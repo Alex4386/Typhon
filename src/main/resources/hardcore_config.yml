@@ -1,0 +1,47 @@
+# Ultimate Volcano Global Setups
+autoStart:
+  statusCheckInterval: 36000
+  probability:
+    dormant:
+      increase: 0.1
+      decrease: 0.05
+    minor_activity:
+      increase: 0.2
+      decrease: 0.1
+    major_activity:
+      increase: 0.5
+      decrease: 0.2
+  disallowLavaPourNonCrater: true
+
+defaultvolcano:
+  lavaflow:
+    delayFlowed: 3
+    flowed: 6
+    updateRate: 2
+  autoStart:
+    eruptionTimer: 12000
+    pourLavaStart: true
+    canAutoStart: true
+  generator:
+    layer: "ANDESITE,34/POLISHED_ANDESITE,27/MAGMA_BLOCK,0.1/STONE,38.9"
+    craterRadius: 75
+  erupt:
+    isExplosive: true
+    delayExplo: 20
+    damageExplo: 40
+    realDamageExplo: 2
+    timerExplo: 5
+    maxBombCount: 70
+    minBombCount: 10
+  bombs:
+    maxPower: 12.0
+    minPower: 4.0
+    maxLaunchPower: 25.0
+    minLaunchPower: 5.0
+    maxRadius: 3
+    minRadius: 1
+    maxCalderaPower: 120.0
+    minCalderaPower: 40.0
+    bombDelay: 20
+
+

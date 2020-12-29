@@ -1,0 +1,16 @@
+# Ultimate Volcano Global Setups
+debug: true
+
+autoStart:
+  statusCheckInterval: 144000
+  probability:
+    dormant:
+      increase: 0.05
+      decrease: 0.005
+    minor_activity:
+      increase: 0.1
+      decrease: 0.05
+    major_activity:
+      increase: 0.2
+      decrease: 0.1
+  disallowLavaPourNonCrater: true

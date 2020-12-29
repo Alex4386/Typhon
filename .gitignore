@@ -1,0 +1,6 @@
+## gitignore file:
+
+out/
+target/
+.DS_Store
+.idea/

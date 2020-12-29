@@ -1,0 +1,21 @@
+name: typhon
+version: ${project.version}
+main: me.alex4386.plugin.typhon.TyphonPlugin
+prefix: Typhon
+authors: [Alex4386]
+description: Minecraft world is SO BORING, Typhon is saying NO to you.
+website: https://github.com/Alex4386/Typhon-Plugin
+api-version: 1.16
+commands:
+  typhon:
+    description: A management Interface for Typhon Plugin
+    usage: /<command> help
+  volcano:
+    description: A management Interface for Typhon Plugin's Volcanoes
+    usage: /<command> help
+    aliases: [vol]
+permissions:
+  volcano.*:
+    description: Allow using volcano plugins
+  magmachamber.*:
+    description: Allow using magmachamber related stuff

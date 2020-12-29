@@ -1,0 +1,15 @@
+name: typhon
+version: ${project.version}
+main: me.alex4386.plugin.typhon.TyphonPlugin
+prefix: Typhon
+authors: [Alex4386]
+description: Minecraft world is SO BORING, Typhon is saying NO to you.
+website: https://github.com/Alex4386/Typhon-Plugin
+api-version: 1.15
+commands:
+  typhon:
+    description: A management Interface for
+    usage: /<command> help
+permissions:
+  typhon.*:
+    description: Allow using typhon plugin commands
