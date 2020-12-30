@@ -52,6 +52,9 @@ public class VolcanoMetamorphism {
         }
 
         block.setType(material);
+        if (material == Material.LAVA) {
+            this.volcano.bombLavaFlow.registerLavaCoolData(block);
+        }
         return;
     }
 
