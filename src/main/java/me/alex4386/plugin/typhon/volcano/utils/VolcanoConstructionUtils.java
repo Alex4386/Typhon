@@ -43,6 +43,7 @@ class VolcanoConstructionUtils {
 
             if (radiusHeight != currentHeight) {
                 int heightDiff = radiusHeight - currentHeight;
+                currentHeight = radiusHeight;
                 radiusHeightMap.put(i, heightDiff);
             }
         }
@@ -70,7 +71,6 @@ class VolcanoConstructionUtils {
                 );
             }
         }
-
         return volcanoMagmaChamberFillData;
     }
 

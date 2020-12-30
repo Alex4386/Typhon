@@ -40,6 +40,18 @@ public class VolcanoManager {
         return false;
     }
 
+    public boolean isInAnyLavaFlow(Location loc) {
+        List<VolcanoCrater> craters = this.getCraters();
+
+        for (VolcanoCrater crater : craters) {
+            if (crater.isInLavaFlow(loc)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public ChatColor getChatColor() {
         boolean isErupting = volcano.manager.currentlyStartedCraters().size() > 0;
         return (isErupting ? ChatColor.RED : (

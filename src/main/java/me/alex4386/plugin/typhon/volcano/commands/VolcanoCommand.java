@@ -331,7 +331,7 @@ public class VolcanoCommand {
                             volcano.shutdown();
                             try {
                                 volcano.load();
-                                volcano.initialize();
+                                volcano.startup();
                             } catch(IOException| ParseException e) {
                                 msg.error("Error occurred while reloading!");
                             }
@@ -373,6 +373,11 @@ public class VolcanoCommand {
                                     sender.sendMessage(" - "+chamberState+chamberName);
                                 }
                             }
+                            break;
+                        case DEBUG:
+                            if (args.length == 3) this.volcano.isDebug = Boolean.parseBoolean(args[2]);
+                            msg.info("isDebug - "+this.volcano.isDebug);
+
                             break;
                         case SAVE:
                             try {

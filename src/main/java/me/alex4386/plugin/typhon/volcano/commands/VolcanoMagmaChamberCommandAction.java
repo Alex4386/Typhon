@@ -9,13 +9,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 public enum VolcanoMagmaChamberCommandAction {
-    BUILD("build", "", "build this magmachamber"),
-    BUILD_NMS("build:nms", "", "build this magmachamber with net.minecraft.server"),
-    BUILD_BUKKIT("build:bukkit", "", "build this magmachamber with bukkit api (SLOW)"),
-    FILL("fill", "", "fill this magmachamber"),
-    COOL("cool", "", "cooldown this magmachamber"),
+    BUILD("build", "<useNMS>", "build this magmachamber"),
+    FILL("fill", "<useNMS>", "fill this magmachamber"),
+    COOL("cool", "<useNMS>", "cooldown this magmachamber"),
     HELP("help", "", "show help of this command"),
+    HEIGHT("height", "<value>", "update height of the magmachamber - readonly after built"),
+    RADIUS("radius", "<value>", "update radius of the magmachamber - readonly after built"),
+    BASE("base", "<baseY>", "update baseY of the magmachamber - readonly after built"),
     DEBUG_RESET("debug:reset", "", "reset this magmachamber"),
+    DELETE("delete", "", "delete this magmachamber"),
     INFO("info", "", "give info about magmachamber");
 
     String cmdline;

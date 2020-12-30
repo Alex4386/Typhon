@@ -12,6 +12,7 @@ import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
 import org.json.simple.JSONObject;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -28,7 +29,6 @@ public class VolcanoMagmaChamber {
     public boolean isFilled = false;
 
     public VolcanoConstructionType constructionType = VolcanoConstructionType.NONE;
-    public int constructionStage = 0;
 
     public VolcanoMagmaChamber(Volcano volcano, String name, Block baseBlock, int baseRadius, int maxHeight) {
         this.volcano = volcano;
@@ -45,111 +45,110 @@ public class VolcanoMagmaChamber {
     }
 
     public void fill() { fill(null); }
-    public void fill(CommandSender sender) {
+    public void fill(CommandSender sender) { fill(null, false); }
+    public void fill(boolean useNMS) { fill(null, useNMS); }
+    public void fill(CommandSender sender, boolean useNMS) {
         List<VolcanoConstructionMagmaChamberFillData> data = VolcanoConstructionUtils.getPDFMagmaChamberData(
                 this.baseBlock.getLocation(), this.height, this.baseRadius, Material.LAVA, this.height > 0);
 
-        VolcanoMessage msg = new VolcanoMessage(this.volcano);
+        List<List<VolcanoConstructionMagmaChamberFillData>> dataGroup = VolcanoConstruction.splitToGroups(this.baseBlock.getLocation(), data, useNMS);
 
         this.constructionType = VolcanoConstructionType.FILLING;
 
         VolcanoConstructionStatus status = new VolcanoConstructionStatus(this.constructionType, volcano, this.name+"/fill", 1, data.size());
         TyphonPlugin.constructionStatuses.add(status);
 
-        for (int i = 0; i < this.constructionStage; i++) {
-            data.remove(0);
-            status.stageComplete();
-        }
-
-        VolcanoConstruction.runConstructions(data.iterator(), true,
+        VolcanoConstruction.runConstructionGroups(status, dataGroup.iterator(), useNMS,
                 (Runnable) () -> {
                     this.constructionType = VolcanoConstructionType.NONE;
                     this.isFilled = true;
-                    this.constructionStage = 0;
                     this.volcano.trySave();
 
                     TyphonPlugin.constructionStatuses.remove(status);
-                    if (sender == null) {
-                        sender.sendMessage("Build Complete!");
+                    if (sender != null) {
+                        VolcanoMessage msg = new VolcanoMessage(this.volcano, sender);
+                        msg.info("Filled MagmaChamber "+this.name+"!");
+                        if (useNMS)
+                            msg.info("You might need to reconnect to see updated chunks due to NMS updates");
                     }
                 }, (Runnable) () -> {
-                    status.stageComplete();
-
-                    this.constructionStage = status.getCurrentStage();
                     this.volcano.trySave();
                 }
         );
     }
 
-    public void coolDown() { coolDown(null, this.volcano.composition); }
-    public void coolDown(VolcanoComposition composition) { coolDown(null, composition); }
-    public void coolDown(CommandSender sender) { coolDown(sender, this.volcano.composition); }
+    public boolean delete() {
+        if (this.name == null) return false;
+        if (this.name.equals("main")) return false;
 
-    public void coolDown(CommandSender sender, VolcanoComposition composition) {
+        this.volcano.dataLoader.deleteMagmaChambersConfig(this.name);
+        this.volcano.subCraters.remove(this.name);
+        return true;
+    }
+
+    public void coolDown() { coolDown(null, this.volcano.composition, false); }
+    public void coolDown(VolcanoComposition composition) { coolDown(null, composition, false); }
+    public void coolDown(CommandSender sender) { coolDown(sender, this.volcano.composition, false); }
+    public void coolDown(CommandSender sender, boolean useNMS) { coolDown(sender, this.volcano.composition, useNMS); }
+
+    public void coolDown(CommandSender sender, VolcanoComposition composition, boolean useNMS) {
         List<VolcanoConstructionMagmaChamberFillData> data = VolcanoConstructionUtils.getPDFMagmaChamberData(
                 this.baseBlock.getLocation(), this.height, this.baseRadius, composition.getIntrusiveRockMaterial(), this.height > 0);
+
+        List<List<VolcanoConstructionMagmaChamberFillData>> dataGroup = VolcanoConstruction.splitToGroups(this.baseBlock.getLocation(), data, useNMS);
 
         this.constructionType = VolcanoConstructionType.COOLING;
 
         VolcanoConstructionStatus status = new VolcanoConstructionStatus(this.constructionType, volcano, this.name+"/cooldown", 1, data.size());
         TyphonPlugin.constructionStatuses.add(status);
 
-        for (int i = 0; i < this.constructionStage; i++) {
-            data.remove(0);
-            status.stageComplete();
-        }
-
-        VolcanoConstruction.runConstructions(data.iterator(), true,
+        VolcanoConstruction.runConstructionGroups(status, dataGroup.iterator(), useNMS,
                 (Runnable) () -> {
                     this.constructionType = VolcanoConstructionType.NONE;
                     this.isFilled = false;
-                    this.constructionStage = 0;
                     this.volcano.trySave();
 
                     TyphonPlugin.constructionStatuses.remove(status);
-                    if (sender == null) {
-                        sender.sendMessage("Build Complete!");
+                    if (sender != null) {
+                        VolcanoMessage msg = new VolcanoMessage(this.volcano, sender);
+                        msg.info("Cooled down MagmaChamber "+this.name+"!");
+                        if (useNMS)
+                            msg.info("You might need to reconnect to see updated chunks due to NMS updates");
                     }
                 }, (Runnable) () -> {
-                    status.stageComplete();
-
-                    this.constructionStage = status.getCurrentStage();
                     this.volcano.trySave();
                 }
         );
     }
 
     public void build() { build(null); }
-    public void build(CommandSender sender) { build(sender, true); }
+    public void build(CommandSender sender) { build(sender, false); }
     public void build(CommandSender sender, boolean useNMS) {
         List<VolcanoConstructionRaiseData> data = VolcanoConstructionUtils.getPDFConsturctionData(
                 this.baseBlock.getLocation(), this.height, this.baseRadius, Material.LAVA, this.baseRadius < 0);
 
+        List<List<VolcanoConstructionRaiseData>> dataGroup = VolcanoConstruction.splitToGroups(this.baseBlock.getLocation(), data, useNMS);
+
         this.constructionType = VolcanoConstructionType.BUILDING;
 
-        VolcanoConstructionStatus status = new VolcanoConstructionStatus(this.constructionType, volcano, this.name+"/build", 1, data.size());
+        VolcanoConstructionStatus status = new VolcanoConstructionStatus(this.constructionType, volcano, this.name+"/build", 1, dataGroup.size());
         TyphonPlugin.constructionStatuses.add(status);
 
-        for (int i = 0; i < this.constructionStage; i++) {
-            data.remove(0);
-            status.stageComplete();
-        }
-
-        VolcanoConstruction.runConstructions(data.iterator(), useNMS,
+        VolcanoConstruction.runConstructionGroups(status, dataGroup.iterator(), useNMS,
                 (Runnable) () -> {
                     this.constructionType = VolcanoConstructionType.NONE;
                     this.isBuilt = true;
-                    this.constructionStage = 0;
+                    this.isFilled = true;
                     this.volcano.trySave();
 
                     TyphonPlugin.constructionStatuses.remove(status);
-                    if (sender == null) {
-                        sender.sendMessage("Build Complete!");
+                    if (sender != null) {
+                        VolcanoMessage msg = new VolcanoMessage(this.volcano, sender);
+                        msg.info("Built MagmaChamber "+this.name+"!");
+                        if (useNMS)
+                            msg.info("You might need to reconnect to see updated chunks due to NMS updates");
                     }
                 }, (Runnable) () -> {
-                    status.stageComplete();
-
-                    this.constructionStage = status.getCurrentStage();
                     this.volcano.trySave();
                 }
         );
@@ -166,7 +165,6 @@ public class VolcanoMagmaChamber {
         this.isBuilt = (boolean) configData.get("isBuilt");
         this.isFilled = (boolean) configData.get("isFilled");
 
-        this.constructionStage = (int) (long) configData.get("constructionStage");
         this.constructionType = VolcanoConstructionType.getType((int) (long) configData.get("constructionType"));
     }
 
@@ -182,7 +180,6 @@ public class VolcanoMagmaChamber {
         configData.put("isBuilt", this.isBuilt);
         configData.put("isFilled", this.isFilled);
 
-        configData.put("constructionStage", this.constructionStage);
         configData.put("constructionType", this.constructionType.getCode());
 
         return configData;

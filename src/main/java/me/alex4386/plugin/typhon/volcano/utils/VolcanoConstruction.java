@@ -2,15 +2,15 @@ package me.alex4386.plugin.typhon.volcano.utils;
 
 import me.alex4386.plugin.typhon.TyphonNMSUtils;
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 
 import java.util.*;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 public class VolcanoConstruction {
     Volcano volcano;
@@ -47,110 +47,115 @@ public class VolcanoConstruction {
     }
 
     // synchronous function that build volcano construction
-    public static<T extends VolcanoConstructionData> void runConstruction(T data, boolean useNMS, Runnable callback) {
+    public static<T extends VolcanoConstructionData> void runConstruction(T data, boolean useNMS) {
         Map<Block, Block> constructionData = data.getConstructionData();
 
-        Bukkit.getScheduler().runTask(TyphonPlugin.plugin, (Runnable) () -> {
+        // time calculation
+        long blockUpdateInitTime = System.currentTimeMillis();
+        int processingBlocks = constructionData.size();
 
-            // time calculation
-            long blockUpdateInitTime = System.currentTimeMillis();
-            int processingBlocks = constructionData.size();
+        for (Map.Entry<Block, Block> entry : constructionData.entrySet()) {
+            Block sourceBlock = entry.getKey();
+            Block destinationBlock = entry.getValue();
+            boolean shouldUpdate = destinationBlock.getY() % 16 == 0 && destinationBlock.getX() % 16 == 0 && destinationBlock.getZ() % 16 == 0;
 
-            int currentBlock = 0;
-
-            for (Map.Entry<Block, Block> entry : constructionData.entrySet()) {
-                Block sourceBlock = entry.getKey();
-                Block destinationBlock = entry.getValue();
-                boolean shouldUpdate = destinationBlock.getY() % 16 == 0 && destinationBlock.getX() % 16 == 0 && destinationBlock.getZ() % 16 == 0;
-
-                if (useNMS) {
-                    TyphonNMSUtils.moveBlock(sourceBlock, destinationBlock, false, shouldUpdate);
-                } else {
-                    BlockData blockData = sourceBlock.getBlockData();
-                    destinationBlock.setType(sourceBlock.getType());
-                    destinationBlock.setBlockData(blockData, true);
+            if (!TyphonUtils.isMaterialRocklikes(sourceBlock.getType())) {
+                if (!sourceBlock.getType().isAir()) {
+                    continue;
                 }
-
-                currentBlock++;
             }
 
-            // raise data handler
+            Material replacementMaterial = Material.AIR;
             if (data instanceof VolcanoConstructionRaiseData) {
-                VolcanoConstructionRaiseData raiseData = (VolcanoConstructionRaiseData)data;
-
-                for (int i = 0; i < raiseData.raiseAmount; i = raiseData.raiseAmount < 0 ? --i : ++i) {
-                    Block gapBlock = raiseData.baseBlock.getRelative(0, i, 0);
-
-                    boolean shouldUpdate = gapBlock.getY() % 16 == 0 && gapBlock.getX() % 16 == 0 && gapBlock.getZ() % 16 == 0;
-
-                    if (useNMS) {
-                        TyphonNMSUtils.setBlockMaterial(gapBlock, raiseData.replacementMaterial, false, shouldUpdate);
-                    } else {
-                        gapBlock.setType(raiseData.replacementMaterial);
-                    }
+                VolcanoConstructionRaiseData raiseData = (VolcanoConstructionRaiseData) data;
+                Block block = raiseData.baseBlock;
+                while (block.getType() == Material.LAVA) {
+                    block = block.getRelative(0,1,0);
                 }
-                processingBlocks += raiseData.raiseAmount;
+                if (sourceBlock.getY() <= raiseData.raiseAmount + block.getY()) {
+                    replacementMaterial = Material.LAVA;
+                }
             }
 
-            // time calculation
-            long blockUpdateEndTime = System.currentTimeMillis();
-            long processingInMilliseconds = blockUpdateEndTime - blockUpdateInitTime;
-
-            double partOfSeconds = ( (double) processingInMilliseconds / 1000 );
-            int thisBlockUpdatePerSecond;
-
-            // has accuracy issue if it is 0.
-            if (partOfSeconds != 0) {
-                if (useNMS) {
-                    blockUpdatesPerSecondsInNMS = (int)(processingBlocks / partOfSeconds);
-                    thisBlockUpdatePerSecond = blockUpdatesPerSecondsInNMS;
-                } else {
-                    blockUpdatesPerSecondsInBukkit = (int)(processingBlocks / partOfSeconds);
-                    thisBlockUpdatePerSecond = blockUpdatesPerSecondsInBukkit;
-                }
+            if (useNMS) {
+                TyphonNMSUtils.moveBlock(sourceBlock, destinationBlock, replacementMaterial, false, shouldUpdate);
             } else {
-                thisBlockUpdatePerSecond = processingBlocks;
+                BlockData blockData = sourceBlock.getBlockData();
+                destinationBlock.setType(sourceBlock.getType());
+                destinationBlock.setBlockData(blockData, true);
+                sourceBlock.setType(replacementMaterial);
+            }
+        }
+
+        // raise data handler
+        /*
+        if (data instanceof VolcanoConstructionRaiseData) {
+            VolcanoConstructionRaiseData raiseData = (VolcanoConstructionRaiseData) data;
+
+            if (raiseData.raiseAmount > 0) {
+
+            } else {
+                for (int i = 0; i > raiseData.raiseAmount; i--) {
+                    Block updateBlock = raiseData.baseBlock.getRelative(0, i, 0);
+                    boolean shouldUpdate = updateBlock.getY() % 16 == 0 && updateBlock.getX() % 16 == 0 && updateBlock.getZ() % 16 == 0;
+
+                }
             }
 
+            for (int i = 0; i != raiseData.raiseAmount; i = raiseData.raiseAmount < 0 ? --i : ++i) {
+                Block gapBlock = raiseData.baseBlock.getRelative(0, i, 0);
+
+                boolean shouldUpdate = gapBlock.getY() % 16 == 0 && gapBlock.getX() % 16 == 0 && gapBlock.getZ() % 16 == 0;
+
+                if (useNMS) {
+                    TyphonNMSUtils.setBlockMaterial(gapBlock, raiseData.replacementMaterial, false, shouldUpdate);
+                } else {
+                    gapBlock.setType(raiseData.replacementMaterial);
+                }
+            }
+            processingBlocks += raiseData.raiseAmount;
+        }
+        */
+
+        // time calculation
+        long blockUpdateEndTime = System.currentTimeMillis();
+        long processingInMilliseconds = blockUpdateEndTime - blockUpdateInitTime;
+
+        double partOfSeconds = ((double) processingInMilliseconds / 1000);
+
+        // has accuracy issue if it is 0.
+        if (partOfSeconds != 0) {
+            if (useNMS) {
+                blockUpdatesPerSecondsInNMS = (int) (processingBlocks / partOfSeconds);
+            } else {
+                blockUpdatesPerSecondsInBukkit = (int) (processingBlocks / partOfSeconds);
+            }
+        }
+    }
+
+    public static<T extends VolcanoConstructionData> void runConstructionAsync(T data, boolean useNMS, Runnable callback) {
+        Bukkit.getScheduler().runTask(TyphonPlugin.plugin, (Runnable) () -> {
+            runConstruction(data, useNMS);
             if (callback != null) {
-                int threadWait = (processingBlocks / thisBlockUpdatePerSecond) / 2;
-
-                Thread createNextThread = new Thread((Runnable) () -> {
-                    callback.run();
-                });
-
-                ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
-
-                executorService.schedule(() -> {
-                    createNextThread.start();
-                }, threadWait, TimeUnit.SECONDS);
+                callback.run();
             }
         });
     }
 
-    public static void runConstruction(VolcanoConstructionData data, boolean useNMS) {
-        runConstruction(data, useNMS, null);
-    }
-
-    public static void runConstruction(VolcanoConstructionData data) {
-        runConstruction(data, false);
-    }
-
-
-    public static <T extends VolcanoConstructionData> void runConstructions(Iterator<T> iterator, boolean useNMS, Runnable callback, Runnable iterationCallback) {
+    public static <T extends VolcanoConstructionData> void runConstructions(VolcanoConstructionStatus status, Iterator<T> iterator, boolean useNMS, Runnable callback, Runnable iterationCallback) {
+        status.hasSubStage = false;
         if (iterator.hasNext()) {
-            VolcanoConstructionData nextData = iterator.next();
-            runConstruction(nextData, useNMS, (Runnable) () -> {
+            T nextData = iterator.next();
+            runConstructionAsync(nextData, useNMS, (Runnable) () -> {
                 if (iterationCallback != null) {
                     iterationCallback.run();
                 }
                 if (nextData != null) {
                     // ah screw it
-                    Thread createNextThread = new Thread((Runnable) () -> {
-                        runConstructions(iterator, useNMS, callback, iterationCallback);
+                    Bukkit.getScheduler().runTask(TyphonPlugin.plugin, (Runnable) () -> {
+                        status.stageComplete();
+                        runConstructions(status, iterator, useNMS, callback, iterationCallback);
                     });
-
-                    createNextThread.start();
                 }
             });
         } else {
@@ -160,20 +165,68 @@ public class VolcanoConstruction {
         }
     }
 
-    public static void runConstructions(Iterable<VolcanoConstructionData> data, boolean useNMS, Runnable callback, Runnable iterationCallback) {
-        Iterator<VolcanoConstructionData> iterator = data.iterator();
-        runConstructions(iterator, useNMS, callback, iterationCallback);
+    public static <T extends VolcanoConstructionData> void runConstructionGroups(VolcanoConstructionStatus status, Iterator<List<T>> iterator, boolean useNMS, Runnable callback, Runnable iterationCallback) {
+        status.hasSubStage = true;
+        if (iterator.hasNext()) {
+            List<T> nextData = iterator.next();
+            status.currentSubStage = 0;
+            status.totalSubStage = nextData.size();
+
+            for (T data: nextData) {
+                runConstruction(data, useNMS);
+                status.subStageComplete();
+            }
+            Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, (Runnable) () -> {
+                if (iterationCallback != null) {
+                    iterationCallback.run();
+                }
+                status.stageComplete();
+                runConstructionGroups(status, iterator, useNMS, callback, iterationCallback);
+            }, 40L);
+        } else {
+            if (callback != null) {
+                callback.run();
+            }
+        }
     }
 
-    public static void runConstructions(Iterable<VolcanoConstructionData> data, boolean useNMS, Runnable callback) {
-        runConstructions(data, useNMS, callback, null);
-    }
+    public static <T extends VolcanoConstructionData> List<List<T>> splitToGroups(Location baseLocation, List<T> data, boolean useNMS) {
+        Block block = baseLocation.getBlock();
+        Material material = block.getType();
 
-    public static void runConstructions(Iterable<VolcanoConstructionData> data, boolean useNMS) {
-        runConstructions(data, useNMS, null);
-    }
+        long blockUpdateStartTime = System.nanoTime();;
 
-    public static void runConstructions(Iterable<VolcanoConstructionData> data) {
-        runConstructions(data, false);
+        if (useNMS) {
+            TyphonNMSUtils.setBlockMaterial(block, Material.LAVA, true, false);
+        } else {
+            baseLocation.getBlock().setType(Material.LAVA);
+        }
+
+        long blockUpdateEndTime = System.nanoTime();;
+        long elapsedNanoSecondPerBlockUpdate = blockUpdateEndTime - blockUpdateStartTime;
+
+        block.setType(material);
+
+        long blockUpdatesPerMilliSecond = 1000000 / elapsedNanoSecondPerBlockUpdate;
+        long blockUpdatesPerSecond = blockUpdatesPerMilliSecond * 1000;
+
+        System.out.println("block update took:" + blockUpdatesPerSecond + "ns.");
+        System.out.println(blockUpdatesPerSecond + " block updates per second");
+
+        List<List<T>> dataGroup = new ArrayList<>();
+
+        int separatedBlocksPerGroup = (int) blockUpdatesPerSecond / 2;
+        int separateGroupCount = (int) Math.ceil(data.size() / (double) separatedBlocksPerGroup);
+
+        System.out.println("Separated: " + separatedBlocksPerGroup + " block updates per second, "+separateGroupCount+" groups");
+
+        for (int i = 0; i < separateGroupCount; i++) {
+            int max = Math.min(((i+1) * separatedBlocksPerGroup) - 1, data.size());
+            List<T> thisData = data.subList(i * separatedBlocksPerGroup, max);
+
+            dataGroup.add(thisData);
+        }
+
+        return dataGroup;
     }
 }

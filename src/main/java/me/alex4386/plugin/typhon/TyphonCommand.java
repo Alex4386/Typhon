@@ -72,6 +72,7 @@ public class TyphonCommand {
             Location location = player.getLocation();
 
             List<Volcano> volcanoesNearYou = new ArrayList<>();
+            List<Volcano> cratersNearYou = new ArrayList<>();
 
             for (Volcano volcano: TyphonPlugin.listVolcanoes.values()) {
                 if (volcano.manager.isInAnyCrater(location)) {
@@ -86,6 +87,9 @@ public class TyphonCommand {
                     sender.sendMessage(ChatColor.DARK_RED+" - "+volcano.manager.getChatColor()+volcano.name);
                 }
             }
+            sender.sendMessage("");
+            sender.sendMessage(ChatColor.DARK_RED+""+ChatColor.BOLD+"[Affected Volcanoes]");
+
 
         } else {
             TyphonMessage.error(sender, "This command can not be triggered from console.");
@@ -122,6 +126,9 @@ public class TyphonCommand {
         for (VolcanoConstructionStatus status : statuses) {
             if (volcano == null) sender.sendMessage(ChatColor.GOLD + "Volcano " + status.volcano.name);
             sender.sendMessage(ChatColor.YELLOW + status.jobName + ChatColor.GRAY + ": " + status.currentStage + "/" + status.totalStages + " (" + String.format("%.2f", status.currentStage * 100 / (double) status.totalStages) + "%)");
+            if (status.hasSubStage) {
+                sender.sendMessage(ChatColor.GOLD + "SubStage: " + status.currentSubStage + "/" + status.totalSubStage + " (" + String.format("%.2f", status.currentSubStage * 100 / (double) status.totalSubStage) + "%)");
+            }
             if (volcano == null) sender.sendMessage("");
         }
     }

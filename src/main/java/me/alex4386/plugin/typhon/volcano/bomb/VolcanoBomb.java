@@ -3,6 +3,7 @@ package me.alex4386.plugin.typhon.volcano.bomb;
 import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
+import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import org.bukkit.Bukkit;
@@ -10,6 +11,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.FallingBlock;
 import org.bukkit.material.MaterialData;
 import org.bukkit.metadata.FixedMetadataValue;
@@ -100,6 +102,33 @@ public class VolcanoBomb {
         Volcano volcano = this.crater.getVolcano();
 
         this.landingLocation = block.getLocation();
+
+        // calculate even more fall.
+        Block block = this.landingLocation.getBlock();
+        while (!TyphonUtils.isMaterialRocklikes(block.getRelative(BlockFace.DOWN).getType())) {
+            if (block.getY() < TyphonUtils.getMinimumY(block.getWorld())) return;
+            for (int i = -1; i <= 1; i++) {
+                for (int j = -1; j <= 1; j++) {
+                    Block burnBlock = block.getRelative(i, 0, j);
+                    if (i == 0 && j == 0) {
+                        burnBlock.setType(Material.AIR);
+                        continue;
+                    }
+                    if (burnBlock.getType().isBurnable()) {
+                        Block topOfBurnBlock = burnBlock.getRelative(0,1,0);
+                        if (topOfBurnBlock.getType().isAir()) {
+                            topOfBurnBlock.setType(Material.FIRE);
+                        }
+                    } else {
+                        this.crater.volcano.metamorphism.metamorphoseBlock(burnBlock);
+                    }
+                }
+            }
+            block = block.getRelative(BlockFace.DOWN);
+        }
+
+        this.landingLocation = block.getLocation();
+
         Location loc = block.getLocation();
 
         String craterName = "";
@@ -127,8 +156,12 @@ public class VolcanoBomb {
                     " with Power: "+this.bombPower+", radius: "+this.bombRadius+", lifeTime: "+this.lifeTime+" (= "+
                     this.getLifetimeSeconds()+"s)");
 
+        final Block finalBlock = block;
         Bukkit.getScheduler().scheduleSyncDelayedTask(TyphonPlugin.plugin, (Runnable) () -> {
             int totalEjecta = 0;
+            
+            volcano.bombLavaFlow.registerEvent();
+            volcano.bombLavaFlow.registerTask();
 
             if (bombRadius <= 1) {
                 List<Block> bomb = VolcanoMath.getSphere(loc.getBlock(), this.bombRadius);
@@ -136,10 +169,6 @@ public class VolcanoBomb {
                 for (Block bombBlock:bomb) {
                     volcano.bombLavaFlow.registerLavaCoolData(bombBlock);
                     bombBlock.setType(Material.LAVA);
-
-                    volcano.bombLavaFlow.registerEvent();
-                    volcano.bombLavaFlow.registerTask();
-
                 }
 
                 totalEjecta = bomb.size();
@@ -164,7 +193,7 @@ public class VolcanoBomb {
 
             crater.record.addEjectaVolume(totalEjecta);
 
-            TyphonNMSUtils.updateChunk(block.getLocation());
+            TyphonNMSUtils.updateChunk(finalBlock.getLocation());
 
             Bukkit.getScheduler().scheduleSyncDelayedTask(TyphonPlugin.plugin, (Runnable) () -> {
                 this.explode();

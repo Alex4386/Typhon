@@ -151,7 +151,7 @@ public class VolcanoLavaFlow implements Listener {
 
             List<Block> nearByBlocks = TyphonUtils.getNearByBlocks(block);
             for (Block nearByBlock : nearByBlocks) {
-                if (nearByBlock.getType() == Material.AIR) {
+                if (nearByBlock.getType().isAir()) {
                     continue;
                 }
 

@@ -22,6 +22,7 @@ public enum VolcanoCommandAction {
     SAVE("save", "", "save the volcano"),
     RELOAD("reload", "", "reload the volcano"),
     UPDATE_RATE("updaterate", "<value>", "get/set the updaterate"),
+    DEBUG("debug", "<value>", "get/set the debug mode"),
 
     DELETE("delete", "", "Delete this volcano");
 

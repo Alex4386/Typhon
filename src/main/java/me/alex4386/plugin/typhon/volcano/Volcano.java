@@ -81,6 +81,7 @@ public class Volcano implements Listener {
         if (basePath.toFile().exists()) {
             try {
                 this.load();
+                this.startup();
             } catch(ParseException parseException) {
                 logger.error(VolcanoLogClass.CORE, "Unable to parse Volcano Config Dir "+basePath.toString()+" for Volcano "+this.name+". To inspect, please enable debug mode of plugin.");
                 throw parseException;
@@ -100,6 +101,7 @@ public class Volcano implements Listener {
         if (basePath.toFile().exists()) {
             try {
                 this.load();
+                this.startup();
             } catch(ParseException parseException) {
                 logger.error(VolcanoLogClass.CORE, "Unable to parse Volcano Config Dir "+basePath.toString()+" for Volcano "+this.name+". To inspect, please enable debug mode of plugin.");
                 throw parseException;
@@ -125,6 +127,19 @@ public class Volcano implements Listener {
         bombLavaFlow.initialize();
         autoStart.initialize();
         geoThermal.initialize();
+    }
+
+    public void startup() {
+        this.initialize();
+        this.mainCrater.initialize();
+        for (Map.Entry<String, VolcanoCrater> entry : this.subCraters.entrySet()) {
+            String name = entry.getKey();
+            VolcanoCrater crater = entry.getValue();
+            crater.name = name;
+            if (crater.enabled) {
+                crater.initialize();
+            }
+        }
     }
 
     public void shutdown() {

@@ -94,9 +94,14 @@ public class TyphonNMSUtils {
     }
 
     public static void moveBlock(org.bukkit.block.Block block, org.bukkit.block.Block toBlock, boolean applyPhysics, boolean updateChunk) {
-        copyBlock(block, toBlock, applyPhysics, updateChunk);
-        setBlockMaterial(block, org.bukkit.Material.AIR, applyPhysics, updateChunk);
+        moveBlock(block, toBlock, org.bukkit.Material.AIR, applyPhysics, updateChunk);
     }
+
+    public static void moveBlock(org.bukkit.block.Block block, org.bukkit.block.Block toBlock, org.bukkit.Material replacementMaterial, boolean applyPhysics, boolean updateChunk) {
+        copyBlock(block, toBlock, applyPhysics, updateChunk);
+        setBlockMaterial(block, replacementMaterial, applyPhysics, updateChunk);
+    }
+
 
     public static void updateChunk(org.bukkit.block.Block block) {
         org.bukkit.Chunk chunk = block.getChunk();

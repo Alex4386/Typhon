@@ -14,7 +14,7 @@ public class VolcanoMessage {
         this.sender = sender;
     }
 
-    VolcanoMessage(Volcano volcano, CommandSender sender) {
+    public VolcanoMessage(Volcano volcano, CommandSender sender) {
         this.volcano = volcano;
         this.sender = sender;
     }

@@ -10,6 +10,10 @@ public class VolcanoConstructionStatus {
     public int currentStage;
     public int totalStages;
 
+    public boolean hasSubStage = false;
+    public int currentSubStage = -1;
+    public int totalSubStage = -1;
+
     public Location lastLocation = null;
 
     public VolcanoConstructionStatus(VolcanoConstructionType type, Volcano volcano, String jobName, int currentStage, int totalStages) {
@@ -30,6 +34,9 @@ public class VolcanoConstructionStatus {
 
     public void stageComplete() {
         this.currentStage++;
+    }
+    public void subStageComplete() {
+        this.currentSubStage++;
     }
 
     public boolean isCompleted() {
