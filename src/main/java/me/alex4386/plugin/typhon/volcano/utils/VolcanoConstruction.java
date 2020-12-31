@@ -210,7 +210,7 @@ public class VolcanoConstruction {
         long blockUpdatesPerMilliSecond = 1000000 / elapsedNanoSecondPerBlockUpdate;
         long blockUpdatesPerSecond = blockUpdatesPerMilliSecond * 1000;
 
-        System.out.println("block update took:" + blockUpdatesPerSecond + "ns.");
+        System.out.println("block update took:" + elapsedNanoSecondPerBlockUpdate + "ns.");
         System.out.println(blockUpdatesPerSecond + " block updates per second");
 
         List<List<T>> dataGroup = new ArrayList<>();
