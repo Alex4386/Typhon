@@ -16,7 +16,7 @@ GNU Public License Version 3.
 See Copyrights section for more details.
 
 ### Copyrights
-This software is continuation of ultimate volcano project. which is initially developed from fork of [Diwaly's Volcano Plugin](https://bitbucket.org/diwaly/volcano/src/default/).  
+This software is continuation of [ultimate volcano project](https://github.com/Alex4386/ultimateVolcano). which is initially developed from fork of [Diwaly's Volcano Plugin](https://bitbucket.org/diwaly/volcano/src/default/).  
 Even though this software now contains almost no traces of his code, since this is the fork, This repository follows Diwlay's Volcano Plugin's Initial License, GPLv3.  
 
 #### Acknowledgements  
