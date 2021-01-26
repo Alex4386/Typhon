@@ -2,11 +2,9 @@ package me.alex4386.plugin.typhon;
 
 import me.alex4386.plugin.typhon.volcano.commands.VolcanoCommand;
 import me.alex4386.plugin.typhon.volcano.Volcano;
-import me.alex4386.plugin.typhon.volcano.commands.VolcanoCraterCommand;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoConstructionStatus;
-import org.bukkit.ChatColor;
-import org.bukkit.Location;
+import org.bukkit.*;
+import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -96,6 +94,61 @@ public class TyphonCommand {
         }
     }
 
+    public static void runDebugCommand(CommandSender sender, String debugCommand) {
+        if (sender.hasPermission("typhon.debug")) {
+            Player player = null;
+            if (sender instanceof Player) player = (Player) sender;
+
+            if (debugCommand.equalsIgnoreCase("steam")) {
+                if (player == null) return;
+                Location location = player.getLocation();
+
+                TyphonNMSUtils.createParticle(Particle.CLOUD, location, 100);
+                sender.sendMessage("Steamy day");
+            } else if (debugCommand.equalsIgnoreCase("steamblast")) {
+                if (player == null) return;
+                Location location = player.getTargetBlock(null, 100).getLocation();
+
+
+                sender.sendMessage("Steamy day");
+
+            } else if (debugCommand.equalsIgnoreCase("bombeffect")) {
+                if (player == null) return;
+                Location loc = player.getTargetBlock(null, 100).getLocation();
+
+                TyphonNMSUtils.createParticle(
+                        Particle.CLOUD,
+                        loc,
+                        35,
+                        2,2,2
+                );
+                TyphonNMSUtils.createParticle(
+                        Particle.ASH,
+                        loc,
+                        2,
+                        30,30,30
+                );
+                TyphonNMSUtils.createParticle(
+                        Particle.LAVA,
+                        loc,
+                        6
+                );
+            } else if (debugCommand.equalsIgnoreCase("craterblast")) {
+                if (player == null) return;
+                Random random = new Random();
+                Location location = player.getTargetBlock(null, 100).getLocation();
+                Block randomBlock = location.getBlock();
+                int steamRadius = 10;
+                int count = 10;
+
+                World world = location.getWorld();
+
+                sender.sendMessage("craterTest");
+
+            }
+        }
+    }
+
     public static void showConstructions(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("volcano.constructions")) {
             TyphonMessage.error(sender, "You don't have enough permission!");
@@ -161,14 +214,20 @@ public class TyphonCommand {
         if (commandName.equals("typhon")) {
             if (args.length == 1) {
                 return TyphonCommand.search(args[0], TyphonCommandAction.listAll(sender));
-            } else if (args.length == 2) {
+            } else if (args.length >= 2) {
                 TyphonCommandAction action = TyphonCommandAction.getAction(args[0]);
+                if (action == null) return null;
 
-                if (action.equals(TyphonCommandAction.CONSTRUCTIONS)) {
-                    return searchVolcano(args[1]);
-                } else if (action.equals(TyphonCommandAction.CREATE)) {
-                    String[] str = { "<name>" };
-                    return Arrays.asList(str);
+                if (args.length == 2) {
+                    if (action.equals(TyphonCommandAction.CONSTRUCTIONS)) {
+                        return searchVolcano(args[1]);
+                    } else if (action.equals(TyphonCommandAction.CREATE)) {
+                        String[] str = { "<name>" };
+                        return Arrays.asList(str);
+                    } else if (action.equals(TyphonCommandAction.DEBUG)) {
+                        String[] debugCommands = { "steam", "steamblast", "bombeffect" };
+                        return TyphonCommand.search(args[1], Arrays.asList(debugCommands.clone()));
+                    }
                 }
             }
         } else if (commandName.equals("volcano") || commandName.equals("vol")) {
@@ -208,6 +267,11 @@ public class TyphonCommand {
                         break;
                     case CONSTRUCTIONS:
                         showConstructions(sender, command, label, args);
+                        break;
+                    case DEBUG:
+                        if (args.length == 2) {
+                            runDebugCommand(sender, args[1]);
+                        }
                         break;
                     default:
                         break;

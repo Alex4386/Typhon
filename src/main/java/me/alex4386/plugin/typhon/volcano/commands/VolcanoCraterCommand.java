@@ -97,10 +97,16 @@ public class VolcanoCraterCommand {
 
         VolcanoMessage msg = new VolcanoMessage(this.crater.volcano, sender);
 
+        if (action == null) {
+            msg.error("Invalid Operation: "+operationName);
+            return true;
+        }
+
         if (!action.hasPermission(sender)) {
             msg.error("You don't have enough permission to run "+action.getCommand());
             return true;
         }
+
 
         switch (action) {
             case START:
@@ -125,7 +131,7 @@ public class VolcanoCraterCommand {
                         msg.info("Crater "+crater.getName()+" is now erupting!");
 
                     } else if (newArgs[1].equalsIgnoreCase("stop")) {
-                        if (crater.isErupting()) {
+                        if (!crater.isErupting()) {
                             msg.warn("Crater "+crater.getName()+" is not erupting!");
                             break;
                         }
@@ -290,7 +296,7 @@ public class VolcanoCraterCommand {
                 sender.sendMessage(ChatColor.RED+""+ChatColor.BOLD+"[Typhon Plugin] "+ChatColor.GOLD+"Volcano Crater Info");
                 msg.info("Location: "+ TyphonUtils.blockLocationTostring(crater.location.getBlock()));
                 msg.info("Summit  : "+ TyphonUtils.blockLocationTostring(crater.getSummitBlock()));
-                msg.info("LavaFlow: "+ crater.isFlowingLava());
+                msg.info("LavaFlow: "+ crater.isFlowingLava()+" @ "+String.format("%.2f",crater.longestFlowLength)+"m");
                 msg.info("Erupting: "+ crater.isErupting());
                 msg.info("Radius  : "+ crater.getRadius());
 

@@ -1,10 +1,12 @@
 package me.alex4386.plugin.typhon.volcano.crater;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoStatus;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -15,6 +17,7 @@ import org.bukkit.plugin.PluginManager;
 import org.json.simple.JSONObject;
 
 import java.io.IOException;
+import java.util.*;
 
 public class VolcanoAutoStart implements Listener {
     public Volcano volcano;
@@ -24,9 +27,12 @@ public class VolcanoAutoStart implements Listener {
     public boolean canAutoStart = defaultCanAutoStart;
     public boolean pourLavaStart = true;
 
+    public boolean createSubCrater = true;
+
     public VolcanoAutoStartProbability probability = new VolcanoAutoStartProbability();
 
-    public long statusCheckInterval = 144000;
+    public long statusCheckInterval = 72000;
+    public long subCraterInterval = 72000;
 
     public long eruptionTimer = 12000;
     public int scheduleID = -1;
@@ -42,6 +48,7 @@ public class VolcanoAutoStart implements Listener {
         Bukkit.getScheduler().scheduleSyncRepeatingTask(TyphonPlugin.plugin,
             () -> {
                 updateStatus();
+                createSubCraters();
             },
         0L, statusCheckInterval);
     }
@@ -87,6 +94,91 @@ public class VolcanoAutoStart implements Listener {
                 if (crater.isInCrater(player.getLocation())) {
                    // start lava flow on crater.
                 }
+            }
+        }
+    }
+
+    public void createSubCraters() {
+        boolean isMaincraterGrownEnough = (volcano.mainCrater.longestFlowLength > 100);
+
+        if (isMaincraterGrownEnough && createSubCrater) {
+            VolcanoCrater crater = null;
+            Location subCraterLocation = null;
+
+            if (Math.random() < 0.7) {
+                // base on main crater
+                crater = volcano.mainCrater;
+
+            } else if (volcano.subCraters.size() > 0) {
+                Collection<VolcanoCrater> craters = volcano.subCraters.values();
+                VolcanoCrater[] craterArray = (VolcanoCrater[]) craters.toArray();
+                List<VolcanoCrater> craterList = Arrays.asList(craterArray.clone());
+                Collections.shuffle(craterList);
+                crater = craterList.get(0);
+            }
+
+            if (Math.random() < 0.3) {
+                subCraterLocation = TyphonUtils.getRandomBlockInRange(
+                        volcano.mainCrater.location.getBlock(),
+                        (int) volcano.mainCrater.longestFlowLength - 100,
+                        (int) volcano.mainCrater.longestFlowLength + 100
+                ).getLocation();
+
+            } else if (Math.random() < 0.35 && volcano.mainCrater.longestFlowLength > 150) {
+                // create one near player.
+                Collection<Player> onlinePlayers = (Collection<Player>) Bukkit.getOnlinePlayers();
+                Player[] playerArray = (Player[]) onlinePlayers.toArray();
+                List<Player> onlinePlayerList = Arrays.asList(playerArray);
+                Collections.shuffle(onlinePlayerList);
+
+                for (Player player : onlinePlayerList) {
+                    if (volcano.manager.isInAnyLavaFlowArea(player.getLocation())) {
+                        subCraterLocation = TyphonUtils.getRandomBlockInRange(
+                                player.getLocation().getBlock(),
+                                (int) volcano.mainCrater.longestFlowLength - 100,
+                                (int) volcano.mainCrater.longestFlowLength + 100
+                        ).getLocation();
+
+                        volcano.logger.log(VolcanoLogClass.AUTOSTART, "volcano creating new subcrater near by user "+player.getName());
+                        break;
+                    }
+                }
+            }
+
+            if (subCraterLocation != null) {
+                double minimumDistance = -1;
+                Random random = new Random();
+                int key = -1;
+                String name;
+
+                for (VolcanoCrater thisCrater : volcano.manager.getCraters()) {
+                    double distance = TyphonUtils.getTwoDimensionalDistance(thisCrater.location, subCraterLocation);
+                    if (distance < minimumDistance || distance < 0) {
+                        minimumDistance = distance;
+                    }
+                }
+
+                if (minimumDistance < 50) {
+                    return;
+                }
+
+                do {
+                    key = random.nextInt(9999);
+                    name = volcano.name+"_auto_"+String.format("%04d", key);
+                } while(!volcano.subCraters.containsKey(name));
+
+                VolcanoCrater newCrater = new VolcanoCrater(volcano, subCraterLocation, name);
+                volcano.subCraters.put(name, newCrater);
+
+                volcano.logger.log(VolcanoLogClass.AUTOSTART, "volcano creating new subcrater "+name);
+
+                newCrater.start();
+                Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin,
+                        (Runnable) () -> {
+                            newCrater.stop();
+                        },
+                        eruptionTimer
+                );
             }
         }
     }
@@ -144,6 +236,7 @@ public class VolcanoAutoStart implements Listener {
 
     public void importConfig(JSONObject configData) {
         this.canAutoStart = (boolean) configData.get("canAutoStart");
+        this.createSubCrater = (boolean) configData.get("createSubCrater");
         this.pourLavaStart = (boolean) configData.get("pourLavaStart");
         this.eruptionTimer = (long) configData.get("eruptionTimer");
         this.statusCheckInterval = (long) configData.get("statusCheckInterval");
@@ -155,6 +248,7 @@ public class VolcanoAutoStart implements Listener {
 
         configData.put("canAutoStart", this.canAutoStart);
         configData.put("pourLavaStart", this.pourLavaStart);
+        configData.put("createSubCrater", this.createSubCrater);
         configData.put("eruptionTimer", this.eruptionTimer);
         configData.put("statusCheckInterval", this.statusCheckInterval);
         configData.put("probability", this.probability.exportConfig());
@@ -165,8 +259,8 @@ public class VolcanoAutoStart implements Listener {
 
 class VolcanoAutoStartProbability {
     public VolcanoAutoStartStatusProbability dormant = new VolcanoAutoStartStatusProbability(0.05, 0.001);
-    public VolcanoAutoStartStatusProbability minor_activity = new VolcanoAutoStartStatusProbability(0.2, 0.05);
-    public VolcanoAutoStartStatusProbability major_activity = new VolcanoAutoStartStatusProbability(0.35, 0.25);
+    public VolcanoAutoStartStatusProbability minor_activity = new VolcanoAutoStartStatusProbability(0.1, 0.05);
+    public VolcanoAutoStartStatusProbability major_activity = new VolcanoAutoStartStatusProbability(0.2, 0.25);
 
     public void importConfig(JSONObject configData) {
         dormant = new VolcanoAutoStartStatusProbability((JSONObject) configData.get("dormant"));

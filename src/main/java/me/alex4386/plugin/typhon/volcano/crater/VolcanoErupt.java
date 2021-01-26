@@ -1,10 +1,11 @@
 package me.alex4386.plugin.typhon.volcano.crater;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
-import me.alex4386.plugin.typhon.volcano.Volcano;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.json.simple.JSONObject;
+
+import java.util.Random;
 
 public class VolcanoErupt {
     public VolcanoCrater crater;
@@ -78,6 +79,7 @@ public class VolcanoErupt {
 
     public void erupt(int bombCount, boolean tremor, boolean smoke, boolean summitExplode) {
         if (summitExplode) {
+            crater.location.getWorld().playSound(this.getEruptionLocation(), Sound.ENTITY_GENERIC_EXPLODE, 30f, -10f);
             crater.location.getWorld().createExplosion(this.getEruptionLocation(), settings.explosionSize, true, false);
             crater.location.getWorld().createExplosion(this.getEruptionLocation(), settings.damagingExplosionSize, false, true);
         }
@@ -86,12 +88,24 @@ public class VolcanoErupt {
             crater.tremor.eruptTremor();
         }
 
-        for (int i = 0; i < bombCount; i++) {
-            crater.bombs.launchBomb();
+        if (smoke) {
+            Random random = new Random();
+            int size = 4 + random.nextInt(3);
+            for (int i = 0; i < 30; i++) {
+                Bukkit.getScheduler().runTaskLater(
+                        TyphonPlugin.plugin,
+                        (Runnable) () -> {
+                            crater.generateSmoke(size);
+                        },
+                        5L * i
+                );
+            }
+
+            //crater.generateSteam(5);
         }
 
-        if (smoke) {
-            crater.generateSmoke(100);
+        for (int i = 0; i < bombCount; i++) {
+            crater.bombs.launchBomb();
         }
     }
 

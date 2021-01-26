@@ -9,10 +9,7 @@ import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoLavaFlow;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoCraterRecord;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
-import org.bukkit.ChatColor;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.Particle;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.json.simple.JSONObject;
 
@@ -30,7 +27,7 @@ public class VolcanoCrater {
     public Location location;
     public int craterRadius = defaultCraterRadius;
 
-    public double longestFlowLength;
+    public double longestFlowLength = 0.0;
 
     public List<Block> cachedCraterBlocks = null;
 
@@ -94,6 +91,16 @@ public class VolcanoCrater {
         this.cachedCraterBlocks = newCachedCraterBlocks;
 
         return this.cachedCraterBlocks;
+    }
+
+
+    public double getHeatValue( Location loc) {
+        double distance = this.getTwoDimensionalDistance(loc);
+        double distanceRatio = (distance / this.longestFlowLength) / 1.5;
+
+        double heatValue = VolcanoMath.pdfMaxLimiter(distanceRatio, 1);
+
+        return heatValue;
     }
 
     public int getRadius() {
@@ -208,11 +215,41 @@ public class VolcanoCrater {
     }
 
     public void generateSmoke(int count) {
-        TyphonNMSUtils.createParticle(
-                Particle.CLOUD,
-                location,
-                count
+        Random random = new Random();
+
+        int steamRadius = (int) (random.nextDouble() * (craterRadius / 4) + (craterRadius / 4));
+
+        TyphonUtils.spawnParticleWithVelocity(
+                Particle.CAMPFIRE_SIGNAL_SMOKE,
+                TyphonUtils.getHighestRocklikes(location).getLocation(),
+                steamRadius,
+                (int) (count * (4 / 3) * Math.pow(steamRadius, 3)),
+                0,
+                0.4,
+                0
         );
+    }
+
+    public void generateSteam(int count) {
+        Random random = new Random();
+
+        Block randomBlock = TyphonUtils.getRandomBlockInRange(location.getBlock(), craterRadius);
+
+        int steamRadius = (int) (random.nextDouble() * craterRadius / 2);
+
+        TyphonUtils.createRisingSteam(randomBlock.getLocation(), steamRadius, count);
+    }
+
+    public void generateLavaParticle(int count) {
+        World world = location.getWorld();
+
+        for (int i = 0; i < count; i++) {
+            world.spawnParticle(
+                    Particle.LAVA,
+                    location,
+                    100
+            );
+        }
     }
 
     public boolean isStarted() {
@@ -279,6 +316,7 @@ public class VolcanoCrater {
         this.erupt.importConfig((JSONObject) configData.get("erupt"));
         this.lavaFlow.importConfig((JSONObject) configData.get("lavaFlow"));
         this.record.importConfig((JSONObject) configData.get("record"));
+        this.longestFlowLength = (double) configData.get("longestFlowLength");
     }
 
     public JSONObject exportConfig() {
@@ -286,6 +324,7 @@ public class VolcanoCrater {
 
         configData.put("enabled", this.enabled);
         configData.put("location", TyphonUtils.serializeLocationForJSON(this.location));
+        configData.put("longestFlowLength", this.longestFlowLength);
         configData.put("radius", this.craterRadius);
 
         JSONObject bombConfig = this.bombs.exportConfig();
@@ -299,6 +338,7 @@ public class VolcanoCrater {
 
         JSONObject recordConfig = this.record.exportConfig();
         configData.put("record", recordConfig);
+
 
         return configData;
     }

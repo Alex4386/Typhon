@@ -2,6 +2,7 @@ package me.alex4386.plugin.typhon.volcano.commands;
 
 import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.Volcano;
+import me.alex4386.plugin.typhon.volcano.VolcanoStatus;
 import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
 import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoDike;
 import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMagmaChamber;
@@ -112,6 +113,18 @@ public class VolcanoCommand {
                                 return Arrays.asList(result);
                             }
                         }
+                    } else if (action.equals(VolcanoCommandAction.STATUS)) {
+                        if (args.length == 3) {
+                            String searchQuery = args[2];
+                            List<String> searchResults = new ArrayList<>();
+                            for (VolcanoStatus status : VolcanoStatus.values()) {
+                                if (status.name().startsWith(searchQuery)) {
+                                    searchResults.add(status.name());
+                                }
+                            }
+                            return searchResults;
+                        }
+
                     }
 
                 }
@@ -316,7 +329,12 @@ public class VolcanoCommand {
                             }
                             break;
                         case UPDATE_RATE:
-                            if (args.length == 3) volcano.updateRate = Integer.parseInt(args[2]);
+                            if (args.length == 3) {
+                                volcano.updateRate = Integer.parseInt(args[2]);
+                                volcano.shutdown(true);
+                                volcano.startup();
+
+                            }
                             msg.info("Volcano "+volcano.name+"'s updaterate = "+volcano.updateRate+" ticks.");
                             break;
                         case SUMMIT:
@@ -326,6 +344,23 @@ public class VolcanoCommand {
                             break;
                         case DIKE:
                             msg.error("Implementation in progress...");
+                            break;
+                        case STATUS:
+                            if (args.length == 3) {
+                                VolcanoStatus status = VolcanoStatus.getStatus(args[2]);
+                                if (status != null) {
+                                    volcano.status = status;
+                                }
+                            }
+                            msg.info("Status: "+this.volcano.status.name());
+                            break;
+                        case HEAT:
+                            if (sender instanceof Player) {
+                                Player player = (Player) sender;
+                                msg.info("Heat value of current location: "+this.volcano.manager.getHeatValue(player.getLocation()));
+                            } else {
+                                msg.error("This command is built for in-game only.");
+                            }
                             break;
                         case RELOAD:
                             volcano.shutdown();

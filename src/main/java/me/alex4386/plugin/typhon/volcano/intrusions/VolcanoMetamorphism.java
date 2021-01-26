@@ -59,4 +59,16 @@ public class VolcanoMetamorphism {
     }
 
 
+    public void evaporateBlock(Block block) {
+        Material material = block.getType();
+        String blockTypeName = material.name().toLowerCase();
+
+        if (
+                (blockTypeName.contains("snow"))
+        ) {
+            block.setType(Material.AIR);
+        }
+    }
+
+
 }

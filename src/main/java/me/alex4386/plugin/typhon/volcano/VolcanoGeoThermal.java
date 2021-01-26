@@ -1,12 +1,20 @@
 package me.alex4386.plugin.typhon.volcano;
 
+import me.alex4386.plugin.typhon.TyphonNMSUtils;
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonUtils;
+import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
 import org.bukkit.*;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
+import org.bukkit.entity.Entity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.plugin.PluginManager;
+
+import java.util.Random;
 
 public class VolcanoGeoThermal implements Listener {
     public Volcano volcano;
@@ -45,8 +53,69 @@ public class VolcanoGeoThermal implements Listener {
                     (Runnable) () -> {
                         if (enable) {
                             // something to do~~
+                            for (VolcanoCrater crater : volcano.manager.getCraters()) {
+                                if (crater.enabled) {
+                                    int geothermalRange = (crater.longestFlowLength <= 50) ? 50 : (int) crater.longestFlowLength + 100;
+                                    for (int i = 0; i < volcano.status.getScaleFactor() * Math.pow(geothermalRange / 50, 1 + (1.2 * volcano.status.getScaleFactor())); i++) {
+
+                                        Block block = TyphonUtils.getHighestRocklikes(
+                                                TyphonUtils.getRandomBlockInRange(
+                                                        crater.location.getBlock(),
+                                                        (int) Math.floor(geothermalRange)
+                                                )
+                                        );
+
+                                        if (shouldDoIt(block.getLocation()) || (Math.random() < (0.2 * volcano.status.getScaleFactor()) && geothermalRange == 50 && crater.longestFlowLength <= 50)) {
+
+                                            final Location targetLoc = block.getLocation().add(0, 1, 0);
+                                            TyphonUtils.createRisingSteam(targetLoc, 1, 5);
+
+                                            Entity[] entities = block.getChunk().getEntities();
+                                            for (Entity entity : entities) {
+                                                double distance = entity.getLocation().distance(targetLoc);
+                                                if (distance < 3) {
+                                                    entity.setFireTicks((int) (60 * volcano.manager.getHeatValue(targetLoc) * (distance / 3) * volcano.status.getScaleFactor()));
+                                                }
+                                            }
+
+                                            volcano.metamorphism.evaporateBlock(block);
+                                            for (int x = -1; x <= 1; x++) {
+                                                for (int y = -1; y <= 1; y++) {
+                                                    for (int z = -1; z <= 1; z++) {
+                                                        volcano.metamorphism.evaporateBlock(block.getRelative(x, y, z));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if (volcano.status.getScaleFactor() >= 0.1) {
+                                        for (int i = 0; i < Math.random() * 50 * volcano.status.getScaleFactor(); i++) {
+                                            Location location = TyphonUtils.getHighestLocation(TyphonUtils.getRandomBlockInRange(
+                                                    crater.location.getBlock(),
+                                                    (int) Math.floor(crater.craterRadius - 3) + (int) ((Math.random() * 6) - 3)
+                                            ).getLocation());
+
+                                            if (Math.random() < volcano.status.getScaleFactor() * 0.5 && crater.getHeatValue(location) > 0.999) {
+                                                volcano.location.getWorld().spawnParticle(
+                                                        Particle.LAVA,
+                                                        location,
+                                                        Math.abs((int) (volcano.manager.getHeatValue(location) - 0.999) * 1000) * 20);
+
+                                                Entity[] entities = location.getChunk().getEntities();
+                                                for (Entity entity : entities) {
+                                                    double distance = entity.getLocation().distance(location);
+                                                    if (distance < 5) {
+                                                        entity.setFireTicks((int) (100 * volcano.manager.getHeatValue(location) * (distance / 5) * volcano.status.getScaleFactor()));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    }, 0, geoThermalUpdateRate
+                    }, (geoThermalUpdateRate / 20) * volcano.updateRate, (geoThermalUpdateRate / 20) * volcano.updateRate
             );
         }
     }
@@ -68,9 +137,14 @@ public class VolcanoGeoThermal implements Listener {
         this.unregisterTask();
     }
 
+    public boolean shouldDoIt(Location location) {
+        Random random = new Random();
+        return enable && volcano.manager.getHeatValue(location) >= 1 - volcano.status.getScaleFactor() && random.nextDouble() < volcano.status.getScaleFactor();
+    }
+
     @EventHandler
     public void onPlayerDropItem(PlayerDropItemEvent e) {
-        if (enable && volcano.manager.getHeatValue(e.getPlayer().getLocation()) >= 1 - volcano.status.scaleFactor) {
+        if (shouldDoIt(e.getPlayer().getLocation())) {
             switch (e.getItemDrop().getItemStack().getType()) {
                 case PORKCHOP:
                     e.getItemDrop().getItemStack().setType(Material.COOKED_PORKCHOP);

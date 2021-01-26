@@ -15,6 +15,7 @@ import org.json.simple.JSONObject;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Random;
 
 public class TyphonUtils {
 
@@ -199,6 +200,30 @@ public class TyphonUtils {
         return highestBlock;
     }
 
+    public static org.bukkit.block.Block getRandomBlockInRange(org.bukkit.block.Block block, int minRange, int maxRange) {
+        Random random = new Random();
+
+        int offsetRadius = random.nextInt(maxRange - minRange) + minRange;
+        double angle = random.nextDouble() * 2 * Math.PI;
+
+        int offsetX = (int) (Math.sin(angle) * offsetRadius);
+        int offsetZ = (int) (Math.cos(angle) * offsetRadius);
+
+        return block.getRelative(offsetX, 0, offsetZ);
+    }
+
+    public static org.bukkit.block.Block getRandomBlockInRange(org.bukkit.block.Block block, int range) {
+        Random random = new Random();
+
+        int offsetRadius = random.nextInt(range);
+        double angle = random.nextDouble() * 2 * Math.PI;
+
+        int offsetX = (int) (Math.sin(angle) * offsetRadius);
+        int offsetZ = (int) (Math.cos(angle) * offsetRadius);
+
+        return block.getRelative(offsetX, 0, offsetZ);
+    }
+
     public static boolean isMaterialTree(org.bukkit.Material material) {
         String materialType = material.name().toLowerCase();
         return (
@@ -287,6 +312,76 @@ public class TyphonUtils {
 
         return new TyphonNavigationResult(destinationYaw, distanceDirect);
     }
+
+    public static void spawnParticleWithVelocity(Particle particle, Location loc, double radius, int count, double offsetX, double offsetY, double offsetZ) {
+        org.bukkit.World world = loc.getWorld();
+        double baseX = loc.getX();
+        double baseY = loc.getY();
+        double baseZ = loc.getZ();
+
+        if (radius == 0) {
+            for (int i = 0; i < count; i++) {
+                world.spawnParticle(particle, loc, 0, offsetX, offsetY, offsetZ);
+            }
+            return;
+        }
+
+        double radiusSquared = Math.pow(radius, 2);
+
+        // imagine a sphere, that has volume of count.
+        // get the radius.
+        // then you'll have a sphere that has amount of count's
+        // particle.
+        // now you shrink it accordingly to given radius, you'll get a offset.
+        double referenceSphereVolume = count;
+        double referenceSphereRadiusCubed = 3 / (4 * Math.PI) * referenceSphereVolume;
+
+
+        double referenceSphereRadius = Math.cbrt(referenceSphereRadiusCubed);
+        double offset = radius / referenceSphereRadius;
+
+        int axisRepeat = (int)(2 * referenceSphereRadius);
+
+        for (int xIdx = 0; xIdx < axisRepeat; xIdx++) {
+            for (int yIdx = 0; yIdx < axisRepeat; yIdx++) {
+                for (int zIdx = 0; zIdx < axisRepeat; zIdx++) {
+                    double offsetXLoc = -radius + (xIdx * offset);
+                    double offsetYLoc = -radius + (yIdx * offset);
+                    double offsetZLoc = -radius + (zIdx * offset);
+
+                    double x = baseX + offsetXLoc;
+                    double y = baseY + offsetYLoc;
+                    double z = baseZ + offsetZLoc;
+
+                    if (Math.pow(offsetXLoc, 2) + Math.pow(offsetYLoc, 2) + Math.pow(offsetZLoc, 2) < radiusSquared) {
+                        org.bukkit.Location tmpLoc = new org.bukkit.Location(
+                                world,
+                                x,
+                                y,
+                                z
+                        );
+
+                        world.spawnParticle(particle, tmpLoc, 0, offsetX, offsetY, offsetZ);
+                    }
+                }
+            }
+        }
+    }
+
+    public static void createRisingSteam(Location location, int radius, int count) {
+        TyphonUtils.spawnParticleWithVelocity(
+            Particle.CLOUD,
+            TyphonUtils.getHighestRocklikes(location).getLocation(),
+            radius,
+            (int) (count * (4 / 3) * Math.pow(radius, 3)),
+            0,
+            0.4,
+            0
+        );
+        location.getWorld().playSound(location, Sound.BLOCK_LAVA_POP, .05f * count, 0);
+        location.getWorld().playSound(location, Sound.BLOCK_LAVA_EXTINGUISH, .2f * count, 0);
+    }
+
 
     public static org.bukkit.block.Block createFakeBlock(Material material) {
         Block fakeBlock = new Block() {

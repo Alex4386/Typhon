@@ -130,6 +130,7 @@ public class VolcanoLavaFlow implements Listener {
 
                 if (distance > crater.longestFlowLength) {
                     crater.longestFlowLength = distance;
+                    crater.getVolcano().trySave();
                 }
 
                 crater.record.addEjectaVolume(1);
@@ -156,8 +157,8 @@ public class VolcanoLavaFlow implements Listener {
                 }
 
                 if (Arrays.asList(VolcanoLavaFlowExplode.water).contains(nearByBlock.getType())) {
-                    TyphonNMSUtils.createParticle(Particle.CLOUD, nearByBlock.getLocation(), 100);
-                    //nearByBlock.getWorld().playSound(nearByBlock.getLocation(), Sound.BLOCK_LAVA_EXTINGUISH, 100f, 0f);
+                    TyphonUtils.createRisingSteam(nearByBlock.getLocation(), 1, 2);
+                    nearByBlock.getWorld().playSound(nearByBlock.getLocation(), Sound.BLOCK_LAVA_EXTINGUISH, 1f, 0f);
                 } else {
                     getVolcano().metamorphism.metamorphoseBlock(nearByBlock);
                 }
@@ -189,7 +190,20 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void flowLava(Block whereToFlow) {
+        World world = whereToFlow.getWorld();
+
         whereToFlow.setType(Material.LAVA);
+        world.spawnParticle(
+                Particle.LAVA,
+                whereToFlow.getLocation(),
+                10
+        );
+        world.playSound(
+                whereToFlow.getLocation(),
+                Sound.BLOCK_LAVA_POP,
+                1f,
+                1f
+        );
         registerLavaCoolData(whereToFlow);
     }
 

@@ -23,6 +23,8 @@ public enum VolcanoCommandAction {
     RELOAD("reload", "", "reload the volcano"),
     UPDATE_RATE("updaterate", "<value>", "get/set the updaterate"),
     DEBUG("debug", "<value>", "get/set the debug mode"),
+    STATUS("status", "<value>", "get/set the current status"),
+    HEAT("heat", "", "get heat value of current location"),
 
     DELETE("delete", "", "Delete this volcano");
 

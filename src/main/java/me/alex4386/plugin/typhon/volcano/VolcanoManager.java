@@ -125,14 +125,8 @@ public class VolcanoManager {
     public double getHeatValue(Location loc) {
         double accumulatedHeat = 0.0f;
         for (VolcanoCrater crater : volcano.manager.getCraters()) {
-            double distance = crater.getTwoDimensionalDistance(loc);
-            double distanceRatio = distance / crater.longestFlowLength;
-
-            double heatValue = VolcanoMath.pdfMaxLimiter(distanceRatio, 1);
-
-            accumulatedHeat = Math.max(heatValue, accumulatedHeat);
+            accumulatedHeat = Math.max(crater.getHeatValue(loc), accumulatedHeat);
         }
-
         return Math.min(accumulatedHeat, 1.0);
     }
 

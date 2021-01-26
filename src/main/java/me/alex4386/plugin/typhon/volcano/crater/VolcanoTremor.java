@@ -5,8 +5,11 @@ import me.alex4386.plugin.typhon.volcano.Volcano;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
@@ -73,7 +76,7 @@ public class VolcanoTremor {
         }
     }
 
-    public void tremorOnPlayer(Player player, int tremorLength, double power) {
+    public void tremorOnEntity(Entity entity, int tremorLength, double power) {
         Volcano volcano = crater.getVolcano();
 
         AtomicInteger loop = new AtomicInteger();
@@ -81,28 +84,32 @@ public class VolcanoTremor {
 
         AtomicInteger scheduleID = new AtomicInteger();
         Runnable tremorRunnable = (Runnable) () -> {
-            if (player.isOnGround()) {
+            if (entity.isOnGround()) {
                 float xDelta = (float) ((Math.random() - 0.5) * 0.04 * power);
                 float zDelta = (float) ((Math.random() - 0.5) * 0.04 * power);
                 float yawDelta = (float) ((Math.random() - 0.5) * 0.4 * power);
                 float pitchDelta = (float) ((Math.random() - 0.5) * 0.4 * power);
 
-                Location location = new Location(player.getWorld(),
-                        player.getLocation().getX() + xDelta,
-                        player.getLocation().getY(),
-                        player.getLocation().getZ() + zDelta,
-                        player.getLocation().getYaw() + yawDelta,
-                        player.getLocation().getPitch() + pitchDelta);
+                Location location = new Location(entity.getWorld(),
+                        entity.getLocation().getX() + xDelta,
+                        entity.getLocation().getY(),
+                        entity.getLocation().getZ() + zDelta,
+                        entity.getLocation().getYaw() + yawDelta,
+                        entity.getLocation().getPitch() + pitchDelta);
 
-                if (location.getBlock().getType().isAir()) player.teleport(location);
+                if (location.getBlock().getType().isAir()) entity.teleport(location);
             }
 
             loop.getAndIncrement();
 
-            if (loop.get() > termorLength.get()) {
-                TyphonPlugin.plugin.getLogger().log(Level.INFO, player.getDisplayName()+" termor sequence Pass.");
-                Bukkit.getScheduler().cancelTask(scheduleID.get());
+            if (entity instanceof Player) {
+                Player player = (Player) entity;
+                if (loop.get() > termorLength.get()) {
+                    TyphonPlugin.plugin.getLogger().log(Level.INFO, player.getDisplayName()+" termor sequence Pass.");
+                    Bukkit.getScheduler().cancelTask(scheduleID.get());
+                }
             }
+
         };
 
         scheduleID.set(Bukkit.getScheduler().scheduleSyncRepeatingTask(TyphonPlugin.plugin, tremorRunnable, 0, Math.min(1, volcano.updateRate / 5)));
@@ -114,21 +121,37 @@ public class VolcanoTremor {
         TyphonPlugin.plugin.getLogger().log(Level.FINEST, "[Volcano "+volcano.name+" Tremor] Running tremor for volcano " + volcano.name + " with power " + power + ".");
 
         for (Player player : Bukkit.getOnlinePlayers()) {
-            int radius = (int) crater.longestFlowLength;
+            int radius = (int) crater.longestFlowLength * 2;
             Location location = player.getLocation();
 
             double distance = Math.sqrt(Math.pow(location.getBlockX() - block.getX(), 2) +
                     Math.pow(location.getBlockZ() - block.getZ(), 2));
 
-            if (player.getWorld().getUID() == block.getWorld().getUID() &&
-                    distance < radius && player.isOnGround()) {
+            if (player.getWorld().getUID() == block.getWorld().getUID() && distance < radius) {
 
-                double impactFactor = 1.0 - (distance / radius);
-                impactFactor = impactFactor > 0.2 ? impactFactor : 0;
+                double impactFactor = crater.getHeatValue(player.getLocation());
 
-                if (impactFactor > 0) {
-                    tremorOnPlayer(player, (int) ( 2 + (Math.random() * 3)), power * impactFactor);
+                Entity[] entities = player.getLocation().getChunk().getEntities();
+                Map<Entity, Location> entityLocation = new HashMap<>();
+                for (Entity entity : entities) {
+                    entityLocation.put(entity, entity.getLocation());
                 }
+
+                Bukkit.getScheduler().runTaskLater(
+                        TyphonPlugin.plugin,
+                        (Runnable) () -> {
+                            for (Entity entity : entities) {
+                                Location prevLocation = entityLocation.get(entity);
+                                Location nowLocation = entity.getLocation();
+
+                                if (impactFactor > 0 && prevLocation.distance(nowLocation) == 0 && prevLocation.getYaw() == nowLocation.getYaw() && prevLocation.getPitch() == nowLocation.getPitch()) {
+                                    tremorOnEntity(entity, (int) ( 2 + (Math.random() * 3)), power * impactFactor);
+                                }
+                            }
+                        },
+                        2L
+                );
+
             }
         }
     }
@@ -148,9 +171,9 @@ public class VolcanoTremor {
             case MINOR_ACTIVITY:
                 return 0.1;
             case MAJOR_ACTIVITY:
-                return 1;
+                return 0.5;
             case ERUPTING:
-                return 10;
+                return 2;
             default:
                 return 0;
         }

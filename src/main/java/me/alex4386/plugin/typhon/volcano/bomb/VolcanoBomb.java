@@ -78,7 +78,19 @@ public class VolcanoBomb {
         TyphonNMSUtils.createParticle(
                 Particle.CLOUD,
                 loc,
-                1
+                5,
+                2,2,2
+        );
+        TyphonNMSUtils.createParticle(
+                Particle.ASH,
+                loc,
+                2,
+                30, 30, 30
+        );
+        TyphonNMSUtils.createParticle(
+                Particle.FLAME,
+                loc,
+                6
         );
     }
 

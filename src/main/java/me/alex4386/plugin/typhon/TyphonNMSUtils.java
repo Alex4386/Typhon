@@ -173,4 +173,16 @@ public class TyphonNMSUtils {
     public static void createParticle(org.bukkit.Particle particle, org.bukkit.Location loc, int count) {
         createParticle(particle, loc, count, 0,0,0);
     }
+
+    public static void createParticle(org.bukkit.Particle particle, org.bukkit.block.Block block, int count, double offsetX, double offsetY, double offsetZ, double extra) {
+        createParticle(particle, block.getLocation(), count, 1,1,1, extra, (Object)null);
+    }
+
+    public static void createParticle(org.bukkit.Particle particle, org.bukkit.block.Block block, int count, double offsetX, double offsetY, double offsetZ) {
+        createParticle(particle, block, count, offsetX, offsetY, offsetZ, 0);
+    }
+
+    public static void createParticle(org.bukkit.Particle particle, org.bukkit.block.Block block, int count) {
+        createParticle(particle, block, count, 0,0,0);
+    }
 }

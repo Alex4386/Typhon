@@ -6,8 +6,8 @@ public class VolcanoBombsDefault {
     public static float minBombPower = 2.0f;
     public static float maxBombPower = 4.0f;
 
-    public static float minBombLaunchPower = 2.0f;
-    public static float maxBombLaunchPower = 40.0f;
+    public static float minBombLaunchPower = 1.0f;
+    public static float maxBombLaunchPower = 14.0f;
 
     public static int minBombRadius = 1;
     public static int maxBombRadius = 2;
