@@ -23,20 +23,28 @@ public class VolcanoConstructionMagmaChamberFillData extends VolcanoConstruction
     public Map<Block, Block> getConstructionData() {
         Map<Block, Block> blockUpdates = new LinkedHashMap<>();
 
+        return blockUpdates;
+    }
+
+    @Override
+    public Map<Block, Material> getConstructionMaterialUpdateData() {
+        Map<Block, Material> blockUpdates = new LinkedHashMap<>();
+
         World world = this.baseBlock.getWorld();
 
         int x = baseBlock.getX();
+        int y = baseBlock.getY();
         int z = baseBlock.getZ();
 
         if (this.magmaHeight > 0) {
             for (int i = 0; i < magmaHeight; i++) {
-                Block sourceBlock = world.getBlockAt(x, i, z);
-                sourceBlock.setType(Material.LAVA);
+                Block sourceBlock = world.getBlockAt(x, y + i, z);
+                blockUpdates.put(sourceBlock, Material.LAVA);
             }
         } else if (this.magmaHeight < 0) {
             for (int i = 0; i >= -magmaHeight; i--) {
-                Block sourceBlock = world.getBlockAt(x, i, z);
-                sourceBlock.setType(Material.LAVA);
+                Block sourceBlock = world.getBlockAt(x, y + i, z);
+                blockUpdates.put(sourceBlock, Material.LAVA);
             }
         } else {}
 

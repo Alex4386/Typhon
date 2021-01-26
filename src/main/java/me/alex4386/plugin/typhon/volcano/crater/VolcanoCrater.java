@@ -2,18 +2,14 @@ package me.alex4386.plugin.typhon.volcano.crater;
 
 import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.Volcano;
-import me.alex4386.plugin.typhon.volcano.VolcanoStatus;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombs;
-import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoLavaCoolData;
 import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoLavaFlow;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoCraterRecord;
-import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.json.simple.JSONObject;
 
-import java.io.IOException;
 import java.util.*;
 
 public class VolcanoCrater {
@@ -23,6 +19,7 @@ public class VolcanoCrater {
 
     public Volcano volcano;
     public String name = null;
+    public VolcanoCraterStatus status = VolcanoCraterStatus.DORMANT;
 
     public Location location;
     public int craterRadius = defaultCraterRadius;
@@ -62,6 +59,7 @@ public class VolcanoCrater {
         // bombs don't need initialization
         erupt.initialize();
         lavaFlow.initialize();
+        tremor.initialize();
 
         this.getCraterBlocks();
     }
@@ -70,6 +68,7 @@ public class VolcanoCrater {
         // bombs don't need shutdown
         erupt.shutdown();
         lavaFlow.shutdown();
+        tremor.shutdown();
     }
 
     public String getName() {
@@ -217,7 +216,7 @@ public class VolcanoCrater {
     public void generateSmoke(int count) {
         Random random = new Random();
 
-        int steamRadius = (int) (random.nextDouble() * (craterRadius / 4) + (craterRadius / 4));
+        int steamRadius = (int) (random.nextDouble() * 5);
 
         TyphonUtils.spawnParticleWithVelocity(
                 Particle.CAMPFIRE_SIGNAL_SMOKE,
@@ -278,25 +277,25 @@ public class VolcanoCrater {
 
     public void startFlowingLava() {
         this.initialize();
-        volcano.status = VolcanoStatus.ERUPTING;
+        this.status = VolcanoCraterStatus.ERUPTING;
         lavaFlow.settings.flowing = true;
     }
 
     public void stopFlowingLava() {
         lavaFlow.settings.flowing = false;
-        volcano.status = (volcano.manager.currentlyStartedCraters().size() == 0) ? VolcanoStatus.MAJOR_ACTIVITY : volcano.status;
+        this.status = (volcano.manager.currentlyStartedCraters().size() == 0) ? VolcanoCraterStatus.MAJOR_ACTIVITY : this.status;
         this.cool();
     }
 
     public void startErupting() {
         this.initialize();
-        volcano.status = VolcanoStatus.ERUPTING;
+        this.status = VolcanoCraterStatus.ERUPTING;
         erupt.erupting = true;
     }
 
     public void stopErupting() {
         erupt.erupting = false;
-        volcano.status = (volcano.manager.currentlyStartedCraters().size() == 0) ? VolcanoStatus.MAJOR_ACTIVITY : volcano.status;
+        this.status = (volcano.manager.currentlyStartedCraters().size() == 0) ? VolcanoCraterStatus.MAJOR_ACTIVITY : this.status;
     }
 
     public boolean isMainCrater() {
@@ -309,7 +308,7 @@ public class VolcanoCrater {
 
     public void importConfig(JSONObject configData) {
         this.enabled = (boolean) configData.get("enabled");
-
+        this.status = VolcanoCraterStatus.getStatus((String) configData.get("status"));
         this.location = TyphonUtils.deserializeLocationForJSON((JSONObject) configData.get("location"));
         this.craterRadius = (int) (long) configData.get("radius");
         this.bombs.importConfig((JSONObject) configData.get("bombs"));
@@ -324,6 +323,7 @@ public class VolcanoCrater {
 
         configData.put("enabled", this.enabled);
         configData.put("location", TyphonUtils.serializeLocationForJSON(this.location));
+        configData.put("status", this.status.toString());
         configData.put("longestFlowLength", this.longestFlowLength);
         configData.put("radius", this.craterRadius);
 

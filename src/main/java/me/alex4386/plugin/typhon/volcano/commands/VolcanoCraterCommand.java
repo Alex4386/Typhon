@@ -3,10 +3,12 @@ package me.alex4386.plugin.typhon.volcano.commands;
 import me.alex4386.plugin.typhon.TyphonCommand;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
+import me.alex4386.plugin.typhon.volcano.crater.VolcanoCraterStatus;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -77,8 +79,24 @@ public class VolcanoCraterCommand {
                             return TyphonCommand.search(args[baseOffset + 1], Arrays.asList(configNodes));
 
                         } else if (args.length == baseOffset + 3) {
-                            String[] res = { "<?value>" };
+                            String[] res = { "<? value>" };
                             return Arrays.asList(res);
+                        }
+                    } else if (action == VolcanoCraterCommandAction.TREMOR) {
+                        if (args.length == baseOffset + 2) {
+                            String[] res = { "<? power>" };
+                            return Arrays.asList(res);
+                        }
+                    } else if (action == VolcanoCraterCommandAction.STATUS) {
+                        if (args.length == baseOffset + 2) {
+                            String searchQuery = args[baseOffset + 1];
+                            List<String> searchResults = new ArrayList<>();
+                            for (VolcanoCraterStatus status : VolcanoCraterStatus.values()) {
+                                if (status.name().startsWith(searchQuery)) {
+                                    searchResults.add(status.name());
+                                }
+                            }
+                            return searchResults;
                         }
                     }
                 }
@@ -116,6 +134,16 @@ public class VolcanoCraterCommand {
             case STOP:
                 crater.stop();
                 msg.info("Crater "+crater.getName()+" is now stopped!");
+                break;
+            case TREMOR:
+                if (newArgs.length == 1) {
+                    msg.info("Creating tremor at "+crater.name);
+                    crater.tremor.runTremorCycle();
+                } else if (newArgs.length == 2) {
+                    double power = Double.parseDouble(newArgs[1]);
+                    crater.tremor.showTremorActivity(TyphonUtils.getHighestRocklikes(crater.location.getBlock()), power);
+                    msg.info("Creating tremor at "+crater.name+" with power: "+power);
+                }
                 break;
             case ERUPT:
                 if (newArgs.length == 1) {
@@ -208,7 +236,37 @@ public class VolcanoCraterCommand {
                 crater.lavaFlow.cooldownAll();
                 msg.info("Cooled down all lava from crater "+crater.getName());
                 break;
+            case STATUS:
+                if (newArgs.length == 2) {
+                    VolcanoCraterStatus prevStatus = crater.status;
+                    VolcanoCraterStatus status = VolcanoCraterStatus.getStatus(newArgs[1]);
+
+                    if (status != null) {
+                        crater.status = status;
+                        if (prevStatus == VolcanoCraterStatus.ERUPTING && status != VolcanoCraterStatus.ERUPTING) {
+                            crater.stop();
+                        } else if (prevStatus != VolcanoCraterStatus.ERUPTING && status == VolcanoCraterStatus.ERUPTING) {
+                            crater.start();
+                        }
+                    }
+                }
+                msg.info("Crater Status: "+crater.volcano.manager.getCraterChatColor(crater)+crater.status.toString());
+                break;
+
+            case CREATE_SUB:
+                if (newArgs.length >= 3) {
+
+                } else {
+                    VolcanoCrater subCrater = crater.volcano.autoStart.createSubCrater(crater);
+                    msg.info("Sub Crater: "+subCrater.name+" has been created.");
+                }
+                break;
+
             case CONFIG:
+                if (newArgs.length < 2) {
+                    msg.error("Invalid usage");
+                    return true;
+                }
                 if (newArgs[1].equalsIgnoreCase("lavaflow:delay")) {
                     if (newArgs.length >= 2) {
                         if (newArgs.length == 3) crater.lavaFlow.settings.delayFlowed = Integer.parseInt(newArgs[2]);
@@ -281,7 +339,7 @@ public class VolcanoCraterCommand {
                     }
                 } else if (newArgs[1].equalsIgnoreCase("crater:radius")) {
                     if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) crater.craterRadius = Integer.parseInt(newArgs[2]);
+                        if (newArgs.length == 3) crater.setRadius(Integer.parseInt(newArgs[2]));
                         msg.info("crater:radius - "+ crater.craterRadius);
                     }
                 } else {
@@ -299,6 +357,7 @@ public class VolcanoCraterCommand {
                 msg.info("LavaFlow: "+ crater.isFlowingLava()+" @ "+String.format("%.2f",crater.longestFlowLength)+"m");
                 msg.info("Erupting: "+ crater.isErupting());
                 msg.info("Radius  : "+ crater.getRadius());
+                msg.info("Status  : "+crater.volcano.manager.getCraterChatColor(crater)+crater.status.toString());
 
                 sender.sendMessage("type \"/"+label+" "+ crater.volcano.name+" "+args[1]+(args.length > 2 ? " "+args[2]:"")+" help\" for more commands.");
 

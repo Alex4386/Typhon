@@ -2,10 +2,11 @@ package me.alex4386.plugin.typhon.volcano.commands;
 
 import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.Volcano;
-import me.alex4386.plugin.typhon.volcano.VolcanoStatus;
+import me.alex4386.plugin.typhon.volcano.crater.VolcanoCraterStatus;
 import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
 import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoDike;
 import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMagmaChamber;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
@@ -62,7 +63,7 @@ public class VolcanoCommand {
                         }
                     } else if (action.equals(VolcanoCommandAction.CREATE)) {
                         if (args.length == 3) {
-                            String[] types = { "crater", "dike", "magmachamber" };
+                            String[] types = { "crater", "dike", "magmachamber", "autocrater" };
                             return Arrays.asList(types.clone());
                         } else if (args.length > 3) {
                             String option = args[2];
@@ -95,6 +96,11 @@ public class VolcanoCommand {
                                     String[] result = { "<height>" };
                                     return Arrays.asList(result);
                                 }
+                            } else if (option.toLowerCase().equals("autocrater")) {
+                                if (args.length == 4) {
+                                    String[] result = {"<playerName>"};
+                                    return Arrays.asList(result);
+                                }
                             }
                         }
                     } else if (action.equals(VolcanoCommandAction.MAGMA_CHAMBER)) {
@@ -113,18 +119,6 @@ public class VolcanoCommand {
                                 return Arrays.asList(result);
                             }
                         }
-                    } else if (action.equals(VolcanoCommandAction.STATUS)) {
-                        if (args.length == 3) {
-                            String searchQuery = args[2];
-                            List<String> searchResults = new ArrayList<>();
-                            for (VolcanoStatus status : VolcanoStatus.values()) {
-                                if (status.name().startsWith(searchQuery)) {
-                                    searchResults.add(status.name());
-                                }
-                            }
-                            return searchResults;
-                        }
-
                     }
 
                 }
@@ -277,6 +271,11 @@ public class VolcanoCommand {
                                             msg.error(sender, "Not enough arguments to generate magma chamber");
                                             msg.error(sender, ""+ChatColor.RED+ChatColor.BOLD+"Usage: "+ChatColor.RESET+"/vol "+volcano.name+" create magmachamber "+ChatColor.YELLOW+"<name> <baseY> <baseRadius> <height>");
                                         }
+                                    } else if (type.equalsIgnoreCase("autocreate")) {
+                                        Player target = Bukkit.getPlayer(name);
+                                        if (target != null) {
+
+                                        }
                                     }
                                 }
 
@@ -346,13 +345,8 @@ public class VolcanoCommand {
                             msg.error("Implementation in progress...");
                             break;
                         case STATUS:
-                            if (args.length == 3) {
-                                VolcanoStatus status = VolcanoStatus.getStatus(args[2]);
-                                if (status != null) {
-                                    volcano.status = status;
-                                }
-                            }
-                            msg.info("Status: "+this.volcano.status.name());
+                            VolcanoCrater crater = volcano.manager.getHighestStatusCrater();
+                            msg.info("Highest Status: "+crater.status.name());
                             break;
                         case HEAT:
                             if (sender instanceof Player) {

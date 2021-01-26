@@ -18,6 +18,9 @@ public enum VolcanoCraterCommandAction {
     LAVA_FLOW("lavaflow", "<start / stop / now> <? flowamount>", "start or stop lavaflow scheduler / or flow lava now"),
     SUMMIT("summit", "", "get navigation to summit"),
     QUICK_COOL("quickcool", "", "cool all lava from this crater"),
+    TREMOR("tremor", "<? power>", "create volcano tremor"),
+    STATUS("status", "<? status>", "get/set status of this crater"),
+    CREATE_SUB("createSub", "<? minRange> <? maxRange>", "create subcrater from this crater"),
     DELETE("delete", "", "delete this crater");
 
     String cmdline;

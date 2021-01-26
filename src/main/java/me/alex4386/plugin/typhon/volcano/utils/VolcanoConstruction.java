@@ -35,6 +35,7 @@ public class VolcanoConstruction {
 
     public static int estimateConstructionProcessedBlocks(VolcanoConstructionData data) {
         int processingBlocks = data.getConstructionData().size();
+        processingBlocks += data.getConstructionMaterialUpdateData().size();
         if (data instanceof VolcanoConstructionRaiseData) {
             processingBlocks += ((VolcanoConstructionRaiseData) data).raiseAmount;
         }
@@ -49,10 +50,11 @@ public class VolcanoConstruction {
     // synchronous function that build volcano construction
     public static<T extends VolcanoConstructionData> void runConstruction(T data, boolean useNMS) {
         Map<Block, Block> constructionData = data.getConstructionData();
+        Map<Block, Material> constructionMaterialData = data.getConstructionMaterialUpdateData();
 
         // time calculation
         long blockUpdateInitTime = System.currentTimeMillis();
-        int processingBlocks = constructionData.size();
+        int processingBlocks = constructionData.size() + constructionMaterialData.size();
 
         for (Map.Entry<Block, Block> entry : constructionData.entrySet()) {
             Block sourceBlock = entry.getKey();
@@ -84,6 +86,19 @@ public class VolcanoConstruction {
                 destinationBlock.setType(sourceBlock.getType());
                 destinationBlock.setBlockData(blockData, true);
                 sourceBlock.setType(replacementMaterial);
+            }
+        }
+
+        for (Map.Entry<Block, Material> entry : constructionMaterialData.entrySet()) {
+            Block destinationBlock = entry.getKey();
+            Material material = entry.getValue();
+
+            boolean shouldUpdate = destinationBlock.getY() % 16 == 0 && destinationBlock.getX() % 16 == 0 && destinationBlock.getZ() % 16 == 0;
+
+            if (useNMS) {
+                TyphonNMSUtils.setBlockMaterial(destinationBlock, material, false, shouldUpdate);
+            } else {
+                destinationBlock.setType(material);
             }
         }
 

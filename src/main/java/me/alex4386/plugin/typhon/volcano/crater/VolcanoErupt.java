@@ -74,7 +74,7 @@ public class VolcanoErupt {
     }
 
     public void erupt(int bombCount, boolean tremor, boolean smoke) {
-        erupt(bombCount, tremor, true, true);
+        erupt(bombCount, tremor, smoke, true);
     }
 
     public void erupt(int bombCount, boolean tremor, boolean smoke, boolean summitExplode) {

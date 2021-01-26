@@ -2,7 +2,7 @@ package me.alex4386.plugin.typhon.volcano;
 
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
-import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
+import me.alex4386.plugin.typhon.volcano.crater.VolcanoCraterStatus;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
@@ -52,11 +52,21 @@ public class VolcanoManager {
         return false;
     }
 
-    public ChatColor getChatColor() {
+    public ChatColor getVolcanoChatColor() {
         boolean isErupting = volcano.manager.currentlyStartedCraters().size() > 0;
         return (isErupting ? ChatColor.RED : (
-            volcano.status.getScaleFactor() < 0.1 ? ChatColor.GREEN : ChatColor.GOLD
+            volcano.manager.getHighestStatusCrater().status.getScaleFactor() < 0.1 ? ChatColor.GREEN : ChatColor.GOLD
         ));
+    }
+
+    public ChatColor getCraterChatColor(VolcanoCrater crater) {
+        return (
+            (crater.status == VolcanoCraterStatus.ERUPTING) ? ChatColor.RED :
+                (crater.status == VolcanoCraterStatus.MAJOR_ACTIVITY) ? ChatColor.GOLD :
+                        (crater.status == VolcanoCraterStatus.MINOR_ACTIVITY) ? ChatColor.YELLOW :
+                                (crater.status == VolcanoCraterStatus.DORMANT) ? ChatColor.GREEN :
+                                        ChatColor.RESET
+        );
     }
 
     public VolcanoCrater getNearestCrater(Block block) {
@@ -128,6 +138,44 @@ public class VolcanoManager {
             accumulatedHeat = Math.max(crater.getHeatValue(loc), accumulatedHeat);
         }
         return Math.min(accumulatedHeat, 1.0);
+    }
+
+    public List<VolcanoCrater> getCratersInRange(Location loc, double range) {
+        List<VolcanoCrater> list = new ArrayList<>();
+
+        for (VolcanoCrater crater : volcano.manager.getCraters()) {
+            if (crater.getTwoDimensionalDistance(loc) <= range) {
+                list.add(crater);
+
+            }
+        }
+        return list;
+    }
+
+    public VolcanoCrater getHighestStatusCrater() {
+        VolcanoCrater highestCrater = volcano.mainCrater;
+        VolcanoCraterStatus status = VolcanoCraterStatus.EXTINCT;
+
+        for (VolcanoCrater crater : getCraters()) {
+            if (status.getScaleFactor() < crater.status.getScaleFactor()) {
+                highestCrater = crater;
+                status = crater.status;
+            }
+        }
+
+        return highestCrater;
+    }
+
+    public List<VolcanoCrater> getCraterRadiusInRange(Location loc, double range) {
+        List<VolcanoCrater> list = new ArrayList<>();
+
+        for (VolcanoCrater crater : volcano.manager.getCraters()) {
+            if (crater.getTwoDimensionalDistance(loc) <= range + crater.craterRadius) {
+                list.add(crater);
+
+            }
+        }
+        return list;
     }
 
     public VolcanoCrater getSubCraterByCraterName(String name) {

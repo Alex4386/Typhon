@@ -1,6 +1,6 @@
-package me.alex4386.plugin.typhon.volcano;
+package me.alex4386.plugin.typhon.volcano.crater;
 
-public enum VolcanoStatus {
+public enum VolcanoCraterStatus {
     EXTINCT("EXTINCT", 0.0),
     DORMANT("DORMANT", 0.04),
     MINOR_ACTIVITY("MINOR_ACTIVITY", 0.1),
@@ -10,7 +10,7 @@ public enum VolcanoStatus {
     String string;
     double scaleFactor;
 
-    VolcanoStatus(String string, double scaleFactor) {
+    VolcanoCraterStatus(String string, double scaleFactor) {
         this.string = string;
         this.scaleFactor = scaleFactor;
     }
@@ -26,8 +26,8 @@ public enum VolcanoStatus {
         return getStatus(string) != null;
     }
 
-    public static VolcanoStatus getStatus(String string) {
-        for (VolcanoStatus status : VolcanoStatus.values()) {
+    public static VolcanoCraterStatus getStatus(String string) {
+        for (VolcanoCraterStatus status : VolcanoCraterStatus.values()) {
             if (status.toString().equalsIgnoreCase(string)) {
                  return status;
             }
@@ -40,7 +40,7 @@ public enum VolcanoStatus {
         return !this.equals(EXTINCT);
     }
 
-    public VolcanoStatus increase() {
+    public VolcanoCraterStatus increase() {
         switch(this) {
             case EXTINCT:
                 return EXTINCT;
@@ -55,7 +55,7 @@ public enum VolcanoStatus {
         }
     }
 
-    public VolcanoStatus decrease() {
+    public VolcanoCraterStatus decrease() {
         switch(this) {
             case EXTINCT:
                 return EXTINCT;

@@ -3,11 +3,11 @@ package me.alex4386.plugin.typhon.volcano.crater;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
-import me.alex4386.plugin.typhon.volcano.VolcanoStatus;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -48,9 +48,9 @@ public class VolcanoAutoStart implements Listener {
         Bukkit.getScheduler().scheduleSyncRepeatingTask(TyphonPlugin.plugin,
             () -> {
                 updateStatus();
-                createSubCraters();
+                autoStartCreateSubCrater();
             },
-        0L, statusCheckInterval);
+        0L, Math.max(1, statusCheckInterval / 20 * volcano.updateRate));
     }
 
     public void unregisterTask() {
@@ -98,7 +98,60 @@ public class VolcanoAutoStart implements Listener {
         }
     }
 
-    public void createSubCraters() {
+    public VolcanoCrater createSubCrater(Location location) {
+        int key = -1;
+        String name;
+
+        Random random = new Random();
+        do {
+            key = random.nextInt(999999);
+            name = volcano.name+"_auto_"+String.format("%06d", key);
+            System.out.println("tried" + name);
+        } while(volcano.subCraters.get(name) != null);
+
+        VolcanoCrater newCrater = new VolcanoCrater(volcano, location, name);
+        volcano.subCraters.put(name, newCrater);
+
+        volcano.trySave();
+
+        return newCrater;
+    }
+
+    public VolcanoCrater createSubCrater(VolcanoCrater crater) {
+        int minRange = (int) (Math.random() * 20) + 40 + crater.craterRadius;
+        int range = (int) (Math.random() * 100);
+        return createSubCrater(crater.location, minRange, minRange + range);
+    }
+
+    public VolcanoCrater createSubCrater(Location location, int minRange, int maxRange) {
+        Location craterLocation;
+
+        do {
+            craterLocation = TyphonUtils.getHighestRocklikes(
+                    TyphonUtils.getRandomBlockInRange(
+                            location.getBlock(),
+                            minRange,
+                            maxRange
+                    )
+            ).getLocation();
+        } while (volcano.manager.getCraterRadiusInRange(craterLocation, minRange).size() == 0);
+
+
+        return createSubCrater(craterLocation);
+    }
+
+    public VolcanoCrater createSubCraterNearEntity(Entity entity) {
+        int minRange = (int) (Math.random() * 20) + 40;
+        int range = (int) (Math.random() * 100);
+        return createSubCraterNearEntity(entity, minRange, minRange + range);
+    }
+
+    public VolcanoCrater createSubCraterNearEntity(Entity entity, int minRange, int maxRange) {
+        Location location = entity.getLocation();
+        return createSubCrater(location, minRange, maxRange);
+    }
+
+    public VolcanoCrater autoStartCreateSubCrater() {
         boolean isMaincraterGrownEnough = (volcano.mainCrater.longestFlowLength > 100);
 
         if (isMaincraterGrownEnough && createSubCrater) {
@@ -119,7 +172,7 @@ public class VolcanoAutoStart implements Listener {
 
             if (Math.random() < 0.3) {
                 subCraterLocation = TyphonUtils.getRandomBlockInRange(
-                        volcano.mainCrater.location.getBlock(),
+                        crater.location.getBlock(),
                         (int) volcano.mainCrater.longestFlowLength - 100,
                         (int) volcano.mainCrater.longestFlowLength + 100
                 ).getLocation();
@@ -159,7 +212,7 @@ public class VolcanoAutoStart implements Listener {
                 }
 
                 if (minimumDistance < 50) {
-                    return;
+                    return null;
                 }
 
                 do {
@@ -179,51 +232,57 @@ public class VolcanoAutoStart implements Listener {
                         },
                         eruptionTimer
                 );
+
+                return newCrater;
             }
         }
+
+        return null;
     }
 
     public void updateStatus() {
-        if (volcano.autoStart.canAutoStart && volcano.status != VolcanoStatus.ERUPTING) {
+        if (volcano.autoStart.canAutoStart) {
             volcano.logger.debug(VolcanoLogClass.AUTOSTART, "Volcano AutoStart interval Checking...");
 
-            double a = Math.random();
+            for (VolcanoCrater crater : volcano.manager.getCraters()) {
+                VolcanoCraterStatus status = crater.status;
+                double a = Math.random();
 
-            VolcanoStatus status = volcano.status;
 
-            switch (volcano.status) {
-                case DORMANT:
-                    if (a <= probability.dormant.increase) {
-                        volcano.status = volcano.status.increase();
-                    }
-                    break;
-                case MINOR_ACTIVITY:
-                    if (a <= probability.minor_activity.increase) {
-                        volcano.status = volcano.status.increase();
-                    } else if (a <= probability.minor_activity.increase + probability.minor_activity.decrease) {
-                        volcano.status = volcano.status.decrease();
-                    }
-                    break;
-                case MAJOR_ACTIVITY:
-                    if (a <= probability.major_activity.increase) {
-                        volcano.logger.log(VolcanoLogClass.AUTOSTART, "volcano starting due to increment from major_activity");
-                        volcano.status = volcano.status.increase();
-                        volcano.start();
-                        Bukkit.getScheduler().scheduleSyncDelayedTask(TyphonPlugin.plugin, () -> {
-                            volcano.logger.log(VolcanoLogClass.AUTOSTART, "Volcano ended eruption session. back to MAJOR_ACTIVITY");
-                            volcano.stop();
-                            volcano.status = volcano.status.decrease();
-                        }, volcano.autoStart.eruptionTimer);
-                    } else if (a <= probability.major_activity.increase + probability.major_activity.decrease) {
-                        volcano.status = volcano.status.decrease();
-                    }
-                    break;
-                default:
-                    break;
-            }
+                switch (crater.status) {
+                    case DORMANT:
+                        if (a <= probability.dormant.increase) {
+                            crater.status = crater.status.increase();
+                        }
+                        break;
+                    case MINOR_ACTIVITY:
+                        if (a <= probability.minor_activity.increase) {
+                            crater.status = crater.status.increase();
+                        } else if (a <= probability.minor_activity.increase + probability.minor_activity.decrease) {
+                            crater.status = crater.status.decrease();
+                        }
+                        break;
+                    case MAJOR_ACTIVITY:
+                        if (a <= probability.major_activity.increase) {
+                            crater.volcano.logger.log(VolcanoLogClass.AUTOSTART, "volcano starting due to increment from major_activity");
+                            crater.status = crater.status.increase();
+                            crater.start();
+                            Bukkit.getScheduler().scheduleSyncDelayedTask(TyphonPlugin.plugin, () -> {
+                                crater.volcano.logger.log(VolcanoLogClass.AUTOSTART, "Volcano ended eruption session. back to MAJOR_ACTIVITY");
+                                crater.stop();
+                                crater.status = crater.status.decrease();
+                            }, volcano.autoStart.eruptionTimer);
+                        } else if (a <= probability.major_activity.increase + probability.major_activity.decrease) {
+                            crater.status = crater.status.decrease();
+                        }
+                        break;
+                    default:
+                        break;
+                }
 
-            if (status != volcano.status) {
-                volcano.logger.debug(VolcanoLogClass.AUTOSTART, "Volcano has changed status to" + volcano.status.toString());
+                if (crater.status != status) {
+                    volcano.logger.debug(VolcanoLogClass.AUTOSTART, "Volcano has changed status to" + crater.status.toString());
+                }
             }
 
             try {
@@ -231,6 +290,7 @@ public class VolcanoAutoStart implements Listener {
             } catch (IOException e) {
 
             }
+
         }
     }
 

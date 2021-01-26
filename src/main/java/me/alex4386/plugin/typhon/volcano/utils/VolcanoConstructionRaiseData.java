@@ -64,5 +64,30 @@ public class VolcanoConstructionRaiseData extends VolcanoConstructionData {
 
         return blockUpdates;
     }
+
+    @Override
+    public Map<Block, Material> getConstructionMaterialUpdateData() {
+        Map<Block, Material> blockUpdates = new LinkedHashMap<>();
+
+        World world = this.baseBlock.getWorld();
+
+        int x = baseBlock.getX();
+        int y = baseBlock.getY();
+        int z = baseBlock.getZ();
+
+        if (this.raiseAmount > 0) {
+            for (int i = 0; i < raiseAmount; i++) {
+                Block sourceBlock = world.getBlockAt(x, y + i, z);
+                blockUpdates.put(sourceBlock, Material.LAVA);
+            }
+        } else if (this.raiseAmount < 0) {
+            for (int i = 0; i >= -raiseAmount; i--) {
+                Block sourceBlock = world.getBlockAt(x, y + i, z);
+                blockUpdates.put(sourceBlock, Material.LAVA);
+            }
+        } else {}
+
+        return blockUpdates;
+    }
 }
 

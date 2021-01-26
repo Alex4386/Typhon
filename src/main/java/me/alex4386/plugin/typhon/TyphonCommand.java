@@ -82,7 +82,7 @@ public class TyphonCommand {
             sender.sendMessage(ChatColor.DARK_RED+""+ChatColor.BOLD+"[Near-by Volcanoes]");
             if (volcanoesNearYou.size() != 0) {
                 for (Volcano volcano: volcanoesNearYou) {
-                    sender.sendMessage(ChatColor.DARK_RED+" - "+volcano.manager.getChatColor()+volcano.name);
+                    sender.sendMessage(ChatColor.DARK_RED+" - "+volcano.manager.getVolcanoChatColor()+volcano.name);
                 }
             }
             sender.sendMessage("");
@@ -307,7 +307,7 @@ public class TyphonCommand {
                         for (Map.Entry<String, Volcano> entry: TyphonPlugin.listVolcanoes.entrySet()) {
                             String name = entry.getKey();
                             Volcano volcano = entry.getValue();
-                            sender.sendMessage(" - "+volcano.manager.getChatColor()+name);
+                            sender.sendMessage(" - "+volcano.manager.getVolcanoChatColor()+name);
                         }
                     }
 

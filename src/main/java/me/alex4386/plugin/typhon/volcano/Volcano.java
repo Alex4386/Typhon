@@ -31,7 +31,7 @@ public class Volcano implements Listener {
     public Location location;
 
     // metadata
-    public VolcanoStatus status = VolcanoStatus.DORMANT;
+    // public VolcanoStatus status = VolcanoStatus.DORMANT;
 
     // lavaFlow for Bombs
     public VolcanoLavaFlow bombLavaFlow = new VolcanoLavaFlow(this);
@@ -255,7 +255,7 @@ public class Volcano implements Listener {
     }
 
     public void importConfig(JSONObject configData) {
-        this.status = VolcanoStatus.getStatus((String) configData.get("status"));
+        //this.status = VolcanoStatus.getStatus((String) configData.get("status"));
         this.location = TyphonUtils.deserializeLocationForJSON((JSONObject) configData.get("location"));
         this.isDebug = (boolean) configData.get("isDebug");
         this.updateRate = (long) configData.get("updateRate");
@@ -264,7 +264,7 @@ public class Volcano implements Listener {
     public JSONObject exportConfig() {
         JSONObject configData = new JSONObject();
 
-        configData.put("status", this.status.toString());
+        //configData.put("status", this.status.toString());
         configData.put("location", TyphonUtils.serializeLocationForJSON(this.location));
         configData.put("isDebug", this.isDebug);
         configData.put("updateRate", this.updateRate);
