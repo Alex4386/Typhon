@@ -52,6 +52,18 @@ public class VolcanoManager {
         return false;
     }
 
+    public boolean isInAnyLavaFlowOffset(Location loc, double offset) {
+        List<VolcanoCrater> craters = this.getCraters();
+
+        for (VolcanoCrater crater : craters) {
+            if (crater.getTwoDimensionalDistance(loc) <= crater.longestFlowLength + offset) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public ChatColor getVolcanoChatColor() {
         boolean isErupting = volcano.manager.currentlyStartedCraters().size() > 0;
         return (isErupting ? ChatColor.RED : (

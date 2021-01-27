@@ -5,6 +5,7 @@ import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombs;
 import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoLavaFlow;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoCraterRecord;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import org.bukkit.*;
 import org.bukkit.block.Block;
@@ -56,19 +57,30 @@ public class VolcanoCrater {
     }
 
     public void initialize() {
+        volcano.logger.log(VolcanoLogClass.CRATER, "Starting up crater "+name);
+
         // bombs don't need initialization
         erupt.initialize();
         lavaFlow.initialize();
         tremor.initialize();
 
         this.getCraterBlocks();
+
+
+        volcano.logger.log(VolcanoLogClass.CRATER, "Started" +
+                " up crater "+name);
     }
 
     public void shutdown() {
+        volcano.logger.log(VolcanoLogClass.CRATER, "Shutting down crater "+name);
+
         // bombs don't need shutdown
         erupt.shutdown();
         lavaFlow.shutdown();
         tremor.shutdown();
+
+        volcano.logger.log(VolcanoLogClass.CRATER, "Shutted down crater "+name);
+
     }
 
     public String getName() {

@@ -25,6 +25,7 @@ public class VolcanoBombs {
     public int maxBombRadius = VolcanoBombsDefault.maxBombRadius;
 
     public int bombDelay = VolcanoBombsDefault.bombDelay;
+    public double maxDistance = 0;
 
     public VolcanoBombs(VolcanoCrater crater) {
         this.crater = crater;
@@ -132,6 +133,7 @@ public class VolcanoBombs {
         minBombRadius = (int) ((long) bombRadius.get("min"));
         maxBombRadius = (int) ((long) bombRadius.get("max"));
         bombDelay = (int) ((long) configData.get("delay"));
+        maxDistance = (double) configData.get("maxDistance");
     }
 
     public JSONObject exportConfig() {
@@ -153,6 +155,7 @@ public class VolcanoBombs {
         configData.put("launchPower", bombLaunchPower);
         configData.put("radius", bombRadius);
         configData.put("delay", bombDelay);
+        configData.put("maxDistance", maxDistance);
 
         return configData;
     }

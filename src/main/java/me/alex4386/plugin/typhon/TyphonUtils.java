@@ -279,7 +279,8 @@ public class TyphonUtils {
         double directDistance = navigationResult.distance;
 
         String destinationString = Math.abs(Math.floor(destinationYaw))+" degrees "
-                + ((Math.abs(destinationYaw) < 1) ? "Forward" : (destinationYaw < 0) ? "Left" : "Right");
+                + ((Math.abs(destinationYaw) < 1) ? "Forward" : (destinationYaw < 0) ? "Left" : "Right")
+                + ((Math.abs(destinationYaw) > 135) ? " Backward" : "");
 
         if (Double.isNaN(destinationYaw) || directDistance < 1) {
             return "Arrived!";
@@ -296,6 +297,7 @@ public class TyphonUtils {
         }
 
         float userYawN = from.getYaw() - 180;
+        userYawN = (userYawN < 0) ? userYawN + 360 : userYawN;
 
         double distanceN = from.getBlockZ() - to.getBlockZ();
         double distanceE = to.getBlockX() - from.getBlockX();
@@ -303,10 +305,13 @@ public class TyphonUtils {
 
         double theta;
         theta = Math.toDegrees(Math.acos(distanceN / distanceDirect));
-        theta = (distanceE > 0) ? theta : -theta;
+
+        System.out.println(theta);
+        System.out.println(userYawN);
 
         double destinationYaw = theta - userYawN;
-        destinationYaw = (Math.abs(destinationYaw) > 180) ? -(360 - destinationYaw) : destinationYaw;
+        destinationYaw = destinationYaw > 180 ? -( 360 - destinationYaw ) :
+                destinationYaw < -180 ? (360 + destinationYaw) : destinationYaw;
 
         if (Double.isNaN(destinationYaw)) { destinationYaw = 0; }
 
@@ -369,17 +374,25 @@ public class TyphonUtils {
     }
 
     public static void createRisingSteam(Location location, int radius, int count) {
+        createRisingSteam(location, radius, count, false);
+    }
+
+    public static void createRisingSteam(Location location, int radius, int count, boolean mute) {
         TyphonUtils.spawnParticleWithVelocity(
-            Particle.CLOUD,
-            TyphonUtils.getHighestRocklikes(location).getLocation(),
-            radius,
-            (int) (count * (4 / 3) * Math.pow(radius, 3)),
-            0,
-            0.4,
-            0
+                Particle.CLOUD,
+                TyphonUtils.getHighestRocklikes(location).getLocation(),
+                radius,
+                (int) (count * (4 / 3) * Math.pow(radius, 3)),
+                0,
+                0.4,
+                0
         );
-        location.getWorld().playSound(location, Sound.BLOCK_LAVA_POP, .05f * count, 0);
-        location.getWorld().playSound(location, Sound.BLOCK_LAVA_EXTINGUISH, .2f * count, 0);
+
+        if (!mute) {
+            location.getWorld().playSound(location, Sound.BLOCK_LAVA_POP, .1f * count, 0);
+            location.getWorld().playSound(location, Sound.BLOCK_LAVA_EXTINGUISH, .05f * count, 0);
+        }
+
     }
 
 
@@ -435,5 +448,15 @@ public class TyphonUtils {
             @Override public BoundingBox getBoundingBox() {return null; }
         };
         return fakeBlock;
+    }
+
+    public static boolean isNumber(String string) {
+        try {
+            Double.parseDouble(string);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+
+        return true;
     }
 }

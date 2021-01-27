@@ -94,59 +94,15 @@ public class TyphonCommand {
         }
     }
 
-    public static void runDebugCommand(CommandSender sender, String debugCommand) {
+    public static String[] getDebugCommands(CommandSender sender) {
+        String[] blank = {};
         if (sender.hasPermission("typhon.debug")) {
-            Player player = null;
-            if (sender instanceof Player) player = (Player) sender;
+            String[] commands = {
 
-            if (debugCommand.equalsIgnoreCase("steam")) {
-                if (player == null) return;
-                Location location = player.getLocation();
-
-                TyphonNMSUtils.createParticle(Particle.CLOUD, location, 100);
-                sender.sendMessage("Steamy day");
-            } else if (debugCommand.equalsIgnoreCase("steamblast")) {
-                if (player == null) return;
-                Location location = player.getTargetBlock(null, 100).getLocation();
-
-
-                sender.sendMessage("Steamy day");
-
-            } else if (debugCommand.equalsIgnoreCase("bombeffect")) {
-                if (player == null) return;
-                Location loc = player.getTargetBlock(null, 100).getLocation();
-
-                TyphonNMSUtils.createParticle(
-                        Particle.CLOUD,
-                        loc,
-                        35,
-                        2,2,2
-                );
-                TyphonNMSUtils.createParticle(
-                        Particle.ASH,
-                        loc,
-                        2,
-                        30,30,30
-                );
-                TyphonNMSUtils.createParticle(
-                        Particle.LAVA,
-                        loc,
-                        6
-                );
-            } else if (debugCommand.equalsIgnoreCase("craterblast")) {
-                if (player == null) return;
-                Random random = new Random();
-                Location location = player.getTargetBlock(null, 100).getLocation();
-                Block randomBlock = location.getBlock();
-                int steamRadius = 10;
-                int count = 10;
-
-                World world = location.getWorld();
-
-                sender.sendMessage("craterTest");
-
-            }
+            };
+            return commands;
         }
+        return blank;
     }
 
     public static void showConstructions(CommandSender sender, Command command, String label, String[] args) {
@@ -225,8 +181,12 @@ public class TyphonCommand {
                         String[] str = { "<name>" };
                         return Arrays.asList(str);
                     } else if (action.equals(TyphonCommandAction.DEBUG)) {
-                        String[] debugCommands = { "steam", "steamblast", "bombeffect" };
-                        return TyphonCommand.search(args[1], Arrays.asList(debugCommands.clone()));
+                        if (TyphonDebugCommand.canRunDebug(sender)) {
+                            return TyphonDebugCommand.onTabComplete(
+                                    sender,
+                                    TyphonDebugCommand.convertToDebugNewArgs(args)
+                            );
+                        }
                     }
                 }
             }
@@ -269,8 +229,11 @@ public class TyphonCommand {
                         showConstructions(sender, command, label, args);
                         break;
                     case DEBUG:
-                        if (args.length == 2) {
-                            runDebugCommand(sender, args[1]);
+                        if (TyphonDebugCommand.canRunDebug(sender)) {
+                            return TyphonDebugCommand.onCommand(
+                                    sender,
+                                    TyphonDebugCommand.convertToDebugNewArgs(args)
+                            );
                         }
                         break;
                     default:

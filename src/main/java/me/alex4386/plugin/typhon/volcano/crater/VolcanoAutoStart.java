@@ -118,8 +118,8 @@ public class VolcanoAutoStart implements Listener {
     }
 
     public VolcanoCrater createSubCrater(VolcanoCrater crater) {
-        int minRange = (int) (Math.random() * 20) + 40 + crater.craterRadius;
-        int range = (int) (Math.random() * 100);
+        int minRange = (int) (((Math.random() * 0.2) + 0.4) * crater.longestFlowLength) + crater.craterRadius;
+        int range = (int) (Math.random() * (crater.bombs.maxDistance - minRange));
         return createSubCrater(crater.location, minRange, minRange + range);
     }
 
@@ -163,11 +163,18 @@ public class VolcanoAutoStart implements Listener {
                 crater = volcano.mainCrater;
 
             } else if (volcano.subCraters.size() > 0) {
-                Collection<VolcanoCrater> craters = volcano.subCraters.values();
-                VolcanoCrater[] craterArray = (VolcanoCrater[]) craters.toArray();
-                List<VolcanoCrater> craterList = Arrays.asList(craterArray.clone());
-                Collections.shuffle(craterList);
-                crater = craterList.get(0);
+                Random random = new Random();
+                int size = volcano.subCraters.size();
+                crater = volcano.mainCrater;
+
+                int i = 0;
+                int idx = random.nextInt(size);
+                for (VolcanoCrater thisCrater : volcano.subCraters.values()) {
+                    if (idx == i) {
+                        crater = thisCrater;
+                    }
+                    i++;
+                }
             }
 
             if (Math.random() < 0.3) {

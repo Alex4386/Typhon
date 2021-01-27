@@ -130,6 +130,7 @@ public class Volcano implements Listener {
     }
 
     public void startup() {
+        logger.log(VolcanoLogClass.CORE, "Starting up Volcano...");
         this.initialize();
         this.mainCrater.initialize();
         for (Map.Entry<String, VolcanoCrater> entry : this.subCraters.entrySet()) {
@@ -140,6 +141,8 @@ public class Volcano implements Listener {
                 crater.initialize();
             }
         }
+
+        logger.log(VolcanoLogClass.CORE, "Started up!");
     }
 
     public void shutdown() {
@@ -147,6 +150,7 @@ public class Volcano implements Listener {
     }
 
     public void shutdown(boolean runQuickCool) {
+        logger.log(VolcanoLogClass.CORE, "Shutting down Volcano...");
         List<VolcanoCrater> craters = manager.getCraters();
 
         for (VolcanoCrater crater : craters) {
@@ -158,6 +162,8 @@ public class Volcano implements Listener {
         bombLavaFlow.shutdown();
         autoStart.shutdown();
         geoThermal.shutdown();
+
+        logger.log(VolcanoLogClass.CORE, "Shutdown Complete!");
     }
 
     public void quickCool() {
@@ -221,6 +227,7 @@ public class Volcano implements Listener {
     }
 
     public void save() throws IOException {
+        logger.log(VolcanoLogClass.CORE, "Saving...");
         this.dataLoader.setCoreConfig(this.exportConfig());
         this.dataLoader.setAutostartConfig(this.autoStart.exportConfig());
         this.dataLoader.setCompositionConfig(this.composition.exportConfig());
@@ -246,12 +253,18 @@ public class Volcano implements Listener {
 
             this.dataLoader.setMagmaChamberConfig(name, magmaChamber.exportConfig());
         }
+
+        logger.log(VolcanoLogClass.CORE, "Save Complete.");
     }
 
     public void delete() throws IOException {
+        logger.log(VolcanoLogClass.CORE, "Deleting...");
+
         this.shutdown();
         FileUtils.deleteDirectory(this.basePath.toFile());
         TyphonPlugin.listVolcanoes.remove(this.name);
+
+        logger.log(VolcanoLogClass.CORE, "Delete Complete!");
     }
 
     public void importConfig(JSONObject configData) {

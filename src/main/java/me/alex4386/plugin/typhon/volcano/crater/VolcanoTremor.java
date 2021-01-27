@@ -46,7 +46,9 @@ public class VolcanoTremor {
         if (scheduleID >= 0) { return; }
         Bukkit.getScheduler().scheduleSyncRepeatingTask(TyphonPlugin.plugin,
                 () -> {
-                    runTremorCycle();
+                    if (!crater.isErupting()) {
+                        runTremorCycle();
+                    }
                 },
                 0L, Math.max(1, tremorCycleRate / 20 * crater.volcano.updateRate));
     }
@@ -144,6 +146,13 @@ public class VolcanoTremor {
 
     public void showTremorActivity(Block block, double power) {
         Volcano volcano = crater.getVolcano();
+        /*
+        block.getWorld().playSound(
+                block.getLocation(),
+
+                power * 10f
+        );
+        */
 
         TyphonPlugin.plugin.getLogger().log(Level.FINEST, "[Volcano "+volcano.name+" Tremor] Running tremor for volcano " + volcano.name + " with power " + power + ".");
 
@@ -161,7 +170,11 @@ public class VolcanoTremor {
                 Entity[] entities = player.getLocation().getChunk().getEntities();
                 Map<Entity, Location> entityLocation = new HashMap<>();
                 for (Entity entity : entities) {
-                    entityLocation.put(entity, entity.getLocation());
+                    if (entity.isOnGround()) {
+                        if (entity.getType().isAlive()) {
+                            entityLocation.put(entity, entity.getLocation());
+                        }
+                    }
                 }
 
                 Bukkit.getScheduler().runTaskLater(
@@ -169,10 +182,17 @@ public class VolcanoTremor {
                         (Runnable) () -> {
                             for (Entity entity : entities) {
                                 Location prevLocation = entityLocation.get(entity);
-                                Location nowLocation = entity.getLocation();
+                                if (entity != null) {
+                                    Location nowLocation = entity.getLocation();
 
-                                if (impactFactor > 0 && prevLocation.distance(nowLocation) == 0 && prevLocation.getYaw() == nowLocation.getYaw() && prevLocation.getPitch() == nowLocation.getPitch()) {
-                                    tremorOnEntity(entity, (int) ( 2 + Math.max(Math.random() * impactFactor, 2)), power * impactFactor);
+                                    if (prevLocation != null) {
+                                        if (impactFactor > 0 && prevLocation.distance(nowLocation) == 0 && prevLocation.getYaw() == nowLocation.getYaw() && prevLocation.getPitch() == nowLocation.getPitch()) {
+                                            tremorOnEntity(entity, (int) ( 2 + Math.max(Math.random() * impactFactor, 2)), power * impactFactor);
+                                        }
+                                    }
+
+                                    entityLocation.remove(entity);
+                                    entityLocation.put(entity, nowLocation);
                                 }
                             }
                         },

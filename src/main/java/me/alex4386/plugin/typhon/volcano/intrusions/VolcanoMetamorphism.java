@@ -4,6 +4,7 @@ import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 
 import java.util.Random;
 
@@ -67,6 +68,15 @@ public class VolcanoMetamorphism {
                 (blockTypeName.contains("snow"))
         ) {
             block.setType(Material.AIR);
+        } else if (material == Material.GRASS) {
+            block.setType(Material.DIRT);
+        } else if (material.isBurnable()) {
+            for (BlockFace face : BlockFace.values()) {
+                Block relativeBlock = block.getRelative(face);
+                if (relativeBlock.getType().isAir()) {
+                    relativeBlock.setType(Material.FIRE);
+                }
+            }
         }
     }
 

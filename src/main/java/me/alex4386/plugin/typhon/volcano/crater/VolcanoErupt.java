@@ -79,7 +79,6 @@ public class VolcanoErupt {
 
     public void erupt(int bombCount, boolean tremor, boolean smoke, boolean summitExplode) {
         if (summitExplode) {
-            crater.location.getWorld().playSound(this.getEruptionLocation(), Sound.ENTITY_GENERIC_EXPLODE, 30f, -10f);
             crater.location.getWorld().createExplosion(this.getEruptionLocation(), settings.explosionSize, true, false);
             crater.location.getWorld().createExplosion(this.getEruptionLocation(), settings.damagingExplosionSize, false, true);
         }

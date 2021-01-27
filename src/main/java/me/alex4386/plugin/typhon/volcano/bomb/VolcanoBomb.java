@@ -4,6 +4,7 @@ import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
 import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
+import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoLavaFlow;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import org.bukkit.Bukkit;
@@ -168,18 +169,26 @@ public class VolcanoBomb {
                     " with Power: "+this.bombPower+", radius: "+this.bombRadius+", lifeTime: "+this.lifeTime+" (= "+
                     this.getLifetimeSeconds()+"s)");
 
+        if (crater != null) {
+            if (crater.bombs.maxDistance < crater.getTwoDimensionalDistance(loc)) {
+                crater.bombs.maxDistance = crater.getTwoDimensionalDistance(loc);
+            }
+        }
+
         final Block finalBlock = block;
         Bukkit.getScheduler().scheduleSyncDelayedTask(TyphonPlugin.plugin, (Runnable) () -> {
             int totalEjecta = 0;
+
+            VolcanoLavaFlow lavaFlow = (crater != null) ? crater.lavaFlow : volcano.bombLavaFlow;
             
-            volcano.bombLavaFlow.registerEvent();
-            volcano.bombLavaFlow.registerTask();
+            lavaFlow.registerEvent();
+            lavaFlow.registerTask();
 
             if (bombRadius <= 1) {
                 List<Block> bomb = VolcanoMath.getSphere(loc.getBlock(), this.bombRadius);
 
                 for (Block bombBlock:bomb) {
-                    volcano.bombLavaFlow.registerLavaCoolData(bombBlock);
+                    lavaFlow.registerLavaCoolData(bombBlock);
                     bombBlock.setType(Material.LAVA);
                 }
 
@@ -194,7 +203,7 @@ public class VolcanoBomb {
                         case 1:
                             bombBlock.setType(volcano.composition.getExtrusiveRockMaterial());
                         case 2:
-                            volcano.bombLavaFlow.registerLavaCoolData(bombBlock);
+                            lavaFlow.registerLavaCoolData(bombBlock);
                             bombBlock.setType(Material.LAVA);
                     }
                 }

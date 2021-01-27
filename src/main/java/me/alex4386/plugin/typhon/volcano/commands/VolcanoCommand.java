@@ -271,11 +271,6 @@ public class VolcanoCommand {
                                             msg.error(sender, "Not enough arguments to generate magma chamber");
                                             msg.error(sender, ""+ChatColor.RED+ChatColor.BOLD+"Usage: "+ChatColor.RESET+"/vol "+volcano.name+" create magmachamber "+ChatColor.YELLOW+"<name> <baseY> <baseRadius> <height>");
                                         }
-                                    } else if (type.equalsIgnoreCase("autocreate")) {
-                                        Player target = Bukkit.getPlayer(name);
-                                        if (target != null) {
-
-                                        }
                                     }
                                 }
 
