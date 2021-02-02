@@ -12,6 +12,7 @@ import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.json.simple.parser.ParseException;
 
@@ -181,6 +182,30 @@ public class VolcanoCommand {
                             volcano.quickCool();
                             msg.info(sender, "Volcano "+this.volcano.name+" has cooled all flowing lava!");
                             break;
+                        case TELEPORT:
+                            if (sender instanceof Entity) {
+                                Entity senderEntity = (Entity)sender;
+                                volcano.mainCrater.teleport(senderEntity);
+                                msg.info("You have been teleported to mainCrater of Volcano "+volcano.name);
+                            } else {
+                                msg.error("This command can not be used by console.");
+                            }
+                            break;
+                        case NEAR:
+                            if (sender instanceof Player) {
+                                Player player = ((Player) sender);
+                                Location location = player.getLocation();
+
+                                VolcanoCrater nearestCrater = volcano.manager.getNearestCrater(location);
+                                msg.info("Nearest Crater: "+nearestCrater.getName()+" @ "+String.format("%.2f", nearestCrater.getTwoDimensionalDistance(location))+"m");
+                                msg.info("Status  : "+(volcano.manager.getCraterChatColor(nearestCrater)+nearestCrater.status.toString()));
+                                msg.info("LavaFlow: "+(volcano.manager.isInAnyLavaFlow(location) ? ChatColor.RED+"Affected" : "Not Affected"));
+                                msg.info("Bombs   : "+(volcano.manager.isInAnyBombAffected(location) ? ChatColor.RED+"Affected" : "Not Affected"));
+
+                            } else {
+                                msg.error("This command can not be used by console.");
+                            }
+                            break;
                         case CREATE:
                             if (args.length >= 4) {
 
@@ -279,6 +304,14 @@ public class VolcanoCommand {
                                 msg.error(sender, ""+ChatColor.RED+ChatColor.BOLD+"Usage: "+ChatColor.RESET+"/vol "+volcano.name+" create "+ChatColor.YELLOW+"<crater | dike | magmachamber>"+ChatColor.GRAY+" <name> ...");
                             }
                             break;
+
+                        case RECORD:
+                            msg.info("C.Ejecta: "+volcano.manager.getCurrentEjecta()+" blocks (VEI: "+TyphonUtils.getVEIScale(volcano.manager.getCurrentEjecta())+")");
+                            msg.info("Ejecta  : "+volcano.manager.getTotalEjecta()+" blocks (VEI: "+TyphonUtils.getVEIScale(volcano.manager.getTotalEjecta())+")");
+
+                            break;
+
+
                         case MAIN_CRATER:
                             craterCmd = new VolcanoCraterCommand(volcano.mainCrater, true);
                             return craterCmd.onCommand(sender, command, label, args);
@@ -318,7 +351,7 @@ public class VolcanoCommand {
                                                             )
                                             );
 
-                                    sender.sendMessage(" - "+craterState+craterName);
+                                    sender.sendMessage(" - "+craterState+craterName+ChatColor.RESET+": "+(volcano.manager.getCraterChatColor(crater)+crater.status.toString()));
                                 }
                             }
                             break;

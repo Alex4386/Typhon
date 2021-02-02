@@ -121,6 +121,13 @@ public class TyphonUtils {
         return Math.sqrt(Math.pow(x,2) + Math.pow(z,2));
     }
 
+    public static double getTwoDimensionalDistance(org.bukkit.util.Vector vec1, org.bukkit.util.Vector vec2) {
+        double x = vec1.getX() - vec2.getX();
+        double z = vec1.getZ() - vec2.getZ();
+
+        return Math.sqrt(Math.pow(x,2) + Math.pow(z,2));
+    }
+
     public static String blockLocationTostring(org.bukkit.block.Block block) {
         if (block == null) return "NULL";
         return block.getX()+","+block.getY()+","+block.getZ()+" @ "+block.getWorld().getName();
@@ -393,6 +400,70 @@ public class TyphonUtils {
             location.getWorld().playSound(location, Sound.BLOCK_LAVA_EXTINGUISH, .05f * count, 0);
         }
 
+    }
+
+    public static int getVEIScale(long data) {
+        if (data < Math.pow(10, 4)) {
+            return 0;
+        } else if (data <= Math.pow(10, 6)) {
+            return 1;
+        } else if (data <= Math.pow(10, 7)) {
+            return 2;
+        } else if (data <= Math.pow(10, 8)) {
+            // 0.1 km^3
+            return 3;
+        } else if (data <= Math.pow(10, 9)) {
+            return 4;
+        } else if (data <= Math.pow(10, 10)) {
+            return 5;
+        } else if (data <= Math.pow(10, 11)) {
+            return 6;
+        } else if (data <= Math.pow(10, 12)) {
+            return 7;
+        } else {
+            return 8;
+        }
+    }
+
+    public static Vector calculateVelocity(Vector from, Vector to, int heightGain)
+    {
+        // Gravity of a potion
+        double gravity = 0.115;
+
+        // Block locations
+        int endGain = to.getBlockY() - from.getBlockY();
+        double horizDist = getTwoDimensionalDistance(from, to);
+
+        // Height gain
+        int gain = heightGain;
+
+        double maxGain = gain > (endGain + gain) ? gain : (endGain + gain);
+
+        // Solve quadratic equation for velocity
+        double a = -horizDist * horizDist / (4 * maxGain);
+        double b = horizDist;
+        double c = -endGain;
+
+        double slope = -b / (2 * a) - Math.sqrt(b * b - 4 * a * c) / (2 * a);
+
+        // Vertical velocity
+        double vy = Math.sqrt(maxGain * gravity);
+
+        // Horizontal velocity
+        double vh = vy / slope;
+
+        // Calculate horizontal direction
+        int dx = to.getBlockX() - from.getBlockX();
+        int dz = to.getBlockZ() - from.getBlockZ();
+        double mag = Math.sqrt(dx * dx + dz * dz);
+        double dirx = dx / mag;
+        double dirz = dz / mag;
+
+        // Horizontal velocity components
+        double vx = vh * dirx;
+        double vz = vh * dirz;
+
+        return new Vector(vx, vy, vz);
     }
 
 

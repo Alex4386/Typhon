@@ -28,7 +28,7 @@ public class VolcanoCraterEjectaTimeData {
         this.startTime = (long) timeData.get("start");
         this.endTime = (long) timeData.get("end");
 
-        this.ejectaVolume = (int) (long) timeData.get("volume");
+        this.ejectaVolume = (int) (long) jsonObject.get("volume");
     }
 
     public JSONObject serialize() {

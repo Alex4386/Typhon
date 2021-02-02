@@ -40,6 +40,42 @@ public class VolcanoManager {
         return false;
     }
 
+    public boolean isInAnyBombAffected(Location loc) {
+        List<VolcanoCrater> craters = this.getCraters();
+
+        for (VolcanoCrater crater : craters) {
+            if (crater.isBombAffected(loc)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public long getCurrentEjecta() {
+        long total = 0;
+
+        List<VolcanoCrater> craters = this.getCraters();
+
+        for (VolcanoCrater crater : craters) {
+            total += crater.record.currentEjectaVolume;
+        }
+
+        return total;
+    }
+
+    public long getTotalEjecta() {
+        long total = 0;
+
+        List<VolcanoCrater> craters = this.getCraters();
+
+        for (VolcanoCrater crater : craters) {
+            total += crater.record.getTotalEjecta();
+        }
+
+        return total;
+    }
+
     public boolean isInAnyLavaFlow(Location loc) {
         List<VolcanoCrater> craters = this.getCraters();
 

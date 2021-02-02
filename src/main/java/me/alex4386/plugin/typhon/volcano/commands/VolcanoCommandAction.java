@@ -16,6 +16,7 @@ public enum VolcanoCommandAction {
     SUB_CRATER("subcrater", "<name>", "get subsidiary crater"),
     SUMMIT("summit", "<name>", "get summit of the volcano"),
     DIKE("dike", "<name>", "get dikes"),
+    NEAR("near", "", "get near-by craters"),
     MAGMA_CHAMBER("magmachamber", "<name>", "get magmaChambers"),
     SHUTDOWN("shutdown", "<name>", "shutting down the entire volcano forcibly"),
     QUICK_COOL("quickcool", "<name>", "forcibly cooling all flowing lava"),
@@ -25,6 +26,8 @@ public enum VolcanoCommandAction {
     DEBUG("debug", "<value>", "get/set the debug mode"),
     STATUS("status", "", "get the current highest status"),
     HEAT("heat", "", "get heat value of current location"),
+    TELEPORT("teleport", "", "teleport to maincrater of this volcano"),
+    RECORD("record", "", "see the volcano's record"),
 
     DELETE("delete", "", "Delete this volcano");
 

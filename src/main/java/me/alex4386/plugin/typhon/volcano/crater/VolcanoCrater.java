@@ -9,12 +9,14 @@ import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import org.bukkit.*;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
 import org.json.simple.JSONObject;
 
 import java.util.*;
 
 public class VolcanoCrater {
-    public static int defaultCraterRadius = 10;
+    public static int defaultCraterRadius = 20;
 
     public boolean enabled = true;
 
@@ -56,6 +58,21 @@ public class VolcanoCrater {
         return this.volcano;
     }
 
+    public List<Player> getPlayersInRange() {
+        List<Player> players = new ArrayList<>();
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.getWorld().getUID().equals(this.location.getWorld().getUID())) {
+                Location loc = player.getLocation();
+                if (this.isBombAffected(loc) || this.isInLavaFlow(loc) || this.isInCrater(loc)) {
+                    players.add(player);
+                }
+            }
+        }
+
+        return players;
+    }
+
     public void initialize() {
         volcano.logger.log(VolcanoLogClass.CRATER, "Starting up crater "+name);
 
@@ -78,10 +95,11 @@ public class VolcanoCrater {
         erupt.shutdown();
         lavaFlow.shutdown();
         tremor.shutdown();
+        record.endEjectaTrack();
 
         volcano.logger.log(VolcanoLogClass.CRATER, "Shutted down crater "+name);
-
     }
+
 
     public String getName() {
         return this.name == null ? ChatColor.GOLD+"main"+ChatColor.RESET : this.name;
@@ -143,7 +161,7 @@ public class VolcanoCrater {
         Random random = new Random();
 
         if (evenFlow && random.nextDouble() < 0.7f) {
-            int minimumTolerantHeight = (int) this.averageCraterHeight() - 2;
+            int minimumTolerantHeight = (int) this.averageCraterHeight() - 1;
 
             for (Block block:craterBlocks) {
                 int y = block.getY();
@@ -206,8 +224,10 @@ public class VolcanoCrater {
     }
 
     public boolean isInLavaFlow(Location loc) {
-        return this.getTwoDimensionalDistance(loc) < this.longestFlowLength;
+        return this.getTwoDimensionalDistance(loc) <= this.longestFlowLength;
     }
+
+    public boolean isBombAffected(Location loc) { return this.getTwoDimensionalDistance(loc) <= this.bombs.maxDistance; }
 
     public double getTwoDimensionalDistance(Location loc) {
         return TyphonUtils.getTwoDimensionalDistance(loc, this.location);
@@ -223,6 +243,14 @@ public class VolcanoCrater {
 
     public void erupt(int bombCount) {
         erupt.erupt(bombCount);
+    }
+
+    public void teleport(Entity entity) { teleport(entity, true); }
+
+    public void teleport(Entity entity, boolean unstuck) {
+        Location location = this.location;
+        if (unstuck) location = TyphonUtils.getHighestLocation(location).add(0,2,0);
+        entity.teleport(location);
     }
 
     public void generateSmoke(int count) {
@@ -295,7 +323,7 @@ public class VolcanoCrater {
 
     public void stopFlowingLava() {
         lavaFlow.settings.flowing = false;
-        this.status = (volcano.manager.currentlyStartedCraters().size() == 0) ? VolcanoCraterStatus.MAJOR_ACTIVITY : this.status;
+        this.status = (!this.isErupting()) ? VolcanoCraterStatus.MAJOR_ACTIVITY : this.status;
         this.cool();
     }
 
@@ -307,7 +335,7 @@ public class VolcanoCrater {
 
     public void stopErupting() {
         erupt.erupting = false;
-        this.status = (volcano.manager.currentlyStartedCraters().size() == 0) ? VolcanoCraterStatus.MAJOR_ACTIVITY : this.status;
+        this.status = (!this.isFlowingLava()) ? VolcanoCraterStatus.MAJOR_ACTIVITY : this.status;
     }
 
     public boolean isMainCrater() {

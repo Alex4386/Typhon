@@ -9,6 +9,7 @@ public class VolcanoLavaCoolData {
     public Block block;
     public Material material;
     public VolcanoCrater flowedFromCrater = null;
+    boolean isBomb = false;
 
     public VolcanoLavaCoolData(Block block, VolcanoCrater flowedFromCrater, Material material, int ticks) {
         this.ticks = ticks;
@@ -23,6 +24,13 @@ public class VolcanoLavaCoolData {
         this.material = material;
     }
 
+    public VolcanoLavaCoolData(Block block, Material material, int ticks, boolean isBomb) {
+        this.ticks = ticks;
+        this.block = block;
+        this.material = material;
+        this.isBomb = isBomb;
+    }
+
     public void tickPass() {
         if (this.tickPassed()) { this.coolDown(); }
         else { this.ticks--; }
@@ -32,12 +40,11 @@ public class VolcanoLavaCoolData {
         return this.ticks <= 0;
     }
 
-    public void coolDown() {
-        block.setType(material);
-    }
+    public void coolDown() { block.setType(material); }
 
     public void forceCoolDown() {
         this.ticks = 0;
         block.setType(material);
     }
+
 }

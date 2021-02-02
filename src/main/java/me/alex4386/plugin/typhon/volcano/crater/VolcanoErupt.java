@@ -1,10 +1,13 @@
 package me.alex4386.plugin.typhon.volcano.crater;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import org.bukkit.*;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Player;
 import org.json.simple.JSONObject;
 
+import java.util.List;
 import java.util.Random;
 
 public class VolcanoErupt {
@@ -105,6 +108,24 @@ public class VolcanoErupt {
 
         for (int i = 0; i < bombCount; i++) {
             crater.bombs.launchBomb();
+        }
+
+        // sentient mode.
+        List<Player> players = crater.getPlayersInRange();
+        for (Player player : players) {
+            if (!player.isFlying() && !crater.isInCrater(player.getLocation())) {
+                int sentientBombs = (int)(bombCount * 0.1 * Math.random());
+
+                if (sentientBombs > 0) {
+                    crater.volcano.logger.log(VolcanoLogClass.ERUPT, "Striking "+sentientBombs+" volcanic bombs to player "+player.getDisplayName());
+
+                    for (int i = 0; i < sentientBombs; i++) {
+                        crater.bombs.launchBombToDestination(
+                                player.getLocation()
+                        );
+                    }
+                }
+            }
         }
     }
 

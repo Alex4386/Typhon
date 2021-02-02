@@ -21,6 +21,7 @@ public enum VolcanoCraterCommandAction {
     TREMOR("tremor", "<? power>", "create volcano tremor"),
     STATUS("status", "<? status>", "get/set status of this crater"),
     CREATE_SUB("createSub", "<? minRange> <? maxRange>", "create subcrater from this crater"),
+    TELEPORT("teleport", "", "teleport to this crater"),
     DELETE("delete", "", "delete this crater");
 
     String cmdline;

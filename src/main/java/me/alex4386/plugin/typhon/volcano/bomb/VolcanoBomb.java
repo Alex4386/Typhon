@@ -40,14 +40,13 @@ public class VolcanoBomb {
 
     public boolean isLanded = false;
 
-    public VolcanoBomb(VolcanoCrater crater, Location loc, float bombLaunchPowerX, float bombLaunchPowerZ, float bombPower, int bombRadius, int bombDelay) {
+    public VolcanoBomb(VolcanoCrater crater, Location loc, float bombLaunchPowerX, float bombLaunchPowerY, float bombLaunchPowerZ, float bombPower, int bombRadius, int bombDelay) {
         this.crater = crater;
         this.bombPower = bombPower;
         this.bombRadius = bombRadius;
         this.bombDelay = bombDelay;
 
         Random random = new Random();
-        float bombLaunchPowerY = (random.nextFloat() * 2) + 4f;
 
         this.launchLocation = loc;
 
@@ -62,10 +61,6 @@ public class VolcanoBomb {
         this.block.setDropItem(false);
 
         this.crater.getVolcano().logger.debug(VolcanoLogClass.BOMB_LAUNCHER, "Volcanic Bomb Just launched from: "+ TyphonUtils.blockLocationTostring(launchLocation.getBlock()));
-    }
-
-    VolcanoBomb(VolcanoCrater crater, float bombLaunchPowerX, float bombLaunchPowerZ, float bombPower, int bombRadius, int bombDelay) {
-        this(crater, crater.erupt.getEruptionLocation(), bombLaunchPowerX, bombLaunchPowerZ, bombPower, bombRadius, bombDelay);
     }
 
     public double getLifetimeSeconds() {
@@ -188,10 +183,11 @@ public class VolcanoBomb {
                 List<Block> bomb = VolcanoMath.getSphere(loc.getBlock(), this.bombRadius);
 
                 for (Block bombBlock:bomb) {
-                    lavaFlow.registerLavaCoolData(bombBlock);
+                    lavaFlow.registerLavaCoolData(bombBlock, true);
                     bombBlock.setType(Material.LAVA);
                 }
 
+                loc.getWorld().createExplosion(loc, 1, true, false);
                 totalEjecta = bomb.size();
             } else {
                 List<Block> bomb = VolcanoMath.getSphere(loc.getBlock(), this.bombRadius);
@@ -203,7 +199,7 @@ public class VolcanoBomb {
                         case 1:
                             bombBlock.setType(volcano.composition.getExtrusiveRockMaterial());
                         case 2:
-                            lavaFlow.registerLavaCoolData(bombBlock);
+                            lavaFlow.registerLavaCoolData(bombBlock, true);
                             bombBlock.setType(Material.LAVA);
                     }
                 }
@@ -256,7 +252,7 @@ public class VolcanoBomb {
                     Block block = TyphonUtils.getHighestOceanFloor(circle.get(i).getLocation()).getBlock();
                     block.setType(Material.LAVA);
 
-                    volcano.bombLavaFlow.registerLavaCoolData(block);
+                    volcano.bombLavaFlow.registerLavaCoolData(block, true);
                 }
             }
         }

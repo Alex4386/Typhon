@@ -46,6 +46,16 @@ class VolcanoCraterRecord {
         ejectaVolumeList.add(timeData);
     }
 
+    public long getTotalEjecta() {
+        long total = 0;
+        for (VolcanoCraterEjectaTimeData timeData : ejectaVolumeList) {
+            total += timeData.ejectaVolume;
+        }
+        total += this.currentEjectaVolume;
+
+        return total;
+    }
+
     public void importConfig(JSONObject configData) {
         JSONObject ejectaData = (JSONObject) configData.get("ejecta");
         JSONArray ejectaTimeLog = (JSONArray) ejectaData.get("timeData");

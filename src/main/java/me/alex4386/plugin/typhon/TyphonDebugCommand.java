@@ -1,13 +1,20 @@
 package me.alex4386.plugin.typhon;
 
-import me.alex4386.plugin.typhon.volcano.commands.VolcanoCommandUtils;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
-import org.bukkit.command.Command;
+import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.FallingBlock;
+import org.bukkit.entity.Player;
+import org.bukkit.material.MaterialData;
+import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 enum TyphonDebugCommandAction {
     TEST("test", "", "Test this feature");
@@ -97,9 +104,87 @@ public class TyphonDebugCommand {
 
         if (newArgs.length >= 1) {
             TyphonDebugCommandAction action = TyphonDebugCommandAction.getAction(newArgs[0]);
+            Player player = (sender instanceof Player) ? (Player)sender : null;
+
             switch(action) {
                 case TEST:
                     sendMessage(sender, "Test!");
+                    if (newArgs.length >= 4) {
+                        float powerX = Float.parseFloat(newArgs[1]);
+                        float powerY = Float.parseFloat(newArgs[2]);
+                        float powerZ = Float.parseFloat(newArgs[3]);
+
+                        if (player != null) {
+                            Location startLocation = player.getLocation();
+                            Location wantedDestination = player.getLocation().add(powerX,powerY,powerZ);
+                            FallingBlock block = player.getWorld().spawnFallingBlock(startLocation, new MaterialData(Material.GRAVEL));
+                            block.setVelocity(
+                                    TyphonUtils.calculateVelocity(
+                                            new Vector(0,0,0),
+                                            new Vector(powerX, powerY, powerZ),
+                                            5
+                                    )
+                            );
+
+                            block.setGravity(true);
+                            block.setInvulnerable(true);
+                            block.setDropItem(false);
+
+                            AtomicInteger i = new AtomicInteger();
+                            final Location[] prevLocation = {player.getLocation()};
+                            AtomicReference<Location> highestLocation = new AtomicReference<>(player.getLocation());
+
+                            boolean startup = false;
+                            if (newArgs.length == 5) {
+                                startup = Boolean.parseBoolean(newArgs[4]);
+                            }
+
+                            boolean finalStartup = startup;
+                            i.set(
+                                Bukkit.getScheduler().scheduleSyncRepeatingTask(
+                                    TyphonPlugin.plugin,
+                                    () -> {
+                                        Location location = block.getLocation();
+                                        double offsetX = location.getX() - prevLocation[0].getX();
+                                        double offsetY = location.getY() - prevLocation[0].getY();
+                                        double offsetZ = location.getZ() - prevLocation[0].getZ();
+
+                                        if (block.isOnGround() || block.isDead() || (offsetX == 0 && offsetY == 0 && offsetZ == 0) || (location.getBlockY() == startLocation.getBlockY() && finalStartup && location.distance(startLocation) > 10)) {
+                                            Location destination = block.getLocation();
+                                            sendMessage(sender, "FINAL");
+                                            sendMessage(sender, TyphonUtils.blockLocationTostring(destination.getBlock()));
+                                            sendMessage(sender, "Distance Travelled");
+                                            sendMessage(sender, "x: " + (destination.getX() - startLocation.getX()));
+                                            sendMessage(sender, "y: " + (destination.getY() - startLocation.getY()));
+                                            sendMessage(sender, "z: " + (destination.getZ() - startLocation.getZ()));
+                                            sendMessage(sender, "Highest - height: "+(highestLocation.get().getY() - startLocation.getY()));
+                                            sendMessage(sender, TyphonUtils.blockLocationTostring(highestLocation.get().getBlock()));
+                                            Bukkit.getScheduler().cancelTask(i.get());
+                                            block.getLocation().getBlock().setType(Material.AIR);
+                                        }
+
+                                        if (highestLocation.get().getY() < location.getY()) {
+                                            highestLocation.set(location);
+                                        }
+
+                                        String data =
+                                                TyphonUtils.blockLocationTostring(location.getBlock())
+                                                + (
+                                                    prevLocation[0] != null ? " - " +
+                                                            "x:" + String.format("%.2f", offsetX) + ", " +
+                                                            "y:" + String.format("%.2f", offsetY) + ", " +
+                                                            "z:" + String.format("%.2f", offsetZ) : ""
+                                                );
+
+                                        sender.sendMessage(data);
+                                        System.out.println(data);
+
+                                        prevLocation[0] = location;
+                                    }, 0l, 1l
+                                )
+                            );
+                        }
+                    }
                     return true;
                 default:
                     sendMessage(sender, "Unknown Command");

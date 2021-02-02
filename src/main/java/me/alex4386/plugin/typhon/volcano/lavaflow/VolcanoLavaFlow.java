@@ -12,6 +12,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.plugin.PluginManager;
 import org.json.simple.JSONObject;
+import org.bukkit.util.Vector;
 
 import java.util.*;
 
@@ -124,11 +125,12 @@ public class VolcanoLavaFlow implements Listener {
 
         // this is lava. flow it.
         if (lavaCoolHashMap.get(block) != null) {
+            VolcanoLavaCoolData data = lavaCoolHashMap.get(block);
 
             if (this.crater != null) {
                 double distance = TyphonUtils.getTwoDimensionalDistance(crater.location, block.getLocation());
 
-                if (distance > crater.longestFlowLength) {
+                if (distance > crater.longestFlowLength && !data.isBomb) {
                     crater.longestFlowLength = distance;
                     crater.getVolcano().trySave();
                 }
@@ -164,18 +166,23 @@ public class VolcanoLavaFlow implements Listener {
                 }
             }
 
-            this.registerLavaCoolData(toBlock);
+            this.registerLavaCoolData(toBlock, data.isBomb);
         }
     }
 
     public void registerLavaCoolData(Block block) {
+        registerLavaCoolData(block, false);
+    }
+
+    public void registerLavaCoolData(Block block, boolean isBomb) {
         block.setType(Material.LAVA);
         lavaCoolHashMap.put(
                 block,
                 new VolcanoLavaCoolData(
                         block,
                         getVolcano().composition.getExtrusiveRockMaterial(),
-                        settings.flowed * this.getTickFactor()
+                        settings.flowed * this.getTickFactor(),
+                        isBomb
                 ));
         if (crater != null) {
             crater.record.addEjectaVolume(1);
@@ -192,7 +199,22 @@ public class VolcanoLavaFlow implements Listener {
     public void flowLava(Block whereToFlow) {
         World world = whereToFlow.getWorld();
 
-        whereToFlow.setType(Material.LAVA);
+        Location volcanicPlug = TyphonUtils.getHighestLocation(crater.location).add(0,1,0);
+
+        Vector vector = TyphonUtils.calculateVelocity(
+                new Vector(0, 0, 0),
+                whereToFlow.getLocation().toVector().subtract(volcanicPlug.toVector()),
+                10
+        );
+
+        world.spawnParticle(
+                Particle.FLAME,
+                volcanicPlug,
+                0,
+                vector.getX(),
+                vector.getY(),
+                vector.getZ()
+        );
         world.spawnParticle(
                 Particle.LAVA,
                 whereToFlow.getLocation(),
@@ -204,6 +226,8 @@ public class VolcanoLavaFlow implements Listener {
                 1f,
                 1f
         );
+
+        whereToFlow.setType(Material.LAVA);
         registerLavaCoolData(whereToFlow);
     }
 

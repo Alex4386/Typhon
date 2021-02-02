@@ -69,6 +69,8 @@ public class VolcanoMetamorphism {
         ) {
             block.setType(Material.AIR);
         } else if (material == Material.GRASS) {
+            block.setType(Material.AIR);
+        } else if (material == Material.GRASS_BLOCK) {
             block.setType(Material.DIRT);
         } else if (material.isBurnable()) {
             for (BlockFace face : BlockFace.values()) {

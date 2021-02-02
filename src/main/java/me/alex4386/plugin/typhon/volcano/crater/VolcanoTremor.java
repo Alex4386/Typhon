@@ -2,6 +2,7 @@ package me.alex4386.plugin.typhon.volcano.crater;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.volcano.Volcano;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
@@ -68,7 +69,10 @@ public class VolcanoTremor {
     }
 
     public void runTremorCycle() {
+        Volcano volcano = crater.getVolcano();
         if (shouldIDoIt()) {
+            volcano.logger.debug(VolcanoLogClass.TREMOR, "Volcano Tremor Cycle Started.");
+
             Block block;
             block = getRandomTremorBlock();
 
@@ -134,7 +138,7 @@ public class VolcanoTremor {
             loop.getAndIncrement();
 
             if (loop.get() > termorLength.get()) {
-                TyphonPlugin.plugin.getLogger().log(Level.INFO, name+" termor sequence Pass.");
+                volcano.logger.debug(VolcanoLogClass.TREMOR, name+" termor sequence Pass.");
                 Bukkit.getScheduler().cancelTask(scheduleID.get());
             }
 

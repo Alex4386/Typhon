@@ -8,6 +8,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
@@ -394,18 +395,30 @@ public class VolcanoCraterCommand {
                 crater.volcano.trySave();
 
                 break;
+
+            case TELEPORT:
+                if (sender instanceof Entity) {
+                    Entity senderEntity = (Entity)sender;
+                    crater.teleport(senderEntity);
+                    msg.info("You have been teleported to crater "+crater.getName()+" of Volcano "+crater.volcano.name);
+                } else {
+                    msg.error("This command can not be used by console.");
+                }
+                break;
+
             case INFO:
             default:
                 sender.sendMessage(ChatColor.RED+""+ChatColor.BOLD+"[Typhon Plugin] "+ChatColor.GOLD+"Volcano Crater Info");
                 msg.info("Location: "+ TyphonUtils.blockLocationTostring(crater.location.getBlock()));
                 msg.info("Summit  : "+ TyphonUtils.blockLocationTostring(crater.getSummitBlock()));
                 msg.info("LavaFlow: "+ crater.isFlowingLava()+" @ "+String.format("%.2f",crater.longestFlowLength)+"m");
-                msg.info("Erupting: "+ crater.isErupting());
+                msg.info("Erupting: "+ crater.isErupting()+" @ "+String.format("%.2f",crater.bombs.maxDistance)+"m");
                 msg.info("Radius  : "+ crater.getRadius());
                 msg.info("Status  : "+crater.volcano.manager.getCraterChatColor(crater)+crater.status.toString());
+                msg.info("C.Ejecta: "+crater.record.currentEjectaVolume+" blocks (VEI: "+TyphonUtils.getVEIScale(crater.record.currentEjectaVolume)+")");
+                msg.info("Ejecta  : "+crater.record.getTotalEjecta()+" blocks (VEI: "+TyphonUtils.getVEIScale(crater.record.getTotalEjecta())+")");
 
                 sender.sendMessage("type \"/"+label+" "+ crater.volcano.name+" "+args[1]+(args.length > 2 ? " "+args[2]:"")+" help\" for more commands.");
-
                 break;
         }
         return true;
