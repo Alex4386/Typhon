@@ -157,7 +157,10 @@ public class Volcano implements Listener {
             crater.shutdown();
         }
 
-        if (runQuickCool) this.quickCool();
+        if (runQuickCool) {
+            logger.log(VolcanoLogClass.CORE, "Running Quickcool due to shutdown... This might take a while...");
+            this.quickCool();
+        }
 
         bombLavaFlow.shutdown();
         autoStart.shutdown();

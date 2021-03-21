@@ -51,7 +51,7 @@ public class VolcanoBomb {
         this.launchLocation = loc;
 
         Vector launchVector = new Vector(bombLaunchPowerX, bombLaunchPowerY, bombLaunchPowerZ);
-        this.block = loc.getWorld().spawnFallingBlock(loc, new MaterialData(Material.GRAVEL));
+        this.block = loc.getWorld().spawnFallingBlock(loc, new MaterialData(Material.MAGMA_BLOCK));
 
         this.block.setVelocity(launchVector);
 

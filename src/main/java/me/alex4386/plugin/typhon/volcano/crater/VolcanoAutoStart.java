@@ -119,7 +119,7 @@ public class VolcanoAutoStart implements Listener {
 
     public VolcanoCrater createSubCrater(VolcanoCrater crater) {
         int minRange = (int) (((Math.random() * 0.2) + 0.4) * crater.longestFlowLength) + crater.craterRadius;
-        int range = (int) (Math.random() * (crater.bombs.maxDistance - minRange));
+        int range = (int) (Math.random() * ((crater.bombs.maxDistance <= 100 ? 100 : crater.bombs.maxDistance) - minRange));
         return createSubCrater(crater.location, minRange, minRange + range);
     }
 
@@ -195,8 +195,8 @@ public class VolcanoAutoStart implements Listener {
                     if (volcano.manager.isInAnyLavaFlowArea(player.getLocation())) {
                         subCraterLocation = TyphonUtils.getRandomBlockInRange(
                                 player.getLocation().getBlock(),
-                                (int) volcano.mainCrater.longestFlowLength - 100,
-                                (int) volcano.mainCrater.longestFlowLength + 100
+                                50,
+                                100
                         ).getLocation();
 
                         volcano.logger.log(VolcanoLogClass.AUTOSTART, "volcano creating new subcrater near by user "+player.getName());

@@ -40,7 +40,9 @@ public class VolcanoLavaCoolData {
         return this.ticks <= 0;
     }
 
-    public void coolDown() { block.setType(material); }
+    public void coolDown() {
+        block.setType(material);
+    }
 
     public void forceCoolDown() {
         this.ticks = 0;

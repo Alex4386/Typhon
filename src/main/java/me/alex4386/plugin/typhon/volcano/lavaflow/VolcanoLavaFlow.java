@@ -7,6 +7,7 @@ import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
 import org.bukkit.*;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFromToEvent;
@@ -250,7 +251,25 @@ public class VolcanoLavaFlow implements Listener {
                 if (lavaCoolHashMap.keySet().contains(coolData.block)) {
                     iterator.remove();
                 }
-                coolData.coolDown();
+
+                if (!coolData.isBomb) {
+                    Random random = new Random();
+                    if (random.nextDouble() < 0.2f) {
+                        int i = random.nextInt(5) + 1;
+
+                        int x = i % 2 == 0 && i < 5 ? 1 : -1;
+                        int z = i / 2 > 0 ? 1 : -1;
+
+                        int y = i == 5 ? -1 : 0;
+
+                        Block block = coolData.block.getRelative(x, y, z);
+                        block.setType(coolData.material);
+
+                        if (block.getType().isAir()) {
+                            this.registerLavaCoolData(block, coolData.isBomb);
+                        }
+                    }
+                }
             }
         }
     }

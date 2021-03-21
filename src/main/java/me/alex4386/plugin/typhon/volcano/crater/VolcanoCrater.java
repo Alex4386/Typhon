@@ -160,8 +160,8 @@ public class VolcanoCrater {
 
         Random random = new Random();
 
-        if (evenFlow && random.nextDouble() < 0.7f) {
-            int minimumTolerantHeight = (int) this.averageCraterHeight() - 1;
+        if (evenFlow && random.nextDouble() < 0.9f) {
+            int minimumTolerantHeight = (int) this.averageCraterHeight() - ((int) craterRadius / 7);
 
             for (Block block:craterBlocks) {
                 int y = block.getY();
