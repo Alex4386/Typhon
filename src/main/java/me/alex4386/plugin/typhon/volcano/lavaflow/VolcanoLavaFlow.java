@@ -245,7 +245,6 @@ public class VolcanoLavaFlow implements Listener {
         while (iterator.hasNext()) {
             Map.Entry<Block, VolcanoLavaCoolData> entry = iterator.next();
             VolcanoLavaCoolData coolData = entry.getValue();
-            coolData.tickPass();
 
             if (coolData.tickPassed()) {
                 if (lavaCoolHashMap.keySet().contains(coolData.block)) {
@@ -271,6 +270,8 @@ public class VolcanoLavaFlow implements Listener {
                     }
                 }
             }
+
+            coolData.tickPass();
         }
     }
 

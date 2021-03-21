@@ -7,10 +7,7 @@ import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
 import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoLavaFlow;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.Particle;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.FallingBlock;
@@ -53,6 +50,8 @@ public class VolcanoBomb {
         Vector launchVector = new Vector(bombLaunchPowerX, bombLaunchPowerY, bombLaunchPowerZ);
         this.block = loc.getWorld().spawnFallingBlock(loc, new MaterialData(Material.MAGMA_BLOCK));
 
+        this.block.setGlowing(true);
+
         this.block.setVelocity(launchVector);
 
         this.block.setGravity(true);
@@ -71,18 +70,6 @@ public class VolcanoBomb {
         Location loc = block.getLocation();
         loc.getChunk().load();
 
-        TyphonNMSUtils.createParticle(
-                Particle.CLOUD,
-                loc,
-                5,
-                2,2,2
-        );
-        TyphonNMSUtils.createParticle(
-                Particle.ASH,
-                loc,
-                2,
-                30, 30, 30
-        );
         TyphonNMSUtils.createParticle(
                 Particle.FLAME,
                 loc,
