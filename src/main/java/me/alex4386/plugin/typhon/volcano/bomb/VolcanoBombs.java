@@ -121,6 +121,20 @@ public class VolcanoBombs {
         launchBomb(hostLocation);
     }
 
+    public void shutdown() {
+        Iterator<Map.Entry<FallingBlock, VolcanoBomb>> iterator = bombMap.entrySet().iterator();
+
+        while (iterator.hasNext()) {
+            Map.Entry<FallingBlock, VolcanoBomb> entry = iterator.next();
+            FallingBlock block = entry.getKey();
+            VolcanoBomb bomb = entry.getValue();
+
+            bomb.land();
+            block.remove();
+            iterator.remove();
+        }
+    }
+
     public void trackAll() {
         Iterator<Map.Entry<FallingBlock, VolcanoBomb>> iterator = bombMap.entrySet().iterator();
 

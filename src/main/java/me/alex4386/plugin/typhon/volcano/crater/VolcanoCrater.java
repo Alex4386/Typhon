@@ -96,6 +96,7 @@ public class VolcanoCrater {
         lavaFlow.shutdown();
         tremor.shutdown();
         record.endEjectaTrack();
+        bombs.shutdown();
 
         volcano.logger.log(VolcanoLogClass.CRATER, "Shutted down crater "+name);
     }
