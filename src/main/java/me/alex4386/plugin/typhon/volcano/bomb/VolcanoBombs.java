@@ -49,7 +49,7 @@ public class VolcanoBombs {
         int maxY = crater.getSummitBlock().getY();
         int yToLaunch = maxY - crater.location.getWorld().getHighestBlockYAt(crater.location);
 
-        float powerY = (random.nextFloat() * (float) 1.5) + ((yToLaunch + 4 - 9) / (float) 25.0) + 1f;
+        float powerY = ((float) random.nextGaussian() * (float) 1.5) + ((yToLaunch + 4 - 9) / (float) 25.0) + 1f;
 
 
         bombRadius = (bombRadius < 1) ? 1 : bombRadius;
@@ -80,7 +80,7 @@ public class VolcanoBombs {
 
         float volcanoScaleVar = (crater.getSummitBlock().getY() / (float)crater.getVolcano().heightLimit);
 
-        double bombLaunchPower = (((maxBombLaunchPower - minBombLaunchPower) * Math.random()) + minBombLaunchPower) * volcanoScaleVar;
+        double bombLaunchPower = (((maxBombLaunchPower - minBombLaunchPower) * Math.max(Math.abs(random.nextGaussian()), 1.0) + minBombLaunchPower) * volcanoScaleVar);
         float bombPower = (float) VolcanoMath.getZeroFocusedRandom() * (maxBombPower - minBombPower) + minBombPower;
         int bombRadius = (int) ((Math.floor(random.nextDouble() * (maxBombRadius - minBombRadius)) * volcanoScaleVar) + minBombRadius);
 
