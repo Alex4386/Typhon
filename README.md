@@ -1,26 +1,29 @@
 # Typhon Plugin
-## Description
-Bring real-life rock features, such as magma chamber, dikes, Laccolith, Lopolith to the Minecraft® World!
+Typhon Plugin aims to implement real-life volcanoes and its behavior in the restriction of vanilla as much as possible.  
 
-## Alert
-Due to entire rewrite, entire plugin is unstable.  
-Please consider this as a alpha-grade software. Thank you.
+## System Requirements
+* Spigot (or compatibles) for Minecraft® 1.16.5+
+* A Really beefy (multithreading capable) computer/server
+* Bandwidth to cover up extreme usage of FallingBlock and Particles
 
-## Docs
-TODO
+### Notice
+This plugin utilizes a lot of particles and FallingBlock.  
+which could impact your Network bandwidth usage.  
+If you are going to use this in public server, **Please closely monitor your bandwidth usage.**
 
+## Downloads
+Nightly builds *(GitHub Login Required)*: [GitHub Actions](https://github.com/Alex4386/Typhon-Plugin/actions/workflows/maven.yml)  
+Stable builds: [Release Page]()
 
-## Miscellaneous
-### License
-GNU Public License Version 3.  
-See Copyrights section for more details.
+## License
+Copyright &copy; Alex4386, Diwaly, MintNetwork.  
+Originally developed by [Diwaly](https://github.com/diwaly) at [original repo (broken link)](https://bitbucket.org/diwaly/volcano/src/default/).  
+  
+Distributed under GNU General Public License Version 3.  
+See [LICENSE](LICENSE) file for more details.  
 
-### Copyrights
-This software is continuation of [ultimate volcano project](https://github.com/Alex4386/ultimateVolcano). which is initially developed from fork of [Diwaly's Volcano Plugin](https://bitbucket.org/diwaly/volcano/src/default/).  
-Even though this software now contains almost no traces of his code, since this is the fork, This repository follows Diwlay's Volcano Plugin's Initial License, GPLv3.  
-
-#### Acknowledgements  
-This plugin was initially forked developing MintNetwork Season 3::The Endless Survival Contents.  
+### Acknowledgements  
+This plugin was initially forked developing MintNetwork Season 3::The Endless Survival.  
 Since I am no longer part of MintNetwork, This is moved from MintNetwork group repository to this repository.  
 
 This plugin might contains several code traces from Diwaly's Volcano Plugin.
