@@ -13,7 +13,7 @@ If you are going to use this in public server, **Please closely monitor your ban
 
 ## Downloads
 Nightly builds *(GitHub Login Required)*: [GitHub Actions](https://github.com/Alex4386/Typhon-Plugin/actions/workflows/maven.yml)  
-Stable builds: [Release Page]()
+Stable builds: [Release Page](https://github.com/Alex4386/Typhon-Plugin/releases/latest)
 
 ## License
 Copyright &copy; Alex4386, Diwaly, MintNetwork.  
