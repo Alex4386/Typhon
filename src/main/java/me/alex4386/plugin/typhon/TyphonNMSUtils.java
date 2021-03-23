@@ -5,6 +5,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.craftbukkit.v1_16_R3.CraftChunk;
 import org.bukkit.craftbukkit.v1_16_R3.CraftParticle;
 import org.bukkit.craftbukkit.v1_16_R3.CraftWorld;
+import org.bukkit.craftbukkit.v1_16_R3.entity.CraftEntity;
 import org.bukkit.craftbukkit.v1_16_R3.util.CraftMagicNumbers;
 import org.json.simple.JSONObject;
 import org.spigotmc.AsyncCatcher;
@@ -21,6 +22,11 @@ public class TyphonNMSUtils {
 
     public static void setBlockMaterial(org.bukkit.block.Block block, org.bukkit.Material material, boolean applyPhysics) {
         setLocationMaterial(block.getLocation(), material, applyPhysics, true);
+    }
+
+    public static void setFallingBlockUnbreakable(org.bukkit.entity.FallingBlock fallingBlock) {
+        Entity entity = ((CraftEntity) fallingBlock).getHandle();
+        entity.persist = true;
     }
 
     public static void setBlockMaterial(org.bukkit.block.Block block, org.bukkit.Material material, boolean applyPhysics, boolean updateChunk) {

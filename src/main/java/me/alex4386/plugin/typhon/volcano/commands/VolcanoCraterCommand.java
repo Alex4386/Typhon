@@ -206,7 +206,7 @@ public class VolcanoCraterCommand {
                 } else {
                     if (newArgs[1].equalsIgnoreCase("start")) {
 
-                        if (crater.isErupting()) {
+                        if (crater.isFlowingLava()) {
                             msg.warn("Crater "+crater.getName()+" is already flowing lava!");
                             break;
                         }
@@ -214,7 +214,7 @@ public class VolcanoCraterCommand {
                         msg.info("Crater "+crater.getName()+" is now flowing lava!");
 
                     } else if (newArgs[1].equalsIgnoreCase("stop")) {
-                        if (crater.isErupting()) {
+                        if (!crater.isFlowingLava()) {
                             msg.warn("Crater "+crater.getName()+" is not flowing lava!");
                             break;
                         }
@@ -268,9 +268,12 @@ public class VolcanoCraterCommand {
                         return true;
                     }
 
-                    if (newArgs.length == 3) {
+                    if (newArgs.length == 2) {
+                        minRange = (int) ((Math.random() * 40) + 10);
+                        maxRange = (int) 100;
+                    } else if (newArgs.length == 3) {
                         minRange = Integer.parseInt(newArgs[2]);
-                        maxRange = (int) ((crater.bombs.maxDistance - minRange) * Math.random() + minRange);
+                        maxRange = (int) (((crater.bombs.maxDistance - minRange) * Math.random()) + minRange);
                     } else if (newArgs.length == 4) {
                         minRange = Integer.parseInt(newArgs[2]);
                         maxRange = Integer.parseInt(newArgs[3]);
@@ -278,7 +281,11 @@ public class VolcanoCraterCommand {
                             msg.error("invalid range");
                             return true;
                         }
+                    } else {
+                        msg.error("Invalid Command Args");
+                        return true;
                     }
+
                     subCrater = crater.volcano.autoStart.createSubCraterNearEntity(player, minRange, maxRange);
                     msg.info("Sub Crater: "+subCrater.name+" has been created near "+player.getName());
 

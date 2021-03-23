@@ -31,6 +31,13 @@ public class VolcanoBombs {
 
     public VolcanoBombs(VolcanoCrater crater) {
         this.crater = crater;
+
+        Vector vector = TyphonUtils.calculateVelocity(
+                new Vector(0,0, 0),
+                new Vector(0, 0, crater.craterRadius),
+                4
+        );
+        this.minBombLaunchPower = vector.getBlockZ();
     }
 
     public void launchBomb(Location location, double bombLaunchPower, float bombPower, int bombRadius, int bombDelay) {
@@ -49,7 +56,7 @@ public class VolcanoBombs {
         int maxY = crater.getSummitBlock().getY();
         int yToLaunch = maxY - crater.location.getWorld().getHighestBlockYAt(crater.location);
 
-        float powerY = ((float) random.nextGaussian() * (float) 1.5) + ((yToLaunch + 4 - 9) / (float) 25.0) + 1f;
+        float powerY = (random.nextFloat() * (float) 1.5) + ((yToLaunch + 4 - 9) / (float) 25.0) + 1f;
 
 
         bombRadius = (bombRadius < 1) ? 1 : bombRadius;
@@ -80,7 +87,7 @@ public class VolcanoBombs {
 
         float volcanoScaleVar = (crater.getSummitBlock().getY() / (float)crater.getVolcano().heightLimit);
 
-        double bombLaunchPower = (((maxBombLaunchPower - minBombLaunchPower) * Math.max(Math.abs(random.nextGaussian()), 1.0) + minBombLaunchPower) * volcanoScaleVar);
+        double bombLaunchPower = (((maxBombLaunchPower - minBombLaunchPower) * Math.random()) * volcanoScaleVar + minBombLaunchPower);
         float bombPower = (float) VolcanoMath.getZeroFocusedRandom() * (maxBombPower - minBombPower) + minBombPower;
         int bombRadius = (int) ((Math.floor(random.nextDouble() * (maxBombRadius - minBombRadius)) * volcanoScaleVar) + minBombRadius);
 
@@ -134,6 +141,7 @@ public class VolcanoBombs {
             iterator.remove();
         }
     }
+
 
     public void trackAll() {
         Iterator<Map.Entry<FallingBlock, VolcanoBomb>> iterator = bombMap.entrySet().iterator();

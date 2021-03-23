@@ -50,8 +50,20 @@ public class VolcanoBomb {
         Vector launchVector = new Vector(bombLaunchPowerX, bombLaunchPowerY, bombLaunchPowerZ);
         this.block = loc.getWorld().spawnFallingBlock(loc, new MaterialData(Material.MAGMA_BLOCK));
 
-        this.block.setGlowing(true);
+        try {
+            TyphonNMSUtils.setFallingBlockUnbreakable(this.block);
+        } catch(Exception e) {
 
+        }
+
+        try {
+            TyphonNMSUtils.setFallingBlockUnbreakable(this.block);
+        } catch(Exception e) {
+
+        }
+
+        this.block.setGlowing(true);
+        this.block.setFireTicks(1000);
         this.block.setVelocity(launchVector);
 
         this.block.setGravity(true);

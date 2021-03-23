@@ -56,9 +56,11 @@ public class VolcanoConstruction {
         long blockUpdateInitTime = System.currentTimeMillis();
         int processingBlocks = constructionData.size() + constructionMaterialData.size();
 
-        for (Map.Entry<Block, Block> entry : constructionData.entrySet()) {
-            Block sourceBlock = entry.getKey();
-            Block destinationBlock = entry.getValue();
+        List<Block> entrySet = new ArrayList<>(constructionData.keySet());
+
+        for (Block key : entrySet) {
+            Block sourceBlock = key;
+            Block destinationBlock = constructionData.get(key);
             boolean shouldUpdate = destinationBlock.getY() % 16 == 0 && destinationBlock.getX() % 16 == 0 && destinationBlock.getZ() % 16 == 0;
 
             if (!TyphonUtils.isMaterialRocklikes(sourceBlock.getType())) {
@@ -89,9 +91,11 @@ public class VolcanoConstruction {
             }
         }
 
-        for (Map.Entry<Block, Material> entry : constructionMaterialData.entrySet()) {
-            Block destinationBlock = entry.getKey();
-            Material material = entry.getValue();
+        entrySet = new ArrayList<>(constructionMaterialData.keySet());
+
+        for (Block key : entrySet) {
+            Block destinationBlock = key;
+            Material material = constructionMaterialData.get(key);
 
             boolean shouldUpdate = destinationBlock.getY() % 16 == 0 && destinationBlock.getX() % 16 == 0 && destinationBlock.getZ() % 16 == 0;
 

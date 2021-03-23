@@ -99,22 +99,26 @@ public class VolcanoAutoStart implements Listener {
     }
 
     public VolcanoCrater createSubCrater(Location location) {
-        int key = -1;
-        String name;
+        String name = "";
+        boolean generated = false;
 
-        Random random = new Random();
-        do {
-            key = random.nextInt(999999);
-            name = volcano.name+"_auto_"+String.format("%06d", key);
-            System.out.println("tried" + name);
-        } while(volcano.subCraters.get(name) != null);
+        for (int key = 1; key < 999; key++) {
+            name = volcano.name+"_auto"+String.format("%03d", key);
+            if (volcano.subCraters.get(name) == null) {
+                generated = true;
+                break;
+            }
+        }
 
-        VolcanoCrater newCrater = new VolcanoCrater(volcano, location, name);
-        volcano.subCraters.put(name, newCrater);
+        if (generated) {
+            VolcanoCrater newCrater = new VolcanoCrater(volcano, location, name);
+            volcano.subCraters.put(name, newCrater);
 
-        volcano.trySave();
-
-        return newCrater;
+            volcano.trySave();
+            return newCrater;
+        } else {
+            return null;
+        }
     }
 
     public VolcanoCrater createSubCrater(VolcanoCrater crater) {
@@ -141,9 +145,10 @@ public class VolcanoAutoStart implements Listener {
     }
 
     public VolcanoCrater createSubCraterNearEntity(Entity entity) {
-        int minRange = (int) (Math.random() * 20) + 40;
+        int minRange = (int) (Math.random() * 30) + 10;
         int range = (int) (Math.random() * 100);
-        return createSubCraterNearEntity(entity, minRange, minRange + range);
+
+        return createSubCraterNearEntity(entity, minRange, range);
     }
 
     public VolcanoCrater createSubCraterNearEntity(Entity entity, int minRange, int maxRange) {
@@ -187,20 +192,52 @@ public class VolcanoAutoStart implements Listener {
             } else if (Math.random() < 0.35 && volcano.mainCrater.longestFlowLength > 150) {
                 // create one near player.
                 Collection<Player> onlinePlayers = (Collection<Player>) Bukkit.getOnlinePlayers();
-                Player[] playerArray = (Player[]) onlinePlayers.toArray();
-                List<Player> onlinePlayerList = Arrays.asList(playerArray);
-                Collections.shuffle(onlinePlayerList);
+                List<Player> targetPlayers = new ArrayList<>();
 
-                for (Player player : onlinePlayerList) {
-                    if (volcano.manager.isInAnyLavaFlowArea(player.getLocation())) {
-                        subCraterLocation = TyphonUtils.getRandomBlockInRange(
-                                player.getLocation().getBlock(),
-                                50,
-                                100
-                        ).getLocation();
+                for (Player player: onlinePlayers) {
+                    if (player instanceof Player) {
+                        if (volcano.manager.isInAnyLavaFlowArea(player.getLocation())) {
+                            targetPlayers.add(player);
+                        }
+                    }
+                }
 
-                        volcano.logger.log(VolcanoLogClass.AUTOSTART, "volcano creating new subcrater near by user "+player.getName());
-                        break;
+                Random random = new Random();
+
+                if (targetPlayers.size() > 0) {
+                    int maxVolcanoes = random.nextInt(3);
+
+                    if (targetPlayers.size() < maxVolcanoes) {
+                        maxVolcanoes = targetPlayers.size();
+                    }
+
+                    for (int i = 0; i < maxVolcanoes; i++) {
+                        Collections.shuffle(targetPlayers);
+                        Player player = targetPlayers.get(0);
+
+                        if (volcano.manager.isInAnyLavaFlowArea(player.getLocation())) {
+                            int j = 0;
+                            do {
+                                subCraterLocation = TyphonUtils.getRandomBlockInRange(
+                                        player.getLocation().getBlock(),
+                                        10,
+                                        100
+                                ).getLocation();
+                                j++;
+                            } while (volcano.manager.getNearestCrater(subCraterLocation).getTwoDimensionalDistance(subCraterLocation) < 70 && j < 10);
+
+                            if (j == 10) {
+                                break;
+                            }
+
+                            VolcanoCrater newCrater = createSubCrater(subCraterLocation);
+                            volcano.logger.log(VolcanoLogClass.AUTOSTART, "volcano creating new subcrater near by user "+player.getName());
+
+                            Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
+                                newCrater.start();
+                            }, 100l);
+                            newCrater.tremor.showTremorActivity(subCraterLocation.getBlock(), 4f);
+                        }
                     }
                 }
             }
@@ -223,8 +260,8 @@ public class VolcanoAutoStart implements Listener {
                 }
 
                 do {
-                    key = random.nextInt(9999);
-                    name = volcano.name+"_auto_"+String.format("%04d", key);
+                    key = random.nextInt(999);
+                    name = volcano.name+"_a"+String.format("%03d", key);
                 } while(!volcano.subCraters.containsKey(name));
 
                 VolcanoCrater newCrater = new VolcanoCrater(volcano, subCraterLocation, name);
