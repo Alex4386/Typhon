@@ -1,6 +1,5 @@
 package me.alex4386.plugin.typhon;
 
-import com.comphenix.protocol.ProtocolLibrary;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombListener;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;

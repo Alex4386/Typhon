@@ -1,6 +1,5 @@
 package me.alex4386.plugin.typhon;
 
-import com.comphenix.protocol.ProtocolManager;
 import net.minecraft.core.BlockPosition;
 import net.minecraft.core.particles.ParticleParam;
 import net.minecraft.network.protocol.Packet;
