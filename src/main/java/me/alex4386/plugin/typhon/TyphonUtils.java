@@ -21,17 +21,12 @@ import java.util.Random;
 
 public class TyphonUtils {
 
-    /* These are added for future-proofing */
     public static int getMinimumY(org.bukkit.World world) {
-        // preparing for 1.17's world minHeight and maxHeight changes
-
-        return 0;
+        return world.getMinHeight();
     }
 
     public static int getMaximumY(org.bukkit.World world) {
-        // preparing for 1.17's world minHeight and maxHeight changes
-
-        return world.getMaxHeight() - getMinimumY(world);
+        return world.getMaxHeight();
     }
 
     public static org.bukkit.Location getHighestLocation(org.bukkit.Location loc) {
@@ -80,9 +75,14 @@ public class TyphonUtils {
         }
 
 
-        System.out.println("EXCEPTION OCCURRED! FUCK - LOWEST BEDROCK CEILING WAS NOT FOUND AT x = "+x+", z = "+z);
+        System.err.println("EXCEPTION OCCURRED! FUCK - LOWEST BEDROCK CEILING WAS NOT FOUND AT x = "+x+", z = "+z+" / fallback to lowest Y of the world");
         // Um... This really shouldn't happen.
-        return null;
+        return new org.bukkit.Location(
+                loc.getWorld(),
+                x,
+                getMinimumY(loc.getWorld()),
+                z
+        );
     }
 
     public static List<org.bukkit.block.Block> getNearByBlocks(org.bukkit.block.Block baseBlock, int radius) {
