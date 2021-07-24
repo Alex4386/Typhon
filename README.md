@@ -2,7 +2,7 @@
 Typhon Plugin aims to implement real-life volcanoes and its behavior in the restriction of vanilla as much as possible.  
 
 ## System Requirements
-* Spigot (or compatibles) for Minecraft® 1.16.5+
+* Spigot (or compatibles) for Minecraft® 1.17.1
 * A Really beefy (multithreading capable) computer/server
 * Bandwidth to cover up extreme usage of FallingBlock and Particles
 
