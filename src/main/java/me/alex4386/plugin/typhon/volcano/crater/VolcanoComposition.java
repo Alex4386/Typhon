@@ -50,7 +50,7 @@ public class VolcanoComposition {
 }
 
 class VolcanoCompositionUtils {
-    public static String defaultExtrusiveComposition = "DEEPSLATE,22.8/BLACKSTONE,25/BASALT,55/ANDESITE,2/POLISHED_ANDESITE,1.2";
+    public static String defaultExtrusiveComposition = "DEEPSLATE,21.8/BLACKSTONE,25/BASALT,50/ANDESITE,2/POLISHED_ANDESITE,1.2";
     public static String defaultIntrusiveComposition = "DIORITE,3/GRANITE,1.2/DEEPSLATE,95.8";
 
     public static void importConfig(JSONObject configData) {
