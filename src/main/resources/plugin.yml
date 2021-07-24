@@ -5,7 +5,7 @@ prefix: Typhon
 authors: [Alex4386]
 description: Minecraft world is SO BORING, Typhon is saying NO to you.
 website: https://github.com/Alex4386/Typhon-Plugin
-api-version: 1.16
+api-version: 1.17
 commands:
   typhon:
     description: A management Interface for Typhon Plugin

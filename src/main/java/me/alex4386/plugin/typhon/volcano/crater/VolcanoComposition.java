@@ -50,8 +50,8 @@ public class VolcanoComposition {
 }
 
 class VolcanoCompositionUtils {
-    public static String defaultExtrusiveComposition = "BLACKSTONE,27/BASALT,57/ANDESITE,16";
-    public static String defaultIntrusiveComposition = "DIORITE,33/GRANITE,33/STONE,34";
+    public static String defaultExtrusiveComposition = "DEEPSLATE,22.8/BLACKSTONE,25/BASALT,55/ANDESITE,2/POLISHED_ANDESITE,1.2";
+    public static String defaultIntrusiveComposition = "DIORITE,3/GRANITE,1.2/DEEPSLATE,95.8";
 
     public static void importConfig(JSONObject configData) {
         defaultExtrusiveComposition = (String) configData.get("extrusive");
@@ -95,11 +95,11 @@ class VolcanoCompositionUtils {
         }
         if (sum < 100) {
             double missing = 100f - sum;
-            logger.warn(VolcanoLogClass.COMPOSITION, missing+"% of material data is missing, filling data with stone.");
+            logger.warn(VolcanoLogClass.COMPOSITION, missing+"% of material data is missing, filling data with deepslate.");
 
             VolcanoCompositionData fittingData = new VolcanoCompositionData(
                     missing,
-                    Material.STONE
+                    Material.DEEPSLATE
             );
 
             composition.add(fittingData);
