@@ -1,12 +1,25 @@
 package me.alex4386.plugin.typhon;
 
-import net.minecraft.server.v1_16_R3.*;
+import com.comphenix.protocol.ProtocolManager;
+import net.minecraft.core.BlockPosition;
+import net.minecraft.core.particles.ParticleParam;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.PacketPlayOutMapChunk;
+import net.minecraft.network.protocol.game.PacketPlayOutWorldParticles;
+import net.minecraft.server.*;
+import net.minecraft.server.level.EntityPlayer;
+import net.minecraft.server.level.WorldServer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkCoordIntPair;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.IBlockData;
+import net.minecraft.world.level.chunk.Chunk;
 import org.bukkit.Bukkit;
-import org.bukkit.craftbukkit.v1_16_R3.CraftChunk;
-import org.bukkit.craftbukkit.v1_16_R3.CraftParticle;
-import org.bukkit.craftbukkit.v1_16_R3.CraftWorld;
-import org.bukkit.craftbukkit.v1_16_R3.entity.CraftEntity;
-import org.bukkit.craftbukkit.v1_16_R3.util.CraftMagicNumbers;
+import org.bukkit.craftbukkit.v1_17_R1.CraftChunk;
+import org.bukkit.craftbukkit.v1_17_R1.CraftParticle;
+import org.bukkit.craftbukkit.v1_17_R1.CraftWorld;
+import org.bukkit.craftbukkit.v1_17_R1.entity.CraftEntity;
+import org.bukkit.craftbukkit.v1_17_R1.util.CraftMagicNumbers;
 import org.json.simple.JSONObject;
 import org.spigotmc.AsyncCatcher;
 
@@ -14,8 +27,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TyphonNMSUtils {
-    //Package nmsPackage = Package.getPackage("org.bukkit.craftbukkit.v1_16_R3");
-
     public static void setBlockMaterial(org.bukkit.block.Block block, org.bukkit.Material material) {
         setBlockMaterial(block, material, true);
     }
@@ -126,7 +137,9 @@ public class TyphonNMSUtils {
         int view = Bukkit.getServer().getViewDistance() << 4;
 
         Chunk rawChunk = ((CraftChunk) chunk).getHandle();
-        WorldServer world = rawChunk.world;
+
+        // it is now much more obfuscated :facepalm:
+        WorldServer world = rawChunk.i;
 
         // force server to reload the chunk.
         boolean previouslyForceLoaded = chunk.isForceLoaded();
@@ -144,15 +157,22 @@ public class TyphonNMSUtils {
             if (diffx <= view && diffz <= view) {
                 ep.a(new ChunkCoordIntPair(chunk.getX(), chunk.getZ()));
 
+                // even more obfuscations :facepalm:
+
                 // every single block in chunk has been updated.
-                ep.playerConnection.sendPacket(new PacketPlayOutMapChunk(
-                        rawChunk,
-                        65535
+                TyphonNMSUtils.sendPacket(ep, new PacketPlayOutMapChunk(
+                        rawChunk
+// yay, less arguments
+//                        , 65535
 //                        , false
                 ));
 
             }
         }
+    }
+
+    public static void sendPacket(EntityPlayer player, Packet<?> packet) {
+        player.b.sendPacket(packet);
     }
 
     public static <T> void createParticle(org.bukkit.Particle particle, org.bukkit.Location loc, int count, double offsetX, double offsetY, double offsetZ, double extra, T data) {
@@ -164,7 +184,7 @@ public class TyphonNMSUtils {
         WorldServer world = ((CraftWorld) bukkitWorld).getHandle();
 
         for (EntityPlayer ep : world.getPlayers()) {
-            ep.playerConnection.sendPacket(packet);
+            TyphonNMSUtils.sendPacket(ep, packet);
         }
     }
 

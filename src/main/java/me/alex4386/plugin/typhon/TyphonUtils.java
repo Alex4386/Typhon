@@ -4,12 +4,14 @@ import org.bukkit.*;
 import org.bukkit.block.*;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.metadata.MetadataValue;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
+import org.bukkit.util.VoxelShape;
 import org.json.simple.JSONObject;
 
 import java.util.ArrayList;
@@ -514,9 +516,12 @@ public class TyphonUtils {
             @Override public Collection<ItemStack> getDrops() {return null; }
             @Override public Collection<ItemStack> getDrops(ItemStack itemStack) {return null; }
             @Override public Collection<ItemStack> getDrops(ItemStack itemStack, Entity entity) {return null; }
+            @Override public boolean isPreferredTool(ItemStack itemStack) {return false;}
+            @Override public float getBreakSpeed(Player player) { return 0; }
             @Override public boolean isPassable() {return false; }
             @Override public RayTraceResult rayTrace(Location location, Vector vector, double v, FluidCollisionMode fluidCollisionMode) {return null; }
             @Override public BoundingBox getBoundingBox() {return null; }
+            @Override public VoxelShape getCollisionShape() { return null; }
         };
         return fakeBlock;
     }
