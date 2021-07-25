@@ -73,11 +73,9 @@ public class VolcanoConstruction {
             if (data instanceof VolcanoConstructionRaiseData) {
                 VolcanoConstructionRaiseData raiseData = (VolcanoConstructionRaiseData) data;
                 Block block = raiseData.baseBlock;
-                /*
                 while (block.getType() == Material.LAVA) {
                     block = block.getRelative(0,1,0);
                 }
-                */
                 if (sourceBlock.getY() <= raiseData.raiseAmount + block.getY()) {
                     replacementMaterial = Material.LAVA;
                 }
@@ -85,6 +83,9 @@ public class VolcanoConstruction {
 
             if (useNMS) {
                 TyphonNMSUtils.moveBlock(sourceBlock, destinationBlock, replacementMaterial, false, shouldUpdate);
+                if (replacementMaterial == Material.LAVA) {
+                    TyphonNMSUtils.setBlockMaterial(sourceBlock, Material.LAVA);
+                }
             } else {
                 BlockData blockData = sourceBlock.getBlockData();
                 destinationBlock.setType(sourceBlock.getType());
