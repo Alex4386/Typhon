@@ -11,8 +11,8 @@ Typhon plugin is a Minecraft Plugin aims to implement real-life volcanoes and it
 ## Testing your gear against Typhon Plugin
 Any minecraft servers supports Spigot API can work with Typhon Plugin. 
 
-But, Typhon plugin is tested on [Paper](https://papermc.io).  
-For your best experience, I recommend using Paper.
+But, Typhon plugin was only properly tested on [Paper](https://papermc.io).  
+Due to extreme I/O use and CPU-Intensive job that Typhon plugin does to your Minecraft server, I recommend using Paper for best experience.
 
 ### Benchmarking your gear with erupting a volcano in ludicrous speed
 In order to test your gear is adequate for Typhon plugin, try the following:  

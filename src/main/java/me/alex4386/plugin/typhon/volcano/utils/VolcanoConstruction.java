@@ -73,9 +73,11 @@ public class VolcanoConstruction {
             if (data instanceof VolcanoConstructionRaiseData) {
                 VolcanoConstructionRaiseData raiseData = (VolcanoConstructionRaiseData) data;
                 Block block = raiseData.baseBlock;
+                /*
                 while (block.getType() == Material.LAVA) {
                     block = block.getRelative(0,1,0);
                 }
+                */
                 if (sourceBlock.getY() <= raiseData.raiseAmount + block.getY()) {
                     replacementMaterial = Material.LAVA;
                 }

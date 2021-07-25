@@ -138,7 +138,6 @@ public class VolcanoMagmaChamber {
                 (Runnable) () -> {
                     this.constructionType = VolcanoConstructionType.NONE;
                     this.isBuilt = true;
-                    this.isFilled = true;
                     this.volcano.trySave();
 
                     TyphonPlugin.constructionStatuses.remove(status);

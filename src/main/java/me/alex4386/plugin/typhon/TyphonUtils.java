@@ -261,6 +261,7 @@ public class TyphonUtils {
         String materialType = material.name().toLowerCase();
         return (
             materialType.contains("stone") ||
+            materialType.contains("deepslate") ||
             materialType.contains("granite") ||
             materialType.contains("diorite") ||
             materialType.contains("andesite") ||
@@ -270,10 +271,15 @@ public class TyphonUtils {
             materialType.contains("sand") ||
             materialType.contains("gravel") ||
             materialType.contains("ore") ||
+            materialType.contains("iron") ||
+            materialType.contains("gold") ||
+            materialType.contains("coppe") ||
             materialType.contains("quartz") ||
             materialType.contains("magma") ||
             materialType.contains("obsidian") ||
-            materialType.contains("basalt")
+            materialType.contains("basalt") ||
+            materialType.contains("debris") ||
+            materialType.contains("amethyst")
         );
     }
 

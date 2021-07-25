@@ -157,117 +157,74 @@ public class VolcanoAutoStart implements Listener {
     }
 
     public VolcanoCrater autoStartCreateSubCrater() {
-        boolean isMaincraterGrownEnough = (volcano.mainCrater.longestFlowLength > 100);
+        int availableHeight = volcano.mainCrater.location.getWorld().getMaxHeight() - volcano.mainCrater.location.getBlockY();
+        int mainCraterHeight = ((int) volcano.mainCrater.averageCraterHeight()) - volcano.mainCrater.location.getBlockY();
+        boolean isMaincraterGrownEnough = (volcano.mainCrater.longestFlowLength > 150 && mainCraterHeight > 100);
 
         if (isMaincraterGrownEnough && createSubCrater) {
-            VolcanoCrater crater = null;
-            Location subCraterLocation = null;
+            VolcanoCrater crater = volcano.mainCrater;
 
-            if (Math.random() < 0.7) {
-                // base on main crater
-                crater = volcano.mainCrater;
+            Location location;
+            List<Player> players = volcano.manager.getAffectedPlayers();
+            Collections.shuffle(players);
 
-            } else if (volcano.subCraters.size() > 0) {
-                Random random = new Random();
-                int size = volcano.subCraters.size();
-                crater = volcano.mainCrater;
-
-                int i = 0;
-                int idx = random.nextInt(size);
-                for (VolcanoCrater thisCrater : volcano.subCraters.values()) {
-                    if (idx == i) {
-                        crater = thisCrater;
-                    }
-                    i++;
-                }
-            }
-
-            if (Math.random() < 0.3) {
-                subCraterLocation = TyphonUtils.getRandomBlockInRange(
+            if (Math.random() < 0.7 || players.size() == 0) {
+                location = TyphonUtils.getRandomBlockInRange(
                         crater.location.getBlock(),
-                        (int) volcano.mainCrater.longestFlowLength - 100,
-                        (int) volcano.mainCrater.longestFlowLength + 100
+                        (int) Math.max(volcano.mainCrater.longestFlowLength, 100),
+                        (int) Math.max(volcano.mainCrater.longestFlowLength * 2, 200)
                 ).getLocation();
 
-            } else if (Math.random() < 0.35 && volcano.mainCrater.longestFlowLength > 150) {
-                // create one near player.
-                Collection<Player> onlinePlayers = (Collection<Player>) Bukkit.getOnlinePlayers();
-                List<Player> targetPlayers = new ArrayList<>();
+                volcano.logger.log(VolcanoLogClass.AUTOSTART, "Volcano will now create a subcrater!");
+            } else {
+                Player target = players.get(0);
+                double distance = volcano.mainCrater.getTwoDimensionalDistance(target.getLocation());
 
-                for (Player player: onlinePlayers) {
-                    if (player instanceof Player) {
-                        if (volcano.manager.isInAnyLavaFlowArea(player.getLocation())) {
-                            targetPlayers.add(player);
-                        }
-                    }
+                double xDiff = target.getLocation().getX() - volcano.mainCrater.location.getX();
+                double zDiff = target.getLocation().getZ() - volcano.mainCrater.location.getZ();
+
+                double sin = 0;
+                double cos = 0;
+                if (Math.abs(xDiff) >= 1) {
+                    double tan = zDiff / xDiff;
+
+                    double rad = Math.atan(tan);
+                    sin = Math.sin(rad);
+                    cos = Math.cos(rad);
+                } else {
+                    sin = 1;
+                    cos = 0;
                 }
 
-                Random random = new Random();
+                double newDistance = Math.max(volcano.mainCrater.longestFlowLength + 50, distance);
+                double newXDiff = newDistance * cos;
+                double newZDiff = newDistance * sin;
 
-                if (targetPlayers.size() > 0) {
-                    int maxVolcanoes = random.nextInt(3);
+                volcano.logger.log(VolcanoLogClass.AUTOSTART, "Volcano will now create a subcrater near-by a player "+target.getName());
 
-                    if (targetPlayers.size() < maxVolcanoes) {
-                        maxVolcanoes = targetPlayers.size();
-                    }
+                location = volcano.mainCrater.location.add(newXDiff, 0, newZDiff);
 
-                    for (int i = 0; i < maxVolcanoes; i++) {
-                        Collections.shuffle(targetPlayers);
-                        Player player = targetPlayers.get(0);
-
-                        if (volcano.manager.isInAnyLavaFlowArea(player.getLocation())) {
-                            int j = 0;
-                            do {
-                                subCraterLocation = TyphonUtils.getRandomBlockInRange(
-                                        player.getLocation().getBlock(),
-                                        10,
-                                        100
-                                ).getLocation();
-                                j++;
-                            } while (volcano.manager.getNearestCrater(subCraterLocation).getTwoDimensionalDistance(subCraterLocation) < 70 && j < 10);
-
-                            if (j == 10) {
-                                break;
-                            }
-
-                            VolcanoCrater newCrater = createSubCrater(subCraterLocation);
-                            volcano.logger.log(VolcanoLogClass.AUTOSTART, "volcano creating new subcrater near by user "+player.getName());
-
-                            Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
-                                newCrater.start();
-                            }, 100l);
-                            newCrater.tremor.showTremorActivity(subCraterLocation.getBlock(), 4f);
-                        }
-                    }
-                }
+                location = TyphonUtils.getRandomBlockInRange(
+                        location.getBlock(),
+                        0,
+                        (int) (volcano.mainCrater.getTwoDimensionalDistance(location) - volcano.mainCrater.longestFlowLength)
+                ).getLocation();
+                location = TyphonUtils.getHighestLocation(location);
             }
 
-            if (subCraterLocation != null) {
-                double minimumDistance = -1;
-                Random random = new Random();
-                int key = -1;
+            if (!volcano.manager.isInAnyLavaFlowArea(location)) {
+                int key;
                 String name;
-
-                for (VolcanoCrater thisCrater : volcano.manager.getCraters()) {
-                    double distance = TyphonUtils.getTwoDimensionalDistance(thisCrater.location, subCraterLocation);
-                    if (distance < minimumDistance || distance < 0) {
-                        minimumDistance = distance;
-                    }
-                }
-
-                if (minimumDistance < 50) {
-                    return null;
-                }
+                Random random = new Random();
 
                 do {
                     key = random.nextInt(999);
                     name = volcano.name+"_a"+String.format("%03d", key);
                 } while(!volcano.subCraters.containsKey(name));
 
-                VolcanoCrater newCrater = new VolcanoCrater(volcano, subCraterLocation, name);
-                volcano.subCraters.put(name, newCrater);
+                VolcanoCrater newCrater = new VolcanoCrater(volcano, location, name);
 
-                volcano.logger.log(VolcanoLogClass.AUTOSTART, "volcano creating new subcrater "+name);
+                volcano.logger.log(VolcanoLogClass.AUTOSTART, "Volcano is now creating a new subcrater "+name);
 
                 newCrater.start();
                 Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin,
@@ -279,6 +236,8 @@ public class VolcanoAutoStart implements Listener {
 
                 return newCrater;
             }
+
+            return null;
         }
 
         return null;

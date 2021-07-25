@@ -3,11 +3,14 @@ package me.alex4386.plugin.typhon.volcano;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
 import me.alex4386.plugin.typhon.volcano.crater.VolcanoCraterStatus;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 public class VolcanoManager {
@@ -38,6 +41,21 @@ public class VolcanoManager {
         }
 
         return false;
+    }
+
+    public List<Player> getAffectedPlayers() {
+        Collection<Player> onlinePlayers = (Collection<Player>) Bukkit.getOnlinePlayers();
+        List<Player> targetPlayers = new ArrayList<>();
+
+        for (Player player: onlinePlayers) {
+            if (player instanceof Player) {
+                if (volcano.manager.isInAnyLavaFlowArea(player.getLocation())) {
+                    targetPlayers.add(player);
+                }
+            }
+        }
+
+        return targetPlayers;
     }
 
     public boolean isInAnyBombAffected(Location loc) {
