@@ -4,6 +4,7 @@ import me.alex4386.plugin.typhon.TyphonNMSUtils;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -232,8 +233,8 @@ public class VolcanoConstruction {
         long blockUpdatesPerMilliSecond = 1000000 / elapsedNanoSecondPerBlockUpdate;
         long blockUpdatesPerSecond = blockUpdatesPerMilliSecond * 1000;
 
-        System.out.println("block update took:" + elapsedNanoSecondPerBlockUpdate + "ns.");
-        System.out.println(blockUpdatesPerSecond + " block updates per second");
+        TyphonPlugin.logger.log( VolcanoLogClass.CONSTRUCTION, "block update took:" + elapsedNanoSecondPerBlockUpdate + "ns.");
+        TyphonPlugin.logger.log( VolcanoLogClass.CONSTRUCTION, blockUpdatesPerSecond + " block updates per second");
 
         List<List<T>> dataGroup = new ArrayList<>();
 

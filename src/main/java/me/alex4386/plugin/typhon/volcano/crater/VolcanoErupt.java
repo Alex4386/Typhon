@@ -26,7 +26,7 @@ public class VolcanoErupt {
 
     public void registerTask() {
         if (this.scheduleID < 0) {
-            System.out.println("Register VolcanoErupt");
+            this.crater.volcano.logger.log(VolcanoLogClass.ERUPT, "Registering VolcanoErupt for crater "+crater.getName());
             this.scheduleID = Bukkit.getScheduler().scheduleSyncRepeatingTask(
                 TyphonPlugin.plugin,
                 () -> {

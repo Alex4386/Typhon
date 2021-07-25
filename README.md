@@ -1,5 +1,7 @@
 # Typhon Plugin
 Typhon Plugin aims to implement real-life volcanoes and its behavior in the restriction of vanilla as much as possible.  
+**1.18 World height update ready**  
+_(Tested with 1.17 with Caves and Cliffs update preview datapack)_
 
 ## System Requirements
 * Spigot (or compatibles) for Minecraft® 1.17.1
