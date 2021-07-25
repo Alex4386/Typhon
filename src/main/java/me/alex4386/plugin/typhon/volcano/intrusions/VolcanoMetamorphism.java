@@ -2,9 +2,15 @@ package me.alex4386.plugin.typhon.volcano.intrusions;
 
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
+import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
+import org.bukkit.Effect;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.player.PlayerBucketEmptyEvent;
 
 import java.util.Random;
 
@@ -79,6 +85,10 @@ public class VolcanoMetamorphism {
                     relativeBlock.setType(Material.FIRE);
                 }
             }
+        } else if (material == Material.WATER) {
+            block.setType(Material.AIR);
+        } else if (material == Material.WATER_CAULDRON) {
+            block.setType(Material.CAULDRON);
         }
     }
 

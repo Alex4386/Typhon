@@ -70,10 +70,6 @@ public class Volcano implements Listener {
     // updateRate
     public long updateRate = 20;
 
-    // heightLimit
-    @Deprecated
-    public int heightLimit = Bukkit.getWorlds().get(0).getMaxHeight();
-
     public Volcano(Path basePath) throws IOException, ParseException {
         this.name = basePath.getFileName().toString();
         this.basePath = basePath;
@@ -174,6 +170,7 @@ public class Volcano implements Listener {
 
         for (VolcanoCrater crater : craters) {
             crater.lavaFlow.cooldownAll();
+            crater.bombs.shutdown();
         }
 
         bombLavaFlow.cooldownAll();

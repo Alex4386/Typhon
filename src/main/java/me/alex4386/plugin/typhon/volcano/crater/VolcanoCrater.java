@@ -161,7 +161,7 @@ public class VolcanoCrater {
 
         Random random = new Random();
 
-        if (evenFlow && random.nextDouble() < 0.9f) {
+        if (evenFlow && random.nextDouble() < 0.95f) {
             int minimumTolerantHeight = (int) this.averageCraterHeight() - ((int) craterRadius / 7);
 
             for (Block block:craterBlocks) {
@@ -326,6 +326,10 @@ public class VolcanoCrater {
         lavaFlow.settings.flowing = false;
         this.status = (!this.isErupting()) ? VolcanoCraterStatus.MAJOR_ACTIVITY : this.status;
         this.cool();
+
+        if (this.status != VolcanoCraterStatus.ERUPTING) {
+            this.record.endEjectaTrack();
+        }
     }
 
     public void startErupting() {
@@ -337,6 +341,10 @@ public class VolcanoCrater {
     public void stopErupting() {
         erupt.erupting = false;
         this.status = (!this.isFlowingLava()) ? VolcanoCraterStatus.MAJOR_ACTIVITY : this.status;
+
+        if (this.status != VolcanoCraterStatus.ERUPTING) {
+            this.record.endEjectaTrack();
+        }
     }
 
     public boolean isMainCrater() {

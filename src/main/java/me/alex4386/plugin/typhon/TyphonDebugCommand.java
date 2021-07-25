@@ -177,7 +177,6 @@ public class TyphonDebugCommand {
                                                 );
 
                                         sender.sendMessage(data);
-                                        System.out.println(data);
 
                                         prevLocation[0] = location;
                                     }, 0l, 1l

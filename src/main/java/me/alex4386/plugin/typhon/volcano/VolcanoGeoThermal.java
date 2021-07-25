@@ -12,6 +12,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockFromToEvent;
+import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.plugin.PluginManager;
 
@@ -46,6 +47,8 @@ public class VolcanoGeoThermal implements Listener {
     public void unregisterEvent() {
         if (registeredEvent) {
             BlockFromToEvent.getHandlerList().unregisterAll(this);
+            PlayerDropItemEvent.getHandlerList().unregisterAll(this);
+            PlayerBucketEmptyEvent.getHandlerList().unregisterAll(this);
             registeredEvent = false;
         }
     }
@@ -195,6 +198,27 @@ public class VolcanoGeoThermal implements Listener {
     }
 
     @EventHandler
+    public void playerWaterFlow(PlayerBucketEmptyEvent event) {
+        Material bucket = event.getBucket();
+        Block clickedBlock = event.getBlockClicked();
+        Block targetBlock = clickedBlock.getRelative(event.getBlockFace());
+        Location loc = targetBlock.getLocation();
+
+        if (volcano.manager.getHeatValue(loc) > 0.7) {
+            if (bucket == Material.WATER_BUCKET || bucket == Material.WATER || bucket == Material.POWDER_SNOW_BUCKET || bucket == Material.POWDER_SNOW) {
+                TyphonUtils.createRisingSteam(loc, 1, 5);
+
+                event.getPlayer().sendMessage(ChatColor.RED+"Heat of the volcano evaporated your water!");
+
+                event.setCancelled(true);
+                if (event.getPlayer().getInventory().getItemInMainHand().getType() == bucket) {
+                    event.getPlayer().getInventory().getItemInMainHand().setType(Material.BUCKET);
+                }
+            }
+        }
+    }
+
+    @EventHandler
     public void onPlayerDropItem(PlayerDropItemEvent e) {
         List<VolcanoCrater> craters = volcano.manager.getCraters();
 
@@ -212,6 +236,15 @@ public class VolcanoGeoThermal implements Listener {
                         break;
                     case CHICKEN:
                         e.getItemDrop().getItemStack().setType(Material.COOKED_CHICKEN);
+                        break;
+                    case COD:
+                        e.getItemDrop().getItemStack().setType(Material.COOKED_COD);
+                        break;
+                    case KELP:
+                        e.getItemDrop().getItemStack().setType(Material.DRIED_KELP);
+                        break;
+                    case POTATO:
+                        e.getItemDrop().getItemStack().setType(Material.BAKED_POTATO);
                         break;
                     case SALMON:
                         e.getItemDrop().getItemStack().setType(Material.COOKED_SALMON);

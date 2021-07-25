@@ -296,6 +296,22 @@ public class VolcanoCommand {
                                             msg.error(sender, "Not enough arguments to generate magma chamber");
                                             msg.error(sender, ""+ChatColor.RED+ChatColor.BOLD+"Usage: "+ChatColor.RESET+"/vol "+volcano.name+" create magmachamber "+ChatColor.YELLOW+"<name> <baseY> <baseRadius> <height>");
                                         }
+                                    } else if (type.equalsIgnoreCase("autocrater")) {
+                                        if (args.length >= 5) {
+                                            String playerName = args[4];
+                                            Player target = Bukkit.getPlayer(playerName);
+
+                                            if (target == null) {
+                                                msg.error(sender, "Target player was not found!");
+                                                break;
+                                            }
+
+                                            VolcanoCrater crater = this.volcano.autoStart.autoStartCreateSubCrater(player);
+                                            msg.info("subcrater "+crater.getName()+" is generated near "+target.getName());
+                                        } else if (args.length == 4) {
+                                            VolcanoCrater crater = this.volcano.autoStart.autoStartCreateSubCrater(player);
+                                            msg.info("subcrater "+crater.getName()+" is generated");
+                                        }
                                     }
                                 }
 

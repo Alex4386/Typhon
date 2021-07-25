@@ -225,7 +225,7 @@ public class VolcanoConstruction {
             baseLocation.getBlock().setType(Material.LAVA);
         }
 
-        long blockUpdateEndTime = System.nanoTime();;
+        long blockUpdateEndTime = System.nanoTime();
         long elapsedNanoSecondPerBlockUpdate = blockUpdateEndTime - blockUpdateStartTime;
 
         block.setType(material);
@@ -241,7 +241,7 @@ public class VolcanoConstruction {
         int separatedBlocksPerGroup = (int) blockUpdatesPerSecond / 2;
         int separateGroupCount = (int) Math.ceil(data.size() / (double) separatedBlocksPerGroup);
 
-        System.out.println("Separated: " + separatedBlocksPerGroup + " block updates per second, "+separateGroupCount+" groups");
+        TyphonPlugin.logger.log(VolcanoLogClass.CONSTRUCTION, "Separated: " + separatedBlocksPerGroup + " block updates per second, "+separateGroupCount+" groups");
 
         for (int i = 0; i < separateGroupCount; i++) {
             int max = Math.min(((i+1) * separatedBlocksPerGroup) - 1, data.size());

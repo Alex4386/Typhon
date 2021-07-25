@@ -237,6 +237,7 @@ public class VolcanoCraterCommand {
                 break;
             case QUICK_COOL:
                 crater.lavaFlow.cooldownAll();
+                crater.bombs.shutdown();
                 msg.info("Cooled down all lava from crater "+crater.getName());
                 break;
             case STATUS:
@@ -255,65 +256,6 @@ public class VolcanoCraterCommand {
                 }
                 msg.info("Crater Status: "+crater.volcano.manager.getCraterChatColor(crater)+crater.status.toString());
                 break;
-
-            case CREATE_SUB: {
-                int minRange = 0;
-                int maxRange = 0;
-                VolcanoCrater subCrater;
-
-                if (newArgs.length >= 2 && !(TyphonUtils.isNumber(newArgs[1]) && Bukkit.getPlayer(newArgs[1]) != null && !newArgs[1].equals("start"))) {
-                    Player player = Bukkit.getPlayer(newArgs[1]);
-                    if (player == null) {
-                        msg.error("invalid range");
-                        return true;
-                    }
-
-                    if (newArgs.length == 2) {
-                        minRange = (int) ((Math.random() * 40) + 10);
-                        maxRange = (int) 100;
-                    } else if (newArgs.length == 3) {
-                        minRange = Integer.parseInt(newArgs[2]);
-                        maxRange = (int) (((crater.bombs.maxDistance - minRange) * Math.random()) + minRange);
-                    } else if (newArgs.length == 4) {
-                        minRange = Integer.parseInt(newArgs[2]);
-                        maxRange = Integer.parseInt(newArgs[3]);
-                        if (minRange > maxRange) {
-                            msg.error("invalid range");
-                            return true;
-                        }
-                    } else {
-                        msg.error("Invalid Command Args");
-                        return true;
-                    }
-
-                    subCrater = crater.volcano.autoStart.createSubCraterNearEntity(player, minRange, maxRange);
-                    msg.info("Sub Crater: "+subCrater.name+" has been created near "+player.getName());
-
-                } else if (newArgs.length >= 1) {
-                    if (newArgs.length == 2) {
-                        minRange = Integer.parseInt(newArgs[1]);
-                        maxRange = (int) ((crater.bombs.maxDistance - minRange) * Math.random() + minRange);
-                        subCrater = crater.volcano.autoStart.createSubCrater(crater.location, minRange, maxRange);
-                    } else if (newArgs.length >= 3 && !newArgs[1].equals("start") && !newArgs[2].equals("start")) {
-                        minRange = Integer.parseInt(newArgs[1]);
-                        maxRange = Integer.parseInt(newArgs[2]);
-                        if (minRange > maxRange) {
-                            msg.error("invalid range");
-                            return true;
-                        }
-                        subCrater = crater.volcano.autoStart.createSubCrater(crater.location, minRange, maxRange);
-                    } else {
-                        subCrater = crater.volcano.autoStart.createSubCrater(crater);
-                    }
-
-                    msg.info("Sub Crater: "+subCrater.name+" has been created. Starting to erupt.");
-                    subCrater.start();
-
-                } else {
-                    msg.error("? "+newArgs.length);
-                }
-                break;
-            }
 
             case CONFIG:
                 if (newArgs.length < 2) {

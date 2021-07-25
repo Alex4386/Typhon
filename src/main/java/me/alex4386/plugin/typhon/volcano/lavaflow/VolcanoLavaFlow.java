@@ -11,6 +11,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFromToEvent;
+import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.plugin.PluginManager;
 import org.json.simple.JSONObject;
 import org.bukkit.util.Vector;
@@ -62,6 +63,7 @@ public class VolcanoLavaFlow implements Listener {
     public void unregisterEvent() {
         if (registeredEvent) {
             BlockFromToEvent.getHandlerList().unregisterAll(this);
+            PlayerBucketFillEvent.getHandlerList().unregisterAll(this);
             registeredEvent = false;
         }
     }
@@ -105,6 +107,27 @@ public class VolcanoLavaFlow implements Listener {
         int tickFactor = 20 / ((int) getVolcano().updateRate);
 
         return tickFactor;
+    }
+
+    @EventHandler
+    public void lavaFlowPickupEvent(PlayerBucketFillEvent event) {
+        Material bucket = event.getBucket();
+        Block clickedBlock = event.getBlockClicked();
+        Block targetBlock = clickedBlock.getRelative(event.getBlockFace());
+        Location loc = targetBlock.getLocation();
+
+        if (targetBlock.getType() == Material.LAVA) {
+            if (lavaCoolHashMap.get(targetBlock) != null || volcano.manager.isInAnyLavaFlowArea(loc)) {
+                TyphonUtils.createRisingSteam(loc, 1, 5);
+
+                event.getPlayer().sendMessage(ChatColor.RED+"Volcano is erupting and you can't stop lava! Run!");
+
+                event.setCancelled(true);
+                if (event.getPlayer().getInventory().getItemInMainHand().getType() == bucket) {
+                    event.getPlayer().getInventory().getItemInMainHand().setType(Material.LAVA_BUCKET);
+                }
+            }
+        }
     }
 
     @EventHandler
@@ -313,6 +336,6 @@ class VolcanoLavaFlowDefaultSettings {
 
 
 interface VolcanoLavaFlowExplode {
-    public static Material[] water = { Material.WATER, Material.LEGACY_STATIONARY_WATER, Material.SNOW, Material.SNOW_BLOCK, Material.KELP, Material.KELP_PLANT };
+    public static Material[] water = { Material.WATER, Material.LEGACY_STATIONARY_WATER, Material.SNOW, Material.SNOW_BLOCK, Material.POWDER_SNOW, Material.KELP, Material.KELP_PLANT };
 }
 

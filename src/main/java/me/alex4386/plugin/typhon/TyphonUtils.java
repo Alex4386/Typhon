@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon;
 
+import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import org.bukkit.*;
 import org.bukkit.block.*;
 import org.bukkit.block.data.BlockData;
@@ -321,8 +322,7 @@ public class TyphonUtils {
         double theta;
         theta = Math.toDegrees(Math.acos(distanceN / distanceDirect));
 
-        System.out.println(theta);
-        System.out.println(userYawN);
+        TyphonPlugin.logger.debug(VolcanoLogClass.MATH, "Caclulated Navigation / target theta: "+theta+", userYawN: "+userYawN);
 
         double destinationYaw = theta - userYawN;
         destinationYaw = destinationYaw > 180 ? -( 360 - destinationYaw ) :

@@ -53,10 +53,8 @@ public class VolcanoBombs {
         float powerX = (float) (bombLaunchPower * powerRatioX);
         float powerZ = (float) (bombLaunchPower * powerRatioZ);
 
-        int maxY = crater.getSummitBlock().getY();
-        int launchY = 30;
-
-        float powerY = (random.nextFloat() * (float) 1.5) + ((launchY + 4 - 9) / (float) 25.0) + 3f;
+        int launchY = 5;
+        float powerY = (random.nextFloat() * (float) 1.5) + ((launchY + 4 - 9) / (float) 25.0);
 
 
         bombRadius = (bombRadius < 1) ? 1 : bombRadius;
@@ -85,7 +83,9 @@ public class VolcanoBombs {
     public void launchBomb(Location hostLocation) {
         Random random = new Random();
 
-        float volcanoScaleVar = (crater.getSummitBlock().getY() / (float)crater.getVolcano().heightLimit);
+        double volcanoHeight = crater.averageCraterHeight() - crater.location.getY();
+        double volcanoMax = Math.min(crater.location.getWorld().getMaxHeight() - crater.location.getY(), 150.0);
+        float volcanoScaleVar = Math.min(1, (float) (volcanoHeight / volcanoMax));
 
         double bombLaunchPower = (((maxBombLaunchPower - minBombLaunchPower) * Math.random()) * volcanoScaleVar + minBombLaunchPower);
         float bombPower = (float) VolcanoMath.getZeroFocusedRandom() * (maxBombPower - minBombPower) + minBombPower;
@@ -95,7 +95,7 @@ public class VolcanoBombs {
     }
 
     public Location getLaunchLocation() {
-        int theY = Math.max(crater.getSummitBlock().getY() - 5, crater.location.getWorld().getHighestBlockYAt(crater.location.getBlockX(), crater.location.getBlockZ()));
+        int theY = Math.max(crater.getSummitBlock().getY(), crater.location.getBlockY());
         Location hostLocation = new Location(crater.location.getWorld(), crater.location.getX(), theY, crater.location.getZ());
         return hostLocation;
     }
@@ -105,7 +105,9 @@ public class VolcanoBombs {
 
         Random random = new Random();
 
-        float volcanoScaleVar = (crater.getSummitBlock().getY() / (float)crater.getVolcano().heightLimit);
+        double volcanoHeight = crater.averageCraterHeight() - crater.location.getY();
+        double volcanoMax = Math.min(crater.location.getWorld().getMaxHeight() - crater.location.getY(), 150.0);
+        float volcanoScaleVar = Math.min(1, (float) (volcanoHeight / volcanoMax));
 
         float bombPower = (float) VolcanoMath.getZeroFocusedRandom() * (maxBombPower - minBombPower) + minBombPower;
         int bombRadius = (int) ((Math.floor(random.nextDouble() * (maxBombRadius - minBombRadius)) * volcanoScaleVar) + minBombRadius);
@@ -126,9 +128,10 @@ public class VolcanoBombs {
             FallingBlock block = entry.getKey();
             VolcanoBomb bomb = entry.getValue();
 
-            bomb.land();
-            block.remove();
+            bomb.isLanded = true;
             iterator.remove();
+
+            block.remove();
         }
     }
 

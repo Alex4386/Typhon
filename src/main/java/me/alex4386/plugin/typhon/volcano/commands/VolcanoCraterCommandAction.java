@@ -20,7 +20,6 @@ public enum VolcanoCraterCommandAction {
     QUICK_COOL("quickcool", "", "cool all lava from this crater"),
     TREMOR("tremor", "<? power>", "create volcano tremor"),
     STATUS("status", "<? status>", "get/set status of this crater"),
-    CREATE_SUB("createSub", "<? minRange> <? maxRange>", "create subcrater from this crater"),
     TELEPORT("teleport", "", "teleport to this crater"),
     DELETE("delete", "", "delete this crater");
 

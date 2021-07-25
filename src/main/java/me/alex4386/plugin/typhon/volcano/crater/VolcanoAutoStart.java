@@ -121,45 +121,14 @@ public class VolcanoAutoStart implements Listener {
         }
     }
 
-    public VolcanoCrater createSubCrater(VolcanoCrater crater) {
-        int minRange = (int) (((Math.random() * 0.2) + 0.4) * crater.longestFlowLength) + crater.craterRadius;
-        int range = (int) (Math.random() * ((crater.bombs.maxDistance <= 100 ? 100 : crater.bombs.maxDistance) - minRange));
-        return createSubCrater(crater.location, minRange, minRange + range);
-    }
-
-    public VolcanoCrater createSubCrater(Location location, int minRange, int maxRange) {
-        Location craterLocation;
-
-        do {
-            craterLocation = TyphonUtils.getHighestRocklikes(
-                    TyphonUtils.getRandomBlockInRange(
-                            location.getBlock(),
-                            minRange,
-                            maxRange
-                    )
-            ).getLocation();
-        } while (volcano.manager.getCraterRadiusInRange(craterLocation, minRange).size() == 0);
-
-
-        return createSubCrater(craterLocation);
-    }
-
-    public VolcanoCrater createSubCraterNearEntity(Entity entity) {
-        int minRange = (int) (Math.random() * 30) + 10;
-        int range = (int) (Math.random() * 100);
-
-        return createSubCraterNearEntity(entity, minRange, range);
-    }
-
-    public VolcanoCrater createSubCraterNearEntity(Entity entity, int minRange, int maxRange) {
-        Location location = entity.getLocation();
-        return createSubCrater(location, minRange, maxRange);
-    }
-
     public VolcanoCrater autoStartCreateSubCrater() {
+        return this.autoStartCreateSubCrater(null);
+    }
+
+    public VolcanoCrater autoStartCreateSubCrater(Player player) {
         int availableHeight = volcano.mainCrater.location.getWorld().getMaxHeight() - volcano.mainCrater.location.getBlockY();
         int mainCraterHeight = ((int) volcano.mainCrater.averageCraterHeight()) - volcano.mainCrater.location.getBlockY();
-        boolean isMaincraterGrownEnough = (volcano.mainCrater.longestFlowLength > 150 && mainCraterHeight > 100);
+        boolean isMaincraterGrownEnough = (volcano.mainCrater.longestFlowLength > 150 && mainCraterHeight >= Math.min(100, availableHeight));
 
         if (isMaincraterGrownEnough && createSubCrater) {
             VolcanoCrater crater = volcano.mainCrater;
@@ -168,7 +137,7 @@ public class VolcanoAutoStart implements Listener {
             List<Player> players = volcano.manager.getAffectedPlayers();
             Collections.shuffle(players);
 
-            if (Math.random() < 0.7 || players.size() == 0) {
+            if ((Math.random() < 0.7 || players.size() == 0) && player == null) {
                 location = TyphonUtils.getRandomBlockInRange(
                         crater.location.getBlock(),
                         (int) Math.max(volcano.mainCrater.longestFlowLength, 100),
@@ -178,6 +147,9 @@ public class VolcanoAutoStart implements Listener {
                 volcano.logger.log(VolcanoLogClass.AUTOSTART, "Volcano will now create a subcrater!");
             } else {
                 Player target = players.get(0);
+                if (player != null) {
+                    target = player;
+                }
                 double distance = volcano.mainCrater.getTwoDimensionalDistance(target.getLocation());
 
                 double xDiff = target.getLocation().getX() - volcano.mainCrater.location.getX();
@@ -226,13 +198,17 @@ public class VolcanoAutoStart implements Listener {
 
                 volcano.logger.log(VolcanoLogClass.AUTOSTART, "Volcano is now creating a new subcrater "+name);
 
-                newCrater.start();
-                Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin,
-                        (Runnable) () -> {
-                            newCrater.stop();
-                        },
-                        eruptionTimer
-                );
+                if (newCrater != null) {
+                    newCrater.start();
+                    newCrater.getVolcano().trySave();
+
+                    Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin,
+                            (Runnable) () -> {
+                                newCrater.stop();
+                            },
+                            eruptionTimer
+                    );
+                }
 
                 return newCrater;
             }
