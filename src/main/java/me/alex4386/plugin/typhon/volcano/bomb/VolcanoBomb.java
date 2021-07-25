@@ -151,10 +151,16 @@ public class VolcanoBomb {
         }
 
         if (isLandedOnCrater) {
+            this.block.remove();
+            this.isLanded = true;
+            this.crater.lavaFlow.flowLava(this.block.getLocation().getBlock());
             return;
         }
 
         if (isLandedInCurrentlyGrowingCone) {
+            this.block.remove();
+            this.isLanded = true;
+            this.crater.lavaFlow.flowLava(this.block.getLocation().getBlock());
             return;
         }
 

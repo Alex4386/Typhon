@@ -54,9 +54,9 @@ public class VolcanoBombs {
         float powerZ = (float) (bombLaunchPower * powerRatioZ);
 
         int maxY = crater.getSummitBlock().getY();
-        int yToLaunch = maxY - crater.location.getWorld().getHighestBlockYAt(crater.location);
+        int launchY = 30;
 
-        float powerY = (random.nextFloat() * (float) 1.5) + ((yToLaunch + 4 - 9) / (float) 25.0) + 3f;
+        float powerY = (random.nextFloat() * (float) 1.5) + ((launchY + 4 - 9) / (float) 25.0) + 3f;
 
 
         bombRadius = (bombRadius < 1) ? 1 : bombRadius;
@@ -74,7 +74,7 @@ public class VolcanoBombs {
         Vector vector = TyphonUtils.calculateVelocity(
                 new Vector(0,0,0),
                 destination.toVector().subtract(location.toVector()),
-                yToLaunch + 4
+                yToLaunch + 6
         );
 
         VolcanoBomb bomb = new VolcanoBomb(crater, location, (float) vector.getX(), (float) vector.getY(), (float) vector.getZ(), bombPower, bombRadius, bombDelay);
@@ -95,17 +95,7 @@ public class VolcanoBombs {
     }
 
     public Location getLaunchLocation() {
-        int theY = crater.location.getWorld().getHighestBlockYAt(crater.location)+1;
-        for (int x = -2; x <= 2; x++) {
-            for (int z = -2; z <= 2; z++) {
-                int tmpY = crater.location.getWorld().getHighestBlockYAt(
-                        crater.location.getBlock().getRelative(x, 0, z).getLocation()
-                )+1;
-                if (tmpY > theY) {
-                    theY = tmpY;
-                }
-            }
-        }
+        int theY = Math.min(crater.getSummitBlock().getY() - 5, crater.location.getWorld().getHighestBlockYAt(crater.location.getBlockX(), crater.location.getBlockZ()));
         Location hostLocation = new Location(crater.location.getWorld(), crater.location.getX(), theY, crater.location.getZ());
         return hostLocation;
     }
