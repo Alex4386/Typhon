@@ -140,9 +140,22 @@ public class VolcanoBomb {
 
         String craterName = "";
         boolean isLandedOnCrater = this.crater.getVolcano().manager.isInAnyCrater(loc);
+        boolean isLandedInCurrentlyGrowingCone = false;
+        VolcanoCrater nearestCrater = this.crater.getVolcano().manager.getNearestCrater(loc);
+
+        if (nearestCrater != null) {
+            double getCurrentDistance = nearestCrater.getTwoDimensionalDistance(loc);
+            if (getCurrentDistance < nearestCrater.longestFlowLength * 0.8) {
+                isLandedInCurrentlyGrowingCone = true;
+            }
+        }
+
         if (isLandedOnCrater) {
-            craterName = this.crater.getVolcano().manager.getNearestCrater(loc).name;
-            this.bombRadius = 1;
+            return;
+        }
+
+        if (isLandedInCurrentlyGrowingCone) {
+            return;
         }
 
         if (!VolcanoBombListener.groundChecker(loc, bombRadius)) {
