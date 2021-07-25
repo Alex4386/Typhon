@@ -95,7 +95,7 @@ public class VolcanoBombs {
     }
 
     public Location getLaunchLocation() {
-        int theY = Math.min(crater.getSummitBlock().getY() - 5, crater.location.getWorld().getHighestBlockYAt(crater.location.getBlockX(), crater.location.getBlockZ()));
+        int theY = Math.max(crater.getSummitBlock().getY() - 5, crater.location.getWorld().getHighestBlockYAt(crater.location.getBlockX(), crater.location.getBlockZ()));
         Location hostLocation = new Location(crater.location.getWorld(), crater.location.getX(), theY, crater.location.getZ());
         return hostLocation;
     }
