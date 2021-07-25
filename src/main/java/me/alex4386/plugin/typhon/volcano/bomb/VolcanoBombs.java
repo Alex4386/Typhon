@@ -56,7 +56,7 @@ public class VolcanoBombs {
         int maxY = crater.getSummitBlock().getY();
         int yToLaunch = maxY - crater.location.getWorld().getHighestBlockYAt(crater.location);
 
-        float powerY = (random.nextFloat() * (float) 1.5) + ((yToLaunch + 4 - 9) / (float) 25.0) + 1f;
+        float powerY = (random.nextFloat() * (float) 1.5) + ((yToLaunch + 4 - 9) / (float) 25.0) + 3f;
 
 
         bombRadius = (bombRadius < 1) ? 1 : bombRadius;
