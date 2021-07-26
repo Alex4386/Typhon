@@ -3,6 +3,7 @@ package me.alex4386.plugin.typhon.volcano.bomb;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import org.bukkit.Location;
 import org.bukkit.entity.FallingBlock;
@@ -87,15 +88,10 @@ public class VolcanoBombs {
         float volcanoScaleVar = Math.min(1, (float) (volcanoHeight / volcanoMax));
 
         // calculate maximum power
-        Location pureMaxDestination = this.crater.location.add(this.crater.longestFlowLength * 2, 0, 0);
-        Vector vec = TyphonUtils.calculateVelocity(
-                new Vector(0,0,0),
-                pureMaxDestination.toVector().subtract(this.crater.location.toVector()),
-                11
-        );
+        double maxPower = 20.0 * (this.crater.longestFlowLength / 150);
 
         double minBombLaunchPower = this.minBombLaunchPower * volcanoScaleVar;
-        double maxBombLaunchPower = Math.max(this.maxBombLaunchPower, vec.getX());
+        double maxBombLaunchPower = Math.max(this.maxBombLaunchPower, maxPower);
 
         double bombLaunchPower = (((maxBombLaunchPower - minBombLaunchPower) * Math.random()) + minBombLaunchPower);
         float bombPower = (float) VolcanoMath.getZeroFocusedRandom() * (maxBombPower - minBombPower) + minBombPower;

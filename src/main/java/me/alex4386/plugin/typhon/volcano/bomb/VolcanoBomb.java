@@ -150,6 +150,14 @@ public class VolcanoBomb {
             }
         }
 
+        if (!VolcanoBombListener.groundChecker(loc, bombRadius)) {
+            volcano.logger.debug(VolcanoLogClass.BOMB_LAUNCHER,
+                    "Volcanic Bomb from "+ TyphonUtils.blockLocationTostring(this.launchLocation.getBlock())+
+                            " did not landed properly at "+ TyphonUtils.blockLocationTostring(this.landingLocation.getBlock()));
+            isLanded = true;
+            return;
+        }
+
         if (isLandedOnCrater) {
             this.block.remove();
             this.isLanded = true;
@@ -166,14 +174,6 @@ public class VolcanoBomb {
             this.block.getLocation().getBlock().setType(Material.LAVA);
 
             this.crater.getVolcano().bombLavaFlow.registerLavaCoolData(this.block.getLocation().getBlock(), true);
-            return;
-        }
-
-        if (!VolcanoBombListener.groundChecker(loc, bombRadius)) {
-            volcano.logger.debug(VolcanoLogClass.BOMB_LAUNCHER,
-                    "Volcanic Bomb from "+ TyphonUtils.blockLocationTostring(this.launchLocation.getBlock())+
-                          " did not landed properly at "+ TyphonUtils.blockLocationTostring(this.landingLocation.getBlock()));
-            isLanded = true;
             return;
         }
 

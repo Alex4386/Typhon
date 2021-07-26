@@ -146,6 +146,8 @@ public final class TyphonPlugin extends JavaPlugin {
         vbl.shutdown();
     }
 
+
+
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String label, String[] args) {
         return TyphonCommand.onTabComplete(sender, command, label, args);
