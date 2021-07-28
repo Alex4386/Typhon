@@ -126,7 +126,7 @@ public class VolcanoBomb {
                         if (topOfBurnBlock.getType().isAir()) {
                             topOfBurnBlock.setType(Material.FIRE);
                         }
-                    } else {
+                    } else if (!burnBlock.getType().isAir()) {
                         this.crater.volcano.metamorphism.metamorphoseBlock(burnBlock);
                     }
                 }
@@ -163,7 +163,10 @@ public class VolcanoBomb {
             this.isLanded = true;
 
             this.block.getLocation().getBlock().setType(Material.AIR);
-            this.crater.getVolcano().mainCrater.lavaFlow.flowLava();
+
+            volcano.logger.debug(VolcanoLogClass.BOMB_LAUNCHER,
+                    "Volcanic Bomb from "+ TyphonUtils.blockLocationTostring(this.launchLocation.getBlock())+
+                            " landed at crater. interrupting.");
             return;
         }
 
@@ -171,9 +174,16 @@ public class VolcanoBomb {
             this.block.remove();
             this.isLanded = true;
 
-            this.block.getLocation().getBlock().setType(Material.LAVA);
+            volcano.logger.debug(VolcanoLogClass.BOMB_LAUNCHER,
+                    "Volcanic Bomb from "+ TyphonUtils.blockLocationTostring(this.launchLocation.getBlock())+
+                            " landed at currently growing cone. interrupting bomb and starting a new flow");
 
-            this.crater.getVolcano().bombLavaFlow.registerLavaCoolData(this.block.getLocation().getBlock(), true);
+            this.block.getLocation().getBlock().setType(Material.LAVA);
+            loc.getWorld().createExplosion(loc, 1, true, false);
+
+            this.crater.lavaFlow.registerLavaCoolData(this.block.getLocation().getBlock(), true);
+            this.crater.record.addEjectaVolume(1);
+
             return;
         }
 

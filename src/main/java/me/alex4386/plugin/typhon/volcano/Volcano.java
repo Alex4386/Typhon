@@ -86,8 +86,6 @@ public class Volcano implements Listener {
             logger.error(VolcanoLogClass.CORE, "Unable to find Volcano Config Dir "+basePath.toString()+" for Volcano "+this.name+".");
             throw new FileNotFoundException("Unable to find Volcano "+this.name+" on path: "+basePath.toString());
         }
-
-        this.logger.setDebug(true);
     }
 
     public Volcano(Path basePath, Location loc) throws IOException, ParseException {

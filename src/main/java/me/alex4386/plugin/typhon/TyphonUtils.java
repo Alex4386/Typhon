@@ -75,8 +75,6 @@ public class TyphonUtils {
             }
         }
 
-
-        System.err.println("EXCEPTION OCCURRED! FUCK - LOWEST BEDROCK CEILING WAS NOT FOUND AT x = "+x+", z = "+z+" / fallback to lowest Y of the world");
         // Um... This really shouldn't happen.
         return new org.bukkit.Location(
                 loc.getWorld(),

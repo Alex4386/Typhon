@@ -21,6 +21,16 @@ public class VolcanoLogger {
 
     public void setDebug(boolean isDebug) {
         isDebug = isDebug;
+        if (volcano != null) {
+            volcano.isDebug = isDebug;
+        }
+    }
+
+    public boolean getDebug() {
+        if (volcano == null) {
+            return this.isDebug;
+        }
+        return this.volcano.isDebug;
     }
 
     public String getHeader() {
@@ -40,7 +50,7 @@ public class VolcanoLogger {
     public void debug(VolcanoLogClass logClass, String string) {
         String headers = logClass.getHeader() + this.getHeader();
 
-        if (isDebug) {
+        if (getDebug()) {
             Bukkit.getLogger().info(headers+string);
         }
     }

@@ -6,6 +6,7 @@ import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.entity.FallingBlock;
 import org.bukkit.util.Vector;
 import org.json.simple.JSONObject;
@@ -54,8 +55,8 @@ public class VolcanoBombs {
         float powerX = (float) (bombLaunchPower * powerRatioX);
         float powerZ = (float) (bombLaunchPower * powerRatioZ);
 
-        int launchY = 5;
-        float powerY = (random.nextFloat() * (float) 1.5) + ((launchY + 4 - 9) / (float) 25.0);
+        int launchY = 15;
+        float powerY = (random.nextFloat() * (float) 1.5) + ((launchY + 4 - 9) / (float) 25.0) + 3f;
 
         bombRadius = (bombRadius < 1) ? 1 : bombRadius;
 
@@ -182,6 +183,7 @@ public class VolcanoBombs {
                 //Bukkit.getLogger().log(Level.INFO, "Volcano Bomb from Volcano "+volcano.name+" died.");
                 bomb.stopTrail();
                 bomb.block.remove();
+                bomb.block.getLocation().getBlock().setType(Material.AIR);
 
                 iterator.remove();
             } else {

@@ -448,7 +448,9 @@ public class VolcanoCommand {
                             }
                             break;
                         case DEBUG:
-                            if (args.length == 3) this.volcano.isDebug = Boolean.parseBoolean(args[2]);
+                            if (args.length == 3) {
+                                this.volcano.isDebug = Boolean.parseBoolean(args[2]);
+                            }
                             msg.info("isDebug - "+this.volcano.isDebug);
 
                             break;

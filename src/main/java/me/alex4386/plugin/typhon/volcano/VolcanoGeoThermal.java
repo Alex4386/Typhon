@@ -84,7 +84,7 @@ public class VolcanoGeoThermal implements Listener {
                                             );
                                         }
 
-                                        if (shouldDoIt(crater, block.getLocation()) || (Math.random() < (0.2 * crater.status.getScaleFactor()) && geothermalRange == 50 && crater.longestFlowLength <= 50)) {
+                                        if (shouldDoIt(crater, block.getLocation()) || (Math.random() < (0.7 * crater.status.getScaleFactor()) && geothermalRange == 50 && crater.longestFlowLength <= 50)) {
 
                                             final Location targetLoc = block.getLocation().add(0, 1, 0);
                                             TyphonUtils.createRisingSteam(targetLoc, 1, 5);
@@ -93,7 +93,7 @@ public class VolcanoGeoThermal implements Listener {
                                             for (Entity entity : entities) {
                                                 double distance = entity.getLocation().distance(targetLoc);
                                                 if (distance < 3 && entity.getMaxFireTicks() != 0) {
-                                                    entity.setFireTicks((int) (60 * volcano.manager.getHeatValue(targetLoc) * (distance / 3) * crater.status.getScaleFactor()));
+                                                    entity.setFireTicks((int) (120 * volcano.manager.getHeatValue(targetLoc) * (distance / 3) * crater.status.getScaleFactor()));
                                                 }
                                             }
 
