@@ -13,4 +13,4 @@ autoStart:
     major_activity:
       increase: 0.2
       decrease: 0.1
-  disallowLavaPourNonCrater: true
+  disallowLavaPourNonVent: true

@@ -4,3 +4,6 @@ out/
 target/
 .DS_Store
 .idea/
+
+.deploy/node_modules
+.deploy/.secrets.json

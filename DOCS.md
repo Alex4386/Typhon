@@ -24,10 +24,10 @@ In order to test your gear is adequate for Typhon plugin, try the following:
 5. Now let's configure the volcano for benchmarking your gear.
 6. configure volcano's update rate to `5` by running `/vol <name> updaterate 5` 
    (`updaterate` is how manytick does it take to process a single stage. If you want to make volcano to erupt faster, set it as a low value. (but i don't recommend going below 5))
-7. configure volcano's maincrater's eruption delay to `2` ticks by running `/vol <name> config erupt:delay 2`.
+7. configure volcano's mainvent's eruption delay to `2` ticks by running `/vol <name> config erupt:delay 2`.
 8. configure volcano's minimum erupting volcanic bombs to 100 by running `/vol <name> config erupt:bombs:min 100`.
 9. configure volcano's maximum erupting volcanic bombs to 200 by running `/vol <name> config erupt:bombs:max 200`.
-10. Now start the eruption by typing `/vol <name> maincrater start`.  
+10. Now start the eruption by typing `/vol <name> mainvent start`.  
 
 Now probably the volcano will be erupting right now:  
 ![image](https://user-images.githubusercontent.com/27724108/126882463-2a55ecec-9c2a-4a7d-8236-5c6603734f8e.png)
@@ -36,9 +36,9 @@ Please check if your `tps` is reaching dangerous levels.
 If then, you need to tweak the plugin to be lightweight.  
 
 ### Stopping the benchmark
-If you want to stop the benchmark. you can run: `/vol <name> maincrater stop`.  
+If you want to stop the benchmark. you can run: `/vol <name> mainvent stop`.  
 By default, It will try to shut down gracefully by processing lava flows after the shutdown request.  
-If you want it to stop immediately, You can run: `/vol <name> maincrater quickcool`.  
+If you want it to stop immediately, You can run: `/vol <name> mainvent quickcool`.  
 (This will turn all lava blocks (related to current lavaflows tracked by plugin) into solid rocks)
 
 ## Configuring Volcano
