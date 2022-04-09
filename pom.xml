@@ -39,10 +39,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <!--
-                    Using Snapshot for now since Java 1.16 targeting build using maven-shade-plugin is not in stable yet
-                 -->
-                <version>3.3.0-SNAPSHOT</version>
+                <version>3.3.0</version>
                 <executions>
                     <execution>
                         <phase>package</phase>

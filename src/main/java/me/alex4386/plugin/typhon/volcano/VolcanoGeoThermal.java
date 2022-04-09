@@ -1,6 +1,5 @@
 package me.alex4386.plugin.typhon.volcano;
 
-import me.alex4386.plugin.typhon.TyphonNMSUtils;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;

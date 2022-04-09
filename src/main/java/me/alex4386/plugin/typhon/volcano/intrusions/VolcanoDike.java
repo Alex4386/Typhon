@@ -1,6 +1,5 @@
 package me.alex4386.plugin.typhon.volcano.intrusions;
 
-import me.alex4386.plugin.typhon.TyphonNMSUtils;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
@@ -102,7 +101,7 @@ public class VolcanoDike {
         Location smokeLoc = TyphonUtils.getHighestOceanFloor(this.dikeBase.getLocation());
         float multiplier = ((float) this.howMuchToIntrude() / (float) this.getIntrusionTotalDistance());
 
-        TyphonNMSUtils.createParticle(
+        smokeLoc.getWorld().spawnParticle(
                 Particle.CLOUD,
                 smokeLoc,
                 (int)(500 * multiplier)

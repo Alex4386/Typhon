@@ -1,6 +1,5 @@
 package me.alex4386.plugin.typhon.volcano.utils;
 
-import me.alex4386.plugin.typhon.TyphonNMSUtils;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
@@ -82,17 +81,11 @@ public class VolcanoConstruction {
                 }
             }
 
-            if (useNMS) {
-                TyphonNMSUtils.moveBlock(sourceBlock, destinationBlock, replacementMaterial, false, shouldUpdate);
-                if (replacementMaterial == Material.LAVA) {
-                    TyphonNMSUtils.setBlockMaterial(sourceBlock, Material.LAVA);
-                }
-            } else {
-                BlockData blockData = sourceBlock.getBlockData();
-                destinationBlock.setType(sourceBlock.getType());
-                destinationBlock.setBlockData(blockData, true);
-                sourceBlock.setType(replacementMaterial);
-            }
+            BlockData blockData = sourceBlock.getBlockData();
+            destinationBlock.setType(sourceBlock.getType());
+            destinationBlock.setBlockData(blockData, true);
+            sourceBlock.setType(replacementMaterial);
+        
         }
 
         entrySet = new ArrayList<>(constructionMaterialData.keySet());
@@ -103,11 +96,8 @@ public class VolcanoConstruction {
 
             boolean shouldUpdate = destinationBlock.getY() % 16 == 0 && destinationBlock.getX() % 16 == 0 && destinationBlock.getZ() % 16 == 0;
 
-            if (useNMS) {
-                TyphonNMSUtils.setBlockMaterial(destinationBlock, material, false, shouldUpdate);
-            } else {
-                destinationBlock.setType(material);
-            }
+            destinationBlock.setType(material);
+            
         }
 
         // raise data handler
@@ -219,11 +209,8 @@ public class VolcanoConstruction {
 
         long blockUpdateStartTime = System.nanoTime();;
 
-        if (useNMS) {
-            TyphonNMSUtils.setBlockMaterial(block, Material.LAVA, true, false);
-        } else {
-            baseLocation.getBlock().setType(Material.LAVA);
-        }
+        baseLocation.getBlock().setType(Material.LAVA);
+        
 
         long blockUpdateEndTime = System.nanoTime();
         long elapsedNanoSecondPerBlockUpdate = blockUpdateEndTime - blockUpdateStartTime;

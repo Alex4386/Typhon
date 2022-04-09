@@ -50,18 +50,6 @@ public class VolcanoBomb {
         Vector launchVector = new Vector(bombLaunchPowerX, bombLaunchPowerY, bombLaunchPowerZ);
         this.block = loc.getWorld().spawnFallingBlock(loc, new MaterialData(Material.MAGMA_BLOCK));
 
-        try {
-            TyphonNMSUtils.setFallingBlockUnbreakable(this.block);
-        } catch(Exception e) {
-
-        }
-
-        try {
-            TyphonNMSUtils.setFallingBlockUnbreakable(this.block);
-        } catch(Exception e) {
-
-        }
-
         this.block.setGlowing(true);
         this.block.setFireTicks(1000);
         this.block.setVelocity(launchVector);
@@ -82,7 +70,7 @@ public class VolcanoBomb {
         Location loc = block.getLocation();
         loc.getChunk().load();
 
-        TyphonNMSUtils.createParticle(
+        loc.getWorld().spawnParticle(
                 Particle.FLAME,
                 loc,
                 6
@@ -243,8 +231,6 @@ public class VolcanoBomb {
 
             crater.record.addEjectaVolume(totalEjecta);
 
-            TyphonNMSUtils.updateChunk(finalBlock.getLocation());
-
             Bukkit.getScheduler().scheduleSyncDelayedTask(TyphonPlugin.plugin, (Runnable) () -> {
                 this.explode();
             }, TyphonPlugin.minecraftTicksPerSeconds * this.bombDelay);
@@ -290,7 +276,6 @@ public class VolcanoBomb {
             }
         }
 
-        TyphonNMSUtils.updateChunk(block.getLocation());
         isLanded = true;
     }
 }

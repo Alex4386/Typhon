@@ -526,6 +526,11 @@ public class TyphonUtils {
             @Override public RayTraceResult rayTrace(Location location, Vector vector, double v, FluidCollisionMode fluidCollisionMode) {return null; }
             @Override public BoundingBox getBoundingBox() {return null; }
             @Override public VoxelShape getCollisionShape() { return null; }
+            @Override
+            public boolean canPlace(BlockData arg0) {
+                // TODO Auto-generated method stub
+                return false;
+            }
         };
         return fakeBlock;
     }
