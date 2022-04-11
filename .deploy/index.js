@@ -74,7 +74,7 @@ const minehubCloudCrongifyAPI = "https://cloud.minehub.kr/crongify";
         }
 
         console.log(chalk.blueBright("i"), "updating secrets to json file...");
-        fs.writeFileSync(secretsFile, JSON.stringify(secrets, null, 2));
+        fs.writeFileSync(secretsFile, JSON.stringify(secrets));
     }
 
     console.log(chalk.greenBright("v"), "Credentials all set!");
@@ -162,7 +162,7 @@ const minehubCloudCrongifyAPI = "https://cloud.minehub.kr/crongify";
 
         console.log(chalk.blueBright("i"), "Reloading server...");
         await axios.post(minehubCloudCrongifyAPI+"/servers/"+serverIdentifier+"/command", {
-            command: 'reload confirm',
+            command: 'plugman reload typhon',
         }, {
             headers: {
                 "Authorization": "Bearer "+secrets.accessToken,

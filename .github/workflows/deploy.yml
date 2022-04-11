@@ -19,6 +19,10 @@ jobs:
       uses: actions/setup-java@v1
       with:
         java-version: 1.17
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: 16.x
     - name: Setup Spigot Build Environment
       run: |
         mkdir BuildTools
@@ -26,13 +30,27 @@ jobs:
         wget https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar
         java -jar BuildTools.jar --rev 1.18.2
         cd ..
-    - name: Build with Maven
-      run: mvn
-    - name: Upload a Build Artifact
-      uses: actions/upload-artifact@v2
+    - name: setting up deploy environment
+      run: |
+        cd .deploy
+        npm i -g yarn
+        yarn
+    - name: setting up minehub credentials
+      run: |
+        echo -n "${MINEHUB_SECRETS}" > .deploy/.secrets.json
+      env:
+        MINEHUB_SECRETS: ${{ secrets.MINEHUB_SECRETS }}
+    - name: Run Deploy
+      run: |
+        ./deploy.sh
+    - name: Reading secret to update
+      id: secretrdr
+      uses: juliangruber/read-file-action@v1
       with:
-        # Artifact name
-        name: Typhon.jar
-        # A file, directory or wildcard pattern that describes what to upload
-        path: target/**/typhon-*.jar
-      
+        path: ./.deploy/.secrets.json
+    - uses: hmanzur/actions-set-secret@v2.0.0
+      with:
+        name: 'MINEHUB_SECRETS'
+        value: ${{ steps.secretrdr.outputs.content }}
+        repository: hmanzur/actions-set-secret
+        token: ${{ secrets.GITHUB_TOKEN }}

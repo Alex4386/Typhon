@@ -9,5 +9,8 @@
     "chalk": "4.1.2",
     "figlet": "^1.5.2",
     "form-data": "^4.0.0"
+  },
+  "scripts": {
+    "start": "node index.js"
   }
 }
