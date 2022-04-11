@@ -2,6 +2,7 @@ package me.alex4386.plugin.typhon.volcano.utils;
 
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoCircleOffsetXZ;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -103,6 +104,27 @@ public class VolcanoMath {
         }
 
         return circleBlocks;
+    }
+
+    public static List<Block> getLine(Block centerBlock, double angle, int length) {
+        List<Block> lineBlocks = new ArrayList<>();
+
+        for (double i = 0; i <= (length / 2); i ++) {
+            double x = Math.sin(angle) * i;
+            double z = Math.cos(angle) * i;
+
+            Block negativeBlock = centerBlock.getRelative((int) -x, 0, (int) -z);
+            if (!lineBlocks.contains(negativeBlock)) {
+                lineBlocks.add(negativeBlock);
+            }
+
+            Block block = centerBlock.getRelative((int) x, 0, (int) z);
+            if (!lineBlocks.contains(block)) {
+                lineBlocks.add(block);
+            }
+        }
+
+        return lineBlocks;
     }
 
     public static List<Block> getCylinder(Block centerBlock, int radius, int height) {

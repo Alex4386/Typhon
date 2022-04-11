@@ -2,16 +2,13 @@ package me.alex4386.plugin.typhon.volcano;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoAutoStart;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoComposition;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
-import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoDike;
-import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMagmaChamber;
-import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMagmaIntrusion;
 import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
 import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoLavaFlow;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogger;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoAutoStart;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+
 import org.bukkit.*;
 import org.apache.commons.io.FileUtils;
 import org.bukkit.event.Listener;
@@ -33,9 +30,6 @@ public class Volcano implements Listener {
     // metadata
     // public VolcanoStatus status = VolcanoStatus.DORMANT;
 
-    // lavaFlow for Bombs
-    public VolcanoLavaFlow bombLavaFlow = new VolcanoLavaFlow(this);
-
     // check if debug mode is enabled for this volcano.
     public boolean isDebug = false;
 
@@ -51,21 +45,18 @@ public class Volcano implements Listener {
     // Volcano AutoStart
     public VolcanoAutoStart autoStart = new VolcanoAutoStart(this);
 
-    // composition controller
-    public VolcanoComposition composition = new VolcanoComposition(this);
-
     // Stone Metamorphism. that uses volcano's composition controller.
     public VolcanoMetamorphism metamorphism = new VolcanoMetamorphism(this);
 
     // geoThermal Activities: ?
     public VolcanoGeoThermal geoThermal = new VolcanoGeoThermal(this);
 
-    // craters. that spew out lavas everywhere <3
-    public VolcanoCrater mainCrater = new VolcanoCrater(this);
-    public Map<String, VolcanoCrater> subCraters = new HashMap<>();
+    // vents. that spew out lavas everywhere <3
+    public VolcanoVent mainVent = new VolcanoVent(this);
+    public Map<String, VolcanoVent> subVents = new HashMap<>();
 
-    // magma intrusion
-    public VolcanoMagmaIntrusion magmaIntrusion = new VolcanoMagmaIntrusion(this);
+    // default silicate
+    public double silicateLevel = 0.63;
 
     // updateRate
     public long updateRate = 20;
@@ -103,7 +94,7 @@ public class Volcano implements Listener {
         } else {
             if (loc != null) {
                 this.location = loc;
-                this.mainCrater.location = loc;
+                this.mainVent.location = loc;
                 logger.log(VolcanoLogClass.CORE, "Typhon is creating new Volcano "+this.name+".");
                 basePath.toFile().mkdirs();
 
@@ -118,7 +109,6 @@ public class Volcano implements Listener {
     }
 
     public void initialize() {
-        bombLavaFlow.initialize();
         autoStart.initialize();
         geoThermal.initialize();
     }
@@ -126,13 +116,13 @@ public class Volcano implements Listener {
     public void startup() {
         logger.log(VolcanoLogClass.CORE, "Starting up Volcano...");
         this.initialize();
-        this.mainCrater.initialize();
-        for (Map.Entry<String, VolcanoCrater> entry : this.subCraters.entrySet()) {
+        this.mainVent.initialize();
+        for (Map.Entry<String, VolcanoVent> entry : this.subVents.entrySet()) {
             String name = entry.getKey();
-            VolcanoCrater crater = entry.getValue();
-            crater.name = name;
-            if (crater.enabled) {
-                crater.initialize();
+            VolcanoVent vent = entry.getValue();
+            vent.name = name;
+            if (vent.enabled) {
+                vent.initialize();
             }
         }
 
@@ -145,10 +135,10 @@ public class Volcano implements Listener {
 
     public void shutdown(boolean runQuickCool) {
         logger.log(VolcanoLogClass.CORE, "Shutting down Volcano...");
-        List<VolcanoCrater> craters = manager.getCraters();
+        List<VolcanoVent> vents = manager.getVents();
 
-        for (VolcanoCrater crater : craters) {
-            crater.shutdown();
+        for (VolcanoVent vent : vents) {
+            vent.shutdown();
         }
 
         if (runQuickCool) {
@@ -156,7 +146,6 @@ public class Volcano implements Listener {
             this.quickCool();
         }
 
-        bombLavaFlow.shutdown();
         autoStart.shutdown();
         geoThermal.shutdown();
 
@@ -164,14 +153,12 @@ public class Volcano implements Listener {
     }
 
     public void quickCool() {
-        List<VolcanoCrater> craters = manager.getCraters();
+        List<VolcanoVent> vents = manager.getVents();
 
-        for (VolcanoCrater crater : craters) {
-            crater.lavaFlow.cooldownAll();
-            crater.bombs.shutdown();
+        for (VolcanoVent vent : vents) {
+            vent.lavaFlow.cooldownAll();
+            vent.bombs.shutdown();
         }
-
-        bombLavaFlow.cooldownAll();
     }
 
     public void load() throws IOException, ParseException {
@@ -180,38 +167,19 @@ public class Volcano implements Listener {
         JSONObject autoStartConfig = this.dataLoader.getAutostartConfig();
         this.autoStart.importConfig(autoStartConfig);
 
-        JSONObject compositionConfig = this.dataLoader.getCompositionConfig();
-        this.composition.importConfig(compositionConfig);
-
         JSONObject coreConfig = this.dataLoader.getCoreConfig();
         this.importConfig(coreConfig);
 
-        JSONObject mainCraterConfig = this.dataLoader.getMainCraterConfig();
-        this.mainCrater.importConfig(mainCraterConfig);
+        JSONObject mainVentConfig = this.dataLoader.getMainVentConfig();
+        this.mainVent.importConfig(mainVentConfig);
 
-        Map<String, JSONObject> subCraterConfigs = this.dataLoader.getSubCraterConfigs();
-        for (Map.Entry<String, JSONObject> subCraterConfigEntry : subCraterConfigs.entrySet()) {
-            String craterName = subCraterConfigEntry.getKey();
-            JSONObject craterConfig = subCraterConfigEntry.getValue();
+        Map<String, JSONObject> subVentConfigs = this.dataLoader.getSubVentConfigs();
+        for (Map.Entry<String, JSONObject> subVentConfigEntry : subVentConfigs.entrySet()) {
+            String ventName = subVentConfigEntry.getKey();
+            JSONObject ventConfig = subVentConfigEntry.getValue();
 
-            subCraters.put(craterName, new VolcanoCrater(this, craterConfig));
-            subCraters.get(craterName).name = craterName;
-        }
-
-        Map<String, JSONObject> dikesConfigs = this.dataLoader.getDikesConfigs();
-        for (Map.Entry<String, JSONObject> dikeConfigEntry : dikesConfigs.entrySet()) {
-            String dikeName = dikeConfigEntry.getKey();
-            JSONObject dikeConfig = dikeConfigEntry.getValue();
-
-            this.magmaIntrusion.dikes.put(dikeName, new VolcanoDike(this, dikeConfig));
-        }
-
-        Map<String, JSONObject> magmaChambersConfigs = this.dataLoader.getMagmaChambersConfigs();
-        for (Map.Entry<String, JSONObject> magmaChamberConfigEntry : magmaChambersConfigs.entrySet()) {
-            String magmaChamberName = magmaChamberConfigEntry.getKey();
-            JSONObject magmaChamberConfig = magmaChamberConfigEntry.getValue();
-
-            this.magmaIntrusion.magmaChambers.put(magmaChamberName, new VolcanoMagmaChamber(this, magmaChamberName, magmaChamberConfig));
+            subVents.put(ventName, new VolcanoVent(this, ventConfig));
+            subVents.get(ventName).name = ventName;
         }
     }
 
@@ -228,30 +196,14 @@ public class Volcano implements Listener {
         logger.log(VolcanoLogClass.CORE, "Saving...");
         this.dataLoader.setCoreConfig(this.exportConfig());
         this.dataLoader.setAutostartConfig(this.autoStart.exportConfig());
-        this.dataLoader.setCompositionConfig(this.composition.exportConfig());
-        this.dataLoader.setMainCraterConfig(this.mainCrater.exportConfig());
+        this.dataLoader.setMainVentConfig(this.mainVent.exportConfig());
 
-        for (Map.Entry<String, VolcanoCrater> subCraterEntry: this.subCraters.entrySet() ) {
-            String name = subCraterEntry.getKey();
-            VolcanoCrater crater = subCraterEntry.getValue();
+        for (Map.Entry<String, VolcanoVent> subVentEntry: this.subVents.entrySet() ) {
+            String name = subVentEntry.getKey();
+            VolcanoVent vent = subVentEntry.getValue();
 
-            this.dataLoader.setSubCraterConfig(name, crater.exportConfig());
+            this.dataLoader.setSubVentConfig(name, vent.exportConfig());
         }
-
-        for (Map.Entry<String, VolcanoDike> dikeEntry: this.magmaIntrusion.dikes.entrySet() ) {
-            String name = dikeEntry.getKey();
-            VolcanoDike dike = dikeEntry.getValue();
-
-            this.dataLoader.setDikeConfig(name, dike.exportConfig());
-        }
-
-        for (Map.Entry<String, VolcanoMagmaChamber> magmaChamberEntry: this.magmaIntrusion.magmaChambers.entrySet() ) {
-            String name = magmaChamberEntry.getKey();
-            VolcanoMagmaChamber magmaChamber = magmaChamberEntry.getValue();
-
-            this.dataLoader.setMagmaChamberConfig(name, magmaChamber.exportConfig());
-        }
-
         logger.log(VolcanoLogClass.CORE, "Save Complete.");
     }
 
@@ -284,18 +236,18 @@ public class Volcano implements Listener {
     }
 
     @Deprecated
-    // Erupt to default crater.
+    // Erupt to default vent.
     public void start() {
         initialize();
-        this.mainCrater.start();
+        this.mainVent.start();
     }
 
     @Deprecated
     // Stop the entire volcano.
     public void stop() {
-        List<VolcanoCrater> startedCraters = manager.currentlyStartedCraters();
-        for (VolcanoCrater crater : startedCraters) {
-            crater.stop();
+        List<VolcanoVent> startedVents = manager.currentlyStartedVents();
+        for (VolcanoVent vent : startedVents) {
+            vent.stop();
         }
     }
 }

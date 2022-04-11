@@ -11,15 +11,16 @@ public enum VolcanoLogClass {
     COMMAND("Command"),
     COMPOSITION("Composition"),
     CONSTRUCTION("Construction"),
-    CRATER("Crater"),
     ERUPT("Erupt"),
+    LAVA_FLOW("Lava flow"),
     GEOTHERMAL("Geothermal"),
     MAGMA_INTRUSION("Magma Intrusion"),
     MATH("Math"),
     METAMORPHISM("Metamorphism"),
     PLAYER_EVENT("Player Event"),
     TREMOR("Tremor"),
-    UTILS("Utils")
+    UTILS("Utils"),
+    VENT("Vent"),
     ;
 
     private final String string;

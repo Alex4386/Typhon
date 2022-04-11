@@ -1,7 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.utils;
 
 import me.alex4386.plugin.typhon.volcano.Volcano;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 
 public class VolcanoScaleFactor {
     public Volcano volcano;
@@ -12,21 +12,21 @@ public class VolcanoScaleFactor {
 
     public void getScaleFactor() {
         int mainVolcanoY = volcano.manager.getSummitBlock().getY();
-        double mainCraterFlowDistance = volcano.mainCrater.longestFlowLength;
+        double mainVentFlowDistance = volcano.mainVent.longestFlowLength;
     }
 
 }
 
-class VolcanoCraterScaleFactor {
-    public VolcanoCrater crater;
+class VolcanoVentScaleFactor {
+    public VolcanoVent vent;
 
-    VolcanoCraterScaleFactor(VolcanoCrater crater) {
-        this.crater = crater;
+    VolcanoVentScaleFactor(VolcanoVent vent) {
+        this.vent = vent;
     }
 
     public void getScaleFactor() {
-        int mainVolcanoY = crater.getSummitBlock().getY();
-        double mainCraterFlowDistance = crater.longestFlowLength;
+        int mainVolcanoY = vent.getSummitBlock().getY();
+        double mainVentFlowDistance = vent.longestFlowLength;
     }
 
 }

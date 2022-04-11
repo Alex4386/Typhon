@@ -40,12 +40,15 @@ public class VolcanoConstructionRaiseData extends VolcanoConstructionData {
         int blockY = baseBlock.getY();
 
         World world = baseBlock.getWorld();
+/*
 
+        // TODO: This should be refactored.
+        
         if (this.raiseAmount > 0) {
             for (int i = surfaceY; i >= blockY; i--) {
                 Block sourceBlock = world.getBlockAt(x, i, z);
                 Block destinationBlock = sourceBlock.getRelative(0, this.raiseAmount, 0);
-                Block fakeBlock = TyphonUtils.createFakeBlock(replacementMaterial);
+                Block fakeBlock = ;
 
                 blockUpdates.put(sourceBlock, destinationBlock);
                 blockUpdates.put(fakeBlock, sourceBlock);
@@ -61,6 +64,7 @@ public class VolcanoConstructionRaiseData extends VolcanoConstructionData {
                 blockUpdates.put(fakeBlock, sourceBlock);
             }
         } else {}
+*/
 
         return blockUpdates;
     }

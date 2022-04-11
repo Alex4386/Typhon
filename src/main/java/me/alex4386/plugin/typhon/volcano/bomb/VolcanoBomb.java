@@ -2,7 +2,9 @@ package me.alex4386.plugin.typhon.volcano.bomb;
 
 import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.Volcano;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
+import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
 import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoLavaFlow;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
@@ -15,12 +17,13 @@ import org.bukkit.material.MaterialData;
 import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.util.Vector;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
 public class VolcanoBomb {
-    public VolcanoCrater crater;
+    public VolcanoVent vent;
 
     public Location launchLocation;
     public float bombPower;
@@ -37,8 +40,17 @@ public class VolcanoBomb {
 
     public boolean isLanded = false;
 
-    public VolcanoBomb(VolcanoCrater crater, Location loc, float bombLaunchPowerX, float bombLaunchPowerY, float bombLaunchPowerZ, float bombPower, int bombRadius, int bombDelay) {
-        this.crater = crater;
+    public VolcanoBomb(VolcanoVent vent, Location loc, FallingBlock block, float bombPower, int bombRadius, int bombDelay) {
+        this.vent = vent;
+        this.launchLocation = loc;
+        this.bombPower = bombPower;
+        this.bombRadius = bombRadius;
+        this.bombDelay = bombDelay;
+        this.block = block;
+    }
+
+    public VolcanoBomb(VolcanoVent vent, Location loc, float bombLaunchPowerX, float bombLaunchPowerY, float bombLaunchPowerZ, float bombPower, int bombRadius, int bombDelay) {
+        this.vent = vent;
         this.bombPower = bombPower;
         this.bombRadius = bombRadius;
         this.bombDelay = bombDelay;
@@ -59,7 +71,7 @@ public class VolcanoBomb {
         this.block.setMetadata("DropItem", new FixedMetadataValue(TyphonPlugin.plugin, 0));
         this.block.setDropItem(false);
 
-        this.crater.getVolcano().logger.debug(VolcanoLogClass.BOMB_LAUNCHER, "Volcanic Bomb Just launched from: "+ TyphonUtils.blockLocationTostring(launchLocation.getBlock()));
+        this.vent.getVolcano().logger.debug(VolcanoLogClass.BOMB_LAUNCHER, "Volcanic Bomb Just launched from: "+ TyphonUtils.blockLocationTostring(launchLocation.getBlock()));
     }
 
     public double getLifetimeSeconds() {
@@ -94,7 +106,7 @@ public class VolcanoBomb {
     }
 
     public void land() {
-        Volcano volcano = this.crater.getVolcano();
+        Volcano volcano = this.vent.getVolcano();
 
         this.landingLocation = block.getLocation();
 
@@ -115,7 +127,7 @@ public class VolcanoBomb {
                             topOfBurnBlock.setType(Material.FIRE);
                         }
                     } else if (!burnBlock.getType().isAir()) {
-                        this.crater.volcano.metamorphism.metamorphoseBlock(burnBlock);
+                        this.vent.volcano.metamorphism.metamorphoseBlock(burnBlock);
                     }
                 }
             }
@@ -126,14 +138,14 @@ public class VolcanoBomb {
 
         Location loc = block.getLocation();
 
-        String craterName = "";
-        boolean isLandedOnCrater = this.crater.getVolcano().manager.isInAnyCrater(loc);
+        String ventName = "";
+        boolean isLandedOnVent = this.vent.getVolcano().manager.isInAnyVent(loc);
         boolean isLandedInCurrentlyGrowingCone = false;
-        VolcanoCrater nearestCrater = this.crater.getVolcano().manager.getNearestCrater(loc);
+        VolcanoVent nearestVent = this.vent.getVolcano().manager.getNearestVent(loc);
 
-        if (nearestCrater != null) {
-            double getCurrentDistance = nearestCrater.getTwoDimensionalDistance(loc);
-            if (getCurrentDistance < nearestCrater.longestFlowLength * 0.8) {
+        if (nearestVent != null) {
+            double getCurrentDistance = nearestVent.getTwoDimensionalDistance(loc);
+            if (getCurrentDistance < nearestVent.longestFlowLength * 0.8) {
                 isLandedInCurrentlyGrowingCone = true;
             }
         }
@@ -146,7 +158,7 @@ public class VolcanoBomb {
             return;
         }
 
-        if (isLandedOnCrater) {
+        if (isLandedOnVent) {
             this.block.remove();
             this.isLanded = true;
 
@@ -154,7 +166,7 @@ public class VolcanoBomb {
 
             volcano.logger.debug(VolcanoLogClass.BOMB_LAUNCHER,
                     "Volcanic Bomb from "+ TyphonUtils.blockLocationTostring(this.launchLocation.getBlock())+
-                            " landed at crater. interrupting.");
+                            " landed at vent. interrupting.");
             return;
         }
 
@@ -165,12 +177,11 @@ public class VolcanoBomb {
             volcano.logger.debug(VolcanoLogClass.BOMB_LAUNCHER,
                     "Volcanic Bomb from "+ TyphonUtils.blockLocationTostring(this.launchLocation.getBlock())+
                             " landed at currently growing cone. interrupting bomb and starting a new flow");
-
-            this.block.getLocation().getBlock().setType(Material.LAVA);
+            
             loc.getWorld().createExplosion(loc, 1, true, false);
 
-            this.crater.lavaFlow.registerLavaCoolData(this.block.getLocation().getBlock(), true);
-            this.crater.record.addEjectaVolume(1);
+            this.vent.lavaFlow.registerLavaCoolData(this.block.getLocation().getBlock(), true);
+            this.vent.record.addEjectaVolume(1);
 
             return;
         }
@@ -181,13 +192,13 @@ public class VolcanoBomb {
                 VolcanoLogClass.BOMB_LAUNCHER,
                 "Volcanic Bomb from "+ TyphonUtils.blockLocationTostring(this.launchLocation.getBlock())+
                     " just landed at "+ TyphonUtils.blockLocationTostring(this.landingLocation.getBlock())+
-                    (isLandedOnCrater ? "which is inside of crater: "+craterName : "")+
+                    (isLandedOnVent ? "which is inside of vent: "+ventName : "")+
                     " with Power: "+this.bombPower+", radius: "+this.bombRadius+", lifeTime: "+this.lifeTime+" (= "+
                     this.getLifetimeSeconds()+"s)");
 
-        if (crater != null) {
-            if (crater.bombs.maxDistance < crater.getTwoDimensionalDistance(loc)) {
-                crater.bombs.maxDistance = crater.getTwoDimensionalDistance(loc);
+        if (vent != null) {
+            if (vent.bombs.maxDistance < vent.getTwoDimensionalDistance(loc)) {
+                vent.bombs.maxDistance = vent.getTwoDimensionalDistance(loc);
             }
         }
 
@@ -195,7 +206,7 @@ public class VolcanoBomb {
         Bukkit.getScheduler().scheduleSyncDelayedTask(TyphonPlugin.plugin, (Runnable) () -> {
             int totalEjecta = 0;
 
-            VolcanoLavaFlow lavaFlow = (crater != null) ? crater.lavaFlow : volcano.bombLavaFlow;
+            VolcanoLavaFlow lavaFlow = vent.lavaFlow;
             
             lavaFlow.registerEvent();
             lavaFlow.registerTask();
@@ -205,7 +216,6 @@ public class VolcanoBomb {
 
                 for (Block bombBlock:bomb) {
                     lavaFlow.registerLavaCoolData(bombBlock, true);
-                    bombBlock.setType(Material.LAVA);
                 }
 
                 loc.getWorld().createExplosion(loc, 1, true, false);
@@ -217,11 +227,15 @@ public class VolcanoBomb {
                     Random random = new Random();
                     switch(random.nextInt(3)) {
                         case 0:
+                            lavaFlow.registerLavaCoolData(bombBlock, true);
+                            bombBlock.setType(Material.MAGMA_BLOCK);
+                            break;
                         case 1:
-                            bombBlock.setType(volcano.composition.getExtrusiveRockMaterial());
+                            bombBlock.setType(VolcanoComposition.getBombRock(vent.lavaFlow.settings.silicateLevel));
+                            break;
                         case 2:
                             lavaFlow.registerLavaCoolData(bombBlock, true);
-                            bombBlock.setType(Material.LAVA);
+                            break;
                     }
                 }
 
@@ -229,7 +243,7 @@ public class VolcanoBomb {
             }
 
 
-            crater.record.addEjectaVolume(totalEjecta);
+            vent.record.addEjectaVolume(totalEjecta);
 
             Bukkit.getScheduler().scheduleSyncDelayedTask(TyphonPlugin.plugin, (Runnable) () -> {
                 this.explode();
@@ -240,7 +254,7 @@ public class VolcanoBomb {
     }
 
     public void explode() {
-        Volcano volcano = this.crater.getVolcano();
+        Volcano volcano = this.vent.getVolcano();
 
         if (bombRadius >= 2) {
             Block bombCenter = landingLocation.add(0,bombRadius,0).getBlock();
@@ -252,11 +266,13 @@ public class VolcanoBomb {
                     +" with Power: "+this.bombPower+", radius: "+this.bombRadius+", lifeTime: "+this.lifeTime+" (= "+
                     this.getLifetimeSeconds()+"s)");
 
+            VolcanoBombListener.lavaSplashExplosions.put(bombCenter.getLocation().getBlock(), this.vent);
+
             landingLocation.getWorld().createExplosion(
                     bombCenter.getLocation(),
                     bombPower,
                     true,
-                    !volcano.manager.isInAnyCrater(landingLocation)
+                    !volcano.manager.isInAnyVent(landingLocation)
             );
 
             if (bombRadius > 4) {
@@ -269,9 +285,8 @@ public class VolcanoBomb {
 
                 for (int i = 0; i < lavaSpread; i++) {
                     Block block = TyphonUtils.getHighestOceanFloor(circle.get(i).getLocation()).getBlock();
-                    block.setType(Material.LAVA);
 
-                    volcano.bombLavaFlow.registerLavaCoolData(block, true);
+                    this.vent.lavaFlow.registerLavaCoolData(block, true);
                 }
             }
         }

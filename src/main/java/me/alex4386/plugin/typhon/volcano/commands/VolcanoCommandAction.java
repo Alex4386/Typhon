@@ -9,14 +9,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 public enum VolcanoCommandAction {
-    START("start", "", "deprecated. start the maincrater"),
-    STOP("stop", "", "deprecated. stop the all craters"),
-    CREATE("create", "<type> <name>", "create crater, dike, magma chambers"),
-    MAIN_CRATER("maincrater", "", "get main crater"),
-    SUB_CRATER("subcrater", "<name>", "get subsidiary crater"),
+    START("start", "", "deprecated. start the mainvent"),
+    STOP("stop", "", "deprecated. stop the all vents"),
+    CREATE("create", "<type> <name>", "create vent, dike, magma chambers"),
+    MAIN_VENT("mainvent", "", "get main vent"),
+    SUB_VENT("subvent", "<name>", "get subsidiary vent"),
     SUMMIT("summit", "<name>", "get summit of the volcano"),
     DIKE("dike", "<name>", "get dikes"),
-    NEAR("near", "", "get near-by craters"),
+    NEAR("near", "", "get near-by vents"),
     MAGMA_CHAMBER("magmachamber", "<name>", "get magmaChambers"),
     SHUTDOWN("shutdown", "<name>", "shutting down the entire volcano forcibly"),
     QUICK_COOL("quickcool", "<name>", "forcibly cooling all flowing lava"),
@@ -26,7 +26,7 @@ public enum VolcanoCommandAction {
     DEBUG("debug", "<value>", "get/set the debug mode"),
     STATUS("status", "", "get the current highest status"),
     HEAT("heat", "", "get heat value of current location"),
-    TELEPORT("teleport", "", "teleport to maincrater of this volcano"),
+    TELEPORT("teleport", "", "teleport to mainvent of this volcano"),
     RECORD("record", "", "see the volcano's record"),
 
     DELETE("delete", "", "Delete this volcano");

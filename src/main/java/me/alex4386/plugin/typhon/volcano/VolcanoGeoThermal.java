@@ -2,7 +2,10 @@ package me.alex4386.plugin.typhon.volcano;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
+
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -59,31 +62,32 @@ public class VolcanoGeoThermal implements Listener {
                     (Runnable) () -> {
                         if (enable) {
                             // something to do~~
-                            for (VolcanoCrater crater : volcano.manager.getCraters()) {
-                                if (crater.enabled) {
+                            for (VolcanoVent vent : volcano.manager.getVents()) {
+                                if (vent.enabled) {
 
-                                    int geothermalRange = (crater.longestFlowLength <= 50) ? 50 : (int) crater.longestFlowLength + 100;
-                                    for (int i = 0; i < crater.status.getScaleFactor() * Math.pow(geothermalRange / 50, 1 + (1.2 * crater.status.getScaleFactor())); i++) {
+                                    int geothermalRange = (vent.longestFlowLength <= 50) ? 50 : (int) vent.longestFlowLength + 100;
+
+                                    for (int i = 0; i < vent.status.getScaleFactor() * Math.pow(geothermalRange / 50, 1 + (1.2 * vent.status.getScaleFactor())); i++) {
                                         Block block;
 
-                                        if (Math.random() < 0.125 * ((double) crater.craterRadius / 20)) {
+                                        if (Math.random() < 0.125 * ((double) vent.craterRadius / 20)) {
                                             block = TyphonUtils.getHighestRocklikes(
                                                     TyphonUtils.getRandomBlockInRange(
-                                                            crater.location.getBlock(),
-                                                            (int) Math.floor(crater.craterRadius)
+                                                            vent.location.getBlock(),
+                                                            (int) Math.floor(vent.craterRadius)
                                                     )
                                             );
                                         } else {
                                             block = TyphonUtils.getHighestRocklikes(
                                                     TyphonUtils.getRandomBlockInRange(
-                                                            crater.location.getBlock(),
-                                                            (int) Math.floor(crater.craterRadius),
+                                                            vent.location.getBlock(),
+                                                            (int) Math.floor(vent.craterRadius),
                                                             (int) Math.floor(geothermalRange)
                                                     )
                                             );
                                         }
 
-                                        if (shouldDoIt(crater, block.getLocation()) || (Math.random() < (0.7 * crater.status.getScaleFactor()) && geothermalRange == 50 && crater.longestFlowLength <= 50)) {
+                                        if (shouldDoIt(vent, block.getLocation()) || (Math.random() < (0.7 * vent.status.getScaleFactor()) && geothermalRange == 50 && vent.longestFlowLength <= 50)) {
 
                                             final Location targetLoc = block.getLocation().add(0, 1, 0);
                                             TyphonUtils.createRisingSteam(targetLoc, 1, 5);
@@ -92,7 +96,7 @@ public class VolcanoGeoThermal implements Listener {
                                             for (Entity entity : entities) {
                                                 double distance = entity.getLocation().distance(targetLoc);
                                                 if (distance < 3 && entity.getMaxFireTicks() != 0) {
-                                                    entity.setFireTicks((int) (120 * volcano.manager.getHeatValue(targetLoc) * (distance / 3) * crater.status.getScaleFactor()));
+                                                    entity.setFireTicks((int) (120 * volcano.manager.getHeatValue(targetLoc) * (distance / 3) * vent.status.getScaleFactor()));
                                                 }
                                             }
 
@@ -107,29 +111,29 @@ public class VolcanoGeoThermal implements Listener {
                                         }
                                     }
 
-                                    Block craterTopBlock = TyphonUtils.getHighestRocklikes(crater.location.getBlock());
+                                    Block ventTopBlock = TyphonUtils.getHighestRocklikes(vent.location.getBlock());
 
-                                    if (crater.status.getScaleFactor() >= 0.1) {
-                                        int length = (int) (Math.random() * 0.1 * Math.pow(crater.craterRadius, 2) * crater.status.getScaleFactor());
+                                    if (vent.status.getScaleFactor() >= 0.1) {
+                                        int length = (int) (Math.random() * 0.1 * Math.pow(vent.craterRadius, 2) * vent.status.getScaleFactor());
 
                                         for (int i = 0; i < length; i++) {
                                             Location location = TyphonUtils.getHighestLocation(TyphonUtils.getRandomBlockInRange(
-                                                    crater.location.getBlock(),
-                                                    (int) Math.floor(crater.craterRadius - 3) + (int) ((Math.random() * 6) - 3)
+                                                    vent.location.getBlock(),
+                                                    (int) Math.floor(vent.craterRadius - 3) + (int) ((Math.random() * 6) - 3)
                                             ).getLocation());
 
-                                            if (Math.random() < crater.status.getScaleFactor() && crater.getHeatValue(location) > 0.999) {
+                                            if (Math.random() < vent.status.getScaleFactor() && vent.getHeatValue(location) > 0.999) {
                                                 int count = Math.abs((int) (volcano.manager.getHeatValue(location) - 0.999) * 1000) * 20;
-                                                crater.location.getWorld().spawnParticle(
+                                                vent.location.getWorld().spawnParticle(
                                                         Particle.LAVA,
-                                                        location,
+                                                        vent.getType() == VolcanoVentType.FISSURE ? vent.selectCraterBlock().getLocation() : location,
                                                         count);
 
                                                 Entity[] entities = location.getChunk().getEntities();
                                                 for (Entity entity : entities) {
                                                     double distance = entity.getLocation().distance(location);
                                                     if (distance < 5 && entity.getMaxFireTicks() != 0) {
-                                                        entity.setFireTicks((int) (100 * volcano.manager.getHeatValue(location) * (distance / 5) * crater.status.getScaleFactor()));
+                                                        entity.setFireTicks((int) (100 * volcano.manager.getHeatValue(location) * (distance / 5) * vent.status.getScaleFactor()));
                                                     }
                                                 }
                                             }
@@ -138,14 +142,14 @@ public class VolcanoGeoThermal implements Listener {
                                         if (lastLavaTime < 0 || lastLavaTime < System.currentTimeMillis() - 2000) {
                                             lastLavaTime = System.currentTimeMillis();
 
-                                            crater.location.getWorld().playSound(
-                                                    craterTopBlock.getLocation(),
+                                            vent.location.getWorld().playSound(
+                                                    ventTopBlock.getLocation(),
                                                     Sound.BLOCK_LAVA_POP,
                                                     2f,
                                                     1f
                                             );
-                                            crater.location.getWorld().playSound(
-                                                    craterTopBlock.getLocation(),
+                                            vent.location.getWorld().playSound(
+                                                    ventTopBlock.getLocation(),
                                                     Sound.BLOCK_LAVA_AMBIENT,
                                                     2f,
                                                     1f
@@ -168,26 +172,28 @@ public class VolcanoGeoThermal implements Listener {
     }
 
     public void initialize() {
+        this.volcano.logger.log(VolcanoLogClass.GEOTHERMAL, "Intializing Volcano Geothermal...");
         this.registerEvent();
         this.registerTask();
     }
 
     public void shutdown() {
+        this.volcano.logger.log(VolcanoLogClass.GEOTHERMAL, "Shutting down Volcano Geothermal...");
         this.unregisterEvent();
         this.unregisterTask();
     }
 
-    public boolean shouldDoIt(VolcanoCrater crater, Location location) {
+    public boolean shouldDoIt(VolcanoVent vent, Location location) {
         Random random = new Random();
-        return enable && volcano.manager.getHeatValue(location) >= 1 - crater.status.getScaleFactor() && random.nextDouble() < crater.status.getScaleFactor();
+        return enable && volcano.manager.getHeatValue(location) >= 1 - vent.status.getScaleFactor() && random.nextDouble() < vent.status.getScaleFactor();
     }
 
     @EventHandler
     public void onBlockForm(BlockFormEvent e) {
-        List<VolcanoCrater> craters = volcano.manager.getCraters();
+        List<VolcanoVent> vents = volcano.manager.getVents();
 
-        for (VolcanoCrater crater : craters) {
-            if (shouldDoIt(crater, e.getBlock().getLocation())) {
+        for (VolcanoVent vent : vents) {
+            if (shouldDoIt(vent, e.getBlock().getLocation())) {
                 if (e.getBlock().getType().name().toLowerCase().contains("snow")) {
                     e.setCancelled(true);
                     return;
@@ -219,10 +225,10 @@ public class VolcanoGeoThermal implements Listener {
 
     @EventHandler
     public void onPlayerDropItem(PlayerDropItemEvent e) {
-        List<VolcanoCrater> craters = volcano.manager.getCraters();
+        List<VolcanoVent> vents = volcano.manager.getVents();
 
-        for (VolcanoCrater crater : craters) {
-            if (shouldDoIt(crater, e.getPlayer().getLocation())) {
+        for (VolcanoVent vent : vents) {
+            if (shouldDoIt(vent, e.getPlayer().getLocation())) {
                 switch (e.getItemDrop().getItemStack().getType()) {
                     case PORKCHOP:
                         e.getItemDrop().getItemStack().setType(Material.COOKED_PORKCHOP);

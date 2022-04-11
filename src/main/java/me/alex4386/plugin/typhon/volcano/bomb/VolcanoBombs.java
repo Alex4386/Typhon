@@ -2,11 +2,13 @@ package me.alex4386.plugin.typhon.volcano.bomb;
 
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.block.Block;
 import org.bukkit.entity.FallingBlock;
 import org.bukkit.util.Vector;
 import org.json.simple.JSONObject;
@@ -14,7 +16,7 @@ import org.json.simple.JSONObject;
 import java.util.*;
 
 public class VolcanoBombs {
-    public VolcanoCrater crater;
+    public VolcanoVent vent;
 
     // changed to hashmap to make indexing and querying way faster.
     public Map<FallingBlock, VolcanoBomb> bombMap = new HashMap<>();
@@ -31,12 +33,12 @@ public class VolcanoBombs {
     public int bombDelay = VolcanoBombsDefault.bombDelay;
     public double maxDistance = 0;
 
-    public VolcanoBombs(VolcanoCrater crater) {
-        this.crater = crater;
+    public VolcanoBombs(VolcanoVent vent) {
+        this.vent = vent;
 
         Vector vector = TyphonUtils.calculateVelocity(
                 new Vector(0,0, 0),
-                new Vector(0, 0, crater.craterRadius),
+                new Vector(0, 0, vent.craterRadius),
                 4
         );
         this.minBombLaunchPower = vector.getBlockZ();
@@ -60,15 +62,15 @@ public class VolcanoBombs {
 
         bombRadius = (bombRadius < 1) ? 1 : bombRadius;
 
-        VolcanoBomb bomb = new VolcanoBomb(crater, location, powerX, powerY, powerZ, bombPower, bombRadius, bombDelay);
+        VolcanoBomb bomb = new VolcanoBomb(vent, location, powerX, powerY, powerZ, bombPower, bombRadius, bombDelay);
 
         bombMap.put(bomb.block, bomb);
     }
 
     public void launchBombToDestination(Location location, Location destination, float bombPower, int bombRadius, int bombDelay) {
 
-        int maxY = crater.getSummitBlock().getY();
-        int yToLaunch = maxY - crater.location.getWorld().getHighestBlockYAt(crater.location);
+        int maxY = vent.getSummitBlock().getY();
+        int yToLaunch = maxY - vent.location.getWorld().getHighestBlockYAt(vent.location);
 
         Vector vector = TyphonUtils.calculateVelocity(
                 new Vector(0,0,0),
@@ -76,7 +78,7 @@ public class VolcanoBombs {
                 yToLaunch + 6
         );
 
-        VolcanoBomb bomb = new VolcanoBomb(crater, location, (float) vector.getX(), (float) vector.getY(), (float) vector.getZ(), bombPower, bombRadius, bombDelay);
+        VolcanoBomb bomb = new VolcanoBomb(vent, location, (float) vector.getX(), (float) vector.getY(), (float) vector.getZ(), bombPower, bombRadius, bombDelay);
 
         bombMap.put(bomb.block, bomb);
     }
@@ -84,12 +86,12 @@ public class VolcanoBombs {
     public void launchBomb(Location hostLocation) {
         Random random = new Random();
 
-        double volcanoHeight = crater.averageCraterHeight() - crater.location.getY();
-        double volcanoMax = Math.min(crater.location.getWorld().getMaxHeight() - crater.location.getY(), 150.0);
+        double volcanoHeight = vent.averageVentHeight() - vent.location.getY();
+        double volcanoMax = Math.min(vent.location.getWorld().getMaxHeight() - vent.location.getY(), 150.0);
         float volcanoScaleVar = Math.min(1, (float) (volcanoHeight / volcanoMax));
 
         // calculate maximum power
-        double maxPower = 20.0 * (this.crater.longestFlowLength / 150);
+        double maxPower = 20.0 * (this.vent.longestFlowLength / 150);
 
         double minBombLaunchPower = this.minBombLaunchPower * volcanoScaleVar;
         double maxBombLaunchPower = Math.max(this.maxBombLaunchPower, maxPower);
@@ -102,8 +104,14 @@ public class VolcanoBombs {
     }
 
     public Location getLaunchLocation() {
-        int theY = Math.max(crater.getSummitBlock().getY(), crater.location.getBlockY());
-        Location hostLocation = new Location(crater.location.getWorld(), crater.location.getX(), theY, crater.location.getZ());
+        Location hostLocation;
+        if (vent.getType() == VolcanoVentType.FISSURE) {
+            Block whereToFlow = vent.selectCoreBlock();
+            hostLocation = whereToFlow.getLocation();
+        } else {
+            int theY = Math.max(vent.getSummitBlock().getY(), vent.location.getBlockY());
+            hostLocation = new Location(vent.location.getWorld(), vent.location.getX(), theY, vent.location.getZ());
+        }
         return hostLocation;
     }
 
@@ -112,8 +120,8 @@ public class VolcanoBombs {
 
         Random random = new Random();
 
-        double volcanoHeight = crater.averageCraterHeight() - crater.location.getY();
-        double volcanoMax = Math.min(crater.location.getWorld().getMaxHeight() - crater.location.getY(), 150.0);
+        double volcanoHeight = vent.averageVentHeight() - vent.location.getY();
+        double volcanoMax = Math.min(vent.location.getWorld().getMaxHeight() - vent.location.getY(), 150.0);
         float volcanoScaleVar = Math.min(1, (float) (volcanoHeight / volcanoMax));
 
         float bombPower = (float) VolcanoMath.getZeroFocusedRandom() * (maxBombPower - minBombPower) + minBombPower;

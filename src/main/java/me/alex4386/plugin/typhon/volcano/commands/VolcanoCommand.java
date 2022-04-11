@@ -2,10 +2,9 @@ package me.alex4386.plugin.typhon.volcano.commands;
 
 import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.Volcano;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCraterStatus;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
-import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoDike;
-import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMagmaChamber;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -40,105 +39,49 @@ public class VolcanoCommand {
             } else if (args.length >= 3) {
                 VolcanoCommandAction action = VolcanoCommandAction.getAction(operationName);
                 if (action != null) {
-                    if (action.equals(VolcanoCommandAction.SUB_CRATER)) {
+                    if (action.equals(VolcanoCommandAction.SUB_VENT)) {
                         if (args.length == 3) {
-                            // crater name selection
+                            // vent name selection
                             String query = args[2];
-                            if (TyphonCommand.hasPermission(sender, "crater.list")) {
-                                return TyphonCommand.search(query, volcano.subCraters.keySet());
+                            if (TyphonCommand.hasPermission(sender, "vent.list")) {
+                                return TyphonCommand.search(query, volcano.subVents.keySet());
                             }
                         } else if (args.length >= 4) {
-                            // crater operation
-                            VolcanoCrater crater = volcano.subCraters.get(args[2]);
-                            if (crater != null) {
-                                VolcanoCraterCommand cmd = new VolcanoCraterCommand(crater, false);
+                            // vent operation
+                            VolcanoVent vent = volcano.subVents.get(args[2]);
+                            if (vent != null) {
+                                VolcanoVentCommand cmd = new VolcanoVentCommand(vent, false);
                                 return cmd.onTabComplete(sender, command, label, args);
                             }
                         }
-                    } else if (action.equals(VolcanoCommandAction.MAIN_CRATER)) {
-                        // crater operation
-                        VolcanoCrater crater = volcano.mainCrater;
-                        if (crater != null) {
-                            VolcanoCraterCommand cmd = new VolcanoCraterCommand(crater, true);
+                    } else if (action.equals(VolcanoCommandAction.MAIN_VENT)) {
+                        // vent operation
+                        VolcanoVent vent = volcano.mainVent;
+                        if (vent != null) {
+                            VolcanoVentCommand cmd = new VolcanoVentCommand(vent, true);
                             return cmd.onTabComplete(sender, command, label, args);
                         }
                     } else if (action.equals(VolcanoCommandAction.CREATE)) {
                         if (args.length == 3) {
-                            String[] types = { "crater", "dike", "magmachamber", "autocrater" };
+                            String[] types = { "vent", "fissure", "autovent" };
                             return Arrays.asList(types.clone());
                         } else if (args.length > 3) {
                             String option = args[2];
-                            if (option.toLowerCase().equals("crater")) {
+                            if (option.toLowerCase().equals("vent")) {
                                 String[] result = { "<name>" };
                                 return Arrays.asList(result);
-                            } else if (option.toLowerCase().equals("dike")) {
-                                if (args.length == 4) {
-                                    String[] result = { "<name>" };
-                                    return Arrays.asList(result);
-                                } else if (args.length == 5) {
-                                    String searchQuery = args[4];
-                                    return searchMagmaChamberNames(searchQuery);
-                                } else if (args.length == 6) {
-                                    String[] result = { "<radius>" };
-                                    return Arrays.asList(result);
-                                }
-                            } else if (option.toLowerCase().equals("magmachamber")) {
-                                if (args.length == 4) {
-
-                                    String[] result = { "<name>" };
-                                    return Arrays.asList(result);
-                                } else if (args.length == 5) {
-                                    String[] result = { "<baseY>" };
-                                    return Arrays.asList(result);
-                                } else if (args.length == 6) {
-                                    String[] result = { "<baseRadius>" };
-                                    return Arrays.asList(result);
-                                } else if (args.length == 7) {
-                                    String[] result = { "<height>" };
-                                    return Arrays.asList(result);
-                                }
-                            } else if (option.toLowerCase().equals("autocrater")) {
+                            } else if (option.toLowerCase().equals("autovent")) {
                                 if (args.length == 4) {
                                     String[] result = {"<playerName>"};
                                     return Arrays.asList(result);
                                 }
                             }
                         }
-                    } else if (action.equals(VolcanoCommandAction.MAGMA_CHAMBER)) {
-                        if (args.length == 3) {
-                            String searchQuery = args[2];
-                            return searchMagmaChamberNames(searchQuery);
-                        } else if (args.length > 3) {
-                            String magmaChamberName = args[2];
-                            VolcanoMagmaChamber magmaChamber = volcano.magmaIntrusion.magmaChambers.get(magmaChamberName);
-
-                            if (magmaChamber != null) {
-                                VolcanoMagmaChamberCommand magmaChamberCommand = new VolcanoMagmaChamberCommand(magmaChamber);
-                                return magmaChamberCommand.onTabComplete(sender, command, label, args);
-                            } else {
-                                String[] result = { "invalid" };
-                                return Arrays.asList(result);
-                            }
-                        }
-                    }
-
+                    } 
                 }
             }
         }
         return null;
-    }
-
-    private List<String> searchMagmaChamberNames(String searchQuery) {
-        Set<String> magmaChambers = volcano.magmaIntrusion.magmaChambers.keySet();
-        List<String> searchResult = new ArrayList<>();
-
-        for (String magmaChamber : magmaChambers) {
-            if (magmaChamber.startsWith(searchQuery)) {
-                searchResult.add(magmaChamber);
-            }
-        }
-
-        return searchResult;
     }
 
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
@@ -147,21 +90,20 @@ public class VolcanoCommand {
             VolcanoCommandAction action = VolcanoCommandAction.getAction(operationName);
             VolcanoMessage msg = new VolcanoMessage(this.volcano, sender);
 
-            VolcanoCraterCommand craterCmd = null;
-            VolcanoMagmaChamberCommand magmaChamberCmd = null;
+            VolcanoVentCommand ventCmd = null;
 
             if (action != null) {
                 if (action.hasPermission(sender)) {
                     switch (action) {
                         case START:
                             msg.warn(sender, "Using Volcano's default start/stop has been deprecated.");
-                            msg.warn(sender, "Please, Use /volcano "+this.volcano.name+" mainCrater start");
+                            msg.warn(sender, "Please, Use /volcano "+this.volcano.name+" mainVent start");
                             this.volcano.start();
                             msg.info(sender, "Volcano "+this.volcano.name+" has started!");
                             break;
                         case STOP:
                             msg.warn(sender, "Using Volcano's default start/stop has been deprecated.");
-                            msg.warn(sender, "Please, Use /volcano "+this.volcano.name+" mainCrater stop");
+                            msg.warn(sender, "Please, Use /volcano "+this.volcano.name+" mainVent stop");
                             this.volcano.stop();
                             msg.info(sender, "Volcano "+this.volcano.name+" has stopped!");
                             break;
@@ -185,8 +127,8 @@ public class VolcanoCommand {
                         case TELEPORT:
                             if (sender instanceof Entity) {
                                 Entity senderEntity = (Entity)sender;
-                                volcano.mainCrater.teleport(senderEntity);
-                                msg.info("You have been teleported to mainCrater of Volcano "+volcano.name);
+                                volcano.mainVent.teleport(senderEntity);
+                                msg.info("You have been teleported to mainVent of Volcano "+volcano.name);
                             } else {
                                 msg.error("This command can not be used by console.");
                             }
@@ -196,9 +138,9 @@ public class VolcanoCommand {
                                 Player player = ((Player) sender);
                                 Location location = player.getLocation();
 
-                                VolcanoCrater nearestCrater = volcano.manager.getNearestCrater(location);
-                                msg.info("Nearest Crater: "+nearestCrater.getName()+" @ "+String.format("%.2f", nearestCrater.getTwoDimensionalDistance(location))+"m");
-                                msg.info("Status  : "+(volcano.manager.getCraterChatColor(nearestCrater)+nearestCrater.status.toString()));
+                                VolcanoVent nearestVent = volcano.manager.getNearestVent(location);
+                                msg.info("Nearest Vent: "+nearestVent.getName()+" @ "+String.format("%.2f", nearestVent.getTwoDimensionalDistance(location))+"m");
+                                msg.info("Status  : "+(volcano.manager.getVentChatColor(nearestVent)+nearestVent.status.toString()));
                                 msg.info("LavaFlow: "+(volcano.manager.isInAnyLavaFlow(location) ? ChatColor.RED+"Affected" : "Not Affected"));
                                 msg.info("Bombs   : "+(volcano.manager.isInAnyBombAffected(location) ? ChatColor.RED+"Affected" : "Not Affected"));
 
@@ -218,85 +160,30 @@ public class VolcanoCommand {
                                 if (sender instanceof Player) {
                                     Player player = (Player)sender;
                                     if (type.equalsIgnoreCase("crater")) {
-                                        if (this.volcano.subCraters.get(name) == null) {
-                                            VolcanoCrater crater = new VolcanoCrater(volcano, player.getLocation(), name);
-                                            this.volcano.subCraters.put(name, crater);
-                                            crater.initialize();
-                                            msg.info("Crater "+crater.name+" has been created!");
+                                        if (this.volcano.subVents.get(name) == null) {
+                                            VolcanoVent vent = new VolcanoVent(volcano, player.getLocation(), name);
+                                            vent.setType(VolcanoVentType.CRATER);
+
+                                            this.volcano.subVents.put(name, vent);
+                                            vent.initialize();
+                                            msg.info("Vent "+vent.name+" has been created!");
                                         } else {
-                                            msg.error(sender, "Crater "+name+" already exists on Volcano "+this.volcano.name+"!");
+                                            msg.error(sender, "Vent "+name+" already exists on Volcano "+this.volcano.name+"!");
                                         }
-                                    } else if (type.equalsIgnoreCase("dike")) {
+                                    } if (type.equalsIgnoreCase("fissure")) {
+                                        if (this.volcano.subVents.get(name) == null) {
+                                            VolcanoVent vent = new VolcanoVent(volcano, player.getLocation(), name);
+                                            vent.setType(VolcanoVentType.FISSURE);
+                                            vent.lavaFlow.settings.silicateLevel = 0.45;
 
-                                        // vol wa create dike aaa magmachamber_name radius
-                                        //      0      1    2   3                 4      5
+                                            this.volcano.subVents.put(name, vent);
 
-                                        if (args.length >= 5) {
-                                            if (this.volcano.magmaIntrusion.dikes.get(name) == null) {
-                                                String magmaChamberName = args[4];
-                                                if (this.volcano.magmaIntrusion.magmaChambers.get(magmaChamberName) == null) {
-                                                    VolcanoMagmaChamber magmaChamber = this.volcano.magmaIntrusion.magmaChambers.get(magmaChamberName);
-
-                                                    Block baseBlock = magmaChamber.getMagmaDikeBaseBlock(player.getLocation());
-
-                                                    int radius = 1;
-                                                    if (args.length >= 6) { radius = Integer.parseInt(args[5]); }
-
-                                                    if (baseBlock != null) {
-                                                        VolcanoDike dike = new VolcanoDike(this.volcano, magmaChamber, baseBlock, radius);
-                                                        this.volcano.magmaIntrusion.dikes.put(name, dike);
-                                                        msg.info(sender, "Dike "+name+" from MagmaChamber "+magmaChamberName+" has been generated!");
-                                                    } else {
-                                                        msg.error(sender, "You are not in the MagmaChamber "+magmaChamberName+"'s range!");
-                                                    }
-
-                                                } else {
-                                                    msg.error(sender, "MagmaChamber "+magmaChamberName+" does NOT exist on Volcano "+this.volcano.name+"!");
-                                                }
-                                            } else {
-                                                msg.error(sender, "Dike "+name+" already exists on Volcano "+this.volcano.name+"!");
-                                            }
+                                            vent.initialize();
+                                            msg.info("Vent "+vent.name+" has been created!");
                                         } else {
-                                            msg.error(sender, "Not enough arguments to generate dikes");
-                                            msg.error(sender, ""+ChatColor.RED+ChatColor.BOLD+"Usage: "+ChatColor.RESET+"/vol "+volcano.name+" create dike "+ChatColor.YELLOW+"<name> <magmaChamberName> <radius>");
+                                            msg.error(sender, "Vent "+name+" already exists on Volcano "+this.volcano.name+"!");
                                         }
-                                    } else if (type.equalsIgnoreCase("magmachamber")) {
-
-                                        // vol wa create magmachamber aaa baseY baseradius height
-                                        //      0      1            2   3     4          5      6
-
-                                        if (args.length >= 7) {
-                                            Location location = player.getLocation();
-
-                                            int x = location.getBlockX();
-                                            int y = Integer.parseInt(args[4]);
-                                            int z = location.getBlockZ();
-
-                                            int baseRadius = Integer.parseInt(args[5]);
-                                            int height = Integer.parseInt(args[6]);
-
-                                            Location baseLocation = new Location(
-                                                    location.getWorld(),
-                                                    x,
-                                                    y,
-                                                    z
-                                            );
-                                            Block baseBlock = baseLocation.getBlock();
-
-                                            if (this.volcano.magmaIntrusion.magmaChambers.get(name) == null) {
-                                                VolcanoMagmaChamber magmaChamber = new VolcanoMagmaChamber(this.volcano, name, baseBlock, baseRadius, height);
-                                                this.volcano.magmaIntrusion.magmaChambers.put(name, magmaChamber);
-                                                msg.info(sender, "MagmaChamber "+name+" has been generated!");
-
-                                            } else {
-                                                msg.error(sender, "MagmaChamber "+name+" already exist on Volcano "+this.volcano.name+"!");
-                                            }
-
-                                        } else {
-                                            msg.error(sender, "Not enough arguments to generate magma chamber");
-                                            msg.error(sender, ""+ChatColor.RED+ChatColor.BOLD+"Usage: "+ChatColor.RESET+"/vol "+volcano.name+" create magmachamber "+ChatColor.YELLOW+"<name> <baseY> <baseRadius> <height>");
-                                        }
-                                    } else if (type.equalsIgnoreCase("autocrater")) {
+                                    }else if (type.equalsIgnoreCase("autovent")) {
                                         if (args.length >= 5) {
                                             String playerName = args[4];
                                             Player target = Bukkit.getPlayer(playerName);
@@ -306,18 +193,18 @@ public class VolcanoCommand {
                                                 break;
                                             }
 
-                                            VolcanoCrater crater = this.volcano.autoStart.autoStartCreateSubCrater(player);
-                                            msg.info("subcrater "+crater.getName()+" is generated near "+target.getName());
+                                            VolcanoVent vent = this.volcano.autoStart.autoStartCreateSubVent(player);
+                                            msg.info("subvent "+vent.getName()+" is generated near "+target.getName());
                                         } else if (args.length == 4) {
-                                            VolcanoCrater crater = this.volcano.autoStart.autoStartCreateSubCrater(player);
-                                            msg.info("subcrater "+crater.getName()+" is generated");
+                                            VolcanoVent vent = this.volcano.autoStart.autoStartCreateSubVent(player);
+                                            msg.info("subvent "+vent.getName()+" is generated");
                                         }
                                     }
                                 }
 
                             } else {
                                 msg.error(sender, "Not enough arguments for command "+action.getCommand());
-                                msg.error(sender, ""+ChatColor.RED+ChatColor.BOLD+"Usage: "+ChatColor.RESET+"/vol "+volcano.name+" create "+ChatColor.YELLOW+"<crater | dike | magmachamber>"+ChatColor.GRAY+" <name> ...");
+                                msg.error(sender, ""+ChatColor.RED+ChatColor.BOLD+"Usage: "+ChatColor.RESET+"/vol "+volcano.name+" create "+ChatColor.YELLOW+"<vent | dike | magmachamber>"+ChatColor.GRAY+" <name> ...");
                             }
                             break;
 
@@ -328,34 +215,34 @@ public class VolcanoCommand {
                             break;
 
 
-                        case MAIN_CRATER:
-                            craterCmd = new VolcanoCraterCommand(volcano.mainCrater, true);
-                            return craterCmd.onCommand(sender, command, label, args);
+                        case MAIN_VENT:
+                            ventCmd = new VolcanoVentCommand(volcano.mainVent, true);
+                            return ventCmd.onCommand(sender, command, label, args);
 
-                        case SUB_CRATER:
+                        case SUB_VENT:
                             if (args.length >= 3) {
-                                String subCraterName = args[2];
-                                VolcanoCrater subCrater = volcano.subCraters.get(subCraterName);
+                                String subVentName = args[2];
+                                VolcanoVent subVent = volcano.subVents.get(subVentName);
 
-                                if (subCrater != null) {
-                                    subCrater.name = subCraterName;
-                                    craterCmd = new VolcanoCraterCommand(subCrater, false);
-                                    return craterCmd.onCommand(sender, command, label, args);
+                                if (subVent != null) {
+                                    subVent.name = subVentName;
+                                    ventCmd = new VolcanoVentCommand(subVent, false);
+                                    return ventCmd.onCommand(sender, command, label, args);
                                 } else {
-                                    msg.error(sender, "Subcrater "+subCraterName+" doesn't exist on volcano "+volcano.name);
+                                    msg.error(sender, "Subvent "+subVentName+" doesn't exist on volcano "+volcano.name);
                                 }
                             } else {
-                                sender.sendMessage(ChatColor.RED+""+ChatColor.BOLD+"[Typhon Plugin] "+ChatColor.GOLD+"Volcano Craters");
+                                sender.sendMessage(ChatColor.RED+""+ChatColor.BOLD+"[Typhon Plugin] "+ChatColor.GOLD+"Volcano Vents");
                                 sender.sendMessage(ChatColor.RED+"Red: "+ChatColor.RESET+"Lava Flows, "+ChatColor.YELLOW+"Yellow: "+ChatColor.RESET+"Eruption, "+ChatColor.GOLD+"Gold: "+ChatColor.RESET+"Both");
 
-                                for (Map.Entry<String, VolcanoCrater> subCrater: volcano.subCraters.entrySet()) {
-                                    String craterName = subCrater.getKey();
-                                    VolcanoCrater crater = subCrater.getValue();
+                                for (Map.Entry<String, VolcanoVent> subVent: volcano.subVents.entrySet()) {
+                                    String ventName = subVent.getKey();
+                                    VolcanoVent vent = subVent.getValue();
 
-                                    boolean isErupting = crater.isErupting(); // YELLOW
-                                    boolean isFlowing = crater.isFlowingLava(); // RED
+                                    boolean isErupting = vent.isErupting(); // YELLOW
+                                    boolean isFlowing = vent.isFlowingLava(); // RED
 
-                                    ChatColor craterState = isFlowing && isErupting ?
+                                    ChatColor ventState = isFlowing && isErupting ?
                                             ChatColor.GOLD :
                                             (
                                                     isFlowing ?
@@ -367,7 +254,7 @@ public class VolcanoCommand {
                                                             )
                                             );
 
-                                    sender.sendMessage(" - "+craterState+craterName+ChatColor.RESET+": "+(volcano.manager.getCraterChatColor(crater)+crater.status.toString()));
+                                    sender.sendMessage(" - "+ventState+ventName+ChatColor.RESET+": "+(volcano.manager.getVentChatColor(vent)+vent.status.toString()));
                                 }
                             }
                             break;
@@ -382,15 +269,15 @@ public class VolcanoCommand {
                             break;
                         case SUMMIT:
                             sender.sendMessage(ChatColor.RED+""+ChatColor.BOLD+"[Typhon Plugin] "+ChatColor.GOLD+"Volcano Summit of "+this.volcano.name);
-                            VolcanoCrater summitCrater = this.volcano.manager.getSummitCrater();
-                            VolcanoCommandUtils.findSummitAndSendToSender(sender, summitCrater);
+                            VolcanoVent summitVent = this.volcano.manager.getSummitVent();
+                            VolcanoCommandUtils.findSummitAndSendToSender(sender, summitVent);
                             break;
                         case DIKE:
                             msg.error("Implementation in progress...");
                             break;
                         case STATUS:
-                            VolcanoCrater crater = volcano.manager.getHighestStatusCrater();
-                            msg.info("Highest Status: "+crater.status.name());
+                            VolcanoVent vent = volcano.manager.getHighestStatusVent();
+                            msg.info("Highest Status: "+vent.status.name());
                             break;
                         case HEAT:
                             if (sender instanceof Player) {
@@ -407,44 +294,6 @@ public class VolcanoCommand {
                                 volcano.startup();
                             } catch(IOException| ParseException e) {
                                 msg.error("Error occurred while reloading!");
-                            }
-                            break;
-                        case MAGMA_CHAMBER:
-                            if (args.length >= 3) {
-                                String magmaChamberName = args[2];
-                                VolcanoMagmaChamber magmaChamber = volcano.magmaIntrusion.magmaChambers.get(magmaChamberName);
-
-                                if (magmaChamber != null) {
-                                    magmaChamberCmd = new VolcanoMagmaChamberCommand(magmaChamber);
-                                    return magmaChamberCmd.onCommand(sender, command, label, args);
-                                } else {
-                                    msg.error(sender, "magma chamber "+magmaChamberName+" doesn't exist on volcano "+volcano.name);
-                                }
-                            } else {
-                                sender.sendMessage(ChatColor.RED+""+ChatColor.BOLD+"[Typhon Plugin] "+ChatColor.GOLD+"Magma Chamber");
-                                sender.sendMessage(ChatColor.RED+"Red: "+ChatColor.RESET+"filled, "+ChatColor.YELLOW+"Yellow: "+ChatColor.RESET+"built, "+ChatColor.GOLD+"Gold: "+ChatColor.RESET+"Both");
-
-                                for (Map.Entry<String, VolcanoMagmaChamber> chamberEntry: volcano.magmaIntrusion.magmaChambers.entrySet()) {
-                                    String chamberName = chamberEntry.getKey();
-                                    VolcanoMagmaChamber chamber = chamberEntry.getValue();
-
-                                    boolean isFilled = chamber.isFilled;
-                                    boolean isBuilt = chamber.isBuilt; // RED
-
-                                    ChatColor chamberState = isBuilt && isFilled ?
-                                            ChatColor.GOLD :
-                                            (
-                                                    isFilled ?
-                                                            ChatColor.RED :
-                                                            (
-                                                                    isBuilt ?
-                                                                            ChatColor.YELLOW :
-                                                                            ChatColor.RESET
-                                                            )
-                                            );
-
-                                    sender.sendMessage(" - "+chamberState+chamberName);
-                                }
                             }
                             break;
                         case DEBUG:

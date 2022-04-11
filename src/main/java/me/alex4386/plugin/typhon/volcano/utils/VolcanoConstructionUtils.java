@@ -10,9 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public
-
-class VolcanoConstructionUtils {
+public class VolcanoConstructionUtils {
 
     public static List<VolcanoConstructionRaiseData> getLaccolithConstructionData(Volcano volcano, int maxHeight, int baseRadius) {
         return getPDFConsturctionData(volcano.location, maxHeight, baseRadius, Material.LAVA, false);

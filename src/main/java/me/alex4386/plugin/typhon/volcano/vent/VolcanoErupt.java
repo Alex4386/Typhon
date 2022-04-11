@@ -1,4 +1,4 @@
-package me.alex4386.plugin.typhon.volcano.crater;
+package me.alex4386.plugin.typhon.volcano.vent;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Random;
 
 public class VolcanoErupt {
-    public VolcanoCrater crater;
+    public VolcanoVent vent;
 
     public boolean enabled = true;
     public boolean erupting = false;
@@ -20,13 +20,13 @@ public class VolcanoErupt {
 
     public int scheduleID = -1;
 
-    public VolcanoErupt(VolcanoCrater crater) {
-        this.crater = crater;
+    public VolcanoErupt(VolcanoVent vent) {
+        this.vent = vent;
     }
 
     public void registerTask() {
         if (this.scheduleID < 0) {
-            this.crater.volcano.logger.log(VolcanoLogClass.ERUPT, "Registering VolcanoErupt for crater "+crater.getName());
+            this.vent.volcano.logger.log(VolcanoLogClass.ERUPT, "Registering VolcanoErupt for vent "+vent.getName());
             this.scheduleID = Bukkit.getScheduler().scheduleSyncRepeatingTask(
                 TyphonPlugin.plugin,
                 () -> {
@@ -34,32 +34,40 @@ public class VolcanoErupt {
                         erupt();
                     }
                 },
-                this.settings.explosionDelay * crater.getVolcano().updateRate,
-                this.settings.explosionDelay * crater.getVolcano().updateRate
+                this.settings.explosionDelay * vent.getVolcano().updateRate,
+                this.settings.explosionDelay * vent.getVolcano().updateRate
             );
         }
     }
 
     public void unregisterTask() {
         if (scheduleID >= 0) {
+            this.vent.volcano.logger.log(VolcanoLogClass.ERUPT, "Unregistering VolcanoErupt for vent "+vent.getName());
             Bukkit.getScheduler().cancelTask(scheduleID);
             scheduleID = -1;
         }
     }
 
     public void initialize() {
+        this.vent.volcano.logger.log(VolcanoLogClass.ERUPT, "Intializing VolcanoErupt for vent "+vent.getName());
         this.registerTask();
     }
 
     public void shutdown() {
+        this.vent.volcano.logger.log(VolcanoLogClass.ERUPT, "Shutting down VolcanoErupt for vent "+vent.getName());
         this.unregisterTask();
     }
 
     // get eruption location
     public Location getEruptionLocation() {
-        int theY = crater.getSummitBlock().getY();
+        int theY = vent.getSummitBlock().getY();
 
-        Block launchBlock = new Location(crater.location.getWorld(), crater.location.getX(), theY, crater.location.getZ()).getBlock();
+        Location location = vent.location;
+        if (vent.getType() == VolcanoVentType.FISSURE) {
+            location = vent.selectCoreBlock().getLocation();
+        }
+
+        Block launchBlock = new Location(location.getWorld(), location.getX(), theY, location.getZ()).getBlock();
         return launchBlock.getLocation();
     }
 
@@ -82,12 +90,12 @@ public class VolcanoErupt {
 
     public void erupt(int bombCount, boolean tremor, boolean smoke, boolean summitExplode) {
         if (summitExplode) {
-            crater.location.getWorld().createExplosion(this.getEruptionLocation(), settings.explosionSize, true, false);
-            crater.location.getWorld().createExplosion(this.getEruptionLocation(), settings.damagingExplosionSize, false, true);
+            vent.location.getWorld().createExplosion(this.getEruptionLocation(), settings.explosionSize, true, false);
+            vent.location.getWorld().createExplosion(this.getEruptionLocation(), settings.damagingExplosionSize, false, true);
         }
 
         if (tremor) {
-            crater.tremor.eruptTremor();
+            // vent.tremor.eruptTremor();
         }
 
         if (smoke) {
@@ -97,30 +105,30 @@ public class VolcanoErupt {
                 Bukkit.getScheduler().runTaskLater(
                         TyphonPlugin.plugin,
                         (Runnable) () -> {
-                            crater.generateSmoke(size);
+                            vent.generateSmoke(size);
                         },
                         5L * i
                 );
             }
 
-            //crater.generateSteam(5);
+            //vent.generateSteam(5);
         }
 
         for (int i = 0; i < bombCount; i++) {
-            crater.bombs.launchBomb();
+            vent.bombs.launchBomb();
         }
 
         // sentient mode.
-        List<Player> players = crater.getPlayersInRange();
+        List<Player> players = vent.getPlayersInRange();
         for (Player player : players) {
-            if (!player.isFlying() && !crater.isInCrater(player.getLocation())) {
+            if (!player.isFlying() && !vent.isInVent(player.getLocation())) {
                 int sentientBombs = (int)(bombCount * 0.1 * Math.random());
 
                 if (sentientBombs > 0) {
-                    crater.volcano.logger.log(VolcanoLogClass.ERUPT, "Striking "+sentientBombs+" volcanic bombs to player "+player.getDisplayName());
+                    vent.volcano.logger.log(VolcanoLogClass.ERUPT, "Striking "+sentientBombs+" volcanic bombs to player "+player.getDisplayName());
 
                     for (int i = 0; i < sentientBombs; i++) {
-                        crater.bombs.launchBombToDestination(
+                        vent.bombs.launchBombToDestination(
                                 player.getLocation()
                         );
                     }

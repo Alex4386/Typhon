@@ -2,7 +2,9 @@ package me.alex4386.plugin.typhon.volcano.intrusions;
 
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
+import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
+import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombListener;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import org.bukkit.Effect;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -30,9 +32,14 @@ public class VolcanoMetamorphism {
 
         if (block.getType().isBurnable()) {
             material = Material.LAVA;
-            block.getWorld().createExplosion(block.getLocation(), 4f, false);
+            VolcanoVent vent = this.volcano.manager.getNearestVent(block);
+            
+            if (vent != null) {
+                VolcanoBombListener.lavaSplashExplosions.put(block, vent);
+                block.setType(VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
+            }
 
-            block.setType(volcano.composition.getExtrusiveRockMaterial());
+            block.getWorld().createExplosion(block.getLocation(), 4f, false);
         } else {
             String blockTypeName = material.name().toLowerCase();
 
@@ -48,10 +55,10 @@ public class VolcanoMetamorphism {
                     || blockTypeName.contains("podzol")
                     || blockTypeName.contains("grass")
             ) {
-                material = isExtrusive ? this.volcano.composition.getExtrusiveRockMaterial() : this.volcano.composition.getIntrusiveRockMaterial();
+                material = isExtrusive ? VolcanoComposition.getExtrusiveRock(volcano.silicateLevel) : VolcanoComposition.getIntrusiveRock(volcano.silicateLevel);
             } else if (blockTypeName.contains("sand")) {
-                material = isExtrusive ? this.volcano.composition.getExtrusiveRockMaterial() : (
-                    randomDouble < 0.3 ? Material.QUARTZ_PILLAR : this.volcano.composition.getIntrusiveRockMaterial()
+                material = isExtrusive ? VolcanoComposition.getExtrusiveRock(volcano.silicateLevel) : (
+                    VolcanoComposition.getIntrusiveRock(volcano.silicateLevel)
                 );
             } else {
                 return;
@@ -60,7 +67,10 @@ public class VolcanoMetamorphism {
 
         block.setType(material);
         if (material == Material.LAVA) {
-            this.volcano.bombLavaFlow.registerLavaCoolData(block);
+            VolcanoVent vent = this.volcano.manager.getNearestVent(block);
+            if (vent != null) {
+                vent.lavaFlow.registerLavaCoolData(block, true);
+            }
         }
         return;
     }

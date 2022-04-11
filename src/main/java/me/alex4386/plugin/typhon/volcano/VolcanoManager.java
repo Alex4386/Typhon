@@ -1,8 +1,8 @@
 package me.alex4386.plugin.typhon.volcano;
 
 import me.alex4386.plugin.typhon.TyphonUtils;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCraterStatus;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -20,22 +20,22 @@ public class VolcanoManager {
         this.volcano = volcano;
     }
 
-    public List<VolcanoCrater> getCraters() {
-        List<VolcanoCrater> craters = new ArrayList<>();
-        craters.add(volcano.mainCrater);
-        craters.addAll(volcano.subCraters.values());
-        return craters;
+    public List<VolcanoVent> getVents() {
+        List<VolcanoVent> vents = new ArrayList<>();
+        vents.add(volcano.mainVent);
+        vents.addAll(volcano.subVents.values());
+        return vents;
     }
 
-    public boolean isInAnyCrater(Block block) {
-        return isInAnyCrater(block.getLocation());
+    public boolean isInAnyVent(Block block) {
+        return isInAnyVent(block.getLocation());
     }
 
-    public boolean isInAnyCrater(Location loc) {
-        List<VolcanoCrater> craters = this.getCraters();
+    public boolean isInAnyVent(Location loc) {
+        List<VolcanoVent> vents = this.getVents();
 
-        for (VolcanoCrater crater : craters) {
-            if (crater.isInCrater(loc)) {
+        for (VolcanoVent vent : vents) {
+            if (vent.isInVent(loc)) {
                 return true;
             }
         }
@@ -59,10 +59,10 @@ public class VolcanoManager {
     }
 
     public boolean isInAnyBombAffected(Location loc) {
-        List<VolcanoCrater> craters = this.getCraters();
+        List<VolcanoVent> vents = this.getVents();
 
-        for (VolcanoCrater crater : craters) {
-            if (crater.isBombAffected(loc)) {
+        for (VolcanoVent vent : vents) {
+            if (vent.isBombAffected(loc)) {
                 return true;
             }
         }
@@ -73,10 +73,10 @@ public class VolcanoManager {
     public long getCurrentEjecta() {
         long total = 0;
 
-        List<VolcanoCrater> craters = this.getCraters();
+        List<VolcanoVent> vents = this.getVents();
 
-        for (VolcanoCrater crater : craters) {
-            total += crater.record.currentEjectaVolume;
+        for (VolcanoVent vent : vents) {
+            total += vent.record.currentEjectaVolume;
         }
 
         return total;
@@ -85,20 +85,20 @@ public class VolcanoManager {
     public long getTotalEjecta() {
         long total = 0;
 
-        List<VolcanoCrater> craters = this.getCraters();
+        List<VolcanoVent> vents = this.getVents();
 
-        for (VolcanoCrater crater : craters) {
-            total += crater.record.getTotalEjecta();
+        for (VolcanoVent vent : vents) {
+            total += vent.record.getTotalEjecta();
         }
 
         return total;
     }
 
     public boolean isInAnyLavaFlow(Location loc) {
-        List<VolcanoCrater> craters = this.getCraters();
+        List<VolcanoVent> vents = this.getVents();
 
-        for (VolcanoCrater crater : craters) {
-            if (crater.isInLavaFlow(loc)) {
+        for (VolcanoVent vent : vents) {
+            if (vent.isInLavaFlow(loc)) {
                 return true;
             }
         }
@@ -107,10 +107,10 @@ public class VolcanoManager {
     }
 
     public boolean isInAnyLavaFlowOffset(Location loc, double offset) {
-        List<VolcanoCrater> craters = this.getCraters();
+        List<VolcanoVent> vents = this.getVents();
 
-        for (VolcanoCrater crater : craters) {
-            if (crater.getTwoDimensionalDistance(loc) <= crater.longestFlowLength + offset) {
+        for (VolcanoVent vent : vents) {
+            if (vent.getTwoDimensionalDistance(loc) <= vent.longestFlowLength + offset) {
                 return true;
             }
         }
@@ -119,78 +119,77 @@ public class VolcanoManager {
     }
 
     public ChatColor getVolcanoChatColor() {
-        boolean isErupting = volcano.manager.currentlyStartedCraters().size() > 0;
+        boolean isErupting = volcano.manager.currentlyStartedVents().size() > 0;
         return (isErupting ? ChatColor.RED : (
-            volcano.manager.getHighestStatusCrater().status.getScaleFactor() < 0.1 ? ChatColor.GREEN : ChatColor.GOLD
+            volcano.manager.getHighestStatusVent().status.getScaleFactor() < 0.1 ? ChatColor.GREEN : ChatColor.GOLD
         ));
     }
 
-    public ChatColor getCraterChatColor(VolcanoCrater crater) {
+    public ChatColor getVentChatColor(VolcanoVent vent) {
         return (
-            (crater.status == VolcanoCraterStatus.ERUPTING) ? ChatColor.RED :
-                (crater.status == VolcanoCraterStatus.MAJOR_ACTIVITY) ? ChatColor.GOLD :
-                        (crater.status == VolcanoCraterStatus.MINOR_ACTIVITY) ? ChatColor.YELLOW :
-                                (crater.status == VolcanoCraterStatus.DORMANT) ? ChatColor.GREEN :
+            (vent.status == VolcanoVentStatus.ERUPTING) ? ChatColor.RED :
+                (vent.status == VolcanoVentStatus.MAJOR_ACTIVITY) ? ChatColor.GOLD :
+                        (vent.status == VolcanoVentStatus.MINOR_ACTIVITY) ? ChatColor.YELLOW :
+                                (vent.status == VolcanoVentStatus.DORMANT) ? ChatColor.GREEN :
                                         ChatColor.RESET
         );
     }
 
-    public VolcanoCrater getNearestCrater(Block block) {
-        return getNearestCrater(block.getLocation());
+    public VolcanoVent getNearestVent(Block block) {
+        return getNearestVent(block.getLocation());
     }
 
-    public VolcanoCrater getNearestCrater(Location loc) {
-        List<VolcanoCrater> craters = this.getCraters();
+    public VolcanoVent getNearestVent(Location loc) {
+        List<VolcanoVent> vents = this.getVents();
 
-        VolcanoCrater nearestCrater = null;
+        VolcanoVent nearestVent = null;
         double shortestY = -1;
 
-        for (VolcanoCrater crater : craters) {
-            double distance = TyphonUtils.getTwoDimensionalDistance(loc, crater.location);
+        for (VolcanoVent vent : vents) {
+            double distance = TyphonUtils.getTwoDimensionalDistance(loc, vent.location);
             if (shortestY < 0 || distance < shortestY) {
                 shortestY = distance;
-                nearestCrater = crater;
+                nearestVent = vent;
             }
         }
 
-        return nearestCrater;
+        return nearestVent;
     }
 
-    public VolcanoCrater getSummitCrater() {
+    public VolcanoVent getSummitVent() {
         int y = -1;
-        VolcanoCrater summitCrater = null;
+        VolcanoVent summitVent = null;
 
-        for (VolcanoCrater crater:volcano.subCraters.values()) {
-            Block block = crater.getSummitBlock();
+        for (VolcanoVent vent:volcano.subVents.values()) {
+            Block block = vent.getSummitBlock();
             int blockY = block.getY();
 
             if (blockY >= y) {
                 y = blockY;
-                summitCrater = crater;
+                summitVent = vent;
             }
         }
 
-        Block mainCraterSummit = volcano.mainCrater.getSummitBlock();
-        if (mainCraterSummit.getY() >= y) {
-            summitCrater = volcano.mainCrater;;
-            y = mainCraterSummit.getY();
+        Block mainVentSummit = volcano.mainVent.getSummitBlock();
+        if (mainVentSummit.getY() >= y) {
+            summitVent = volcano.mainVent;;
+            y = mainVentSummit.getY();
         }
 
-        return summitCrater;
+        return summitVent;
     }
 
     public Block getSummitBlock() {
-        int y = -1;
-        VolcanoCrater summitCrater = this.getSummitCrater();
+        VolcanoVent summitVent = this.getSummitVent();
 
-        return summitCrater.getSummitBlock();
+        return summitVent.getSummitBlock();
     }
 
     public boolean isInAnyLavaFlowArea(Location loc) {
-        List<VolcanoCrater> craters = this.getCraters();
+        List<VolcanoVent> vents = this.getVents();
 
-        for (VolcanoCrater crater:craters) {
-            if (crater.isInLavaFlow(loc)) {
+        for (VolcanoVent vent:vents) {
+            if (vent.isInLavaFlow(loc)) {
                 return true;
             }
         }
@@ -200,106 +199,106 @@ public class VolcanoManager {
 
     public double getHeatValue(Location loc) {
         double accumulatedHeat = 0.0f;
-        for (VolcanoCrater crater : volcano.manager.getCraters()) {
-            accumulatedHeat = Math.max(crater.getHeatValue(loc), accumulatedHeat);
+        for (VolcanoVent vent : volcano.manager.getVents()) {
+            accumulatedHeat = Math.max(vent.getHeatValue(loc), accumulatedHeat);
         }
         return Math.min(accumulatedHeat, 1.0);
     }
 
-    public List<VolcanoCrater> getCratersInRange(Location loc, double range) {
-        List<VolcanoCrater> list = new ArrayList<>();
+    public List<VolcanoVent> getVentsInRange(Location loc, double range) {
+        List<VolcanoVent> list = new ArrayList<>();
 
-        for (VolcanoCrater crater : volcano.manager.getCraters()) {
-            if (crater.getTwoDimensionalDistance(loc) <= range) {
-                list.add(crater);
-
-            }
-        }
-        return list;
-    }
-
-    public VolcanoCrater getHighestStatusCrater() {
-        VolcanoCrater highestCrater = volcano.mainCrater;
-        VolcanoCraterStatus status = VolcanoCraterStatus.EXTINCT;
-
-        for (VolcanoCrater crater : getCraters()) {
-            if (status.getScaleFactor() < crater.status.getScaleFactor()) {
-                highestCrater = crater;
-                status = crater.status;
-            }
-        }
-
-        return highestCrater;
-    }
-
-    public List<VolcanoCrater> getCraterRadiusInRange(Location loc, double range) {
-        List<VolcanoCrater> list = new ArrayList<>();
-
-        for (VolcanoCrater crater : volcano.manager.getCraters()) {
-            if (crater.getTwoDimensionalDistance(loc) <= range + crater.craterRadius) {
-                list.add(crater);
+        for (VolcanoVent vent : volcano.manager.getVents()) {
+            if (vent.getTwoDimensionalDistance(loc) <= range) {
+                list.add(vent);
 
             }
         }
         return list;
     }
 
-    public VolcanoCrater getSubCraterByCraterName(String name) {
-        return volcano.subCraters.get(name);
-    }
+    public VolcanoVent getHighestStatusVent() {
+        VolcanoVent highestVent = volcano.mainVent;
+        VolcanoVentStatus status = VolcanoVentStatus.EXTINCT;
 
-    public boolean getSubCraterExist(String name) {
-        return this.getSubCraterByCraterName(name) != null;
-    }
-
-    public List<VolcanoCrater> currentlyStartedCraters() {
-        Volcano volcano = this.volcano;
-        List<VolcanoCrater> craters = new ArrayList<>();
-
-        for (VolcanoCrater crater : volcano.subCraters.values()) {
-            if (crater.isStarted()) {
-                craters.add(crater);
+        for (VolcanoVent vent : getVents()) {
+            if (status.getScaleFactor() < vent.status.getScaleFactor()) {
+                highestVent = vent;
+                status = vent.status;
             }
         }
 
-        if (volcano.mainCrater.isStarted()) {
-            craters.add(volcano.mainCrater);
-        }
-
-        return craters;
+        return highestVent;
     }
 
-    public List<VolcanoCrater> currentlyLavaFlowingCraters() {
-        Volcano volcano = this.volcano;
-        List<VolcanoCrater> craters = new ArrayList<>();
+    public List<VolcanoVent> getVentRadiusInRange(Location loc, double range) {
+        List<VolcanoVent> list = new ArrayList<>();
 
-        for (VolcanoCrater crater : volcano.subCraters.values()) {
-            if (crater.isFlowingLava()) {
-                craters.add(crater);
+        for (VolcanoVent vent : volcano.manager.getVents()) {
+            if (vent.getTwoDimensionalDistance(loc) <= range + vent.craterRadius) {
+                list.add(vent);
+
+            }
+        }
+        return list;
+    }
+
+    public VolcanoVent getSubVentByVentName(String name) {
+        return volcano.subVents.get(name);
+    }
+
+    public boolean getSubVentExist(String name) {
+        return this.getSubVentByVentName(name) != null;
+    }
+
+    public List<VolcanoVent> currentlyStartedVents() {
+        Volcano volcano = this.volcano;
+        List<VolcanoVent> vents = new ArrayList<>();
+
+        for (VolcanoVent vent : volcano.subVents.values()) {
+            if (vent.isStarted()) {
+                vents.add(vent);
             }
         }
 
-        if (volcano.mainCrater.isFlowingLava()) {
-            craters.add(volcano.mainCrater);
+        if (volcano.mainVent.isStarted()) {
+            vents.add(volcano.mainVent);
         }
 
-        return craters;
+        return vents;
     }
 
-    public List<VolcanoCrater> currentlyEruptingCraters() {
+    public List<VolcanoVent> currentlyLavaFlowingVents() {
         Volcano volcano = this.volcano;
-        List<VolcanoCrater> craters = new ArrayList<>();
+        List<VolcanoVent> vents = new ArrayList<>();
 
-        for (VolcanoCrater crater : volcano.subCraters.values()) {
-            if (crater.isErupting()) {
-                craters.add(crater);
+        for (VolcanoVent vent : volcano.subVents.values()) {
+            if (vent.isFlowingLava()) {
+                vents.add(vent);
             }
         }
 
-        if (volcano.mainCrater.isErupting()) {
-            craters.add(volcano.mainCrater);
+        if (volcano.mainVent.isFlowingLava()) {
+            vents.add(volcano.mainVent);
         }
 
-        return craters;
+        return vents;
+    }
+
+    public List<VolcanoVent> currentlyEruptingVents() {
+        Volcano volcano = this.volcano;
+        List<VolcanoVent> vents = new ArrayList<>();
+
+        for (VolcanoVent vent : volcano.subVents.values()) {
+            if (vent.isErupting()) {
+                vents.add(vent);
+            }
+        }
+
+        if (volcano.mainVent.isErupting()) {
+            vents.add(volcano.mainVent);
+        }
+
+        return vents;
     }
 }

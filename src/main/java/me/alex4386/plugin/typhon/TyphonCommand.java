@@ -2,7 +2,7 @@ package me.alex4386.plugin.typhon;
 
 import me.alex4386.plugin.typhon.volcano.commands.VolcanoCommand;
 import me.alex4386.plugin.typhon.volcano.Volcano;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoConstructionStatus;
 import org.bukkit.*;
 import org.bukkit.block.Block;
@@ -71,7 +71,7 @@ public class TyphonCommand {
             Location location = player.getLocation();
 
             List<Volcano> volcanoesNearYou = new ArrayList<>();
-            List<VolcanoCrater> cratersNearYou = new ArrayList<>();
+            List<VolcanoVent> ventsNearYou = new ArrayList<>();
 
             for (Volcano volcano: TyphonPlugin.listVolcanoes.values()) {
                 if (
@@ -84,13 +84,13 @@ public class TyphonCommand {
             }
 
             for (Volcano volcano : volcanoesNearYou) {
-                for (VolcanoCrater crater : volcano.manager.getCraters()) {
-                    if (crater.getTwoDimensionalDistance(location) <= crater.craterRadius + crater.longestFlowLength + 100) {
+                for (VolcanoVent vent : volcano.manager.getVents()) {
+                    if (vent.getTwoDimensionalDistance(location) <= vent.craterRadius + vent.longestFlowLength + 100) {
                         if (
-                                crater.isBombAffected(location) ||
-                                crater.isInLavaFlow(location)
+                                vent.isBombAffected(location) ||
+                                vent.isInLavaFlow(location)
                         ) {
-                            cratersNearYou.add(crater);
+                            ventsNearYou.add(vent);
                         }
                     }
                 }
@@ -105,13 +105,13 @@ public class TyphonCommand {
             sender.sendMessage("");
 
 
-            sender.sendMessage(ChatColor.DARK_RED+""+ChatColor.BOLD+"[Near-by Craters]");
+            sender.sendMessage(ChatColor.DARK_RED+""+ChatColor.BOLD+"[Near-by Vents]");
             if (volcanoesNearYou.size() != 0) {
-                for (VolcanoCrater crater: cratersNearYou) {
-                    sender.sendMessage(ChatColor.DARK_RED+" - "+crater.volcano.manager.getCraterChatColor(crater)+(crater.name == null ? "main" : crater.name)+" from "+crater.volcano.name+" : "+String.format("%.2f", crater.getTwoDimensionalDistance(location))+"m");
-                    if (crater.isBombAffected(location)) {
-                        sender.sendMessage("   -> Bombs Affected   : "+String.format("%.2f", crater.bombs.maxDistance)+"m");
-                        sender.sendMessage("   -> LavaFlow Affected: "+String.format("%.2f", crater.longestFlowLength)+"m");
+                for (VolcanoVent vent: ventsNearYou) {
+                    sender.sendMessage(ChatColor.DARK_RED+" - "+vent.volcano.manager.getVentChatColor(vent)+(vent.name == null ? "main" : vent.name)+" from "+vent.volcano.name+" : "+String.format("%.2f", vent.getTwoDimensionalDistance(location))+"m");
+                    if (vent.isBombAffected(location)) {
+                        sender.sendMessage("   -> Bombs Affected   : "+String.format("%.2f", vent.bombs.maxDistance)+"m");
+                        sender.sendMessage("   -> LavaFlow Affected: "+String.format("%.2f", vent.longestFlowLength)+"m");
                     }
                 }
             }

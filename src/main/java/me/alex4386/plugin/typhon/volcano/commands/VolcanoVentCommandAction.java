@@ -8,26 +8,26 @@ import org.bukkit.command.CommandSender;
 import java.util.ArrayList;
 import java.util.List;
 
-public enum VolcanoCraterCommandAction {
-    START("start", "", "start this crater's eruption"),
-    STOP("stop", "", "stop this crater's eruption"),
+public enum VolcanoVentCommandAction {
+    START("start", "", "start this vent's eruption"),
+    STOP("stop", "", "stop this vent's eruption"),
     HELP("help", "", "shows this help menu"),
-    CONFIG("config", "<name> <?value>", "configure the crater"),
+    CONFIG("config", "<name> <?value>", "configure the vent"),
     INFO("info", "", "shows the information menu"),
     ERUPT("erupt", "<start / stop / now> <? bombCount>", "start or stop eruption scheduler / or erupt now"),
     LAVA_FLOW("lavaflow", "<start / stop / now> <? flowamount>", "start or stop lavaflow scheduler / or flow lava now"),
     SUMMIT("summit", "", "get navigation to summit"),
-    QUICK_COOL("quickcool", "", "cool all lava from this crater"),
+    QUICK_COOL("quickcool", "", "cool all lava from this vent"),
     TREMOR("tremor", "<? power>", "create volcano tremor"),
-    STATUS("status", "<? status>", "get/set status of this crater"),
-    TELEPORT("teleport", "", "teleport to this crater"),
-    DELETE("delete", "", "delete this crater");
+    STATUS("status", "<? status>", "get/set status of this vent"),
+    TELEPORT("teleport", "", "teleport to this vent"),
+    DELETE("delete", "", "delete this vent");
 
     String cmdline;
     String usage;
     String explanation;
 
-    VolcanoCraterCommandAction(String cmdline, String usage, String explanation) {
+    VolcanoVentCommandAction(String cmdline, String usage, String explanation) {
         this.cmdline = cmdline;
         this.usage = usage;
         this.explanation = explanation;
@@ -36,7 +36,7 @@ public enum VolcanoCraterCommandAction {
     public static List<String> listAll(CommandSender sender) {
         List<String> all = new ArrayList<>();
 
-        for (VolcanoCraterCommandAction action : VolcanoCraterCommandAction.values()) {
+        for (VolcanoVentCommandAction action : VolcanoVentCommandAction.values()) {
             if (action.hasPermission(sender)) {
                 all.add(action.getCommand());
             }
@@ -45,24 +45,24 @@ public enum VolcanoCraterCommandAction {
         return all;
     }
 
-    public String getManual(String label, String name, String craterName) {
-        String commandType = "subCrater";
-        if (craterName == null) {
-            commandType = "mainCrater";
-        } else if (craterName.equals("") || craterName.equals("main")) {
-            commandType = "mainCrater";
+    public String getManual(String label, String name, String ventName) {
+        String commandType = "subVent";
+        if (ventName == null) {
+            commandType = "mainVent";
+        } else if (ventName.equals("") || ventName.equals("main")) {
+            commandType = "mainVent";
         } else {
-            commandType += " "+craterName;
+            commandType += " "+ventName;
         }
         return ChatColor.LIGHT_PURPLE+"/"+label+" "+ChatColor.AQUA+name+" "+commandType+" "+ChatColor.YELLOW+this.cmdline+" "+ChatColor.GRAY+this.usage+ChatColor.RESET+" : "+this.explanation;
     }
 
-    public static String getAllManual(CommandSender sender, String label, String name, String craterName) {
+    public static String getAllManual(CommandSender sender, String label, String name, String ventName) {
         String all = "";
 
-        for (VolcanoCraterCommandAction action : VolcanoCraterCommandAction.values()) {
+        for (VolcanoVentCommandAction action : VolcanoVentCommandAction.values()) {
             if (action.hasPermission(sender)) {
-                all += action.getManual(label, name, craterName)+"\n";
+                all += action.getManual(label, name, ventName)+"\n";
             }
         }
 
@@ -74,11 +74,11 @@ public enum VolcanoCraterCommandAction {
     }
 
     public boolean hasPermission(CommandSender sender) {
-        return TyphonCommand.hasPermission(sender, "crater."+this.cmdline);
+        return TyphonCommand.hasPermission(sender, "vent."+this.cmdline);
     }
 
-    public static VolcanoCraterCommandAction getAction(String string) {
-        for (VolcanoCraterCommandAction action : VolcanoCraterCommandAction.values()) {
+    public static VolcanoVentCommandAction getAction(String string) {
+        for (VolcanoVentCommandAction action : VolcanoVentCommandAction.values()) {
             if (action.getCommand().equalsIgnoreCase(string)) {
                 return action;
             }

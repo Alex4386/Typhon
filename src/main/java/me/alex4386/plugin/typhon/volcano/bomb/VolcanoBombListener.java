@@ -3,21 +3,27 @@ package me.alex4386.plugin.typhon.volcano.bomb;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.FallingBlock;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.plugin.PluginManager;
+import org.bukkit.util.Vector;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class VolcanoBombListener implements Listener {
+    public static Map<Block, VolcanoVent> lavaSplashExplosions = new HashMap<>();
 
     public static int bombTrackingScheduleId = -1;
     public static int updatesPerSeconds = 4;
@@ -30,9 +36,9 @@ public class VolcanoBombListener implements Listener {
                 for (Map.Entry<String, Volcano> entry: TyphonPlugin.listVolcanoes.entrySet()) {
                     Volcano volcano = entry.getValue();
 
-                    List<VolcanoCrater> craters = volcano.manager.getCraters();
-                    for (VolcanoCrater crater:craters) {
-                        crater.bombs.trackAll();
+                    List<VolcanoVent> vents = volcano.manager.getVents();
+                    for (VolcanoVent vent: vents) {
+                        vent.bombs.trackAll();
                     }
                 }
             }, 0L, (long) TyphonPlugin.minecraftTicksPerSeconds / updatesPerSeconds);
@@ -85,8 +91,8 @@ public class VolcanoBombListener implements Listener {
                     Volcano volcano = entry.getValue();
 
                     if (volcano.location.getWorld().equals(player.getWorld())) {
-                        for (VolcanoCrater crater : volcano.manager.getCraters()) {
-                            VolcanoBomb bomb = crater.bombs.bombMap.get(fallingBlock);
+                        for (VolcanoVent vent : volcano.manager.getVents()) {
+                            VolcanoBomb bomb = vent.bombs.bombMap.get(fallingBlock);
                             if (bomb != null) {
                                 bomb.startTrail();
                             }
@@ -96,5 +102,48 @@ public class VolcanoBombListener implements Listener {
             }
         }
     }
+
+    @EventHandler
+    public void onBlockExplode(BlockExplodeEvent event) {
+        Location explosionTriggered = event.getBlock().getLocation();
+        Block triggerBlock = explosionTriggered.getBlock();
+        VolcanoVent vent = lavaSplashExplosions.get(triggerBlock);
+
+        if (vent != null) {
+            for (Block block : event.blockList()) {
+                float x = (float)(block.getX() - explosionTriggered.getX());
+                float y = (float)(block.getY() - explosionTriggered.getY()) + 1;
+                float z = (float)(block.getZ() - explosionTriggered.getZ());
+
+                x *= (Math.random() - 0.5) * 2;
+                y *= (0.5 + (Math.random() * 0.8));
+                z *= (Math.random() - 0.5) * 2;
+
+                FallingBlock fallingBlock;
+                boolean isBomb = false;
+
+                if (Math.random() < ((vent.lavaFlow.settings.silicateLevel - 0.2) / 5) ) {
+                    isBomb = true;
+                }
+
+                if (isBomb) {
+                    block.setType(Material.MAGMA_BLOCK);
+                }
+
+                fallingBlock = block.getWorld().spawnFallingBlock(block.getLocation(), block.getBlockData());
+                fallingBlock.setDropItem(false);
+                fallingBlock.setVelocity(new Vector(x,y,z));
+
+                if (isBomb) {
+                    vent.bombs.bombMap.put(fallingBlock, new VolcanoBomb(vent, block.getLocation(), fallingBlock, 4.0f, 1, 1));
+                }
+
+                block.setType(Material.AIR);
+            }
+
+            lavaSplashExplosions.remove(explosionTriggered.getBlock());
+        }
+    }
+
 
 }

@@ -1,7 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.commands;
 
 import me.alex4386.plugin.typhon.TyphonUtils;
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -11,8 +11,8 @@ import java.util.Arrays;
 import java.util.List;
 
 public class VolcanoCommandUtils {
-    public static void findSummitAndSendToSender(CommandSender sender, VolcanoCrater crater) {
-        Block summitBlock = crater.getSummitBlock();
+    public static void findSummitAndSendToSender(CommandSender sender, VolcanoVent vent) {
+        Block summitBlock = vent.getSummitBlock();
 
         if (sender instanceof Player) {
             Player player = ((Player) sender).getPlayer();
@@ -26,14 +26,14 @@ public class VolcanoCommandUtils {
 
         }
 
-        sender.sendMessage("Located @ "+TyphonUtils.blockLocationTostring(summitBlock)+" on crater "+crater.getName());
+        sender.sendMessage("Located @ "+TyphonUtils.blockLocationTostring(summitBlock)+" on vent "+vent.getName());
     }
 
     public static String getSubmenuName(String submenuString, String[] args) {
-        // vol name mainCrater command
+        // vol name mainVent command
         // -1  0    1          2
 
-        // vol name subCrater name command
+        // vol name subVent name command
         // -1  0    1         2    3
 
         List<String> parsedArgs = new ArrayList<>(Arrays.asList(args));
@@ -47,10 +47,10 @@ public class VolcanoCommandUtils {
     }
 
     public static String[] parseSubmenuCommand(String submenuString, String[] args) {
-        // vol name mainCrater command
+        // vol name mainVent command
         // -1  0    1          2
 
-        // vol name subCrater name command
+        // vol name subVent name command
         // -1  0    1         2    3
 
         List<String> parsedArgs = new ArrayList<>(Arrays.asList(args));

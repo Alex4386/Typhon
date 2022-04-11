@@ -1,4 +1,4 @@
-package me.alex4386.plugin.typhon.volcano.crater;
+package me.alex4386.plugin.typhon.volcano.vent;
 
 
 import org.json.simple.JSONObject;

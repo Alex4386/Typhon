@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.log;
 
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoVentEjectaTimeData;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
@@ -8,16 +9,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 public
-class VolcanoCraterRecord {
-    VolcanoCrater crater;
+class VolcanoVentRecord {
+    VolcanoVent vent;
 
     public long startEjectaTracking = -1;
     public int currentEjectaVolume = 0;
 
-    public List<VolcanoCraterEjectaTimeData> ejectaVolumeList = new ArrayList<>();
+    public List<VolcanoVentEjectaTimeData> ejectaVolumeList = new ArrayList<>();
 
-    public VolcanoCraterRecord(VolcanoCrater crater) {
-        this.crater = crater;
+    public VolcanoVentRecord(VolcanoVent vent) {
+        this.vent = vent;
     }
 
     public boolean isEjectaTrackingStarted() {
@@ -40,7 +41,7 @@ class VolcanoCraterRecord {
         long startTime = startEjectaTracking;
         long endTime = System.currentTimeMillis();
 
-        VolcanoCraterEjectaTimeData timeData = new VolcanoCraterEjectaTimeData(startTime, endTime, currentEjectaVolume);
+        VolcanoVentEjectaTimeData timeData = new VolcanoVentEjectaTimeData(startTime, endTime, currentEjectaVolume);
         currentEjectaVolume = 0;
 
         ejectaVolumeList.add(timeData);
@@ -48,7 +49,7 @@ class VolcanoCraterRecord {
 
     public long getTotalEjecta() {
         long total = 0;
-        for (VolcanoCraterEjectaTimeData timeData : ejectaVolumeList) {
+        for (VolcanoVentEjectaTimeData timeData : ejectaVolumeList) {
             total += timeData.ejectaVolume;
         }
         total += this.currentEjectaVolume;
@@ -62,9 +63,9 @@ class VolcanoCraterRecord {
 
         for (Object timeDataRaw : ejectaTimeLog) {
             JSONObject timeData = (JSONObject) timeDataRaw;
-            VolcanoCraterEjectaTimeData craterEjectaTimeData = new VolcanoCraterEjectaTimeData(timeData);
+            VolcanoVentEjectaTimeData ventEjectaTimeData = new VolcanoVentEjectaTimeData(timeData);
 
-            ejectaVolumeList.add(craterEjectaTimeData);
+            ejectaVolumeList.add(ventEjectaTimeData);
         }
     }
 
@@ -74,7 +75,7 @@ class VolcanoCraterRecord {
         JSONObject ejectaData = new JSONObject();
 
         JSONArray ejectaTimeLog = new JSONArray();
-        for (VolcanoCraterEjectaTimeData timeData : ejectaVolumeList) {
+        for (VolcanoVentEjectaTimeData timeData : ejectaVolumeList) {
             ejectaTimeLog.add(timeData.serialize());
         }
         ejectaData.put("timeData", ejectaTimeLog);

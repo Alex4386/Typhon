@@ -15,12 +15,9 @@ public class VolcanoDataLoader {
 
     public static String coreFilename = "core.json";
     public static String autoStartFilename = "autostart.json";
-    public static String compositionsFilename = "compositions.json";
-    public static String mainCraterFilename = "mainCrater.json";
+    public static String mainVentFilename = "mainVent.json";
 
-    public static String cratersDirname = "craters";
-    public static String dikesDirname = "dikes";
-    public static String magmaChambersDirname = "magmas";
+    public static String ventsDirname = "vents";
 
     VolcanoDataLoader(Volcano volcano) {
         this.volcano = volcano;
@@ -40,24 +37,15 @@ public class VolcanoDataLoader {
         return TyphonUtils.parseJSON(file);
     }
 
-    public JSONObject getCompositionConfig() throws IOException, ParseException {
-        File file = this.getFile(compositionsFilename);
-        return TyphonUtils.parseJSON(file);
-    }
-
-    public JSONObject getMainCraterConfig() throws IOException, ParseException {
-        File file = this.getFile(mainCraterFilename);
+    public JSONObject getMainVentConfig() throws IOException, ParseException {
+        File file = this.getFile(mainVentFilename);
         return TyphonUtils.parseJSON(file);
     }
 
     public void setupDirectory() {
-        File craterDir = this.getFile(cratersDirname);
-        File dikeDir = this.getFile(dikesDirname);
-        File magmaDir = this.getFile(magmaChambersDirname);
+        File ventDir = this.getFile(ventsDirname);
 
-        craterDir.mkdirs();
-        dikeDir.mkdirs();
-        magmaDir.mkdirs();
+        ventDir.mkdirs();
     }
 
     public File[] getDirectoryFiles(String dirname) throws IOException {
@@ -76,10 +64,10 @@ public class VolcanoDataLoader {
             String fileName = file.getName();
             if (fileName.toLowerCase().endsWith(".json")) {
                 int idx = fileName.lastIndexOf(".");
-                String craterName = fileName.substring(0, idx);
+                String ventName = fileName.substring(0, idx);
 
-                JSONObject craterConfig = TyphonUtils.parseJSON(file);
-                map.put(craterName, craterConfig);
+                JSONObject ventConfig = TyphonUtils.parseJSON(file);
+                map.put(ventName, ventConfig);
             }
         }
 
@@ -92,30 +80,13 @@ public class VolcanoDataLoader {
         config.delete();
     }
 
-    public Map<String, JSONObject> getSubCraterConfigs() throws IOException, ParseException {
-        return this.getJSONsFromDirectoryToMap(cratersDirname);
+    public Map<String, JSONObject> getSubVentConfigs() throws IOException, ParseException {
+        return this.getJSONsFromDirectoryToMap(ventsDirname);
     }
 
-    public void deleteSubCraterConfig(String string) {
-        this.deleteJSONFromDirectory(cratersDirname, string);
+    public void deleteSubVentConfig(String string) {
+        this.deleteJSONFromDirectory(ventsDirname, string);
     }
-
-    public Map<String, JSONObject> getDikesConfigs() throws IOException, ParseException {
-        return this.getJSONsFromDirectoryToMap(dikesDirname);
-    }
-
-    public void deleteDikeConfig(String string) {
-        this.deleteJSONFromDirectory(dikesDirname, string);
-    }
-
-    public Map<String, JSONObject> getMagmaChambersConfigs() throws IOException, ParseException {
-        return this.getJSONsFromDirectoryToMap(magmaChambersDirname);
-    }
-
-    public void deleteMagmaChambersConfig(String string) {
-        this.deleteJSONFromDirectory(magmaChambersDirname, string);
-    }
-
     public void setCoreConfig(JSONObject jsonObject) throws IOException {
         File file = this.getFile(coreFilename);
         TyphonUtils.writeJSON(file, jsonObject);
@@ -126,13 +97,8 @@ public class VolcanoDataLoader {
         TyphonUtils.writeJSON(file, jsonObject);
     }
 
-    public void setCompositionConfig(JSONObject jsonObject) throws IOException {
-        File file = this.getFile(compositionsFilename);
-        TyphonUtils.writeJSON(file, jsonObject);
-    }
-
-    public void setMainCraterConfig(JSONObject jsonObject) throws IOException {
-        File file = this.getFile(mainCraterFilename);
+    public void setMainVentConfig(JSONObject jsonObject) throws IOException {
+        File file = this.getFile(mainVentFilename);
         TyphonUtils.writeJSON(file, jsonObject);
     }
 
@@ -143,15 +109,7 @@ public class VolcanoDataLoader {
         TyphonUtils.writeJSON(file, jsonObject);
     }
 
-    public void setSubCraterConfig(String name, JSONObject jsonObject) throws IOException {
-        setSubDirectoryJSONFile(cratersDirname, name, jsonObject);
-    }
-
-    public void setDikeConfig(String name, JSONObject jsonObject) throws IOException {
-        setSubDirectoryJSONFile(dikesDirname, name, jsonObject);
-    }
-
-    public void setMagmaChamberConfig(String name, JSONObject jsonObject) throws IOException {
-        setSubDirectoryJSONFile(magmaChambersDirname, name, jsonObject);
+    public void setSubVentConfig(String name, JSONObject jsonObject) throws IOException {
+        setSubDirectoryJSONFile(ventsDirname, name, jsonObject);
     }
 }

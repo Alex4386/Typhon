@@ -1,25 +1,25 @@
 package me.alex4386.plugin.typhon.volcano.log;
 
-import me.alex4386.plugin.typhon.volcano.crater.VolcanoCrater;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class VolcanoCraterEjectaTimeData {
+public class VolcanoVentEjectaTimeData {
     long startTime;
     long endTime;
 
     int ejectaVolume;
 
-    public VolcanoCraterEjectaTimeData(long startTime, long endTime, int ejectaVolume) {
+    public VolcanoVentEjectaTimeData(long startTime, long endTime, int ejectaVolume) {
         this.startTime = startTime;
         this.endTime = endTime;
         this.ejectaVolume = ejectaVolume;
     }
 
-    public VolcanoCraterEjectaTimeData(JSONObject jsonObject) {
+    public VolcanoVentEjectaTimeData(JSONObject jsonObject) {
         this.load(jsonObject);
     }
 

@@ -1,4 +1,4 @@
-package me.alex4386.plugin.typhon.volcano.crater;
+package me.alex4386.plugin.typhon.volcano.vent;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.volcano.Volcano;
@@ -17,23 +17,23 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 
 public class VolcanoTremor {
-    public VolcanoCrater crater;
+    public VolcanoVent vent;
 
     public boolean enable = true;
     public int scheduleID = -1;
     public int tremorCycleRate = 200;
 
-    public VolcanoTremor(VolcanoCrater crater) {
-        this.crater = crater;
+    public VolcanoTremor(VolcanoVent vent) {
+        this.vent = vent;
     }
 
     public Block getRandomTremorBlock() {
-        Volcano volcano = crater.getVolcano();
+        Volcano volcano = vent.getVolcano();
 
         Location loc;
         Random random = new Random();
-        int x = crater.location.getBlockX() + (int) (random.nextGaussian() * (crater.craterRadius * 2));
-        int z = crater.location.getBlockZ() + (int) (random.nextGaussian() * (crater.craterRadius * 2));
+        int x = vent.location.getBlockX() + (int) (random.nextGaussian() * (vent.craterRadius * 2));
+        int z = vent.location.getBlockZ() + (int) (random.nextGaussian() * (vent.craterRadius * 2));
         loc = new Location(volcano.location.getWorld(),
                 x,
                 volcano.location.getWorld().getHighestBlockYAt(x,z),
@@ -47,11 +47,11 @@ public class VolcanoTremor {
         if (scheduleID >= 0) { return; }
         Bukkit.getScheduler().scheduleSyncRepeatingTask(TyphonPlugin.plugin,
                 () -> {
-                    if (!crater.isErupting()) {
-                        runTremorCycle();
+                    if (!vent.isErupting()) {
+                        // runTremorCycle();
                     }
                 },
-                0L, Math.max(1, tremorCycleRate / 20 * crater.volcano.updateRate));
+                0L, Math.max(1, tremorCycleRate / 20 * vent.volcano.updateRate));
     }
 
     public void unregisterTask() {
@@ -61,15 +61,17 @@ public class VolcanoTremor {
     }
 
     public void initialize() {
+        this.vent.volcano.logger.log(VolcanoLogClass.TREMOR, "Intializing Volcano Tremor...");
         this.registerTask();
     }
 
     public void shutdown() {
+        this.vent.volcano.logger.log(VolcanoLogClass.TREMOR, "Shutting down Volcano Tremor...");
         this.unregisterTask();
     }
 
     public void runTremorCycle() {
-        Volcano volcano = crater.getVolcano();
+        Volcano volcano = vent.getVolcano();
         if (shouldIDoIt()) {
             volcano.logger.debug(VolcanoLogClass.TREMOR, "Volcano Tremor Cycle Started.");
 
@@ -83,12 +85,12 @@ public class VolcanoTremor {
     public void eruptTremor() {
         Random random = new Random();
 
-        eruptTremor((Math.random() / 2 + 0.5) * getTremorPower(VolcanoCraterStatus.ERUPTING));
+        eruptTremor((Math.random() / 2 + 0.5) * getTremorPower(VolcanoVentStatus.ERUPTING));
     }
 
     public void eruptTremor(double power) {
         if (shouldIDoIt()) {
-            Volcano volcano = crater.getVolcano();
+            Volcano volcano = vent.getVolcano();
             Random random = new Random();
 
             showTremorActivity(getRandomTremorBlock(), power);
@@ -96,7 +98,7 @@ public class VolcanoTremor {
     }
 
     public void tremorOnEntity(Entity entity, int tremorLength, double power) {
-        Volcano volcano = crater.getVolcano();
+        Volcano volcano = vent.getVolcano();
 
         AtomicInteger loop = new AtomicInteger();
         AtomicInteger termorLength = new AtomicInteger(tremorLength * (int) volcano.updateRate);
@@ -149,7 +151,7 @@ public class VolcanoTremor {
     }
 
     public void showTremorActivity(Block block, double power) {
-        Volcano volcano = crater.getVolcano();
+        Volcano volcano = vent.getVolcano();
         /*
         block.getWorld().playSound(
                 block.getLocation(),
@@ -161,7 +163,7 @@ public class VolcanoTremor {
         TyphonPlugin.plugin.getLogger().log(Level.FINEST, "[Volcano "+volcano.name+" Tremor] Running tremor for volcano " + volcano.name + " with power " + power + ".");
 
         for (Player player : Bukkit.getOnlinePlayers()) {
-            int radius = (int) crater.longestFlowLength * 2;
+            int radius = (int) vent.longestFlowLength * 2;
             Location location = player.getLocation();
 
             double distance = Math.sqrt(Math.pow(location.getBlockX() - block.getX(), 2) +
@@ -169,7 +171,7 @@ public class VolcanoTremor {
 
             if (player.getWorld().getUID() == block.getWorld().getUID() && distance < radius) {
 
-                double impactFactor = crater.getHeatValue(player.getLocation());
+                double impactFactor = vent.getHeatValue(player.getLocation());
 
                 Entity[] entities = player.getLocation().getChunk().getEntities();
                 Map<Entity, Location> entityLocation = new HashMap<>();
@@ -208,16 +210,16 @@ public class VolcanoTremor {
     }
 
     public boolean shouldIDoIt() {
-        Volcano volcano = crater.getVolcano();
+        Volcano volcano = vent.getVolcano();
 
-        return Math.random() < crater.status.getScaleFactor();
+        return Math.random() < vent.status.getScaleFactor();
     }
 
     public double getTremorPower() {
-        return getTremorPower(this.crater.status);
+        return getTremorPower(this.vent.status);
     }
 
-    public double getTremorPower(VolcanoCraterStatus status) {
+    public double getTremorPower(VolcanoVentStatus status) {
         switch(status) {
             case DORMANT:
                 return 0.001;

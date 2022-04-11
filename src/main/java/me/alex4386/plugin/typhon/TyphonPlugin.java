@@ -42,6 +42,9 @@ public final class TyphonPlugin extends JavaPlugin {
 
         // Plugin startup logic
         logger.log(VolcanoLogClass.INIT, "Initializing...");
+        if (version.toLowerCase().contains("snapshot")) {
+            logger.warn(VolcanoLogClass.INIT, "You are using developer build of the Typhon or nightly CI Build. Expect Bugs.");
+        }
 
         TyphonPlugin.dataDir = this.getDataFolder();
         TyphonPlugin.volcanoDir = new File(TyphonPlugin.dataDir, "Volcanoes");
