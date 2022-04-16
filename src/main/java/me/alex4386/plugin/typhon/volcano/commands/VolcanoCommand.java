@@ -233,22 +233,21 @@ public class VolcanoCommand {
                                 }
                             } else {
                                 sender.sendMessage(ChatColor.RED+""+ChatColor.BOLD+"[Typhon Plugin] "+ChatColor.GOLD+"Volcano Vents");
-                                sender.sendMessage(ChatColor.RED+"Red: "+ChatColor.RESET+"Lava Flows, "+ChatColor.YELLOW+"Yellow: "+ChatColor.RESET+"Eruption, "+ChatColor.GOLD+"Gold: "+ChatColor.RESET+"Both");
 
                                 for (Map.Entry<String, VolcanoVent> subVent: volcano.subVents.entrySet()) {
                                     String ventName = subVent.getKey();
                                     VolcanoVent vent = subVent.getValue();
 
-                                    boolean isErupting = vent.isErupting(); // YELLOW
+                                    boolean isExploding = vent.isExploding(); // YELLOW
                                     boolean isFlowing = vent.isFlowingLava(); // RED
 
-                                    ChatColor ventState = isFlowing && isErupting ?
+                                    ChatColor ventState = isFlowing && isExploding ?
                                             ChatColor.GOLD :
                                             (
                                                     isFlowing ?
                                                             ChatColor.RED :
                                                             (
-                                                                    isErupting ?
+                                                                    isExploding ?
                                                                             ChatColor.YELLOW :
                                                                             ChatColor.RESET
                                                             )

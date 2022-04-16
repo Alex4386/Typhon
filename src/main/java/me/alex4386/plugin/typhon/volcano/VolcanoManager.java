@@ -285,17 +285,17 @@ public class VolcanoManager {
         return vents;
     }
 
-    public List<VolcanoVent> currentlyEruptingVents() {
+    public List<VolcanoVent> currentlyExplodingVents() {
         Volcano volcano = this.volcano;
         List<VolcanoVent> vents = new ArrayList<>();
 
         for (VolcanoVent vent : volcano.subVents.values()) {
-            if (vent.isErupting()) {
+            if (vent.isExploding()) {
                 vents.add(vent);
             }
         }
 
-        if (volcano.mainVent.isErupting()) {
+        if (volcano.mainVent.isExploding()) {
             vents.add(volcano.mainVent);
         }
 

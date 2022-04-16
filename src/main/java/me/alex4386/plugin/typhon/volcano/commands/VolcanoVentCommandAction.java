@@ -14,8 +14,6 @@ public enum VolcanoVentCommandAction {
     HELP("help", "", "shows this help menu"),
     CONFIG("config", "<name> <?value>", "configure the vent"),
     INFO("info", "", "shows the information menu"),
-    ERUPT("erupt", "<start / stop / now> <? bombCount>", "start or stop eruption scheduler / or erupt now"),
-    LAVA_FLOW("lavaflow", "<start / stop / now> <? flowamount>", "start or stop lavaflow scheduler / or flow lava now"),
     SUMMIT("summit", "", "get navigation to summit"),
     QUICK_COOL("quickcool", "", "cool all lava from this vent"),
     TREMOR("tremor", "<? power>", "create volcano tremor"),

@@ -1,14 +1,14 @@
-package me.alex4386.plugin.typhon.volcano.vent;
+package me.alex4386.plugin.typhon.volcano.explosion;
 
 
 import org.json.simple.JSONObject;
 
-public class VolcanoEruptionSettings {
-    public int explosionDelay = VolcanoEruptionDefaultSettings.explosionDelay;
-    public int explosionSize = VolcanoEruptionDefaultSettings.explosionSize;
-    public int damagingExplosionSize = VolcanoEruptionDefaultSettings.damagingExplosionSize;
-    public int minBombCount = VolcanoEruptionDefaultSettings.minBombCount;
-    public int maxBombCount = VolcanoEruptionDefaultSettings.maxBombCount;
+public class VolcanoExplosionSettings {
+    public int explosionDelay = VolcanoExplosionDefaultSettings.explosionDelay;
+    public int explosionSize = VolcanoExplosionDefaultSettings.explosionSize;
+    public int damagingExplosionSize = VolcanoExplosionDefaultSettings.damagingExplosionSize;
+    public int minBombCount = VolcanoExplosionDefaultSettings.minBombCount;
+    public int maxBombCount = VolcanoExplosionDefaultSettings.maxBombCount;
 
     public void importConfig(JSONObject configData) {
         JSONObject explosionData = (JSONObject) configData.get("explosion");
@@ -44,7 +44,7 @@ public class VolcanoEruptionSettings {
     }
 }
 
-class VolcanoEruptionDefaultSettings {
+class VolcanoExplosionDefaultSettings {
     public static int explosionDelay = 10;
     public static int explosionSize = 8;
     public static int damagingExplosionSize = 2;
@@ -52,7 +52,7 @@ class VolcanoEruptionDefaultSettings {
     public static int maxBombCount = 100;
 
     public static void importConfig(JSONObject configData) {
-        VolcanoEruptionSettings settings = new VolcanoEruptionSettings();
+        VolcanoExplosionSettings settings = new VolcanoExplosionSettings();
         settings.importConfig(configData);
 
         explosionDelay = settings.explosionDelay;

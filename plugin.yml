@@ -1,4 +1,4 @@
-name: typhon
+name: Typhon
 version: ${project.version}
 main: me.alex4386.plugin.typhon.TyphonPlugin
 prefix: Typhon

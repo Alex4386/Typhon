@@ -1,7 +1,10 @@
-package me.alex4386.plugin.typhon.volcano.vent;
+package me.alex4386.plugin.typhon.volcano.explosion;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
+
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -10,28 +13,28 @@ import org.json.simple.JSONObject;
 import java.util.List;
 import java.util.Random;
 
-public class VolcanoErupt {
+public class VolcanoExplosion {
     public VolcanoVent vent;
 
     public boolean enabled = true;
-    public boolean erupting = false;
+    public boolean running = false;
 
-    public VolcanoEruptionSettings settings = new VolcanoEruptionSettings();
+    public VolcanoExplosionSettings settings = new VolcanoExplosionSettings();
 
     public int scheduleID = -1;
 
-    public VolcanoErupt(VolcanoVent vent) {
+    public VolcanoExplosion(VolcanoVent vent) {
         this.vent = vent;
     }
 
     public void registerTask() {
         if (this.scheduleID < 0) {
-            this.vent.volcano.logger.log(VolcanoLogClass.ERUPT, "Registering VolcanoErupt for vent "+vent.getName());
+            this.vent.volcano.logger.log(VolcanoLogClass.EXPLOSION, "Registering VolcanoExplosion for vent "+vent.getName());
             this.scheduleID = Bukkit.getScheduler().scheduleSyncRepeatingTask(
                 TyphonPlugin.plugin,
                 () -> {
-                    if (this.enabled && this.erupting) {
-                        erupt();
+                    if (this.enabled && this.running) {
+                        explode();
                     }
                 },
                 this.settings.explosionDelay * vent.getVolcano().updateRate,
@@ -42,24 +45,24 @@ public class VolcanoErupt {
 
     public void unregisterTask() {
         if (scheduleID >= 0) {
-            this.vent.volcano.logger.log(VolcanoLogClass.ERUPT, "Unregistering VolcanoErupt for vent "+vent.getName());
+            this.vent.volcano.logger.log(VolcanoLogClass.EXPLOSION, "Unregistering VolcanoExplosion for vent "+vent.getName());
             Bukkit.getScheduler().cancelTask(scheduleID);
             scheduleID = -1;
         }
     }
 
     public void initialize() {
-        this.vent.volcano.logger.log(VolcanoLogClass.ERUPT, "Intializing VolcanoErupt for vent "+vent.getName());
+        this.vent.volcano.logger.log(VolcanoLogClass.EXPLOSION, "Intializing VolcanoExplosion for vent "+vent.getName());
         this.registerTask();
     }
 
     public void shutdown() {
-        this.vent.volcano.logger.log(VolcanoLogClass.ERUPT, "Shutting down VolcanoErupt for vent "+vent.getName());
+        this.vent.volcano.logger.log(VolcanoLogClass.EXPLOSION, "Shutting down VolcanoExplosion for vent "+vent.getName());
         this.unregisterTask();
     }
 
     // get eruption location
-    public Location getEruptionLocation() {
+    public Location selectEruptionVent() {
         int theY = vent.getSummitBlock().getY();
 
         Location location = vent.location;
@@ -71,27 +74,27 @@ public class VolcanoErupt {
         return launchBlock.getLocation();
     }
 
-    public void erupt() {
+    public void explode() {
         int bombCount = (int) (Math.random() * (settings.maxBombCount - settings.minBombCount) + settings.minBombCount);
-        erupt(bombCount);
+        explode(bombCount);
     }
 
-    public void erupt(int bombCount) {
-        erupt(bombCount, true);
+    public void explode(int bombCount) {
+        explode(bombCount, true);
     }
 
-    public void erupt(int bombCount, boolean tremor) {
-        erupt(bombCount, tremor, true);
+    public void explode(int bombCount, boolean tremor) {
+        explode(bombCount, tremor, true);
     }
 
-    public void erupt(int bombCount, boolean tremor, boolean smoke) {
-        erupt(bombCount, tremor, smoke, true);
+    public void explode(int bombCount, boolean tremor, boolean smoke) {
+        explode(bombCount, tremor, smoke, true);
     }
 
-    public void erupt(int bombCount, boolean tremor, boolean smoke, boolean summitExplode) {
+    public void explode(int bombCount, boolean tremor, boolean smoke, boolean summitExplode) {
         if (summitExplode) {
-            vent.location.getWorld().createExplosion(this.getEruptionLocation(), settings.explosionSize, true, false);
-            vent.location.getWorld().createExplosion(this.getEruptionLocation(), settings.damagingExplosionSize, false, true);
+            vent.location.getWorld().createExplosion(this.selectEruptionVent(), settings.explosionSize, true, false);
+            vent.location.getWorld().createExplosion(this.selectEruptionVent(), settings.damagingExplosionSize, false, true);
         }
 
         if (tremor) {
@@ -105,7 +108,7 @@ public class VolcanoErupt {
                 Bukkit.getScheduler().runTaskLater(
                         TyphonPlugin.plugin,
                         (Runnable) () -> {
-                            vent.generateSmoke(size);
+                            vent.ash.createAshPlume();
                         },
                         5L * i
                 );
@@ -125,7 +128,7 @@ public class VolcanoErupt {
                 int sentientBombs = (int)(bombCount * 0.1 * Math.random());
 
                 if (sentientBombs > 0) {
-                    vent.volcano.logger.log(VolcanoLogClass.ERUPT, "Striking "+sentientBombs+" volcanic bombs to player "+player.getDisplayName());
+                    vent.volcano.logger.log(VolcanoLogClass.EXPLOSION, "Striking "+sentientBombs+" volcanic bombs to player "+player.getDisplayName());
 
                     for (int i = 0; i < sentientBombs; i++) {
                         vent.bombs.launchBombToDestination(

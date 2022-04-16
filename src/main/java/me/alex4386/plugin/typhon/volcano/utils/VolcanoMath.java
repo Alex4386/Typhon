@@ -52,16 +52,20 @@ public class VolcanoMath {
     public static double getZeroFocusedRandom(double variance) {
         Random random = new Random();
 
-        // range: -infinity -> infinity
-        double gaussianRandom = random.nextGaussian();
+        /*
+            // range: -infinity -> infinity
+            double gaussianRandom = random.nextGaussian();
 
-        // range: 0 -> infinity
-        gaussianRandom = Math.abs(gaussianRandom);
+            // range: 0 -> infinity
+            gaussianRandom = Math.abs(gaussianRandom);
 
-        // inside 1, 70%, inside 2, 95%
-        double gaussianMappedToOne = pdfMaxLimiter(variance, gaussianRandom, 1);
+            // inside 1, 70%, inside 2, 95%
+            double gaussianMappedToOne = pdfMaxLimiter(variance, gaussianRandom, 1);
 
-        return 1.0f - gaussianMappedToOne;
+            return 1.0f - gaussianMappedToOne;
+        */
+
+        return Math.pow(random.nextDouble(), 2 + (Math.random() * variance));
     }
 
     public static double getZeroFocusedRandom() {

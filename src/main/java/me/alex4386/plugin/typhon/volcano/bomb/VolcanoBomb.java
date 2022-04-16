@@ -55,12 +55,10 @@ public class VolcanoBomb {
         this.bombRadius = bombRadius;
         this.bombDelay = bombDelay;
 
-        Random random = new Random();
-
         this.launchLocation = loc;
 
         Vector launchVector = new Vector(bombLaunchPowerX, bombLaunchPowerY, bombLaunchPowerZ);
-        this.block = loc.getWorld().spawnFallingBlock(loc, new MaterialData(Material.MAGMA_BLOCK));
+        this.block = loc.getWorld().spawnFallingBlock(loc, new MaterialData(VolcanoComposition.getBombRock(this.vent.lavaFlow.settings.silicateLevel)));
 
         this.block.setGlowing(true);
         this.block.setFireTicks(1000);

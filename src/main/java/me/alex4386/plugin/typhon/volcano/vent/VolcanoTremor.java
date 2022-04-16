@@ -47,7 +47,7 @@ public class VolcanoTremor {
         if (scheduleID >= 0) { return; }
         Bukkit.getScheduler().scheduleSyncRepeatingTask(TyphonPlugin.plugin,
                 () -> {
-                    if (!vent.isErupting()) {
+                    if (!vent.isExploding()) {
                         // runTremorCycle();
                     }
                 },
@@ -82,17 +82,12 @@ public class VolcanoTremor {
         }
     }
 
-    public void eruptTremor() {
-        Random random = new Random();
-
-        eruptTremor((Math.random() / 2 + 0.5) * getTremorPower(VolcanoVentStatus.ERUPTING));
+    public void explosionTremor() {
+        explosionTremor((Math.random() / 2 + 0.5) * getTremorPower(VolcanoVentStatus.ERUPTING));
     }
 
-    public void eruptTremor(double power) {
+    public void explosionTremor(double power) {
         if (shouldIDoIt()) {
-            Volcano volcano = vent.getVolcano();
-            Random random = new Random();
-
             showTremorActivity(getRandomTremorBlock(), power);
         }
     }

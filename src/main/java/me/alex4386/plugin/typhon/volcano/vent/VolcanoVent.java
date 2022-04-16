@@ -3,7 +3,11 @@ package me.alex4386.plugin.typhon.volcano.vent;
 import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
+import me.alex4386.plugin.typhon.volcano.ash.VolcanoAsh;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombs;
+import me.alex4386.plugin.typhon.volcano.erupt.VolcanoErupt;
+import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
+import me.alex4386.plugin.typhon.volcano.explosion.VolcanoExplosion;
 import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoLavaFlow;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoVentRecord;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
@@ -40,10 +44,12 @@ public class VolcanoVent {
     public List<Block> coreBlocks = null;
 
     public VolcanoBombs bombs = new VolcanoBombs(this);
-    public VolcanoErupt erupt = new VolcanoErupt(this);
+    public VolcanoExplosion explosion = new VolcanoExplosion(this);
     public VolcanoTremor tremor = new VolcanoTremor(this);
     public VolcanoLavaFlow lavaFlow = new VolcanoLavaFlow(this);
     public VolcanoVentRecord record = new VolcanoVentRecord(this);
+    public VolcanoErupt erupt = new VolcanoErupt(this);
+    public VolcanoAsh ash = new VolcanoAsh(this);
 
     public VolcanoVent(Volcano volcano) {
         this.volcano = volcano;
@@ -85,7 +91,8 @@ public class VolcanoVent {
         volcano.logger.log(VolcanoLogClass.VENT, "Starting up vent "+name);
 
         // bombs don't need initialization
-        erupt.initialize();
+        ash.initialize();
+        explosion.initialize();
         lavaFlow.initialize();
         tremor.initialize();
 
@@ -104,7 +111,8 @@ public class VolcanoVent {
         volcano.logger.log(VolcanoLogClass.VENT, "Shutting down vent "+name);
 
         // bombs don't need shutdown
-        erupt.shutdown();
+        ash.shutdown();
+        explosion.shutdown();
         lavaFlow.shutdown();
         tremor.shutdown();
         record.endEjectaTrack();
@@ -362,6 +370,10 @@ public class VolcanoVent {
     public boolean isBombAffected(Location loc) { return this.getTwoDimensionalDistance(loc) <= this.bombs.maxDistance; }
 
     public Block getNearestCoreBlock(Location loc) {
+        if (this.coreBlocks == null) {
+            this.getVentBlocks();
+        }
+
         double lowest = Double.POSITIVE_INFINITY;
         Iterator<Block> iterator = this.coreBlocks.iterator();
 
@@ -390,12 +402,12 @@ public class VolcanoVent {
         return this.getNearestCoreBlock(loc).getLocation().distance(loc);
     }
 
-    public void erupt() {
-        erupt.erupt();
+    public void explode() {
+        explosion.explode();
     }
 
-    public void erupt(int bombCount) {
-        erupt.erupt(bombCount);
+    public void explode(int bombCount) {
+        explosion.explode(bombCount);
     }
 
     public void teleport(Entity entity) { teleport(entity, true); }
@@ -404,24 +416,6 @@ public class VolcanoVent {
         Location location = this.location;
         if (unstuck) location = TyphonUtils.getHighestLocation(location).add(0,2,0);
         entity.teleport(location);
-    }
-
-    public void generateSmoke(int count) {
-        Random random = new Random();
-
-        int steamRadius = (int) (random.nextDouble() * 5);
-
-        Location location = this.selectFlowVentBlock().getLocation();
-
-        TyphonUtils.spawnParticleWithVelocity(
-                Particle.CAMPFIRE_SIGNAL_SMOKE,
-                TyphonUtils.getHighestRocklikes(location).getLocation(),
-                steamRadius,
-                (int) (count * (4 / 3) * Math.pow(steamRadius, 3)),
-                0,
-                0.4,
-                0
-        );
     }
 
     public void generateSteam(int count) {
@@ -434,71 +428,26 @@ public class VolcanoVent {
         TyphonUtils.createRisingSteam(randomBlock.getLocation(), steamRadius, count);
     }
 
-    public void generateLavaParticle(int count) {
-        World world = location.getWorld();
-
-        for (int i = 0; i < count; i++) {
-            world.spawnParticle(
-                    Particle.LAVA,
-                    location,
-                    100
-            );
-        }
-    }
-
     public boolean isStarted() {
-        return this.isFlowingLava() || this.isErupting();
+        return this.isFlowingLava() || this.isExploding();
     }
 
     public boolean isFlowingLava() {
         return lavaFlow.settings.flowing;
     }
 
-    public boolean isErupting() {
-        return erupt.erupting;
+    public boolean isExploding() {
+        return explosion.running;
     }
 
     public void start() {
-        this.startErupting();
-        this.startFlowingLava();
+        this.erupt.start();
         this.getVolcano().trySave();
     }
 
     public void stop() {
-        this.stopErupting();
-        this.stopFlowingLava();
+        this.erupt.stop();
         this.getVolcano().trySave();
-    }
-
-    public void startFlowingLava() {
-        this.initialize();
-        this.status = VolcanoVentStatus.ERUPTING;
-        lavaFlow.settings.flowing = true;
-    }
-
-    public void stopFlowingLava() {
-        lavaFlow.settings.flowing = false;
-        this.status = (!this.isErupting()) ? VolcanoVentStatus.MAJOR_ACTIVITY : this.status;
-        this.cool();
-
-        if (this.status != VolcanoVentStatus.ERUPTING) {
-            this.record.endEjectaTrack();
-        }
-    }
-
-    public void startErupting() {
-        this.initialize();
-        this.status = VolcanoVentStatus.ERUPTING;
-        erupt.erupting = true;
-    }
-
-    public void stopErupting() {
-        erupt.erupting = false;
-        this.status = (!this.isFlowingLava()) ? VolcanoVentStatus.MAJOR_ACTIVITY : this.status;
-
-        if (this.status != VolcanoVentStatus.ERUPTING) {
-            this.record.endEjectaTrack();
-        }
     }
 
     public boolean isMainVent() {
@@ -518,9 +467,10 @@ public class VolcanoVent {
         this.fissureAngle = (double) configData.get("fissureAngle");
         this.fissureLength = (int) (long) configData.get("fissureLength");
         this.bombs.importConfig((JSONObject) configData.get("bombs"));
-        this.erupt.importConfig((JSONObject) configData.get("erupt"));
+        this.explosion.importConfig((JSONObject) configData.get("explosion"));
         this.lavaFlow.importConfig((JSONObject) configData.get("lavaFlow"));
         this.record.importConfig((JSONObject) configData.get("record"));
+        this.erupt.importConfig((JSONObject) configData.get("erupt"));
         this.longestFlowLength = (double) configData.get("longestFlowLength");
     }
 
@@ -541,6 +491,9 @@ public class VolcanoVent {
 
         JSONObject bombConfig = this.bombs.exportConfig();
         configData.put("bombs", bombConfig);
+
+        JSONObject explosionConfig = this.explosion.exportConfig();
+        configData.put("explosion", explosionConfig);
 
         JSONObject eruptConfig = this.erupt.exportConfig();
         configData.put("erupt", eruptConfig);

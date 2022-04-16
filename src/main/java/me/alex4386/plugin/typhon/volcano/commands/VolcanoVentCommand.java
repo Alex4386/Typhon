@@ -2,6 +2,7 @@ package me.alex4386.plugin.typhon.volcano.commands;
 
 import me.alex4386.plugin.typhon.TyphonCommand;
 import me.alex4386.plugin.typhon.TyphonUtils;
+import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
@@ -51,33 +52,23 @@ public class VolcanoVentCommand {
                 VolcanoVentCommandAction action = VolcanoVentCommandAction.getAction(operationName);
 
                 if (action != null) {
-                    if (action == VolcanoVentCommandAction.ERUPT || action == VolcanoVentCommandAction.LAVA_FLOW) {
-                        if (args.length == baseOffset + 2) {
-                            String[] res = {"start", "stop", "now"};
-                            return Arrays.asList(res);
-                        } else if (args.length == baseOffset + 3) {
-                            if (args[baseOffset + 1].toLowerCase().equals("now")) {
-                                String[] res = {"<? count>"};
-                                return Arrays.asList(res);
-                            }
-                        }
-                    } else if (action == VolcanoVentCommandAction.CONFIG) {
+                    if (action == VolcanoVentCommandAction.CONFIG) {
                         if (args.length == baseOffset + 2) {
                             String[] configNodes = {
                                     "lavaflow:delay",
                                     "lavaflow:flowed",
-                                    "bombs:launchPower:min",
-                                    "bombs:launchPower:max",
                                     "bombs:explosionPower:min",
                                     "bombs:explosionPower:max",
                                     "bombs:radius:min",
                                     "bombs:radius:max",
                                     "bombs:delay",
-                                    "erupt:delay",
-                                    "erupt:bombs:min",
-                                    "erupt:bombs:max",
-                                    "erupt:explosion:size",
-                                    "erupt:explosion:damagingSize",
+                                    "erupt:style",
+                                    "erupt:autoconfig",
+                                    "explosion:delay",
+                                    "explosion:bombs:min",
+                                    "explosion:bombs:max",
+                                    "explosion:explosion:size",
+                                    "explosion:explosion:damagingSize",
                                     "vent:craterRadius",
                                     "vent:type",
                                     "vent:fissureLength",
@@ -153,39 +144,6 @@ public class VolcanoVentCommand {
                     msg.info("Creating tremor at "+vent.name+" with power: "+power);
                 }
                 break;
-            case ERUPT:
-                if (newArgs.length == 1) {
-                    msg.info("Vent "+vent.name+" is "+(vent.isErupting() ? "" : "not ")+"erupting now!");
-                } else {
-                    if (newArgs[1].equalsIgnoreCase("start")) {
-
-                        if (vent.isErupting()) {
-                            msg.warn("Vent "+vent.getName()+" is already erupting!");
-                            break;
-                        }
-                        vent.startErupting();
-                        msg.info("Vent "+vent.getName()+" is now erupting!");
-
-                    } else if (newArgs[1].equalsIgnoreCase("stop")) {
-                        if (!vent.isErupting()) {
-                            msg.warn("Vent "+vent.getName()+" is not erupting!");
-                            break;
-                        }
-                        vent.stopErupting();
-                        msg.info("Vent "+vent.getName()+" is now stopped erupting!");
-
-                    } else if (newArgs[1].equalsIgnoreCase("now")) {
-                        if (newArgs.length == 3) {
-                            int bombCount = Integer.parseInt(newArgs[2]);
-                            vent.erupt(bombCount);
-                            msg.info("Vent "+vent.getName()+" is erupting "+bombCount+" bombs now!");
-                        } else {
-                            vent.erupt();
-                            msg.info("Vent "+vent.getName()+" is erupting now!");
-                        }
-                    }
-                }
-                break;
             case SUMMIT:
                 sender.sendMessage(ChatColor.RED+""+ChatColor.BOLD+"[Vent Summit] "+ChatColor.GOLD+"Summit of vent "+vent.name);
 
@@ -203,41 +161,6 @@ public class VolcanoVentCommand {
                     vent.shutdown();
                     vent.volcano.subVents.remove(vent.name);
                     msg.info("Vent "+vent.name+" has been deleted!");
-                }
-                break;
-            case LAVA_FLOW:
-                if (newArgs.length == 1) {
-                    msg.info("Vent "+vent.name+" is "+(vent.isErupting() ? "" : "not ")+"flowing lava right now!");
-                } else {
-                    if (newArgs[1].equalsIgnoreCase("start")) {
-
-                        if (vent.isFlowingLava()) {
-                            msg.warn("Vent "+vent.getName()+" is already flowing lava!");
-                            break;
-                        }
-                        vent.startFlowingLava();
-                        msg.info("Vent "+vent.getName()+" is now flowing lava!");
-
-                    } else if (newArgs[1].equalsIgnoreCase("stop")) {
-                        if (!vent.isFlowingLava()) {
-                            msg.warn("Vent "+vent.getName()+" is not flowing lava!");
-                            break;
-                        }
-                        vent.stopFlowingLava();
-                        msg.info("Vent "+vent.getName()+" is now stopped flowing lava!");
-
-                    } else if (newArgs[1].equalsIgnoreCase("now")) {
-                        if (newArgs.length == 3) {
-                            int flowAmount = Integer.parseInt(newArgs[2]);
-                            for (int i = 0; i < flowAmount; i++) {
-                                vent.lavaFlow.flowLava();
-                            }
-                            msg.info("Vent "+vent.getName()+" is flowing "+flowAmount+" blocks of lava now!");
-                        } else {
-                            vent.lavaFlow.flowLava();
-                            msg.info("Vent "+vent.getName()+" is erupting now!");
-                        }
-                    }
                 }
                 break;
             case QUICK_COOL:
@@ -277,16 +200,6 @@ public class VolcanoVentCommand {
                         if (newArgs.length == 3) vent.lavaFlow.settings.flowed = Integer.parseInt(newArgs[2]);
                         msg.info("lavaflow:flowed - "+ vent.lavaFlow.settings.flowed+" ticks");
                     }
-                } else if (newArgs[1].equalsIgnoreCase("bombs:launchPower:min")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) vent.bombs.minBombLaunchPower = Float.parseFloat(newArgs[2]);
-                        msg.info("bombs:launchPower:min - "+ vent.bombs.minBombLaunchPower);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("bombs:launchPower:max")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) vent.bombs.maxBombLaunchPower = Float.parseFloat(newArgs[2]);
-                        msg.info("bombs:launchPower:max - "+ vent.bombs.maxBombLaunchPower);
-                    }
                 } else if (newArgs[1].equalsIgnoreCase("bombs:explosionPower:min")) {
                     if (newArgs.length >= 2) {
                         if (newArgs.length == 3) vent.bombs.minBombPower = Float.parseFloat(newArgs[2]);
@@ -312,30 +225,47 @@ public class VolcanoVentCommand {
                         if (newArgs.length == 3) vent.bombs.bombDelay = Integer.parseInt(newArgs[2]);
                         msg.info("bombs:delay - "+ vent.bombs.bombDelay);
                     }
-                } else if (newArgs[1].equalsIgnoreCase("erupt:delay")) {
+                } else if (newArgs[1].equalsIgnoreCase("erupt:style")) {
                     if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) vent.erupt.settings.explosionDelay = Integer.parseInt(newArgs[2]);
-                        msg.info("erupt:delay - "+ vent.erupt.settings.explosionDelay);
+                        if (newArgs.length == 3) {
+                            VolcanoEruptStyle style = VolcanoEruptStyle.getVolcanoEruptStyle(newArgs[2]);
+                            if (style != null) vent.erupt.setStyle(style);
+                        }
+                        msg.info("erupt:style - "+ vent.erupt.getStyle().toString());
                     }
-                } else if (newArgs[1].equalsIgnoreCase("erupt:bombs:min")) {
+                } else if (newArgs[1].equalsIgnoreCase("erupt:autoconfig")) {
                     if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) vent.erupt.settings.minBombCount = Integer.parseInt(newArgs[2]);
-                        msg.info("erupt:bombs:min - "+ vent.erupt.settings.minBombCount);
+                        if (newArgs.length == 3 && newArgs[2].equalsIgnoreCase("confirm")) {
+                            vent.erupt.autoConfig();
+                            msg.info("erupt:autoconfig applied!");
+                        } else {
+                            msg.info("run erupt:autoconfig with confirm to apply autoconfig.");
+                        }
                     }
-                } else if (newArgs[1].equalsIgnoreCase("erupt:bombs:max")) {
+                } else if (newArgs[1].equalsIgnoreCase("explosion:delay")) {
                     if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) vent.erupt.settings.maxBombCount = Integer.parseInt(newArgs[2]);
-                        msg.info("erupt:bombs:max - "+ vent.erupt.settings.maxBombCount);
+                        if (newArgs.length == 3) vent.explosion.settings.explosionDelay = Integer.parseInt(newArgs[2]);
+                        msg.info("explosion:delay - "+ vent.explosion.settings.explosionDelay);
                     }
-                } else if (newArgs[1].equalsIgnoreCase("erupt:explosion:size")) {
+                } else if (newArgs[1].equalsIgnoreCase("explosion:bombs:min")) {
                     if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) vent.erupt.settings.explosionSize = Integer.parseInt(newArgs[2]);
-                        msg.info("erupt:explosion:size - "+ vent.erupt.settings.explosionSize);
+                        if (newArgs.length == 3) vent.explosion.settings.minBombCount = Integer.parseInt(newArgs[2]);
+                        msg.info("explosion:bombs:min - "+ vent.explosion.settings.minBombCount);
                     }
-                } else if (newArgs[1].equalsIgnoreCase("erupt:explosion:damagingSize")) {
+                } else if (newArgs[1].equalsIgnoreCase("explosion:bombs:max")) {
                     if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) vent.erupt.settings.damagingExplosionSize = Integer.parseInt(newArgs[2]);
-                        msg.info("erupt:explosion:damagingSize - "+ vent.erupt.settings.damagingExplosionSize);
+                        if (newArgs.length == 3) vent.explosion.settings.maxBombCount = Integer.parseInt(newArgs[2]);
+                        msg.info("explosion:bombs:max - "+ vent.explosion.settings.maxBombCount);
+                    }
+                } else if (newArgs[1].equalsIgnoreCase("explosion:explosion:size")) {
+                    if (newArgs.length >= 2) {
+                        if (newArgs.length == 3) vent.explosion.settings.explosionSize = Integer.parseInt(newArgs[2]);
+                        msg.info("explosion:explosion:size - "+ vent.explosion.settings.explosionSize);
+                    }
+                } else if (newArgs[1].equalsIgnoreCase("explosion:explosion:damagingSize")) {
+                    if (newArgs.length >= 2) {
+                        if (newArgs.length == 3) vent.explosion.settings.damagingExplosionSize = Integer.parseInt(newArgs[2]);
+                        msg.info("explosion:explosion:damagingSize - "+ vent.explosion.settings.damagingExplosionSize);
                     }
                 } else if (newArgs[1].equalsIgnoreCase("vent:craterRadius")) {
                     if (newArgs.length >= 2) {
@@ -349,9 +279,22 @@ public class VolcanoVentCommand {
                 } else if (newArgs[1].equalsIgnoreCase("vent:fissureAngle")) {
                     if (newArgs.length >= 2) {
                         if (newArgs.length == 3) {
-                            vent.fissureAngle = Double.parseDouble(newArgs[2]);                            vent.cachedVentBlocks = null;
+                            if (newArgs[2].equalsIgnoreCase("get")) {
+                                if (sender instanceof Player) {
+                                    Player player = (Player) sender;
+    
+                                    float yaw = player.getLocation().getYaw();
+                                    yaw = (yaw % 360 + 360) % 360;
+                                    
+                                    vent.fissureAngle = Math.toRadians(yaw);
+                                }
+                            } else {
+                                vent.fissureAngle = Double.parseDouble(newArgs[2]);
+                            }
+
                             vent.cachedVentBlocks = null;
                         }
+                        
                         msg.info("vent:fissureAngle - "+ vent.fissureAngle);
                     }
                 } else if (newArgs[1].equalsIgnoreCase("vent:fissureLength")) {
@@ -367,6 +310,14 @@ public class VolcanoVentCommand {
                         if (newArgs.length == 3) {
                             VolcanoVentType type = VolcanoVentType.fromString(newArgs[2]);
                             vent.setType(type);
+                            if (sender instanceof Player) {
+                                Player player = (Player) sender;
+
+                                float yaw = player.getLocation().getYaw();
+                                yaw = (yaw % 360 + 360) % 360;
+                                
+                                vent.fissureAngle = Math.toRadians(yaw);
+                            }
                             vent.cachedVentBlocks = null;
                         }
                         msg.info("vent:type - "+ vent.getType().toString());
@@ -397,10 +348,13 @@ public class VolcanoVentCommand {
             case INFO:
             default:
                 sender.sendMessage(ChatColor.RED+""+ChatColor.BOLD+"[Typhon Plugin] "+ChatColor.GOLD+"Volcano Vent Info");
+
                 msg.info("Location: "+ TyphonUtils.blockLocationTostring(vent.location.getBlock()));
                 msg.info("Summit  : "+ TyphonUtils.blockLocationTostring(vent.getSummitBlock()));
-                msg.info("LavaFlow: "+ vent.isFlowingLava()+" @ "+String.format("%.2f",vent.longestFlowLength)+"m");
-                msg.info("Erupting: "+ vent.isErupting()+" @ "+String.format("%.2f",vent.bombs.maxDistance)+"m");
+                msg.info("Eruption: "+ (vent.erupt.isErupting() ? ChatColor.RED + "true" : ChatColor.AQUA + "false" ));
+                msg.info(" - Style: "+ (vent.erupt.getStyle().toString()));
+                msg.info(" - Lava : "+ vent.isFlowingLava()+" @ "+String.format("%.2f",vent.longestFlowLength)+"m");
+                msg.info(" - Bomb : "+ vent.isExploding()+" @ "+String.format("%.2f",vent.bombs.maxDistance)+"m");
                 msg.info("Radius  : "+ vent.getRadius());
                 msg.info("Status  : "+vent.volcano.manager.getVentChatColor(vent)+vent.status.toString());
                 msg.info("C.Ejecta: "+vent.record.currentEjectaVolume+" blocks (VEI: "+TyphonUtils.getVEIScale(vent.record.currentEjectaVolume)+")");

@@ -28,7 +28,9 @@ public class VolcanoLavaCoolData {
 
     public VolcanoLavaCoolData(Block source, Block fromBlock, Block block, VolcanoVent flowedFromVent,
             Material material, int ticks) {
-        this.source = source;
+        if (source == null) this.source = block;
+        else this.source = source;
+
         this.ticks = ticks;
         this.fromBlock = fromBlock;
         this.block = block;
@@ -42,7 +44,7 @@ public class VolcanoLavaCoolData {
 
         if (this.flowedFromVent.lavaFlow.settings.silicateLevel < 0.68) {
             this.runExtensionCount = (int) Math.min(Math.max(
-                    Math.floor((0.68 - this.flowedFromVent.lavaFlow.settings.silicateLevel) / 0.01),
+                    Math.floor((0.68 - this.flowedFromVent.lavaFlow.settings.silicateLevel) * 100),
                     0.0) * (Math.random() + 1.0), 25.0);
         }
     }
@@ -73,15 +75,20 @@ public class VolcanoLavaCoolData {
             BlockData bd = block.getBlockData();
             if (bd instanceof Levelled && this.flowedFromVent != null) {
                 Levelled levelBd = (Levelled) bd;
-                if ((block.getWorld().getEnvironment() != Environment.NETHER && levelBd.getLevel() == 6)
-                        || (block.getWorld().getEnvironment() == Environment.NETHER && levelBd.getLevel() == 7)) {
-                    if (fromBlock != null) {
-                        block.setType(material);
+                if (fromBlock != null && levelBd.getLevel() != 0) {
+                    block.setType(material);
+                    Location flowVector = block.getLocation().subtract(fromBlock.getLocation());
+                    
+                    if (flowVector.getBlockY() == 0) {
+                        BlockFace[] flowableFaces = {
+                            BlockFace.DOWN,
+                            BlockFace.EAST,
+                            BlockFace.WEST,
+                            BlockFace.NORTH,
+                        };
 
-                        Location flowVector = block.getLocation().subtract(fromBlock.getLocation());
-
-                        if (flowVector.getBlockY() == 0) {
-                            Block flowDirectionBlock = block.getLocation().add(flowVector).getBlock();
+                        for (BlockFace bf : flowableFaces) {
+                            Block flowDirectionBlock = block.getRelative(bf);
                             if (flowDirectionBlock.getType().isAir()) {
                                 this.flowedFromVent.lavaFlow.cachedLavaCoolHashMap.put(
                                     block,
@@ -97,41 +104,42 @@ public class VolcanoLavaCoolData {
                                             false,
                                             this.runExtensionCount - 1));
                             }
-                        } else if (flowVector.getBlockY() == -1) {
-                            Block flowDirectionBlock = block.getLocation().add(flowVector).getBlock();
-                            Block bottomBlock = flowDirectionBlock.getRelative(BlockFace.DOWN);
+                        }
+                    } else if (flowVector.getBlockY() == -1) {
+                        Block flowDirectionBlock = block.getLocation().add(flowVector).getBlock();
+                        Block bottomBlock = flowDirectionBlock.getRelative(BlockFace.DOWN);
 
-                            if (!bottomBlock.getType().isAir()) {
-                                flowDirectionBlock.setType(VolcanoComposition.getExtrusiveRock(this.flowedFromVent.lavaFlow.settings.silicateLevel));
-                            }
+                        if (!bottomBlock.getType().isAir()) {
+                            flowDirectionBlock.setType(VolcanoComposition.getExtrusiveRock(this.flowedFromVent.lavaFlow.settings.silicateLevel));
+                        }
 
-                            for (int x = -1; x <= 1; x++) {
-                                for (int z = -1; z <= 1; z++) {
-                                    if (x == 0 && z == 0) continue;
-                                    Block targetBlock = block.getRelative(x, 0, z);
-                                    if (targetBlock.getType().isAir()) {
-                                        this.flowedFromVent.lavaFlow.cachedLavaCoolHashMap.put(
-                                            block,
-                                            new VolcanoLavaCoolData(
-                                                    source,
-                                                    block,
-                                                    targetBlock,
-                                                    this.flowedFromVent,
-                                                    VolcanoComposition.getExtrusiveRock(
-                                                            this.flowedFromVent.lavaFlow.settings.silicateLevel),
-                                                    this.flowedFromVent.lavaFlow.settings.flowed
-                                                            * this.flowedFromVent.lavaFlow.getTickFactor(),
-                                                    false
-                                        ));
-                                    }
+                        for (int x = -1; x <= 1; x++) {
+                            for (int z = -1; z <= 1; z++) {
+                                if (x == 0 && z == 0) continue;
+                                Block targetBlock = block.getRelative(x, 0, z);
+                                if (targetBlock.getType().isAir()) {
+                                    this.flowedFromVent.lavaFlow.cachedLavaCoolHashMap.put(
+                                        block,
+                                        new VolcanoLavaCoolData(
+                                                source,
+                                                block,
+                                                targetBlock,
+                                                this.flowedFromVent,
+                                                VolcanoComposition.getExtrusiveRock(
+                                                        this.flowedFromVent.lavaFlow.settings.silicateLevel),
+                                                this.flowedFromVent.lavaFlow.settings.flowed
+                                                        * this.flowedFromVent.lavaFlow.getTickFactor(),
+                                                false
+                                    ));
                                 }
                             }
                         }
-                    } else {
-                        this.flowedFromVent.volcano.logger.log(VolcanoLogClass.LAVA_FLOW,
-                                "Extend failed due to missing fromBlock!");
                     }
+                } else {
+                    this.flowedFromVent.volcano.logger.log(VolcanoLogClass.LAVA_FLOW,
+                            "Extend failed due to missing fromBlock!");
                 }
+            
             }
         }
 

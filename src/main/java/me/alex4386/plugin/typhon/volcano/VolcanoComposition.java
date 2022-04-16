@@ -70,7 +70,7 @@ public class VolcanoComposition {
             return Material.TUFF;
         }
 
-        if (silicateLevel < 0.56) {
+        if (silicateLevel < 0.57) {
             double s = random.nextDouble();
 
             // bunch of scoria
@@ -89,7 +89,7 @@ public class VolcanoComposition {
 
             double s = random.nextDouble();
             if (s > ratio) {
-                return getBombRock(0.59);
+                return getBombRock(0.56);
             } else {
                 return getBombRock(0.61);
             }

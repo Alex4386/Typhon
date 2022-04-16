@@ -4,6 +4,7 @@ import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
+import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombListener;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
@@ -67,13 +68,13 @@ public class VolcanoLavaFlow implements Listener {
         if (lavaFlowScheduleId == -1) {
             this.vent.volcano.logger.log(VolcanoLogClass.LAVA_FLOW, "Intializing lava flow scheduler of VolcanoLavaFlow for vent "+vent.getName());
             lavaFlowScheduleId = TyphonPlugin.plugin.getServer().getScheduler().scheduleSyncRepeatingTask(TyphonPlugin.plugin, () -> {
-                if (settings.enabled && settings.flowing) autoFlowLava();
+                if (settings.flowing) autoFlowLava();
             },0L,(long)getVolcano().updateRate);
         }
         if (lavaCoolScheduleId == -1) {
             this.vent.volcano.logger.log(VolcanoLogClass.LAVA_FLOW, "Intializing lava cooldown scheduler of VolcanoLavaFlow for vent "+vent.getName());
             lavaCoolScheduleId = TyphonPlugin.plugin.getServer().getScheduler().scheduleSyncRepeatingTask(TyphonPlugin.plugin, () -> {
-                if (settings.enabled) runCooldownTick();
+                runCooldownTick();
             },0L,(long)getVolcano().updateRate);
         }
     }
@@ -168,13 +169,9 @@ public class VolcanoLavaFlow implements Listener {
         if (data != null) {
             if (this.vent != null && !data.isBomb && data.source != null) {
                 double distance;
-                if (this.vent.getType() == VolcanoVentType.FISSURE) {
-                    distance = TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), block.getLocation());
-                } else {
-                    distance = TyphonUtils.getTwoDimensionalDistance(vent.location, block.getLocation());
-                }
+                distance = TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), block.getLocation());
 
-                if (distance > vent.longestFlowLength && !data.isBomb) {
+                if (distance > vent.longestFlowLength) {
                     vent.longestFlowLength = distance;
                     vent.getVolcano().trySave();
                 }
@@ -211,6 +208,9 @@ public class VolcanoLavaFlow implements Listener {
                 if (Arrays.asList(VolcanoLavaFlowExplode.water).contains(nearByBlock.getType())) {
                     TyphonUtils.createRisingSteam(nearByBlock.getLocation(), 1, 2);
                     nearByBlock.getWorld().playSound(nearByBlock.getLocation(), Sound.BLOCK_LAVA_EXTINGUISH, 1f, 0f);
+
+                    VolcanoBombListener.lavaSplashExplosions.put(block, vent);
+                    nearByBlock.getWorld().createExplosion(block.getLocation(), 4f, false);
                 } else {
                     getVolcano().metamorphism.metamorphoseBlock(nearByBlock);
                 }
@@ -233,7 +233,7 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void registerLavaCoolData(Block block, boolean isBomb) {
-        this.registerLavaCoolData(null, null, block, isBomb, -1);
+        this.registerLavaCoolData(block, block, block, isBomb, -1);
     }
 
     public void registerLavaCoolData(Block source, Block fromBlock, Block block) {
@@ -296,36 +296,18 @@ public class VolcanoLavaFlow implements Listener {
     public void flowLava(Block whereToFlow) {
         World world = whereToFlow.getWorld();
 
-        Location volcanicPlug = TyphonUtils.getHighestLocation(vent.location).add(0,1,0);
-
-        if (vent.getType() != VolcanoVentType.FISSURE) {
-            Vector vector = TyphonUtils.calculateVelocity(
-                new Vector(0, 0, 0),
-                whereToFlow.getLocation().toVector().subtract(volcanicPlug.toVector()),
+        world.spawnParticle(
+                Particle.SMOKE_LARGE,
+                whereToFlow.getLocation(),
                 10
-            );
-
-            world.spawnParticle(
-                    Particle.FLAME,
-                    volcanicPlug,
-                    0,
-                    vector.getX(),
-                    vector.getY(),
-                    vector.getZ()
-            );
-        } else {
-            world.spawnParticle(
-                    Particle.FLAME,
-                    whereToFlow.getLocation(),
-                    10
-            );
-        }
+        );
         
         world.spawnParticle(
                 Particle.LAVA,
                 whereToFlow.getLocation(),
                 10
         );
+
         world.playSound(
                 whereToFlow.getLocation(),
                 Sound.BLOCK_LAVA_POP,
@@ -427,14 +409,12 @@ public class VolcanoLavaFlow implements Listener {
 class VolcanoLavaFlowDefaultSettings {
     public static boolean enabled = true;
 
-    public static int flowed = 5;
-    public static int delayFlowed = 10;
+    public static int flowed = 3;
+    public static int delayFlowed = 5;
 
     public static void importConfig(JSONObject configData) {
         VolcanoLavaFlowSettings settings = new VolcanoLavaFlowSettings();
         settings.importConfig(configData);
-
-        enabled = settings.enabled;
 
         flowed = settings.flowed;
         delayFlowed = settings.delayFlowed;

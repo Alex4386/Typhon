@@ -2,9 +2,7 @@ package me.alex4386.plugin.typhon.volcano.lavaflow;
 
 import org.json.simple.JSONObject;
 
-public
-class VolcanoLavaFlowSettings {
-    public boolean enabled = VolcanoLavaFlowDefaultSettings.enabled;
+public class VolcanoLavaFlowSettings {
     public boolean flowing = false;
 
     public int flowed = VolcanoLavaFlowDefaultSettings.flowed;
@@ -13,7 +11,6 @@ class VolcanoLavaFlowSettings {
     public double silicateLevel = 0.63;
 
     public void importConfig(JSONObject configData) {
-        this.enabled = (boolean) configData.get("enabled");
         this.flowing = (boolean) configData.get("flowing");
 
         this.flowed = (int) (long) configData.get("flowed");
@@ -25,7 +22,6 @@ class VolcanoLavaFlowSettings {
     public JSONObject exportConfig() {
         JSONObject configData = new JSONObject();
 
-        configData.put("enabled", this.enabled);
         configData.put("flowing", this.flowing);
 
         configData.put("flowed", this.flowed);

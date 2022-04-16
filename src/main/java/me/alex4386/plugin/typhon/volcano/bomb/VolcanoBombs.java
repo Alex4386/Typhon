@@ -5,6 +5,7 @@ import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
+import me.alex4386.plugin.typhon.volcano.utils.VolcanoCircleOffsetXZ;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -24,9 +25,6 @@ public class VolcanoBombs {
     public float minBombPower = VolcanoBombsDefault.minBombPower;
     public float maxBombPower = VolcanoBombsDefault.maxBombPower;
 
-    public float minBombLaunchPower = VolcanoBombsDefault.minBombLaunchPower;
-    public float maxBombLaunchPower = VolcanoBombsDefault.maxBombLaunchPower;
-
     public int minBombRadius = VolcanoBombsDefault.minBombRadius;
     public int maxBombRadius = VolcanoBombsDefault.maxBombRadius;
 
@@ -41,36 +39,11 @@ public class VolcanoBombs {
                 new Vector(0, 0, vent.craterRadius),
                 4
         );
-        this.minBombLaunchPower = vector.getBlockZ();
-    }
-
-    public void launchBomb(Location location, double bombLaunchPower, float bombPower, int bombRadius, int bombDelay) {
-        Random random = new Random();
-
-        // get random radian angle
-        double randomAngle = Math.random() * Math.PI * 2;
-
-        // super power ratio
-        double powerRatioX = Math.sin(randomAngle);
-        double powerRatioZ = Math.cos(randomAngle);
-
-        float powerX = (float) (bombLaunchPower * powerRatioX);
-        float powerZ = (float) (bombLaunchPower * powerRatioZ);
-
-        int launchY = 15;
-        float powerY = (random.nextFloat() * (float) 1.5) + ((launchY + 4 - 9) / (float) 25.0) + 3f;
-
-        bombRadius = (bombRadius < 1) ? 1 : bombRadius;
-
-        VolcanoBomb bomb = new VolcanoBomb(vent, location, powerX, powerY, powerZ, bombPower, bombRadius, bombDelay);
-
-        bombMap.put(bomb.block, bomb);
     }
 
     public void launchBombToDestination(Location location, Location destination, float bombPower, int bombRadius, int bombDelay) {
-
         int maxY = vent.getSummitBlock().getY();
-        int yToLaunch = maxY - vent.location.getWorld().getHighestBlockYAt(vent.location);
+        int yToLaunch = maxY - location.getWorld().getHighestBlockYAt(location);
 
         Vector vector = TyphonUtils.calculateVelocity(
                 new Vector(0,0,0),
@@ -84,30 +57,29 @@ public class VolcanoBombs {
     }
 
     public void launchBomb(Location hostLocation) {
-        Random random = new Random();
+        double multiplier = this.vent.erupt.bombMultiplier();
+        if (multiplier < 0) return;
 
-        double volcanoHeight = vent.averageVentHeight() - vent.location.getY();
-        double volcanoMax = Math.min(vent.location.getWorld().getMaxHeight() - vent.location.getY(), 150.0);
-        float volcanoScaleVar = Math.min(1, (float) (volcanoHeight / volcanoMax));
+        double maxRadius = (1.25 + (Math.random() * 1.0)) * hostLocation.getWorld().getHighestBlockYAt(hostLocation) * multiplier;
+        double minRadius = Math.min(vent.craterRadius, 20);
 
-        // calculate maximum power
-        double maxPower = 20.0 * (this.vent.longestFlowLength / 150);
+        VolcanoCircleOffsetXZ offsetXZ = VolcanoMath.getCenterFocusedCircleOffset(hostLocation.getBlock(), (int) maxRadius, (int) minRadius);
+        Block destination = hostLocation.getBlock().getRelative((int) offsetXZ.x, 0, (int) offsetXZ.z);
 
-        double minBombLaunchPower = this.minBombLaunchPower * volcanoScaleVar;
-        double maxBombLaunchPower = Math.max(this.maxBombLaunchPower, maxPower);
+        float bombPower = (float) VolcanoMath.getZeroFocusedRandom(0) * (maxBombPower - minBombPower) + minBombPower;
+        int bombRadius = (int) (Math.floor(VolcanoMath.getZeroFocusedRandom() * (maxBombRadius - minBombRadius)) + minBombRadius);
 
-        double bombLaunchPower = (((maxBombLaunchPower - minBombLaunchPower) * Math.random()) + minBombLaunchPower);
-        float bombPower = (float) VolcanoMath.getZeroFocusedRandom() * (maxBombPower - minBombPower) + minBombPower;
-        int bombRadius = (int) ((Math.floor(random.nextDouble() * (maxBombRadius - minBombRadius)) * volcanoScaleVar) + minBombRadius);
+        this.launchBombToDestination(hostLocation, destination.getLocation(), bombPower, bombRadius, bombDelay);
+    }
 
-        launchBomb(hostLocation, bombLaunchPower, bombPower, bombRadius, this.bombDelay);
+    public void launchbomb() {
+        this.launchBomb(this.getLaunchLocation());
     }
 
     public Location getLaunchLocation() {
         Location hostLocation;
         if (vent.getType() == VolcanoVentType.FISSURE) {
-            Block whereToFlow = vent.selectCoreBlock();
-            hostLocation = whereToFlow.getLocation();
+            hostLocation = TyphonUtils.getHighestLocation(this.vent.selectCoreBlock().getLocation());
         } else {
             int theY = Math.max(vent.getSummitBlock().getY(), vent.location.getBlockY());
             hostLocation = new Location(vent.location.getWorld(), vent.location.getX(), theY, vent.location.getZ());
@@ -206,13 +178,10 @@ public class VolcanoBombs {
 
     public void importConfig(JSONObject configData) {
         JSONObject bombPower = (JSONObject) configData.get("explosionPower");
-        JSONObject bombLaunchPower = (JSONObject) configData.get("launchPower");
         JSONObject bombRadius = (JSONObject) configData.get("radius");
 
         minBombPower = (float) ((double) bombPower.get("min"));
         maxBombPower = (float) ((double) bombPower.get("max"));
-        minBombLaunchPower = (float) ((double) bombLaunchPower.get("min"));
-        maxBombLaunchPower = (float) ((double) bombLaunchPower.get("max"));
         minBombRadius = (int) ((long) bombRadius.get("min"));
         maxBombRadius = (int) ((long) bombRadius.get("max"));
         bombDelay = (int) ((long) configData.get("delay"));
@@ -226,16 +195,11 @@ public class VolcanoBombs {
         bombPower.put("min", minBombPower);
         bombPower.put("max", maxBombPower);
 
-        JSONObject bombLaunchPower = new JSONObject();
-        bombLaunchPower.put("min", minBombLaunchPower);
-        bombLaunchPower.put("max", maxBombLaunchPower);
-
         JSONObject bombRadius = new JSONObject();
         bombRadius.put("min", minBombRadius);
         bombRadius.put("max", maxBombRadius);
 
         configData.put("explosionPower", bombPower);
-        configData.put("launchPower", bombLaunchPower);
         configData.put("radius", bombRadius);
         configData.put("delay", bombDelay);
         configData.put("maxDistance", maxDistance);

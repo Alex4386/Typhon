@@ -6,6 +6,7 @@ import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
+import org.apache.logging.log4j.core.Version;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -124,10 +125,6 @@ public class VolcanoGeoThermal implements Listener {
 
                                             if (Math.random() < vent.status.getScaleFactor() && vent.getHeatValue(location) > 0.999) {
                                                 int count = Math.abs((int) (volcano.manager.getHeatValue(location) - 0.999) * 1000) * 20;
-                                                vent.location.getWorld().spawnParticle(
-                                                        Particle.LAVA,
-                                                        vent.getType() == VolcanoVentType.FISSURE ? vent.selectCraterBlock().getLocation() : location,
-                                                        count);
 
                                                 Entity[] entities = location.getChunk().getEntities();
                                                 for (Entity entity : entities) {
@@ -219,6 +216,14 @@ public class VolcanoGeoThermal implements Listener {
                 if (event.getPlayer().getInventory().getItemInMainHand().getType() == bucket) {
                     event.getPlayer().getInventory().getItemInMainHand().setType(Material.BUCKET);
                 }
+            }
+        }
+
+        // temp lava flow handler
+        if (bucket == Material.LAVA_BUCKET) {
+            VolcanoVent vent = volcano.manager.getNearestVent(targetBlock);
+            if (vent.isInLavaFlow(loc)) {
+                vent.lavaFlow.registerLavaCoolData(targetBlock, false);
             }
         }
     }

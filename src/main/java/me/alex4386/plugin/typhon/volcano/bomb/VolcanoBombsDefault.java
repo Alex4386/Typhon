@@ -6,9 +6,6 @@ public class VolcanoBombsDefault {
     public static float minBombPower = 2.0f;
     public static float maxBombPower = 4.0f;
 
-    public static float minBombLaunchPower = 1.0f;
-    public static float maxBombLaunchPower = 14.0f;
-
     public static int minBombRadius = 1;
     public static int maxBombRadius = 2;
 
@@ -20,8 +17,6 @@ public class VolcanoBombsDefault {
 
         minBombPower = bombs.minBombPower;
         maxBombPower = bombs.maxBombPower;
-        minBombLaunchPower = bombs.minBombLaunchPower;
-        maxBombLaunchPower = bombs.maxBombLaunchPower;
         minBombRadius = bombs.minBombRadius;
         maxBombRadius = bombs.maxBombRadius;
         bombDelay = bombs.bombDelay;
@@ -34,8 +29,6 @@ public class VolcanoBombsDefault {
 
         bombs.minBombPower = minBombPower;
         bombs.maxBombPower = maxBombPower;
-        bombs.minBombLaunchPower = minBombLaunchPower;
-        bombs.maxBombLaunchPower = maxBombLaunchPower;
         bombs.minBombRadius = minBombRadius;
         bombs.maxBombRadius = maxBombRadius;
 
