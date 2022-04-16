@@ -44,14 +44,3 @@ jobs:
     - name: Run Deploy
       run: |
         ./deploy.sh
-    - name: Reading secret to update
-      id: secretrdr
-      uses: juliangruber/read-file-action@v1
-      with:
-        path: ./.deploy/.secrets.json
-    - uses: hmanzur/actions-set-secret@v2.0.0
-      with:
-        name: 'MINEHUB_SECRETS'
-        value: ${{ steps.secretrdr.outputs.content }}
-        repository: hmanzur/actions-set-secret
-        token: ${{ secrets.GITHUB_TOKEN }}
