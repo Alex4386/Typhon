@@ -279,11 +279,11 @@ public class VolcanoVentCommand {
                 } else if (newArgs[1].equalsIgnoreCase("vent:fissureAngle")) {
                     if (newArgs.length >= 2) {
                         if (newArgs.length == 3) {
-                            if (newArgs[2].equalsIgnoreCase("get")) {
+                            if (newArgs[2].equalsIgnoreCase("get") || newArgs[2].equalsIgnoreCase("auto")) {
                                 if (sender instanceof Player) {
                                     Player player = (Player) sender;
     
-                                    float yaw = player.getLocation().getYaw();
+                                    float yaw = -1 * player.getLocation().getYaw();
                                     yaw = (yaw % 360 + 360) % 360;
                                     
                                     vent.fissureAngle = Math.toRadians(yaw);
@@ -295,7 +295,7 @@ public class VolcanoVentCommand {
                             vent.cachedVentBlocks = null;
                         }
                         
-                        msg.info("vent:fissureAngle - "+ vent.fissureAngle);
+                        msg.info("vent:fissureAngle - "+ vent.fissureAngle + " ("+Math.toDegrees(vent.fissureAngle)+" deg)");
                     }
                 } else if (newArgs[1].equalsIgnoreCase("vent:fissureLength")) {
                     if (newArgs.length >= 2) {

@@ -58,7 +58,7 @@ public enum VolcanoEruptStyle {
         this.aliases = aliases;
 
         this.causeType = causeType;
-        this.flowLava = false;
+        this.flowLava = flowLava;
     }
 
     public static VolcanoEruptStyle getVolcanoEruptStyle(String name) {

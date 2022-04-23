@@ -4,6 +4,7 @@ import org.json.simple.JSONObject;
 
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
 public class VolcanoErupt {
     VolcanoVent vent;
@@ -36,7 +37,8 @@ public class VolcanoErupt {
     public void autoConfig() {
         if (this.style == VolcanoEruptStyle.HAWAIIAN) {
             this.vent.lavaFlow.settings.silicateLevel = 0.45 + (Math.random() * (0.52 - 0.45));
-            this.vent.lavaFlow.settings.flowed = 7;
+            this.vent.lavaFlow.settings.flowed = 10;
+            this.vent.lavaFlow.settings.delayFlowed = 14;
             this.vent.explosion.enabled = false;
 
         } else {
@@ -68,6 +70,18 @@ public class VolcanoErupt {
                 
             } else {}
         }
+    }
+
+    public void updateVentConfig() {
+        if (this.vent == null) return;
+
+        if (this.style == VolcanoEruptStyle.HAWAIIAN || this.style == VolcanoEruptStyle.STROMBOLIAN) {
+            if (this.vent.getType() == VolcanoVentType.FISSURE) {
+                this.vent.fissureLength = (int) Math.max(this.vent.longestFlowLength * 2, this.vent.fissureLength);
+                this.vent.flushCache();
+            }
+        }
+
     }
 
     public double bombMultiplier() {

@@ -75,7 +75,7 @@ public class VolcanoLavaCoolData {
             BlockData bd = block.getBlockData();
             if (bd instanceof Levelled && this.flowedFromVent != null) {
                 Levelled levelBd = (Levelled) bd;
-                if (fromBlock != null && levelBd.getLevel() != 0) {
+                if (fromBlock != null && 4 <= levelBd.getLevel() && levelBd.getLevel() < 8) {
                     block.setType(material);
                     Location flowVector = block.getLocation().subtract(fromBlock.getLocation());
                     
@@ -136,8 +136,6 @@ public class VolcanoLavaCoolData {
                         }
                     }
                 } else {
-                    this.flowedFromVent.volcano.logger.log(VolcanoLogClass.LAVA_FLOW,
-                            "Extend failed due to missing fromBlock!");
                 }
             
             }

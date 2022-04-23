@@ -31,15 +31,7 @@ public class VolcanoMetamorphism {
         boolean isExtrusive = block.getLocation().getBlockY() < (surfaceY - 5);
 
         if (block.getType().isBurnable()) {
-            material = Material.LAVA;
-            VolcanoVent vent = this.volcano.manager.getNearestVent(block);
-            
-            if (vent != null) {
-                VolcanoBombListener.lavaSplashExplosions.put(block, vent);
-                block.setType(VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
-            }
-
-            block.getWorld().createExplosion(block.getLocation(), 4f, false);
+            block.setType(Material.AIR);
         } else {
             String blockTypeName = material.name().toLowerCase();
 

@@ -288,6 +288,7 @@ public class VolcanoLavaFlow implements Listener {
 
     public void flowLava() {
         Block whereToFlow = vent.requestFlow();
+
         if (whereToFlow != null) {
             flowLava(whereToFlow);
         }
@@ -317,6 +318,10 @@ public class VolcanoLavaFlow implements Listener {
 
         whereToFlow.setType(Material.LAVA);
         registerLavaCoolData(whereToFlow, false);
+
+        if (this.vent != null && this.vent.erupt != null) {
+            this.vent.erupt.updateVentConfig();
+        }
     }
 
     public void autoFlowLava() {
