@@ -66,7 +66,7 @@ public class VolcanoGeoThermal implements Listener {
                             for (VolcanoVent vent : volcano.manager.getVents()) {
                                 if (vent.enabled) {
 
-                                    int geothermalRange = (vent.longestFlowLength <= 50) ? 50 : (int) vent.longestFlowLength + 100;
+                                    int geothermalRange = Math.max(50, (int) (vent.craterRadius * 2.5));
 
                                     for (int i = 0; i < vent.status.getScaleFactor() * Math.pow(geothermalRange / 50, 1 + (1.2 * vent.status.getScaleFactor())); i++) {
                                         Block block;

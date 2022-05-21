@@ -16,6 +16,7 @@ public enum VolcanoVentCommandAction {
     INFO("info", "", "shows the information menu"),
     SUMMIT("summit", "", "get navigation to summit"),
     QUICK_COOL("quickcool", "", "cool all lava from this vent"),
+    LAVA_DOME("lavadome", "<start/stop/explode>", "start/stop building or explode this lavadome"),
     TREMOR("tremor", "<? power>", "create volcano tremor"),
     STATUS("status", "<? status>", "get/set status of this vent"),
     TELEPORT("teleport", "", "teleport to this vent"),

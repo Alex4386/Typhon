@@ -4,8 +4,6 @@ import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
-import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
-import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
 import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoLavaFlow;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;

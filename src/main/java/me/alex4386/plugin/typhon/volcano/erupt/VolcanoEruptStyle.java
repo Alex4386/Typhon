@@ -25,7 +25,7 @@ public enum VolcanoEruptStyle {
 
     // no lava overflow + caldera + top collapse + (granite) rhyolite volcano bombs (A LOT)
     // **RAINING TUFF**
-    PLINIAN("plinian", new String[]{"vesuvian"}, VolcanoEruptCauseType.MAGMATIC, false),
+    PLINIAN("plinian", new String[]{"vesuvian"}, VolcanoEruptCauseType.MAGMATIC),
 
     // slight lava flow (-> basalt + andesite) + volcano bombs (TUFF)
     // water vapor + ash jet
@@ -43,22 +43,22 @@ public enum VolcanoEruptStyle {
     String rawType;
     String[] aliases;
     VolcanoEruptCauseType causeType;
-    boolean flowLava;
+    boolean lavaFlow;
 
     VolcanoEruptStyle(String rawType, String[] aliases, VolcanoEruptCauseType causeType) {
         this(rawType, aliases, causeType, true);
 
         if (causeType == VolcanoEruptCauseType.PHREATIC) {
-            this.flowLava = false;
+            this.lavaFlow = false;
         }
     }
 
-    VolcanoEruptStyle(String rawType, String[] aliases, VolcanoEruptCauseType causeType, boolean flowLava) {
+    VolcanoEruptStyle(String rawType, String[] aliases, VolcanoEruptCauseType causeType, boolean lavaFlow) {
         this.rawType = rawType;
         this.aliases = aliases;
 
         this.causeType = causeType;
-        this.flowLava = flowLava;
+        this.lavaFlow = lavaFlow;
     }
 
     public static VolcanoEruptStyle getVolcanoEruptStyle(String name) {
@@ -86,6 +86,10 @@ public enum VolcanoEruptStyle {
         }
 
         return false;
+    }
+
+    public boolean flowsLava() {
+        return (!this.lavaFlow && this.causeType != VolcanoEruptCauseType.PHREATIC);
     }
 
 

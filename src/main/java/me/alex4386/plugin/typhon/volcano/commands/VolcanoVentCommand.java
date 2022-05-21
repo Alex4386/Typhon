@@ -184,7 +184,31 @@ public class VolcanoVentCommand {
                 }
                 msg.info("Vent Status: "+vent.volcano.manager.getVentChatColor(vent)+vent.status.toString());
                 break;
+            case LAVA_DOME:
+                if (newArgs.length <= 1) {
+                    msg.error("Invalid usage");
+                    return true;
+                }
 
+                String domeAction = newArgs[1];
+                if (domeAction.equalsIgnoreCase("start")) {
+                    vent.stop();
+                    if (vent.status.getScaleFactor() < 0.5) vent.status = VolcanoVentStatus.MAJOR_ACTIVITY;
+                    vent.lavadome.start();
+                    msg.info("Lavadome eruption started.");
+                } else if (domeAction.equalsIgnoreCase("stop")) {
+                    vent.lavadome.stop();
+                    msg.info("Lavadome eruption stopped.");
+                } else if (domeAction.equalsIgnoreCase("build")) {
+                    msg.info("Forcing lavadome build....");
+                    vent.lavadome.build();
+                    msg.info("Lavadome build complete!");
+                } else if (domeAction.equalsIgnoreCase("explode")) {
+                    vent.lavadome.explode();
+                    vent.start();
+                    msg.info("Lavadome has just exploded. Vent eruption was automatically triggered.");
+                }
+                break;
             case CONFIG:
                 if (newArgs.length < 2) {
                     msg.error("Invalid usage");

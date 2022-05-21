@@ -5,6 +5,7 @@ import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.ash.VolcanoAsh;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombs;
+import me.alex4386.plugin.typhon.volcano.dome.VolcanoLavaDome;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoErupt;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.explosion.VolcanoExplosion;
@@ -50,6 +51,7 @@ public class VolcanoVent {
     public VolcanoVentRecord record = new VolcanoVentRecord(this);
     public VolcanoErupt erupt = new VolcanoErupt(this);
     public VolcanoAsh ash = new VolcanoAsh(this);
+    public VolcanoLavaDome lavadome = new VolcanoLavaDome(this);
 
     public VolcanoVent(Volcano volcano) {
         this.volcano = volcano;
@@ -95,6 +97,7 @@ public class VolcanoVent {
         explosion.initialize();
         lavaFlow.initialize();
         tremor.initialize();
+        lavadome.initialize();
 
         this.getVentBlocks();
 
@@ -117,6 +120,7 @@ public class VolcanoVent {
         tremor.shutdown();
         record.endEjectaTrack();
         bombs.shutdown();
+        lavadome.shutdown();
 
         volcano.logger.log(VolcanoLogClass.VENT, "Shutted down vent "+name);
     }
@@ -471,6 +475,7 @@ public class VolcanoVent {
         this.lavaFlow.importConfig((JSONObject) configData.get("lavaFlow"));
         this.record.importConfig((JSONObject) configData.get("record"));
         this.erupt.importConfig((JSONObject) configData.get("erupt"));
+        this.lavadome.importConfig((JSONObject) configData.get("lavaDome"));
         this.longestFlowLength = (double) configData.get("longestFlowLength");
     }
 
@@ -500,6 +505,9 @@ public class VolcanoVent {
 
         JSONObject lavaFlowConfig = this.lavaFlow.exportConfig();
         configData.put("lavaFlow", lavaFlowConfig);
+
+        JSONObject lavadomeConfig = this.lavadome.exportConfig();
+        configData.put("lavaDome", lavadomeConfig);
 
         JSONObject recordConfig = this.record.exportConfig();
         configData.put("record", recordConfig);

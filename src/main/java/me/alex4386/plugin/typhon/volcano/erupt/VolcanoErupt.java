@@ -19,7 +19,7 @@ public class VolcanoErupt {
     public void start() {
         if (this.erupting) return;
         
-        if (this.style.flowLava) {
+        if (this.style.flowsLava()) {
             this.startFlowingLava();
         }
         this.startExploding();

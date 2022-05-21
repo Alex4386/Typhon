@@ -127,7 +127,7 @@ public class VolcanoAsh {
 
             for (int i = 0; i < count * multiplier; i++) {
                 VolcanoCircleOffsetXZ xz = VolcanoMath.getCenterFocusedCircleOffset(loc.getBlock(), 0, (int) Math.round(this.vent.longestFlowLength * 0.5 * multiplier));
-                Location finalLoc = TyphonUtils.getHighestLocation(loc.add(xz.x, 0, xz.z)).add(0, 1, 0);
+                Location finalLoc = TyphonUtils.getHighestRocklikes(loc.add(xz.x, 0, xz.z)).getRelative(BlockFace.UP).getLocation();
 
                 TyphonUtils.spawnParticleWithVelocity(
                     Particle.CAMPFIRE_SIGNAL_SMOKE,
@@ -139,7 +139,7 @@ public class VolcanoAsh {
                     0
                 );
 
-                //finalLoc.add(0,1,0).getBlock().setType(Material.TUFF);
+                //finalLoc.getBlock().setType(Material.TUFF);
                 
             }
         }

@@ -2,13 +2,11 @@ package me.alex4386.plugin.typhon.volcano.commands;
 
 import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.Volcano;
-import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
-import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;

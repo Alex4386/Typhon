@@ -141,6 +141,7 @@ public class VolcanoBombListener implements Listener {
                 block.setType(Material.AIR);
             }
 
+            vent.record.addEjectaVolume(event.blockList().size());
             lavaSplashExplosions.remove(explosionTriggered.getBlock());
         }
     }
