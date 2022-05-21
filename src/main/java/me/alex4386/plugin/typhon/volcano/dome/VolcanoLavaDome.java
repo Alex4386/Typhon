@@ -23,7 +23,7 @@ public class VolcanoLavaDome {
     
     Location baseLocation = null;
 
-    boolean baseYDefined = false;
+    boolean baseYDefined = true;
     int baseY = 0;
 
     boolean isForming = false;
@@ -127,6 +127,7 @@ public class VolcanoLavaDome {
             if (increaseHeight) {
                 this.height += incrementAmount;
                 this.build();
+                this.vent.volcano.trySave();
             }
             this.flowLava();
         } else {
@@ -140,7 +141,10 @@ public class VolcanoLavaDome {
 
     public void move(Location location) {
         this.height = 0;
+        this.baseY = 0;
+        this.baseYDefined = false;
         this.baseLocation = TyphonUtils.getHighestRocklikes(vent.location).getLocation();
+        this.vent.volcano.trySave();
     }
 
     public void explode() {
