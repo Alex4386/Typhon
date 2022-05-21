@@ -20,7 +20,11 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
 public class VolcanoLavaDome {
     VolcanoVent vent;
-    Location baseLocation;
+    
+    Location baseLocation = null;
+
+    boolean baseYDefined = false;
+    int baseY = 0;
 
     boolean isForming = false;
 
@@ -35,7 +39,24 @@ public class VolcanoLavaDome {
 
     public VolcanoLavaDome(VolcanoVent vent) {
         this.vent = vent; 
-        this.baseLocation = TyphonUtils.getHighestRocklikes(vent.location).getLocation();
+        this.baseLocation = null;
+    }
+
+    public Location getLocation() {
+        if (this.baseLocation == null) {
+            if (this.vent.location != null && !this.baseYDefined) {
+                Block block = TyphonUtils.getHighestRocklikes(this.vent.location);
+                this.baseY = block.getY();
+                this.baseYDefined = true;
+
+                return new Location(this.vent.location.getWorld(), this.vent.location.getX(), this.baseY, this.vent.location.getZ());                
+            } else if (this.vent.location != null) {
+                return new Location(this.vent.location.getWorld(), this.vent.location.getX(), this.baseY, this.vent.location.getZ());
+            }
+            return null;
+        }
+
+        return this.baseLocation;
     }
 
     public boolean isForming() {
@@ -126,7 +147,7 @@ public class VolcanoLavaDome {
         this.stop();
         this.height = 0;
 
-        Block explosionBlock = this.baseLocation.add(0, (int) (height / 2), 0).getBlock();
+        Block explosionBlock = this.getLocation().add(0, (int) (height / 2), 0).getBlock();
         VolcanoBombListener.lavaSplashExplosions.put(explosionBlock, this.vent);
 
         explosionBlock.getWorld().createExplosion(explosionBlock.getLocation(), (float) this.calculateRadius(this.height) * 1.1f, true, true);
@@ -142,7 +163,7 @@ public class VolcanoLavaDome {
             int height = (int) this.getHeight(i);
 
             if (height > currentlyBuiltHeight) {
-                List<Block> cylinderBlocks = VolcanoMath.getCircle(this.baseLocation.getBlock().getRelative(0, height, 0), i);
+                List<Block> cylinderBlocks = VolcanoMath.getCircle(this.getLocation().getBlock().getRelative(0, height, 0), i);
                 for (Block block: cylinderBlocks) {
                     if (block.getType().isAir()) {
                         block.setType(VolcanoComposition.getExtrusiveRock(this.vent.lavaFlow.settings.silicateLevel));
@@ -159,7 +180,7 @@ public class VolcanoLavaDome {
 
     public void flowLava() {
         double radius = this.calculateRadius(this.height);
-        Block toFlowBottom = TyphonUtils.getRandomBlockInRange(this.baseLocation.getBlock(), (int) (radius * 0.2), (int) (radius * 0.95));
+        Block toFlowBottom = TyphonUtils.getRandomBlockInRange(this.getLocation().getBlock(), (int) (radius * 0.2), (int) (radius * 0.95));
         Block toFlow = TyphonUtils.getHighestRocklikes(toFlowBottom);
 
         this.vent.lavaFlow.flowLava(toFlow);
@@ -169,8 +190,14 @@ public class VolcanoLavaDome {
         this.height = (double) json.get("height");
         this.incrementAmount = (double) json.get("incrementAmount");
         this.isForming = (boolean) json.get("isForming");
-        this.baseLocation = TyphonUtils.deserializeLocationForJSON((JSONObject) json.get("baseLocation"));
         this.updateInterval = (int) json.get("updateInterval");
+
+        boolean baseYDefined = (boolean) json.get("baseYDefined");
+        if (baseYDefined) {
+            this.baseY = (int) json.get("baseY");
+        } else {
+            this.baseLocation = TyphonUtils.deserializeLocationForJSON((JSONObject) json.get("baseLocation"));
+        }
 
         return json;
     }
@@ -180,7 +207,15 @@ public class VolcanoLavaDome {
 
         json.put("height", this.height);
         json.put("isForming", this.isForming);
-        json.put("baseLocation", TyphonUtils.serializeLocationForJSON(this.baseLocation));
+
+        if (this.baseYDefined && this.baseLocation == null) {
+            json.put("baseYDefined", this.baseYDefined);
+            json.put("baseY", this.baseY);
+        } else {
+            json.put("baseYDefined", false);
+            json.put("baseLocation", TyphonUtils.serializeLocationForJSON(this.baseLocation));
+        }
+
         json.put("updateInterval", this.updateInterval);
         json.put("incrementAmount", this.incrementAmount);
 
