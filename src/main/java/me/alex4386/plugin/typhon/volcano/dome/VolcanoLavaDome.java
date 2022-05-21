@@ -6,6 +6,7 @@ import java.util.List;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.json.simple.JSONObject;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
@@ -145,6 +146,9 @@ public class VolcanoLavaDome {
                 for (Block block: cylinderBlocks) {
                     if (block.getType().isAir()) {
                         block.setType(VolcanoComposition.getExtrusiveRock(this.vent.lavaFlow.settings.silicateLevel));
+                        if (height == 1) {
+                            this.vent.volcano.metamorphism.metamorphoseBlock(block.getRelative(BlockFace.DOWN));
+                        }
                     }
                 }
 
