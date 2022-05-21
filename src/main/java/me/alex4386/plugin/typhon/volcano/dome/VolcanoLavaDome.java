@@ -194,11 +194,11 @@ public class VolcanoLavaDome {
         this.height = (double) json.get("height");
         this.incrementAmount = (double) json.get("incrementAmount");
         this.isForming = (boolean) json.get("isForming");
-        this.updateInterval = (int) json.get("updateInterval");
+        this.updateInterval = (int) (long) json.get("updateInterval");
 
         boolean baseYDefined = (boolean) json.get("baseYDefined");
         if (baseYDefined) {
-            this.baseY = (int) json.get("baseY");
+            this.baseY = (int) (long) json.get("baseY");
         } else {
             this.baseLocation = TyphonUtils.deserializeLocationForJSON((JSONObject) json.get("baseLocation"));
         }
