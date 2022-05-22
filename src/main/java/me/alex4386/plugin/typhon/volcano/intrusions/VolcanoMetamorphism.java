@@ -26,16 +26,11 @@ public class VolcanoMetamorphism {
 
     public void metamorphoseBlock(Block block) {
         Material material = block.getType();
-        int surfaceY = TyphonUtils.getHighestRocklikes(block.getLocation()).getY();
-
-        boolean isExtrusive = block.getLocation().getBlockY() < (surfaceY - 5);
 
         if (block.getType().isBurnable()) {
             block.setType(Material.AIR);
         } else {
             String blockTypeName = material.name().toLowerCase();
-
-            double randomDouble = random.nextDouble();
 
             if (
                     (blockTypeName.contains("stone") && !blockTypeName.contains("sand") && !blockTypeName.contains("black"))
@@ -46,12 +41,9 @@ public class VolcanoMetamorphism {
                     || blockTypeName.contains("dirt")
                     || blockTypeName.contains("podzol")
                     || blockTypeName.contains("grass")
+                    || blockTypeName.contains("sand")
             ) {
-                material = isExtrusive ? VolcanoComposition.getExtrusiveRock(volcano.silicateLevel) : VolcanoComposition.getIntrusiveRock(volcano.silicateLevel);
-            } else if (blockTypeName.contains("sand")) {
-                material = isExtrusive ? VolcanoComposition.getExtrusiveRock(volcano.silicateLevel) : (
-                    VolcanoComposition.getIntrusiveRock(volcano.silicateLevel)
-                );
+                material = VolcanoComposition.getExtrusiveRock(volcano.silicateLevel);
             } else {
                 return;
             }

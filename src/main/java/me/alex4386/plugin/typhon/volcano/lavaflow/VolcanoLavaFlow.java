@@ -287,10 +287,17 @@ public class VolcanoLavaFlow implements Listener {
     private long nextFlowTime = 0;
 
     public void flowLava() {
-        Block whereToFlow = vent.requestFlow();
+        int craterBlocks = Math.max(vent.cachedVentBlocks.size(), 1);
+        
+        int boom = (this.settings.flowed + 20) / this.getTickFactor();
+        int flowCount = Math.max(1, craterBlocks / boom);
 
-        if (whereToFlow != null) {
-            flowLava(whereToFlow);
+        for (int i = 0; i < flowCount; i++) {
+            Block whereToFlow = vent.requestFlow();
+
+            if (whereToFlow != null) {
+                flowLava(whereToFlow);
+            }
         }
     }
 
@@ -326,8 +333,10 @@ public class VolcanoLavaFlow implements Listener {
 
     public void autoFlowLava() {
         long timeNow = System.currentTimeMillis();
-        if (System.currentTimeMillis() >= nextFlowTime) {
-            flowLava();
+        if (timeNow >= nextFlowTime) {
+            double missedFlows = timeNow - nextFlowTime;
+
+            for (int i = 0; i < missedFlows; i++) flowLava();
             nextFlowTime = timeNow + settings.delayFlowed * (1000 * (1 / getTickFactor()));
         }
     }

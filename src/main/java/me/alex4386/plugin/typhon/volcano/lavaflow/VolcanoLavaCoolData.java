@@ -4,6 +4,7 @@ import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -70,18 +71,29 @@ public class VolcanoLavaCoolData {
         return this.isProcessed || this.ticks <= 0;
     }
 
+    public boolean extensionCapable() {
+        if (this.flowedFromVent != null) {
+            if (this.flowedFromVent.getType() == VolcanoVentType.CRATER) {
+                if (this.flowedFromVent.isInVent(this.block.getLocation())) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     public void coolDown() {
-        if (this.runExtensionCount > 0) {
+        if (this.runExtensionCount > 0 && this.extensionCapable()) {
             BlockData bd = block.getBlockData();
             if (bd instanceof Levelled && this.flowedFromVent != null) {
                 Levelled levelBd = (Levelled) bd;
-                if (fromBlock != null && 4 <= levelBd.getLevel() && levelBd.getLevel() < 8) {
+                if (fromBlock != null && 2 <= levelBd.getLevel() && levelBd.getLevel() < 6) {
                     block.setType(material);
                     Location flowVector = block.getLocation().subtract(fromBlock.getLocation());
                     
                     if (flowVector.getBlockY() == 0) {
                         BlockFace[] flowableFaces = {
-                            BlockFace.DOWN,
+                            BlockFace.SOUTH,
                             BlockFace.EAST,
                             BlockFace.WEST,
                             BlockFace.NORTH,

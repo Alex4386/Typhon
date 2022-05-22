@@ -118,6 +118,8 @@ public class VolcanoErupt {
         if (this.vent.status != VolcanoVentStatus.ERUPTING) {
             this.vent.record.endEjectaTrack();
         }
+
+        this.vent.lavadome.postConeBuildHandler();
     }
 
     public void startExploding() {
@@ -133,6 +135,8 @@ public class VolcanoErupt {
         if (this.vent.status != VolcanoVentStatus.ERUPTING) {
             this.vent.record.endEjectaTrack();
         }
+
+        this.vent.lavadome.postConeBuildHandler();
     }
 
     public void importConfig(JSONObject json) {

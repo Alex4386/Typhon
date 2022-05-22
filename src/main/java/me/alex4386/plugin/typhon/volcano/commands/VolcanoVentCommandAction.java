@@ -20,7 +20,8 @@ public enum VolcanoVentCommandAction {
     TREMOR("tremor", "<? power>", "create volcano tremor"),
     STATUS("status", "<? status>", "get/set status of this vent"),
     TELEPORT("teleport", "", "teleport to this vent"),
-    DELETE("delete", "", "delete this vent");
+    DELETE("delete", "", "delete this vent"),
+    STYLE("style", "<? hawaiian/strombolian/fissure/crater/etc.>", "get/set eruption style and type of this vent");
 
     String cmdline;
     String usage;

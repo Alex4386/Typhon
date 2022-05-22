@@ -3,6 +3,8 @@ package me.alex4386.plugin.typhon.volcano;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
+
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -211,7 +213,6 @@ public class VolcanoManager {
         for (VolcanoVent vent : volcano.manager.getVents()) {
             if (vent.getTwoDimensionalDistance(loc) <= range) {
                 list.add(vent);
-
             }
         }
         return list;
@@ -300,5 +301,30 @@ public class VolcanoManager {
         }
 
         return vents;
+    }
+
+    public VolcanoVent createFissureVent() {
+        Volcano volcano = this.volcano;
+
+        int number = -1;
+        for (int tmp = 1; tmp < 10; tmp++) {
+            if (volcano.subVents.get("fissure"+tmp) == null) {
+                number = tmp; 
+                break;
+            }
+        }
+
+        if (number == -1) return null;
+        VolcanoVent vent = new VolcanoVent(volcano);
+        vent.name = "fissure"+number;
+
+        if (volcano.mainVent.getType() == VolcanoVentType.FISSURE) {
+            vent.fissureAngle = volcano.mainVent.fissureAngle;
+        } else {
+            vent.fissureAngle = Math.random() * 2 * Math.PI;
+        }
+
+        volcano.subVents.put(vent.name, vent);
+        return vent;
     }
 }

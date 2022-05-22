@@ -60,13 +60,14 @@ public class VolcanoLavaDome {
     }
 
     public boolean isForming() {
-        return this.vent.status.getScaleFactor() > 0.5 && this.isForming;
+        return this.isForming;
     }
 
     public void registerTask() {
         if (domeScheduleId < 0) {
             domeScheduleId = Bukkit.getScheduler().scheduleSyncRepeatingTask(TyphonPlugin.plugin, (Runnable) () -> {
-                if (this.isForming()) this.plumbCycle();
+                double shouldDo = Math.random();
+                if (shouldDo < this.vent.status.getScaleFactor() && this.isForming()) this.plumbCycle();
             }, 0L, (long) updateInterval * TyphonPlugin.minecraftTicksPerSeconds / this.vent.getVolcano().updateRate);
         }
     }
@@ -75,6 +76,16 @@ public class VolcanoLavaDome {
         if (domeScheduleId >= 0) {
             Bukkit.getScheduler().cancelTask(domeScheduleId);
             domeScheduleId = -1;
+        }
+    }
+
+    public void postConeBuildHandler() {
+        if (this.baseYDefined) {
+            this.baseYDefined = false;
+            this.baseLocation = null;
+            this.getLocation();
+        } else {
+            this.baseLocation = TyphonUtils.getHighestRocklikes(this.baseLocation).getLocation();
         }
     }
 
@@ -87,7 +98,7 @@ public class VolcanoLavaDome {
     }
 
     public double calculateRadius(double height) {
-        double scaledRadius = Math.sqrt(6 - (5 * this.vent.lavaFlow.settings.silicateLevel));
+        double scaledRadius = Math.sqrt(6.0 - (5.0 * this.vent.lavaFlow.settings.silicateLevel));
         return scaledRadius * height;
     }
 
@@ -113,7 +124,7 @@ public class VolcanoLavaDome {
             if (Math.random() < 0.0005) { this.explode(); return; }
         }
         
-        if (Math.random() < 0.05) {
+        if (Math.random() < 0.1) {
             this.plumbLava();
         }
 

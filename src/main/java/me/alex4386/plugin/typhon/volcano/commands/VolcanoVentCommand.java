@@ -209,6 +209,37 @@ public class VolcanoVentCommand {
                     msg.info("Lavadome has just exploded. Vent eruption was automatically triggered.");
                 }
                 break;
+            case STYLE:
+                if (newArgs.length < 2) {
+                    msg.info("Vent Type: "+vent.getType());
+                    msg.info("Eruption Style: "+vent.erupt.getStyle());
+                    return true;
+                }
+
+                if (newArgs[1] != null) {
+                    String type = newArgs[1];
+
+                    VolcanoEruptStyle style = VolcanoEruptStyle.getVolcanoEruptStyle(type);
+                    if (style != null) {
+                        vent.erupt.setStyle(style);
+                        msg.info("Eruption Style of Vent "+vent.getName()+"was updated to: "+style.toString());
+
+                        vent.erupt.autoConfig();
+                        return true;
+                    }
+    
+                    VolcanoVentType ventType = VolcanoVentType.fromString(type);
+                    if (ventType != null) {
+                        vent.setType(ventType);
+                        msg.info("Type of Vent "+vent.getName()+"was updated to: "+ventType.toString());
+    
+                        return true;
+                    }
+    
+                    msg.error("Invalid Type: "+type);
+                }
+
+                break;
             case CONFIG:
                 if (newArgs.length < 2) {
                     msg.error("Invalid usage");

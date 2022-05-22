@@ -6,6 +6,7 @@ import org.bukkit.Material;
 
 public class VolcanoComposition {
     
+    @Deprecated
     public static Material getIntrusiveRock(double silicateLevel) {
         Random random = new Random();
 
