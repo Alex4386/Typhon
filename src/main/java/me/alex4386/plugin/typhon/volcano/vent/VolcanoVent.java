@@ -259,6 +259,10 @@ public class VolcanoVent {
         return selectFlowVentBlock(true);
     }
 
+    public List<Block> selectFlowVentBlocks(int count) {
+        return selectFlowVentBlocks(true, count);
+    }
+
     public Block selectCoreBlock() {
         Collections.shuffle(this.coreBlocks);
 
@@ -279,9 +283,12 @@ public class VolcanoVent {
         return TyphonUtils.getHighestRocklikes(target);
     }
 
-    public Block selectFlowVentBlock(boolean evenFlow) {
+
+    public List<Block> selectFlowVentBlocks(boolean evenFlow, int count) {
         List<Block> ventBlocks = getVentBlocks();
         Random random = new Random();
+
+        List<Block> selectedBlocks = new ArrayList<>();
 
         if (evenFlow) {
             boolean useLowest = false;
@@ -296,7 +303,10 @@ public class VolcanoVent {
 
                     for (Block block:ventBlocks) {
                         if (this.lavaFlow.lavaCoolHashMap.get(block) == null) {
-                            return block;
+                            if (!selectedBlocks.contains(block)) {
+                                selectedBlocks.add(block);
+                                if (selectedBlocks.size() == count) return selectedBlocks;
+                            }
                         }
                     }
                 }
@@ -313,14 +323,31 @@ public class VolcanoVent {
 
                 if (y < minimumTolerantHeight && this.lavaFlow.lavaCoolHashMap.get(block) == null) {
                     if (Math.random() < 0.2f) continue; 
-                    return block;
+                    if (!selectedBlocks.contains(block)) {
+                        selectedBlocks.add(block);
+                        if (selectedBlocks.size() == count) return selectedBlocks;
+                    }
                 }
             }
 
         }
 
-        int idx = random.nextInt(ventBlocks.size());
-        return ventBlocks.get(idx);
+        for (int i = 0; i < count; i++) {
+            int idx = random.nextInt(ventBlocks.size());
+            Block block = ventBlocks.get(idx);
+
+            if (!selectedBlocks.contains(block)) {
+                selectedBlocks.add(block);
+                if (selectedBlocks.size() == count) return selectedBlocks;
+            }
+        }
+
+        return selectedBlocks;
+    }
+
+
+    public Block selectFlowVentBlock(boolean evenFlow) {
+        return this.selectFlowVentBlocks(evenFlow, 1).get(0);
     }
 
     public Block requestFlow() {
@@ -330,6 +357,18 @@ public class VolcanoVent {
     public Block requestFlow(Material material) {
         Block ventBlock = this.selectFlowVentBlock().getRelative(BlockFace.UP);
         return ventBlock;
+    }
+
+    public List<Block> requestFlows(int count) {
+        return this.requestFlows(Material.LAVA, count);
+    }
+
+    public List<Block> requestFlows(Material material, int count) {
+        List<Block> ventBlocks = this.selectFlowVentBlocks(count);
+        List<Block> lavaFlowBlocks = new ArrayList<>();
+
+        for (Block ventBlock:ventBlocks) lavaFlowBlocks.add(ventBlock.getRelative(BlockFace.UP));
+        return lavaFlowBlocks;
     }
 
     public Block getSummitBlock() {

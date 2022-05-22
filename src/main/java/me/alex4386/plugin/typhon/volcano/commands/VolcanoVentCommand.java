@@ -222,7 +222,7 @@ public class VolcanoVentCommand {
                     VolcanoEruptStyle style = VolcanoEruptStyle.getVolcanoEruptStyle(type);
                     if (style != null) {
                         vent.erupt.setStyle(style);
-                        msg.info("Eruption Style of Vent "+vent.getName()+"was updated to: "+style.toString());
+                        msg.info("Eruption Style of Vent "+vent.getName()+" was updated to: "+style.toString());
 
                         vent.erupt.autoConfig();
                         return true;
@@ -231,7 +231,7 @@ public class VolcanoVentCommand {
                     VolcanoVentType ventType = VolcanoVentType.fromString(type);
                     if (ventType != null) {
                         vent.setType(ventType);
-                        msg.info("Type of Vent "+vent.getName()+"was updated to: "+ventType.toString());
+                        msg.info("Type of Vent "+vent.getName()+" was updated to: "+ventType.toString());
     
                         return true;
                     }

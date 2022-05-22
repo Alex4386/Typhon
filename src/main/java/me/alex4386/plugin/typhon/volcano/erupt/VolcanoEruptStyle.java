@@ -89,7 +89,7 @@ public enum VolcanoEruptStyle {
     }
 
     public boolean flowsLava() {
-        return (!this.lavaFlow && this.causeType != VolcanoEruptCauseType.PHREATIC);
+        return (this.lavaFlow && this.causeType != VolcanoEruptCauseType.PHREATIC);
     }
 
 
