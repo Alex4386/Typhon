@@ -139,7 +139,7 @@ public final class TyphonPlugin extends JavaPlugin {
         // Plugin shutdown logic
         for (Volcano volcano : listVolcanoes.values()) {
             try {
-                volcano.save();
+                volcano.save(true);
                 volcano.shutdown();
             } catch (IOException e) {
                 volcano.logger.error(VolcanoLogClass.CORE, "Saving Failed! I/O Error detected!");

@@ -25,6 +25,8 @@ public class Volcano implements Listener {
     public Path basePath;
     public String name;
 
+    long lastSave = System.currentTimeMillis();
+
     // Core data
     public Location location;
 
@@ -100,7 +102,7 @@ public class Volcano implements Listener {
                 basePath.toFile().mkdirs();
 
                 dataLoader.setupDirectory();
-                this.save();
+                this.save(true);
                 logger.log(VolcanoLogClass.CORE, "Typhon created new Volcano "+this.name+"!");
             } else {
                 logger.error(VolcanoLogClass.CORE, "Unable to find Volcano Config Dir "+basePath.toString()+" for Volcano "+this.name+".");
@@ -185,8 +187,12 @@ public class Volcano implements Listener {
     }
 
     public boolean trySave() {
+        return this.trySave(false);
+    }
+
+    public boolean trySave(boolean force) {
         try {
-            this.save();
+            this.save(force);
             return true;
         } catch (IOException e) {
             return false;
@@ -194,6 +200,15 @@ public class Volcano implements Listener {
     }
 
     public void save() throws IOException {
+        this.save(false);
+    }
+
+    public void save(boolean force) throws IOException {
+        if (!force) {
+            int timeframe = 10;
+            if (System.currentTimeMillis() - lastSave < timeframe * 1000) return;
+        }
+
         logger.log(VolcanoLogClass.CORE, "Saving...");
         this.dataLoader.setCoreConfig(this.exportConfig());
         this.dataLoader.setAutostartConfig(this.autoStart.exportConfig());
@@ -206,6 +221,8 @@ public class Volcano implements Listener {
             this.dataLoader.setSubVentConfig(name, vent.exportConfig());
         }
         logger.log(VolcanoLogClass.CORE, "Save Complete.");
+
+        lastSave = System.currentTimeMillis();
     }
 
     public void delete() throws IOException {

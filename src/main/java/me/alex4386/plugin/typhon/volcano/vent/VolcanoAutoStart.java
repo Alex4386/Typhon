@@ -117,7 +117,7 @@ public class VolcanoAutoStart implements Listener {
             VolcanoVent newVent = new VolcanoVent(volcano, location, name);
             volcano.subVents.put(name, newVent);
 
-            volcano.trySave();
+            volcano.trySave(true);
             return newVent;
         } else {
             return null;
@@ -203,7 +203,7 @@ public class VolcanoAutoStart implements Listener {
 
                 if (newVent != null) {
                     newVent.start();
-                    newVent.getVolcano().trySave();
+                    newVent.getVolcano().trySave(true);
 
                     Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin,
                             (Runnable) () -> {

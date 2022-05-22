@@ -386,7 +386,7 @@ public class VolcanoVentCommand {
                     msg.error("Invalid config node!");
                 }
 
-                vent.volcano.trySave();
+                vent.volcano.trySave(true);
 
                 break;
 

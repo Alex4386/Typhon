@@ -128,7 +128,7 @@ public class VolcanoLavaDome {
             this.plumbLava();
         }
 
-        if (Math.random() < 0.1) {
+        if (Math.random() < 0.4) {
             this.plumbLava(false);
         }
     }
@@ -138,7 +138,7 @@ public class VolcanoLavaDome {
             if (increaseHeight) {
                 this.height += incrementAmount;
                 this.build();
-                this.vent.volcano.trySave();
+                this.vent.volcano.trySave(false);
             }
             this.flowLava();
         } else {
@@ -155,7 +155,7 @@ public class VolcanoLavaDome {
         this.baseY = 0;
         this.baseYDefined = false;
         this.baseLocation = TyphonUtils.getHighestRocklikes(vent.location).getLocation();
-        this.vent.volcano.trySave();
+        this.vent.volcano.trySave(true);
     }
 
     public void explode() {

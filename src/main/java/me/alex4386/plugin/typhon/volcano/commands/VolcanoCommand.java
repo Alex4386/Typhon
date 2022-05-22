@@ -303,7 +303,7 @@ public class VolcanoCommand {
                         case SAVE:
                             try {
                                 sender.sendMessage(ChatColor.RED+""+ChatColor.BOLD+"[Typhon Plugin] "+ChatColor.GOLD+"Saving Volcano: "+this.volcano.name);
-                                volcano.save();
+                                volcano.save(true);
                                 sender.sendMessage(ChatColor.RED+""+ChatColor.BOLD+"[Typhon Plugin] "+ChatColor.GOLD+"Saved Volcano: "+this.volcano.name);
                             } catch (IOException e) {
                                 sender.sendMessage(ChatColor.RED+""+ChatColor.BOLD+"[Typhon Plugin] "+ChatColor.GOLD+"Error while saving volcano: "+this.volcano.name);

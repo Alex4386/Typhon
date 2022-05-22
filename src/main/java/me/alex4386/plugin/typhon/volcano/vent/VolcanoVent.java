@@ -446,12 +446,12 @@ public class VolcanoVent {
 
     public void start() {
         this.erupt.start();
-        this.getVolcano().trySave();
+        this.getVolcano().trySave(true);
     }
 
     public void stop() {
         this.erupt.stop();
-        this.getVolcano().trySave();
+        this.getVolcano().trySave(true);
     }
 
     public boolean isMainVent() {

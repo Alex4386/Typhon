@@ -173,7 +173,7 @@ public class VolcanoLavaFlow implements Listener {
 
                 if (distance > vent.longestFlowLength) {
                     vent.longestFlowLength = distance;
-                    vent.getVolcano().trySave();
+                    vent.getVolcano().trySave(false);
                 }
 
                 vent.record.addEjectaVolume(1);
