@@ -158,7 +158,7 @@ public class VolcanoVent {
                 this.cachedVentBlocks = VolcanoMath.getCircle(this.location.getBlock(), craterRadius, craterRadius - 1);
             }
 
-            this.volcano.logger.log(VolcanoLogClass.VENT, "Getting chunks to load vent blocks of "+this.getName()+"...");
+            this.volcano.logger.log(VolcanoLogClass.VENT, "Getting chunks to load vent blocks of "+this.getName()+"... (This may take a while)");
             List<Chunk> chunksToLoad = new ArrayList<Chunk>();
             for (Block block: this.cachedVentBlocks) {
                 if (!chunksToLoad.contains(block.getChunk())) {
