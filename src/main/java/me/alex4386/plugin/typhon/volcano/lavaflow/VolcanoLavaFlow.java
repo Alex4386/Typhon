@@ -289,13 +289,14 @@ public class VolcanoLavaFlow implements Listener {
     public void flowLava() {
         int craterBlocks = Math.max(vent.cachedVentBlocks.size(), 1);
         
-        int boom = (this.settings.flowed + 20) / this.getTickFactor();
+        int boom = (int) (this.settings.flowed * this.vent.getVolcano().updateRate * 9);
         int flowCount = Math.max(1, craterBlocks / boom);
 
         List<Block> whereToFlows = vent.requestFlows(flowCount);
 
         for (Block whereToFlow: whereToFlows) {
-            flowLava(whereToFlow);
+            if (whereToFlow.getType() != Material.LAVA)
+                flowLava(whereToFlow);
         }
     }
 
