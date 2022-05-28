@@ -21,11 +21,11 @@ Want to open Minecraft Server free-of-charge?
 Visit: [minehub.kr](https://minehub.kr) for more information! (South Korea Residents only, Non-commercial uses only)  
 
 ## TODO
-* Remove underlying NMS (`net.minecraft.server`) access for version interoperability (WIP)
-* Remove version-specific Fake block generation (WIP)
-* Implement Fissure Eruption (WIP)
 * Implement Magma Evolution
+* Automatic vent openings
 * Caldera formation
+  - Due to mass block updates, This causes bukkit to crash due to watchdog.
+    Should come up with mitigations to implement this.
 
 ## Docs
 Please refer to [DOCS.md](./DOCS.md).  
