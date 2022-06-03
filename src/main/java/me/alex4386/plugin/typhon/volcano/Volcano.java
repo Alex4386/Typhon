@@ -111,6 +111,12 @@ public class Volcano implements Listener {
         }
     }
 
+    public double getTickFactor() {
+        double tickFactor = 20 / ((int) this.updateRate);
+
+        return tickFactor;
+    }
+
     public void initialize() {
         autoStart.initialize();
         geoThermal.initialize();

@@ -326,7 +326,7 @@ public class VolcanoVentCommand {
                     if (newArgs.length >= 2) {
                         if (newArgs.length == 3) {
                             vent.setRadius(Integer.parseInt(newArgs[2]));
-                            vent.cachedVentBlocks = null;
+                            vent.flushCache();
                         }
 
                         msg.info("vent:craterRadius - "+ vent.craterRadius);
@@ -347,7 +347,7 @@ public class VolcanoVentCommand {
                                 vent.fissureAngle = Double.parseDouble(newArgs[2]);
                             }
 
-                            vent.cachedVentBlocks = null;
+                            vent.flushCache();
                         }
                         
                         msg.info("vent:fissureAngle - "+ vent.fissureAngle + " ("+Math.toDegrees(vent.fissureAngle)+" deg)");
@@ -356,7 +356,7 @@ public class VolcanoVentCommand {
                     if (newArgs.length >= 2) {
                         if (newArgs.length == 3) {
                             vent.fissureLength = Integer.parseInt(newArgs[2]);
-                            vent.cachedVentBlocks = null;
+                            vent.flushCache();
                         }
                         msg.info("vent:fissureLength - "+ vent.fissureLength);
                     }
@@ -373,7 +373,7 @@ public class VolcanoVentCommand {
                                 
                                 vent.fissureAngle = Math.toRadians(yaw);
                             }
-                            vent.cachedVentBlocks = null;
+                            vent.flushCache();
                         }
                         msg.info("vent:type - "+ vent.getType().toString());
                     }

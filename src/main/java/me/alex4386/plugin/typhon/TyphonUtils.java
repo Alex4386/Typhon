@@ -232,6 +232,14 @@ public class TyphonUtils {
         return block.getRelative(offsetX, 0, offsetZ);
     }
 
+    public static void stackTraceMe() {
+        try {
+            throw new Exception("manually triggered stacktrace");
+        } catch(Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     public static boolean isMaterialTree(org.bukkit.Material material) {
         String materialType = material.name().toLowerCase();
         return (

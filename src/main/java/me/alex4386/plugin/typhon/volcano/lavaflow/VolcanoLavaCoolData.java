@@ -42,17 +42,20 @@ public class VolcanoLavaCoolData {
     public VolcanoLavaCoolData(Block source, Block fromBlock, Block block, VolcanoVent flowedFromVent,
             Material material, int ticks, boolean isBomb) {
         this(source, fromBlock, block, flowedFromVent, material, ticks);
+        this.isBomb = isBomb;
 
         if (this.flowedFromVent.lavaFlow.settings.silicateLevel < 0.68) {
             this.runExtensionCount = (int) Math.min(Math.max(
                     Math.floor((0.68 - this.flowedFromVent.lavaFlow.settings.silicateLevel) * 100),
                     0.0) * (Math.random() + 1.0), 25.0);
         }
+
     }
 
     public VolcanoLavaCoolData(Block source, Block fromBlock, Block block, VolcanoVent flowedFromVent,
             Material material, int ticks, boolean isBomb, int runExtensionCount) {
-        this(source, fromBlock, block, flowedFromVent, material, ticks, false);
+        this(source, fromBlock, block, flowedFromVent, material, ticks, isBomb);
+
         this.flowedFromVent = flowedFromVent;
         this.runExtensionCount = runExtensionCount;
     }
@@ -85,9 +88,11 @@ public class VolcanoLavaCoolData {
     public void coolDown() {
         if (this.runExtensionCount > 0 && this.extensionCapable()) {
             BlockData bd = block.getBlockData();
+
             if (bd instanceof Levelled && this.flowedFromVent != null) {
                 Levelled levelBd = (Levelled) bd;
-                if (fromBlock != null && 2 <= levelBd.getLevel() && levelBd.getLevel() < 6) {
+
+                if (fromBlock != null && 2 <= levelBd.getLevel() && levelBd.getLevel() < 4) {
                     block.setType(material);
                     Location flowVector = block.getLocation().subtract(fromBlock.getLocation());
                     
@@ -102,19 +107,22 @@ public class VolcanoLavaCoolData {
                         for (BlockFace bf : flowableFaces) {
                             Block flowDirectionBlock = block.getRelative(bf);
                             if (flowDirectionBlock.getType().isAir()) {
+                                double silicateLevel = this.flowedFromVent.lavaFlow.settings.silicateLevel;
+                                Material material = !this.isBomb ? VolcanoComposition.getExtrusiveRock(silicateLevel) : VolcanoComposition.getBombRock(silicateLevel);
                                 this.flowedFromVent.lavaFlow.cachedLavaCoolHashMap.put(
                                     block,
                                     new VolcanoLavaCoolData(
-                                            source,
-                                            block,
-                                            flowDirectionBlock,
-                                            this.flowedFromVent,
-                                            VolcanoComposition.getExtrusiveRock(
-                                                    this.flowedFromVent.lavaFlow.settings.silicateLevel),
-                                            this.flowedFromVent.lavaFlow.settings.flowed
-                                                    * this.flowedFromVent.lavaFlow.getTickFactor(),
-                                            false,
-                                            this.runExtensionCount - 1));
+                                        source,
+                                        block,
+                                        flowDirectionBlock,
+                                        this.flowedFromVent,
+                                        material,
+                                        (int) (this.flowedFromVent.lavaFlow.settings.flowed
+                                                * this.flowedFromVent.lavaFlow.getTickFactor()),
+                                        this.isBomb,
+                                        this.runExtensionCount - 1
+                                    )
+                                );
                             }
                         }
                     } else if (flowVector.getBlockY() == -1) {
@@ -122,7 +130,9 @@ public class VolcanoLavaCoolData {
                         Block bottomBlock = flowDirectionBlock.getRelative(BlockFace.DOWN);
 
                         if (!bottomBlock.getType().isAir()) {
-                            flowDirectionBlock.setType(VolcanoComposition.getExtrusiveRock(this.flowedFromVent.lavaFlow.settings.silicateLevel));
+                            double silicateLevel = this.flowedFromVent.lavaFlow.settings.silicateLevel;
+                            Material material = !this.isBomb ? VolcanoComposition.getExtrusiveRock(silicateLevel) : VolcanoComposition.getBombRock(silicateLevel);
+                            flowDirectionBlock.setType(material);
                         }
 
                         for (int x = -1; x <= 1; x++) {
@@ -130,19 +140,21 @@ public class VolcanoLavaCoolData {
                                 if (x == 0 && z == 0) continue;
                                 Block targetBlock = block.getRelative(x, 0, z);
                                 if (targetBlock.getType().isAir()) {
+                                    double silicateLevel = this.flowedFromVent.lavaFlow.settings.silicateLevel;
+                                    Material material = !this.isBomb ? VolcanoComposition.getExtrusiveRock(silicateLevel) : VolcanoComposition.getBombRock(silicateLevel);
                                     this.flowedFromVent.lavaFlow.cachedLavaCoolHashMap.put(
                                         block,
                                         new VolcanoLavaCoolData(
-                                                source,
-                                                block,
-                                                targetBlock,
-                                                this.flowedFromVent,
-                                                VolcanoComposition.getExtrusiveRock(
-                                                        this.flowedFromVent.lavaFlow.settings.silicateLevel),
-                                                this.flowedFromVent.lavaFlow.settings.flowed
-                                                        * this.flowedFromVent.lavaFlow.getTickFactor(),
-                                                false
-                                    ));
+                                            source,
+                                            block,
+                                            flowDirectionBlock,
+                                            this.flowedFromVent,
+                                            material,
+                                            (int) (this.flowedFromVent.lavaFlow.settings.flowed
+                                                    * this.flowedFromVent.lavaFlow.getTickFactor()),
+                                            this.isBomb
+                                        )
+                                    );
                                 }
                             }
                         }

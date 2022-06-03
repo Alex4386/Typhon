@@ -45,7 +45,7 @@ public class VolcanoExplosionSettings {
 }
 
 class VolcanoExplosionDefaultSettings {
-    public static int explosionDelay = 10;
+    public static int explosionDelay = 100;
     public static int explosionSize = 8;
     public static int damagingExplosionSize = 2;
     public static int minBombCount = 20;

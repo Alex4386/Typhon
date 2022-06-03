@@ -37,11 +37,12 @@ public class VolcanoVent {
     public int craterRadius = defaultVentRadius;
 
     public double fissureAngle = 0.0;
-    public int fissureLength = 60;
+    public int fissureLength = 20;
+    public int maxFissureLength = 100;
 
     public double longestFlowLength = 0.0;
 
-    public List<Block> cachedVentBlocks = null;
+    private List<Block> cachedVentBlocks = null;
     public List<Block> coreBlocks = null;
 
     public VolcanoBombs bombs = new VolcanoBombs(this);
@@ -130,33 +131,48 @@ public class VolcanoVent {
         return this.name == null ? ChatColor.GOLD+"main"+ChatColor.RESET : this.name;
     }
 
+    public boolean isCacheInitialized() {
+        return this.cachedVentBlocks != null;
+    }
+
+    public List<Block> getVentBlocksScaffold() {
+        List<Block> scaffoldBlocks = new ArrayList<>();
+
+        if (type == VolcanoVentType.CRATER) {
+            scaffoldBlocks = VolcanoMath.getCircle(this.location.getBlock(), craterRadius, craterRadius - 1);
+        } else if (type == VolcanoVentType.FISSURE) {
+            double rightAngledAngle = (Math.PI / 2) + this.fissureAngle;
+            int xRadiusOffset = (int) Math.cos(rightAngledAngle) * this.craterRadius;
+            int zRadiusOffset = (int) Math.sin(rightAngledAngle) * this.craterRadius;
+
+            List<Block> ventBlocksWithCrater = new ArrayList<Block>();
+
+            Block fromBlock = this.location.getBlock().getRelative(xRadiusOffset, 0, zRadiusOffset);
+            ventBlocksWithCrater.addAll(VolcanoMath.getLine(fromBlock, this.fissureAngle, this.fissureLength));
+
+            fromBlock = this.location.getBlock().getRelative(-xRadiusOffset, 0, -zRadiusOffset);
+            ventBlocksWithCrater.addAll(VolcanoMath.getLine(fromBlock, this.fissureAngle, this.fissureLength));
+
+            scaffoldBlocks = ventBlocksWithCrater;
+        } else {
+            // fallback to crater
+            scaffoldBlocks = VolcanoMath.getCircle(this.location.getBlock(), craterRadius, craterRadius - 1);
+        }
+
+        return scaffoldBlocks;
+    }
+
     public List<Block> getVentBlocks() {
         boolean isFirstLoad = false;
 
-        if (this.cachedVentBlocks == null) {
+        // Debug
+        //TyphonUtils.stackTraceMe();
+
+        if (!this.isCacheInitialized()) {
             isFirstLoad = true;
+            this.cachedVentBlocks = this.getVentBlocksScaffold();
 
             this.volcano.logger.log(VolcanoLogClass.VENT, "Calculating vent blocks of "+this.getName()+"...");
-            if (type == VolcanoVentType.CRATER) {
-                this.cachedVentBlocks = VolcanoMath.getCircle(this.location.getBlock(), craterRadius, craterRadius - 1);
-            } else if (type == VolcanoVentType.FISSURE) {
-                double rightAngledAngle = (Math.PI / 2) + this.fissureAngle;
-                int xRadiusOffset = (int) Math.cos(rightAngledAngle) * this.craterRadius;
-                int zRadiusOffset = (int) Math.sin(rightAngledAngle) * this.craterRadius;
-
-                List<Block> ventBlocksWithCrater = new ArrayList<Block>();
-
-                Block fromBlock = this.location.getBlock().getRelative(xRadiusOffset, 0, zRadiusOffset);
-                ventBlocksWithCrater.addAll(VolcanoMath.getLine(fromBlock, this.fissureAngle, this.fissureLength));
-
-                fromBlock = this.location.getBlock().getRelative(-xRadiusOffset, 0, -zRadiusOffset);
-                ventBlocksWithCrater.addAll(VolcanoMath.getLine(fromBlock, this.fissureAngle, this.fissureLength));
-
-                this.cachedVentBlocks = ventBlocksWithCrater;
-            } else {
-                // fallback to crater
-                this.cachedVentBlocks = VolcanoMath.getCircle(this.location.getBlock(), craterRadius, craterRadius - 1);
-            }
 
             this.volcano.logger.log(VolcanoLogClass.VENT, "Getting chunks to load vent blocks of "+this.getName()+"... (This may take a while)");
             List<Chunk> chunksToLoad = new ArrayList<Chunk>();
@@ -168,7 +184,7 @@ public class VolcanoVent {
 
             this.volcano.logger.log(VolcanoLogClass.VENT, "Loading chunk vent blocks of "+this.getName()+"...");
             for (Chunk chunk: chunksToLoad) {
-                chunk.load();
+                if (!chunk.isLoaded()) chunk.load();
             }
         }
 
@@ -285,10 +301,10 @@ public class VolcanoVent {
 
 
     public List<Block> selectFlowVentBlocks(boolean evenFlow, int count) {
-        List<Block> ventBlocks = getVentBlocks();
         Random random = new Random();
-
         List<Block> selectedBlocks = new ArrayList<>();
+
+        List<Block> ventBlocks = this.getVentBlocks();
 
         if (evenFlow) {
             boolean useLowest = false;
@@ -393,7 +409,6 @@ public class VolcanoVent {
 
     public void cool() {
         List<Block> cachedVentBlocks = this.getVentBlocks();
-
         Iterator<Block> iterator = cachedVentBlocks.iterator();
 
         while (iterator.hasNext()) {
@@ -509,6 +524,7 @@ public class VolcanoVent {
         this.craterRadius = (int) (long) configData.get("craterRadius");
         this.fissureAngle = (double) configData.get("fissureAngle");
         this.fissureLength = (int) (long) configData.get("fissureLength");
+        this.maxFissureLength = (int) (long) configData.get("maxFissureLength");
         this.bombs.importConfig((JSONObject) configData.get("bombs"));
         this.explosion.importConfig((JSONObject) configData.get("explosion"));
         this.lavaFlow.importConfig((JSONObject) configData.get("lavaFlow"));
@@ -532,6 +548,7 @@ public class VolcanoVent {
 
         configData.put("fissureAngle", this.fissureAngle);
         configData.put("fissureLength", this.fissureLength);
+        configData.put("maxFissureLength", this.maxFissureLength);
 
         JSONObject bombConfig = this.bombs.exportConfig();
         configData.put("bombs", bombConfig);

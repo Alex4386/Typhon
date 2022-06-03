@@ -37,8 +37,8 @@ public class VolcanoExplosion {
                         explode();
                     }
                 },
-                this.settings.explosionDelay * vent.getVolcano().updateRate,
-                this.settings.explosionDelay * vent.getVolcano().updateRate
+                0l,
+                (long) Math.max(this.settings.explosionDelay / vent.getVolcano().getTickFactor(), 1)
             );
         }
     }

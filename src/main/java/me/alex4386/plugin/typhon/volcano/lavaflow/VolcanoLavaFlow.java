@@ -106,10 +106,8 @@ public class VolcanoLavaFlow implements Listener {
         this.unregisterTask();
     }
 
-    public int getTickFactor() {
-        int tickFactor = 20 / ((int) getVolcano().updateRate);
-
-        return tickFactor;
+    public double getTickFactor() {
+        return this.getVolcano().getTickFactor();
     }
 
     @EventHandler
@@ -225,7 +223,7 @@ public class VolcanoLavaFlow implements Listener {
     
                 if (flowVector.getBlockY() < 0) {
                     extensionCount = -1;
-                }    
+                }
             }
 
             this.registerLavaCoolData(data.source, block, toBlock, data.isBomb, extensionCount);
@@ -234,10 +232,6 @@ public class VolcanoLavaFlow implements Listener {
 
     public void registerLavaCoolData(Block block, boolean isBomb) {
         this.registerLavaCoolData(block, block, block, isBomb, -1);
-    }
-
-    public void registerLavaCoolData(Block source, Block fromBlock, Block block) {
-        registerLavaCoolData(source, fromBlock, block, false);
     }
 
     public void registerLavaCoolData(Block source, Block fromBlock, Block block, boolean isBomb) {
@@ -260,7 +254,7 @@ public class VolcanoLavaFlow implements Listener {
                         block,
                         this.vent,
                         targetMaterial,
-                        settings.flowed * this.getTickFactor(),
+                        (int) (settings.flowed * this.getTickFactor()),
                         isBomb
                 ));
         } else {
@@ -272,7 +266,7 @@ public class VolcanoLavaFlow implements Listener {
                         block,
                         this.vent,
                         targetMaterial,
-                        settings.flowed * this.getTickFactor(),
+                        (int) (settings.flowed * this.getTickFactor()),
                         isBomb,
                         extension
                 ));
@@ -287,10 +281,16 @@ public class VolcanoLavaFlow implements Listener {
     private long nextFlowTime = 0;
 
     public void flowLava() {
-        int craterBlocks = Math.max(vent.cachedVentBlocks.size(), 1);
+        flowLava(1);
+    }
+
+    public void flowLava(int flowCount) {
+        /*
+        int craterBlocks = Math.max(vent.getVentBlocksScaffold().size(), 1);
         
         int boom = (int) (this.settings.flowed * this.vent.getVolcano().updateRate * 9);
         int flowCount = Math.max(1, craterBlocks / boom);
+        */
 
         List<Block> whereToFlows = vent.requestFlows(flowCount);
 
@@ -333,10 +333,13 @@ public class VolcanoLavaFlow implements Listener {
     public void autoFlowLava() {
         long timeNow = System.currentTimeMillis();
         if (timeNow >= nextFlowTime) {
-            double missedFlows = timeNow - nextFlowTime;
+            double missedFlowTime = timeNow - nextFlowTime;
+            double flowTick = settings.delayFlowed * (1000 * (1 / getTickFactor()));
 
-            for (int i = 0; i < missedFlows; i++) flowLava();
-            nextFlowTime = timeNow + settings.delayFlowed * (1000 * (1 / getTickFactor()));
+            int missedFlows = (int) Math.min(missedFlowTime / flowTick, this.vent.getVentBlocksScaffold().size() / 3);
+
+            flowLava(missedFlows);
+            nextFlowTime = timeNow + (int) (settings.delayFlowed * (1000 * (1 / getTickFactor())));
         }
     }
 
@@ -393,17 +396,23 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void cooldownAll() {
-        for (Block block : lavaCoolHashMap.keySet()) {
+        for (Map.Entry<Block, VolcanoLavaCoolData> entry : lavaCoolHashMap.entrySet()) {
+            Block block = entry.getKey();
+            VolcanoLavaCoolData coolData = entry.getValue();
+
             block.setType(
-                VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel)
+                coolData.material
             );
         }
 
         lavaCoolHashMap.clear();
 
-        for (Block block : cachedLavaCoolHashMap.keySet()) {
+        for (Map.Entry<Block, VolcanoLavaCoolData> entry : cachedLavaCoolHashMap.entrySet()) {
+            Block block = entry.getKey();
+            VolcanoLavaCoolData coolData = entry.getValue();
+            
             block.setType(
-                VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel)
+                coolData.material
             );
         }
         cachedLavaCoolHashMap.clear();
@@ -422,8 +431,8 @@ public class VolcanoLavaFlow implements Listener {
 class VolcanoLavaFlowDefaultSettings {
     public static boolean enabled = true;
 
-    public static int flowed = 3;
-    public static int delayFlowed = 5;
+    public static int flowed = 10;
+    public static int delayFlowed = 7;
 
     public static void importConfig(JSONObject configData) {
         VolcanoLavaFlowSettings settings = new VolcanoLavaFlowSettings();
