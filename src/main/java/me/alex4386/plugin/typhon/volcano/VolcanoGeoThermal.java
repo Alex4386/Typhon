@@ -222,8 +222,8 @@ public class VolcanoGeoThermal implements Listener {
         // temp lava flow handler
         if (bucket == Material.LAVA_BUCKET) {
             VolcanoVent vent = volcano.manager.getNearestVent(targetBlock);
-            if (vent.isInLavaFlow(loc)) {
-                vent.lavaFlow.registerLavaCoolData(targetBlock, false);
+            if (vent != null) {
+                vent.lavaFlow.flowLava(targetBlock);
             }
         }
     }

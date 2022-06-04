@@ -25,37 +25,41 @@ public class VolcanoMetamorphism {
     }
 
     public void metamorphoseBlock(Block block) {
+        VolcanoVent vent = volcano.manager.getNearestVent(block);
+        if (vent == null) return;
+
+        this.metamorphoseBlock(vent, block);
+    }
+
+    public void metamorphoseBlock(VolcanoVent vent, Block block) {
+        this.metamorphoseBlock(vent, block, false);
+    }
+
+    public void metamorphoseBlock(VolcanoVent vent, Block block, boolean isBomb) {
         Material material = block.getType();
 
         if (block.getType().isBurnable()) {
             block.setType(Material.AIR);
         } else {
             String blockTypeName = material.name().toLowerCase();
+            double silicateLevel = vent.lavaFlow.settings.silicateLevel;
 
             if (
-                    (blockTypeName.contains("stone") && !blockTypeName.contains("sand") && !blockTypeName.contains("black"))
-                    || blockTypeName.contains("ore")
-                    || blockTypeName.contains("diorite")
-                    || blockTypeName.contains("granite")
-                    || blockTypeName.contains("andesite")
-                    || blockTypeName.contains("dirt")
-                    || blockTypeName.contains("podzol")
-                    || blockTypeName.contains("grass")
-                    || blockTypeName.contains("sand")
+                blockTypeName.contains("dirt")
+                || blockTypeName.contains("podzol")
+                || blockTypeName.contains("grass")
+                || blockTypeName.contains("sand")
             ) {
-                material = VolcanoComposition.getExtrusiveRock(volcano.silicateLevel);
+                material = 
+                    isBomb ?
+                        VolcanoComposition.getBombRock(silicateLevel) :
+                        VolcanoComposition.getExtrusiveRock(silicateLevel);
             } else {
                 return;
             }
         }
 
         block.setType(material);
-        if (material == Material.LAVA) {
-            VolcanoVent vent = this.volcano.manager.getNearestVent(block);
-            if (vent != null) {
-                vent.lavaFlow.registerLavaCoolData(block, true);
-            }
-        }
         return;
     }
 

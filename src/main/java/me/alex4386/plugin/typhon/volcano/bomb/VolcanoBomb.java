@@ -176,7 +176,7 @@ public class VolcanoBomb {
             
             loc.getWorld().createExplosion(loc, 1, true, false);
 
-            this.vent.lavaFlow.registerLavaCoolData(this.block.getLocation().getBlock(), true);
+            this.vent.lavaFlow.flowLavaFromBomb(this.block.getLocation().getBlock());
             this.vent.record.addEjectaVolume(1);
 
             return;
@@ -211,7 +211,7 @@ public class VolcanoBomb {
                 List<Block> bomb = VolcanoMath.getSphere(loc.getBlock(), this.bombRadius);
 
                 for (Block bombBlock:bomb) {
-                    lavaFlow.registerLavaCoolData(bombBlock, true);
+                    lavaFlow.flowLavaFromBomb(bombBlock);
                 }
 
                 loc.getWorld().createExplosion(loc, 1, true, false);
@@ -223,14 +223,11 @@ public class VolcanoBomb {
                     Random random = new Random();
                     switch(random.nextInt(3)) {
                         case 0:
-                            lavaFlow.registerLavaCoolData(bombBlock, true);
-                            bombBlock.setType(Material.MAGMA_BLOCK);
-                            break;
                         case 1:
                             bombBlock.setType(VolcanoComposition.getBombRock(vent.lavaFlow.settings.silicateLevel));
                             break;
                         case 2:
-                            lavaFlow.registerLavaCoolData(bombBlock, true);
+                            lavaFlow.flowLavaFromBomb(bombBlock);
                             break;
                     }
                 }
@@ -282,7 +279,7 @@ public class VolcanoBomb {
                 for (int i = 0; i < lavaSpread; i++) {
                     Block block = TyphonUtils.getHighestOceanFloor(circle.get(i).getLocation()).getBlock();
 
-                    this.vent.lavaFlow.registerLavaCoolData(block, true);
+                    this.vent.lavaFlow.flowLavaFromBomb(block);
                 }
             }
         }

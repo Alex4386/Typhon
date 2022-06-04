@@ -92,5 +92,9 @@ public enum VolcanoEruptStyle {
         return (this.lavaFlow && this.causeType != VolcanoEruptCauseType.PHREATIC);
     }
 
+    public boolean isEffusive() {
+        return this == VolcanoEruptStyle.HAWAIIAN;
+    }
+
 
 }

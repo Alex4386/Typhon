@@ -23,6 +23,27 @@ public class VolcanoVentCommand {
     VolcanoVent vent;
     boolean isMainVent;
 
+    String[] configNodes = {
+        "lavaflow:delay",
+        "lavaflow:flowed",
+        "bombs:explosionPower:min",
+        "bombs:explosionPower:max",
+        "bombs:radius:min",
+        "bombs:radius:max",
+        "bombs:delay",
+        "erupt:style",
+        "erupt:autoconfig",
+        "explosion:delay",
+        "explosion:bombs:min",
+        "explosion:bombs:max",
+        "explosion:explosion:size",
+        "explosion:explosion:damagingSize",
+        "vent:craterRadius",
+        "vent:type",
+        "vent:fissureLength",
+        "vent:fissureAngle",
+    };
+
     public VolcanoVentCommand(VolcanoVent vent) {
         this.vent = vent;
         this.isMainVent = vent.equals(vent.volcano.mainVent);
@@ -54,29 +75,7 @@ public class VolcanoVentCommand {
                 if (action != null) {
                     if (action == VolcanoVentCommandAction.CONFIG) {
                         if (args.length == baseOffset + 2) {
-                            String[] configNodes = {
-                                    "lavaflow:delay",
-                                    "lavaflow:flowed",
-                                    "bombs:explosionPower:min",
-                                    "bombs:explosionPower:max",
-                                    "bombs:radius:min",
-                                    "bombs:radius:max",
-                                    "bombs:delay",
-                                    "erupt:style",
-                                    "erupt:autoconfig",
-                                    "explosion:delay",
-                                    "explosion:bombs:min",
-                                    "explosion:bombs:max",
-                                    "explosion:explosion:size",
-                                    "explosion:explosion:damagingSize",
-                                    "vent:craterRadius",
-                                    "vent:type",
-                                    "vent:fissureLength",
-                                    "vent:fissureAngle",
-                            };
-
                             return TyphonCommand.search(args[baseOffset + 1], Arrays.asList(configNodes));
-
                         } else if (args.length == baseOffset + 3) {
                             String[] res = { "<? value>" };
                             return Arrays.asList(res);
@@ -384,6 +383,7 @@ public class VolcanoVentCommand {
                     }
                 } else {
                     msg.error("Invalid config node!");
+                    msg.error("Available config nodes: " + String.join(", ", configNodes));
                 }
 
                 vent.volcano.trySave(true);

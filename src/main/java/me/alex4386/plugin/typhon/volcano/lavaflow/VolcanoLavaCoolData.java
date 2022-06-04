@@ -59,6 +59,14 @@ public class VolcanoLavaCoolData {
         this.flowedFromVent = flowedFromVent;
         this.runExtensionCount = runExtensionCount;
     }
+    
+    public static int calculateExtensionCount(double silicateLevel) {
+        // 0.48 is lower end. minimum travel distance should be 10km. but this is
+
+        return silicateLevel < 0.68 ? (int) Math.floor(Math.min(Math.max(
+            Math.pow(Math.floor((0.68 - silicateLevel) * 100) / 5, 3),
+            0.0), 64.0)) : 0;
+    }
 
     public void tickPass() {
         if (this.isProcessed) {

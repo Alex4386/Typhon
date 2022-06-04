@@ -206,6 +206,11 @@ public class VolcanoVent {
         if (isFirstLoad) this.volcano.logger.log(VolcanoLogClass.VENT, "Calculating highest points of vent blocksof "+this.getName()+"...");
         List<Block> newCachedVentBlocks = new ArrayList<>();
         for (Block block : this.cachedVentBlocks) {
+            if (block.getType() == Material.LAVA) {
+                newCachedVentBlocks.add(block);
+                continue;
+            }
+
             newCachedVentBlocks.add(TyphonUtils.getHighestNonTreeSolid(block.getLocation()));
         }
 
@@ -301,6 +306,8 @@ public class VolcanoVent {
 
 
     public List<Block> selectFlowVentBlocks(boolean evenFlow, int count) {
+        if (count <= 0) return new ArrayList<Block>();
+
         Random random = new Random();
         List<Block> selectedBlocks = new ArrayList<>();
 
@@ -383,7 +390,9 @@ public class VolcanoVent {
         List<Block> ventBlocks = this.selectFlowVentBlocks(count);
         List<Block> lavaFlowBlocks = new ArrayList<>();
 
-        for (Block ventBlock:ventBlocks) lavaFlowBlocks.add(ventBlock.getRelative(BlockFace.UP));
+        for (Block ventBlock:ventBlocks) {
+            lavaFlowBlocks.add(ventBlock.getRelative(BlockFace.UP));
+        }
         return lavaFlowBlocks;
     }
 

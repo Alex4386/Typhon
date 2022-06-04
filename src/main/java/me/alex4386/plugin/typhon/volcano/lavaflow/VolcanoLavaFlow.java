@@ -230,15 +230,15 @@ public class VolcanoLavaFlow implements Listener {
         }
     }
 
-    public void registerLavaCoolData(Block block, boolean isBomb) {
+    private void registerLavaCoolData(Block block, boolean isBomb) {
         this.registerLavaCoolData(block, block, block, isBomb, -1);
     }
 
-    public void registerLavaCoolData(Block source, Block fromBlock, Block block, boolean isBomb) {
+    private void registerLavaCoolData(Block source, Block fromBlock, Block block, boolean isBomb) {
         this.registerLavaCoolData(source, fromBlock, block, isBomb, -1);
     }
 
-    public void registerLavaCoolData(Block source, Block fromBlock, Block block, boolean isBomb, int extension) {
+    private void registerLavaCoolData(Block source, Block fromBlock, Block block, boolean isBomb, int extension) {
         block.setType(Material.LAVA);
 
         Material targetMaterial = isBomb ?
@@ -292,10 +292,13 @@ public class VolcanoLavaFlow implements Listener {
         int flowCount = Math.max(1, craterBlocks / boom);
         */
 
+        // this.vent.getVolcano().logger.log(VolcanoLogClass.LAVA_FLOW, "Triggering "+flowCount+" blocks of lava flow at vent "+vent.getName()+"...");
+
         List<Block> whereToFlows = vent.requestFlows(flowCount);
 
         for (Block whereToFlow: whereToFlows) {
-            if (whereToFlow.getType() != Material.LAVA)
+            VolcanoLavaCoolData coolData = lavaCoolHashMap.get(whereToFlow);
+            if (coolData == null || coolData.tickPassed())
                 flowLava(whereToFlow);
         }
     }
@@ -330,20 +333,25 @@ public class VolcanoLavaFlow implements Listener {
         }
     }
 
-    public void autoFlowLava() {
+    public void flowLavaFromBomb(Block bomb) {
+        this.registerLavaCoolData(bomb, true);
+    }
+
+    private void autoFlowLava() {
         long timeNow = System.currentTimeMillis();
         if (timeNow >= nextFlowTime) {
             double missedFlowTime = timeNow - nextFlowTime;
             double flowTick = settings.delayFlowed * (1000 * (1 / getTickFactor()));
 
-            int missedFlows = (int) Math.min(missedFlowTime / flowTick, this.vent.getVentBlocksScaffold().size() / 3);
+            int missedFlows = (int) (missedFlowTime / flowTick) + 1;
+            int actualFlows = Math.min((int) ((float) (1 + missedFlows) * ((Math.random() * 1.5) + 0.5)), vent.getVentBlocksScaffold().size() / 3);
 
-            flowLava(missedFlows);
+            flowLava(actualFlows);
             nextFlowTime = timeNow + (int) (settings.delayFlowed * (1000 * (1 / getTickFactor())));
         }
     }
 
-    public void runCooldownTick() {
+    private void runCooldownTick() {
         Iterator<Map.Entry<Block, VolcanoLavaCoolData>> iterator = lavaCoolHashMap.entrySet().iterator();
         List<Block> removeTargets = new ArrayList<Block>();
 

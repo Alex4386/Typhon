@@ -1,8 +1,10 @@
 package me.alex4386.plugin.typhon;
 
 import me.alex4386.plugin.typhon.volcano.commands.VolcanoCommand;
+import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoConstructionStatus;
 import org.bukkit.*;
 import org.bukkit.block.Block;
@@ -41,8 +43,38 @@ public class TyphonCommand {
                     Volcano volcano = new Volcano(volcanoDir.toPath(), location);
                     volcano.load();
 
-                    TyphonPlugin.listVolcanoes.put(volcanoName, volcano);
-                    TyphonMessage.info(sender, "Volcano "+volcanoName+" was generated!");
+                    if (args.length >= 3) {
+                        VolcanoEruptStyle style = VolcanoEruptStyle.getVolcanoEruptStyle(args[2]);
+
+                        if (style == null) {
+                            TyphonMessage.warn(sender, "Erupt Style "+args[2]+" is not valid! skipping configuration.");
+                        } else {
+                            volcano.mainVent.erupt.setStyle(style);
+                            volcano.mainVent.erupt.autoConfig();
+
+                            if (style == VolcanoEruptStyle.HAWAIIAN) {
+                                if (sender instanceof Player) {
+                                    Player player = (Player) sender;
+    
+                                    float yaw = -1 * player.getLocation().getYaw();
+                                    yaw = (yaw % 360 + 360) % 360;
+                                    
+                                    volcano.mainVent.fissureAngle = Math.toRadians(yaw);
+
+                                    TyphonMessage.info(sender, "Fissure angle was setted to your current viewing direction");
+                                } else {
+                                    volcano.mainVent.fissureAngle = Math.random() * Math.PI * 2;
+                                }
+
+                                volcano.mainVent.setType(VolcanoVentType.FISSURE);
+                            }
+
+                            volcano.trySave();
+                        }
+
+                        TyphonPlugin.listVolcanoes.put(volcanoName, volcano);
+                        TyphonMessage.info(sender, "Volcano "+volcanoName+" was generated!");
+                    }
 
                 } catch (IOException e) {
                     TyphonMessage.error(sender, "I/O Exception was generated during creation of Volcano "+volcanoName+"!");
@@ -203,18 +235,28 @@ public class TyphonCommand {
                 TyphonCommandAction action = TyphonCommandAction.getAction(args[0]);
                 if (action == null) return null;
 
-                if (args.length == 2) {
+                if (args.length >= 2) {
                     if (action.equals(TyphonCommandAction.CONSTRUCTIONS)) {
-                        return searchVolcano(args[1]);
+                        if (args.length == 2) return searchVolcano(args[1]);
                     } else if (action.equals(TyphonCommandAction.CREATE)) {
-                        String[] str = { "<name>" };
-                        return Arrays.asList(str);
+                        if (args.length == 2) {
+                            String[] str = { "<name>" };
+                            return Arrays.asList(str);
+                        } else if (args.length == 3) {
+                            List<String> str = new ArrayList<>();
+                            for (VolcanoEruptStyle style : VolcanoEruptStyle.values()) {
+                                str.add(style.toString());
+                            }
+                            return search(args[2], str);
+                        }
                     } else if (action.equals(TyphonCommandAction.DEBUG)) {
-                        if (TyphonDebugCommand.canRunDebug(sender)) {
-                            return TyphonDebugCommand.onTabComplete(
-                                    sender,
-                                    TyphonDebugCommand.convertToDebugNewArgs(args)
-                            );
+                        if (args.length == 2) {
+                            if (TyphonDebugCommand.canRunDebug(sender)) {
+                                return TyphonDebugCommand.onTabComplete(
+                                        sender,
+                                        TyphonDebugCommand.convertToDebugNewArgs(args)
+                                );
+                            }
                         }
                     }
                 }
@@ -274,7 +316,7 @@ public class TyphonCommand {
                 sender.sendMessage(ChatColor.GRAY+"Originally developed by diwaly");
                 sender.sendMessage(ChatColor.GRAY+"Distributed under GPLv3");
                 sender.sendMessage("");
-                sender.sendMessage(ChatColor.YELLOW+"/typhon create <name>"+ChatColor.GRAY+" : Create a volcano");
+                sender.sendMessage(ChatColor.YELLOW+"/typhon create <name> <?style>"+ChatColor.GRAY+" : Create a volcano");
                 sender.sendMessage(ChatColor.YELLOW+"/typhon near"+ChatColor.GRAY+" : get near-by volcanoes");
             }
         } else if (commandName.equals("volcano") || commandName.equals("vol")) {
