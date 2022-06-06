@@ -32,4 +32,3 @@ public class VolcanoLavaFlowSettings {
         return configData;
     }
 }
-

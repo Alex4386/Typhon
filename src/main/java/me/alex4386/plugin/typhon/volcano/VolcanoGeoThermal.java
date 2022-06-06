@@ -4,12 +4,9 @@ import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
-import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
-import org.apache.logging.log4j.core.Version;
 import org.bukkit.*;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -58,106 +55,270 @@ public class VolcanoGeoThermal implements Listener {
 
     public void registerTask() {
         if (scheduleID == -1) {
-            scheduleID = Bukkit.getServer().getScheduler().scheduleSyncRepeatingTask(
-                    TyphonPlugin.plugin,
-                    (Runnable) () -> {
-                        if (enable) {
-                            // something to do~~
-                            for (VolcanoVent vent : volcano.manager.getVents()) {
-                                if (vent.enabled) {
+            scheduleID =
+                    Bukkit.getServer()
+                            .getScheduler()
+                            .scheduleSyncRepeatingTask(
+                                    TyphonPlugin.plugin,
+                                    (Runnable)
+                                            () -> {
+                                                if (enable) {
+                                                    // something to do~~
+                                                    for (VolcanoVent vent :
+                                                            volcano.manager.getVents()) {
+                                                        if (vent.enabled) {
 
-                                    int geothermalRange = Math.max(50, (int) (vent.craterRadius * 2.5));
+                                                            int geothermalRange =
+                                                                    Math.max(
+                                                                            50,
+                                                                            (int)
+                                                                                    (vent.craterRadius
+                                                                                            * 2.5));
 
-                                    for (int i = 0; i < vent.status.getScaleFactor() * Math.pow(geothermalRange / 50, 1 + (1.2 * vent.status.getScaleFactor())); i++) {
-                                        Block block;
+                                                            for (int i = 0;
+                                                                    i
+                                                                            < vent.status
+                                                                                            .getScaleFactor()
+                                                                                    * Math.pow(
+                                                                                            geothermalRange
+                                                                                                    / 50,
+                                                                                            1
+                                                                                                    + (1.2
+                                                                                                            * vent
+                                                                                                                    .status
+                                                                                                                    .getScaleFactor()));
+                                                                    i++) {
+                                                                Block block;
 
-                                        if (Math.random() < 0.125 * ((double) vent.craterRadius / 20)) {
-                                            block = TyphonUtils.getHighestRocklikes(
-                                                    TyphonUtils.getRandomBlockInRange(
-                                                            vent.location.getBlock(),
-                                                            (int) Math.floor(vent.craterRadius)
-                                                    )
-                                            );
-                                        } else {
-                                            block = TyphonUtils.getHighestRocklikes(
-                                                    TyphonUtils.getRandomBlockInRange(
-                                                            vent.location.getBlock(),
-                                                            (int) Math.floor(vent.craterRadius),
-                                                            (int) Math.floor(geothermalRange)
-                                                    )
-                                            );
-                                        }
+                                                                if (Math.random()
+                                                                        < 0.125
+                                                                                * ((double)
+                                                                                                vent.craterRadius
+                                                                                        / 20)) {
+                                                                    block =
+                                                                            TyphonUtils
+                                                                                    .getHighestRocklikes(
+                                                                                            TyphonUtils
+                                                                                                    .getRandomBlockInRange(
+                                                                                                            vent
+                                                                                                                    .location
+                                                                                                                    .getBlock(),
+                                                                                                            (int)
+                                                                                                                    Math
+                                                                                                                            .floor(
+                                                                                                                                    vent.craterRadius)));
+                                                                } else {
+                                                                    block =
+                                                                            TyphonUtils
+                                                                                    .getHighestRocklikes(
+                                                                                            TyphonUtils
+                                                                                                    .getRandomBlockInRange(
+                                                                                                            vent
+                                                                                                                    .location
+                                                                                                                    .getBlock(),
+                                                                                                            (int)
+                                                                                                                    Math
+                                                                                                                            .floor(
+                                                                                                                                    vent.craterRadius),
+                                                                                                            (int)
+                                                                                                                    Math
+                                                                                                                            .floor(
+                                                                                                                                    geothermalRange)));
+                                                                }
 
-                                        if (shouldDoIt(vent, block.getLocation()) || (Math.random() < (0.7 * vent.status.getScaleFactor()) && geothermalRange == 50 && vent.longestFlowLength <= 50)) {
+                                                                if (shouldDoIt(
+                                                                                vent,
+                                                                                block.getLocation())
+                                                                        || (Math.random()
+                                                                                        < (0.7
+                                                                                                * vent
+                                                                                                        .status
+                                                                                                        .getScaleFactor())
+                                                                                && geothermalRange
+                                                                                        == 50
+                                                                                && vent.longestFlowLength
+                                                                                        <= 50)) {
 
-                                            final Location targetLoc = block.getLocation().add(0, 1, 0);
-                                            TyphonUtils.createRisingSteam(targetLoc, 1, 5);
+                                                                    final Location targetLoc =
+                                                                            block.getLocation()
+                                                                                    .add(0, 1, 0);
+                                                                    TyphonUtils.createRisingSteam(
+                                                                            targetLoc, 1, 5);
 
-                                            Entity[] entities = block.getChunk().getEntities();
-                                            for (Entity entity : entities) {
-                                                double distance = entity.getLocation().distance(targetLoc);
-                                                if (distance < 3 && entity.getMaxFireTicks() != 0) {
-                                                    entity.setFireTicks((int) (120 * volcano.manager.getHeatValue(targetLoc) * (distance / 3) * vent.status.getScaleFactor()));
-                                                }
-                                            }
+                                                                    Entity[] entities =
+                                                                            block.getChunk()
+                                                                                    .getEntities();
+                                                                    for (Entity entity : entities) {
+                                                                        double distance =
+                                                                                entity.getLocation()
+                                                                                        .distance(
+                                                                                                targetLoc);
+                                                                        if (distance < 3
+                                                                                && entity
+                                                                                                .getMaxFireTicks()
+                                                                                        != 0) {
+                                                                            entity.setFireTicks(
+                                                                                    (int)
+                                                                                            (120
+                                                                                                    * volcano
+                                                                                                            .manager
+                                                                                                            .getHeatValue(
+                                                                                                                    targetLoc)
+                                                                                                    * (distance
+                                                                                                            / 3)
+                                                                                                    * vent
+                                                                                                            .status
+                                                                                                            .getScaleFactor()));
+                                                                        }
+                                                                    }
 
-                                            volcano.metamorphism.evaporateBlock(block);
-                                            for (int x = -1; x <= 1; x++) {
-                                                for (int y = -1; y <= 1; y++) {
-                                                    for (int z = -1; z <= 1; z++) {
-                                                        volcano.metamorphism.evaporateBlock(block.getRelative(x, y, z));
+                                                                    volcano.metamorphism
+                                                                            .evaporateBlock(block);
+                                                                    for (int x = -1; x <= 1; x++) {
+                                                                        for (int y = -1;
+                                                                                y <= 1;
+                                                                                y++) {
+                                                                            for (int z = -1;
+                                                                                    z <= 1;
+                                                                                    z++) {
+                                                                                volcano.metamorphism
+                                                                                        .evaporateBlock(
+                                                                                                block
+                                                                                                        .getRelative(
+                                                                                                                x,
+                                                                                                                y,
+                                                                                                                z));
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            Block ventTopBlock =
+                                                                    TyphonUtils.getHighestRocklikes(
+                                                                            vent.location
+                                                                                    .getBlock());
+
+                                                            if (vent.status.getScaleFactor()
+                                                                    >= 0.1) {
+                                                                int length =
+                                                                        (int)
+                                                                                (Math.random()
+                                                                                        * 0.1
+                                                                                        * Math.pow(
+                                                                                                vent.craterRadius,
+                                                                                                2)
+                                                                                        * vent
+                                                                                                .status
+                                                                                                .getScaleFactor());
+
+                                                                for (int i = 0; i < length; i++) {
+                                                                    Location location =
+                                                                            TyphonUtils
+                                                                                    .getHighestLocation(
+                                                                                            TyphonUtils
+                                                                                                    .getRandomBlockInRange(
+                                                                                                            vent
+                                                                                                                    .location
+                                                                                                                    .getBlock(),
+                                                                                                            (int)
+                                                                                                                            Math
+                                                                                                                                    .floor(
+                                                                                                                                            vent.craterRadius
+                                                                                                                                                    - 3)
+                                                                                                                    + (int)
+                                                                                                                            ((Math
+                                                                                                                                                    .random()
+                                                                                                                                            * 6)
+                                                                                                                                    - 3))
+                                                                                                    .getLocation());
+
+                                                                    if (Math.random()
+                                                                                    < vent.status
+                                                                                            .getScaleFactor()
+                                                                            && vent.getHeatValue(
+                                                                                            location)
+                                                                                    > 0.999) {
+                                                                        int count =
+                                                                                Math.abs(
+                                                                                                (int)
+                                                                                                                (volcano
+                                                                                                                                .manager
+                                                                                                                                .getHeatValue(
+                                                                                                                                        location)
+                                                                                                                        - 0.999)
+                                                                                                        * 1000)
+                                                                                        * 20;
+
+                                                                        Entity[] entities =
+                                                                                location.getChunk()
+                                                                                        .getEntities();
+                                                                        for (Entity entity :
+                                                                                entities) {
+                                                                            double distance =
+                                                                                    entity.getLocation()
+                                                                                            .distance(
+                                                                                                    location);
+                                                                            if (distance < 5
+                                                                                    && entity
+                                                                                                    .getMaxFireTicks()
+                                                                                            != 0) {
+                                                                                entity.setFireTicks(
+                                                                                        (int)
+                                                                                                (100
+                                                                                                        * volcano
+                                                                                                                .manager
+                                                                                                                .getHeatValue(
+                                                                                                                        location)
+                                                                                                        * (distance
+                                                                                                                / 5)
+                                                                                                        * vent
+                                                                                                                .status
+                                                                                                                .getScaleFactor()));
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                if (lastLavaTime < 0
+                                                                        || lastLavaTime
+                                                                                < System
+                                                                                                .currentTimeMillis()
+                                                                                        - 2000) {
+                                                                    lastLavaTime =
+                                                                            System
+                                                                                    .currentTimeMillis();
+
+                                                                    vent.location
+                                                                            .getWorld()
+                                                                            .playSound(
+                                                                                    ventTopBlock
+                                                                                            .getLocation(),
+                                                                                    Sound
+                                                                                            .BLOCK_LAVA_POP,
+                                                                                    2f,
+                                                                                    1f);
+                                                                    vent.location
+                                                                            .getWorld()
+                                                                            .playSound(
+                                                                                    ventTopBlock
+                                                                                            .getLocation(),
+                                                                                    Sound
+                                                                                            .BLOCK_LAVA_AMBIENT,
+                                                                                    2f,
+                                                                                    1f);
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 }
-                                            }
-                                        }
-                                    }
-
-                                    Block ventTopBlock = TyphonUtils.getHighestRocklikes(vent.location.getBlock());
-
-                                    if (vent.status.getScaleFactor() >= 0.1) {
-                                        int length = (int) (Math.random() * 0.1 * Math.pow(vent.craterRadius, 2) * vent.status.getScaleFactor());
-
-                                        for (int i = 0; i < length; i++) {
-                                            Location location = TyphonUtils.getHighestLocation(TyphonUtils.getRandomBlockInRange(
-                                                    vent.location.getBlock(),
-                                                    (int) Math.floor(vent.craterRadius - 3) + (int) ((Math.random() * 6) - 3)
-                                            ).getLocation());
-
-                                            if (Math.random() < vent.status.getScaleFactor() && vent.getHeatValue(location) > 0.999) {
-                                                int count = Math.abs((int) (volcano.manager.getHeatValue(location) - 0.999) * 1000) * 20;
-
-                                                Entity[] entities = location.getChunk().getEntities();
-                                                for (Entity entity : entities) {
-                                                    double distance = entity.getLocation().distance(location);
-                                                    if (distance < 5 && entity.getMaxFireTicks() != 0) {
-                                                        entity.setFireTicks((int) (100 * volcano.manager.getHeatValue(location) * (distance / 5) * vent.status.getScaleFactor()));
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        if (lastLavaTime < 0 || lastLavaTime < System.currentTimeMillis() - 2000) {
-                                            lastLavaTime = System.currentTimeMillis();
-
-                                            vent.location.getWorld().playSound(
-                                                    ventTopBlock.getLocation(),
-                                                    Sound.BLOCK_LAVA_POP,
-                                                    2f,
-                                                    1f
-                                            );
-                                            vent.location.getWorld().playSound(
-                                                    ventTopBlock.getLocation(),
-                                                    Sound.BLOCK_LAVA_AMBIENT,
-                                                    2f,
-                                                    1f
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }, 0, Math.min((long) ((geoThermalUpdateRate / 20.0) * volcano.updateRate), 1)
-            );
+                                            },
+                                    0,
+                                    Math.min(
+                                            (long)
+                                                    ((geoThermalUpdateRate / 20.0)
+                                                            * volcano.updateRate),
+                                            1));
         }
     }
 
@@ -182,7 +343,9 @@ public class VolcanoGeoThermal implements Listener {
 
     public boolean shouldDoIt(VolcanoVent vent, Location location) {
         Random random = new Random();
-        return enable && volcano.manager.getHeatValue(location) >= 1 - vent.status.getScaleFactor() && random.nextDouble() < vent.status.getScaleFactor();
+        return enable
+                && volcano.manager.getHeatValue(location) >= 1 - vent.status.getScaleFactor()
+                && random.nextDouble() < vent.status.getScaleFactor();
     }
 
     @EventHandler
@@ -207,10 +370,14 @@ public class VolcanoGeoThermal implements Listener {
         Location loc = targetBlock.getLocation();
 
         if (volcano.manager.getHeatValue(loc) > 0.7) {
-            if (bucket == Material.WATER_BUCKET || bucket == Material.WATER || bucket == Material.POWDER_SNOW_BUCKET || bucket == Material.POWDER_SNOW) {
+            if (bucket == Material.WATER_BUCKET
+                    || bucket == Material.WATER
+                    || bucket == Material.POWDER_SNOW_BUCKET
+                    || bucket == Material.POWDER_SNOW) {
                 TyphonUtils.createRisingSteam(loc, 1, 5);
 
-                event.getPlayer().sendMessage(ChatColor.RED+"Heat of the volcano evaporated your water!");
+                event.getPlayer()
+                        .sendMessage(ChatColor.RED + "Heat of the volcano evaporated your water!");
 
                 event.setCancelled(true);
                 if (event.getPlayer().getInventory().getItemInMainHand().getType() == bucket) {

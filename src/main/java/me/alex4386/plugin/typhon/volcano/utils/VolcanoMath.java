@@ -1,8 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.utils;
 
-import me.alex4386.plugin.typhon.volcano.utils.VolcanoCircleOffsetXZ;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,8 +18,8 @@ public class VolcanoMath {
     }
 
     public static double pdf(double mean, double variance, double x) {
-        double base = 1/Math.sqrt(2*Math.PI*variance);
-        double pow = -(Math.pow((x-mean), 2)/(2*variance));
+        double base = 1 / Math.sqrt(2 * Math.PI * variance);
+        double pow = -(Math.pow((x - mean), 2) / (2 * variance));
         return Math.pow(Math.E, pow) * base;
     }
 
@@ -46,7 +44,7 @@ public class VolcanoMath {
     }
 
     public static double magmaPdfHeight(double x) {
-        return pdfMaxLimiter(0,1, x, 1);
+        return pdfMaxLimiter(0, 1, x, 1);
     }
 
     public static double getZeroFocusedRandom(double variance) {
@@ -78,8 +76,8 @@ public class VolcanoMath {
         double steepVariance = steepness * 0.1;
 
         double variance = 0.1 + steepVariance;
-        double base = 1/Math.sqrt(2*Math.PI*variance);
-        double pow = -(Math.pow((x-mean), 2)/(2*variance));
+        double base = 1 / Math.sqrt(2 * Math.PI * variance);
+        double pow = -(Math.pow((x - mean), 2) / (2 * variance));
         return Math.pow(Math.E, pow) * base;
     }
 
@@ -113,7 +111,7 @@ public class VolcanoMath {
     public static List<Block> getLine(Block centerBlock, double angle, int length) {
         List<Block> lineBlocks = new ArrayList<>();
 
-        for (double i = 0; i <= (length / 2); i ++) {
+        for (double i = 0; i <= (length / 2); i++) {
             double x = Math.sin(angle) * i;
             double z = Math.cos(angle) * i;
 
@@ -135,18 +133,19 @@ public class VolcanoMath {
         List<Block> cylinderBlocks = new ArrayList<>();
 
         for (int i = 0; i < height; i++) {
-            Block cylinderCenterBlock = centerBlock.getRelative(0,i,0);
+            Block cylinderCenterBlock = centerBlock.getRelative(0, i, 0);
             cylinderBlocks.addAll(getCircle(cylinderCenterBlock, radius));
         }
 
         return cylinderBlocks;
     }
 
-    public static List<Block> getCylinder(Block centerBlock, int radius, int height, int hollowRadius) {
+    public static List<Block> getCylinder(
+            Block centerBlock, int radius, int height, int hollowRadius) {
         List<Block> cylinderBlocks = new ArrayList<>();
 
         for (int i = 0; i < height; i++) {
-            Block cylinderCenterBlock = centerBlock.getRelative(0,i,0);
+            Block cylinderCenterBlock = centerBlock.getRelative(0, i, 0);
             cylinderBlocks.addAll(getCircle(cylinderCenterBlock, radius, hollowRadius));
         }
 
@@ -166,7 +165,8 @@ public class VolcanoMath {
                     double distanceSquared = Math.pow(x, 2) + Math.pow(y, 2) + Math.pow(z, 2);
 
                     double radiusSquared = 3 * Math.pow(radius - 1, 2);
-                    double hollowRadiusSquared = hollowRadius > 0 ? 3 * Math.pow(hollowRadius - 1, 2) : -1;
+                    double hollowRadiusSquared =
+                            hollowRadius > 0 ? 3 * Math.pow(hollowRadius - 1, 2) : -1;
 
                     if (distanceSquared <= radiusSquared && distanceSquared > hollowRadiusSquared) {
                         sphereBlocks.add(centerBlock.getRelative(x, y, z));
@@ -178,12 +178,13 @@ public class VolcanoMath {
         return sphereBlocks;
     }
 
-
-    public static VolcanoCircleOffsetXZ getCenterFocusedCircleOffset(Block centerBlock, int radius) {
+    public static VolcanoCircleOffsetXZ getCenterFocusedCircleOffset(
+            Block centerBlock, int radius) {
         return getCenterFocusedCircleOffset(centerBlock, radius, 0);
     }
 
-    public static VolcanoCircleOffsetXZ getCenterFocusedCircleOffset(Block centerBlock, int radius, int hollowRadius) {
+    public static VolcanoCircleOffsetXZ getCenterFocusedCircleOffset(
+            Block centerBlock, int radius, int hollowRadius) {
         double launchRadius = hollowRadius + getZeroFocusedRandom() * (radius - hollowRadius);
         double randomAngle = Math.random() * 2 * Math.PI;
 

@@ -2,6 +2,7 @@ package me.alex4386.plugin.typhon.volcano.commands;
 
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+
 import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -21,20 +22,23 @@ public class VolcanoCommandUtils {
 
             int toClimb = summitBlock.getY() - player.getLocation().getBlockY();
 
-            sender.sendMessage("Directions: "+directions);
-            sender.sendMessage("climb: "+toClimb+" blocks");
-
+            sender.sendMessage("Directions: " + directions);
+            sender.sendMessage("climb: " + toClimb + " blocks");
         }
 
-        sender.sendMessage("Located @ "+TyphonUtils.blockLocationTostring(summitBlock)+" on vent "+vent.getName());
+        sender.sendMessage(
+                "Located @ "
+                        + TyphonUtils.blockLocationTostring(summitBlock)
+                        + " on vent "
+                        + vent.getName());
     }
 
     public static String getSubmenuName(String submenuString, String[] args) {
         // vol name mainVent command
-        // -1  0    1          2
+        // -1 0 1 2
 
         // vol name subVent name command
-        // -1  0    1         2    3
+        // -1 0 1 2 3
 
         List<String> parsedArgs = new ArrayList<>(Arrays.asList(args));
         parsedArgs.remove(0);
@@ -48,10 +52,10 @@ public class VolcanoCommandUtils {
 
     public static String[] parseSubmenuCommand(String submenuString, String[] args) {
         // vol name mainVent command
-        // -1  0    1          2
+        // -1 0 1 2
 
         // vol name subVent name command
-        // -1  0    1         2    3
+        // -1 0 1 2 3
 
         List<String> parsedArgs = new ArrayList<>(Arrays.asList(args));
         parsedArgs.remove(0);
@@ -63,7 +67,4 @@ public class VolcanoCommandUtils {
 
         return parsedArgs.toArray(new String[parsedArgs.size()]);
     }
-
 }
-
-

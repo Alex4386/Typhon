@@ -29,35 +29,46 @@ public class VolcanoExplosion {
 
     public void registerTask() {
         if (this.scheduleID < 0) {
-            this.vent.volcano.logger.log(VolcanoLogClass.EXPLOSION, "Registering VolcanoExplosion for vent "+vent.getName());
-            this.scheduleID = Bukkit.getScheduler().scheduleSyncRepeatingTask(
-                TyphonPlugin.plugin,
-                () -> {
-                    if (this.enabled && this.running) {
-                        explode();
-                    }
-                },
-                0l,
-                (long) Math.max(this.settings.explosionDelay / vent.getVolcano().getTickFactor(), 1)
-            );
+            this.vent.volcano.logger.log(
+                    VolcanoLogClass.EXPLOSION,
+                    "Registering VolcanoExplosion for vent " + vent.getName());
+            this.scheduleID = Bukkit.getScheduler()
+                    .scheduleSyncRepeatingTask(
+                            TyphonPlugin.plugin,
+                            () -> {
+                                if (this.enabled && this.running) {
+                                    explode();
+                                }
+                            },
+                            0l,
+                            (long) Math.max(
+                                    this.settings.explosionDelay
+                                            / vent.getVolcano().getTickFactor(),
+                                    1));
         }
     }
 
     public void unregisterTask() {
         if (scheduleID >= 0) {
-            this.vent.volcano.logger.log(VolcanoLogClass.EXPLOSION, "Unregistering VolcanoExplosion for vent "+vent.getName());
+            this.vent.volcano.logger.log(
+                    VolcanoLogClass.EXPLOSION,
+                    "Unregistering VolcanoExplosion for vent " + vent.getName());
             Bukkit.getScheduler().cancelTask(scheduleID);
             scheduleID = -1;
         }
     }
 
     public void initialize() {
-        this.vent.volcano.logger.log(VolcanoLogClass.EXPLOSION, "Intializing VolcanoExplosion for vent "+vent.getName());
+        this.vent.volcano.logger.log(
+                VolcanoLogClass.EXPLOSION,
+                "Intializing VolcanoExplosion for vent " + vent.getName());
         this.registerTask();
     }
 
     public void shutdown() {
-        this.vent.volcano.logger.log(VolcanoLogClass.EXPLOSION, "Shutting down VolcanoExplosion for vent "+vent.getName());
+        this.vent.volcano.logger.log(
+                VolcanoLogClass.EXPLOSION,
+                "Shutting down VolcanoExplosion for vent " + vent.getName());
         this.unregisterTask();
     }
 
@@ -70,12 +81,15 @@ public class VolcanoExplosion {
             location = vent.selectCoreBlock().getLocation();
         }
 
-        Block launchBlock = new Location(location.getWorld(), location.getX(), theY, location.getZ()).getBlock();
+        Block launchBlock = new Location(location.getWorld(), location.getX(), theY, location.getZ())
+                .getBlock();
         return launchBlock.getLocation();
     }
 
     public void explode() {
-        int bombCount = (int) (Math.random() * (settings.maxBombCount - settings.minBombCount) + settings.minBombCount);
+        int bombCount = (int) ((Math.random() * (settings.maxBombCount - settings.minBombCount)
+                + settings.minBombCount)
+                * this.vent.erupt.getStyle().bombMultiplier);
         explode(bombCount);
     }
 
@@ -93,8 +107,14 @@ public class VolcanoExplosion {
 
     public void explode(int bombCount, boolean tremor, boolean smoke, boolean summitExplode) {
         if (summitExplode) {
-            vent.location.getWorld().createExplosion(this.selectEruptionVent(), settings.explosionSize, true, false);
-            vent.location.getWorld().createExplosion(this.selectEruptionVent(), settings.damagingExplosionSize, false, true);
+            vent.location
+                    .getWorld()
+                    .createExplosion(
+                            this.selectEruptionVent(), settings.explosionSize, true, false);
+            vent.location
+                    .getWorld()
+                    .createExplosion(
+                            this.selectEruptionVent(), settings.damagingExplosionSize, false, true);
         }
 
         if (tremor) {
@@ -105,16 +125,16 @@ public class VolcanoExplosion {
             Random random = new Random();
             int size = 4 + random.nextInt(3);
             for (int i = 0; i < 30; i++) {
-                Bukkit.getScheduler().runTaskLater(
-                        TyphonPlugin.plugin,
-                        (Runnable) () -> {
-                            vent.ash.createAshPlume();
-                        },
-                        5L * i
-                );
+                Bukkit.getScheduler()
+                        .runTaskLater(
+                                TyphonPlugin.plugin,
+                                (Runnable) () -> {
+                                    vent.ash.createAshPlume();
+                                },
+                                5L * i);
             }
 
-            //vent.generateSteam(5);
+            // vent.generateSteam(5);
         }
 
         for (int i = 0; i < bombCount; i++) {
@@ -125,15 +145,18 @@ public class VolcanoExplosion {
         List<Player> players = vent.getPlayersInRange();
         for (Player player : players) {
             if (!player.isFlying() && !vent.isInVent(player.getLocation())) {
-                int sentientBombs = (int)(bombCount * 0.1 * Math.random());
+                int sentientBombs = (int) (bombCount * 0.1 * Math.random());
 
                 if (sentientBombs > 0) {
-                    vent.volcano.logger.log(VolcanoLogClass.EXPLOSION, "Striking "+sentientBombs+" volcanic bombs to player "+player.getDisplayName());
+                    vent.volcano.logger.log(
+                            VolcanoLogClass.EXPLOSION,
+                            "Striking "
+                                    + sentientBombs
+                                    + " volcanic bombs to player "
+                                    + player.getDisplayName());
 
                     for (int i = 0; i < sentientBombs; i++) {
-                        vent.bombs.launchBombToDestination(
-                                player.getLocation()
-                        );
+                        vent.bombs.launchBombToDestination(player.getLocation());
                     }
                 }
             }

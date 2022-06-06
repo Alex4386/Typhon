@@ -1,6 +1,5 @@
 package me.alex4386.plugin.typhon.volcano.utils;
 
-
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -46,7 +45,8 @@ public class VolcanoConstructionMagmaChamberFillData extends VolcanoConstruction
                 Block sourceBlock = world.getBlockAt(x, y + i, z);
                 blockUpdates.put(sourceBlock, Material.LAVA);
             }
-        } else {}
+        } else {
+        }
 
         return blockUpdates;
     }

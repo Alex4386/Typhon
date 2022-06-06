@@ -4,6 +4,7 @@ import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
+
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -25,9 +26,9 @@ public class VolcanoConstruction {
     // estimate how much would it take to finish this operation
     public static double estimateBlockUpdatesInSeconds(long blockCount, boolean useNMS) {
         if (useNMS && blockUpdatesPerSecondsInNMS < 0) {
-            return (double)blockCount / blockUpdatesPerSecondsInNMS;
+            return (double) blockCount / blockUpdatesPerSecondsInNMS;
         } else if (!useNMS && blockUpdatesPerSecondsInBukkit < 0) {
-            return (double)blockCount / blockUpdatesPerSecondsInBukkit;
+            return (double) blockCount / blockUpdatesPerSecondsInBukkit;
         } else {
             return -1;
         }
@@ -43,12 +44,13 @@ public class VolcanoConstruction {
         return processingBlocks;
     }
 
-    public static double estimateBlockUpdatesInSeconds(VolcanoConstructionData data, boolean useNMS) {
+    public static double estimateBlockUpdatesInSeconds(
+            VolcanoConstructionData data, boolean useNMS) {
         return estimateBlockUpdatesInSeconds(estimateConstructionProcessedBlocks(data), useNMS);
     }
 
     // synchronous function that build volcano construction
-    public static<T extends VolcanoConstructionData> void runConstruction(T data, boolean useNMS) {
+    public static <T extends VolcanoConstructionData> void runConstruction(T data, boolean useNMS) {
         Map<Block, Block> constructionData = data.getConstructionData();
         Map<Block, Material> constructionMaterialData = data.getConstructionMaterialUpdateData();
 
@@ -61,7 +63,10 @@ public class VolcanoConstruction {
         for (Block key : entrySet) {
             Block sourceBlock = key;
             Block destinationBlock = constructionData.get(key);
-            boolean shouldUpdate = destinationBlock.getY() % 16 == 0 && destinationBlock.getX() % 16 == 0 && destinationBlock.getZ() % 16 == 0;
+            boolean shouldUpdate =
+                    destinationBlock.getY() % 16 == 0
+                            && destinationBlock.getX() % 16 == 0
+                            && destinationBlock.getZ() % 16 == 0;
 
             if (!TyphonUtils.isMaterialRocklikes(sourceBlock.getType())) {
                 if (!sourceBlock.getType().isAir()) {
@@ -74,7 +79,7 @@ public class VolcanoConstruction {
                 VolcanoConstructionRaiseData raiseData = (VolcanoConstructionRaiseData) data;
                 Block block = raiseData.baseBlock;
                 while (block.getType() == Material.LAVA) {
-                    block = block.getRelative(0,1,0);
+                    block = block.getRelative(0, 1, 0);
                 }
                 if (sourceBlock.getY() <= raiseData.raiseAmount + block.getY()) {
                     replacementMaterial = Material.LAVA;
@@ -85,7 +90,6 @@ public class VolcanoConstruction {
             destinationBlock.setType(sourceBlock.getType());
             destinationBlock.setBlockData(blockData, true);
             sourceBlock.setType(replacementMaterial);
-        
         }
 
         entrySet = new ArrayList<>(constructionMaterialData.keySet());
@@ -94,10 +98,12 @@ public class VolcanoConstruction {
             Block destinationBlock = key;
             Material material = constructionMaterialData.get(key);
 
-            boolean shouldUpdate = destinationBlock.getY() % 16 == 0 && destinationBlock.getX() % 16 == 0 && destinationBlock.getZ() % 16 == 0;
+            boolean shouldUpdate =
+                    destinationBlock.getY() % 16 == 0
+                            && destinationBlock.getX() % 16 == 0
+                            && destinationBlock.getZ() % 16 == 0;
 
             destinationBlock.setType(material);
-            
         }
 
         // raise data handler
@@ -146,31 +152,54 @@ public class VolcanoConstruction {
         }
     }
 
-    public static<T extends VolcanoConstructionData> void runConstructionAsync(T data, boolean useNMS, Runnable callback) {
-        Bukkit.getScheduler().runTask(TyphonPlugin.plugin, (Runnable) () -> {
-            runConstruction(data, useNMS);
-            if (callback != null) {
-                callback.run();
-            }
-        });
+    public static <T extends VolcanoConstructionData> void runConstructionAsync(
+            T data, boolean useNMS, Runnable callback) {
+        Bukkit.getScheduler()
+                .runTask(
+                        TyphonPlugin.plugin,
+                        (Runnable)
+                                () -> {
+                                    runConstruction(data, useNMS);
+                                    if (callback != null) {
+                                        callback.run();
+                                    }
+                                });
     }
 
-    public static <T extends VolcanoConstructionData> void runConstructions(VolcanoConstructionStatus status, Iterator<T> iterator, boolean useNMS, Runnable callback, Runnable iterationCallback) {
+    public static <T extends VolcanoConstructionData> void runConstructions(
+            VolcanoConstructionStatus status,
+            Iterator<T> iterator,
+            boolean useNMS,
+            Runnable callback,
+            Runnable iterationCallback) {
         status.hasSubStage = false;
         if (iterator.hasNext()) {
             T nextData = iterator.next();
-            runConstructionAsync(nextData, useNMS, (Runnable) () -> {
-                if (iterationCallback != null) {
-                    iterationCallback.run();
-                }
-                if (nextData != null) {
-                    // ah screw it
-                    Bukkit.getScheduler().runTask(TyphonPlugin.plugin, (Runnable) () -> {
-                        status.stageComplete();
-                        runConstructions(status, iterator, useNMS, callback, iterationCallback);
-                    });
-                }
-            });
+            runConstructionAsync(
+                    nextData,
+                    useNMS,
+                    (Runnable)
+                            () -> {
+                                if (iterationCallback != null) {
+                                    iterationCallback.run();
+                                }
+                                if (nextData != null) {
+                                    // ah screw it
+                                    Bukkit.getScheduler()
+                                            .runTask(
+                                                    TyphonPlugin.plugin,
+                                                    (Runnable)
+                                                            () -> {
+                                                                status.stageComplete();
+                                                                runConstructions(
+                                                                        status,
+                                                                        iterator,
+                                                                        useNMS,
+                                                                        callback,
+                                                                        iterationCallback);
+                                                            });
+                                }
+                            });
         } else {
             if (callback != null) {
                 callback.run();
@@ -178,24 +207,39 @@ public class VolcanoConstruction {
         }
     }
 
-    public static <T extends VolcanoConstructionData> void runConstructionGroups(VolcanoConstructionStatus status, Iterator<List<T>> iterator, boolean useNMS, Runnable callback, Runnable iterationCallback) {
+    public static <T extends VolcanoConstructionData> void runConstructionGroups(
+            VolcanoConstructionStatus status,
+            Iterator<List<T>> iterator,
+            boolean useNMS,
+            Runnable callback,
+            Runnable iterationCallback) {
         status.hasSubStage = true;
         if (iterator.hasNext()) {
             List<T> nextData = iterator.next();
             status.currentSubStage = 0;
             status.totalSubStage = nextData.size();
 
-            for (T data: nextData) {
+            for (T data : nextData) {
                 runConstruction(data, useNMS);
                 status.subStageComplete();
             }
-            Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, (Runnable) () -> {
-                if (iterationCallback != null) {
-                    iterationCallback.run();
-                }
-                status.stageComplete();
-                runConstructionGroups(status, iterator, useNMS, callback, iterationCallback);
-            }, 40L);
+            Bukkit.getScheduler()
+                    .runTaskLater(
+                            TyphonPlugin.plugin,
+                            (Runnable)
+                                    () -> {
+                                        if (iterationCallback != null) {
+                                            iterationCallback.run();
+                                        }
+                                        status.stageComplete();
+                                        runConstructionGroups(
+                                                status,
+                                                iterator,
+                                                useNMS,
+                                                callback,
+                                                iterationCallback);
+                                    },
+                            40L);
         } else {
             if (callback != null) {
                 callback.run();
@@ -203,14 +247,15 @@ public class VolcanoConstruction {
         }
     }
 
-    public static <T extends VolcanoConstructionData> List<List<T>> splitToGroups(Location baseLocation, List<T> data, boolean useNMS) {
+    public static <T extends VolcanoConstructionData> List<List<T>> splitToGroups(
+            Location baseLocation, List<T> data, boolean useNMS) {
         Block block = baseLocation.getBlock();
         Material material = block.getType();
 
-        long blockUpdateStartTime = System.nanoTime();;
+        long blockUpdateStartTime = System.nanoTime();
+        ;
 
         baseLocation.getBlock().setType(Material.LAVA);
-        
 
         long blockUpdateEndTime = System.nanoTime();
         long elapsedNanoSecondPerBlockUpdate = blockUpdateEndTime - blockUpdateStartTime;
@@ -220,18 +265,27 @@ public class VolcanoConstruction {
         long blockUpdatesPerMilliSecond = 1000000 / elapsedNanoSecondPerBlockUpdate;
         long blockUpdatesPerSecond = blockUpdatesPerMilliSecond * 1000;
 
-        TyphonPlugin.logger.log( VolcanoLogClass.CONSTRUCTION, "block update took:" + elapsedNanoSecondPerBlockUpdate + "ns.");
-        TyphonPlugin.logger.log( VolcanoLogClass.CONSTRUCTION, blockUpdatesPerSecond + " block updates per second");
+        TyphonPlugin.logger.log(
+                VolcanoLogClass.CONSTRUCTION,
+                "block update took:" + elapsedNanoSecondPerBlockUpdate + "ns.");
+        TyphonPlugin.logger.log(
+                VolcanoLogClass.CONSTRUCTION, blockUpdatesPerSecond + " block updates per second");
 
         List<List<T>> dataGroup = new ArrayList<>();
 
         int separatedBlocksPerGroup = (int) blockUpdatesPerSecond / 2;
         int separateGroupCount = (int) Math.ceil(data.size() / (double) separatedBlocksPerGroup);
 
-        TyphonPlugin.logger.log(VolcanoLogClass.CONSTRUCTION, "Separated: " + separatedBlocksPerGroup + " block updates per second, "+separateGroupCount+" groups");
+        TyphonPlugin.logger.log(
+                VolcanoLogClass.CONSTRUCTION,
+                "Separated: "
+                        + separatedBlocksPerGroup
+                        + " block updates per second, "
+                        + separateGroupCount
+                        + " groups");
 
         for (int i = 0; i < separateGroupCount; i++) {
-            int max = Math.min(((i+1) * separatedBlocksPerGroup) - 1, data.size());
+            int max = Math.min(((i + 1) * separatedBlocksPerGroup) - 1, data.size());
             List<T> thisData = data.subList(i * separatedBlocksPerGroup, max);
 
             dataGroup.add(thisData);

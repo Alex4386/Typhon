@@ -1,5 +1,11 @@
 package me.alex4386.plugin.typhon;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombListener;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
@@ -10,15 +16,8 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.json.simple.parser.ParseException;
-//import com.sk89q.worldedit.WorldEdit;
-//import com.sk89q.worldedit.bukkit.WorldEditPlugin;
-
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+// import com.sk89q.worldedit.WorldEdit;
+// import com.sk89q.worldedit.bukkit.WorldEditPlugin;
 
 public final class TyphonPlugin extends JavaPlugin {
     public static File dataDir;
@@ -43,20 +42,23 @@ public final class TyphonPlugin extends JavaPlugin {
         // Plugin startup logic
         logger.log(VolcanoLogClass.INIT, "Initializing...");
         if (version.toLowerCase().contains("snapshot")) {
-            logger.warn(VolcanoLogClass.INIT, "You are using developer build of the Typhon or nightly CI Build. Expect Bugs.");
+            logger.warn(
+                    VolcanoLogClass.INIT,
+                    "You are using developer build of the Typhon or nightly CI Build. Expect"
+                        + " Bugs.");
         }
 
         TyphonPlugin.dataDir = this.getDataFolder();
         TyphonPlugin.volcanoDir = new File(TyphonPlugin.dataDir, "Volcanoes");
 
-        logger.debug(VolcanoLogClass.INIT, "Data directory detected: "+this.dataDir);
+        logger.debug(VolcanoLogClass.INIT, "Data directory detected: " + this.dataDir);
 
         if (!dataDir.exists()) {
             logger.debug(VolcanoLogClass.INIT, "Data directory not found, creating one...");
             dataDir.mkdir();
         }
 
-        logger.debug(VolcanoLogClass.INIT, "Volcano Data detected: "+this.volcanoDir);
+        logger.debug(VolcanoLogClass.INIT, "Volcano Data detected: " + this.volcanoDir);
         if (!this.volcanoDir.exists()) {
             logger.debug(VolcanoLogClass.INIT, "Volcano Data directory not found, creating one...");
             this.volcanoDir.mkdir();
@@ -78,9 +80,22 @@ public final class TyphonPlugin extends JavaPlugin {
                     Volcano volcano = new Volcano(volcanoDir.toPath());
                     listVolcanoes.put(volcano.name, volcano);
                 } catch (IOException e) {
-                    logger.error(VolcanoLogClass.INIT, "Loading volcano "+volcanoName+" at path "+volcanoDir.getPath()+" caused I/O Error!");
+                    logger.error(
+                            VolcanoLogClass.INIT,
+                            "Loading volcano "
+                                    + volcanoName
+                                    + " at path "
+                                    + volcanoDir.getPath()
+                                    + " caused I/O Error!");
                 } catch (ParseException e) {
-                    logger.error(VolcanoLogClass.INIT, "Loading volcano "+volcanoName+" at path "+volcanoDir.getPath()+" caused Invalid JSON Error! Please turn on debug mode for verbose output!");
+                    logger.error(
+                            VolcanoLogClass.INIT,
+                            "Loading volcano "
+                                    + volcanoName
+                                    + " at path "
+                                    + volcanoDir.getPath()
+                                    + " caused Invalid JSON Error! Please turn on debug mode for"
+                                    + " verbose output!");
                 }
             }
         }
@@ -110,9 +125,22 @@ public final class TyphonPlugin extends JavaPlugin {
             try {
                 volcano.load();
             } catch (IOException e) {
-                volcano.logger.error(VolcanoLogClass.INIT, "Reloading volcano "+volcano.name+" at path "+volcanoDir.getPath()+" caused I/O Error!");
+                volcano.logger.error(
+                        VolcanoLogClass.INIT,
+                        "Reloading volcano "
+                                + volcano.name
+                                + " at path "
+                                + volcanoDir.getPath()
+                                + " caused I/O Error!");
             } catch (ParseException e) {
-                volcano.logger.error(VolcanoLogClass.INIT, "Reloading volcano "+volcano.name+" at path "+volcanoDir.getPath()+" caused Invalid JSON Error! Please turn on debug mode for verbose output!");
+                volcano.logger.error(
+                        VolcanoLogClass.INIT,
+                        "Reloading volcano "
+                                + volcano.name
+                                + " at path "
+                                + volcanoDir.getPath()
+                                + " caused Invalid JSON Error! Please turn on debug mode for"
+                                + " verbose output!");
             }
 
             volcano.initialize();
@@ -149,17 +177,14 @@ public final class TyphonPlugin extends JavaPlugin {
         vbl.shutdown();
     }
 
-
-
     @Override
-    public List<String> onTabComplete(CommandSender sender, Command command, String label, String[] args) {
+    public List<String> onTabComplete(
+            CommandSender sender, Command command, String label, String[] args) {
         return TyphonCommand.onTabComplete(sender, command, label, args);
-
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         return TyphonCommand.onCommand(sender, command, label, args);
     }
-
 }

@@ -1,11 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.log;
 
-import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
-import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class VolcanoVentEjectaTimeData {
     long startTime;

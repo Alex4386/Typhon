@@ -1,20 +1,11 @@
 package me.alex4386.plugin.typhon.volcano.utils;
 
 import me.alex4386.plugin.typhon.TyphonUtils;
+
 import org.bukkit.*;
 import org.bukkit.block.*;
-import org.bukkit.block.data.BlockData;
-import org.bukkit.entity.Entity;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.metadata.MetadataValue;
-import org.bukkit.plugin.Plugin;
-import org.bukkit.util.BoundingBox;
-import org.bukkit.util.RayTraceResult;
-import org.bukkit.util.Vector;
 
-import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 public class VolcanoConstructionRaiseData extends VolcanoConstructionData {
@@ -36,35 +27,36 @@ public class VolcanoConstructionRaiseData extends VolcanoConstructionData {
         int z = baseBlock.getZ();
 
         int surfaceY = TyphonUtils.getHighestOceanFloor(this.baseBlock.getLocation()).getBlockY();
-        int bedrockY = TyphonUtils.getLowestBedrockCeiling(this.baseBlock.getLocation()).getBlockY();
+        int bedrockY =
+                TyphonUtils.getLowestBedrockCeiling(this.baseBlock.getLocation()).getBlockY();
         int blockY = baseBlock.getY();
 
         World world = baseBlock.getWorld();
-/*
+        /*
 
-        // TODO: This should be refactored.
-        
-        if (this.raiseAmount > 0) {
-            for (int i = surfaceY; i >= blockY; i--) {
-                Block sourceBlock = world.getBlockAt(x, i, z);
-                Block destinationBlock = sourceBlock.getRelative(0, this.raiseAmount, 0);
-                Block fakeBlock = ;
+                // TODO: This should be refactored.
 
-                blockUpdates.put(sourceBlock, destinationBlock);
-                blockUpdates.put(fakeBlock, sourceBlock);
-            }
-        } else if (this.raiseAmount < 0) {
-            for (int i = blockY; i >= bedrockY; i--) {
-                Block sourceBlock = world.getBlockAt(x, i, z);
-                Block destinationBlock = sourceBlock.getRelative(0, this.raiseAmount, 0);
-                Block fakeBlock = TyphonUtils.createFakeBlock(replacementMaterial);
+                if (this.raiseAmount > 0) {
+                    for (int i = surfaceY; i >= blockY; i--) {
+                        Block sourceBlock = world.getBlockAt(x, i, z);
+                        Block destinationBlock = sourceBlock.getRelative(0, this.raiseAmount, 0);
+                        Block fakeBlock = ;
 
-                if (destinationBlock.getY() <= bedrockY) continue;
-                blockUpdates.put(sourceBlock, destinationBlock);
-                blockUpdates.put(fakeBlock, sourceBlock);
-            }
-        } else {}
-*/
+                        blockUpdates.put(sourceBlock, destinationBlock);
+                        blockUpdates.put(fakeBlock, sourceBlock);
+                    }
+                } else if (this.raiseAmount < 0) {
+                    for (int i = blockY; i >= bedrockY; i--) {
+                        Block sourceBlock = world.getBlockAt(x, i, z);
+                        Block destinationBlock = sourceBlock.getRelative(0, this.raiseAmount, 0);
+                        Block fakeBlock = TyphonUtils.createFakeBlock(replacementMaterial);
+
+                        if (destinationBlock.getY() <= bedrockY) continue;
+                        blockUpdates.put(sourceBlock, destinationBlock);
+                        blockUpdates.put(fakeBlock, sourceBlock);
+                    }
+                } else {}
+        */
 
         return blockUpdates;
     }
@@ -89,9 +81,9 @@ public class VolcanoConstructionRaiseData extends VolcanoConstructionData {
                 Block sourceBlock = world.getBlockAt(x, y + i, z);
                 blockUpdates.put(sourceBlock, Material.LAVA);
             }
-        } else {}
+        } else {
+        }
 
         return blockUpdates;
     }
 }
-

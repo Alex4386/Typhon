@@ -2,16 +2,14 @@ package me.alex4386.plugin.typhon.volcano;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
-import me.alex4386.plugin.typhon.volcano.ash.VolcanoAsh;
 import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
-import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoLavaFlow;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogger;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoAutoStart;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 
-import org.bukkit.*;
 import org.apache.commons.io.FileUtils;
+import org.bukkit.*;
 import org.bukkit.event.Listener;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.ParseException;
@@ -72,13 +70,26 @@ public class Volcano implements Listener {
             try {
                 this.load();
                 this.startup();
-            } catch(ParseException parseException) {
-                logger.error(VolcanoLogClass.CORE, "Unable to parse Volcano Config Dir "+basePath.toString()+" for Volcano "+this.name+". To inspect, please enable debug mode of plugin.");
+            } catch (ParseException parseException) {
+                logger.error(
+                        VolcanoLogClass.CORE,
+                        "Unable to parse Volcano Config Dir "
+                                + basePath.toString()
+                                + " for Volcano "
+                                + this.name
+                                + ". To inspect, please enable debug mode of plugin.");
                 throw parseException;
             }
         } else {
-            logger.error(VolcanoLogClass.CORE, "Unable to find Volcano Config Dir "+basePath.toString()+" for Volcano "+this.name+".");
-            throw new FileNotFoundException("Unable to find Volcano "+this.name+" on path: "+basePath.toString());
+            logger.error(
+                    VolcanoLogClass.CORE,
+                    "Unable to find Volcano Config Dir "
+                            + basePath.toString()
+                            + " for Volcano "
+                            + this.name
+                            + ".");
+            throw new FileNotFoundException(
+                    "Unable to find Volcano " + this.name + " on path: " + basePath.toString());
         }
     }
 
@@ -90,23 +101,37 @@ public class Volcano implements Listener {
             try {
                 this.load();
                 this.startup();
-            } catch(ParseException parseException) {
-                logger.error(VolcanoLogClass.CORE, "Unable to parse Volcano Config Dir "+basePath.toString()+" for Volcano "+this.name+". To inspect, please enable debug mode of plugin.");
+            } catch (ParseException parseException) {
+                logger.error(
+                        VolcanoLogClass.CORE,
+                        "Unable to parse Volcano Config Dir "
+                                + basePath.toString()
+                                + " for Volcano "
+                                + this.name
+                                + ". To inspect, please enable debug mode of plugin.");
                 throw parseException;
             }
         } else {
             if (loc != null) {
                 this.location = loc;
                 this.mainVent.location = loc;
-                logger.log(VolcanoLogClass.CORE, "Typhon is creating new Volcano "+this.name+".");
+                logger.log(
+                        VolcanoLogClass.CORE, "Typhon is creating new Volcano " + this.name + ".");
                 basePath.toFile().mkdirs();
 
                 dataLoader.setupDirectory();
                 this.save(true);
-                logger.log(VolcanoLogClass.CORE, "Typhon created new Volcano "+this.name+"!");
+                logger.log(VolcanoLogClass.CORE, "Typhon created new Volcano " + this.name + "!");
             } else {
-                logger.error(VolcanoLogClass.CORE, "Unable to find Volcano Config Dir "+basePath.toString()+" for Volcano "+this.name+".");
-                throw new FileNotFoundException("Unable to find Volcano "+this.name+" on path: "+basePath.toString());
+                logger.error(
+                        VolcanoLogClass.CORE,
+                        "Unable to find Volcano Config Dir "
+                                + basePath.toString()
+                                + " for Volcano "
+                                + this.name
+                                + ".");
+                throw new FileNotFoundException(
+                        "Unable to find Volcano " + this.name + " on path: " + basePath.toString());
             }
         }
     }
@@ -151,7 +176,9 @@ public class Volcano implements Listener {
         }
 
         if (runQuickCool) {
-            logger.log(VolcanoLogClass.CORE, "Running Quickcool due to shutdown... This might take a while...");
+            logger.log(
+                    VolcanoLogClass.CORE,
+                    "Running Quickcool due to shutdown... This might take a while...");
             this.quickCool();
         }
 
@@ -220,7 +247,7 @@ public class Volcano implements Listener {
         this.dataLoader.setAutostartConfig(this.autoStart.exportConfig());
         this.dataLoader.setMainVentConfig(this.mainVent.exportConfig());
 
-        for (Map.Entry<String, VolcanoVent> subVentEntry: this.subVents.entrySet() ) {
+        for (Map.Entry<String, VolcanoVent> subVentEntry : this.subVents.entrySet()) {
             String name = subVentEntry.getKey();
             VolcanoVent vent = subVentEntry.getValue();
 
@@ -242,8 +269,9 @@ public class Volcano implements Listener {
     }
 
     public void importConfig(JSONObject configData) {
-        //this.status = VolcanoStatus.getStatus((String) configData.get("status"));
-        this.location = TyphonUtils.deserializeLocationForJSON((JSONObject) configData.get("location"));
+        // this.status = VolcanoStatus.getStatus((String) configData.get("status"));
+        this.location =
+                TyphonUtils.deserializeLocationForJSON((JSONObject) configData.get("location"));
         this.isDebug = (boolean) configData.get("isDebug");
         this.updateRate = (long) configData.get("updateRate");
     }
@@ -251,7 +279,7 @@ public class Volcano implements Listener {
     public JSONObject exportConfig() {
         JSONObject configData = new JSONObject();
 
-        //configData.put("status", this.status.toString());
+        // configData.put("status", this.status.toString());
         configData.put("location", TyphonUtils.serializeLocationForJSON(this.location));
         configData.put("isDebug", this.isDebug);
         configData.put("updateRate", this.updateRate);

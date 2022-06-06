@@ -1,6 +1,5 @@
 package me.alex4386.plugin.typhon.volcano.explosion;
 
-
 import org.json.simple.JSONObject;
 
 public class VolcanoExplosionSettings {

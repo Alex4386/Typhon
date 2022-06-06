@@ -51,14 +51,25 @@ enum TyphonDebugCommandAction {
     }
 
     public String getManual(String label) {
-        return ChatColor.LIGHT_PURPLE+"/"+label+" "+ChatColor.YELLOW+this.cmdline+" "+ChatColor.GRAY+this.usage+ChatColor.RESET+" : "+this.explanation;
+        return ChatColor.LIGHT_PURPLE
+                + "/"
+                + label
+                + " "
+                + ChatColor.YELLOW
+                + this.cmdline
+                + " "
+                + ChatColor.GRAY
+                + this.usage
+                + ChatColor.RESET
+                + " : "
+                + this.explanation;
     }
 
     public static String getAllManual(CommandSender sender, String label) {
         String all = "";
 
         for (TyphonDebugCommandAction action : TyphonDebugCommandAction.values()) {
-            all += action.getManual(label)+"\n";
+            all += action.getManual(label) + "\n";
         }
 
         return all;
@@ -87,13 +98,19 @@ public class TyphonDebugCommand {
     }
 
     public static void sendMessage(CommandSender sender, String msg) {
-        sender.sendMessage(""+
-                ChatColor.RED+ChatColor.BOLD+
-                "[Typhon Plugin: "+
-                ChatColor.YELLOW+"DEBUG"+
-                ChatColor.RED+ChatColor.BOLD+"]"+
-                ChatColor.RESET+" "+
-                msg);
+        sender.sendMessage(
+                ""
+                        + ChatColor.RED
+                        + ChatColor.BOLD
+                        + "[Typhon Plugin: "
+                        + ChatColor.YELLOW
+                        + "DEBUG"
+                        + ChatColor.RED
+                        + ChatColor.BOLD
+                        + "]"
+                        + ChatColor.RESET
+                        + " "
+                        + msg);
     }
 
     public static boolean onCommand(CommandSender sender, String[] newArgs) {
@@ -104,9 +121,9 @@ public class TyphonDebugCommand {
 
         if (newArgs.length >= 1) {
             TyphonDebugCommandAction action = TyphonDebugCommandAction.getAction(newArgs[0]);
-            Player player = (sender instanceof Player) ? (Player)sender : null;
+            Player player = (sender instanceof Player) ? (Player) sender : null;
 
-            switch(action) {
+            switch (action) {
                 case TEST:
                     sendMessage(sender, "Test!");
                     if (newArgs.length >= 4) {
@@ -116,15 +133,18 @@ public class TyphonDebugCommand {
 
                         if (player != null) {
                             Location startLocation = player.getLocation();
-                            Location wantedDestination = player.getLocation().add(powerX,powerY,powerZ);
-                            FallingBlock block = player.getWorld().spawnFallingBlock(startLocation, new MaterialData(Material.GRAVEL));
+                            Location wantedDestination =
+                                    player.getLocation().add(powerX, powerY, powerZ);
+                            FallingBlock block =
+                                    player.getWorld()
+                                            .spawnFallingBlock(
+                                                    startLocation,
+                                                    new MaterialData(Material.GRAVEL));
                             block.setVelocity(
                                     TyphonUtils.calculateVelocity(
-                                            new Vector(0,0,0),
+                                            new Vector(0, 0, 0),
                                             new Vector(powerX, powerY, powerZ),
-                                            5
-                                    )
-                            );
+                                            5));
 
                             block.setGravity(true);
                             block.setInvulnerable(true);
@@ -132,7 +152,8 @@ public class TyphonDebugCommand {
 
                             AtomicInteger i = new AtomicInteger();
                             final Location[] prevLocation = {player.getLocation()};
-                            AtomicReference<Location> highestLocation = new AtomicReference<>(player.getLocation());
+                            AtomicReference<Location> highestLocation =
+                                    new AtomicReference<>(player.getLocation());
 
                             boolean startup = false;
                             if (newArgs.length == 5) {
@@ -141,47 +162,119 @@ public class TyphonDebugCommand {
 
                             boolean finalStartup = startup;
                             i.set(
-                                Bukkit.getScheduler().scheduleSyncRepeatingTask(
-                                    TyphonPlugin.plugin,
-                                    () -> {
-                                        Location location = block.getLocation();
-                                        double offsetX = location.getX() - prevLocation[0].getX();
-                                        double offsetY = location.getY() - prevLocation[0].getY();
-                                        double offsetZ = location.getZ() - prevLocation[0].getZ();
+                                    Bukkit.getScheduler()
+                                            .scheduleSyncRepeatingTask(
+                                                    TyphonPlugin.plugin,
+                                                    () -> {
+                                                        Location location = block.getLocation();
+                                                        double offsetX =
+                                                                location.getX()
+                                                                        - prevLocation[0].getX();
+                                                        double offsetY =
+                                                                location.getY()
+                                                                        - prevLocation[0].getY();
+                                                        double offsetZ =
+                                                                location.getZ()
+                                                                        - prevLocation[0].getZ();
 
-                                        if (block.isOnGround() || block.isDead() || (offsetX == 0 && offsetY == 0 && offsetZ == 0) || (location.getBlockY() == startLocation.getBlockY() && finalStartup && location.distance(startLocation) > 10)) {
-                                            Location destination = block.getLocation();
-                                            sendMessage(sender, "FINAL");
-                                            sendMessage(sender, TyphonUtils.blockLocationTostring(destination.getBlock()));
-                                            sendMessage(sender, "Distance Travelled");
-                                            sendMessage(sender, "x: " + (destination.getX() - startLocation.getX()));
-                                            sendMessage(sender, "y: " + (destination.getY() - startLocation.getY()));
-                                            sendMessage(sender, "z: " + (destination.getZ() - startLocation.getZ()));
-                                            sendMessage(sender, "Highest - height: "+(highestLocation.get().getY() - startLocation.getY()));
-                                            sendMessage(sender, TyphonUtils.blockLocationTostring(highestLocation.get().getBlock()));
-                                            Bukkit.getScheduler().cancelTask(i.get());
-                                            block.getLocation().getBlock().setType(Material.AIR);
-                                        }
+                                                        if (block.isOnGround()
+                                                                || block.isDead()
+                                                                || (offsetX == 0
+                                                                        && offsetY == 0
+                                                                        && offsetZ == 0)
+                                                                || (location.getBlockY()
+                                                                                == startLocation
+                                                                                        .getBlockY()
+                                                                        && finalStartup
+                                                                        && location.distance(
+                                                                                        startLocation)
+                                                                                > 10)) {
+                                                            Location destination =
+                                                                    block.getLocation();
+                                                            sendMessage(sender, "FINAL");
+                                                            sendMessage(
+                                                                    sender,
+                                                                    TyphonUtils
+                                                                            .blockLocationTostring(
+                                                                                    destination
+                                                                                            .getBlock()));
+                                                            sendMessage(
+                                                                    sender, "Distance Travelled");
+                                                            sendMessage(
+                                                                    sender,
+                                                                    "x: "
+                                                                            + (destination.getX()
+                                                                                    - startLocation
+                                                                                            .getX()));
+                                                            sendMessage(
+                                                                    sender,
+                                                                    "y: "
+                                                                            + (destination.getY()
+                                                                                    - startLocation
+                                                                                            .getY()));
+                                                            sendMessage(
+                                                                    sender,
+                                                                    "z: "
+                                                                            + (destination.getZ()
+                                                                                    - startLocation
+                                                                                            .getZ()));
+                                                            sendMessage(
+                                                                    sender,
+                                                                    "Highest - height: "
+                                                                            + (highestLocation
+                                                                                            .get()
+                                                                                            .getY()
+                                                                                    - startLocation
+                                                                                            .getY()));
+                                                            sendMessage(
+                                                                    sender,
+                                                                    TyphonUtils
+                                                                            .blockLocationTostring(
+                                                                                    highestLocation
+                                                                                            .get()
+                                                                                            .getBlock()));
+                                                            Bukkit.getScheduler()
+                                                                    .cancelTask(i.get());
+                                                            block.getLocation()
+                                                                    .getBlock()
+                                                                    .setType(Material.AIR);
+                                                        }
 
-                                        if (highestLocation.get().getY() < location.getY()) {
-                                            highestLocation.set(location);
-                                        }
+                                                        if (highestLocation.get().getY()
+                                                                < location.getY()) {
+                                                            highestLocation.set(location);
+                                                        }
 
-                                        String data =
-                                                TyphonUtils.blockLocationTostring(location.getBlock())
-                                                + (
-                                                    prevLocation[0] != null ? " - " +
-                                                            "x:" + String.format("%.2f", offsetX) + ", " +
-                                                            "y:" + String.format("%.2f", offsetY) + ", " +
-                                                            "z:" + String.format("%.2f", offsetZ) : ""
-                                                );
+                                                        String data =
+                                                                TyphonUtils.blockLocationTostring(
+                                                                                location.getBlock())
+                                                                        + (prevLocation[0] != null
+                                                                                ? " - "
+                                                                                        + "x:"
+                                                                                        + String
+                                                                                                .format(
+                                                                                                        "%.2f",
+                                                                                                        offsetX)
+                                                                                        + ", "
+                                                                                        + "y:"
+                                                                                        + String
+                                                                                                .format(
+                                                                                                        "%.2f",
+                                                                                                        offsetY)
+                                                                                        + ", "
+                                                                                        + "z:"
+                                                                                        + String
+                                                                                                .format(
+                                                                                                        "%.2f",
+                                                                                                        offsetZ)
+                                                                                : "");
 
-                                        sender.sendMessage(data);
+                                                        sender.sendMessage(data);
 
-                                        prevLocation[0] = location;
-                                    }, 0l, 1l
-                                )
-                            );
+                                                        prevLocation[0] = location;
+                                                    },
+                                                    0l,
+                                                    1l));
                         }
                     }
                     return true;
@@ -191,7 +284,7 @@ public class TyphonDebugCommand {
             }
         }
 
-        sender.sendMessage("Debug Command Failed: "+newArgs[1]);
+        sender.sendMessage("Debug Command Failed: " + newArgs[1]);
         return true;
     }
 }

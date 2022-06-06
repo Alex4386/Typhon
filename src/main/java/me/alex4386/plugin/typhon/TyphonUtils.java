@@ -1,24 +1,15 @@
 package me.alex4386.plugin.typhon;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import org.bukkit.*;
 import org.bukkit.block.*;
 import org.bukkit.block.data.BlockData;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.metadata.MetadataValue;
-import org.bukkit.plugin.Plugin;
-import org.bukkit.util.BoundingBox;
-import org.bukkit.util.RayTraceResult;
+import org.bukkit.block.data.Waterlogged;
 import org.bukkit.util.Vector;
-import org.bukkit.util.VoxelShape;
 import org.json.simple.JSONObject;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Random;
 
 public class TyphonUtils {
 
@@ -32,22 +23,12 @@ public class TyphonUtils {
 
     public static org.bukkit.Location getHighestLocation(org.bukkit.Location loc) {
         int y = loc.getWorld().getHighestBlockYAt(loc);
-        return new org.bukkit.Location(
-                loc.getWorld(),
-                loc.getX(),
-                y,
-                loc.getZ()
-        );
+        return new org.bukkit.Location(loc.getWorld(), loc.getX(), y, loc.getZ());
     }
 
     public static org.bukkit.Location getHighestOceanFloor(org.bukkit.Location loc) {
         int y = loc.getWorld().getHighestBlockYAt(loc, org.bukkit.HeightMap.OCEAN_FLOOR);
-        return new org.bukkit.Location(
-                loc.getWorld(),
-                loc.getX(),
-                y,
-                loc.getZ()
-        );
+        return new org.bukkit.Location(loc.getWorld(), loc.getX(), y, loc.getZ());
     }
 
     public static List<Block> getNearByBlocks(org.bukkit.block.Block baseBlock) {
@@ -64,38 +45,28 @@ public class TyphonUtils {
 
         for (int i = getMinimumY(loc.getWorld()); i <= MAX_BEDROCK_HEIGHT; i++) {
             if (block.getType() != org.bukkit.Material.BEDROCK) {
-                return new org.bukkit.Location(
-                        loc.getWorld(),
-                        x,
-                        i - 1,
-                        z
-                );
+                return new org.bukkit.Location(loc.getWorld(), x, i - 1, z);
             } else {
                 block = block.getRelative(org.bukkit.block.BlockFace.UP);
             }
         }
 
         // Um... This really shouldn't happen.
-        return new org.bukkit.Location(
-                loc.getWorld(),
-                x,
-                getMinimumY(loc.getWorld()),
-                z
-        );
+        return new org.bukkit.Location(loc.getWorld(), x, getMinimumY(loc.getWorld()), z);
     }
 
-    public static List<org.bukkit.block.Block> getNearByBlocks(org.bukkit.block.Block baseBlock, int radius) {
+    public static List<org.bukkit.block.Block> getNearByBlocks(
+            org.bukkit.block.Block baseBlock, int radius) {
         List<org.bukkit.block.Block> nearByBlocks = new ArrayList<>();
 
         for (int i = -radius; i <= radius; i++) {
             for (int j = -radius; j <= radius; j++) {
                 for (int k = -radius; k <= radius; k++) {
                     if (i == 0 && j == 0 && k == 0) continue;
-                    if (Math.pow(i,2) + Math.pow(j,2) + Math.pow(k,2) > Math.pow(radius,2)) continue;
+                    if (Math.pow(i, 2) + Math.pow(j, 2) + Math.pow(k, 2) > Math.pow(radius, 2))
+                        continue;
 
-                    nearByBlocks.add(
-                            baseBlock.getRelative(i, j, k)
-                    );
+                    nearByBlocks.add(baseBlock.getRelative(i, j, k));
                 }
             }
         }
@@ -104,53 +75,67 @@ public class TyphonUtils {
     }
 
     public static int getLavaLevel(org.bukkit.block.Block block) {
-        org.bukkit.block.data.Levelled levelled = (org.bukkit.block.data.Levelled) block.getBlockData();
+        org.bukkit.block.data.Levelled levelled =
+                (org.bukkit.block.data.Levelled) block.getBlockData();
         return levelled.getLevel();
     }
 
     public static void setLavaLevel(org.bukkit.block.Block block, int level) {
-        org.bukkit.block.data.Levelled levelled = (org.bukkit.block.data.Levelled) block.getBlockData();
+        org.bukkit.block.data.Levelled levelled =
+                (org.bukkit.block.data.Levelled) block.getBlockData();
         levelled.setLevel(level);
 
         block.setBlockData(levelled);
     }
 
-    public static double getTwoDimensionalDistance(org.bukkit.Location loc1, org.bukkit.Location loc2) {
+    public static double getTwoDimensionalDistance(
+            org.bukkit.Location loc1, org.bukkit.Location loc2) {
         double x = loc1.getX() - loc2.getX();
         double z = loc1.getZ() - loc2.getZ();
 
-        return Math.sqrt(Math.pow(x,2) + Math.pow(z,2));
+        return Math.sqrt(Math.pow(x, 2) + Math.pow(z, 2));
     }
 
-    public static double getTwoDimensionalDistance(org.bukkit.util.Vector vec1, org.bukkit.util.Vector vec2) {
+    public static double getTwoDimensionalDistance(
+            org.bukkit.util.Vector vec1, org.bukkit.util.Vector vec2) {
         double x = vec1.getX() - vec2.getX();
         double z = vec1.getZ() - vec2.getZ();
 
-        return Math.sqrt(Math.pow(x,2) + Math.pow(z,2));
+        return Math.sqrt(Math.pow(x, 2) + Math.pow(z, 2));
     }
 
     public static String blockLocationTostring(org.bukkit.block.Block block) {
         if (block == null) return "NULL";
-        return block.getX()+","+block.getY()+","+block.getZ()+" @ "+block.getWorld().getName();
+        return block.getX()
+                + ","
+                + block.getY()
+                + ","
+                + block.getZ()
+                + " @ "
+                + block.getWorld().getName();
     }
 
-    public static String readFile(java.io.File file) throws java.io.FileNotFoundException, java.io.IOException {
-        java.io.BufferedReader bufferedReader = new java.io.BufferedReader(new java.io.FileReader(file));
+    public static String readFile(java.io.File file)
+            throws java.io.FileNotFoundException, java.io.IOException {
+        java.io.BufferedReader bufferedReader =
+                new java.io.BufferedReader(new java.io.FileReader(file));
 
         String str = "";
         String tmp;
         while ((tmp = bufferedReader.readLine()) != null) {
-            str += tmp+"\n";
+            str += tmp + "\n";
         }
 
         return str;
     }
 
-    public static org.json.simple.JSONObject parseJSON(java.io.File file) throws org.json.simple.parser.ParseException, java.io.IOException {
+    public static org.json.simple.JSONObject parseJSON(java.io.File file)
+            throws org.json.simple.parser.ParseException, java.io.IOException {
         return parseJSON(readFile(file));
     }
 
-    public static org.json.simple.JSONObject parseJSON(String string) throws org.json.simple.parser.ParseException {
+    public static org.json.simple.JSONObject parseJSON(String string)
+            throws org.json.simple.parser.ParseException {
         org.json.simple.parser.JSONParser parser = new org.json.simple.parser.JSONParser();
         org.json.simple.JSONObject object = (org.json.simple.JSONObject) parser.parse(string);
 
@@ -182,7 +167,8 @@ public class TyphonUtils {
         return new org.bukkit.Location(org.bukkit.Bukkit.getWorld(world), x, y, z);
     }
 
-    public static void writeJSON(java.io.File file, org.json.simple.JSONObject jsonObject) throws java.io.IOException {
+    public static void writeJSON(java.io.File file, org.json.simple.JSONObject jsonObject)
+            throws java.io.IOException {
         writeString(file, jsonObject.toJSONString());
     }
 
@@ -208,7 +194,8 @@ public class TyphonUtils {
         return highestBlock;
     }
 
-    public static org.bukkit.block.Block getRandomBlockInRange(org.bukkit.block.Block block, int minRange, int maxRange) {
+    public static org.bukkit.block.Block getRandomBlockInRange(
+            org.bukkit.block.Block block, int minRange, int maxRange) {
         Random random = new Random();
 
         int offsetRadius = random.nextInt(maxRange - minRange) + minRange;
@@ -220,7 +207,8 @@ public class TyphonUtils {
         return block.getRelative(offsetX, 0, offsetZ);
     }
 
-    public static org.bukkit.block.Block getRandomBlockInRange(org.bukkit.block.Block block, int range) {
+    public static org.bukkit.block.Block getRandomBlockInRange(
+            org.bukkit.block.Block block, int range) {
         Random random = new Random();
 
         int offsetRadius = random.nextInt(range);
@@ -235,19 +223,17 @@ public class TyphonUtils {
     public static void stackTraceMe() {
         try {
             throw new Exception("manually triggered stacktrace");
-        } catch(Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
     public static boolean isMaterialTree(org.bukkit.Material material) {
         String materialType = material.name().toLowerCase();
-        return (
-                materialType.contains("leaves") ||
-                        materialType.contains("log") ||
-                        materialType.contains("plank") ||
-                        materialType.contains("wood")
-        );
+        return (materialType.contains("leaves")
+                || materialType.contains("log")
+                || materialType.contains("plank")
+                || materialType.contains("wood"));
     }
 
     public static org.bukkit.block.Block getHighestRocklikes(org.bukkit.block.Block block) {
@@ -266,31 +252,29 @@ public class TyphonUtils {
 
     public static boolean isMaterialRocklikes(org.bukkit.Material material) {
         String materialType = material.name().toLowerCase();
-        return (
-            materialType.contains("stone") ||
-            materialType.contains("deepslate") ||
-            materialType.contains("netherrack") ||
-            materialType.contains("granite") ||
-            materialType.contains("diorite") ||
-            materialType.contains("andesite") ||
-            materialType.contains("grass_block") ||
-            materialType.contains("dirt") ||
-            materialType.contains("rock") ||
-            materialType.contains("sand") ||
-            materialType.contains("gravel") ||
-            materialType.contains("ore") ||
-            materialType.contains("iron") ||
-            materialType.contains("gold") ||
-            materialType.contains("coppe") ||
-            materialType.contains("quartz") ||
-            materialType.contains("magma") ||
-            materialType.contains("obsidian") ||
-            materialType.contains("basalt") ||
-            materialType.contains("debris") ||
-            materialType.contains("amethyst") || 
-            materialType.contains("clay") ||
-            materialType.contains("terracotta")
-        );
+        return (materialType.contains("stone")
+                || materialType.contains("deepslate")
+                || materialType.contains("netherrack")
+                || materialType.contains("granite")
+                || materialType.contains("diorite")
+                || materialType.contains("andesite")
+                || materialType.contains("grass_block")
+                || materialType.contains("dirt")
+                || materialType.contains("rock")
+                || materialType.contains("sand")
+                || materialType.contains("gravel")
+                || materialType.contains("ore")
+                || materialType.contains("iron")
+                || materialType.contains("gold")
+                || materialType.contains("coppe")
+                || materialType.contains("quartz")
+                || materialType.contains("magma")
+                || materialType.contains("obsidian")
+                || materialType.contains("basalt")
+                || materialType.contains("debris")
+                || materialType.contains("amethyst")
+                || materialType.contains("clay")
+                || materialType.contains("terracotta"));
     }
 
     public static String getDirections(org.bukkit.Location from, org.bukkit.Location to) {
@@ -303,20 +287,25 @@ public class TyphonUtils {
         double destinationYaw = navigationResult.yawDegree;
         double directDistance = navigationResult.distance;
 
-        String destinationString = Math.abs(Math.floor(destinationYaw))+" degrees "
-                + ((Math.abs(destinationYaw) < 1) ? "Forward" : (destinationYaw < 0) ? "Left" : "Right")
-                + ((Math.abs(destinationYaw) > 135) ? " Backward" : "");
+        String destinationString =
+                Math.abs(Math.floor(destinationYaw))
+                        + " degrees "
+                        + ((Math.abs(destinationYaw) < 1)
+                                ? "Forward"
+                                : (destinationYaw < 0) ? "Left" : "Right")
+                        + ((Math.abs(destinationYaw) > 135) ? " Backward" : "");
 
         if (Double.isNaN(destinationYaw) || directDistance < 1) {
             return "Arrived!";
         }
 
-        destinationString += " / "+String.format("%.2f", directDistance)+" blocks";
+        destinationString += " / " + String.format("%.2f", directDistance) + " blocks";
 
         return destinationString;
     }
 
-    public static TyphonNavigationResult getNavigation(org.bukkit.Location from, org.bukkit.Location to) {
+    public static TyphonNavigationResult getNavigation(
+            org.bukkit.Location from, org.bukkit.Location to) {
         if (from.getWorld().getUID() != to.getWorld().getUID()) {
             return null;
         }
@@ -331,18 +320,83 @@ public class TyphonUtils {
         double theta;
         theta = Math.toDegrees(Math.acos(distanceN / distanceDirect));
 
-        TyphonPlugin.logger.debug(VolcanoLogClass.MATH, "Caclulated Navigation / target theta: "+theta+", userYawN: "+userYawN);
+        TyphonPlugin.logger.debug(
+                VolcanoLogClass.MATH,
+                "Caclulated Navigation / target theta: " + theta + ", userYawN: " + userYawN);
 
         double destinationYaw = theta - userYawN;
-        destinationYaw = destinationYaw > 180 ? -( 360 - destinationYaw ) :
-                destinationYaw < -180 ? (360 + destinationYaw) : destinationYaw;
+        destinationYaw =
+                destinationYaw > 180
+                        ? -(360 - destinationYaw)
+                        : destinationYaw < -180 ? (360 + destinationYaw) : destinationYaw;
 
-        if (Double.isNaN(destinationYaw)) { destinationYaw = 0; }
+        if (Double.isNaN(destinationYaw)) {
+            destinationYaw = 0;
+        }
 
         return new TyphonNavigationResult(destinationYaw, distanceDirect);
     }
 
-    public static void spawnParticleWithVelocity(Particle particle, Location loc, double radius, int count, double offsetX, double offsetY, double offsetZ) {
+    public static boolean containsWater(Block block) {
+        return containsLiquidWater(block) || containsIce(block) || containsSnow(block);
+    }
+
+    public static boolean containsIce(Block block) {
+        switch (block.getType()) {
+            case ICE:
+            case FROSTED_ICE:
+            case PACKED_ICE:
+            case BLUE_ICE:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public static boolean containsSnow(Block block) {
+        switch (block.getType()) {
+            case SNOW:
+            case SNOWBALL:
+            case SNOW_BLOCK:
+            case POWDER_SNOW:
+            case POWDER_SNOW_BUCKET:
+            case POWDER_SNOW_CAULDRON:
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    public static boolean containsLiquidWater(Block block) {
+        switch (block.getType()) {
+            case WATER:
+            case WATER_CAULDRON:
+            case WATER_BUCKET:
+            case KELP:
+            case KELP_PLANT:
+                return true;
+
+            default:
+        }
+
+        BlockData data = block.getBlockData();
+        if (data instanceof Waterlogged) {
+            Waterlogged wlData = (Waterlogged) data;
+            if (wlData.isWaterlogged()) return true;
+        }
+
+        return false;
+    }
+
+    public static void spawnParticleWithVelocity(
+            Particle particle,
+            Location loc,
+            double radius,
+            int count,
+            double offsetX,
+            double offsetY,
+            double offsetZ) {
         org.bukkit.World world = loc.getWorld();
         double baseX = loc.getX();
         double baseY = loc.getY();
@@ -365,11 +419,10 @@ public class TyphonUtils {
         double referenceSphereVolume = count;
         double referenceSphereRadiusCubed = 3 / (4 * Math.PI) * referenceSphereVolume;
 
-
         double referenceSphereRadius = Math.cbrt(referenceSphereRadiusCubed);
         double offset = radius / referenceSphereRadius;
 
-        int axisRepeat = (int)(2 * referenceSphereRadius);
+        int axisRepeat = (int) (2 * referenceSphereRadius);
 
         for (int xIdx = 0; xIdx < axisRepeat; xIdx++) {
             for (int yIdx = 0; yIdx < axisRepeat; yIdx++) {
@@ -382,13 +435,9 @@ public class TyphonUtils {
                     double y = baseY + offsetYLoc;
                     double z = baseZ + offsetZLoc;
 
-                    if (Math.pow(offsetXLoc, 2) + Math.pow(offsetYLoc, 2) + Math.pow(offsetZLoc, 2) < radiusSquared) {
-                        org.bukkit.Location tmpLoc = new org.bukkit.Location(
-                                world,
-                                x,
-                                y,
-                                z
-                        );
+                    if (Math.pow(offsetXLoc, 2) + Math.pow(offsetYLoc, 2) + Math.pow(offsetZLoc, 2)
+                            < radiusSquared) {
+                        org.bukkit.Location tmpLoc = new org.bukkit.Location(world, x, y, z);
 
                         world.spawnParticle(particle, tmpLoc, 0, offsetX, offsetY, offsetZ);
                     }
@@ -409,8 +458,7 @@ public class TyphonUtils {
                 (int) (count * (4 / 3) * Math.pow(radius, 3)),
                 0,
                 0.4,
-                0
-        );
+                0);
 
         if (!mute) {
             location.getWorld().playSound(location, Sound.BLOCK_LAVA_POP, .1f * count, 0);
@@ -418,7 +466,6 @@ public class TyphonUtils {
 
             location.getWorld().playSound(location, Sound.ENTITY_BLAZE_SHOOT, .1f * count, 0);
         }
-
     }
 
     public static int getVEIScale(long data) {
@@ -444,8 +491,7 @@ public class TyphonUtils {
         }
     }
 
-    public static Vector calculateVelocity(Vector from, Vector to, int heightGain)
-    {
+    public static Vector calculateVelocity(Vector from, Vector to, int heightGain) {
         // Gravity of a potion
         double gravity = 0.115;
 

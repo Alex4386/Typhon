@@ -7,6 +7,6 @@ import java.util.Map;
 
 public abstract class VolcanoConstructionData {
     abstract Map<Block, Block> getConstructionData();
+
     abstract Map<Block, Material> getConstructionMaterialUpdateData();
 }
-

@@ -4,6 +4,7 @@ import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -32,16 +33,22 @@ public class VolcanoBombListener implements Listener {
 
     public void registerTask() {
         if (bombTrackingScheduleId < 0) {
-            bombTrackingScheduleId = Bukkit.getScheduler().scheduleSyncRepeatingTask(TyphonPlugin.plugin, (Runnable) () -> {
-                for (Map.Entry<String, Volcano> entry: TyphonPlugin.listVolcanoes.entrySet()) {
-                    Volcano volcano = entry.getValue();
+            bombTrackingScheduleId = Bukkit.getScheduler()
+                    .scheduleSyncRepeatingTask(
+                            TyphonPlugin.plugin,
+                            (Runnable) () -> {
+                                for (Map.Entry<String, Volcano> entry : TyphonPlugin.listVolcanoes.entrySet()) {
+                                    Volcano volcano = entry.getValue();
 
-                    List<VolcanoVent> vents = volcano.manager.getVents();
-                    for (VolcanoVent vent: vents) {
-                        vent.bombs.trackAll();
-                    }
-                }
-            }, 0L, (long) TyphonPlugin.minecraftTicksPerSeconds / updatesPerSeconds);
+                                    List<VolcanoVent> vents = volcano.manager.getVents();
+                                    for (VolcanoVent vent : vents) {
+                                        vent.bombs.trackAll();
+                                    }
+                                }
+                            },
+                            0L,
+                            (long) TyphonPlugin.minecraftTicksPerSeconds
+                                    / updatesPerSeconds);
         }
     }
 
@@ -75,7 +82,6 @@ public class VolcanoBombListener implements Listener {
         this.unregisterEvent();
     }
 
-
     public static boolean groundChecker(Location location, int offset) {
         return (location.getBlockY() - TyphonUtils.getHighestOceanFloor(location).getY() <= offset);
     }
@@ -83,11 +89,11 @@ public class VolcanoBombListener implements Listener {
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent event) {
         Player player = event.getPlayer();
-        for (Entity entity: player.getLocation().getChunk().getEntities()) {
+        for (Entity entity : player.getLocation().getChunk().getEntities()) {
             if (entity instanceof FallingBlock) {
                 FallingBlock fallingBlock = (FallingBlock) entity;
 
-                for (Map.Entry<String, Volcano> entry: TyphonPlugin.listVolcanoes.entrySet()) {
+                for (Map.Entry<String, Volcano> entry : TyphonPlugin.listVolcanoes.entrySet()) {
                     Volcano volcano = entry.getValue();
 
                     if (volcano.location.getWorld().equals(player.getWorld())) {
@@ -111,9 +117,9 @@ public class VolcanoBombListener implements Listener {
 
         if (vent != null) {
             for (Block block : event.blockList()) {
-                float x = (float)(block.getX() - explosionTriggered.getX());
-                float y = (float)(block.getY() - explosionTriggered.getY()) + 1;
-                float z = (float)(block.getZ() - explosionTriggered.getZ());
+                float x = (float) (block.getX() - explosionTriggered.getX());
+                float y = (float) (block.getY() - explosionTriggered.getY()) + 1;
+                float z = (float) (block.getZ() - explosionTriggered.getZ());
 
                 x *= (Math.random() - 0.5) * 2;
                 y *= (0.5 + (Math.random() * 0.8));
@@ -122,7 +128,7 @@ public class VolcanoBombListener implements Listener {
                 FallingBlock fallingBlock;
                 boolean isBomb = false;
 
-                if (Math.random() < ((vent.lavaFlow.settings.silicateLevel - 0.2) / 5) ) {
+                if (Math.random() < ((vent.lavaFlow.settings.silicateLevel - 0.2) / 5)) {
                     isBomb = true;
                 }
 
@@ -130,12 +136,15 @@ public class VolcanoBombListener implements Listener {
                     block.setType(Material.MAGMA_BLOCK);
                 }
 
-                fallingBlock = block.getWorld().spawnFallingBlock(block.getLocation(), block.getBlockData());
+                fallingBlock = block.getWorld()
+                        .spawnFallingBlock(block.getLocation(), block.getBlockData());
                 fallingBlock.setDropItem(false);
-                fallingBlock.setVelocity(new Vector(x,y,z));
+                fallingBlock.setVelocity(new Vector(x, y, z));
 
                 if (isBomb) {
-                    vent.bombs.bombMap.put(fallingBlock, new VolcanoBomb(vent, block.getLocation(), fallingBlock, 4.0f, 1, 1));
+                    vent.bombs.bombMap.put(
+                            fallingBlock,
+                            new VolcanoBomb(vent, block.getLocation(), fallingBlock, 4.0f, 1, 1));
                 }
 
                 block.setType(Material.AIR);
@@ -145,6 +154,4 @@ public class VolcanoBombListener implements Listener {
             lavaSplashExplosions.remove(explosionTriggered.getBlock());
         }
     }
-
-
 }

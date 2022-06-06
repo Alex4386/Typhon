@@ -1,18 +1,12 @@
 package me.alex4386.plugin.typhon.volcano.intrusions;
 
-import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
-import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombListener;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
-import org.bukkit.Effect;
-import org.bukkit.Location;
+
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.player.PlayerBucketEmptyEvent;
 
 import java.util.Random;
 
@@ -44,16 +38,14 @@ public class VolcanoMetamorphism {
             String blockTypeName = material.name().toLowerCase();
             double silicateLevel = vent.lavaFlow.settings.silicateLevel;
 
-            if (
-                blockTypeName.contains("dirt")
-                || blockTypeName.contains("podzol")
-                || blockTypeName.contains("grass")
-                || blockTypeName.contains("sand")
-            ) {
-                material = 
-                    isBomb ?
-                        VolcanoComposition.getBombRock(silicateLevel) :
-                        VolcanoComposition.getExtrusiveRock(silicateLevel);
+            if (blockTypeName.contains("dirt")
+                    || blockTypeName.contains("podzol")
+                    || blockTypeName.contains("grass")
+                    || blockTypeName.contains("sand")) {
+                material =
+                        isBomb
+                                ? VolcanoComposition.getBombRock(silicateLevel)
+                                : VolcanoComposition.getExtrusiveRock(silicateLevel);
             } else {
                 return;
             }
@@ -63,14 +55,11 @@ public class VolcanoMetamorphism {
         return;
     }
 
-
     public void evaporateBlock(Block block) {
         Material material = block.getType();
         String blockTypeName = material.name().toLowerCase();
 
-        if (
-                (blockTypeName.contains("snow"))
-        ) {
+        if ((blockTypeName.contains("snow"))) {
             block.setType(Material.AIR);
         } else if (material == Material.GRASS) {
             block.setType(Material.AIR);
@@ -89,6 +78,4 @@ public class VolcanoMetamorphism {
             block.setType(Material.CAULDRON);
         }
     }
-
-
 }

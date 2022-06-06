@@ -1,15 +1,14 @@
 package me.alex4386.plugin.typhon.volcano.log;
 
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
-import me.alex4386.plugin.typhon.volcano.log.VolcanoVentEjectaTimeData;
+
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public
-class VolcanoVentRecord {
+public class VolcanoVentRecord {
     VolcanoVent vent;
 
     public long startEjectaTracking = -1;
@@ -41,7 +40,8 @@ class VolcanoVentRecord {
         long startTime = startEjectaTracking;
         long endTime = System.currentTimeMillis();
 
-        VolcanoVentEjectaTimeData timeData = new VolcanoVentEjectaTimeData(startTime, endTime, currentEjectaVolume);
+        VolcanoVentEjectaTimeData timeData =
+                new VolcanoVentEjectaTimeData(startTime, endTime, currentEjectaVolume);
         currentEjectaVolume = 0;
 
         ejectaVolumeList.add(timeData);

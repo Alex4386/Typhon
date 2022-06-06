@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano;
 
 import me.alex4386.plugin.typhon.TyphonUtils;
+
 import org.json.simple.JSONObject;
 import org.json.simple.parser.ParseException;
 
@@ -52,15 +53,17 @@ public class VolcanoDataLoader {
         File dir = this.getFile(dirname);
         Map<String, JSONObject> map = new HashMap<>();
 
-        if (!dir.isDirectory()) throw new NotDirectoryException(dir.getAbsolutePath()+" is not a directory!");
+        if (!dir.isDirectory())
+            throw new NotDirectoryException(dir.getAbsolutePath() + " is not a directory!");
 
         return dir.listFiles();
     }
 
-    public Map<String, JSONObject> getJSONsFromDirectoryToMap(String dirname) throws IOException, ParseException {
+    public Map<String, JSONObject> getJSONsFromDirectoryToMap(String dirname)
+            throws IOException, ParseException {
         Map<String, JSONObject> map = new HashMap<>();
 
-        for (File file: getDirectoryFiles(dirname)) {
+        for (File file : getDirectoryFiles(dirname)) {
             String fileName = file.getName();
             if (fileName.toLowerCase().endsWith(".json")) {
                 int idx = fileName.lastIndexOf(".");
@@ -76,7 +79,7 @@ public class VolcanoDataLoader {
 
     public void deleteJSONFromDirectory(String dirname, String filename) {
         File dir = this.getFile(dirname);
-        File config = new File(dir.getPath(), filename+".json");
+        File config = new File(dir.getPath(), filename + ".json");
         config.delete();
     }
 
@@ -87,6 +90,7 @@ public class VolcanoDataLoader {
     public void deleteSubVentConfig(String string) {
         this.deleteJSONFromDirectory(ventsDirname, string);
     }
+
     public void setCoreConfig(JSONObject jsonObject) throws IOException {
         File file = this.getFile(coreFilename);
         TyphonUtils.writeJSON(file, jsonObject);
@@ -102,9 +106,10 @@ public class VolcanoDataLoader {
         TyphonUtils.writeJSON(file, jsonObject);
     }
 
-    public void setSubDirectoryJSONFile(String dirname, String filename, JSONObject jsonObject) throws IOException {
+    public void setSubDirectoryJSONFile(String dirname, String filename, JSONObject jsonObject)
+            throws IOException {
         File dir = this.getFile(dirname);
-        File file = new File(dir.getPath(), filename+".json");
+        File file = new File(dir.getPath(), filename + ".json");
 
         TyphonUtils.writeJSON(file, jsonObject);
     }

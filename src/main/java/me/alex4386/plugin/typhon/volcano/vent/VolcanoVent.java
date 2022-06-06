@@ -7,12 +7,13 @@ import me.alex4386.plugin.typhon.volcano.ash.VolcanoAsh;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombs;
 import me.alex4386.plugin.typhon.volcano.dome.VolcanoLavaDome;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoErupt;
-import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.explosion.VolcanoExplosion;
 import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoLavaFlow;
-import me.alex4386.plugin.typhon.volcano.log.VolcanoVentRecord;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoVentRecord;
+import me.alex4386.plugin.typhon.volcano.utils.VolcanoCircleOffsetXZ;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
+
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -91,7 +92,7 @@ public class VolcanoVent {
     }
 
     public void initialize() {
-        volcano.logger.log(VolcanoLogClass.VENT, "Starting up vent "+name);
+        volcano.logger.log(VolcanoLogClass.VENT, "Starting up vent " + name);
 
         // bombs don't need initialization
         ash.initialize();
@@ -102,9 +103,7 @@ public class VolcanoVent {
 
         this.getVentBlocks();
 
-
-        volcano.logger.log(VolcanoLogClass.VENT, "Started" +
-                " up vent "+name);
+        volcano.logger.log(VolcanoLogClass.VENT, "Started" + " up vent " + name);
     }
 
     public VolcanoVentType getType() {
@@ -112,7 +111,7 @@ public class VolcanoVent {
     }
 
     public void shutdown() {
-        volcano.logger.log(VolcanoLogClass.VENT, "Shutting down vent "+name);
+        volcano.logger.log(VolcanoLogClass.VENT, "Shutting down vent " + name);
 
         // bombs don't need shutdown
         ash.shutdown();
@@ -123,12 +122,11 @@ public class VolcanoVent {
         bombs.shutdown();
         lavadome.shutdown();
 
-        volcano.logger.log(VolcanoLogClass.VENT, "Shutted down vent "+name);
+        volcano.logger.log(VolcanoLogClass.VENT, "Shutted down vent " + name);
     }
 
-
     public String getName() {
-        return this.name == null ? ChatColor.GOLD+"main"+ChatColor.RESET : this.name;
+        return this.name == null ? ChatColor.GOLD + "main" + ChatColor.RESET : this.name;
     }
 
     public boolean isCacheInitialized() {
@@ -139,7 +137,8 @@ public class VolcanoVent {
         List<Block> scaffoldBlocks = new ArrayList<>();
 
         if (type == VolcanoVentType.CRATER) {
-            scaffoldBlocks = VolcanoMath.getCircle(this.location.getBlock(), craterRadius, craterRadius - 1);
+            scaffoldBlocks =
+                    VolcanoMath.getCircle(this.location.getBlock(), craterRadius, craterRadius - 1);
         } else if (type == VolcanoVentType.FISSURE) {
             double rightAngledAngle = (Math.PI / 2) + this.fissureAngle;
             int xRadiusOffset = (int) Math.cos(rightAngledAngle) * this.craterRadius;
@@ -148,15 +147,18 @@ public class VolcanoVent {
             List<Block> ventBlocksWithCrater = new ArrayList<Block>();
 
             Block fromBlock = this.location.getBlock().getRelative(xRadiusOffset, 0, zRadiusOffset);
-            ventBlocksWithCrater.addAll(VolcanoMath.getLine(fromBlock, this.fissureAngle, this.fissureLength));
+            ventBlocksWithCrater.addAll(
+                    VolcanoMath.getLine(fromBlock, this.fissureAngle, this.fissureLength));
 
             fromBlock = this.location.getBlock().getRelative(-xRadiusOffset, 0, -zRadiusOffset);
-            ventBlocksWithCrater.addAll(VolcanoMath.getLine(fromBlock, this.fissureAngle, this.fissureLength));
+            ventBlocksWithCrater.addAll(
+                    VolcanoMath.getLine(fromBlock, this.fissureAngle, this.fissureLength));
 
             scaffoldBlocks = ventBlocksWithCrater;
         } else {
             // fallback to crater
-            scaffoldBlocks = VolcanoMath.getCircle(this.location.getBlock(), craterRadius, craterRadius - 1);
+            scaffoldBlocks =
+                    VolcanoMath.getCircle(this.location.getBlock(), craterRadius, craterRadius - 1);
         }
 
         return scaffoldBlocks;
@@ -166,34 +168,78 @@ public class VolcanoVent {
         boolean isFirstLoad = false;
 
         // Debug
-        //TyphonUtils.stackTraceMe();
+        // TyphonUtils.stackTraceMe();
 
         if (!this.isCacheInitialized()) {
             isFirstLoad = true;
+            this.volcano.logger.log(
+                    VolcanoLogClass.VENT, "Calculating vent blocks of " + this.getName() + "...");
+
             this.cachedVentBlocks = this.getVentBlocksScaffold();
+            this.volcano.logger.log(
+                    VolcanoLogClass.VENT,
+                    "Calculated vent blocks for vent "
+                            + this.getName()
+                            + ". "
+                            + this.cachedVentBlocks.size()
+                            + " blocks found.");
 
-            this.volcano.logger.log(VolcanoLogClass.VENT, "Calculating vent blocks of "+this.getName()+"...");
+            World world = null;
 
-            this.volcano.logger.log(VolcanoLogClass.VENT, "Getting chunks to load vent blocks of "+this.getName()+"... (This may take a while)");
-            List<Chunk> chunksToLoad = new ArrayList<Chunk>();
-            for (Block block: this.cachedVentBlocks) {
-                if (!chunksToLoad.contains(block.getChunk())) {
-                    chunksToLoad.add(block.getChunk());
+            // estimate chunk count
+            List<VolcanoCircleOffsetXZ> chunks = new ArrayList<>();
+            for (Block block : this.cachedVentBlocks) {
+                world = block.getWorld();
+                int chunkX = block.getLocation().getBlockX() >> 4;
+                int chunkZ = block.getLocation().getBlockZ() >> 4;
+
+                boolean chunkFound = false;
+                for (VolcanoCircleOffsetXZ chunk : chunks) {
+                    if (chunk.x == chunkX && chunk.z == chunkZ) {
+                        chunkFound = true;
+                        break;
+                    }
+                }
+
+                if (!chunkFound) {
+                    chunks.add(new VolcanoCircleOffsetXZ(chunkX, chunkZ));
                 }
             }
+            this.volcano.logger.log(
+                    VolcanoLogClass.VENT,
+                    chunks.size()
+                            + " chunks are required to load vent of "
+                            + this.getName()
+                            + "...");
 
-            this.volcano.logger.log(VolcanoLogClass.VENT, "Loading chunk vent blocks of "+this.getName()+"...");
-            for (Chunk chunk: chunksToLoad) {
-                if (!chunk.isLoaded()) chunk.load();
+            if (world != null) {
+                int i = 1;
+                for (VolcanoCircleOffsetXZ chunkData : chunks) {
+                    this.volcano.logger.log(
+                            VolcanoLogClass.VENT,
+                            "Loading vent chunk of "
+                                    + this.getName()
+                                    + "... ("
+                                    + i
+                                    + "/"
+                                    + chunks.size()
+                                    + ")");
+                    Chunk chunk = world.getChunkAt((int) chunkData.x, (int) chunkData.z);
+                    if (!chunk.isLoaded()) chunk.load();
+                    i++;
+                }
             }
         }
 
         if (this.coreBlocks == null) {
             List<Block> coreBlocks = new ArrayList<Block>();
-            TyphonPlugin.logger.log(VolcanoLogClass.CORE, "Calculating core blocks of "+this.getName()+"...");  
-            
+            TyphonPlugin.logger.log(
+                    VolcanoLogClass.CORE, "Calculating core blocks of " + this.getName() + "...");
+
             if (type == VolcanoVentType.FISSURE) {
-                coreBlocks.addAll(VolcanoMath.getLine(this.location.getBlock(), this.fissureAngle, this.fissureLength));
+                coreBlocks.addAll(
+                        VolcanoMath.getLine(
+                                this.location.getBlock(), this.fissureAngle, this.fissureLength));
             } else {
                 coreBlocks.add(this.location.getBlock());
             }
@@ -201,9 +247,13 @@ public class VolcanoVent {
             this.coreBlocks = coreBlocks;
         }
 
-        //TyphonPlugin.logger.log(VolcanoLogClass.CORE, "Debug: vent Block size: "+this.cachedVentBlocks.size());
+        // TyphonPlugin.logger.log(VolcanoLogClass.CORE, "Debug: vent Block size:
+        // "+this.cachedVentBlocks.size());
 
-        if (isFirstLoad) this.volcano.logger.log(VolcanoLogClass.VENT, "Calculating highest points of vent blocksof "+this.getName()+"...");
+        if (isFirstLoad)
+            this.volcano.logger.log(
+                    VolcanoLogClass.VENT,
+                    "Calculating highest points of vent blocksof " + this.getName() + "...");
         List<Block> newCachedVentBlocks = new ArrayList<>();
         for (Block block : this.cachedVentBlocks) {
             if (block.getType() == Material.LAVA) {
@@ -212,16 +262,19 @@ public class VolcanoVent {
             }
 
             newCachedVentBlocks.add(TyphonUtils.getHighestNonTreeSolid(block.getLocation()));
+            // newCachedVentBlocks.add(TyphonUtils.getHighestLocation(block.getLocation()).getBlock());
         }
 
-        if (isFirstLoad) this.volcano.logger.log(VolcanoLogClass.VENT, "Vent block calculation of "+this.getName()+" complete.");
+        if (isFirstLoad)
+            this.volcano.logger.log(
+                    VolcanoLogClass.VENT,
+                    "Vent block calculation of " + this.getName() + " complete.");
         this.cachedVentBlocks = newCachedVentBlocks;
 
         return this.cachedVentBlocks;
     }
 
-
-    public double getHeatValue( Location loc) {
+    public double getHeatValue(Location loc) {
         double distance = this.getTwoDimensionalDistance(loc);
         double distanceRatio = (distance / this.longestFlowLength) / 1.5;
 
@@ -255,7 +308,7 @@ public class VolcanoVent {
             totalY = block.getY();
         }
 
-        return (double)totalY / this.cachedVentBlocks.size();
+        return (double) totalY / this.cachedVentBlocks.size();
     }
 
     public Block lowestVentBlock() {
@@ -304,7 +357,6 @@ public class VolcanoVent {
         return TyphonUtils.getHighestRocklikes(target);
     }
 
-
     public List<Block> selectFlowVentBlocks(boolean evenFlow, int count) {
         if (count <= 0) return new ArrayList<Block>();
 
@@ -315,7 +367,10 @@ public class VolcanoVent {
 
         if (evenFlow) {
             boolean useLowest = false;
-            useLowest = Math.random() < ((this.lavaFlow.settings.silicateLevel - 0.22) * (1 + this.lavaFlow.settings.silicateLevel));
+            useLowest =
+                    Math.random()
+                            < ((this.lavaFlow.settings.silicateLevel - 0.22)
+                                    * (1 + this.lavaFlow.settings.silicateLevel));
 
             double averageVentHeight = this.averageVentHeight();
 
@@ -324,7 +379,7 @@ public class VolcanoVent {
                 if (Math.round(lowestVent.getY()) < averageVentHeight) {
                     ventBlocks.sort((Block block1, Block block2) -> block1.getY() - block2.getY());
 
-                    for (Block block:ventBlocks) {
+                    for (Block block : ventBlocks) {
                         if (this.lavaFlow.lavaCoolHashMap.get(block) == null) {
                             if (!selectedBlocks.contains(block)) {
                                 selectedBlocks.add(block);
@@ -338,21 +393,21 @@ public class VolcanoVent {
             Collections.shuffle(ventBlocks, random);
 
             int minimumTolerantHeight;
-            if (this.type == VolcanoVentType.FISSURE) minimumTolerantHeight = (int) averageVentHeight - 3;
+            if (this.type == VolcanoVentType.FISSURE)
+                minimumTolerantHeight = (int) averageVentHeight - 3;
             else minimumTolerantHeight = (int) averageVentHeight - ((int) craterRadius / 7);
 
-            for (Block block:ventBlocks) {
+            for (Block block : ventBlocks) {
                 int y = block.getY();
 
                 if (y < minimumTolerantHeight && this.lavaFlow.lavaCoolHashMap.get(block) == null) {
-                    if (Math.random() < 0.2f) continue; 
+                    if (Math.random() < 0.2f) continue;
                     if (!selectedBlocks.contains(block)) {
                         selectedBlocks.add(block);
                         if (selectedBlocks.size() == count) return selectedBlocks;
                     }
                 }
             }
-
         }
 
         for (int i = 0; i < count; i++) {
@@ -367,7 +422,6 @@ public class VolcanoVent {
 
         return selectedBlocks;
     }
-
 
     public Block selectFlowVentBlock(boolean evenFlow) {
         return this.selectFlowVentBlocks(evenFlow, 1).get(0);
@@ -390,7 +444,7 @@ public class VolcanoVent {
         List<Block> ventBlocks = this.selectFlowVentBlocks(count);
         List<Block> lavaFlowBlocks = new ArrayList<>();
 
-        for (Block ventBlock:ventBlocks) {
+        for (Block ventBlock : ventBlocks) {
             lavaFlowBlocks.add(ventBlock.getRelative(BlockFace.UP));
         }
         return lavaFlowBlocks;
@@ -422,7 +476,8 @@ public class VolcanoVent {
 
         while (iterator.hasNext()) {
             Block block = iterator.next();
-            block.setType(VolcanoComposition.getExtrusiveRock(this.lavaFlow.settings.silicateLevel));
+            block.setType(
+                    VolcanoComposition.getExtrusiveRock(this.lavaFlow.settings.silicateLevel));
         }
     }
 
@@ -434,7 +489,9 @@ public class VolcanoVent {
         return this.getTwoDimensionalDistance(loc) <= this.longestFlowLength;
     }
 
-    public boolean isBombAffected(Location loc) { return this.getTwoDimensionalDistance(loc) <= this.bombs.maxDistance; }
+    public boolean isBombAffected(Location loc) {
+        return this.getTwoDimensionalDistance(loc) <= this.bombs.maxDistance;
+    }
 
     public Block getNearestCoreBlock(Location loc) {
         if (this.coreBlocks == null) {
@@ -477,11 +534,13 @@ public class VolcanoVent {
         explosion.explode(bombCount);
     }
 
-    public void teleport(Entity entity) { teleport(entity, true); }
+    public void teleport(Entity entity) {
+        teleport(entity, true);
+    }
 
     public void teleport(Entity entity, boolean unstuck) {
         Location location = this.location;
-        if (unstuck) location = TyphonUtils.getHighestLocation(location).add(0,2,0);
+        if (unstuck) location = TyphonUtils.getHighestLocation(location).add(0, 2, 0);
         entity.teleport(location);
     }
 
@@ -522,14 +581,15 @@ public class VolcanoVent {
     }
 
     public String getVentConfigFilename() {
-        return this.name+".json";
+        return this.name + ".json";
     }
 
     public void importConfig(JSONObject configData) {
         this.enabled = (boolean) configData.get("enabled");
         this.type = VolcanoVentType.fromString((String) configData.get("type"));
         this.status = VolcanoVentStatus.getStatus((String) configData.get("status"));
-        this.location = TyphonUtils.deserializeLocationForJSON((JSONObject) configData.get("location"));
+        this.location =
+                TyphonUtils.deserializeLocationForJSON((JSONObject) configData.get("location"));
         this.craterRadius = (int) (long) configData.get("craterRadius");
         this.fissureAngle = (double) configData.get("fissureAngle");
         this.fissureLength = (int) (long) configData.get("fissureLength");
@@ -576,7 +636,6 @@ public class VolcanoVent {
 
         JSONObject recordConfig = this.record.exportConfig();
         configData.put("record", recordConfig);
-
 
         return configData;
     }

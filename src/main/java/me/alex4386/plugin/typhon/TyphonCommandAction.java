@@ -1,10 +1,9 @@
 package me.alex4386.plugin.typhon;
 
-import org.bukkit.ChatColor;
-import org.bukkit.command.CommandSender;
-
 import java.util.ArrayList;
 import java.util.List;
+import org.bukkit.ChatColor;
+import org.bukkit.command.CommandSender;
 
 public enum TyphonCommandAction {
     CREATE("create", "<name> <?style>", "Create a new volcano"),
@@ -37,7 +36,18 @@ public enum TyphonCommandAction {
     }
 
     public String getManual(String label) {
-        return ChatColor.LIGHT_PURPLE+"/"+label+" "+ChatColor.YELLOW+this.cmdline+" "+ChatColor.GRAY+this.usage+ChatColor.RESET+" : "+this.explanation;
+        return ChatColor.LIGHT_PURPLE
+                + "/"
+                + label
+                + " "
+                + ChatColor.YELLOW
+                + this.cmdline
+                + " "
+                + ChatColor.GRAY
+                + this.usage
+                + ChatColor.RESET
+                + " : "
+                + this.explanation;
     }
 
     public static List<String> listAll() {
@@ -67,7 +77,7 @@ public enum TyphonCommandAction {
 
         for (TyphonCommandAction action : TyphonCommandAction.values()) {
             if (TyphonCommand.hasPermission(sender, action.getCommand())) {
-                all += action.getManual(label)+"\n";
+                all += action.getManual(label) + "\n";
             }
         }
 

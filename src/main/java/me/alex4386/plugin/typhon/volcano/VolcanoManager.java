@@ -49,7 +49,7 @@ public class VolcanoManager {
         Collection<Player> onlinePlayers = (Collection<Player>) Bukkit.getOnlinePlayers();
         List<Player> targetPlayers = new ArrayList<>();
 
-        for (Player player: onlinePlayers) {
+        for (Player player : onlinePlayers) {
             if (player instanceof Player) {
                 if (volcano.manager.isInAnyLavaFlowArea(player.getLocation())) {
                     targetPlayers.add(player);
@@ -122,19 +122,23 @@ public class VolcanoManager {
 
     public ChatColor getVolcanoChatColor() {
         boolean isErupting = volcano.manager.currentlyStartedVents().size() > 0;
-        return (isErupting ? ChatColor.RED : (
-            volcano.manager.getHighestStatusVent().status.getScaleFactor() < 0.1 ? ChatColor.GREEN : ChatColor.GOLD
-        ));
+        return (isErupting
+                ? ChatColor.RED
+                : (volcano.manager.getHighestStatusVent().status.getScaleFactor() < 0.1
+                        ? ChatColor.GREEN
+                        : ChatColor.GOLD));
     }
 
     public ChatColor getVentChatColor(VolcanoVent vent) {
-        return (
-            (vent.status == VolcanoVentStatus.ERUPTING) ? ChatColor.RED :
-                (vent.status == VolcanoVentStatus.MAJOR_ACTIVITY) ? ChatColor.GOLD :
-                        (vent.status == VolcanoVentStatus.MINOR_ACTIVITY) ? ChatColor.YELLOW :
-                                (vent.status == VolcanoVentStatus.DORMANT) ? ChatColor.GREEN :
-                                        ChatColor.RESET
-        );
+        return ((vent.status == VolcanoVentStatus.ERUPTING)
+                ? ChatColor.RED
+                : (vent.status == VolcanoVentStatus.MAJOR_ACTIVITY)
+                        ? ChatColor.GOLD
+                        : (vent.status == VolcanoVentStatus.MINOR_ACTIVITY)
+                                ? ChatColor.YELLOW
+                                : (vent.status == VolcanoVentStatus.DORMANT)
+                                        ? ChatColor.GREEN
+                                        : ChatColor.RESET);
     }
 
     public VolcanoVent getNearestVent(Block block) {
@@ -162,7 +166,7 @@ public class VolcanoManager {
         int y = -1;
         VolcanoVent summitVent = null;
 
-        for (VolcanoVent vent:volcano.subVents.values()) {
+        for (VolcanoVent vent : volcano.subVents.values()) {
             Block block = vent.getSummitBlock();
             int blockY = block.getY();
 
@@ -174,7 +178,8 @@ public class VolcanoManager {
 
         Block mainVentSummit = volcano.mainVent.getSummitBlock();
         if (mainVentSummit.getY() >= y) {
-            summitVent = volcano.mainVent;;
+            summitVent = volcano.mainVent;
+            ;
             y = mainVentSummit.getY();
         }
 
@@ -190,7 +195,7 @@ public class VolcanoManager {
     public boolean isInAnyLavaFlowArea(Location loc) {
         List<VolcanoVent> vents = this.getVents();
 
-        for (VolcanoVent vent:vents) {
+        for (VolcanoVent vent : vents) {
             if (vent.isInLavaFlow(loc)) {
                 return true;
             }
@@ -238,7 +243,6 @@ public class VolcanoManager {
         for (VolcanoVent vent : volcano.manager.getVents()) {
             if (vent.getTwoDimensionalDistance(loc) <= range + vent.craterRadius) {
                 list.add(vent);
-
             }
         }
         return list;
@@ -308,15 +312,15 @@ public class VolcanoManager {
 
         int number = -1;
         for (int tmp = 1; tmp < 10; tmp++) {
-            if (volcano.subVents.get("fissure"+tmp) == null) {
-                number = tmp; 
+            if (volcano.subVents.get("fissure" + tmp) == null) {
+                number = tmp;
                 break;
             }
         }
 
         if (number == -1) return null;
         VolcanoVent vent = new VolcanoVent(volcano);
-        vent.name = "fissure"+number;
+        vent.name = "fissure" + number;
 
         if (volcano.mainVent.getType() == VolcanoVentType.FISSURE) {
             vent.fissureAngle = volcano.mainVent.fissureAngle;

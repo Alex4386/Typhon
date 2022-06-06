@@ -14,7 +14,6 @@ public class VolcanoScaleFactor {
         int mainVolcanoY = volcano.manager.getSummitBlock().getY();
         double mainVentFlowDistance = volcano.mainVent.longestFlowLength;
     }
-
 }
 
 class VolcanoVentScaleFactor {
@@ -28,5 +27,4 @@ class VolcanoVentScaleFactor {
         int mainVolcanoY = vent.getSummitBlock().getY();
         double mainVentFlowDistance = vent.longestFlowLength;
     }
-
 }

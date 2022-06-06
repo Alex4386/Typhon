@@ -15,7 +15,8 @@ public class TyphonMessage {
         TyphonMessage.info(sender, msg);
     }
 
-    public void warn(String msg) { TyphonMessage.warn(sender, msg);
+    public void warn(String msg) {
+        TyphonMessage.warn(sender, msg);
     }
 
     public void error(String msg) {
@@ -23,14 +24,14 @@ public class TyphonMessage {
     }
 
     public static void info(CommandSender sender, String msg) {
-        sender.sendMessage(ChatColor.BLUE+"[Typhon: INFO] "+ChatColor.RESET+msg);
+        sender.sendMessage(ChatColor.BLUE + "[Typhon: INFO] " + ChatColor.RESET + msg);
     }
 
     public static void warn(CommandSender sender, String msg) {
-        sender.sendMessage(ChatColor.GOLD+"[Typhon: WARN] "+ChatColor.RESET+msg);
+        sender.sendMessage(ChatColor.GOLD + "[Typhon: WARN] " + ChatColor.RESET + msg);
     }
 
     public static void error(CommandSender sender, String msg) {
-        sender.sendMessage(ChatColor.RED+"[Typhon: ERROR] "+ChatColor.RESET+msg);
+        sender.sendMessage(ChatColor.RED + "[Typhon: ERROR] " + ChatColor.RESET + msg);
     }
 }

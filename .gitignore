@@ -7,3 +7,6 @@ target/
 
 .deploy/node_modules
 .deploy/.secrets.json
+
+google-java-formatter.jar
+

@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.utils;
 
 import me.alex4386.plugin.typhon.volcano.Volcano;
+
 import org.bukkit.Location;
 
 public class VolcanoConstructionStatus {
@@ -16,7 +17,12 @@ public class VolcanoConstructionStatus {
 
     public Location lastLocation = null;
 
-    public VolcanoConstructionStatus(VolcanoConstructionType type, Volcano volcano, String jobName, int currentStage, int totalStages) {
+    public VolcanoConstructionStatus(
+            VolcanoConstructionType type,
+            Volcano volcano,
+            String jobName,
+            int currentStage,
+            int totalStages) {
         this.type = type;
         this.volcano = volcano;
         this.jobName = jobName;
@@ -35,6 +41,7 @@ public class VolcanoConstructionStatus {
     public void stageComplete() {
         this.currentStage++;
     }
+
     public void subStageComplete() {
         this.currentSubStage++;
     }

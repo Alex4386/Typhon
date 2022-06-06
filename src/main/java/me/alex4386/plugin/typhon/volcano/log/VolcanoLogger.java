@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.log;
 
 import me.alex4386.plugin.typhon.volcano.Volcano;
+
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 
@@ -8,11 +9,17 @@ public class VolcanoLogger {
     Volcano volcano = null;
     boolean isDebug = false;
 
-    public VolcanoLogger() {}
+    public VolcanoLogger() {
+    }
 
-    public VolcanoLogger(boolean isDebug) { this.isDebug = isDebug; }
+    public VolcanoLogger(boolean isDebug) {
+        this.isDebug = isDebug;
+    }
 
-    public VolcanoLogger(Volcano volcano) { this.volcano = volcano; this.isDebug = volcano.isDebug; }
+    public VolcanoLogger(Volcano volcano) {
+        this.volcano = volcano;
+        this.isDebug = volcano.isDebug;
+    }
 
     public VolcanoLogger(Volcano volcano, boolean isDebug) {
         this.volcano = volcano;
@@ -51,7 +58,7 @@ public class VolcanoLogger {
         String headers = logClass.getHeader() + this.getHeader();
 
         if (getDebug()) {
-            Bukkit.getLogger().info(headers+string);
+            Bukkit.getLogger().info(headers + string);
         }
     }
 
@@ -60,7 +67,7 @@ public class VolcanoLogger {
     public void log(VolcanoLogClass logClass, String string) {
         String headers = logClass.getHeader() + this.getHeader();
 
-        Bukkit.getLogger().info(headers+string);
+        Bukkit.getLogger().info(headers + string);
     }
 
     // Use this something is wrong with the plugin but plugin can continue.
@@ -69,7 +76,7 @@ public class VolcanoLogger {
         String headers = logClass.getHeader() + this.getHeader();
 
         string.replace(ChatColor.RESET.toString(), ChatColor.YELLOW.toString());
-        Bukkit.getLogger().severe(headers+ChatColor.YELLOW+string);
+        Bukkit.getLogger().severe(headers + ChatColor.YELLOW + string);
     }
 
     // Use this something is wrong with the plugin but plugin can NOT continue.
@@ -78,7 +85,6 @@ public class VolcanoLogger {
         String headers = logClass.getHeader() + this.getHeader();
 
         string.replace(ChatColor.RESET.toString(), ChatColor.RED.toString());
-        Bukkit.getLogger().severe(headers+ChatColor.RED+string);
+        Bukkit.getLogger().severe(headers + ChatColor.RED + string);
     }
 }
-

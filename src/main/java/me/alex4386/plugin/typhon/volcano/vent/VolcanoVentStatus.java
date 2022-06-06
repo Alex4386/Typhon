@@ -18,6 +18,7 @@ public enum VolcanoVentStatus {
     public String toString() {
         return this.string;
     }
+
     public double getScaleFactor() {
         return this.scaleFactor;
     }
@@ -29,7 +30,7 @@ public enum VolcanoVentStatus {
     public static VolcanoVentStatus getStatus(String string) {
         for (VolcanoVentStatus status : VolcanoVentStatus.values()) {
             if (status.toString().equalsIgnoreCase(string)) {
-                 return status;
+                return status;
             }
         }
 
@@ -41,7 +42,7 @@ public enum VolcanoVentStatus {
     }
 
     public VolcanoVentStatus increase() {
-        switch(this) {
+        switch (this) {
             case EXTINCT:
                 return EXTINCT;
             case DORMANT:
@@ -56,7 +57,7 @@ public enum VolcanoVentStatus {
     }
 
     public VolcanoVentStatus decrease() {
-        switch(this) {
+        switch (this) {
             case EXTINCT:
                 return EXTINCT;
             case DORMANT:

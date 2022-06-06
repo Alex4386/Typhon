@@ -1,10 +1,10 @@
 package me.alex4386.plugin.typhon.volcano.erupt;
 
-import org.json.simple.JSONObject;
-
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
+
+import org.json.simple.JSONObject;
 
 public class VolcanoErupt {
     VolcanoVent vent;
@@ -17,8 +17,9 @@ public class VolcanoErupt {
     }
 
     public void start() {
-        if (this.erupting) return;
-        
+        if (this.erupting)
+            return;
+
         if (this.style.flowsLava()) {
             this.startFlowingLava();
         }
@@ -46,17 +47,17 @@ public class VolcanoErupt {
 
         } else {
             this.vent.explosion.enabled = true;
-            if (this.style == VolcanoEruptStyle.STROMBOLIAN || this.style == VolcanoEruptStyle.VULCANIAN) {
+            if (this.style == VolcanoEruptStyle.STROMBOLIAN
+                    || this.style == VolcanoEruptStyle.VULCANIAN) {
                 this.vent.lavaFlow.settings.delayFlowed = 10;
                 this.vent.lavaFlow.settings.flowed = 7;
 
                 this.vent.explosion.settings.minBombCount = 100;
                 this.vent.explosion.settings.maxBombCount = 500;
-                
-        
+
                 if (this.style == VolcanoEruptStyle.STROMBOLIAN) {
                     this.vent.lavaFlow.settings.silicateLevel = 0.49 + (Math.random() * (0.55 - 0.49));
-                    
+
                     // little bit of ash plume (particle falling)
                 } else if (this.style == VolcanoEruptStyle.VULCANIAN) {
                     this.vent.lavaFlow.settings.silicateLevel = 0.54 + (Math.random() * (0.57 - 0.54));
@@ -65,35 +66,45 @@ public class VolcanoErupt {
 
                     this.vent.explosion.settings.minBombCount = 500;
                     this.vent.explosion.settings.maxBombCount = 2500;
-        
+
                     // cloud of ash plume (campfire smoke + particle falling)
-                } else {}
+                } else {
+                }
             } else if (this.style == VolcanoEruptStyle.PELEAN) {
                 // requires build up of lava dome before hand
-                
-            } else {}
+
+            } else {
+            }
         }
     }
 
     public void updateVentConfig() {
-        if (this.vent == null) return;
+        if (this.vent == null)
+            return;
 
-        if (this.style == VolcanoEruptStyle.HAWAIIAN || this.style == VolcanoEruptStyle.STROMBOLIAN) {
+        if (this.style == VolcanoEruptStyle.HAWAIIAN
+                || this.style == VolcanoEruptStyle.STROMBOLIAN) {
             if (this.vent.getType() == VolcanoVentType.FISSURE) {
                 int prevFissureLength = this.vent.fissureLength;
-                this.vent.fissureLength = (int) Math.min(Math.max(this.vent.longestFlowLength * 2, this.vent.fissureLength), this.vent.maxFissureLength);
+                this.vent.fissureLength = (int) Math.min(
+                        Math.max(
+                                this.vent.longestFlowLength * 2,
+                                this.vent.fissureLength),
+                        this.vent.maxFissureLength);
                 if (prevFissureLength != this.vent.fissureLength) {
                     this.vent.flushCache();
                 }
             }
         }
-
     }
 
     public double bombMultiplier() {
-        if (this.style == VolcanoEruptStyle.STROMBOLIAN) return 1;
-        else if (this.style == VolcanoEruptStyle.VULCANIAN) return 1.3;
-        else if (this.style == VolcanoEruptStyle.PELEAN) return 2;
+        if (this.style == VolcanoEruptStyle.STROMBOLIAN)
+            return 1;
+        else if (this.style == VolcanoEruptStyle.VULCANIAN)
+            return 1.3;
+        else if (this.style == VolcanoEruptStyle.PELEAN)
+            return 2;
         return -1;
     }
 
@@ -155,5 +166,4 @@ public class VolcanoErupt {
 
         return json;
     }
-    
 }

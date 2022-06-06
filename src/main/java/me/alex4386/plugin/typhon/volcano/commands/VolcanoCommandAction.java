@@ -1,7 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.commands;
 
 import me.alex4386.plugin.typhon.TyphonCommand;
-import me.alex4386.plugin.typhon.TyphonCommandAction;
+
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 
@@ -54,7 +54,21 @@ public enum VolcanoCommandAction {
     }
 
     public String getManual(String label, String name) {
-        return ChatColor.LIGHT_PURPLE+"/"+label+" "+ChatColor.AQUA+name+" "+ChatColor.YELLOW+this.cmdline+" "+ChatColor.GRAY+this.usage+ChatColor.RESET+" : "+this.explanation;
+        return ChatColor.LIGHT_PURPLE
+                + "/"
+                + label
+                + " "
+                + ChatColor.AQUA
+                + name
+                + " "
+                + ChatColor.YELLOW
+                + this.cmdline
+                + " "
+                + ChatColor.GRAY
+                + this.usage
+                + ChatColor.RESET
+                + " : "
+                + this.explanation;
     }
 
     public static String getAllManual(CommandSender sender, String label, String name) {
@@ -62,7 +76,7 @@ public enum VolcanoCommandAction {
 
         for (VolcanoCommandAction action : VolcanoCommandAction.values()) {
             if (TyphonCommand.hasPermission(sender, action.getCommand())) {
-                all += action.getManual(label, name)+"\n";
+                all += action.getManual(label, name) + "\n";
             }
         }
 
@@ -74,7 +88,7 @@ public enum VolcanoCommandAction {
     }
 
     public boolean hasPermission(CommandSender sender) {
-        return TyphonCommand.hasPermission(sender, "volcano."+this.cmdline);
+        return TyphonCommand.hasPermission(sender, "volcano." + this.cmdline);
     }
 
     public static VolcanoCommandAction getAction(String string) {

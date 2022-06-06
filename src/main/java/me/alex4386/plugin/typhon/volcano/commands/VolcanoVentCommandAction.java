@@ -1,7 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.commands;
 
 import me.alex4386.plugin.typhon.TyphonCommand;
-import me.alex4386.plugin.typhon.TyphonCommandAction;
+
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 
@@ -21,7 +21,10 @@ public enum VolcanoVentCommandAction {
     STATUS("status", "<? status>", "get/set status of this vent"),
     TELEPORT("teleport", "", "teleport to this vent"),
     DELETE("delete", "", "delete this vent"),
-    STYLE("style", "<? hawaiian/strombolian/fissure/crater/etc.>", "get/set eruption style and type of this vent");
+    STYLE(
+            "style",
+            "<? hawaiian/strombolian/fissure/crater/etc.>",
+            "get/set eruption style and type of this vent");
 
     String cmdline;
     String usage;
@@ -52,17 +55,34 @@ public enum VolcanoVentCommandAction {
         } else if (ventName.equals("") || ventName.equals("main")) {
             commandType = "mainVent";
         } else {
-            commandType += " "+ventName;
+            commandType += " " + ventName;
         }
-        return ChatColor.LIGHT_PURPLE+"/"+label+" "+ChatColor.AQUA+name+" "+commandType+" "+ChatColor.YELLOW+this.cmdline+" "+ChatColor.GRAY+this.usage+ChatColor.RESET+" : "+this.explanation;
+        return ChatColor.LIGHT_PURPLE
+                + "/"
+                + label
+                + " "
+                + ChatColor.AQUA
+                + name
+                + " "
+                + commandType
+                + " "
+                + ChatColor.YELLOW
+                + this.cmdline
+                + " "
+                + ChatColor.GRAY
+                + this.usage
+                + ChatColor.RESET
+                + " : "
+                + this.explanation;
     }
 
-    public static String getAllManual(CommandSender sender, String label, String name, String ventName) {
+    public static String getAllManual(
+            CommandSender sender, String label, String name, String ventName) {
         String all = "";
 
         for (VolcanoVentCommandAction action : VolcanoVentCommandAction.values()) {
             if (action.hasPermission(sender)) {
-                all += action.getManual(label, name, ventName)+"\n";
+                all += action.getManual(label, name, ventName) + "\n";
             }
         }
 
@@ -74,7 +94,7 @@ public enum VolcanoVentCommandAction {
     }
 
     public boolean hasPermission(CommandSender sender) {
-        return TyphonCommand.hasPermission(sender, "vent."+this.cmdline);
+        return TyphonCommand.hasPermission(sender, "vent." + this.cmdline);
     }
 
     public static VolcanoVentCommandAction getAction(String string) {

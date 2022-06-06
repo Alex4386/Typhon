@@ -4,4 +4,8 @@ public enum VolcanoEruptCauseType {
     MAGMATIC,
     PHREATOMAGMATIC,
     PHREATIC;
+
+    public boolean isHydroVolcanic() {
+        return this != VolcanoEruptCauseType.MAGMATIC;
+    }
 }

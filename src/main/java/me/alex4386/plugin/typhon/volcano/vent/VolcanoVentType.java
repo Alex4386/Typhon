@@ -15,7 +15,7 @@ public enum VolcanoVentType {
     }
 
     public static VolcanoVentType fromString(String string) {
-        for (VolcanoVentType type: VolcanoVentType.values()) {
+        for (VolcanoVentType type : VolcanoVentType.values()) {
             if (type.toString().equalsIgnoreCase(string)) {
                 return type;
             }

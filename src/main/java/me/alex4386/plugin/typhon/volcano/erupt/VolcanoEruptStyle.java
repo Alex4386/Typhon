@@ -6,59 +6,76 @@ import java.util.List;
 
 public enum VolcanoEruptStyle {
     // lava lake + lava fountain (minimal), lava flow is everything of this.
-    HAWAIIAN("hawaiian", new String[]{ "effusive" }, VolcanoEruptCauseType.MAGMATIC),
+    HAWAIIAN("hawaiian", new String[] { "effusive" }, VolcanoEruptCauseType.MAGMATIC, 4, 0, 0),
 
-    // Lava fountain (with volcanic bombs) + can have lava flows, but minimal. Usually goes into bursting out into air
-    // rocks: basaltic -> scoria (basaltic + andesite), keep in mind that tuff is lessly used in here
-    STROMBOLIAN("strombolian", new String[]{"stromboli"}, VolcanoEruptCauseType.MAGMATIC),
+    // Lava fountain (with volcanic bombs) + can have lava flows, but minimal.
+    // Usually goes into
+    // bursting out into air
+    // rocks: basaltic -> scoria (basaltic + andesite), keep in mind that tuff is
+    // lessly used in
+    // here
+    STROMBOLIAN(
+            "strombolian", new String[] { "stromboli" }, VolcanoEruptCauseType.MAGMATIC, 1, 1, 0.3),
 
     // stromboli but, range longer + with ash
     // rocks: andestic volcanic bombs (+ tuff)
     // starts with lavadome growth
-    VULCANIAN("vulcanian", new String[]{}, VolcanoEruptCauseType.MAGMATIC),
+    VULCANIAN("vulcanian", new String[] {}, VolcanoEruptCauseType.MAGMATIC, 1, 3, 1),
 
     // BUILD Lava dome first.
-    // andesite lava dome -> explode it. + lava overflow + pyroclastic flows + volcanic bombs (+ tuff)
+    // andesite lava dome -> explode it. + lava overflow + pyroclastic flows +
+    // volcanic bombs (+
+    // tuff)
     // less volume but range is plinian or vulcanian
     // tuff pyroclastic flows
-    PELEAN("pelean", new String[]{"pelèan"}, VolcanoEruptCauseType.MAGMATIC),
+    PELEAN("pelean", new String[] { "pelèan" }, VolcanoEruptCauseType.MAGMATIC, 3, 5, 5),
 
-    // no lava overflow + caldera + top collapse + (granite) rhyolite volcano bombs (A LOT)
+    // no lava overflow + caldera + top collapse + (granite) rhyolite volcano bombs
+    // (A LOT)
     // **RAINING TUFF**
-    PLINIAN("plinian", new String[]{"vesuvian"}, VolcanoEruptCauseType.MAGMATIC),
+    PLINIAN("plinian", new String[] { "vesuvian" }, VolcanoEruptCauseType.MAGMATIC, 0.1, 10, 10),
 
     // slight lava flow (-> basalt + andesite) + volcano bombs (TUFF)
     // water vapor + ash jet
-    SURTSEYAN("surtseyan", new String[]{"island"}, VolcanoEruptCauseType.PHREATOMAGMATIC),
+    SURTSEYAN("surtseyan", new String[] { "island" }, VolcanoEruptCauseType.PHREATOMAGMATIC, 1, 3, 3),
 
     // lava flow (-> basalt + andesite + TUFF)
     // water vapor
-    SUBMARINE("submarine", new String[]{}, VolcanoEruptCauseType.PHREATOMAGMATIC),
+    SUBMARINE("submarine", new String[] {}, VolcanoEruptCauseType.PHREATOMAGMATIC, 1, 0, 1),
 
-    // NO LAVA + generate maar (basically no cone generation and explode in ground) + volcano bombs (mostly tuff, and really little)
+    // NO LAVA + generate maar (basically no cone generation and explode in ground)
+    // + volcano bombs
+    // (mostly tuff, and really little)
     // water vapor (toxic), no smoke
-    PHREATIC("phreatic", new String[]{"hydrothermal"}, VolcanoEruptCauseType.PHREATIC),
+    PHREATIC("phreatic", new String[] { "hydrothermal" }, VolcanoEruptCauseType.PHREATIC, 0, 1, 1),
     ;
 
     String rawType;
     String[] aliases;
     VolcanoEruptCauseType causeType;
-    boolean lavaFlow;
+
+    public double lavaMultiplier = 1;
+    public double bombMultiplier = 1;
+    public double ashMultiplier = 1;
 
     VolcanoEruptStyle(String rawType, String[] aliases, VolcanoEruptCauseType causeType) {
-        this(rawType, aliases, causeType, true);
-
         if (causeType == VolcanoEruptCauseType.PHREATIC) {
-            this.lavaFlow = false;
+            this.lavaMultiplier = 0;
+            this.ashMultiplier = 3;
         }
     }
 
-    VolcanoEruptStyle(String rawType, String[] aliases, VolcanoEruptCauseType causeType, boolean lavaFlow) {
+    VolcanoEruptStyle(
+            String rawType,
+            String[] aliases,
+            VolcanoEruptCauseType causeType,
+            double lavaMultiplier,
+            double bombMultiplier,
+            double ashMultiplier) {
         this.rawType = rawType;
         this.aliases = aliases;
 
         this.causeType = causeType;
-        this.lavaFlow = lavaFlow;
     }
 
     public static VolcanoEruptStyle getVolcanoEruptStyle(String name) {
@@ -79,22 +96,14 @@ public enum VolcanoEruptStyle {
     }
 
     public boolean isHydroVolcanic() {
-        switch (this.causeType) {
-            case PHREATOMAGMATIC:
-            case PHREATIC:
-                return true;
-        }
-
-        return false;
+        return this.causeType.isHydroVolcanic();
     }
 
     public boolean flowsLava() {
-        return (this.lavaFlow && this.causeType != VolcanoEruptCauseType.PHREATIC);
+        return this.lavaMultiplier > 0 && this.causeType != VolcanoEruptCauseType.PHREATIC;
     }
 
     public boolean isEffusive() {
-        return this == VolcanoEruptStyle.HAWAIIAN;
+        return this.bombMultiplier <= 0;
     }
-
-
 }
