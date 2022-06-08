@@ -55,6 +55,14 @@ public class VolcanoLavaCoolData {
 
         this.runExtensionCount = VolcanoLavaCoolData.calculateExtensionCount(
                 this.flowedFromVent.lavaFlow.settings.silicateLevel);
+        
+        if (this.isBomb) {
+            if (Math.random() < 0.25) {
+                this.runExtensionCount /= (1 + Math.random());
+            } else {
+                this.runExtensionCount = 0;
+            }
+        }
     }
 
     public VolcanoLavaCoolData(
