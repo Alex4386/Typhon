@@ -65,7 +65,7 @@ public class VolcanoBombs {
     }
 
     public void launchBomb(Location hostLocation) {
-        double multiplier = this.vent.erupt.bombMultiplier();
+        double multiplier = this.vent.erupt.getStyle().bombMultiplier;
         if (multiplier < 0)
             return;
 

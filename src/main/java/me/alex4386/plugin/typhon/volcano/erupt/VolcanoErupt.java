@@ -98,21 +98,12 @@ public class VolcanoErupt {
         }
     }
 
-    public double bombMultiplier() {
-        if (this.style == VolcanoEruptStyle.STROMBOLIAN)
-            return 1;
-        else if (this.style == VolcanoEruptStyle.VULCANIAN)
-            return 1.3;
-        else if (this.style == VolcanoEruptStyle.PELEAN)
-            return 2;
-        return -1;
-    }
-
     public boolean isErupting() {
         return this.erupting;
     }
 
     public VolcanoEruptStyle getStyle() {
+        System.out.println("[getStyle] "+this.style.lavaMultiplier+", "+this.style.bombMultiplier+", "+this.style.ashMultiplier);
         return this.style;
     }
 

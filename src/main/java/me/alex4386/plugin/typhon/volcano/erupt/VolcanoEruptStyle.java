@@ -54,11 +54,13 @@ public enum VolcanoEruptStyle {
     String[] aliases;
     VolcanoEruptCauseType causeType;
 
-    public double lavaMultiplier = 1;
-    public double bombMultiplier = 1;
-    public double ashMultiplier = 1;
+    public double lavaMultiplier;
+    public double bombMultiplier;
+    public double ashMultiplier;
 
     VolcanoEruptStyle(String rawType, String[] aliases, VolcanoEruptCauseType causeType) {
+        this(rawType, aliases, causeType, 1, 1, 1);
+
         if (causeType == VolcanoEruptCauseType.PHREATIC) {
             this.lavaMultiplier = 0;
             this.ashMultiplier = 3;
