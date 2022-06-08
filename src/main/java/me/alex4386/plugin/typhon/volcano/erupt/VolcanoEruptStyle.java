@@ -37,11 +37,7 @@ public enum VolcanoEruptStyle {
 
     // slight lava flow (-> basalt + andesite) + volcano bombs (TUFF)
     // water vapor + ash jet
-    SURTSEYAN("surtseyan", new String[] { "island" }, VolcanoEruptCauseType.PHREATOMAGMATIC, 1, 3, 3),
-
-    // lava flow (-> basalt + andesite + TUFF)
-    // water vapor
-    SUBMARINE("submarine", new String[] {}, VolcanoEruptCauseType.PHREATOMAGMATIC, 1, 0, 1),
+    SURTSEYAN("surtseyan", new String[] { "island" }, VolcanoEruptCauseType.PHREATOMAGMATIC, 4, 3, 3),
 
     // NO LAVA + generate maar (basically no cone generation and explode in ground)
     // + volcano bombs

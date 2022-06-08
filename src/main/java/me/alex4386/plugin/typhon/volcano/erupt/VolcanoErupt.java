@@ -110,6 +110,11 @@ public class VolcanoErupt {
     public void setStyle(VolcanoEruptStyle style) {
         this.style = style;
         this.vent.flushCache();
+
+        if (this.isErupting()) {
+            this.stop();
+            this.start();
+        }
     }
 
     public void startFlowingLava() {
