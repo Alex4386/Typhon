@@ -10,11 +10,11 @@ public class VolcanoExplosionSettings {
     public int maxBombCount = VolcanoExplosionDefaultSettings.maxBombCount;
 
     public void importConfig(JSONObject configData) {
-        JSONObject explosionData = (JSONObject) configData.get("explosion");
-        JSONObject explosionSizeData = (JSONObject) explosionData.get("size");
+        JSONObject explosionSchedulersData = (JSONObject) configData.get("scheduler");
+        JSONObject explosionSizeData = (JSONObject) explosionSchedulersData.get("size");
         JSONObject bombCountData = (JSONObject) configData.get("bombCount");
 
-        explosionDelay = (int) (long) explosionData.get("delay");
+        explosionDelay = (int) (long) explosionSchedulersData.get("delay");
         explosionSize = (int) (long) explosionSizeData.get("withoutDamage");
         damagingExplosionSize = (int) (long) explosionSizeData.get("withDamage");
         minBombCount = (int) (long) bombCountData.get("min");
@@ -28,15 +28,15 @@ public class VolcanoExplosionSettings {
         explosionSizeData.put("withoutDamage", explosionSize);
         explosionSizeData.put("withDamage", damagingExplosionSize);
 
-        JSONObject explosionData = new JSONObject();
-        explosionData.put("delay", explosionDelay);
-        explosionData.put("size", explosionSizeData);
+        JSONObject explosionSchedulerData = new JSONObject();
+        explosionSchedulerData.put("delay", explosionDelay);
+        explosionSchedulerData.put("size", explosionSizeData);
 
         JSONObject bombCountData = new JSONObject();
         bombCountData.put("min", minBombCount);
         bombCountData.put("max", maxBombCount);
 
-        configData.put("explosion", explosionData);
+        configData.put("scheduler", explosionSchedulerData);
         configData.put("bombCount", bombCountData);
 
         return configData;
