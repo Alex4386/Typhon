@@ -165,9 +165,15 @@ public class VolcanoExplosion {
 
     public void importConfig(JSONObject configData) {
         this.settings.importConfig(configData);
+        this.enabled = (boolean) configData.get("enabled");
+        this.running = (boolean) configData.get("running");
     }
 
     public JSONObject exportConfig() {
-        return this.settings.exportConfig();
+        JSONObject config = this.settings.exportConfig();
+        config.put("enabled", this.enabled);
+        config.put("running", this.running);
+
+        return config;
     }
 }

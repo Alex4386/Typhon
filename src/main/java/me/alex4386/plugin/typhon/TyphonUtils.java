@@ -368,6 +368,24 @@ public class TyphonUtils {
         }
     }
 
+    public static void removeSeaGrass(Block baseBlock) {
+        boolean isSeaGrass = false;
+        switch (baseBlock.getType()) {
+            case KELP:
+            case KELP_PLANT:
+            case SEAGRASS:
+            case TALL_SEAGRASS:
+                isSeaGrass = true;
+            default:
+        }
+
+        if (isSeaGrass) {
+            Block upperBlock = baseBlock.getRelative(BlockFace.UP);
+            removeSeaGrass(upperBlock);
+            baseBlock.setType(Material.WATER);
+        }
+    }
+
     public static boolean containsLiquidWater(Block block) {
         switch (block.getType()) {
             case WATER:
@@ -375,6 +393,8 @@ public class TyphonUtils {
             case WATER_BUCKET:
             case KELP:
             case KELP_PLANT:
+            case SEAGRASS:
+            case TALL_SEAGRASS:
                 return true;
 
             default:

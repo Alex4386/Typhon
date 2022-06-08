@@ -74,13 +74,13 @@ public class TyphonCommand {
 
                                 volcano.mainVent.setType(VolcanoVentType.FISSURE);
                             }
-
-                            volcano.trySave();
                         }
-
-                        TyphonPlugin.listVolcanoes.put(volcanoName, volcano);
-                        TyphonMessage.info(sender, "Volcano " + volcanoName + " was generated!");
                     }
+                    
+                    volcano.trySave();
+
+                    TyphonPlugin.listVolcanoes.put(volcanoName, volcano);
+                    TyphonMessage.info(sender, "Volcano " + volcanoName + " was generated!");
 
                 } catch (IOException e) {
                     TyphonMessage.error(

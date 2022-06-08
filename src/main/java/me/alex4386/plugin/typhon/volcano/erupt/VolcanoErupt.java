@@ -157,7 +157,7 @@ public class VolcanoErupt {
     }
 
     public void importConfig(JSONObject json) {
-        this.style = VolcanoEruptStyle.getVolcanoEruptStyle((String) json.get("style"));
+        this.setStyle(VolcanoEruptStyle.getVolcanoEruptStyle((String) json.get("style")));
     }
 
     public JSONObject exportConfig() {
