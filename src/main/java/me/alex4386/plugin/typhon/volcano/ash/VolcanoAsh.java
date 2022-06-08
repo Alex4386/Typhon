@@ -132,7 +132,7 @@ public class VolcanoAsh {
 
                 TyphonUtils.spawnParticleWithVelocity(
                         Particle.CAMPFIRE_SIGNAL_SMOKE,
-                        finalLoc.add(0, 7, 0),
+                        finalLoc,
                         0,
                         (int) (3 * multiplier),
                         0,
