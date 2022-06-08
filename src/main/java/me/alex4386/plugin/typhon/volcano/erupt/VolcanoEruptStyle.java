@@ -76,6 +76,10 @@ public enum VolcanoEruptStyle {
         this.aliases = aliases;
 
         this.causeType = causeType;
+
+        this.lavaMultiplier = lavaMultiplier;
+        this.bombMultiplier = bombMultiplier;
+        this.ashMultiplier = ashMultiplier;
     }
 
     public static VolcanoEruptStyle getVolcanoEruptStyle(String name) {
@@ -103,7 +107,7 @@ public enum VolcanoEruptStyle {
         return this.lavaMultiplier > 0 && this.causeType != VolcanoEruptCauseType.PHREATIC;
     }
 
-    public boolean isEffusive() {
-        return this.bombMultiplier <= 0;
+    public boolean isExplosive() {
+        return this.bombMultiplier > 0;
     }
 }

@@ -24,7 +24,7 @@ public class VolcanoErupt {
             this.startFlowingLava();
         }
 
-        if (!this.style.isEffusive()) {
+        if (this.style.isExplosive()) {
             this.startExploding();
         }
 
