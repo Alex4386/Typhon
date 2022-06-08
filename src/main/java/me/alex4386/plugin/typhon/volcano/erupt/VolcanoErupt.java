@@ -103,7 +103,7 @@ public class VolcanoErupt {
     }
 
     public VolcanoEruptStyle getStyle() {
-        System.out.println("[getStyle] "+this.style.lavaMultiplier+", "+this.style.bombMultiplier+", "+this.style.ashMultiplier);
+        // System.out.println("[getStyle] "+this.style.lavaMultiplier+", "+this.style.bombMultiplier+", "+this.style.ashMultiplier);
         return this.style;
     }
 
