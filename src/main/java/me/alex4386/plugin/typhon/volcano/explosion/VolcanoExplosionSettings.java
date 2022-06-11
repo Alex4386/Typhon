@@ -3,7 +3,6 @@ package me.alex4386.plugin.typhon.volcano.explosion;
 import org.json.simple.JSONObject;
 
 public class VolcanoExplosionSettings {
-    public int explosionDelay = VolcanoExplosionDefaultSettings.explosionDelay;
     public int explosionSize = VolcanoExplosionDefaultSettings.explosionSize;
     public int damagingExplosionSize = VolcanoExplosionDefaultSettings.damagingExplosionSize;
     public int minBombCount = VolcanoExplosionDefaultSettings.minBombCount;
@@ -14,7 +13,6 @@ public class VolcanoExplosionSettings {
         JSONObject explosionSizeData = (JSONObject) explosionSchedulersData.get("size");
         JSONObject bombCountData = (JSONObject) configData.get("bombCount");
 
-        explosionDelay = (int) (long) explosionSchedulersData.get("delay");
         explosionSize = (int) (long) explosionSizeData.get("withoutDamage");
         damagingExplosionSize = (int) (long) explosionSizeData.get("withDamage");
         minBombCount = (int) (long) bombCountData.get("min");
@@ -29,7 +27,6 @@ public class VolcanoExplosionSettings {
         explosionSizeData.put("withDamage", damagingExplosionSize);
 
         JSONObject explosionSchedulerData = new JSONObject();
-        explosionSchedulerData.put("delay", explosionDelay);
         explosionSchedulerData.put("size", explosionSizeData);
 
         JSONObject bombCountData = new JSONObject();
@@ -44,17 +41,15 @@ public class VolcanoExplosionSettings {
 }
 
 class VolcanoExplosionDefaultSettings {
-    public static int explosionDelay = 100;
     public static int explosionSize = 8;
     public static int damagingExplosionSize = 2;
-    public static int minBombCount = 20;
-    public static int maxBombCount = 100;
+    public static int minBombCount = 5;
+    public static int maxBombCount = 10;
 
     public static void importConfig(JSONObject configData) {
         VolcanoExplosionSettings settings = new VolcanoExplosionSettings();
         settings.importConfig(configData);
 
-        explosionDelay = settings.explosionDelay;
         explosionSize = settings.explosionSize;
         damagingExplosionSize = settings.damagingExplosionSize;
         minBombCount = settings.minBombCount;

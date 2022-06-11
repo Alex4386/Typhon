@@ -31,11 +31,10 @@ public class VolcanoVentCommand {
             "bombs:delay",
             "erupt:style",
             "erupt:autoconfig",
-            "explosion:delay",
             "explosion:bombs:min",
             "explosion:bombs:max",
-            "explosion:explosion:size",
-            "explosion:explosion:damagingSize",
+            "explosion:scheduler:size",
+            "explosion:scheduler:damagingSize",
             "vent:craterRadius",
             "vent:type",
             "vent:fissureLength",
@@ -341,12 +340,6 @@ public class VolcanoVentCommand {
                             msg.info("run erupt:autoconfig with confirm to apply autoconfig.");
                         }
                     }
-                } else if (newArgs[1].equalsIgnoreCase("explosion:delay")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.explosion.settings.explosionDelay = Integer.parseInt(newArgs[2]);
-                        msg.info("explosion:delay - " + vent.explosion.settings.explosionDelay);
-                    }
                 } else if (newArgs[1].equalsIgnoreCase("explosion:bombs:min")) {
                     if (newArgs.length >= 2) {
                         if (newArgs.length == 3)
@@ -359,20 +352,20 @@ public class VolcanoVentCommand {
                             vent.explosion.settings.maxBombCount = Integer.parseInt(newArgs[2]);
                         msg.info("explosion:bombs:max - " + vent.explosion.settings.maxBombCount);
                     }
-                } else if (newArgs[1].equalsIgnoreCase("explosion:explosion:size")) {
+                } else if (newArgs[1].equalsIgnoreCase("explosion:scheduler:size")) {
                     if (newArgs.length >= 2) {
                         if (newArgs.length == 3)
                             vent.explosion.settings.explosionSize = Integer.parseInt(newArgs[2]);
                         msg.info(
-                                "explosion:explosion:size - "
+                                "explosion:scheduler:size - "
                                         + vent.explosion.settings.explosionSize);
                     }
-                } else if (newArgs[1].equalsIgnoreCase("explosion:explosion:damagingSize")) {
+                } else if (newArgs[1].equalsIgnoreCase("explosion:scheduler:damagingSize")) {
                     if (newArgs.length >= 2) {
                         if (newArgs.length == 3)
                             vent.explosion.settings.damagingExplosionSize = Integer.parseInt(newArgs[2]);
                         msg.info(
-                                "explosion:explosion:damagingSize - "
+                                "explosion:scheduler:damagingSize - "
                                         + vent.explosion.settings.damagingExplosionSize);
                     }
                 } else if (newArgs[1].equalsIgnoreCase("vent:craterRadius")) {

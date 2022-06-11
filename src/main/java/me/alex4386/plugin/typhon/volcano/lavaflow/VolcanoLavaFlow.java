@@ -5,6 +5,7 @@ import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
+import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
@@ -321,6 +322,10 @@ public class VolcanoLavaFlow implements Listener {
         this.registerLavaCoolData(block, block, block, isBomb, -1);
     }
 
+    private void registerLavaCoolData(Block block, boolean isBomb, int extension) {
+        this.registerLavaCoolData(block, block, block, isBomb, extension);
+    }
+
     private void registerLavaCoolData(Block source, Block fromBlock, Block block, boolean isBomb) {
         this.registerLavaCoolData(source, fromBlock, block, isBomb, -1);
     }
@@ -450,7 +455,8 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void flowLavaFromBomb(Block bomb) {
-        this.registerLavaCoolData(bomb, true);
+        double zeroFocused = VolcanoMath.getZeroFocusedRandom();
+        this.registerLavaCoolData(bomb, true, (int) (zeroFocused * 2));
     }
 
 
