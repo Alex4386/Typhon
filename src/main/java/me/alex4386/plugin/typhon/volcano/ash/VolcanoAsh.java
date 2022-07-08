@@ -140,6 +140,7 @@ public class VolcanoAsh {
                         0);
 
                 finalLoc.getBlock().setType(Material.TUFF);
+                vent.record.addEjectaVolume(1);
             }
         }
     }

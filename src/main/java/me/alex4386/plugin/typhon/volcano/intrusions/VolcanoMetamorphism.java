@@ -41,11 +41,10 @@ public class VolcanoMetamorphism {
             if (blockTypeName.contains("dirt")
                     || blockTypeName.contains("podzol")
                     || blockTypeName.contains("grass")
-                    || blockTypeName.contains("sand")) {
-                material =
-                        isBomb
-                                ? VolcanoComposition.getBombRock(silicateLevel)
-                                : VolcanoComposition.getExtrusiveRock(silicateLevel);
+                    || blockTypeName.contains("sand")
+                    || blockTypeName.contains("cobblestone")
+                    || blockTypeName.contains("infested")) {
+                material = VolcanoComposition.getExtrusiveRock(silicateLevel);
             } else {
                 return;
             }
@@ -55,27 +54,64 @@ public class VolcanoMetamorphism {
         return;
     }
 
+    public void evaporateWater(Block block) {
+        int radius = 1;
+
+        if (block.getType() == Material.WATER) {
+            if (block.getY() < block.getWorld().getSeaLevel() - 1) {
+                block.setType(Material.AIR);
+                return;
+            }
+
+            for (int x = -radius; x <= radius; x++) {
+                for (int y = -radius; y <= radius; y++) {
+                    for (int z = -radius; z <= radius; z++) {
+                        if (x == 0 && y == 0 && z == 0) continue;
+                        Block nearby = block.getRelative(x, y, z);
+                        if (nearby.getType() == Material.WATER) nearby.setType(Material.AIR);
+                    }
+                }
+            }
+        }
+
+    }
+
     public void evaporateBlock(Block block) {
         Material material = block.getType();
         String blockTypeName = material.name().toLowerCase();
 
-        if ((blockTypeName.contains("snow"))) {
-            block.setType(Material.AIR);
-        } else if (material == Material.GRASS) {
-            block.setType(Material.AIR);
-        } else if (material == Material.GRASS_BLOCK) {
-            block.setType(Material.DIRT);
-        } else if (material.isBurnable()) {
+        VolcanoVent vent = volcano.manager.getNearestVent(block);
+        double silicateLevel = vent == null ? 0.45 : vent.lavaFlow.settings.silicateLevel;
+
+        if (material.isBurnable()) {
             for (BlockFace face : BlockFace.values()) {
                 Block relativeBlock = block.getRelative(face);
                 if (relativeBlock.getType().isAir()) {
                     relativeBlock.setType(Material.FIRE);
                 }
             }
-        } else if (material == Material.WATER) {
+        }
+
+        if (material == Material.WATER) {
+            evaporateWater(block);
+        } else if ((blockTypeName.contains("snow"))) {
+            block.setType(Material.AIR);
+        } else if (blockTypeName.contains("coral")) {
+            block.setType(Material.SAND);
+        } else if (material == Material.GRASS) {
+            block.setType(Material.AIR);
+        } else if (material == Material.GRASS_BLOCK) {
+            block.setType(Material.DIRT);
+        } else if (material == Material.TALL_GRASS || material == Material.GRASS) {
+            block.setType(Material.DEAD_BUSH);
+        } else if (material == Material.SEAGRASS || material == Material.WATER) {
             block.setType(Material.AIR);
         } else if (material == Material.WATER_CAULDRON) {
             block.setType(Material.CAULDRON);
+        } else if (material == Material.MOSS_BLOCK) {
+            block.setType(Material.DIRT);
+        } else if (material.name().toLowerCase().contains("infested")) {
+            block.setType(VolcanoComposition.getExtrusiveRock(silicateLevel));
         }
     }
 }

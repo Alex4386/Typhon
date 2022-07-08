@@ -471,8 +471,19 @@ public class TyphonUtils {
     }
 
     public static void createRisingSteam(Location location, int radius, int count, boolean mute) {
+        Particle type = Particle.CLOUD;
+        
+        if (location.getBlock().getType() == Material.WATER || location.getBlock().getRelative(BlockFace.UP).getType() == Material.WATER) {
+            type = Particle.BUBBLE_COLUMN_UP;
+            Location waterLevel = location.getWorld().getHighestBlockAt(location).getLocation();
+            
+            if (waterLevel.getY() - location.getY() < 10) {
+                createRisingSteam(waterLevel, radius, count, mute);
+            }
+        }
+
         TyphonUtils.spawnParticleWithVelocity(
-                Particle.CLOUD,
+                type,
                 TyphonUtils.getHighestRocklikes(location).getLocation(),
                 radius,
                 (int) (count * (4 / 3) * Math.pow(radius, 3)),

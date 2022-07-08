@@ -493,6 +493,21 @@ public class VolcanoVent {
         return this.getTwoDimensionalDistance(loc) <= this.bombs.maxDistance;
     }
 
+    public List<Block> getCoreBlocks() {
+        if (this.coreBlocks == null) {
+            this.getVentBlocks();
+        }
+
+        return this.coreBlocks;
+    }
+
+    public Block getCoreBlock() {
+        List<Block> coreBlocks = this.getCoreBlocks();
+        int idx = (int) (coreBlocks.size() * Math.random());
+
+        return coreBlocks.get(idx);
+    }
+
     public Block getNearestCoreBlock(Location loc) {
         if (this.coreBlocks == null) {
             this.getVentBlocks();

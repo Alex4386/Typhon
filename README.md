@@ -23,8 +23,6 @@ Visit: [minehub.kr](https://minehub.kr) for more information! (South Korea Resid
 -->
 
 ## TODO
-* Implement underwater pillow lava flows (Done)
-* Implement Magma Evolution
 * Automatic vent openings
 * Caldera formation
   - Due to mass block updates, This causes bukkit to crash due to watchdog.

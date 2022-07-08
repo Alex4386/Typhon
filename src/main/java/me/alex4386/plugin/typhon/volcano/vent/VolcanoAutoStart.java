@@ -112,7 +112,7 @@ public class VolcanoAutoStart implements Listener {
         boolean generated = false;
 
         for (int key = 1; key < 999; key++) {
-            name = volcano.name + "_auto" + String.format("%03d", key);
+            name = "fissure_" + String.format("%03d", key);
             if (volcano.subVents.get(name) == null) {
                 generated = true;
                 break;
@@ -121,6 +121,9 @@ public class VolcanoAutoStart implements Listener {
 
         if (generated) {
             VolcanoVent newVent = new VolcanoVent(volcano, location, name);
+            newVent.erupt.autoConfig();
+            
+            newVent.lavaFlow.settings.silicateLevel = volcano.mainVent.lavaFlow.settings.silicateLevel;
             volcano.subVents.put(name, newVent);
 
             volcano.trySave(true);

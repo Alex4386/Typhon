@@ -5,6 +5,7 @@ import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogger;
+import me.alex4386.plugin.typhon.volcano.succession.VolcanoSuccession;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoAutoStart;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 
@@ -51,6 +52,9 @@ public class Volcano implements Listener {
 
     // geoThermal Activities: ?
     public VolcanoGeoThermal geoThermal = new VolcanoGeoThermal(this);
+
+    // volcano successions
+    public VolcanoSuccession succession = new VolcanoSuccession(this);
 
     // vents. that spew out lavas everywhere <3
     public VolcanoVent mainVent = new VolcanoVent(this);
@@ -145,6 +149,7 @@ public class Volcano implements Listener {
     public void initialize() {
         autoStart.initialize();
         geoThermal.initialize();
+        succession.initialize();
     }
 
     public void startup() {
@@ -184,6 +189,7 @@ public class Volcano implements Listener {
 
         autoStart.shutdown();
         geoThermal.shutdown();
+        succession.shutdown();
 
         logger.log(VolcanoLogClass.CORE, "Shutdown Complete!");
     }

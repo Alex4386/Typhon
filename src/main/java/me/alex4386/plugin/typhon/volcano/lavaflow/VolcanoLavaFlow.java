@@ -203,6 +203,7 @@ public class VolcanoLavaFlow implements Listener {
 
         Block block = event.getBlock();
         Block toBlock = event.getToBlock();
+        BlockFace face = event.getFace();
 
         VolcanoLavaCoolData data = lavaCoolHashMap.get(block);
         if (data == null) cachedLavaCoolHashMap.get(block);
@@ -222,6 +223,15 @@ public class VolcanoLavaFlow implements Listener {
 
         // this is lava. flow it.
         if (data != null) {
+            // for realistic lava flows
+            if (face != BlockFace.DOWN) {
+                if (Math.random() < 0.2 * this.vent.lavaFlow.settings.silicateLevel) {
+                    event.setCancelled(true);
+                    toBlock.setType(Material.AIR);
+                    return;
+                }
+            }
+
             if (this.vent != null && !data.isBomb && data.source != null) {
                 double distance;
                 distance =
@@ -528,7 +538,7 @@ public class VolcanoLavaFlow implements Listener {
                 for (BlockFace flowableFace : flowableFaces) {
                     Block flowTarget = block.getRelative(flowableFace);
                     if (level <= 4) {
-                        if (Math.random() < 0.2 * level) {
+                        if (Math.random() > 0.2 * level) {
                             continue;
                         }
                     }
