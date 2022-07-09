@@ -114,7 +114,7 @@ public class VolcanoSuccession {
     }
 
     public void runSuccession(Block block) {
-        boolean isDebug = true;
+        boolean isDebug = false;
 
         Block targetBlock = TyphonUtils.getHighestRocklikes(block);
         double heatValue = this.volcano.manager.getHeatValue(block.getLocation());
