@@ -475,7 +475,7 @@ public class TyphonUtils {
         
         if (location.getBlock().getType() == Material.WATER || location.getBlock().getRelative(BlockFace.UP).getType() == Material.WATER) {
             type = Particle.BUBBLE_COLUMN_UP;
-            Location waterLevel = location.getWorld().getHighestBlockAt(location).getLocation();
+            Location waterLevel = location.getWorld().getHighestBlockAt(location).getLocation().add(0,1,0);
             
             if (waterLevel.getY() - location.getY() < 10) {
                 createRisingSteam(waterLevel, radius, count, mute);

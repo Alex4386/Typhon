@@ -43,7 +43,9 @@ public class VolcanoErupt {
             this.vent.lavaFlow.settings.silicateLevel = 0.45 + (Math.random() * (0.52 - 0.45));
             this.vent.lavaFlow.settings.flowed = 10;
             this.vent.lavaFlow.settings.delayFlowed = 14;
-            this.vent.explosion.enabled = false;
+
+            this.vent.explosion.settings.minBombCount = 0;
+            this.vent.explosion.settings.maxBombCount = 5;
 
         } else {
             this.vent.explosion.enabled = true;
@@ -52,8 +54,8 @@ public class VolcanoErupt {
                 this.vent.lavaFlow.settings.delayFlowed = 10;
                 this.vent.lavaFlow.settings.flowed = 7;
 
-                this.vent.explosion.settings.minBombCount = 100;
-                this.vent.explosion.settings.maxBombCount = 500;
+                this.vent.explosion.settings.minBombCount = 10;
+                this.vent.explosion.settings.maxBombCount = 20;
 
                 if (this.style == VolcanoEruptStyle.STROMBOLIAN) {
                     this.vent.lavaFlow.settings.silicateLevel = 0.49 + (Math.random() * (0.55 - 0.49));
@@ -64,8 +66,8 @@ public class VolcanoErupt {
                     this.vent.lavaFlow.settings.delayFlowed = 10;
                     this.vent.lavaFlow.settings.flowed = 7;
 
-                    this.vent.explosion.settings.minBombCount = 500;
-                    this.vent.explosion.settings.maxBombCount = 2500;
+                    this.vent.explosion.settings.minBombCount = 50;
+                    this.vent.explosion.settings.maxBombCount = 100;
 
                     // cloud of ash plume (campfire smoke + particle falling)
                 } else {
@@ -88,7 +90,7 @@ public class VolcanoErupt {
                 int prevFissureLength = this.vent.fissureLength;
                 this.vent.fissureLength = (int) Math.min(
                         Math.max(
-                                this.vent.longestFlowLength * 2,
+                                this.vent.longestNormalLavaFlowLength * 2,
                                 this.vent.fissureLength),
                         this.vent.maxFissureLength);
                 if (prevFissureLength != this.vent.fissureLength) {

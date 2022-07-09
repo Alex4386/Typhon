@@ -42,6 +42,7 @@ public class VolcanoVent {
     public int maxFissureLength = 100;
 
     public double longestFlowLength = 0.0;
+    public double longestNormalLavaFlowLength = 0.0;
 
     private List<Block> cachedVentBlocks = null;
     public List<Block> coreBlocks = null;
@@ -274,13 +275,51 @@ public class VolcanoVent {
         return this.cachedVentBlocks;
     }
 
+    public boolean shouldRunSurseyan() {
+        for (Block block : this.getCoreBlocks()) {
+            Block highest = block.getWorld().getHighestBlockAt(block.getLocation());
+            Block highestRock = TyphonUtils.getHighestRocklikes(block.getLocation());
+
+            if (highestRock.getY() >= highest.getY() - 10) {
+                if (block.getType() == Material.WATER && highest.getY() <= block.getWorld().getSeaLevel()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public double getHeatValue(Location loc) {
         double distance = this.getTwoDimensionalDistance(loc);
-        double distanceRatio = (distance / this.longestFlowLength) / 1.5;
+        double killZone = this.getType() == VolcanoVentType.CRATER ? this.craterRadius : 0;
 
-        double heatValue = VolcanoMath.pdfMaxLimiter(distanceRatio, 1);
+        boolean isInSea = distance <= this.longestNormalLavaFlowLength;
+        double pillowRatio = 0.2;
 
-        return heatValue;
+        if (!isInSea) {
+            isInSea = loc.getWorld().getHighestBlockAt(loc).getY() <= loc.getWorld().getSeaLevel() && loc.getBlock().getType() == Material.WATER;
+        }
+
+        if (distance < killZone) {
+            return (isInSea ? pillowRatio : 1);
+        }
+        
+        double deltaFromNormalLava = (this.longestFlowLength - this.longestNormalLavaFlowLength);
+
+        double correctedLavaLength = this.longestNormalLavaFlowLength + (deltaFromNormalLava * pillowRatio);
+        double correctedDistance = distance;
+
+        if (correctedDistance > this.longestNormalLavaFlowLength) {
+            double delta = correctedDistance - this.longestNormalLavaFlowLength;
+            correctedDistance = this.longestNormalLavaFlowLength + (pillowRatio * delta);
+        }
+
+        double converted = (correctedDistance - killZone) / (correctedLavaLength - killZone);
+        if (converted >= 1) return 0;
+        
+        double reversed = Math.max(1 - converted, 0); 
+        
+        return Math.pow(reversed, 1.5);
     }
 
     public int getRadius() {
@@ -616,6 +655,7 @@ public class VolcanoVent {
         this.erupt.importConfig((JSONObject) configData.get("erupt"));
         this.lavadome.importConfig((JSONObject) configData.get("lavaDome"));
         this.longestFlowLength = (double) configData.get("longestFlowLength");
+        this.longestNormalLavaFlowLength = (double) configData.get("longestNormalLavaFlowLength");
     }
 
     public JSONObject exportConfig() {
@@ -627,6 +667,7 @@ public class VolcanoVent {
         configData.put("location", TyphonUtils.serializeLocationForJSON(this.location));
         configData.put("status", this.status.toString());
         configData.put("longestFlowLength", this.longestFlowLength);
+        configData.put("longestNormalLavaFlowLength", this.longestNormalLavaFlowLength);
 
         configData.put("craterRadius", this.craterRadius);
 

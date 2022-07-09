@@ -6,7 +6,7 @@ import java.util.List;
 
 public enum VolcanoEruptStyle {
     // lava lake + lava fountain (minimal), lava flow is everything of this.
-    HAWAIIAN("hawaiian", new String[] { "effusive" }, VolcanoEruptCauseType.MAGMATIC, 4, 0, 0),
+    HAWAIIAN("hawaiian", new String[] { "effusive" }, VolcanoEruptCauseType.MAGMATIC, 4, 0.1, 0.1),
 
     // Lava fountain (with volcanic bombs) + can have lava flows, but minimal.
     // Usually goes into

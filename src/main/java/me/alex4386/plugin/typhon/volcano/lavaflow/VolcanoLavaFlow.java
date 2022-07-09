@@ -238,8 +238,18 @@ public class VolcanoLavaFlow implements Listener {
                         TyphonUtils.getTwoDimensionalDistance(
                                 data.source.getLocation(), block.getLocation());
 
+                boolean trySave = false;
                 if (distance > vent.longestFlowLength) {
                     vent.longestFlowLength = distance;
+                    trySave = true;
+                }
+
+                if (distance > vent.longestNormalLavaFlowLength) {
+                    vent.longestNormalLavaFlowLength = distance;
+                    trySave = true;
+                }
+
+                if (trySave) {
                     vent.getVolcano().trySave(false);
                 }
 

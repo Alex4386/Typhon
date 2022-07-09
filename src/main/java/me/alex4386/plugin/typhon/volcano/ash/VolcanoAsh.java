@@ -125,7 +125,7 @@ public class VolcanoAsh {
                 VolcanoCircleOffsetXZ xz = VolcanoMath.getCenterFocusedCircleOffset(
                         loc.getBlock(),
                         0,
-                        (int) Math.round(this.vent.longestFlowLength * 0.5 * multiplier));
+                        (int) Math.round(this.vent.longestNormalLavaFlowLength * 0.5 * multiplier));
                 Location finalLoc = TyphonUtils.getHighestRocklikes(loc.add(xz.x, 0, xz.z))
                         .getRelative(BlockFace.UP)
                         .getLocation();

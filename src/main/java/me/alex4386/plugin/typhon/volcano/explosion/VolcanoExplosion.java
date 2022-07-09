@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.explosion;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
@@ -84,9 +85,23 @@ public class VolcanoExplosion {
     }
 
     public void explode() {
-        int bombCount = (int) ((Math.random() * (settings.maxBombCount - settings.minBombCount)
-                + settings.minBombCount)
-                * this.vent.erupt.getStyle().bombMultiplier);
+        VolcanoEruptStyle style = this.vent.erupt.getStyle();
+        double bombMultiplier = style.bombMultiplier;
+
+        if (this.vent.shouldRunSurseyan()) {
+            if (style.bombMultiplier > VolcanoEruptStyle.SURTSEYAN.bombMultiplier) {
+                bombMultiplier = VolcanoEruptStyle.SURTSEYAN.bombMultiplier;
+            }
+        }
+
+        int bombCount = (int) (
+            (
+                Math.random() * 
+                (settings.maxBombCount - settings.minBombCount)
+                + settings.minBombCount
+            ) * bombMultiplier
+        );
+        
         explode(bombCount);
     }
 
@@ -103,6 +118,8 @@ public class VolcanoExplosion {
     }
 
     public void explode(int bombCount, boolean tremor, boolean smoke, boolean summitExplode) {
+        if (bombCount <= 0) return;
+
         if (summitExplode) {
             vent.location
                     .getWorld()

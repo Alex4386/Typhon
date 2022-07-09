@@ -19,6 +19,7 @@ public enum VolcanoLogClass {
     MATH("Math"),
     METAMORPHISM("Metamorphism"),
     PLAYER_EVENT("Player Event"),
+    SUCCESSION("Succession"),
     TREMOR("Tremor"),
     UTILS("Utils"),
     VENT("Vent"),
