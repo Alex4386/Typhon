@@ -6,64 +6,6 @@ import java.util.Random;
 
 public class VolcanoComposition {
 
-    @Deprecated
-    public static Material getIntrusiveRock(double silicateLevel) {
-        Random random = new Random();
-
-        if (silicateLevel < 0.45) {
-            return Material.BLACKSTONE;
-        } else if (silicateLevel < 0.53) {
-            return Material.BASALT;
-        } else if (silicateLevel < 0.57) {
-            double ratio = (silicateLevel - 0.53) / (0.57 - 0.53);
-
-            double s = random.nextDouble();
-            if (s > ratio) {
-                return Material.BASALT;
-            } else {
-                return Material.DIORITE;
-            }
-        } else if (silicateLevel < 0.65) {
-            return Material.DIORITE;
-        } else if (silicateLevel < 0.69) {
-            double ratio = (silicateLevel - 0.65) / (0.69 - 0.65);
-
-            double s = random.nextDouble();
-            if (s > ratio) {
-                return Material.DIORITE;
-            } else {
-                return Material.GRANITE;
-            }
-        } else if (silicateLevel < 0.77) {
-            return Material.GRANITE;
-        } else if (silicateLevel < 0.83) {
-            double ratio = (silicateLevel - 0.77) / (0.83 - 0.77);
-
-            double s = random.nextDouble();
-            if (s > ratio) {
-                return Material.GRANITE;
-            } else {
-                return Material.AMETHYST_BLOCK;
-            }
-        } else if (silicateLevel < 0.90) {
-            double ratio = (silicateLevel - 0.77) / (0.90 - 0.77);
-            double ratioAme = (silicateLevel - 0.83) / (0.90 - 0.83);
-
-            double s = random.nextDouble();
-            if (s > ratio) {
-                return Material.GRANITE;
-            } else {
-                if (random.nextDouble() > ratioAme) {
-                    return Material.AMETHYST_BLOCK;
-                } else {
-                    return Material.QUARTZ_BLOCK;
-                }
-            }
-        } else {
-            return Material.QUARTZ_BLOCK;
-        }
-    }
-
     public static Material getBombRock(double silicateLevel) {
         Random random = new Random();
 
@@ -128,42 +70,6 @@ public class VolcanoComposition {
             }
         } else {
             return Material.QUARTZ_BLOCK;
-        }
-    }
-
-    public static Material[] getExtrusiveRocks(double silicateLevel) {
-        if (silicateLevel < 0.45) {
-            return new Material[] {Material.DEEPSLATE, Material.BASALT, Material.POLISHED_BASALT};
-        } else if (silicateLevel < 0.53) {
-            return new Material[] {
-                Material.BASALT, Material.SMOOTH_BASALT, Material.POLISHED_BASALT
-            };
-        } else if (silicateLevel < 0.57) {
-            return new Material[] {
-                Material.ANDESITE,
-                Material.POLISHED_ANDESITE,
-                Material.BASALT,
-                Material.SMOOTH_BASALT,
-                Material.POLISHED_BASALT
-            };
-        } else if (silicateLevel < 0.63) {
-            return new Material[] {Material.ANDESITE, Material.POLISHED_ANDESITE};
-        } else if (silicateLevel < 0.69) {
-            return new Material[] {
-                Material.ANDESITE,
-                Material.POLISHED_ANDESITE,
-                Material.OBSIDIAN,
-                Material.CRYING_OBSIDIAN,
-                Material.TUFF
-            };
-        } else if (silicateLevel < 0.77) {
-            return new Material[] {Material.OBSIDIAN, Material.CRYING_OBSIDIAN, Material.TUFF};
-        } else if (silicateLevel < 0.83) {
-            return new Material[] {
-                Material.OBSIDIAN, Material.CRYING_OBSIDIAN, Material.TUFF, Material.QUARTZ
-            };
-        } else {
-            return new Material[] {Material.QUARTZ};
         }
     }
 
@@ -241,4 +147,106 @@ public class VolcanoComposition {
             return Material.QUARTZ_BLOCK;
         }
     }
+
+
+    // ====== legacy ======
+    // The following is left for 
+    // reference purposes
+
+    @Deprecated
+    public static Material getIntrusiveRock(double silicateLevel) {
+        Random random = new Random();
+
+        if (silicateLevel < 0.45) {
+            return Material.BLACKSTONE;
+        } else if (silicateLevel < 0.53) {
+            return Material.BASALT;
+        } else if (silicateLevel < 0.57) {
+            double ratio = (silicateLevel - 0.53) / (0.57 - 0.53);
+
+            double s = random.nextDouble();
+            if (s > ratio) {
+                return Material.BASALT;
+            } else {
+                return Material.DIORITE;
+            }
+        } else if (silicateLevel < 0.65) {
+            return Material.DIORITE;
+        } else if (silicateLevel < 0.69) {
+            double ratio = (silicateLevel - 0.65) / (0.69 - 0.65);
+
+            double s = random.nextDouble();
+            if (s > ratio) {
+                return Material.DIORITE;
+            } else {
+                return Material.GRANITE;
+            }
+        } else if (silicateLevel < 0.77) {
+            return Material.GRANITE;
+        } else if (silicateLevel < 0.83) {
+            double ratio = (silicateLevel - 0.77) / (0.83 - 0.77);
+
+            double s = random.nextDouble();
+            if (s > ratio) {
+                return Material.GRANITE;
+            } else {
+                return Material.AMETHYST_BLOCK;
+            }
+        } else if (silicateLevel < 0.90) {
+            double ratio = (silicateLevel - 0.77) / (0.90 - 0.77);
+            double ratioAme = (silicateLevel - 0.83) / (0.90 - 0.83);
+
+            double s = random.nextDouble();
+            if (s > ratio) {
+                return Material.GRANITE;
+            } else {
+                if (random.nextDouble() > ratioAme) {
+                    return Material.AMETHYST_BLOCK;
+                } else {
+                    return Material.QUARTZ_BLOCK;
+                }
+            }
+        } else {
+            return Material.QUARTZ_BLOCK;
+        }
+    }
+
+    /*
+    public static Material[] getExtrusiveRocks(double silicateLevel) {
+        if (silicateLevel < 0.45) {
+            return new Material[] {Material.DEEPSLATE, Material.BASALT, Material.POLISHED_BASALT};
+        } else if (silicateLevel < 0.53) {
+            return new Material[] {
+                Material.BASALT, Material.SMOOTH_BASALT, Material.POLISHED_BASALT
+            };
+        } else if (silicateLevel < 0.57) {
+            return new Material[] {
+                Material.ANDESITE,
+                Material.POLISHED_ANDESITE,
+                Material.BASALT,
+                Material.SMOOTH_BASALT,
+                Material.POLISHED_BASALT
+            };
+        } else if (silicateLevel < 0.63) {
+            return new Material[] {Material.ANDESITE, Material.POLISHED_ANDESITE};
+        } else if (silicateLevel < 0.69) {
+            return new Material[] {
+                Material.ANDESITE,
+                Material.POLISHED_ANDESITE,
+                Material.OBSIDIAN,
+                Material.CRYING_OBSIDIAN,
+                Material.TUFF
+            };
+        } else if (silicateLevel < 0.77) {
+            return new Material[] {Material.OBSIDIAN, Material.CRYING_OBSIDIAN, Material.TUFF};
+        } else if (silicateLevel < 0.83) {
+            return new Material[] {
+                Material.OBSIDIAN, Material.CRYING_OBSIDIAN, Material.TUFF, Material.QUARTZ
+            };
+        } else {
+            return new Material[] {Material.QUARTZ};
+        }
+    }
+    */
+
 }

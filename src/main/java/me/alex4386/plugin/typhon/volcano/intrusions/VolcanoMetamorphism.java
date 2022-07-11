@@ -5,6 +5,7 @@ import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 
 import org.bukkit.Material;
+import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 
@@ -38,13 +39,28 @@ public class VolcanoMetamorphism {
             String blockTypeName = material.name().toLowerCase();
             double silicateLevel = vent.lavaFlow.settings.silicateLevel;
 
-            if (blockTypeName.contains("dirt")
-                    || blockTypeName.contains("podzol")
-                    || blockTypeName.contains("grass")
-                    || blockTypeName.contains("sand")
-                    || blockTypeName.contains("cobblestone")
-                    || blockTypeName.contains("infested")) {
+            boolean typeOfDirt = (blockTypeName.contains("dirt")
+                || blockTypeName.contains("podzol")
+                || blockTypeName.contains("grass_block"));
+
+            boolean isPassable = block.isPassable();
+            
+            if (isPassable) {
                 material = VolcanoComposition.getExtrusiveRock(silicateLevel);
+            } else if (typeOfDirt) {
+                material = Material.COARSE_DIRT;
+            } else if (blockTypeName.contains("cobblestone") || blockTypeName.contains("gravel") || blockTypeName.contains("infested")) {
+                if (blockTypeName.contains("infested")) {
+                    block.getWorld().playSound(block.getLocation(), Sound.ENTITY_SILVERFISH_DEATH, 1f, 0f);
+                }
+
+                material = Material.STONE;
+            } else if (material == Material.SAND) {
+                material = Material.SANDSTONE;
+            } else if (material == Material.RED_SAND) {
+                material = Material.RED_SANDSTONE;
+            } else if (material == Material.CLAY) {
+                material = Material.TERRACOTTA;
             } else {
                 return;
             }

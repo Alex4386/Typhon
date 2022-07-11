@@ -266,7 +266,7 @@ public class TyphonUtils {
                 || materialType.contains("ore")
                 || materialType.contains("iron")
                 || materialType.contains("gold")
-                || materialType.contains("coppe")
+                || materialType.contains("copper")
                 || materialType.contains("quartz")
                 || materialType.contains("magma")
                 || materialType.contains("obsidian")
@@ -274,7 +274,8 @@ public class TyphonUtils {
                 || materialType.contains("debris")
                 || materialType.contains("amethyst")
                 || materialType.contains("clay")
-                || materialType.contains("terracotta"));
+                || materialType.contains("terracotta")
+            );
     }
 
     public static String getDirections(org.bukkit.Location from, org.bukkit.Location to) {

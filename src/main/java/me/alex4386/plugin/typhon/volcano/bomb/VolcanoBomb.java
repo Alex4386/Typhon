@@ -136,23 +136,8 @@ public class VolcanoBomb {
         while (!TyphonUtils.isMaterialRocklikes(block.getRelative(BlockFace.DOWN).getType())) {
             if (block.getY() < TyphonUtils.getMinimumY(block.getWorld()))
                 return;
-            for (int i = -1; i <= 1; i++) {
-                for (int j = -1; j <= 1; j++) {
-                    Block burnBlock = block.getRelative(i, 0, j);
-                    if (i == 0 && j == 0) {
-                        burnBlock.setType(Material.AIR);
-                        continue;
-                    }
-                    if (burnBlock.getType().isBurnable()) {
-                        Block topOfBurnBlock = burnBlock.getRelative(0, 1, 0);
-                        if (topOfBurnBlock.getType().isAir()) {
-                            topOfBurnBlock.setType(Material.FIRE);
-                        }
-                    } else if (!burnBlock.getType().isAir()) {
-                        this.vent.volcano.metamorphism.metamorphoseBlock(burnBlock);
-                    }
-                }
-            }
+
+            block.setType(Material.AIR);
             block = block.getRelative(BlockFace.DOWN);
         }
 

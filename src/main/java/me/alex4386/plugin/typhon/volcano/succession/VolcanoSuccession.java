@@ -91,6 +91,14 @@ public class VolcanoSuccession {
         }
 
         double skipZone = (vent.getType() == VolcanoVentType.CRATER ? vent.craterRadius : 0);
+        if (skipZone > 0) {
+            if (vent.status.getScaleFactor() < 0.1) {
+                if (Math.random() < 0.5) {
+                    skipZone = 0;
+                }
+            }
+        }
+        
         double random = ((longestFlow - skipZone) * Math.random()) + skipZone;
 
         double angle = Math.random() * Math.PI * 2;
@@ -159,9 +167,8 @@ public class VolcanoSuccession {
                     // tree can not grow if heatValue is high enough,
                     // in that case, grass should be generated instead.
                     if (shouldCheckHeat(block)) {
-                        if (heatValue > 0.8) {
-                            spreadSoil(targetBlock);
-                            return;
+                        if (heatValue > 0.9) {
+
                         } else if (heatValue > 0.6) {
                             targetBlock.applyBoneMeal(BlockFace.UP);
                             spreadSoil(targetBlock);

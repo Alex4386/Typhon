@@ -175,6 +175,16 @@ public class VolcanoLavaFlow implements Listener {
         }
     }
 
+    public void createEffectOnLavaSeaEntry(Block block) {
+        if (Math.random() < 0.3) {
+            block
+                .getWorld()
+                .playSound(
+                        block.getLocation(), Sound.BLOCK_LAVA_EXTINGUISH, 1f, 0f);
+            TyphonUtils.createRisingSteam(block.getLocation(), 1, 2);
+        }
+    }
+
     @EventHandler
     public void lavaCollisionDetector(BlockFormEvent event) {
         Block block = event.getBlock();
@@ -182,6 +192,7 @@ public class VolcanoLavaFlow implements Listener {
             VolcanoLavaCoolData data = lavaCoolHashMap.get(block);
             if (data == null) data = cachedLavaCoolHashMap.get(block);
             if (data != null) {
+                createEffectOnLavaSeaEntry(block);
                 cachedPillowLavaMap.put(block, new VolcanoPillowLavaData(data.flowedFromVent, data.source, data.fromBlock, data.runExtensionCount));
                 block.setType(VolcanoComposition.getExtrusiveRock(settings.silicateLevel));
             }
@@ -295,18 +306,7 @@ public class VolcanoLavaFlow implements Listener {
                     }
                 }
 
-                if (TyphonUtils.containsWater(nearByBlock)) {
-                    TyphonUtils.createRisingSteam(nearByBlock.getLocation(), 1, 2);
-                    nearByBlock
-                            .getWorld()
-                            .playSound(
-                                    nearByBlock.getLocation(), Sound.BLOCK_LAVA_EXTINGUISH, 1f, 0f);
-
-                    // VolcanoBombListener.lavaSplashExplosions.put(block, vent);
-                    // nearByBlock.getWorld().createExplosion(block.getLocation(), 4f, false);
-                } else {
-                    getVolcano().metamorphism.metamorphoseBlock(nearByBlock);
-                }
+                getVolcano().metamorphism.metamorphoseBlock(nearByBlock);
             }
 
             int extensionCount = data.runExtensionCount;
@@ -375,6 +375,191 @@ public class VolcanoLavaFlow implements Listener {
         this.registerLavaCoolData(source, fromBlock, block, isBomb, extension, isUnderWater);
     }
 
+    private Material getVolcanicPlugOre() {
+        double random = Math.random();
+
+        double silicateLevel = Math.min(Math.max(this.settings.silicateLevel, 0.43), 0.74);
+        double silicateRange = (0.74 - 0.43);
+
+        double ratio = 1 - ((silicateLevel - 0.43) / silicateRange);
+
+        double iron = getProbabilityOfIron() * 5;
+        double copper = iron * 1.4;
+        
+        // gold / iron = 0.55555~~ * 1/4 (iron: 8, gold: 2)
+        double gold = getProbabilityOfSeperation(0.1 * 0.11) * 3;
+        double emerald = getProbabilityOfEmerald() * (1 + (3 * ratio));
+
+        // these will be calculated as same as minecraft defaults; ten times of it.
+        double diamond = 0.000846 * (2 + (3 * ratio));
+        double ancientDebris = 0.00005 * (2 + (3 * ratio));
+
+        double base = 0;
+
+        if (random < base + iron) {
+            return Material.IRON_ORE;
+        }
+        base += iron;
+
+        if (random < base + copper) {
+            return Material.COPPER_ORE;
+        }
+        base += copper;
+
+        if (random < base + diamond) {
+            return Material.DIAMOND_ORE;
+        }
+        base += diamond;
+        
+        if (random < base + gold) {
+            return Material.GOLD_ORE;
+        }
+        base += gold;
+        
+        if (random < base + emerald) {
+            return Material.EMERALD_ORE;
+        }
+        base += emerald;
+        
+        if (random < base + ancientDebris) {
+            return Material.ANCIENT_DEBRIS;
+        }
+        base += ancientDebris;
+
+        return null;
+
+
+    }
+
+    private Material getRegularOre() {
+        double random = Math.random();
+
+        double iron = getProbabilityOfIron();
+        double copper = iron * 1.4;
+        
+        // gold / iron = 0.55555~~ * 1/4 (iron: 8, gold: 2)
+        double gold = getProbabilityOfSeperation(0.1 * 0.11);
+
+        double emerald = getProbabilityOfEmerald();
+
+        // these will be calculated as same as minecraft defaults;
+        double diamond = 0.000846;
+        double ancientDebris = 0.00005;
+
+        double base = 0;
+
+        if (random < base + iron) {
+            return Material.IRON_ORE;
+        }
+        base += iron;
+
+        if (random < base + copper) {
+            return Material.COPPER_ORE;
+        }
+        base += copper;
+
+        if (random < base + diamond) {
+            return Material.DIAMOND_ORE;
+        }
+        base += diamond;
+        
+        if (random < base + gold) {
+            return Material.GOLD_ORE;
+        }
+        base += gold;
+        
+        if (random < base + emerald) {
+            return Material.EMERALD_ORE;
+        }
+        base += emerald;
+        
+        if (random < base + ancientDebris) {
+            return Material.ANCIENT_DEBRIS;
+        }
+        base += ancientDebris;
+
+        return null;
+    }
+
+    private double getIronContentOfLava() {
+        double silicateLevel = Math.min(Math.max(this.settings.silicateLevel, 0.43), 0.74);
+        double silicateRange = (0.74 - 0.43);
+
+        double ratio = 1 - ((silicateLevel - 0.43) / silicateRange);
+        return (0.04 + (ratio * 0.06));
+    }
+
+    private double getProbabilityOfEmerald() {
+        double silicateLevel = Math.min(Math.max(this.settings.silicateLevel, 0), 1);
+
+        // Average amount of Aluminium in lava: 16%
+        return getProbabilityOfSeperation(silicateLevel * 0.16 * 0.015);
+    }
+
+    private double getProbabilityOfIron() {
+        return getProbabilityOfSeperation(getIronContentOfLava());
+    }
+    
+
+    private double getProbabilityOfSeperation(double base) {
+        // part of separated.
+        double baseSeperated = 0.2 + (0.2 * Math.random() - 0.1);
+
+        return base * baseSeperated;
+    }
+
+    private Material oreifyMaterial(Material material, Material source) {
+        Material targetMaterial = source;
+
+        if (source == Material.ANCIENT_DEBRIS) {
+            return Material.ANCIENT_DEBRIS;
+        }
+        
+        if (source == Material.GOLD_ORE && material == Material.NETHERRACK) {
+            return Material.NETHER_GOLD_ORE;
+        } else if (source == Material.GOLD_ORE && (material == Material.DEEPSLATE || material == Material.BLACKSTONE)) {
+            return Material.GILDED_BLACKSTONE;
+        }
+
+        switch (material) {
+            case TUFF:
+                return Material.TUFF;
+            case DEEPSLATE:
+            case BASALT:
+                targetMaterial = Material.getMaterial("DEEPSLATE_"+source.name());
+                break;
+            default:
+                return source;
+        }
+
+        if (targetMaterial == null) {
+            return source;
+        }
+
+        return targetMaterial;
+    }
+
+    private Material getOre(double distance) {
+        double killZone = vent.getType() == VolcanoVentType.CRATER ? vent.craterRadius : 0;
+        double ratio = distance / this.vent.longestFlowLength;
+        if (distance < killZone) {
+            return getVolcanicPlugOre();
+        }
+
+        double random = Math.random() * 0.1;
+        if (ratio < 0.1) {
+            return getVolcanicPlugOre();
+        } else if (ratio < 0.2) {
+            if (Math.random() > (ratio - 0.1) * 10) {
+                return getVolcanicPlugOre();
+            } else {
+                return getRegularOre();
+            }
+        } else {
+            return getRegularOre();
+        }
+    }
+
     private void registerLavaCoolData(
             Block source,
             Block fromBlock,
@@ -386,6 +571,14 @@ public class VolcanoLavaFlow implements Listener {
                 isBomb && !isUnderWater
                         ? VolcanoComposition.getBombRock(this.settings.silicateLevel)
                         : VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel);
+        
+        double distance = TyphonUtils.getTwoDimensionalDistance(source.getLocation(), block.getLocation());
+
+        Material ore = this.getOre(distance);
+        if (ore != null) {
+            Material oreified = this.oreifyMaterial(targetMaterial, ore);
+            if (oreified != null) targetMaterial = oreified;
+        }
 
         if (!isUnderWater) {
             block.setType(Material.LAVA);
@@ -503,9 +696,15 @@ public class VolcanoLavaFlow implements Listener {
                 Block block = data.getKey();
                 VolcanoPillowLavaData lavaData = data.getValue();
 
-                block.setType(VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel));
+                // don't flow.
+                if (Math.random() < 0.2) {
+                    continue;
+                }
 
                 flowedBlocks.add(block);
+
+                block.setType(VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel));
+
                 Block underBlock = block.getRelative(BlockFace.DOWN);
                 if (underBlock.getType() == Material.MAGMA_BLOCK) {
                     underBlock.setType(VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel));
@@ -731,32 +930,3 @@ class VolcanoLavaFlowDefaultSettings {
     }
 }
 
-class VolcanoPillowLavaData {
-    int extensionCount;
-    VolcanoVent vent;
-
-    Block sourceBlock;
-    Block fromBlock;
-
-    int fluidLevel = 8;
-
-    VolcanoPillowLavaData(VolcanoVent vent, Block sourceBlock) {
-        this(vent, sourceBlock, sourceBlock);
-    }
-
-    VolcanoPillowLavaData(VolcanoVent vent, Block sourceBlock, Block fromBlock) {
-        this(
-                vent,
-                sourceBlock,
-                fromBlock,
-                VolcanoLavaCoolData.calculateExtensionCount(vent.lavaFlow.settings.silicateLevel));
-    }
-
-    VolcanoPillowLavaData(VolcanoVent vent, Block sourceBlock, Block fromBlock, int extensionCount) {
-        this.vent = vent;
-        this.sourceBlock = sourceBlock;
-        this.fromBlock = fromBlock;
-
-        this.extensionCount = extensionCount;
-    }
-}

@@ -199,13 +199,12 @@ public class VolcanoAutoStart implements Listener {
 
                 location =
                         TyphonUtils.getRandomBlockInRange(
-                                        location.getBlock(),
-                                        0,
-                                        (int)
-                                                (volcano.mainVent.getTwoDimensionalDistance(
-                                                                location)
-                                                        - volcano.mainVent.longestFlowLength))
-                                .getLocation();
+                            location.getBlock(),
+                            0,
+                            (int)
+                                (volcano.mainVent.getTwoDimensionalDistance(location)
+                                            - volcano.mainVent.longestFlowLength))
+                        .getLocation();
                 location = TyphonUtils.getHighestLocation(location);
             }
 
