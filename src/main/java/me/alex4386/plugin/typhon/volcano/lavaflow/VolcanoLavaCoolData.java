@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.lavaflow;
 
+import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
@@ -40,6 +41,8 @@ public class VolcanoLavaCoolData {
         this.block = block;
         this.material = material;
         this.flowedFromVent = flowedFromVent;
+
+        // System.out.println("LavaCoolData generated: "+TyphonUtils.blockLocationTostring(block));
     }
 
     public VolcanoLavaCoolData(

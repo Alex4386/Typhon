@@ -234,6 +234,7 @@ public class VolcanoSuccession {
             case NETHERRACK:
             case TUFF:
             case BASALT:
+            case POLISHED_BASALT:
                 return true;
         }
 

@@ -234,14 +234,16 @@ public class VolcanoLavaFlow implements Listener {
 
         // this is lava. flow it.
         if (data != null) {
+            /*
             // for realistic lava flows
             if (face != BlockFace.DOWN) {
-                if (Math.random() < 0.2 * this.vent.lavaFlow.settings.silicateLevel) {
+                if (Math.random() < 0.01 * this.vent.lavaFlow.settings.silicateLevel) {
                     event.setCancelled(true);
                     toBlock.setType(Material.AIR);
                     return;
                 }
             }
+            */
 
             if (this.vent != null && !data.isBomb && data.source != null) {
                 double distance;
@@ -273,8 +275,10 @@ public class VolcanoLavaFlow implements Listener {
             Block underToBlock = toBlock.getRelative(BlockFace.DOWN);
             VolcanoLavaCoolData underData = lavaCoolHashMap.get(underToBlock);
 
-            if (underData != null) {
-                underData.forceCoolDown();
+            if (underData != null && !underData.tickPassed()) {
+                if (underData.fromBlock != toBlock) {
+                    underData.forceCoolDown();
+                }
             }
 
             if (!lavaFlowChunks.contains(toBlock.getChunk())) {
@@ -526,6 +530,7 @@ public class VolcanoLavaFlow implements Listener {
                 return Material.TUFF;
             case DEEPSLATE:
             case BASALT:
+            case POLISHED_BASALT:
                 targetMaterial = Material.getMaterial("DEEPSLATE_"+source.name());
                 break;
             default:
@@ -546,7 +551,6 @@ public class VolcanoLavaFlow implements Listener {
             return getVolcanicPlugOre();
         }
 
-        double random = Math.random() * 0.1;
         if (ratio < 0.1) {
             return getVolcanicPlugOre();
         } else if (ratio < 0.2) {
@@ -647,6 +651,15 @@ public class VolcanoLavaFlow implements Listener {
 
         for (Block whereToFlow : whereToFlows) {
             VolcanoLavaCoolData coolData = lavaCoolHashMap.get(whereToFlow);
+            VolcanoLavaCoolData underData = lavaCoolHashMap.get(whereToFlow.getRelative(BlockFace.DOWN));
+            underData = (underData == null) ? cachedLavaCoolHashMap.get(whereToFlow.getRelative(BlockFace.DOWN)) : underData;
+            
+            if (underData != null) {
+                if (!underData.tickPassed()) {
+                    continue;
+                }
+            }
+
             if (coolData == null || coolData.tickPassed()) flowLava(whereToFlow);
         }
     }

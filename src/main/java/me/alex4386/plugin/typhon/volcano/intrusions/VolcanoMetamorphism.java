@@ -44,6 +44,10 @@ public class VolcanoMetamorphism {
                 || blockTypeName.contains("grass_block"));
 
             boolean isPassable = block.isPassable();
+
+            if (block.isLiquid()) {
+                return;
+            }
             
             if (isPassable) {
                 material = VolcanoComposition.getExtrusiveRock(silicateLevel);
