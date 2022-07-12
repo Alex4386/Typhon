@@ -13,6 +13,7 @@ import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Directional;
 import org.bukkit.block.data.Levelled;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -387,7 +388,7 @@ public class VolcanoLavaFlow implements Listener {
 
         double ratio = 1 - ((silicateLevel - 0.43) / silicateRange);
 
-        double iron = getProbabilityOfIron() * 5;
+        double iron = getProbabilityOfIron() * 3;
         double copper = iron * 1.4;
         
         // gold / iron = 0.55555~~ * 1/4 (iron: 8, gold: 2)
@@ -395,8 +396,8 @@ public class VolcanoLavaFlow implements Listener {
         double emerald = getProbabilityOfEmerald() * (1 + (3 * ratio));
 
         // these will be calculated as same as minecraft defaults; ten times of it.
-        double diamond = 0.000846 * (2 + (3 * ratio));
-        double ancientDebris = 0.00005 * (2 + (3 * ratio));
+        double diamond = 0.000846 * (4 + (6 * ratio)); // 0.008
+        double ancientDebris = 0.00005 * (8 + (8 * ratio)); // 0.0008
 
         double base = 0;
 
@@ -716,11 +717,46 @@ public class VolcanoLavaFlow implements Listener {
 
                 flowedBlocks.add(block);
 
-                block.setType(VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel));
+                Block fromBlock = lavaData.fromBlock;
+                Block sourceBlock = lavaData.sourceBlock;
+
+                double distance = TyphonUtils.getTwoDimensionalDistance(sourceBlock.getLocation(), block.getLocation());
+
+                if (fromBlock != null) {
+                    Material material = 
+                        this.getOre(distance);
+                        
+                    material = material == null ?
+                        VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel) :
+                        material;
+
+                    block.setType(material);
+
+                    BlockData bd = block.getBlockData();
+                    BlockFace f = block.getFace(lavaData.fromBlock);
+            
+                    if (bd instanceof Directional) {
+                        Directional d = (Directional) bd;
+                        if (f != null && f.isCartesian()) {
+                            d.setFacing(f);
+                        }
+                        block.setBlockData(d);
+                    }
+                }
+
 
                 Block underBlock = block.getRelative(BlockFace.DOWN);
+                distance = TyphonUtils.getTwoDimensionalDistance(sourceBlock.getLocation(), underBlock.getLocation());
+                Material material = 
+                    this.getOre(distance);
+                    
+                material = material == null ?
+                    VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel) :
+                    material;
+
+
                 if (underBlock.getType() == Material.MAGMA_BLOCK) {
-                    underBlock.setType(VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel));
+                    underBlock.setType(material);
                 } else if (underBlock.getType().isAir() || TyphonUtils.containsLiquidWater(underBlock)) {
                     if (pillowLavaMap.get(underBlock) == null) {
                         registerLavaCoolData(
@@ -730,7 +766,7 @@ public class VolcanoLavaFlow implements Listener {
                                 false);
                         continue;
                     }
-                    underBlock.setType(VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel));
+                    underBlock.setType(material);
                     flowedBlocks.add(underBlock);
                 }
 

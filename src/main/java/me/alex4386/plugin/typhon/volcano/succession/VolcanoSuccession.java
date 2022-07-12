@@ -8,6 +8,7 @@ import org.bukkit.Material;
 import org.bukkit.TreeType;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.json.simple.JSONObject;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
@@ -21,6 +22,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 public class VolcanoSuccession {
     // Implements Primary Succession
     Volcano volcano;
+    boolean isEnabled = true;
     
     public VolcanoSuccession(Volcano volcano) {
         this.volcano = volcano;
@@ -63,8 +65,10 @@ public class VolcanoSuccession {
     }
 
     public void runSuccessionCycle() {
-        for (VolcanoVent vent : this.volcano.manager.getVents()) {
-            runSuccessionCycle(vent);
+        if (this.isEnabled) {
+            for (VolcanoVent vent : this.volcano.manager.getVents()) {
+                runSuccessionCycle(vent);
+            }
         }
     }
 
@@ -210,7 +214,7 @@ public class VolcanoSuccession {
             if (Math.random() < erodeProb) {
                 if (targetBlock.getType() == Material.DEEPSLATE || targetBlock.getType() == Material.BLACKSTONE) {
                     targetBlock.setType(Material.COBBLED_DEEPSLATE);
-                } else if (TyphonUtils.isMaterialRocklikes(targetBlock.getType()) && !targetBlock.getType().name().toLowerCase().contains("dirt")) {
+                } else if (isVolcanicRock(targetBlock.getType())) {
                     targetBlock.setType(Material.COBBLESTONE);
                 } else { return; }
 
@@ -219,6 +223,37 @@ public class VolcanoSuccession {
                     "Eroding rock on block "+TyphonUtils.blockLocationTostring(block));
             }
         }
+    }
+
+    public boolean isVolcanicRock(Material material) {
+        String materialName = material.name().toLowerCase();
+
+        return (
+            material == Material.STONE ||
+            material == Material.DEEPSLATE ||
+            material == Material.NETHERRACK ||
+            material == Material.DIORITE || 
+            material == Material.ANDESITE ||
+            materialName.contains("ore") ||
+            material == Material.MAGMA_BLOCK ||
+            material == Material.OBSIDIAN ||
+            materialName.contains("basalt") ||
+            material == Material.ANCIENT_DEBRIS
+        );
+    }
+
+    public boolean isNaturalized(Material material) {
+        String materialName = material.name().toLowerCase();
+
+        if (
+            materialName.contains("dirt") ||
+            materialName.contains("gravel") ||
+            materialName.contains("sand")
+        ) {
+            return true;
+        }
+
+        return false;
     }
 
     public boolean isConsideredErodedRockType(Material material) {
@@ -377,11 +412,13 @@ public class VolcanoSuccession {
         spreadSoil(block);
 
         int radius = 4;
-        double heatValue = this.volcano.manager.getHeatValue(block.getLocation());
-        radius += (Math.pow(heatValue, 2) * (10));
+        if (shouldCheckHeat(block)) {
+            double heatValue = this.volcano.manager.getHeatValue(block.getLocation());
+            radius = (int) Math.max(radius, (Math.pow(heatValue, 2) * (15.0)));    
+        }
 
         Block scanBaseBlock = rockBlock.getRelative(BlockFace.UP);
-        List<Block> treeScan = VolcanoMath.getCylinder(scanBaseBlock, 6, 2);
+        List<Block> treeScan = VolcanoMath.getCylinder(scanBaseBlock, radius, 2);
         for (Block tree : treeScan) {
             String materialName = tree.getType().name().toLowerCase();
 
@@ -413,6 +450,19 @@ public class VolcanoSuccession {
         }
 
         return isCreated;
+    }
+
+
+    public void importConfig(JSONObject configData) {
+        this.isEnabled = (boolean) configData.get("enabled");
+    }
+
+    public JSONObject exportConfig() {
+        JSONObject configData = new JSONObject();
+
+        configData.put("enabled", this.isEnabled);
+
+        return configData;
     }
 
 }

@@ -10,6 +10,7 @@ import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Directional;
 import org.bukkit.block.data.Levelled;
 
 public class VolcanoLavaCoolData {
@@ -125,14 +126,14 @@ public class VolcanoLavaCoolData {
     }
 
     public void coolDown() {
-        if (this.runExtensionCount > 0 && this.extensionCapable()) {
-            BlockData bd = block.getBlockData();
+        BlockData bd = block.getBlockData();
+        Location flowVector = block.getLocation().subtract(fromBlock.getLocation());
 
+        if (this.runExtensionCount > 0 && this.extensionCapable()) {
             if (bd instanceof Levelled && this.flowedFromVent != null) {
                 Levelled levelBd = (Levelled) bd;
                 int level = levelBd.getLevel();
 
-                Location flowVector = block.getLocation().subtract(fromBlock.getLocation());
                 // System.out.println("[Lavaflow-ext debug] flowVector:
                 // "+flowVector.getBlockX()+","+flowVector.getBlockY()+","+flowVector.getBlockZ()+"
                 // / level:
@@ -203,6 +204,19 @@ public class VolcanoLavaCoolData {
         }
 
         block.setType(material);
+        bd = block.getBlockData();
+        
+        if (fromBlock != null) {
+            BlockFace f = block.getFace(fromBlock);
+    
+            if (bd instanceof Directional) {
+                Directional d = (Directional) bd;
+                if (f != null && f.isCartesian()) {
+                    d.setFacing(f);
+                }
+                block.setBlockData(d);
+            }
+        }
     }
 
     public void forceCoolDown() {

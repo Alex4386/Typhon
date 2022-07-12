@@ -280,6 +280,7 @@ public class Volcano implements Listener {
                 TyphonUtils.deserializeLocationForJSON((JSONObject) configData.get("location"));
         this.isDebug = (boolean) configData.get("isDebug");
         this.updateRate = (long) configData.get("updateRate");
+        this.succession.importConfig((JSONObject) configData.get("succession"));
     }
 
     public JSONObject exportConfig() {
@@ -289,6 +290,7 @@ public class Volcano implements Listener {
         configData.put("location", TyphonUtils.serializeLocationForJSON(this.location));
         configData.put("isDebug", this.isDebug);
         configData.put("updateRate", this.updateRate);
+        configData.put("succession", this.succession.exportConfig());
 
         return configData;
     }
