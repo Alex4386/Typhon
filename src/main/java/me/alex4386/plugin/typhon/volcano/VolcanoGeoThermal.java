@@ -258,19 +258,23 @@ public class VolcanoGeoThermal implements Listener {
     double minimumSo2 = 0.65;
     double minimumCo2 = 75000;
 
-    // dillution = 0.95x per block
-    double h2sRange = Math.log(minimumH2s / h2sGasPpm) / Math.log(0.95);
-    double so2Range = Math.log(minimumSo2 / so2GasPpm) / Math.log(0.95);
-    double co2Range = Math.log(minimumCo2 / co2GasPpm) / Math.log(0.95);
+    double concentrationAfterSpreading = 0.11;
 
-    double range = Math.max(Math.max(h2sRange, so2Range), co2Range);
+    // dillution = 1 -> 9 (1/9 equivalent to 0.11)
+    double h2sRange = Math.log(minimumH2s / h2sGasPpm) / Math.log(concentrationAfterSpreading);
+    double so2Range = Math.log(minimumSo2 / so2GasPpm) / Math.log(concentrationAfterSpreading);
+    double co2Range = Math.log(minimumCo2 / co2GasPpm) / Math.log(concentrationAfterSpreading);
+
+    double range = Math.max(h2sRange, so2Range);
+    range = Math.max(range, co2Range);
+
     System.out.println("calculated ppms / H2S: "+h2sGasPpm+", SO2: "+so2GasPpm+", CO2: "+co2GasPpm+" / Range: "+range);
 
     Collection<Entity> entities = location.getWorld().getNearbyEntities(location, range, range, range);
     
     for (Entity entity : entities) {
       double distance = entity.getLocation().distance(location);
-      double intensity = Math.pow(0.95, distance);
+      double intensity = Math.pow(0.11, distance);
 
       double localSo2GasPpm = so2GasPpm * intensity;
       double localH2sGasPpm = h2sGasPpm * intensity;
@@ -308,8 +312,16 @@ public class VolcanoGeoThermal implements Listener {
 
         // 150ppm = die in few minutes
         if (localCo2GasPpm > 80000) poisonousLevel = Math.max(poisonousLevel, (int) Math.min(localCo2GasPpm / 14000, 5));
-        
-        int timespan = (int) (20 * (range - distance));
+
+
+
+        // ======== timespan ========
+        double dilutionPerSecond = 0.95;
+        double h2sTimespan = Math.log(minimumH2s / localH2sGasPpm) / Math.log(dilutionPerSecond);
+        double so2Timespan = Math.log(minimumSo2 / localSo2GasPpm) / Math.log(dilutionPerSecond);
+        double co2Timespan = Math.log(minimumCo2 / localCo2GasPpm) / Math.log(dilutionPerSecond);
+
+        int timespan = (int) (20 * Math.max(h2sTimespan, Math.max(so2Timespan, co2Timespan)));
 
         if (nauseaLevel > 0) livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.CONFUSION, timespan, 1));
         livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.POISON, timespan, poisonousLevel));
