@@ -8,6 +8,7 @@ import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
+import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoPillowLavaData;
 
 import org.bukkit.*;
 import org.bukkit.block.Block;
@@ -188,16 +189,25 @@ public class VolcanoLavaFlow implements Listener {
 
     @EventHandler
     public void lavaCollisionDetector(BlockFormEvent event) {
+        /*
         Block block = event.getBlock();
         if (block.getType() == Material.COBBLESTONE || block.getType() == Material.STONE) {
-            VolcanoLavaCoolData data = lavaCoolHashMap.get(block);
-            if (data == null) data = cachedLavaCoolHashMap.get(block);
-            if (data != null) {
-                createEffectOnLavaSeaEntry(block);
-                cachedPillowLavaMap.put(block, new VolcanoPillowLavaData(data.flowedFromVent, data.source, data.fromBlock, data.runExtensionCount));
-                block.setType(VolcanoComposition.getExtrusiveRock(settings.silicateLevel));
+            BlockFace[] faces = { BlockFace.UP, BlockFace.WEST, BlockFace.EAST, BlockFace.NORTH, BlockFace.SOUTH};
+            for (BlockFace face : faces) {
+                Block fromBlock = block.getRelative(face);
+                if (fromBlock.getType() == Material.LAVA) {
+                    VolcanoLavaCoolData data = lavaCoolHashMap.get(fromBlock);
+                    if (data == null) data = cachedLavaCoolHashMap.get(fromBlock);
+                    if (data != null) {
+                        createEffectOnLavaSeaEntry(block);
+                        cachedPillowLavaMap.put(block, new VolcanoPillowLavaData(data.flowedFromVent, data.source, data.fromBlock, data.runExtensionCount));
+                        block.setType(VolcanoComposition.getExtrusiveRock(settings.silicateLevel));
+                        break;
+                    }
+                } 
             }
         }
+        */
     }
 
     @EventHandler

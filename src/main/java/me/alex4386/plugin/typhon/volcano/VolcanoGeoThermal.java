@@ -8,6 +8,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFormEvent;
@@ -15,6 +16,8 @@ import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.plugin.PluginManager;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 
 import java.util.Collection;
 import java.util.List;
@@ -67,12 +70,27 @@ public class VolcanoGeoThermal implements Listener {
         5);
 
     this.burnNearbyEntities(targetLoc, 3);
+    this.playLavaBubbling(targetLoc);
+    this.runVolcanicGas(targetLoc);
     vent.volcano.metamorphism.evaporateBlock(block);
+  }
+
+  public void volcanicGasDegassing(Block block) {
+    TyphonUtils.createRisingSteam(
+        block.getLocation(),
+        1,
+        2);
+
+    // Oops~ 
+    if (Math.random() < 0.3) {
+      this.runVolcanicGas(block.getLocation());
+    }
   }
 
   public void runGeoThermalCycle(VolcanoVent vent) {
     if (vent.enabled) {
       this.runCraterGeoThermalCycle(vent);
+      this.runVolcanoGeoThermalCycle(vent);
     }
   }
 
@@ -88,6 +106,13 @@ public class VolcanoGeoThermal implements Listener {
     }  
   }
 
+  public void runVolcanoGeoThermalCycle(VolcanoVent vent) {
+    int cycleCount = (int) ((50 + (Math.random() * 150)) * (vent.status.getScaleFactor()));
+    for (int i = 0; i < cycleCount; i++) {
+      this.runVolcanoGeoThermal(vent);
+    }  
+  }
+
   public Block getBlockToRunCraterCycle(VolcanoVent vent) {
     return getBlockToRunCraterCycle(vent, getCraterGeoThermalRadius(vent));
   }
@@ -95,31 +120,88 @@ public class VolcanoGeoThermal implements Listener {
   public Block getBlockToRunCraterCycle(VolcanoVent vent, double geoThermalRadius) {
     Block block = vent.location.getBlock();
 
-    if (Math.random() < 0.125 * ((double) vent.craterRadius / 20)) {
+    if (Math.random() < 0.35) {
       block = TyphonUtils
-        .getHighestRocklikes(vent.getCoreBlock());
+        .getHighestRocklikes(
+            TyphonUtils
+                .getRandomBlockInRange(
+                    vent.getCoreBlock(),
+                    (int) Math
+                        .floor(
+                            vent.craterRadius / 2)));
+    } else if (Math.random() < 0.75) {
+      block = TyphonUtils
+        .getHighestRocklikes(
+            TyphonUtils
+                .getRandomBlockInRange(
+                    vent.getCoreBlock(),
+                    (int) Math
+                        .floor(
+                            vent.craterRadius / 2),
+                    (int) Math
+                    .floor(
+                        vent.craterRadius)));
     } else {
       block = TyphonUtils
-          .getHighestRocklikes(
-              TyphonUtils
-                  .getRandomBlockInRange(
-                      vent.getCoreBlock(),
-                      (int) Math
-                          .floor(
-                              vent.craterRadius),
-                      (int) Math
-                          .floor(
-                              geoThermalRadius)));
+        .getHighestRocklikes(
+          TyphonUtils
+            .getRandomBlockInRange(
+                  vent.getCoreBlock(),
+                  (int) Math
+                      .floor(
+                          vent.craterRadius),
+                  (int) Math
+                        .floor(
+                          this.getCraterGeoThermalRadius(vent)
+                  )
+              )
+          );
     }
-
     return block;
   }
 
   
   public int getCraterGeoThermalRadius(VolcanoVent vent) {
-    int geothermalRange = Math.max(50, (int) (vent.craterRadius * 2.5));
+    int geothermalRange = Math.max(100, (int) (vent.craterRadius * 2.5));
 
     return geothermalRange;
+  }
+
+  public void runVolcanoGeoThermal(VolcanoVent vent) {
+    Block block;
+    
+    if (Math.random() < 0.75) {
+      block = TyphonUtils
+        .getHighestRocklikes(
+            TyphonUtils
+                .getRandomBlockInRange(
+                    vent.getCoreBlock(),
+                    (int) Math
+                        .floor(
+                            vent.craterRadius),
+                    (int) Math
+                        .floor(
+                          vent.longestNormalLavaFlowLength)));
+    } else {
+      block = TyphonUtils
+        .getHighestRocklikes(
+          TyphonUtils
+              .getRandomBlockInRange(
+                  vent.getCoreBlock(),
+                  (int) Math
+                      .floor(
+                          vent.longestNormalLavaFlowLength),
+                  (int) Math
+                      .floor(
+                        vent.longestFlowLength)));
+    }
+
+    Location targetLoc = block.getLocation();
+    this.burnNearbyEntities(targetLoc, 3);
+    this.playLavaBubbling(targetLoc);
+    this.runVolcanicGas(targetLoc);
+
+    vent.volcano.metamorphism.evaporateBlock(block);
   }
 
   public void playLavaBubbling(Location location) {
@@ -138,6 +220,14 @@ public class VolcanoGeoThermal implements Listener {
         Sound.BLOCK_LAVA_AMBIENT,
         2f,
         1f);
+
+    location
+      .getWorld()
+      .spawnParticle(
+        Particle.FLAME,
+        location,
+        1
+    );
   }
 
   public void burnNearbyEntities(Location location, double range) {
@@ -149,6 +239,80 @@ public class VolcanoGeoThermal implements Listener {
       
       if (distance < range && entity.getMaxFireTicks() != 0 ) {
         entity.setFireTicks((int) fireTicks);
+      }
+    }
+  }
+
+  //
+  public void runVolcanicGas(Location location) {
+    VolcanoVent vent = volcano.manager.getNearestVent(location);
+    if (vent == null) return;
+
+    double referenceH2sGasPpm = volcano.manager.getHeatValue(location) * (150 + (100 * Math.random()));
+
+    double h2sGasPpm = referenceH2sGasPpm;
+    double so2GasPpm = h2sGasPpm * (vent.status.getScaleFactor() / 0.1);
+    double co2GasPpm = so2GasPpm * 8;
+
+    double minimumH2s = 0.75;
+    double minimumSo2 = 0.65;
+    double minimumCo2 = 75000;
+
+    // dillution = 0.95x per block
+    double h2sRange = Math.log(minimumH2s / h2sGasPpm) / Math.log(0.95);
+    double so2Range = Math.log(minimumSo2 / so2GasPpm) / Math.log(0.95);
+    double co2Range = Math.log(minimumCo2 / co2GasPpm) / Math.log(0.95);
+
+    double range = Math.max(Math.max(h2sRange, so2Range), co2Range);
+    System.out.println("calculated ppms / H2S: "+h2sGasPpm+", SO2: "+so2GasPpm+", CO2: "+co2GasPpm+" / Range: "+range);
+
+    Collection<Entity> entities = location.getWorld().getNearbyEntities(location, range, range, range);
+    
+    for (Entity entity : entities) {
+      double distance = entity.getLocation().distance(location);
+      double intensity = Math.pow(0.95, distance);
+
+      double localSo2GasPpm = so2GasPpm * intensity;
+      double localH2sGasPpm = h2sGasPpm * intensity;
+      double localCo2GasPpm = co2GasPpm * intensity;
+
+      // fumaroles can peak to 20 ppm
+      // prolonged nausea, even coma if more than 1000 ppm
+      if (entity instanceof LivingEntity) {
+        LivingEntity livingEntity = (LivingEntity) entity;
+
+        int poisonousLevel = 0;
+        int nauseaLevel = 0;
+
+        // ==== SO2 ====
+        if (localSo2GasPpm > 0.65) nauseaLevel = 1;
+
+        // 150ppm = die in few minutes
+        if (localSo2GasPpm > 150) poisonousLevel = Math.max(poisonousLevel, (int) Math.min((localSo2GasPpm - 50) / 50, 5));
+        if (localSo2GasPpm > 250 && !livingEntity.isInvulnerable()) livingEntity.setHealth(0);
+
+        // ==== H2S ====
+        if (localH2sGasPpm > 0.75) nauseaLevel = 1;
+
+        // 150: respiratory tract
+        if (localH2sGasPpm > 150) poisonousLevel = Math.max(poisonousLevel, 1);
+
+        // 250ppm = risk of death
+        if (localH2sGasPpm > 250) poisonousLevel = Math.max(poisonousLevel, (int) Math.min((localH2sGasPpm + 250) / 250, 5));
+        
+        // acute intoxication. just die.
+        if (localH2sGasPpm > 1000 && !livingEntity.isInvulnerable()) livingEntity.setHealth(0);
+
+        // ==== CO2 ====
+        if (localCo2GasPpm > 75000) nauseaLevel = 1;
+
+        // 150ppm = die in few minutes
+        if (localCo2GasPpm > 80000) poisonousLevel = Math.max(poisonousLevel, (int) Math.min(localCo2GasPpm / 14000, 5));
+        
+        int timespan = (int) (20 * (range - distance));
+
+        if (nauseaLevel > 0) livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.CONFUSION, timespan, 1));
+        livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.POISON, timespan, poisonousLevel));
       }
     }
   }

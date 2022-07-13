@@ -4,6 +4,7 @@ import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
+import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoPillowLavaData;
 
 import org.bukkit.Location;
 import org.bukkit.Material;

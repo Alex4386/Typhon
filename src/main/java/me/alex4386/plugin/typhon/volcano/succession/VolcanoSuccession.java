@@ -376,9 +376,12 @@ public class VolcanoSuccession {
 
         TreeType type = adequateTreeTypes[(int) (Math.random() * adequateTreeTypes.length)];
 
+        /* 
+        // do not spawn big trees
         if (Math.random() < 0.05) {
             type = getBiggerEquivalent(type);
         }
+        */
 
         return type;
     }
@@ -414,11 +417,17 @@ public class VolcanoSuccession {
         int radius = 4;
         if (shouldCheckHeat(block)) {
             double heatValue = this.volcano.manager.getHeatValue(block.getLocation());
+            
+            if (heatValue > 0.8) {
+                return false;
+            }
+
+            heatValue /= 0.8;
             radius = (int) Math.max(radius, (Math.pow(heatValue, 2) * (15.0)));    
         }
 
         Block scanBaseBlock = rockBlock.getRelative(BlockFace.UP);
-        List<Block> treeScan = VolcanoMath.getCylinder(scanBaseBlock, radius, 2);
+        List<Block> treeScan = VolcanoMath.getSphere(scanBaseBlock, radius);
         for (Block tree : treeScan) {
             String materialName = tree.getType().name().toLowerCase();
 

@@ -65,6 +65,8 @@ public class VolcanoMetamorphism {
                 material = Material.RED_SANDSTONE;
             } else if (material == Material.CLAY) {
                 material = Material.TERRACOTTA;
+            } else if (blockTypeName.contains("log") || blockTypeName.contains("leaves")) {
+                removeTree(block);    
             } else {
                 return;
             }
@@ -93,7 +95,25 @@ public class VolcanoMetamorphism {
                 }
             }
         }
+    }
 
+    public void removeTree(Block baseBlock) {
+        removeTree(baseBlock, 25);
+    }
+
+    public void removeTree(Block baseBlock, int maxRecursion) {
+        if (maxRecursion < 0) return;
+
+        BlockFace[] facesToSearch = {BlockFace.UP, BlockFace.WEST, BlockFace.DOWN, BlockFace.EAST, BlockFace.NORTH, BlockFace.SOUTH};
+        for (BlockFace face : facesToSearch) {
+            Block block = baseBlock.getRelative(face);
+            String materialName = block.getType().name().toLowerCase();
+            if (materialName.contains("log") || materialName.contains("leaves")) {
+                removeTree(block, maxRecursion - 1);
+            }
+        }
+
+        baseBlock.setType(Material.AIR);
     }
 
     public void evaporateBlock(Block block) {
