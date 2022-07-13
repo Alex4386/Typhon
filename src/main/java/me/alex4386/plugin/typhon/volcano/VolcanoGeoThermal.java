@@ -4,6 +4,7 @@ import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 
 import org.bukkit.*;
 import org.bukkit.block.Block;
@@ -30,8 +31,6 @@ public class VolcanoGeoThermal implements Listener {
   public int geoThermalUpdateRate = 10;
 
   public boolean registeredEvent = false;
-
-  private long lastLavaTime = -1;
 
   public VolcanoGeoThermal(Volcano volcano) {
     this.volcano = volcano;
@@ -96,10 +95,7 @@ public class VolcanoGeoThermal implements Listener {
 
   public void runCraterGeoThermalCycle(VolcanoVent vent) {
     int geothermalRange = getCraterGeoThermalRadius(vent);
-    int cycleCount = (int) Math.min(vent.status.getScaleFactor() * Math.pow(
-      geothermalRange / 50,
-      1 + (1.2 * vent.status .getScaleFactor())
-    ), (int) (geothermalRange * geothermalRange * Math.PI));
+    int cycleCount = (int) (vent.status.getScaleFactor() * geothermalRange * (1 + Math.random()));
 
     for (int i = 0; i < cycleCount; i++) {
       this.runCraterGeothermal(vent);
@@ -198,7 +194,6 @@ public class VolcanoGeoThermal implements Listener {
 
     Location targetLoc = block.getLocation();
     this.burnNearbyEntities(targetLoc, 3);
-    this.playLavaBubbling(targetLoc);
     this.runVolcanicGas(targetLoc);
 
     vent.volcano.metamorphism.evaporateBlock(block);
@@ -225,7 +220,7 @@ public class VolcanoGeoThermal implements Listener {
       .getWorld()
       .spawnParticle(
         Particle.FLAME,
-        location,
+        location.add(0,1,0),
         1
     );
   }
@@ -247,56 +242,59 @@ public class VolcanoGeoThermal implements Listener {
   public void runVolcanicGas(Location location) {
     VolcanoVent vent = volcano.manager.getNearestVent(location);
     if (vent == null) return;
-
+/*
     double referenceH2sGasPpm = volcano.manager.getHeatValue(location) * (150 + (100 * Math.random()));
 
     double h2sGasPpm = referenceH2sGasPpm;
-    double so2GasPpm = h2sGasPpm * (vent.status.getScaleFactor() / 0.1);
-    double co2GasPpm = so2GasPpm * 8;
-
+    double so2GasPpm = h2sGasPpm * vent.status.getScaleFactor() / 0.1;
+    
     double minimumH2s = 0.75;
     double minimumSo2 = 0.65;
-    double minimumCo2 = 75000;
-
+    
     double concentrationAfterSpreading = 0.11;
 
     // dillution = 1 -> 9 (1/9 equivalent to 0.11)
     double h2sRange = Math.log(minimumH2s / h2sGasPpm) / Math.log(concentrationAfterSpreading);
     double so2Range = Math.log(minimumSo2 / so2GasPpm) / Math.log(concentrationAfterSpreading);
-    double co2Range = Math.log(minimumCo2 / co2GasPpm) / Math.log(concentrationAfterSpreading);
-
+   
     double range = Math.max(h2sRange, so2Range);
-    range = Math.max(range, co2Range);
+    if (range < 1) return;
 
-    System.out.println("calculated ppms / H2S: "+h2sGasPpm+", SO2: "+so2GasPpm+", CO2: "+co2GasPpm+" / Range: "+range);
+    // System.out.println("calculated ppms / H2S: "+h2sGasPpm+", SO2: "+so2GasPpm+" / Range: "+range);
+ */
 
+    int range = 3;
     Collection<Entity> entities = location.getWorld().getNearbyEntities(location, range, range, range);
     
     for (Entity entity : entities) {
       double distance = entity.getLocation().distance(location);
+      /*
       double intensity = Math.pow(0.11, distance);
 
       double localSo2GasPpm = so2GasPpm * intensity;
       double localH2sGasPpm = h2sGasPpm * intensity;
-      double localCo2GasPpm = co2GasPpm * intensity;
 
       // fumaroles can peak to 20 ppm
       // prolonged nausea, even coma if more than 1000 ppm
+       */
+
+      double intensity = distance / (double) range;
       if (entity instanceof LivingEntity) {
         LivingEntity livingEntity = (LivingEntity) entity;
 
+        /*
         int poisonousLevel = 0;
         int nauseaLevel = 0;
 
         // ==== SO2 ====
-        if (localSo2GasPpm > 0.65) nauseaLevel = 1;
+        if (localSo2GasPpm > 30) nauseaLevel = 1;
 
         // 150ppm = die in few minutes
-        if (localSo2GasPpm > 150) poisonousLevel = Math.max(poisonousLevel, (int) Math.min((localSo2GasPpm - 50) / 50, 5));
+        if (localSo2GasPpm > 100) poisonousLevel = Math.max(poisonousLevel, (int) Math.min((localSo2GasPpm - 50) / 50, 5));
         if (localSo2GasPpm > 250 && !livingEntity.isInvulnerable()) livingEntity.setHealth(0);
 
         // ==== H2S ====
-        if (localH2sGasPpm > 0.75) nauseaLevel = 1;
+        if (localH2sGasPpm > 150) nauseaLevel = 1;
 
         // 150: respiratory tract
         if (localH2sGasPpm > 150) poisonousLevel = Math.max(poisonousLevel, 1);
@@ -307,24 +305,34 @@ public class VolcanoGeoThermal implements Listener {
         // acute intoxication. just die.
         if (localH2sGasPpm > 1000 && !livingEntity.isInvulnerable()) livingEntity.setHealth(0);
 
-        // ==== CO2 ====
-        if (localCo2GasPpm > 75000) nauseaLevel = 1;
-
-        // 150ppm = die in few minutes
-        if (localCo2GasPpm > 80000) poisonousLevel = Math.max(poisonousLevel, (int) Math.min(localCo2GasPpm / 14000, 5));
-
-
 
         // ======== timespan ========
         double dilutionPerSecond = 0.95;
         double h2sTimespan = Math.log(minimumH2s / localH2sGasPpm) / Math.log(dilutionPerSecond);
         double so2Timespan = Math.log(minimumSo2 / localSo2GasPpm) / Math.log(dilutionPerSecond);
-        double co2Timespan = Math.log(minimumCo2 / localCo2GasPpm) / Math.log(dilutionPerSecond);
 
-        int timespan = (int) (20 * Math.max(h2sTimespan, Math.max(so2Timespan, co2Timespan)));
+        int timespan = (int) (20 * Math.max(h2sTimespan, so2Timespan));
+        */
 
-        if (nauseaLevel > 0) livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.CONFUSION, timespan, 1));
-        livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.POISON, timespan, poisonousLevel));
+        int timespan = 20 * 3;
+        int poisonousLevel = 0;
+
+        if (vent.status.getScaleFactor() >= 0.1) {
+          double heatValue = volcano.manager.getHeatValue(location);
+          double multiplier = Math.random() < vent.status.getScaleFactor() ? 5 : 1 + (Math.random() * 2);
+          double total = Math.min(Math.max(heatValue * multiplier, 1), 5);
+
+          poisonousLevel = (int) total;
+        } else if (vent.status != VolcanoVentStatus.DORMANT) {
+          if (vent.isInVent(location)) {
+            poisonousLevel = Math.random() > 0.3 ? 1 : 0;
+          }
+        }
+
+        if (poisonousLevel > 0) {
+          poisonousLevel = Math.max((int) (poisonousLevel * intensity), 1);
+          livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.POISON, timespan, poisonousLevel));
+        }        
       }
     }
   }
