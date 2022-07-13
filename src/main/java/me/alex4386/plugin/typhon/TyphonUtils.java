@@ -197,8 +197,14 @@ public class TyphonUtils {
     public static org.bukkit.block.Block getRandomBlockInRange(
             org.bukkit.block.Block block, int minRange, int maxRange) {
         Random random = new Random();
+        
+        // mitigation
+        int range = maxRange - minRange;
 
-        int offsetRadius = random.nextInt(maxRange - minRange) + minRange;
+        // If this is happening, something have been gone wrong
+        if (range < 0) range = 0;
+
+        int offsetRadius = random.nextInt(range) + minRange;
         double angle = random.nextDouble() * 2 * Math.PI;
 
         int offsetX = (int) (Math.sin(angle) * offsetRadius);
