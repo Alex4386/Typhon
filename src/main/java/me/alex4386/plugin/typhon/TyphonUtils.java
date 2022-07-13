@@ -207,7 +207,7 @@ public class TyphonUtils {
             range = 0;
         }
 
-        int offsetRadius = (range <= 0 ? random.nextInt(range) : 0) + minRange;
+        int offsetRadius = (range > 0 ? random.nextInt(range) : 0) + minRange;
         double angle = random.nextDouble() * 2 * Math.PI;
 
         int offsetX = (int) (Math.sin(angle) * offsetRadius);
