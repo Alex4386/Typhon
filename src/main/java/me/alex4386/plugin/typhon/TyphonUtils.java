@@ -202,9 +202,12 @@ public class TyphonUtils {
         int range = maxRange - minRange;
 
         // If this is happening, something have been gone wrong
-        if (range < 0) range = 0;
+        if (range < 0) {
+            // TyphonUtils.stackTraceMe();
+            range = 0;
+        }
 
-        int offsetRadius = random.nextInt(range) + minRange;
+        int offsetRadius = (range <= 0 ? random.nextInt(range) : 0) + minRange;
         double angle = random.nextDouble() * 2 * Math.PI;
 
         int offsetX = (int) (Math.sin(angle) * offsetRadius);
