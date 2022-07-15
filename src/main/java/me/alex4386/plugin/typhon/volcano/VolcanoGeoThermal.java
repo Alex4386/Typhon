@@ -219,7 +219,7 @@ public class VolcanoGeoThermal implements Listener {
     location
       .getWorld()
       .spawnParticle(
-        Particle.FLAME,
+        Particle.LAVA,
         location.add(0,1,0),
         1
     );
