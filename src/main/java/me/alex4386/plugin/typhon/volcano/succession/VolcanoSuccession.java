@@ -84,6 +84,42 @@ public class VolcanoSuccession {
         for (int i = 0; i < successionCount; i++) {
             runSuccession(vent);
         }
+
+        /*
+        double random = Math.random();
+        if (random < 0.0001) {
+            generateAmethystGeode();
+        }
+        */
+    }
+
+    public boolean checkAmethystGeodeCriteria(Block block) {
+        List<Block> cylinderChecker = VolcanoMath.getCylinder(block, 8, 1);
+        for (Block cylinderChk: cylinderChecker) {
+            int chkY = TyphonUtils.getHighestRocklikes(cylinderChk).getY();
+
+            if (chkY <= block.getY() + 8) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public void generateAmethystGeode(Block block) {
+        if (!checkAmethystGeodeCriteria(block)) {
+            return;
+        }
+    
+        List<Block> blocks = VolcanoMath.getSphere(block, 7, 6);
+        for (Block calBlock: blocks) {
+            calBlock.setType(Material.CALCITE);
+        }
+
+        blocks = VolcanoMath.getSphere(block, 6, 5);
+        for (Block calBlock: blocks) {
+            calBlock.setType(Material.AMETHYST_BLOCK);
+        }
     }
 
     public void runSuccession(VolcanoVent vent) {
