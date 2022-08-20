@@ -53,7 +53,7 @@ public class VolcanoSuccession {
                         this.runSuccessionCycle();
                     },
                     0L,
-                    (long) TyphonPlugin.minecraftTicksPerSeconds * 20);
+                    (long) TyphonPlugin.minecraftTicksPerSeconds);
         }
     }
 
@@ -78,7 +78,7 @@ public class VolcanoSuccession {
             successionCount = (int) (Math.random() * 2);
         } else if (Math.random() > vent.status.getScaleFactor()) {
             double count = vent.longestNormalLavaFlowLength * Math.PI * 2;
-            successionCount = (int) ((1.0 - vent.status.getScaleFactor()) * Math.min(2000, count / 3) * Math.random());
+            successionCount = (int) ((1.0 - vent.status.getScaleFactor()) * Math.min(2000, count / 15) * Math.random());
         }
 
         for (int i = 0; i < successionCount; i++) {
