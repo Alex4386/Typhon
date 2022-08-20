@@ -835,6 +835,7 @@ public class VolcanoLavaFlow implements Listener {
                     extension--;
                     if (extension < 0)  {
                         this.handleLavaTerminal(block);
+                        continue;
                     }
 
                     level = 8;

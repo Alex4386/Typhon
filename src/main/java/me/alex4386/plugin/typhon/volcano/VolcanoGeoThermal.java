@@ -97,6 +97,9 @@ public class VolcanoGeoThermal implements Listener {
     int geothermalRange = getCraterGeoThermalRadius(vent);
     int cycleCount = (int) (vent.status.getScaleFactor() * geothermalRange * (1 + Math.random()));
 
+    cycleCount = (int) Math.min(cycleCount, geothermalRange * geothermalRange * Math.PI);
+    cycleCount *= (geoThermalUpdateRate / 20.0);
+
     for (int i = 0; i < cycleCount; i++) {
       this.runCraterGeothermal(vent);
     }  
