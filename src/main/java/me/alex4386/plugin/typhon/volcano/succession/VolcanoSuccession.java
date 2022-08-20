@@ -414,7 +414,7 @@ public class VolcanoSuccession {
 
         spreadSoil(block);
 
-        int radius = 4;
+        int radius = 6;
         if (shouldCheckHeat(block)) {
             double heatValue = this.volcano.manager.getHeatValue(block.getLocation());
             
@@ -423,7 +423,7 @@ public class VolcanoSuccession {
             }
 
             heatValue /= 0.8;
-            radius = (int) Math.max(radius, (Math.pow(heatValue, 2) * (15.0)));    
+            radius = (int) Math.max(radius, radius + (Math.pow(heatValue, 2) * (radius * 2)));    
         }
 
         Block scanBaseBlock = rockBlock.getRelative(BlockFace.UP);
