@@ -173,12 +173,7 @@ public class VolcanoBomb {
             this.isLanded = true;
 
             this.block.getLocation().getBlock().setType(Material.AIR);
-
-            volcano.logger.debug(
-                    VolcanoLogClass.BOMB_LAUNCHER,
-                    "Volcanic Bomb from "
-                            + TyphonUtils.blockLocationTostring(this.launchLocation.getBlock())
-                            + " landed at vent. interrupting.");
+            this.vent.lavaFlow.extendLava();
             return;
         }
 

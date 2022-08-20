@@ -570,6 +570,29 @@ public class VolcanoVent {
         return nearestBlock;
     }
 
+    public Block getNearestVentBlock(Location loc) {
+        if (this.cachedVentBlocks == null) {
+            this.getVentBlocks();
+        }
+
+        double lowest = Double.POSITIVE_INFINITY;
+        Iterator<Block> iterator = this.cachedVentBlocks.iterator();
+
+        Block nearestBlock = null;
+
+        while (iterator.hasNext()) {
+            Block block = iterator.next();
+            double currentDistance = block.getLocation().distance(loc);
+
+            if (currentDistance < lowest) {
+                lowest = currentDistance;
+                nearestBlock = block;
+            }
+        }
+
+        return nearestBlock;
+    }
+
     public double getTwoDimensionalDistance(Location loc) {
         Block block = this.getNearestCoreBlock(loc);
 

@@ -129,21 +129,19 @@ public class VolcanoLavaCoolData {
     public void coolDown() {
         BlockData bd = block.getBlockData();
         Location flowVector = block.getLocation().subtract(fromBlock.getLocation());
+        int level = -1;
+
+        if (bd instanceof Levelled) {
+            Levelled levelBd = (Levelled) bd;
+            level = levelBd.getLevel();
+        }
 
         if (this.runExtensionCount > 0 && this.extensionCapable()) {
             if (bd instanceof Levelled && this.flowedFromVent != null) {
-                Levelled levelBd = (Levelled) bd;
-                int level = levelBd.getLevel();
-
-                // System.out.println("[Lavaflow-ext debug] flowVector:
-                // "+flowVector.getBlockX()+","+flowVector.getBlockY()+","+flowVector.getBlockZ()+"
-                // / level:
-                // "+level);
-
                 if (fromBlock != null
                         && flowVector.getBlockY() == 0
-                        && 6 <= levelBd.getLevel()
-                        && levelBd.getLevel() < 8) {
+                        && 6 <= level
+                        && level < 8) {
                     block.setType(material);
                     // Location flowVector = block.getLocation().subtract(fromBlock.getLocation());
 
@@ -200,6 +198,12 @@ public class VolcanoLavaCoolData {
                     }
                 } else {
 
+                }
+            }
+        } else if (this.runExtensionCount == 0) {
+            if (6 <= level && level < 8) {
+                if (this.flowedFromVent != null) {
+                    this.flowedFromVent.lavaFlow.handleLavaTerminal(block);
                 }
             }
         }
