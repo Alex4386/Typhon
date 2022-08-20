@@ -728,6 +728,8 @@ public class VolcanoLavaFlow implements Listener {
 
             Block target = new ArrayList<Block>(this.lavaTerminals.keySet()).get(idx);
             this.extendLava(target);
+            
+            this.lavaTerminals.remove(target);
         }
     }
 
