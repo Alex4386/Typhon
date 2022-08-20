@@ -80,7 +80,8 @@ public class VolcanoAsh {
     public void createAshPlume(Location loc) {
         VolcanoEruptStyle style = vent.erupt.getStyle();
         if (style == VolcanoEruptStyle.HAWAIIAN) {
-            TyphonUtils.spawnParticleWithVelocity(Particle.ASH, loc, 0, 1, 0, 0.25, 0);
+            TyphonUtils.spawnParticleWithVelocity(Particle.WHITE_ASH, loc, 0, 1, 0, 0.25, 0);
+            TyphonUtils.spawnParticleWithVelocity(Particle.BLOCK_DUST, loc, 0, 1, 0, 0.25, 0);
         } else if (style == VolcanoEruptStyle.STROMBOLIAN
                 || style == VolcanoEruptStyle.VULCANIAN
                 || style == VolcanoEruptStyle.PELEAN) {
