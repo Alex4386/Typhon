@@ -3,6 +3,7 @@ package me.alex4386.plugin.typhon.volcano;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
+import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 
@@ -95,10 +96,12 @@ public class VolcanoGeoThermal implements Listener {
 
   public void runCraterGeoThermalCycle(VolcanoVent vent) {
     int geothermalRange = getCraterGeoThermalRadius(vent);
-    int cycleCount = (int) (vent.status.getScaleFactor() * geothermalRange * (1 + Math.random()));
+    
+    // one geothermal on each block
+    double reference = (geothermalRange * geothermalRange * Math.PI);
+    double targetCount = (vent.status.getScaleFactor() * reference);
 
-    cycleCount = (int) Math.min(cycleCount, geothermalRange * geothermalRange * Math.PI);
-    cycleCount *= (geoThermalUpdateRate / 20.0);
+    int cycleCount = (int) ((0.75 + (Math.random() * 0.5)) * targetCount);
 
     for (int i = 0; i < cycleCount; i++) {
       this.runCraterGeothermal(vent);
@@ -119,43 +122,20 @@ public class VolcanoGeoThermal implements Listener {
   public Block getBlockToRunCraterCycle(VolcanoVent vent, double geoThermalRadius) {
     Block block = vent.location.getBlock();
 
-    if (Math.random() < 0.35) {
-      block = TyphonUtils
-        .getHighestRocklikes(
-            TyphonUtils
-                .getRandomBlockInRange(
-                    vent.getCoreBlock(),
-                    (int) Math
-                        .floor(
-                            vent.craterRadius / 2)));
-    } else if (Math.random() < 0.75) {
-      block = TyphonUtils
-        .getHighestRocklikes(
-            TyphonUtils
-                .getRandomBlockInRange(
-                    vent.getCoreBlock(),
-                    (int) Math
-                        .floor(
-                            vent.craterRadius / 2),
-                    (int) Math
-                    .floor(
-                        vent.craterRadius)));
-    } else {
-      block = TyphonUtils
-        .getHighestRocklikes(
+    int craterRadius = vent.craterRadius;
+    double range = this.getCraterGeoThermalRadius(vent) - craterRadius;
+    double offset = VolcanoMath.getZeroFocusedRandom() * range;
+
+
+    block = TyphonUtils
+      .getHighestRocklikes(
           TyphonUtils
-            .getRandomBlockInRange(
+              .getRandomBlockInRange(
                   vent.getCoreBlock(),
-                  (int) Math
-                      .floor(
-                          vent.craterRadius),
-                  (int) Math
-                        .floor(
-                          this.getCraterGeoThermalRadius(vent)
-                  )
+                  vent.craterRadius,
+                  (int) (vent.craterRadius + offset)
               )
-          );
-    }
+      );
     return block;
   }
 
