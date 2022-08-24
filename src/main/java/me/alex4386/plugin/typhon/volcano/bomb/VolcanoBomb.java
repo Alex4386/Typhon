@@ -102,7 +102,7 @@ public class VolcanoBomb {
         Location loc = block.getLocation();
         loc.getChunk().load();
 
-        loc.getWorld().spawnParticle(Particle.FLAME, loc, 6);
+        loc.getWorld().spawnParticle(Particle.LAVA, loc, 1);
     }
 
     public void startTrail() {
