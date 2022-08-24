@@ -110,9 +110,13 @@ public class VolcanoGeoThermal implements Listener {
 
   public void runVolcanoGeoThermalCycle(VolcanoVent vent) {
     int cycleCount = (int) ((50 + (Math.random() * 150)) * (vent.status.getScaleFactor()));
+    
+    double multiplier = Math.max(Math.min(1, (vent.longestNormalLavaFlowLength - vent.craterRadius) / (vent.craterRadius * 4)), 0);
+    cycleCount = (int) (cycleCount * multiplier);
+
     for (int i = 0; i < cycleCount; i++) {
       this.runVolcanoGeoThermal(vent);
-    }  
+    }
   }
 
   public Block getBlockToRunCraterCycle(VolcanoVent vent) {
@@ -125,7 +129,6 @@ public class VolcanoGeoThermal implements Listener {
     int craterRadius = vent.craterRadius;
     double range = this.getCraterGeoThermalRadius(vent) - craterRadius;
     double offset = VolcanoMath.getZeroFocusedRandom() * range;
-
 
     block = TyphonUtils
       .getHighestRocklikes(
