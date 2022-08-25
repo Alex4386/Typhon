@@ -14,6 +14,7 @@ commands:
     description: A management Interface for Typhon Plugin's Volcanoes
     usage: /<command> help
     aliases: [vol]
+softdepend: [BlueMap]
 permissions:
   typhon.*:
     description: Allow using volcano plugins

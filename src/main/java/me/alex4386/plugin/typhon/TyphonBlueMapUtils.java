@@ -38,6 +38,7 @@ public class TyphonBlueMapUtils {
   }
 
   public static void loadImages(BlueMapAPI api) {
+    TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Loading Images for BlueMap Integration...");
     try {
       InputStream eruptingImg = TyphonPlugin.plugin.getResource("volcano_erupting.png");
       if (eruptingImg != null) {
@@ -68,11 +69,11 @@ public class TyphonBlueMapUtils {
   }
 
   public static String getVolcanoMarkerSetID(Volcano volcano) {
-    return "typhon:vol:"+volcano.name;
+    return "Volcano "+volcano.name;
   }
 
   public static String getVolcanoVentMarkerID(VolcanoVent vent) {
-    return getVolcanoMarkerSetID(vent.volcano)+":"+vent.getName();
+    return vent.getName();
   }
 
   public static void addVolcanoOnMap(Volcano volcano) {
@@ -129,7 +130,7 @@ public class TyphonBlueMapUtils {
   public static void addVolcanoVentToMarkerSet(MarkerSet set, VolcanoVent vent) {
     TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Adding vent "+vent.getName()+" of "+vent.volcano.name+" on map.");
     String markerId = getVolcanoVentMarkerID(vent);
-    
+
     set.getMarkers().put(markerId, getVolcanoVentMarker(vent));
   }
 
