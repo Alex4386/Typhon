@@ -11,11 +11,15 @@ import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombListener;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogger;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoConstructionStatus;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.json.simple.parser.ParseException;
+
+import de.bluecolored.bluemap.api.BlueMapAPI;
 // import com.sk89q.worldedit.WorldEdit;
 // import com.sk89q.worldedit.bukkit.WorldEditPlugin;
 
@@ -29,6 +33,9 @@ public final class TyphonPlugin extends JavaPlugin {
 
     public static Plugin plugin;
     public static VolcanoBombListener vbl;
+
+    public static BlueMapAPI blueMap = null;
+    public static boolean enableBlueMap = true;
 
     public static int minecraftTicksPerSeconds = 20;
 
@@ -102,6 +109,22 @@ public final class TyphonPlugin extends JavaPlugin {
 
         logger.debug(VolcanoLogClass.CORE, "Loaded Volcanoes!");
 
+        if (enableBlueMap) {
+            logger.log(VolcanoLogClass.INIT, "Initializing Bluemap Integration if available!");
+        
+            BlueMapAPI.onEnable(blueMapAPI -> {
+                this.blueMap = blueMapAPI;
+    
+                TyphonBlueMapUtils.loadImages(blueMapAPI);
+    
+                for (Map.Entry<String, Volcano> volcanoEntry : listVolcanoes.entrySet()) {
+                    Volcano volcano = volcanoEntry.getValue();
+    
+                    TyphonBlueMapUtils.addVolcanoOnMap(volcano);
+                }
+            });
+        }
+
         logger.log(VolcanoLogClass.PLAYER_EVENT, "Initializing...");
         logger.log(VolcanoLogClass.PLAYER_EVENT, "Initialization complete!");
 
@@ -158,7 +181,9 @@ public final class TyphonPlugin extends JavaPlugin {
         logger.log(VolcanoLogClass.CORE, "Reload Complete!");
     }
 
-    public static void loadConfig() {}
+    public static void loadConfig() {
+        enableBlueMap = plugin.getConfig().getBoolean("blueMap.enable", true);
+    }
 
     @Override
     public void onDisable() {

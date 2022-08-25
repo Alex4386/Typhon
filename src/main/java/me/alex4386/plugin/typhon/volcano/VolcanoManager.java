@@ -124,19 +124,19 @@ public class VolcanoManager {
         boolean isErupting = volcano.manager.currentlyStartedVents().size() > 0;
         return (isErupting
                 ? ChatColor.RED
-                : (volcano.manager.getHighestStatusVent().status.getScaleFactor() < 0.1
+                : (volcano.manager.getHighestStatusVent().getStatus().getScaleFactor() < 0.1
                         ? ChatColor.GREEN
                         : ChatColor.GOLD));
     }
 
     public ChatColor getVentChatColor(VolcanoVent vent) {
-        return ((vent.status == VolcanoVentStatus.ERUPTING)
+        return ((vent.getStatus() == VolcanoVentStatus.ERUPTING)
                 ? ChatColor.RED
-                : (vent.status == VolcanoVentStatus.MAJOR_ACTIVITY)
+                : (vent.getStatus() == VolcanoVentStatus.MAJOR_ACTIVITY)
                         ? ChatColor.GOLD
-                        : (vent.status == VolcanoVentStatus.MINOR_ACTIVITY)
+                        : (vent.getStatus() == VolcanoVentStatus.MINOR_ACTIVITY)
                                 ? ChatColor.YELLOW
-                                : (vent.status == VolcanoVentStatus.DORMANT)
+                                : (vent.getStatus() == VolcanoVentStatus.DORMANT)
                                         ? ChatColor.GREEN
                                         : ChatColor.RESET);
     }
@@ -228,9 +228,9 @@ public class VolcanoManager {
         VolcanoVentStatus status = VolcanoVentStatus.EXTINCT;
 
         for (VolcanoVent vent : getVents()) {
-            if (status.getScaleFactor() < vent.status.getScaleFactor()) {
+            if (status.getScaleFactor() < vent.getStatus().getScaleFactor()) {
                 highestVent = vent;
-                status = vent.status;
+                status = vent.getStatus();
             }
         }
 

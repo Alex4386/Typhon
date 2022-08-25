@@ -253,11 +253,11 @@ public class VolcanoTremor {
     public boolean shouldIDoIt() {
         Volcano volcano = vent.getVolcano();
 
-        return Math.random() < vent.status.getScaleFactor();
+        return Math.random() < vent.getStatus().getScaleFactor();
     }
 
     public double getTremorPower() {
-        return getTremorPower(this.vent.status);
+        return getTremorPower(this.vent.getStatus());
     }
 
     public double getTremorPower(VolcanoVentStatus status) {

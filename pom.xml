@@ -74,6 +74,10 @@
             <id>dmulloy2-repo</id>
             <url>https://repo.dmulloy2.net/repository/public/</url>
         </repository>
+		<repository>
+		    <id>jitpack.io</id>
+		    <url>https://jitpack.io</url>
+		</repository>
     </repositories>
 
     <dependencies>
@@ -88,6 +92,11 @@
             <artifactId>annotations</artifactId>
             <version>21.0.1</version>
             <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.BlueMap-Minecraft</groupId>
+            <artifactId>BlueMapAPI</artifactId>
+            <version>2.1.0</version>
         </dependency>
     </dependencies>
 </project>

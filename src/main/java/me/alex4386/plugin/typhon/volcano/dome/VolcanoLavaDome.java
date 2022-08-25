@@ -77,7 +77,7 @@ public class VolcanoLavaDome {
                             TyphonPlugin.plugin,
                             (Runnable) () -> {
                                 double shouldDo = Math.random();
-                                if (shouldDo < this.vent.status.getScaleFactor()
+                                if (shouldDo < this.vent.getStatus().getScaleFactor()
                                         && this.isForming())
                                     this.plumbCycle();
                             },

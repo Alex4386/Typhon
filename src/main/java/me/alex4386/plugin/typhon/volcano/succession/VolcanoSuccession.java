@@ -75,11 +75,11 @@ public class VolcanoSuccession {
 
     public void runSuccessionCycle(VolcanoVent vent) {
         int successionCount = 0;
-        if (vent.status == VolcanoVentStatus.ERUPTING) {
+        if (vent.getStatus() == VolcanoVentStatus.ERUPTING) {
             successionCount = (int) (Math.random() * 2);
-        } else if (Math.random() > vent.status.getScaleFactor()) {
+        } else if (Math.random() > vent.getStatus().getScaleFactor()) {
             double count = vent.longestNormalLavaFlowLength * Math.PI * 2;
-            successionCount = (int) ((1.0 - vent.status.getScaleFactor()) * Math.min(2000, count / 15) * Math.random());
+            successionCount = (int) ((1.0 - vent.getStatus().getScaleFactor()) * Math.min(2000, count / 15) * Math.random());
         }
 
         for (int i = 0; i < successionCount; i++) {
@@ -133,7 +133,7 @@ public class VolcanoSuccession {
 
         double skipZone = (vent.getType() == VolcanoVentType.CRATER ? vent.craterRadius : 0);
         if (skipZone > 0) {
-            if (vent.status.getScaleFactor() < 0.1) {
+            if (vent.getStatus().getScaleFactor() < 0.1) {
                 if (Math.random() < 0.5) {
                     skipZone = 0;
                 }
@@ -154,7 +154,7 @@ public class VolcanoSuccession {
         boolean shouldCheckHeat = false;
         VolcanoVent vent = volcano.manager.getNearestVent(block);
         if (vent != null) {
-            if (vent.status.getScaleFactor() > 0.1) {
+            if (vent.getStatus().getScaleFactor() > 0.1) {
                 shouldCheckHeat = true;
             }
         }
@@ -355,7 +355,7 @@ public class VolcanoSuccession {
         Block rockBlock = isSurface ? surfaceBlock : block;
 
         VolcanoVent vent = this.volcano.manager.getNearestVent(block);
-        double scaleFactor = vent.status.getScaleFactor();
+        double scaleFactor = vent.getStatus().getScaleFactor();
         double heatValue = this.volcano.manager.getHeatValue(block.getLocation());
 
         if (scaleFactor >= 0.8) {
@@ -375,8 +375,8 @@ public class VolcanoSuccession {
         }
         
         if (vent != null) {
-            if (vent.status.getScaleFactor() < 0.1) {
-                if (Math.random() < vent.status.getScaleFactor() * 10) {
+            if (vent.getStatus().getScaleFactor() < 0.1) {
+                if (Math.random() < vent.getStatus().getScaleFactor() * 10) {
                     return false;
                 }
             }
@@ -467,7 +467,7 @@ public class VolcanoSuccession {
         int radius = 6;
         if (shouldCheckHeat(block)) {
             double heatValue = this.volcano.manager.getHeatValue(block.getLocation());
-            double scaleFactor = this.volcano.manager.getNearestVent(block).status.getScaleFactor();
+            double scaleFactor = this.volcano.manager.getNearestVent(block).getStatus().getScaleFactor();
             
             if (scaleFactor >= 0.8) {
                 if (heatValue > 0.6) {

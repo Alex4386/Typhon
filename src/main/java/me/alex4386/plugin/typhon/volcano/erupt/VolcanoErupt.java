@@ -121,16 +121,16 @@ public class VolcanoErupt {
 
     public void startFlowingLava() {
         this.vent.initialize();
-        this.vent.status = VolcanoVentStatus.ERUPTING;
+        this.vent.setStatus(VolcanoVentStatus.ERUPTING);
         this.vent.lavaFlow.settings.flowing = true;
     }
 
     public void stopFlowingLava() {
         vent.lavaFlow.settings.flowing = false;
-        this.vent.status = (!this.vent.isExploding()) ? VolcanoVentStatus.MAJOR_ACTIVITY : this.vent.status;
+        this.vent.setStatus((!this.vent.isExploding()) ? VolcanoVentStatus.MAJOR_ACTIVITY : this.vent.getStatus());
         this.vent.cool();
 
-        if (this.vent.status != VolcanoVentStatus.ERUPTING) {
+        if (this.vent.getStatus() != VolcanoVentStatus.ERUPTING) {
             this.vent.record.endEjectaTrack();
         }
 
@@ -139,15 +139,15 @@ public class VolcanoErupt {
 
     public void startExploding() {
         this.vent.initialize();
-        this.vent.status = VolcanoVentStatus.ERUPTING;
+        this.vent.setStatus(VolcanoVentStatus.ERUPTING);
         this.vent.explosion.running = true;
     }
 
     public void stopExploding() {
         this.vent.explosion.running = false;
-        this.vent.status = (!this.vent.isFlowingLava()) ? VolcanoVentStatus.MAJOR_ACTIVITY : this.vent.status;
+        this.vent.setStatus((!this.vent.isFlowingLava()) ? VolcanoVentStatus.MAJOR_ACTIVITY : this.vent.getStatus());
 
-        if (this.vent.status != VolcanoVentStatus.ERUPTING) {
+        if (this.vent.getStatus() != VolcanoVentStatus.ERUPTING) {
             this.vent.record.endEjectaTrack();
         }
 

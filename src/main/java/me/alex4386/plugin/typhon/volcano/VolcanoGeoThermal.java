@@ -71,16 +71,16 @@ public class VolcanoGeoThermal implements Listener {
         5);
 
     
-    if (vent.status.getScaleFactor() >= 0.1) {
+    if (vent.getStatus().getScaleFactor() >= 0.1) {
       this.burnNearbyEntities(targetLoc, 3);
       this.playLavaBubbling(targetLoc);
-    } else if (vent.status.getScaleFactor() >= 0.04) {
+    } else if (vent.getStatus().getScaleFactor() >= 0.04) {
       this.burnNearbyEntities(targetLoc, 1);
     }
 
     this.runVolcanicGas(targetLoc);
 
-    if (Math.random() < vent.status.getScaleFactor()) {
+    if (Math.random() < vent.getStatus().getScaleFactor()) {
       vent.volcano.metamorphism.evaporateBlock(block);
       vent.volcano.metamorphism.metamorphoseBlock(block.getRelative(BlockFace.UP));
     }
@@ -110,7 +110,7 @@ public class VolcanoGeoThermal implements Listener {
     
     // one geothermal on each block
     double reference = (geothermalRange * geothermalRange * Math.PI) / (1 + (2 * Math.random()));
-    double targetCount = (vent.status.getScaleFactor() * reference);
+    double targetCount = (vent.getStatus().getScaleFactor() * reference);
 
     int cycleCount = (int) ((0.25 + (Math.random() * 0.75)) * targetCount);
 
@@ -120,7 +120,7 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runVolcanoGeoThermalCycle(VolcanoVent vent) {
-    int cycleCount = (int) ((50 * Math.random()) * (vent.status.getScaleFactor()));
+    int cycleCount = (int) ((50 * Math.random()) * (vent.getStatus().getScaleFactor()));
     
     double multiplier = Math.max(Math.min(1, (vent.longestNormalLavaFlowLength - vent.craterRadius) / (vent.craterRadius * 4)), 0);
     cycleCount = (int) (cycleCount * multiplier);
@@ -255,7 +255,7 @@ public class VolcanoGeoThermal implements Listener {
     double referenceH2sGasPpm = volcano.manager.getHeatValue(location) * (150 + (100 * Math.random()));
 
     double h2sGasPpm = referenceH2sGasPpm;
-    double so2GasPpm = h2sGasPpm * vent.status.getScaleFactor() / 0.1;
+    double so2GasPpm = h2sGasPpm * vent.getStatus().getScaleFactor() / 0.1;
     
     double minimumH2s = 0.75;
     double minimumSo2 = 0.65;
@@ -326,13 +326,13 @@ public class VolcanoGeoThermal implements Listener {
         int timespan = 20 * 3;
         int poisonousLevel = 0;
 
-        if (vent.status.getScaleFactor() >= 0.1) {
+        if (vent.getStatus().getScaleFactor() >= 0.1) {
           double heatValue = volcano.manager.getHeatValue(location);
-          double multiplier = Math.random() < vent.status.getScaleFactor() ? 5 : 1 + (Math.random() * 2);
+          double multiplier = Math.random() < vent.getStatus().getScaleFactor() ? 5 : 1 + (Math.random() * 2);
           double total = Math.min(Math.max(heatValue * multiplier, 1), 5);
 
           poisonousLevel = (int) total;
-        } else if (vent.status != VolcanoVentStatus.DORMANT) {
+        } else if (vent.getStatus() != VolcanoVentStatus.DORMANT) {
           if (vent.isInVent(location)) {
             poisonousLevel = Math.random() > 0.3 ? 1 : 0;
           }
@@ -389,8 +389,8 @@ public class VolcanoGeoThermal implements Listener {
   public boolean shouldDoIt(VolcanoVent vent, Location location) {
     Random random = new Random();
     return enable
-        && volcano.manager.getHeatValue(location) >= 1 - vent.status.getScaleFactor()
-        && random.nextDouble() < vent.status.getScaleFactor();
+        && volcano.manager.getHeatValue(location) >= 1 - vent.getStatus().getScaleFactor()
+        && random.nextDouble() < vent.getStatus().getScaleFactor();
   }
 
   @EventHandler

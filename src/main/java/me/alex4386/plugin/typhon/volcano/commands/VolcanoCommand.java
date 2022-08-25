@@ -174,7 +174,7 @@ public class VolcanoCommand {
                                 msg.info(
                                         "Status  : "
                                                 + (volcano.manager.getVentChatColor(nearestVent)
-                                                        + nearestVent.status.toString()));
+                                                        + nearestVent.getStatus().toString()));
                                 msg.info(
                                         "LavaFlow: "
                                                 + (volcano.manager.isInAnyLavaFlow(location)
@@ -356,7 +356,7 @@ public class VolcanoCommand {
                                                     + ChatColor.RESET
                                                     + ": "
                                                     + (volcano.manager.getVentChatColor(vent)
-                                                            + vent.status.toString()));
+                                                            + vent.getStatus().toString()));
                                 }
                             }
                             break;
@@ -390,7 +390,7 @@ public class VolcanoCommand {
                             break;
                         case STATUS:
                             VolcanoVent vent = volcano.manager.getHighestStatusVent();
-                            msg.info("Highest Status: " + vent.status.name());
+                            msg.info("Highest Status: " + vent.getStatus().name());
                             break;
                         case HEAT:
                             if (sender instanceof Player) {

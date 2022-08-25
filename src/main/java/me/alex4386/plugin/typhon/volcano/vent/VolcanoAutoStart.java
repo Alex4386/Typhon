@@ -252,22 +252,22 @@ public class VolcanoAutoStart implements Listener {
                     VolcanoLogClass.AUTOSTART, "Volcano AutoStart interval Checking...");
 
             for (VolcanoVent vent : volcano.manager.getVents()) {
-                VolcanoVentStatus status = vent.status;
+                VolcanoVentStatus status = vent.getStatus();
                 double a = Math.random();
 
-                switch (vent.status) {
+                switch (vent.getStatus()) {
                     case DORMANT:
                         if (a <= probability.dormant.increase) {
-                            vent.status = vent.status.increase();
+                            vent.setStatus(vent.getStatus().increase());
                         }
                         break;
                     case MINOR_ACTIVITY:
                         if (a <= probability.minor_activity.increase) {
-                            vent.status = vent.status.increase();
+                            vent.setStatus(vent.getStatus().increase());
                         } else if (a
                                 <= probability.minor_activity.increase
                                         + probability.minor_activity.decrease) {
-                            vent.status = vent.status.decrease();
+                            vent.setStatus(vent.getStatus().decrease());
                         }
                         break;
                     case MAJOR_ACTIVITY:
@@ -275,7 +275,7 @@ public class VolcanoAutoStart implements Listener {
                             vent.volcano.logger.log(
                                     VolcanoLogClass.AUTOSTART,
                                     "volcano starting due to increment from major_activity");
-                            vent.status = vent.status.increase();
+                            vent.setStatus(vent.getStatus().increase());
                             vent.start();
                             Bukkit.getScheduler()
                                     .scheduleSyncDelayedTask(
@@ -286,23 +286,23 @@ public class VolcanoAutoStart implements Listener {
                                                         "Volcano ended eruption session. back to"
                                                             + " MAJOR_ACTIVITY");
                                                 vent.stop();
-                                                vent.status = vent.status.decrease();
+                                                vent.setStatus(vent.getStatus().decrease());
                                             },
                                             volcano.autoStart.eruptionTimer);
                         } else if (a
                                 <= probability.major_activity.increase
                                         + probability.major_activity.decrease) {
-                            vent.status = vent.status.decrease();
+                            vent.setStatus(vent.getStatus().decrease());
                         }
                         break;
                     default:
                         break;
                 }
 
-                if (vent.status != status) {
+                if (vent.getStatus() != status) {
                     volcano.logger.debug(
                             VolcanoLogClass.AUTOSTART,
-                            "Volcano has changed status to" + vent.status.toString());
+                            "Volcano has changed status to" + vent.getStatus().toString());
                 }
             }
 

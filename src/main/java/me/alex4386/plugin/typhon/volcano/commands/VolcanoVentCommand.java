@@ -186,11 +186,11 @@ public class VolcanoVentCommand {
                 break;
             case STATUS:
                 if (newArgs.length == 2) {
-                    VolcanoVentStatus prevStatus = vent.status;
+                    VolcanoVentStatus prevStatus = vent.getStatus();
                     VolcanoVentStatus status = VolcanoVentStatus.getStatus(newArgs[1]);
 
                     if (status != null) {
-                        vent.status = status;
+                        vent.setStatus(status);
                         if (prevStatus == VolcanoVentStatus.ERUPTING
                                 && status != VolcanoVentStatus.ERUPTING) {
                             vent.stop();
@@ -203,7 +203,7 @@ public class VolcanoVentCommand {
                 msg.info(
                         "Vent Status: "
                                 + vent.volcano.manager.getVentChatColor(vent)
-                                + vent.status.toString());
+                                + vent.getStatus().toString());
                 break;
             case LAVA_DOME:
                 if (newArgs.length <= 1) {
@@ -214,8 +214,8 @@ public class VolcanoVentCommand {
                 String domeAction = newArgs[1];
                 if (domeAction.equalsIgnoreCase("start")) {
                     vent.stop();
-                    if (vent.status.getScaleFactor() < 0.5)
-                        vent.status = VolcanoVentStatus.MAJOR_ACTIVITY;
+                    if (vent.getStatus().getScaleFactor() < 0.5)
+                        vent.setStatus(VolcanoVentStatus.MAJOR_ACTIVITY);
                     vent.lavadome.start();
                     msg.info("Lavadome eruption started.");
                 } else if (domeAction.equalsIgnoreCase("stop")) {
@@ -493,7 +493,7 @@ public class VolcanoVentCommand {
                 msg.info(
                         "Status  : "
                                 + vent.volcano.manager.getVentChatColor(vent)
-                                + vent.status.toString());
+                                + vent.getStatus().toString());
                 msg.info(
                         "C.Ejecta: "
                                 + vent.record.currentEjectaVolume

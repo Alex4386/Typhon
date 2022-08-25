@@ -21,6 +21,8 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.json.simple.JSONObject;
 
+import de.bluecolored.bluemap.api.markers.POIMarker;
+
 import java.util.*;
 
 public class VolcanoVent {
@@ -30,7 +32,7 @@ public class VolcanoVent {
 
     public Volcano volcano;
     public String name = null;
-    public VolcanoVentStatus status = VolcanoVentStatus.DORMANT;
+    private VolcanoVentStatus status = VolcanoVentStatus.DORMANT;
 
     private VolcanoVentType type = VolcanoVentType.CRATER;
 
@@ -56,6 +58,8 @@ public class VolcanoVent {
     public VolcanoAsh ash = new VolcanoAsh(this);
     public VolcanoLavaDome lavadome = new VolcanoLavaDome(this);
 
+    public POIMarker ventMarker = null;
+
     public VolcanoVent(Volcano volcano) {
         this.volcano = volcano;
         this.location = volcano.location;
@@ -75,6 +79,18 @@ public class VolcanoVent {
 
     public Volcano getVolcano() {
         return this.volcano;
+    }
+
+    public VolcanoVentStatus getStatus() {
+        return this.status;
+    }
+
+    public void setStatus(VolcanoVentStatus status) {
+        this.status = status;
+
+        if (TyphonBlueMapUtils.getBlueMapAvailable()) {
+            TyphonBlueMapUtils.updateVolcanoVentIcon(this);
+        }
     }
 
     public List<Player> getPlayersInRange() {
