@@ -13,6 +13,7 @@ import org.json.simple.JSONObject;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
+import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
@@ -180,8 +181,9 @@ public class VolcanoSuccession {
             if (heatValue > 0.4) {
                 // since volcano is hot. probability scales down.
                 probability = (probability - 0.4) / (heatValueThreshold - 0.4);
+                probability = Math.pow(0.5, Math.max(probability * 10, 1));
 
-                if (Math.random() > probability) {
+                if (Math.random() < probability) {
                     return;
                 }
             }
@@ -207,9 +209,7 @@ public class VolcanoSuccession {
                     // tree can not grow if heatValue is high enough,
                     // in that case, grass should be generated instead.
                     if (shouldCheckHeat(block)) {
-                        if (heatValue > 0.9) {
-
-                        } else if (heatValue > 0.6) {
+                        if (heatValue > 0.6) {
                             targetBlock.applyBoneMeal(BlockFace.UP);
                             spreadSoil(targetBlock);
                             return;
@@ -258,6 +258,8 @@ public class VolcanoSuccession {
                     VolcanoLogClass.SUCCESSION,
                     "Eroding rock on block "+TyphonUtils.blockLocationTostring(block));
             }
+        } else {
+            
         }
     }
 
@@ -312,6 +314,11 @@ public class VolcanoSuccession {
         return false;
     }
 
+    public boolean isTypeOfVolcanicOre(Material material) {
+        return material == Material.ANCIENT_DEBRIS ||
+            material.name().toLowerCase().contains("ore");
+    }
+
     public void spreadSoil(Block block) {
         int spreadRange = (int) (Math.random() * 3) + 2;
         spreadSoil(block, spreadRange, false);
@@ -347,20 +354,27 @@ public class VolcanoSuccession {
         Block surfaceBlock = TyphonUtils.getHighestRocklikes(block);
         Block rockBlock = isSurface ? surfaceBlock : block;
 
+        VolcanoVent vent = this.volcano.manager.getNearestVent(block);
+        double scaleFactor = vent.status.getScaleFactor();
         double heatValue = this.volcano.manager.getHeatValue(block.getLocation());
-            
-        if (heatValue > 0.7 && shouldCheckHeat(block)) {
-            // since volcano is hot. probability scales down.
-            double probability = (heatValue - 0.7) / 0.2;
 
-            if (Math.random() > probability) {
+        if (scaleFactor >= 0.8) {
+            if (heatValue > 0.9) {
+                if (isTypeOfVolcanicOre(surfaceBlock.getType())) {
+                    if (vent != null) surfaceBlock.setType(VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
+                }
+                return false;
+            }
+        } else if (scaleFactor >= 0.1) {
+            if (heatValue > 0.97) {
+                if (isTypeOfVolcanicOre(surfaceBlock.getType())) {
+                    if (vent != null) surfaceBlock.setType(VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
+                }
                 return false;
             }
         }
         
-        if (this.volcano.manager.isInAnyVent(block)) {
-            VolcanoVent vent = this.volcano.manager.getNearestVent(block);
-
+        if (vent != null) {
             if (vent.status.getScaleFactor() < 0.1) {
                 if (Math.random() < vent.status.getScaleFactor() * 10) {
                     return false;
@@ -453,13 +467,19 @@ public class VolcanoSuccession {
         int radius = 6;
         if (shouldCheckHeat(block)) {
             double heatValue = this.volcano.manager.getHeatValue(block.getLocation());
+            double scaleFactor = this.volcano.manager.getNearestVent(block).status.getScaleFactor();
             
-            if (heatValue > 0.8) {
-                return false;
+            if (scaleFactor >= 0.8) {
+                if (heatValue > 0.6) {
+                    return false;
+                }
+            } else if (scaleFactor >= 0.1) {
+                if (heatValue > 0.8) {
+                    return false;
+                }
             }
 
-            heatValue /= 0.8;
-            radius = (int) Math.max(radius, radius + (Math.pow(heatValue, 2) * (radius * 2)));    
+            radius = (int) (Math.pow(3, heatValue) * 6);
         }
 
         Block scanBaseBlock = rockBlock.getRelative(BlockFace.UP);

@@ -9,6 +9,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 
 import org.bukkit.*;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
@@ -69,10 +70,20 @@ public class VolcanoGeoThermal implements Listener {
         1,
         5);
 
-    this.burnNearbyEntities(targetLoc, 3);
-    this.playLavaBubbling(targetLoc);
+    
+    if (vent.status.getScaleFactor() >= 0.1) {
+      this.burnNearbyEntities(targetLoc, 3);
+      this.playLavaBubbling(targetLoc);
+    } else if (vent.status.getScaleFactor() >= 0.04) {
+      this.burnNearbyEntities(targetLoc, 1);
+    }
+
     this.runVolcanicGas(targetLoc);
-    vent.volcano.metamorphism.evaporateBlock(block);
+
+    if (Math.random() < vent.status.getScaleFactor()) {
+      vent.volcano.metamorphism.evaporateBlock(block);
+      vent.volcano.metamorphism.metamorphoseBlock(block.getRelative(BlockFace.UP));
+    }
   }
 
   public void volcanicGasDegassing(Block block) {
@@ -109,13 +120,21 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runVolcanoGeoThermalCycle(VolcanoVent vent) {
-    int cycleCount = (int) ((50 + (Math.random() * 150)) * (vent.status.getScaleFactor()));
+    int cycleCount = (int) ((50 * Math.random()) * (vent.status.getScaleFactor()));
     
     double multiplier = Math.max(Math.min(1, (vent.longestNormalLavaFlowLength - vent.craterRadius) / (vent.craterRadius * 4)), 0);
     cycleCount = (int) (cycleCount * multiplier);
 
+    if (vent.lavaFlow.hasAnyLavaFlowing()) {
+      List<Block> targets = vent.lavaFlow.getRandomLavaBlocks(cycleCount);
+      for (Block target: targets) {
+        this.runVolcanoGeoThermal(vent, target);
+      }
+      cycleCount -= (int) (cycleCount / 10);
+    }
+
     for (int i = 0; i < cycleCount; i++) {
-      this.runVolcanoGeoThermal(vent);
+      this.runVolcanoGeoThermal(vent, this.getVolcanoGeoThermalBlock(vent));
     }
   }
 
@@ -149,12 +168,11 @@ public class VolcanoGeoThermal implements Listener {
     return geothermalRange;
   }
 
-  public void runVolcanoGeoThermal(VolcanoVent vent) {
+  public Block getVolcanoGeoThermalBlock(VolcanoVent vent) {
     Block block;
-    
+
     if (Math.random() < 0.75) {
-      block = TyphonUtils
-        .getHighestRocklikes(
+      block = 
             TyphonUtils
                 .getRandomBlockInRange(
                     vent.getCoreBlock(),
@@ -163,10 +181,9 @@ public class VolcanoGeoThermal implements Listener {
                             vent.craterRadius),
                     (int) Math
                         .floor(
-                          vent.longestNormalLavaFlowLength)));
+                          vent.longestNormalLavaFlowLength));
     } else {
-      block = TyphonUtils
-        .getHighestRocklikes(
+      block = 
           TyphonUtils
               .getRandomBlockInRange(
                   vent.getCoreBlock(),
@@ -175,14 +192,20 @@ public class VolcanoGeoThermal implements Listener {
                           vent.longestNormalLavaFlowLength),
                   (int) Math
                       .floor(
-                        vent.longestFlowLength)));
+                        vent.longestFlowLength));
     }
 
-    Location targetLoc = block.getLocation();
+    return block;
+  }
+
+  public void runVolcanoGeoThermal(VolcanoVent vent, Block block) {
+    Block targetBlock = TyphonUtils.getHighestRocklikes(block);
+    Location targetLoc = targetBlock.getLocation();
     this.burnNearbyEntities(targetLoc, 3);
     this.runVolcanicGas(targetLoc);
 
     vent.volcano.metamorphism.evaporateBlock(block);
+    vent.volcano.metamorphism.metamorphoseBlock(block.getRelative(BlockFace.UP));
   }
 
   public void playLavaBubbling(Location location) {

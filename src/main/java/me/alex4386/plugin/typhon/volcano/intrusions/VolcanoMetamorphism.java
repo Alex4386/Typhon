@@ -113,7 +113,11 @@ public class VolcanoMetamorphism {
             }
         }
 
-        baseBlock.setType(Material.AIR);
+        if (baseBlock.getType().name().toLowerCase().contains("log")) {
+            baseBlock.setType(Material.COAL_BLOCK);
+        } else {
+            baseBlock.setType(Material.AIR);
+        }
     }
 
     public void evaporateBlock(Block block) {
