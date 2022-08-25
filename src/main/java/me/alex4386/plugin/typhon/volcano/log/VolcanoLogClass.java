@@ -9,6 +9,7 @@ public enum VolcanoLogClass {
     AUTOSTART("Autostart"),
     BOMB("Bomb"),
     BOMB_LAUNCHER("Bomb Launcher"),
+    BLUE_MAP("Blue Map"),
     COMMAND("Command"),
     COMPOSITION("Composition"),
     CONSTRUCTION("Construction"),

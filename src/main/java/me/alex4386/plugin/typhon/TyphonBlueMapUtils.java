@@ -17,6 +17,7 @@ import de.bluecolored.bluemap.api.markers.Marker;
 import de.bluecolored.bluemap.api.markers.MarkerSet;
 import de.bluecolored.bluemap.api.markers.POIMarker;
 import me.alex4386.plugin.typhon.volcano.Volcano;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 
@@ -76,6 +77,7 @@ public class TyphonBlueMapUtils {
 
   public static void addVolcanoOnMap(Volcano volcano) {
     runOnMap(volcano, map -> {
+      TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Adding volcano "+volcano.name+" on map.");
       MarkerSet volcanoSet = getVolcanoMarkers(volcano);
 
       map.getMarkerSets().put(getVolcanoMarkerSetID(volcano), volcanoSet);
@@ -84,6 +86,7 @@ public class TyphonBlueMapUtils {
 
   public static void removeVolcanoFromMap(Volcano volcano) {
     runOnMap(volcano, map -> {
+      TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Removing volcano "+volcano.name+" on map.");
       map.getMarkerSets().remove(getVolcanoMarkerSetID(volcano));
     });
   }
@@ -124,7 +127,9 @@ public class TyphonBlueMapUtils {
   }
 
   public static void addVolcanoVentToMarkerSet(MarkerSet set, VolcanoVent vent) {
+    TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Adding vent "+vent.getName()+" of "+vent.volcano.name+" on map.");
     String markerId = getVolcanoVentMarkerID(vent);
+    
     set.getMarkers().put(markerId, getVolcanoVentMarker(vent));
   }
 
