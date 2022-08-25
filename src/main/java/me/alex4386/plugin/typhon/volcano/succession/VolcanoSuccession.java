@@ -360,15 +360,15 @@ public class VolcanoSuccession {
 
         if (scaleFactor >= 0.8) {
             if (heatValue > 0.9) {
-                if (isTypeOfVolcanicOre(surfaceBlock.getType())) {
-                    if (vent != null) surfaceBlock.setType(VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
+                if (isTypeOfVolcanicOre(rockBlock.getType())) {
+                    if (vent != null) rockBlock.setType(VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
                 }
                 return false;
             }
         } else if (scaleFactor >= 0.1) {
             if (heatValue > 0.97) {
-                if (isTypeOfVolcanicOre(surfaceBlock.getType())) {
-                    if (vent != null) surfaceBlock.setType(VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
+                if (isTypeOfVolcanicOre(rockBlock.getType())) {
+                    if (vent != null) rockBlock.setType(VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
                 }
                 return false;
             }

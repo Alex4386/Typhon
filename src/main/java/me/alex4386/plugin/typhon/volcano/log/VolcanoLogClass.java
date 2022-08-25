@@ -39,4 +39,8 @@ public enum VolcanoLogClass {
     public String getHeader() {
         return ChatColor.RED + "[" + this.string + "]" + ChatColor.RESET + " ";
     }
+
+    public String getStrippedHeader() {
+        return "[" + this.string + "]" + ChatColor.RESET + " ";
+    }
 }

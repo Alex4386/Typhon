@@ -49,7 +49,7 @@ public class TyphonBlueMapUtils {
     }
 
     try {
-      InputStream dormantImg = TyphonPlugin.plugin.getResource("volcano_erupting.png");
+      InputStream dormantImg = TyphonPlugin.plugin.getResource("volcano_dormant.png");
       if (dormantImg != null) {
         dormantImgUrl = api.getWebApp().createImage(ImageIO.read(dormantImg), "typhon/vol_dormant");
       }
