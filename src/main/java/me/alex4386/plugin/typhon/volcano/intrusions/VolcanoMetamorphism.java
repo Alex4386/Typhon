@@ -33,11 +33,13 @@ public class VolcanoMetamorphism {
 
     public void metamorphoseBlock(VolcanoVent vent, Block block, boolean isBomb) {
         Material material = block.getType();
+        String blockTypeName = material.name().toLowerCase();
 
-        if (block.getType().isBurnable()) {
+        if (blockTypeName.contains("log") || blockTypeName.contains("leaves")) {
+            removeTree(block);    
+        } else if (block.getType().isBurnable()) {
             block.setType(Material.AIR);
         } else {
-            String blockTypeName = material.name().toLowerCase();
             double silicateLevel = vent.lavaFlow.settings.silicateLevel;
 
             boolean typeOfDirt = (blockTypeName.contains("dirt")
@@ -66,8 +68,6 @@ public class VolcanoMetamorphism {
                 material = Material.RED_SANDSTONE;
             } else if (material == Material.CLAY) {
                 material = Material.TERRACOTTA;
-            } else if (blockTypeName.contains("log") || blockTypeName.contains("leaves")) {
-                removeTree(block);    
             } else {
                 return;
             }

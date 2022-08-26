@@ -51,7 +51,6 @@ public class VolcanoGeoThermal implements Listener {
 
   public void unregisterEvent() {
     if (registeredEvent) {
-      BlockFromToEvent.getHandlerList().unregisterAll(this);
       PlayerDropItemEvent.getHandlerList().unregisterAll(this);
       PlayerBucketEmptyEvent.getHandlerList().unregisterAll(this);
       registeredEvent = false;

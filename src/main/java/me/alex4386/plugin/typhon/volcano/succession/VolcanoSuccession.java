@@ -173,7 +173,9 @@ public class VolcanoSuccession {
             heatValueThreshold = 0.8 + (0.1 * Math.random());
         }
 
-        if (targetBlock.getY() < block.getWorld().getSeaLevel()) return;
+        if (targetBlock.getY() < block.getWorld().getSeaLevel() - 1) {
+            return;
+        }
 
         if (heatValue < heatValueThreshold && !this.volcano.manager.isInAnyVent(block)) {
             double probability = 1.0;
