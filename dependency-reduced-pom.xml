@@ -72,6 +72,12 @@
       <version>1.18.2-R0.1-SNAPSHOT</version>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>com.github.BlueMap-Minecraft</groupId>
+      <artifactId>BlueMapAPI</artifactId>
+      <version>2.1.0</version>
+      <scope>provided</scope>
+    </dependency>
   </dependencies>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
