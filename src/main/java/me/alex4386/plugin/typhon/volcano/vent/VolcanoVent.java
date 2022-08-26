@@ -670,7 +670,7 @@ public class VolcanoVent {
     }
 
     public boolean isMainVent() {
-        return this.name == null;
+        return this.name == null || this.name.equals("main");
     }
 
     public String getVentConfigFilename() {

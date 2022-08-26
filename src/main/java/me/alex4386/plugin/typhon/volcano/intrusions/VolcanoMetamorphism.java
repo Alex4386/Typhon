@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.intrusions;
 
+import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
@@ -107,8 +108,7 @@ public class VolcanoMetamorphism {
         BlockFace[] facesToSearch = {BlockFace.UP, BlockFace.WEST, BlockFace.DOWN, BlockFace.EAST, BlockFace.NORTH, BlockFace.SOUTH};
         for (BlockFace face : facesToSearch) {
             Block block = baseBlock.getRelative(face);
-            String materialName = block.getType().name().toLowerCase();
-            if (materialName.contains("log") || materialName.contains("leaves")) {
+            if (TyphonUtils.isMaterialTree(block.getType())) {
                 removeTree(block, maxRecursion - 1);
             }
         }

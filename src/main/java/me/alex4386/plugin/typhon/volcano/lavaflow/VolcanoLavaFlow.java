@@ -661,27 +661,26 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public List<Block> getRandomLavaBlocks(int count) {
-        List<Block> lavaBlocks = new ArrayList<>(lavaCoolHashMap.keySet());
-        List<Block> pillowBlocks = new ArrayList<>(pillowLavaMap.keySet());
+        List<Block> lavaBlocks = (ArrayList<Block>) new ArrayList<>(lavaCoolHashMap.keySet());
+        List<Block> pillowBlocks = (ArrayList<Block>) new ArrayList<>(pillowLavaMap.keySet());
 
-        int counts = lavaBlocks.size();
-        counts += pillowBlocks.size();
+        Collections.shuffle(lavaBlocks);
+        Collections.shuffle(pillowBlocks);
 
         List<Block> targetBlocks = new ArrayList<>();
 
         for (int i = 0; i < count; i++) {
-            int rand = (int) (Math.random() * counts);
-            Block targetBlock = null;
-    
-            if (rand < lavaBlocks.size()) {
-                targetBlock = lavaBlocks.get(rand);
-            } else {
-                rand -= pillowBlocks.size();
-                targetBlock = pillowBlocks.get(rand);
+            Block block = null;
+            if (pillowBlocks.size() > 0) {
+                block = pillowBlocks.get(0);
+            }
+            
+            if (Math.random() < 0.7 || block == null) {
+                block = lavaBlocks.get(0);                
             }
 
-            if (targetBlock != null) {
-                targetBlocks.add(targetBlock);
+            if (block != null) {
+                targetBlocks.add(block);
             }
         }
 
