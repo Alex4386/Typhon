@@ -178,7 +178,7 @@ public class VolcanoGeoThermal implements Listener {
 
   
   public int getCraterGeoThermalRadius(VolcanoVent vent) {
-    int geothermalRange = Math.max(100, (int) (vent.craterRadius * 2.5));
+    int geothermalRange = Math.min(100, (int) (vent.craterRadius * 2.5));
 
     return geothermalRange;
   }
