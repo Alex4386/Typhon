@@ -212,9 +212,7 @@ public class VolcanoGeoThermal implements Listener {
             TyphonUtils
                 .getRandomBlockInRange(
                     vent.getCoreBlock(),
-                    (int) Math
-                        .floor(
-                            vent.craterRadius),
+                    0,
                     (int) Math
                         .floor(
                           vent.longestNormalLavaFlowLength));

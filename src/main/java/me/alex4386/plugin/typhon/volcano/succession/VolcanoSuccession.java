@@ -259,7 +259,10 @@ public class VolcanoSuccession {
                     "Eroding rock on block "+TyphonUtils.blockLocationTostring(block));
             }
         } else {
-            
+            VolcanoVent vent = this.volcano.manager.getNearestVent(targetBlock);
+            if (isTypeOfVolcanicOre(targetBlock.getType())) {
+                targetBlock.setType(VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
+            }
         }
     }
 
