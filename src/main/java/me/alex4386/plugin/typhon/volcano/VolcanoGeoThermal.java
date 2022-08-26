@@ -82,7 +82,13 @@ public class VolcanoGeoThermal implements Listener {
 
     if (Math.random() < vent.getStatus().getScaleFactor()) {
       vent.volcano.metamorphism.evaporateBlock(block);
-      vent.volcano.metamorphism.metamorphoseBlock(block.getRelative(BlockFace.UP));
+
+      Block aboveBlock = block.getRelative(BlockFace.UP);
+      if (vent.volcano.succession.isVolcanicRock(aboveBlock.getType())) {
+        vent.volcano.metamorphism.metamorphoseBlock(aboveBlock);
+      } else if (TyphonUtils.isMaterialTree(aboveBlock.getType())) {
+        vent.volcano.metamorphism.removeTree(aboveBlock);
+      }
     }
   }
 
@@ -205,7 +211,12 @@ public class VolcanoGeoThermal implements Listener {
     this.runVolcanicGas(targetLoc);
 
     vent.volcano.metamorphism.evaporateBlock(block);
-    vent.volcano.metamorphism.metamorphoseBlock(block.getRelative(BlockFace.UP));
+    Block aboveBlock = block.getRelative(BlockFace.UP);
+    if (vent.volcano.succession.isVolcanicRock(aboveBlock.getType())) {
+      vent.volcano.metamorphism.metamorphoseBlock(aboveBlock);
+    } else if (TyphonUtils.isMaterialTree(aboveBlock.getType())) {
+      vent.volcano.metamorphism.removeTree(aboveBlock);
+    }
   }
 
   public void playLavaBubbling(Location location) {
