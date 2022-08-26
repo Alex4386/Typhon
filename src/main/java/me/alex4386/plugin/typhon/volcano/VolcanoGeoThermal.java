@@ -61,31 +61,52 @@ public class VolcanoGeoThermal implements Listener {
   public void runCraterGeothermal(VolcanoVent vent) {
     Block block = this.getBlockToRunCraterCycle(vent);
 
+    double scaleFactor = vent.getStatus().getScaleFactor();
+
     final Location targetLoc = block
       .getLocation()
       .add(0, 1, 0);
       
-    TyphonUtils.createRisingSteam(
-        targetLoc,
-        1,
-        5);
+    boolean letOffSteam = false;
+    boolean runPoison = false;
 
-    
-    if (vent.getStatus().getScaleFactor() >= 0.1) {
+    if (scaleFactor >= 0.1) {
       this.burnNearbyEntities(targetLoc, 3);
       this.playLavaBubbling(targetLoc);
-    } else if (vent.getStatus().getScaleFactor() >= 0.04) {
+
+      letOffSteam = true;
+      runPoison = Math.random() < scaleFactor;
+    } else if (scaleFactor >= 0.04) {
       this.burnNearbyEntities(targetLoc, 1);
+    
+      letOffSteam = (Math.random() < 0.5);
+      runPoison = (Math.random() < scaleFactor);
+    } else if (vent.getStatus() == VolcanoVentStatus.EXTINCT) {
+      return;
     }
 
-    this.runVolcanicGas(targetLoc);
+    if (letOffSteam) {
+      TyphonUtils.createRisingSteam(
+        targetLoc,
+        0,
+        1
+      );
 
-    if (Math.random() < vent.getStatus().getScaleFactor()) {
-      vent.volcano.metamorphism.evaporateBlock(block);
+      if (runPoison) {
+        this.volcanicGasDegassing(block);
+      }
+    }
+
+    if (Math.random() < scaleFactor) {
+      if (letOffSteam) {
+        if (runPoison || Math.random() < scaleFactor) {
+          vent.volcano.metamorphism.evaporateBlock(block);
+        }
+      }
 
       Block aboveBlock = block.getRelative(BlockFace.UP);
-      if (vent.volcano.succession.isVolcanicRock(aboveBlock.getType())) {
-        vent.volcano.metamorphism.metamorphoseBlock(aboveBlock);
+      if (!vent.volcano.succession.isVolcanicRock(block.getType())) {
+        vent.volcano.metamorphism.metamorphoseBlock(block);
       } else if (TyphonUtils.isMaterialTree(aboveBlock.getType())) {
         vent.volcano.metamorphism.removeTree(aboveBlock);
       }
@@ -215,16 +236,47 @@ public class VolcanoGeoThermal implements Listener {
 
   public void runVolcanoGeoThermal(VolcanoVent vent, Block block) {
     Block targetBlock = TyphonUtils.getHighestRocklikes(block);
-    Location targetLoc = targetBlock.getLocation();
-    this.burnNearbyEntities(targetLoc, 3);
-    this.runVolcanicGas(targetLoc);
+    Location targetLoc = targetBlock.getLocation().add(0,1,0);
 
-    vent.volcano.metamorphism.evaporateBlock(block);
-    Block aboveBlock = block.getRelative(BlockFace.UP);
-    if (vent.volcano.succession.isVolcanicRock(aboveBlock.getType())) {
-      vent.volcano.metamorphism.metamorphoseBlock(aboveBlock);
-    } else if (TyphonUtils.isMaterialTree(aboveBlock.getType())) {
-      vent.volcano.metamorphism.removeTree(aboveBlock);
+    double scaleFactor = vent.getStatus().getScaleFactor();
+    double heatValue = vent.getHeatValue(block.getLocation());
+      
+    boolean letOffSteam = false;
+    boolean runPoison = false;
+
+    if (scaleFactor >= 0.1) {
+      letOffSteam = true;
+      runPoison = Math.random() < scaleFactor;
+    } else if (scaleFactor >= 0.04) {
+      letOffSteam = (Math.random() < 0.5);
+      runPoison = (Math.random() < scaleFactor);
+    }
+
+    if (Math.random() < heatValue) {
+      if (letOffSteam) {
+        double burnRange = 3 * scaleFactor * heatValue;
+
+        TyphonUtils.createRisingSteam(targetLoc, 0, 1);
+        if (burnRange > 0) {
+          this.burnNearbyEntities(targetLoc, 3);
+        }
+
+        if (runPoison) {
+          this.runVolcanicGas(targetLoc);
+        }
+
+        if (burnRange > 1) {
+          vent.volcano.metamorphism.evaporateBlock(block);
+          targetLoc.getWorld().playSound(targetLoc, Sound.ENTITY_BLAZE_SHOOT, (float) burnRange, 0.5f);
+          Block upperBlock = targetBlock.getRelative(BlockFace.UP);
+
+          if (!vent.volcano.succession.isVolcanicRock(targetBlock.getType())) {
+            vent.volcano.metamorphism.metamorphoseBlock(targetBlock);
+          } else if (TyphonUtils.isMaterialTree(upperBlock.getType())) {
+            vent.volcano.metamorphism.removeTree(upperBlock);
+          }
+        }
+      }
     }
   }
 

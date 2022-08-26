@@ -103,7 +103,7 @@ public class VolcanoMetamorphism {
     }
 
     public void removeTree(Block baseBlock, int maxRecursion) {
-        if (maxRecursion < 0) return;
+        if (maxRecursion < 0 || !TyphonUtils.isMaterialTree(baseBlock.getType())) return;
 
         BlockFace[] facesToSearch = {BlockFace.UP, BlockFace.WEST, BlockFace.DOWN, BlockFace.EAST, BlockFace.NORTH, BlockFace.SOUTH};
         for (BlockFace face : facesToSearch) {
