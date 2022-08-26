@@ -115,7 +115,7 @@ public class VolcanoGeoThermal implements Listener {
     int geothermalRange = getCraterGeoThermalRadius(vent);
     
     // one geothermal on each block
-    double reference = (geothermalRange * geothermalRange * Math.PI) / (1 + (2 * Math.random()));
+    double reference = (geothermalRange * geothermalRange * Math.PI) / (1 + (4 * Math.random()));
     double targetCount = (vent.getStatus().getScaleFactor() * reference);
 
     int cycleCount = (int) ((0.25 + (Math.random() * 0.75)) * targetCount);
@@ -162,7 +162,7 @@ public class VolcanoGeoThermal implements Listener {
           TyphonUtils
               .getRandomBlockInRange(
                   vent.getCoreBlock(),
-                  vent.craterRadius,
+                  0,
                   (int) (vent.craterRadius + offset)
               )
       );
