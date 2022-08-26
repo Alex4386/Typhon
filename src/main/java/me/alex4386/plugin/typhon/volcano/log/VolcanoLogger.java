@@ -86,7 +86,7 @@ public class VolcanoLogger {
         String headers = logClass.getStrippedHeader() + this.getStrippedHeader();
 
         string.replace(ChatColor.RESET.toString(), ChatColor.YELLOW.toString());
-        Bukkit.getLogger().severe(headers + ChatColor.YELLOW + string);
+        Bukkit.getLogger().severe(headers + string);
     }
 
     // Use this something is wrong with the plugin but plugin can NOT continue.
@@ -95,6 +95,6 @@ public class VolcanoLogger {
         String headers = logClass.getStrippedHeader() + this.getStrippedHeader();
 
         string.replace(ChatColor.RESET.toString(), ChatColor.RED.toString());
-        Bukkit.getLogger().severe(headers + ChatColor.RED + string);
+        Bukkit.getLogger().severe(headers + string);
     }
 }
