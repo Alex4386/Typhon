@@ -127,6 +127,12 @@ public class TyphonBlueMapUtils {
     return ventMarker;
   }
 
+  public static void updateVolcanoVentMarkerHeight(VolcanoVent vent) {
+    TyphonBlueMapUtils.runOnVolcanoVentMarker(vent, marker -> {
+      marker.setPosition(new Vector3d(vent.location.getX(), vent.getSummitBlock().getY(), vent.location.getZ()));
+    });
+  }
+
   public static void addVolcanoVentToMarkerSet(MarkerSet set, VolcanoVent vent) {
     TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Adding vent "+vent.getName()+" of "+vent.volcano.name+" on map.");
     String markerId = getVolcanoVentMarkerID(vent);

@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.lavaflow;
 
+import me.alex4386.plugin.typhon.TyphonBlueMapUtils;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
@@ -43,6 +44,8 @@ public class VolcanoLavaFlow implements Listener {
     public VolcanoLavaFlowSettings settings = new VolcanoLavaFlowSettings();
 
     public boolean registeredEvent = false;
+
+    private int highestY = Integer.MIN_VALUE;
 
     // core methods
     public VolcanoLavaFlow(VolcanoVent vent) {
@@ -733,7 +736,15 @@ public class VolcanoLavaFlow implements Listener {
                 }
             }
 
-            if (coolData == null || coolData.tickPassed()) flowLava(whereToFlow);
+            if (coolData == null || coolData.tickPassed()) {
+                flowLava(whereToFlow);
+                if (whereToFlow.getY() > highestY) {
+                    highestY = whereToFlow.getY();
+                    if (TyphonBlueMapUtils.getBlueMapAvailable()) {
+                        TyphonBlueMapUtils.updateVolcanoVentMarkerHeight(this.vent);
+                    }
+                }
+            }
         }
     }
 
