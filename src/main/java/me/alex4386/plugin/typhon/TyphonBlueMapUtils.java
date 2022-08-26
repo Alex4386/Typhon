@@ -116,7 +116,7 @@ public class TyphonBlueMapUtils {
   }
 
   public static POIMarker getVolcanoVentMarker(VolcanoVent vent) {
-    Vector3d v3d = Vector3d.from(vent.location.getX(), vent.location.getY(), vent.location.getZ());
+    Vector3d v3d = Vector3d.from(vent.location.getX(), vent.getSummitBlock().getY(), vent.location.getZ());
 
     POIMarker ventMarker = POIMarker.toBuilder()
       .label(vent.isMainVent() ? vent.volcano.name+" Volcano" : vent.name+" ("+vent.volcano.name+")")

@@ -115,7 +115,7 @@ public class VolcanoGeoThermal implements Listener {
     int geothermalRange = getCraterGeoThermalRadius(vent);
     
     // one geothermal on each block
-    double referenceMax = (geothermalRange * geothermalRange * Math.PI) / 2;
+    double referenceMax = (geothermalRange * geothermalRange * Math.PI) / 20;
     double referenceMin = 20;
 
     double random = VolcanoMath.getZeroFocusedRandom();
