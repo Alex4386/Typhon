@@ -126,7 +126,7 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runVolcanoGeoThermalCycle(VolcanoVent vent) {
-    int cycleCount = (int) ((50 * Math.random()) * (vent.getStatus().getScaleFactor()));
+    int cycleCount = (int) ((5 * Math.random()) * (vent.getStatus().getScaleFactor()));
     
     double multiplier = Math.max(Math.min(1, (vent.longestNormalLavaFlowLength - vent.craterRadius) / (vent.craterRadius * 4)), 0);
     cycleCount = (int) (cycleCount * multiplier);
