@@ -132,11 +132,12 @@ public class VolcanoGeoThermal implements Listener {
     cycleCount = (int) (cycleCount * multiplier);
 
     if (vent.lavaFlow.hasAnyLavaFlowing()) {
-      List<Block> targets = vent.lavaFlow.getRandomLavaBlocks(cycleCount);
+      int lavaFlowCount = (int) (cycleCount * 9 / 10);
+      List<Block> targets = vent.lavaFlow.getRandomLavaBlocks(lavaFlowCount);
       for (Block target: targets) {
         this.runVolcanoGeoThermal(vent, target);
       }
-      cycleCount -= (int) (cycleCount / 10);
+      cycleCount -= lavaFlowCount;
     }
 
     for (int i = 0; i < cycleCount; i++) {
