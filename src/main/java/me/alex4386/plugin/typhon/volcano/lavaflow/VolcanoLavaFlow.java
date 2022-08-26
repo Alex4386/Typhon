@@ -679,7 +679,8 @@ public class VolcanoLavaFlow implements Listener {
             }
             
             if (Math.random() < 0.7 || block == null) {
-                block = lavaBlocks.get(0);                
+                if (lavaBlocks.size() > 0)
+                    block = lavaBlocks.get(0);                
             }
 
             if (block != null) {
