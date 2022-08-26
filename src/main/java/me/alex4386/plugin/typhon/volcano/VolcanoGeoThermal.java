@@ -115,9 +115,16 @@ public class VolcanoGeoThermal implements Listener {
     int geothermalRange = getCraterGeoThermalRadius(vent);
     
     // one geothermal on each block
-    double reference = (geothermalRange * geothermalRange * Math.PI) / (1 + (4 * Math.random()));
-    double targetCount = (vent.getStatus().getScaleFactor() * reference);
+    double referenceMax = (geothermalRange * geothermalRange * Math.PI) / 2;
+    double referenceMin = 20;
 
+    double random = VolcanoMath.getZeroFocusedRandom();
+    double targetMax = referenceMax * vent.getStatus().getScaleFactor();
+    double targetMin = referenceMin * vent.getStatus().getScaleFactor();
+
+    double targetRandom = random * vent.getStatus().getScaleFactor();
+    double targetCount = targetMin + (targetRandom * (targetMax - targetMin));
+    
     int cycleCount = (int) ((0.25 + (Math.random() * 0.75)) * targetCount);
 
     for (int i = 0; i < cycleCount; i++) {
@@ -126,7 +133,7 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runVolcanoGeoThermalCycle(VolcanoVent vent) {
-    int cycleCount = (int) ((5 * Math.random()) * (vent.getStatus().getScaleFactor()));
+    int cycleCount = (int) ((25 * Math.random()) * (vent.getStatus().getScaleFactor()));
     
     double multiplier = Math.max(Math.min(1, (vent.longestNormalLavaFlowLength - vent.craterRadius) / (vent.craterRadius * 4)), 0);
     cycleCount = (int) (cycleCount * multiplier);
