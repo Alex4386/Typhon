@@ -135,7 +135,8 @@ public class VolcanoGeoThermal implements Listener {
       int lavaFlowCount = (int) (cycleCount * 9 / 10);
       List<Block> targets = vent.lavaFlow.getRandomLavaBlocks(lavaFlowCount);
       for (Block target: targets) {
-        this.runVolcanoGeoThermal(vent, target);
+        Block actualTarget = TyphonUtils.getRandomBlockInRange(target, 1, Math.max(2, (int) (2 + (4 * vent.getHeatValue(target.getLocation())))));
+        this.runVolcanoGeoThermal(vent, actualTarget);
       }
       cycleCount -= lavaFlowCount;
     }
