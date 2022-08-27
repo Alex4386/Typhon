@@ -286,6 +286,12 @@ public class VolcanoLavaFlow implements Listener {
 
                 // force load chunk.
                 if (!vent.location.getChunk().isLoaded()) vent.location.getChunk().load();
+            } else if (data.isBomb) {
+                if (data.source != null) {
+                    if (data.source.getLocation().distance(toBlock.getLocation()) > 10) {
+                        event.setCancelled(true);
+                    }
+                }
             }
 
             Block underToBlock = toBlock.getRelative(BlockFace.DOWN);

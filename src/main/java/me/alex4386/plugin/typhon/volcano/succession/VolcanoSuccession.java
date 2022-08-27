@@ -281,7 +281,8 @@ public class VolcanoSuccession {
             material == Material.MAGMA_BLOCK ||
             material == Material.OBSIDIAN ||
             materialName.contains("basalt") ||
-            material == Material.ANCIENT_DEBRIS
+            material == Material.ANCIENT_DEBRIS ||
+            material == Material.TUFF
         );
     }
 
