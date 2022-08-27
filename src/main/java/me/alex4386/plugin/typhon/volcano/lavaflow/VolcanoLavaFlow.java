@@ -44,6 +44,7 @@ public class VolcanoLavaFlow implements Listener {
     public VolcanoLavaFlowSettings settings = new VolcanoLavaFlowSettings();
 
     public boolean registeredEvent = false;
+    public boolean skipFlowLengthCheck = false;
 
     private int highestY = Integer.MIN_VALUE;
 
@@ -268,12 +269,12 @@ public class VolcanoLavaFlow implements Listener {
                                 data.source.getLocation(), block.getLocation());
 
                 boolean trySave = false;
-                if (distance > vent.longestFlowLength) {
+                if (distance > vent.longestFlowLength && !skipFlowLengthCheck) {
                     vent.longestFlowLength = distance;
                     trySave = true;
                 }
 
-                if (distance > vent.longestNormalLavaFlowLength) {
+                if (distance > vent.longestNormalLavaFlowLength && !skipFlowLengthCheck) {
                     vent.longestNormalLavaFlowLength = distance;
                     trySave = true;
                 }
@@ -287,9 +288,10 @@ public class VolcanoLavaFlow implements Listener {
                 // force load chunk.
                 if (!vent.location.getChunk().isLoaded()) vent.location.getChunk().load();
             } else if (data.isBomb) {
-                if (data.source != null) {
+                if (this.vent != null && data.source != null) {
                     if (data.source.getLocation().distance(toBlock.getLocation()) > 10) {
                         event.setCancelled(true);
+                        return;
                     }
                 }
             }
@@ -708,7 +710,6 @@ public class VolcanoLavaFlow implements Listener {
                 }
             }
 
-            //this.vent.volcano.logger.log(VolcanoLogClass.LAVA_FLOW, "registered lava terminal @ "+TyphonUtils.blockLocationTostring(block));
             cachedLavaTerminals.put(source, block);
         }
     }
@@ -750,6 +751,7 @@ public class VolcanoLavaFlow implements Listener {
             
             if (underData != null) {
                 if (!underData.tickPassed()) {
+                    underData.coolDown();
                     this.extendLava();
                     continue;
                 }
@@ -795,12 +797,25 @@ public class VolcanoLavaFlow implements Listener {
         double stickiness = ((this.settings.silicateLevel - 0.45) / (0.53 - 0.45));
 
         if (this.lavaTerminals.size() > 0 && Math.random() > stickiness) {
-            int idx = (int) Math.floor(this.lavaTerminals.size() * Math.random());
+            Map<Block, Block> blocks = new HashMap<>();
 
-            Block target = new ArrayList<Block>(this.lavaTerminals.keySet()).get(idx);
-            this.extendLava(target);
-            
-            this.lavaTerminals.remove(target);
+            for (Map.Entry<Block, Block> entry : this.lavaTerminals.entrySet()) {
+                Block targetBlock = entry.getValue();
+                double distance = TyphonUtils.getTwoDimensionalDistance(targetBlock.getLocation(), this.vent.getNearestVentBlock(targetBlock.getLocation()).getLocation());
+
+                if (distance >= vent.longestNormalLavaFlowLength * 0.9) {
+                    blocks.put(entry.getKey(), entry.getValue());
+                }
+            }
+
+            if (blocks.size() > 0) {
+                int idx = (int) Math.floor(blocks.size() * Math.random());
+
+                Block target = new ArrayList<Block>(blocks.keySet()).get(idx);
+                this.extendLava(target);
+                
+                this.lavaTerminals.remove(target);
+            }
         }
     }
 
