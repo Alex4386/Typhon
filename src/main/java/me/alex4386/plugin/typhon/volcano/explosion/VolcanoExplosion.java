@@ -155,6 +155,8 @@ public class VolcanoExplosion {
             vent.bombs.launchBomb();
         }
 
+        
+
         // sentient mode.
         List<Player> players = vent.getPlayersInRange();
         for (Player player : players) {
