@@ -36,8 +36,8 @@ public class VolcanoLavaFlow implements Listener {
     public Map<Block, VolcanoPillowLavaData> pillowLavaMap = new HashMap<>();
     public Map<Block, VolcanoPillowLavaData> cachedPillowLavaMap = new HashMap<>();
 
-    public Map<Block, Boolean> lavaTerminals = new HashMap<>();
-    public Map<Block, Boolean> cachedLavaTerminals = new HashMap<>();
+    public Map<Block, Block> lavaTerminals = new HashMap<>();
+    public Map<Block, Block> cachedLavaTerminals = new HashMap<>();
 
     private int lavaFlowScheduleId = -1;
     private int lavaCoolScheduleId = -1;
@@ -600,9 +600,11 @@ public class VolcanoLavaFlow implements Listener {
         
         double distance = TyphonUtils.getTwoDimensionalDistance(source.getLocation(), block.getLocation());
 
-        Boolean res = lavaTerminals.get(block);
-        if (res != null) {
-            lavaTerminals.remove(block);
+        for (Map.Entry<Block, Block> entry : lavaTerminals.entrySet()) {
+            if (entry.getValue().equals(block)) {
+                lavaTerminals.remove(entry.getKey());
+                break;
+            }
         }
 
         Material ore = this.getOre(distance);
@@ -697,8 +699,18 @@ public class VolcanoLavaFlow implements Listener {
         return targetBlocks;
     }
 
-    public void handleLavaTerminal(Block block) {
-        cachedLavaTerminals.put(block, true);
+    public void handleLavaTerminal(Block source, Block block) {
+        if (!this.vent.volcano.manager.isInAnyVent(block)) {
+            Block previousTerminal = lavaTerminals.get(source);
+            if (previousTerminal != null) {
+                if (block.getLocation().distance(source.getLocation()) <= previousTerminal.getLocation().distance(source.getLocation())) {
+                    return;
+                }
+            }
+
+            //this.vent.volcano.logger.log(VolcanoLogClass.LAVA_FLOW, "registered lava terminal @ "+TyphonUtils.blockLocationTostring(block));
+            cachedLavaTerminals.put(source, block);
+        }
     }
 
     private long nextFlowTime = 0;
@@ -780,7 +792,9 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void extendLava() {
-        if (this.lavaTerminals.size() > 0) {
+        double stickiness = ((this.settings.silicateLevel - 0.45) / (0.53 - 0.45));
+
+        if (this.lavaTerminals.size() > 0 && Math.random() > stickiness) {
             int idx = (int) Math.floor(this.lavaTerminals.size() * Math.random());
 
             Block target = new ArrayList<Block>(this.lavaTerminals.keySet()).get(idx);
@@ -891,7 +905,6 @@ public class VolcanoLavaFlow implements Listener {
                 if (level <= 0) {
                     extension--;
                     if (extension < 0)  {
-                        this.handleLavaTerminal(block);
                         continue;
                     }
 
@@ -954,10 +967,10 @@ public class VolcanoLavaFlow implements Listener {
             iteratorCache.remove();
         }
 
-        Iterator<Map.Entry<Block, Boolean>> iterator2 = cachedLavaTerminals.entrySet().iterator();
+        Iterator<Map.Entry<Block, Block>> iterator2 = cachedLavaTerminals.entrySet().iterator();
 
         while(iterator2.hasNext()) {
-            Map.Entry<Block, Boolean> entry = iterator2.next();
+            Map.Entry<Block, Block> entry = iterator2.next();
             this.lavaTerminals.put(entry.getKey(), entry.getValue());
             iterator2.remove();
         }

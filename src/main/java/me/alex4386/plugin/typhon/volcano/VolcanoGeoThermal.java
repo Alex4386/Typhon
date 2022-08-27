@@ -264,7 +264,6 @@ public class VolcanoGeoThermal implements Listener {
 
         if (burnRange > 1) {
           vent.volcano.metamorphism.evaporateBlock(block);
-          targetLoc.getWorld().playSound(targetLoc, Sound.ENTITY_BLAZE_SHOOT, (float) burnRange, 0.5f);
           Block upperBlock = targetBlock.getRelative(BlockFace.UP);
 
           if (!vent.volcano.succession.isVolcanicRock(targetBlock.getType())) {

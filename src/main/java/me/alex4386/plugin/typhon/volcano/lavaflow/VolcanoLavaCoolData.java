@@ -202,8 +202,8 @@ public class VolcanoLavaCoolData {
             }
         } else if (this.runExtensionCount == 0) {
             if (6 <= level && level < 8) {
-                if (this.flowedFromVent != null) {
-                    this.flowedFromVent.lavaFlow.handleLavaTerminal(block);
+                if (this.flowedFromVent != null && !this.isBomb) {
+                    this.flowedFromVent.lavaFlow.handleLavaTerminal(this.source, block);
                 }
             }
         }

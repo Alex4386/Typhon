@@ -504,8 +504,6 @@ public class TyphonUtils {
         if (!mute) {
             location.getWorld().playSound(location, Sound.BLOCK_LAVA_POP, .1f * count, 0);
             location.getWorld().playSound(location, Sound.BLOCK_LAVA_EXTINGUISH, .05f * count, 0);
-
-            location.getWorld().playSound(location, Sound.ENTITY_BLAZE_SHOOT, .1f * count, 0);
         }
     }
 
