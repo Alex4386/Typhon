@@ -111,14 +111,14 @@ public class VolcanoVent {
     public void initialize() {
         volcano.logger.log(VolcanoLogClass.VENT, "Starting up vent " + name);
 
+        this.getVentBlocks();
+
         // bombs don't need initialization
         ash.initialize();
         explosion.initialize();
         lavaFlow.initialize();
         tremor.initialize();
         lavadome.initialize();
-
-        this.getVentBlocks();
 
         volcano.logger.log(VolcanoLogClass.VENT, "Started" + " up vent " + name);
     }
