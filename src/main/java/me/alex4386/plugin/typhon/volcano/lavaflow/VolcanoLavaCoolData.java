@@ -25,6 +25,7 @@ public class VolcanoLavaCoolData {
     public boolean isProcessed = false;
 
     public int runExtensionCount = 0;
+    public boolean skipNormalLavaFlowLengthCheck = false;
 
     public VolcanoLavaCoolData(
             Block source,

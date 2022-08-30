@@ -44,7 +44,6 @@ public class VolcanoLavaFlow implements Listener {
     public VolcanoLavaFlowSettings settings = new VolcanoLavaFlowSettings();
 
     public boolean registeredEvent = false;
-    public boolean skipFlowLengthCheck = false;
 
     private int highestY = Integer.MIN_VALUE;
 
@@ -269,12 +268,12 @@ public class VolcanoLavaFlow implements Listener {
                                 data.source.getLocation(), block.getLocation());
 
                 boolean trySave = false;
-                if (distance > vent.longestFlowLength && !skipFlowLengthCheck) {
+                if (distance > vent.longestFlowLength) {
                     vent.longestFlowLength = distance;
                     trySave = true;
                 }
 
-                if (distance > vent.longestNormalLavaFlowLength && !skipFlowLengthCheck) {
+                if (distance > vent.longestNormalLavaFlowLength && !data.skipNormalLavaFlowLengthCheck) {
                     vent.longestNormalLavaFlowLength = distance;
                     trySave = true;
                 }
@@ -289,7 +288,7 @@ public class VolcanoLavaFlow implements Listener {
                 if (!vent.location.getChunk().isLoaded()) vent.location.getChunk().load();
             } else if (data.isBomb) {
                 if (this.vent != null && data.source != null) {
-                    if (data.source.getLocation().distance(toBlock.getLocation()) > 10) {
+                    if (TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation()) > 10) {
                         event.setCancelled(true);
                         return;
                     }
@@ -350,16 +349,28 @@ public class VolcanoLavaFlow implements Listener {
             }
 
             this.registerLavaCoolData(data.source, block, toBlock, data.isBomb, extensionCount);
+            VolcanoLavaCoolData coolData = this.cachedLavaCoolHashMap.get(toBlock);
+            
+            if (coolData != null) {
+                if (data.skipNormalLavaFlowLengthCheck) {
+                    coolData.skipNormalLavaFlowLengthCheck = true;
+                }
 
-            if (this.vent != null && isFlowBlocked) {
-                VolcanoLavaCoolData coolData = this.vent.lavaFlow.lavaCoolHashMap.get(toBlock);
-                if (coolData != null) {
-                    coolData.forceCoolDown();
-
-                    // rush up lava
-                    Block flowUp = toBlock.getRelative(BlockFace.UP);
-                    if (flowUp.getType().isAir()) {
-                        this.registerLavaCoolData(data.source, toBlock, flowUp, data.isBomb);
+                if (this.vent != null && isFlowBlocked) {
+                    if (coolData != null) {
+                        coolData.forceCoolDown();
+    
+                        // rush up lava
+                        Block flowUp = toBlock.getRelative(BlockFace.UP);
+                        if (flowUp.getType().isAir()) {
+                            this.registerLavaCoolData(data.source, toBlock, flowUp, data.isBomb);
+                            if (data.skipNormalLavaFlowLengthCheck) {
+                                VolcanoLavaCoolData newCoolData = this.cachedLavaCoolHashMap.get(toBlock);
+                                if (newCoolData != null) {
+                                    newCoolData.skipNormalLavaFlowLengthCheck = coolData.skipNormalLavaFlowLengthCheck;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -954,9 +965,14 @@ public class VolcanoLavaFlow implements Listener {
                                 false,
                                 extension);
 
-                            pillowData = cachedPillowLavaMap.get(flowTarget);
-                            if (pillowData != null) {
-                                pillowData.fluidLevel = level;
+                            VolcanoLavaCoolData coolData = cachedLavaCoolHashMap.get(flowTarget);
+                            if (coolData != null) {
+                                coolData.skipNormalLavaFlowLengthCheck = true;
+                            } else {
+                                pillowData = cachedPillowLavaMap.get(flowTarget);
+                                if (pillowData != null) {
+                                    pillowData.fluidLevel = level;
+                                }
                             }
                         }
                     }

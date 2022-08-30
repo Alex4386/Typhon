@@ -221,7 +221,16 @@ public class VolcanoBomb {
             }
         }
 
-        final Block finalBlock = block;
+        Block baseBlock = loc.getBlock().getRelative(BlockFace.DOWN);
+        if (TyphonUtils.isMaterialTree(baseBlock.getType())) {
+            // burn it!
+            vent.volcano.metamorphism.removeTree(baseBlock);
+
+            loc = TyphonUtils.getHighestNonTreeSolid(baseBlock).getLocation();
+        }
+
+        final Location finalLoc = loc;
+
         Bukkit.getScheduler()
                 .scheduleSyncDelayedTask(
                         TyphonPlugin.plugin,
@@ -235,17 +244,17 @@ public class VolcanoBomb {
 
                             if (bombRadius <= 1) {
                                 List<Block> bomb = VolcanoMath.getSphere(
-                                        loc.getBlock(), this.bombRadius);
+                                        finalLoc.getBlock(), this.bombRadius);
 
                                 for (Block bombBlock : bomb) {
                                     lavaFlow.flowLavaFromBomb(bombBlock);
                                 }
 
-                                loc.getWorld().createExplosion(loc, 1, true, false);
+                                finalLoc.getWorld().createExplosion(finalLoc, 1, true, false);
                                 totalEjecta = bomb.size();
                             } else {
                                 List<Block> bomb = VolcanoMath.getSphere(
-                                        loc.getBlock(), this.bombRadius);
+                                        finalLoc.getBlock(), this.bombRadius);
 
                                 for (Block bombBlock : bomb) {
                                     Random random = new Random();

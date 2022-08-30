@@ -9,7 +9,7 @@ public class VolcanoComposition {
     public static Material getBombRock(double silicateLevel) {
         Random random = new Random();
 
-        if (random.nextDouble() < 0.5) {
+        if (random.nextDouble() < 0.8) {
             return Material.TUFF;
         }
 

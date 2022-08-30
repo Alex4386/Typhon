@@ -74,6 +74,16 @@ public class VolcanoBombs {
                 * multiplier;
         double minRadius = Math.min(vent.craterRadius * 0.7, 20);
 
+        double absoluteMinimumForMax = Math.max(vent.craterRadius * 2, 40);
+        double hawaiianFlow = vent.longestNormalLavaFlowLength / 2;
+
+        // 30 degrees
+        double adequateCinderConeBaseWidth = (vent.getSummitBlock().getY() - vent.location.getY()) * Math.sqrt(3);
+        double calculatedConeBaseWidth = Math.max(absoluteMinimumForMax, adequateCinderConeBaseWidth);
+
+        maxRadius = Math.min(300, Math.max(hawaiianFlow, calculatedConeBaseWidth)) * multiplier;
+        maxRadius = Math.min(300 * multiplier, Math.max(maxDistance, maxRadius));
+
         VolcanoCircleOffsetXZ offsetXZ = VolcanoMath.getCenterFocusedCircleOffset(
                 hostLocation.getBlock(), (int) maxRadius, (int) minRadius);
         Block destination = hostLocation.getBlock().getRelative((int) offsetXZ.x, 0, (int) offsetXZ.z);
