@@ -801,7 +801,7 @@ public class VolcanoLavaFlow implements Listener {
 
     public void flowLavaFromBomb(Block bomb) {
         double zeroFocused = VolcanoMath.getZeroFocusedRandom();
-        this.registerLavaCoolData(bomb, true, (int) (zeroFocused * 2));
+        this.registerLavaCoolData(bomb, true, 0);
     }
 
     public void extendLava() {
