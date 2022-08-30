@@ -126,6 +126,13 @@ public class VolcanoBomb {
         }
     }
 
+    public void skipMe() {
+        this.block.remove();
+        this.isLanded = true;
+
+        this.block.getLocation().getBlock().setType(Material.AIR);
+    }
+
     public void land() {
         Volcano volcano = this.vent.getVolcano();
 
@@ -147,15 +154,7 @@ public class VolcanoBomb {
 
         String ventName = "";
         boolean isLandedOnVent = this.vent.getVolcano().manager.isInAnyVent(loc);
-        boolean isLandedInCurrentlyGrowingCone = false;
         VolcanoVent nearestVent = this.vent.getVolcano().manager.getNearestVent(loc);
-
-        if (nearestVent != null) {
-            double getCurrentDistance = nearestVent.getTwoDimensionalDistance(loc);
-            if (getCurrentDistance < nearestVent.longestFlowLength * 0.8) {
-                isLandedInCurrentlyGrowingCone = true;
-            }
-        }
 
         if (!VolcanoBombListener.groundChecker(loc, bombRadius)) {
             volcano.logger.debug(
@@ -169,30 +168,8 @@ public class VolcanoBomb {
         }
 
         if (isLandedOnVent) {
-            this.block.remove();
-            this.isLanded = true;
-
-            this.block.getLocation().getBlock().setType(Material.AIR);
+            this.skipMe();
             this.vent.lavaFlow.extendLava();
-            return;
-        }
-
-        if (isLandedInCurrentlyGrowingCone) {
-            this.block.remove();
-            this.isLanded = true;
-
-            volcano.logger.debug(
-                    VolcanoLogClass.BOMB_LAUNCHER,
-                    "Volcanic Bomb from "
-                            + TyphonUtils.blockLocationTostring(this.launchLocation.getBlock())
-                            + " landed at currently growing cone. interrupting bomb and starting a"
-                            + " new flow");
-
-            loc.getWorld().createExplosion(loc, 1, true, false);
-
-            this.vent.lavaFlow.flowLavaFromBomb(this.block.getLocation().getBlock());
-            this.vent.record.addEjectaVolume(1);
-
             return;
         }
 
@@ -218,6 +195,47 @@ public class VolcanoBomb {
         if (vent != null) {
             if (vent.bombs.maxDistance < vent.getTwoDimensionalDistance(loc)) {
                 vent.bombs.maxDistance = vent.getTwoDimensionalDistance(loc);
+            }
+        }
+
+        double distance = TyphonUtils.getTwoDimensionalDistance(nearestVent.location, block.getLocation());
+        double heightOfCone = Math.max(0, nearestVent.averageVentHeight() - nearestVent.location.getBlockY());
+        double coneBase = Math.max(0, heightOfCone * Math.sqrt(3));
+
+        double currentBlockHeight = Math.max(0, block.getY() - nearestVent.location.getBlockY());
+
+        if (distance < coneBase && heightOfCone > 5) {
+            double fromEndOfCone = coneBase - distance;
+
+            double adequateHeight = fromEndOfCone / Math.sqrt(3);
+            int targetHeight = (int) Math.round(adequateHeight);
+
+            if (adequateHeight > 5 && currentBlockHeight > 5) {
+                double probability = 1;
+
+                if (currentBlockHeight > targetHeight) {
+                    probability = Math.pow(0.1, currentBlockHeight - targetHeight);
+                }
+
+                if (probability < 1) {
+                    if (Math.random() >= probability) {
+                        this.skipMe();
+                        return;
+                    }
+                }
+            }
+        } else if (distance > coneBase) {
+            double probability = 1;
+
+            if (currentBlockHeight > 3) {
+                probability = Math.pow(0.1, currentBlockHeight - 3);
+            }
+
+            if (probability < 1) {
+                if (Math.random() >= probability) {
+                    this.skipMe();
+                    return;
+                }
             }
         }
 
