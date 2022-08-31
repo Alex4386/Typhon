@@ -253,7 +253,7 @@ public class VolcanoSuccession {
             if (Math.random() < erodeProb) {
                 if (targetBlock.getType() == Material.DEEPSLATE || targetBlock.getType() == Material.BLACKSTONE) {
                     targetBlock.setType(Material.COBBLED_DEEPSLATE);
-                } else if (isVolcanicRock(targetBlock.getType())) {
+                } else if (VolcanoComposition.isVolcanicRock(targetBlock.getType())) {
                     targetBlock.setType(Material.COBBLESTONE);
                 } else { return; }
 
@@ -267,24 +267,6 @@ public class VolcanoSuccession {
                 targetBlock.setType(VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
             }
         }
-    }
-
-    public boolean isVolcanicRock(Material material) {
-        String materialName = material.name().toLowerCase();
-
-        return (
-            material == Material.STONE ||
-            material == Material.DEEPSLATE ||
-            material == Material.NETHERRACK ||
-            material == Material.DIORITE || 
-            material == Material.ANDESITE ||
-            materialName.contains("ore") ||
-            material == Material.MAGMA_BLOCK ||
-            material == Material.OBSIDIAN ||
-            materialName.contains("basalt") ||
-            material == Material.ANCIENT_DEBRIS ||
-            material == Material.TUFF
-        );
     }
 
     public boolean isNaturalized(Material material) {

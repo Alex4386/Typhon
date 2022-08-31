@@ -111,6 +111,7 @@ public class VolcanoBombListener implements Listener {
 
     @EventHandler
     public void onBlockExplode(BlockExplodeEvent event) {
+        /*
         Location explosionTriggered = event.getBlock().getLocation();
         Block triggerBlock = explosionTriggered.getBlock();
         VolcanoVent vent = lavaSplashExplosions.get(triggerBlock);
@@ -153,5 +154,6 @@ public class VolcanoBombListener implements Listener {
             vent.record.addEjectaVolume(event.blockList().size());
             lavaSplashExplosions.remove(explosionTriggered.getBlock());
         }
+        */
     }
 }

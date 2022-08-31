@@ -343,8 +343,10 @@ public class VolcanoLavaFlow implements Listener {
                 // this.flowedFromVent.volcano.logger.log(VolcanoLogClass.LAVA_FLOW,
                 //      "FlowVector: " + TyphonUtils.blockLocationTostring(flowVector.getBlock()));
 
-                if (flowVector.getBlockY() < 0) {
-                    extensionCount = -1;
+                if (!data.isBomb) {
+                    if (flowVector.getBlockY() < 0) {
+                        extensionCount = -1;
+                    }
                 }
             }
 
@@ -800,7 +802,6 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void flowLavaFromBomb(Block bomb) {
-        double zeroFocused = VolcanoMath.getZeroFocusedRandom();
         this.registerLavaCoolData(bomb, true, 0);
     }
 

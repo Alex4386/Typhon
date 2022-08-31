@@ -104,7 +104,7 @@ public class VolcanoGeoThermal implements Listener {
       }
 
       Block aboveBlock = block.getRelative(BlockFace.UP);
-      if (!vent.volcano.succession.isVolcanicRock(block.getType())) {
+      if (!VolcanoComposition.isVolcanicRock(block.getType())) {
         vent.volcano.metamorphism.metamorphoseBlock(block);
       } else if (TyphonUtils.isMaterialTree(aboveBlock.getType())) {
         vent.volcano.metamorphism.removeTree(aboveBlock);
@@ -266,7 +266,7 @@ public class VolcanoGeoThermal implements Listener {
           vent.volcano.metamorphism.evaporateBlock(block);
           Block upperBlock = targetBlock.getRelative(BlockFace.UP);
 
-          if (!vent.volcano.succession.isVolcanicRock(targetBlock.getType())) {
+          if (!VolcanoComposition.isVolcanicRock(targetBlock.getType())) {
             vent.volcano.metamorphism.metamorphoseBlock(targetBlock);
           } else if (TyphonUtils.isMaterialTree(upperBlock.getType())) {
             vent.volcano.metamorphism.removeTree(upperBlock);

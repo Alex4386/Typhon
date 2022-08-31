@@ -64,10 +64,6 @@ public class VolcanoLavaCoolData {
         
         if (this.isBomb) {
             this.runExtensionCount = 0;
-
-            if (Math.random() < 0.25) {
-                this.runExtensionCount = 1;
-            }
         }
     }
 
@@ -190,7 +186,7 @@ public class VolcanoLavaCoolData {
                         return;
                     }
 
-                    if (!bottomBlock.getType().isAir()) {
+                    if (!bottomBlock.getType().isAir() && VolcanoComposition.isVolcanicRock(bottomBlock.getType())) {
                         double silicateLevel = this.flowedFromVent.lavaFlow.settings.silicateLevel;
                         Material material = !this.isBomb
                                 ? VolcanoComposition.getExtrusiveRock(silicateLevel)
