@@ -15,7 +15,7 @@ public enum VolcanoEruptStyle {
     // lessly used in
     // here
     STROMBOLIAN(
-            "strombolian", new String[] { "stromboli" }, VolcanoEruptCauseType.MAGMATIC, 0, 1, 0.3),
+            "strombolian", new String[] { "stromboli" }, VolcanoEruptCauseType.MAGMATIC, 1, 1, 0.3),
 
     // stromboli but, range longer + with ash
     // rocks: andestic volcanic bombs (+ tuff)

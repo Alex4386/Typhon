@@ -187,7 +187,7 @@ public class VolcanoBomb {
             }
         }
 
-        double heightOfCone = Math.max(0, nearestVent.averageVentHeight() - nearestVent.location.getBlockY());
+        double heightOfCone = Math.max(0, nearestVent.getSummitBlock().getY() - nearestVent.location.getBlockY());
         double coneBase = Math.max(0, heightOfCone * Math.sqrt(3));
 
         double currentBlockHeight = Math.max(0, block.getY() - nearestVent.location.getBlockY());
