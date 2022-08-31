@@ -152,9 +152,7 @@ public class Volcano implements Listener {
         succession.initialize();
     }
 
-    public void startup() {
-        logger.log(VolcanoLogClass.CORE, "Starting up Volcano...");
-        this.initialize();
+    public void initializeVents() {
         this.mainVent.initialize();
         for (Map.Entry<String, VolcanoVent> entry : this.subVents.entrySet()) {
             String name = entry.getKey();
@@ -164,6 +162,14 @@ public class Volcano implements Listener {
                 vent.initialize();
             }
         }
+    }
+
+    public void startup() {
+        logger.log(VolcanoLogClass.CORE, "Starting up Volcano sub vents...");
+        this.initializeVents();
+
+        logger.log(VolcanoLogClass.CORE, "Starting up Volcano...");
+        this.initialize();
 
         logger.log(VolcanoLogClass.CORE, "Started up!");
     }

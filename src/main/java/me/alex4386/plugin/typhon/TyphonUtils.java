@@ -254,6 +254,10 @@ public class TyphonUtils {
 
         while (!isMaterialRocklikes(highestBlock.getType())) {
             highestBlock = highestBlock.getRelative(0, -1, 0);
+
+            if (highestBlock.getY() <= highestBlock.getWorld().getMinHeight()) {
+                break;
+            }
         }
 
         return highestBlock;
