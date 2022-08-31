@@ -159,8 +159,8 @@ public class VolcanoBomb {
         Location loc = block.getLocation();
 
         String ventName = "";
-        boolean isLandedOnVent = this.vent.getVolcano().manager.isInAnyVent(loc);
         VolcanoVent nearestVent = this.vent.getVolcano().manager.getNearestVent(loc);
+        double distance = TyphonUtils.getTwoDimensionalDistance(nearestVent.location, block.getLocation());
 
         if (!VolcanoBombListener.groundChecker(loc, bombRadius)) {
             volcano.logger.debug(
@@ -173,7 +173,7 @@ public class VolcanoBomb {
             return;
         }
 
-        if (isLandedOnVent) {
+        if (distance < nearestVent.craterRadius * 0.7) {
             this.skipMe();
             this.vent.lavaFlow.extendLava();
             return;
@@ -181,30 +181,12 @@ public class VolcanoBomb {
 
         stopTrail();
 
-        volcano.logger.debug(
-                VolcanoLogClass.BOMB_LAUNCHER,
-                "Volcanic Bomb from "
-                        + TyphonUtils.blockLocationTostring(this.launchLocation.getBlock())
-                        + " just landed at "
-                        + TyphonUtils.blockLocationTostring(this.landingLocation.getBlock())
-                        + (isLandedOnVent ? "which is inside of vent: " + ventName : "")
-                        + " with Power: "
-                        + this.bombPower
-                        + ", radius: "
-                        + this.bombRadius
-                        + ", lifeTime: "
-                        + this.lifeTime
-                        + " (= "
-                        + this.getLifetimeSeconds()
-                        + "s)");
-
         if (vent != null) {
             if (vent.bombs.maxDistance < vent.getTwoDimensionalDistance(loc)) {
                 vent.bombs.maxDistance = vent.getTwoDimensionalDistance(loc);
             }
         }
 
-        double distance = TyphonUtils.getTwoDimensionalDistance(nearestVent.location, block.getLocation());
         double heightOfCone = Math.max(0, nearestVent.averageVentHeight() - nearestVent.location.getBlockY());
         double coneBase = Math.max(0, heightOfCone * Math.sqrt(3));
 
