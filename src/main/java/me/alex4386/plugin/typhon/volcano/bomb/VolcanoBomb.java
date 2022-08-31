@@ -175,7 +175,11 @@ public class VolcanoBomb {
 
         if (distance < nearestVent.craterRadius * 0.7) {
             this.skipMe();
-            this.vent.lavaFlow.extendLava();
+            if (this.vent.erupt.getStyle().bombMultiplier == 0) {
+                this.vent.lavaFlow.extendLava();
+            } else {
+                this.vent.lavaFlow.flowLavaFromBomb(vent.requestFlow());
+            }
             return;
         }
 
