@@ -137,7 +137,7 @@ public class VolcanoGeoThermal implements Listener {
 
     double cyclesPerTick = (double) 20.0 / geoThermalUpdateRate;
 
-    double maxCount = circumference / cyclesPerTick;
+    double maxCount = Math.min(Math.max(1, circumference / 20), 200 / cyclesPerTick);
     double cycleCount = thermalScale * maxCount * Math.random();
 
     for (int i = 0; i < cycleCount; i++) {

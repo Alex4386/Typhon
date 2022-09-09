@@ -128,8 +128,7 @@ public class VolcanoBombs {
                 bombPower,
                 bombRadius,
                 bombDelay);
-
-        bombMap.put(bomb.block, bomb);
+        
         return bomb;
     }
 
@@ -144,16 +143,18 @@ public class VolcanoBombs {
 
     public void launchBomb() {
         VolcanoBomb bomb = this.generateBomb();
-
-        bombMap.put(bomb.block, bomb);
-        bomb.launch();
+        this.launchSpecifiedBomb(bomb);
     }
 
     public void launchBombToDestination(Location location) {
         VolcanoBomb bomb = this.generateBomb(location);
-        
-        bombMap.put(bomb.block, bomb);
+    }
+
+    public void launchSpecifiedBomb(VolcanoBomb bomb) {
         bomb.launch();
+        if (bomb.block != null) {
+            bombMap.put(bomb.block, bomb);
+        }
     }
 
     public void shutdown() {
@@ -179,52 +180,54 @@ public class VolcanoBombs {
             FallingBlock block = entry.getKey();
             VolcanoBomb bomb = entry.getValue();
 
-            if (!block.getLocation().getChunk().isLoaded()) {
-                block.getLocation().getChunk().load();
-            }
-            block.setTicksLived(1);
-
-            if (bomb.isLanded) {
-                bomb.stopTrail();
-                iterator.remove();
-                continue;
-            }
-
-            Location bombLocation = block.getLocation();
-
-            if (bomb.prevLocation == null) {
-                bomb.prevLocation = bombLocation;
-            } else {
-                if ((bomb.prevLocation.equals(bombLocation)
-                        && VolcanoBombListener.groundChecker(bombLocation, bomb.bombRadius))
-                        || block.isOnGround()) {
-
-                    bomb.land();
+            if (block != null) {
+                if (!block.getLocation().getChunk().isLoaded()) {
+                    block.getLocation().getChunk().load();
+                }
+                block.setTicksLived(1);
+    
+                if (bomb.isLanded) {
                     bomb.stopTrail();
                     iterator.remove();
                     continue;
+                }
+    
+                Location bombLocation = block.getLocation();
+    
+                if (bomb.prevLocation == null) {
+                    bomb.prevLocation = bombLocation;
                 } else {
-                    bomb.prevLocation = bomb.block.getLocation();
+                    if ((bomb.prevLocation.equals(bombLocation)
+                            && VolcanoBombListener.groundChecker(bombLocation, bomb.bombRadius))
+                            || block.isOnGround()) {
+    
+                        bomb.land();
+                        bomb.stopTrail();
+                        iterator.remove();
+                        continue;
+                    } else {
+                        bomb.prevLocation = bomb.block.getLocation();
+                    }
                 }
-            }
-
-            // Living over 1 min
-            if (bomb.lifeTime >= 60) {
-                // Bukkit.getLogger().log(Level.INFO, "Volcano Bomb from Volcano
-                // "+volcano.name+"
-                // died.");
-                bomb.stopTrail();
-
-                if (bomb.block != null) {
-                    bomb.block.remove();
-                    bomb.block.getLocation().getBlock().setType(Material.AIR);
-                    bomb.block = null;
+    
+                // Living over 1 min
+                if (bomb.lifeTime >= 60) {
+                    // Bukkit.getLogger().log(Level.INFO, "Volcano Bomb from Volcano
+                    // "+volcano.name+"
+                    // died.");
+                    bomb.stopTrail();
+    
+                    if (bomb.block != null) {
+                        bomb.block.remove();
+                        bomb.block.getLocation().getBlock().setType(Material.AIR);
+                        bomb.block = null;
+                    }
+    
+                    bomb.land();
+                    iterator.remove();
+                } else {
+                    bomb.lifeTime++;
                 }
-
-                bomb.land();
-                iterator.remove();
-            } else {
-                bomb.lifeTime++;
             }
         }
     }
