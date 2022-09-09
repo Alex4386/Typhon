@@ -187,9 +187,6 @@ public class VolcanoBomb {
 
         if (distance < nearestVent.craterRadius * 0.7) {
             this.skipMe();
-            if (nearestVent.getStatus() == VolcanoVentStatus.ERUPTING) {
-                nearestVent.bombs.requestBombLaunch();
-            }
 
             if (Math.random() < 0.01) {
                 if (nearestVent == this.vent) {
@@ -212,8 +209,10 @@ public class VolcanoBomb {
 
                     average /= (double) count;
 
-                    if (average + 2 > summit && summit != Integer.MIN_VALUE) {
-                        this.vent.lavaFlow.flowLavaFromBomb(this.vent.requestFlow());
+                    if (shouldGrowUp) {
+                        if (average + 2 > summit && summit != Integer.MIN_VALUE) {
+                            this.vent.lavaFlow.flowLavaFromBomb(this.vent.requestFlow());
+                        }
                     }
                 }
             }
