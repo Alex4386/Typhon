@@ -132,20 +132,13 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runCraterGeoThermalCycle(VolcanoVent vent) {
-    int geothermalRange = getCraterGeoThermalRadius(vent);
-    
-    // one geothermal on each block
-    double referenceMax = (geothermalRange * geothermalRange * Math.PI) / 20;
-    double referenceMin = 20;
+    double circumference = vent.craterRadius * Math.PI * 2;
+    double thermalScale = (vent.getStatus().getScaleFactor());
 
-    double random = VolcanoMath.getZeroFocusedRandom();
-    double targetMax = referenceMax * vent.getStatus().getScaleFactor();
-    double targetMin = referenceMin * vent.getStatus().getScaleFactor();
+    double cyclesPerTick = (double) 20.0 / geoThermalUpdateRate;
 
-    double targetRandom = random * vent.getStatus().getScaleFactor();
-    double targetCount = targetMin + (targetRandom * (targetMax - targetMin));
-    
-    int cycleCount = (int) ((0.25 + (Math.random() * 0.75)) * targetCount);
+    double maxCount = circumference / cyclesPerTick;
+    double cycleCount = thermalScale * maxCount * Math.random();
 
     for (int i = 0; i < cycleCount; i++) {
       this.runCraterGeothermal(vent);
@@ -153,8 +146,14 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runVolcanoGeoThermalCycle(VolcanoVent vent) {
-    int cycleCount = (int) ((25 * Math.random()) * (vent.getStatus().getScaleFactor()));
-    
+    double circumference = vent.longestNormalLavaFlowLength * Math.PI * 2;
+    double thermalScale = (vent.getStatus().getScaleFactor());
+
+    double cyclesPerTick = (double) 20.0 / geoThermalUpdateRate;
+
+    double maxCount = Math.min(Math.max(0, circumference / 20), 200 / cyclesPerTick);
+    double cycleCount = thermalScale * maxCount * Math.random();
+
     double multiplier = Math.max(Math.min(1, (vent.longestNormalLavaFlowLength - vent.craterRadius) / (vent.craterRadius * 4)), 0);
     cycleCount = (int) (cycleCount * multiplier);
 
