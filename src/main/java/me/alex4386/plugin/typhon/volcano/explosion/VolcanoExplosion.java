@@ -89,7 +89,7 @@ public class VolcanoExplosion {
         double bombMultiplier = style.bombMultiplier;
 
         if (this.vent.shouldRunSurseyan()) {
-            if (style.bombMultiplier > VolcanoEruptStyle.SURTSEYAN.bombMultiplier) {
+            if (style.bombMultiplier < VolcanoEruptStyle.SURTSEYAN.bombMultiplier) {
                 bombMultiplier = VolcanoEruptStyle.SURTSEYAN.bombMultiplier;
             }
         }
@@ -136,23 +136,23 @@ public class VolcanoExplosion {
         }
 
         if (smoke) {
-            Random random = new Random();
-            int size = 4 + random.nextInt(3);
-            for (int i = 0; i < 30; i++) {
-                Bukkit.getScheduler()
-                        .runTaskLater(
-                                TyphonPlugin.plugin,
-                                (Runnable) () -> {
-                                    vent.ash.createAshPlume();
-                                },
-                                5L * i);
-            }
+            // Random random = new Random();
+            // int size = 4 + random.nextInt(3);
+            // for (int i = 0; i < 30; i++) {
+            //     Bukkit.getScheduler()
+            //             .runTaskLater(
+            //                     TyphonPlugin.plugin,
+            //                     (Runnable) () -> {
+            //                         vent.ash.createAshPlume();
+            //                     },
+            //                     5L * i);
+            // }
 
             // vent.generateSteam(5);
         }
 
         for (int i = 0; i < bombCount; i++) {
-            vent.bombs.launchBomb();
+            vent.bombs.requestBombLaunch();
         }
 
         

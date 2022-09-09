@@ -30,6 +30,8 @@ public class VolcanoBombs {
     public int bombDelay = VolcanoBombsDefault.bombDelay;
     public double maxDistance = 0;
 
+    public int maximumFallingBlocks = 1000;
+
     public VolcanoBombs(VolcanoVent vent) {
         this.vent = vent;
 
@@ -37,37 +39,31 @@ public class VolcanoBombs {
                 new Vector(0, 0, 0), new Vector(0, 0, vent.craterRadius), 4);
     }
 
-    public void launchBombToDestination(
-            Location location,
-            Location destination,
-            float bombPower,
-            int bombRadius,
-            int bombDelay) {
-        int maxY = vent.getSummitBlock().getY();
-        int yToLaunch = maxY - location.getWorld().getHighestBlockYAt(location);
 
-        Vector vector = TyphonUtils.calculateVelocity(
-                new Vector(0, 0, 0),
-                destination.toVector().subtract(location.toVector()),
-                yToLaunch + 6);
-
-        VolcanoBomb bomb = new VolcanoBomb(
-                vent,
-                location,
-                (float) vector.getX(),
-                (float) vector.getY(),
-                (float) vector.getZ(),
-                bombPower,
-                bombRadius,
-                bombDelay);
-
-        bombMap.put(bomb.block, bomb);
+    public Location getLaunchLocation() {
+        Location hostLocation;
+        if (vent.getType() == VolcanoVentType.FISSURE) {
+            hostLocation = TyphonUtils.getHighestLocation(this.vent.selectCoreBlock().getLocation());
+        } else {
+            int theY = Math.max(vent.getSummitBlock().getY(), vent.location.getBlockY());
+            hostLocation = new Location(
+                    vent.location.getWorld(),
+                    vent.location.getX(),
+                    theY,
+                    vent.location.getZ());
+        }
+        return hostLocation;
     }
 
-    public void launchBomb(Location hostLocation) {
+    public VolcanoBomb generateBomb() {
+        Location hostLocation = this.getLaunchLocation();
+        return generateBomb(hostLocation);
+    }
+
+    public VolcanoBomb generateBomb(Location hostLocation) {
         double multiplier = this.vent.erupt.getStyle().bombMultiplier;
         if (multiplier < 0)
-            return;
+            return null;
 
         double maxRadius = (1.25 + (Math.random() * 1.0))
                 * hostLocation.getWorld().getHighestBlockYAt(hostLocation)
@@ -95,30 +91,12 @@ public class VolcanoBombs {
                         * (maxBombRadius - minBombRadius))
                 + minBombRadius);
 
-        this.launchBombToDestination(
+        return this.generateBombToDestination(
                 hostLocation, destination.getLocation(), bombPower, bombRadius, bombDelay);
     }
 
-    public void launchbomb() {
-        this.launchBomb(this.getLaunchLocation());
-    }
 
-    public Location getLaunchLocation() {
-        Location hostLocation;
-        if (vent.getType() == VolcanoVentType.FISSURE) {
-            hostLocation = TyphonUtils.getHighestLocation(this.vent.selectCoreBlock().getLocation());
-        } else {
-            int theY = Math.max(vent.getSummitBlock().getY(), vent.location.getBlockY());
-            hostLocation = new Location(
-                    vent.location.getWorld(),
-                    vent.location.getX(),
-                    theY,
-                    vent.location.getZ());
-        }
-        return hostLocation;
-    }
-
-    public void launchBombToDestination(Location destination) {
+    public VolcanoBomb generateBombToDestination(Location destination) {
         Location hostLocation = this.getLaunchLocation();
 
         Random random = new Random();
@@ -133,12 +111,49 @@ public class VolcanoBombs {
                 * volcanoScaleVar)
                 + minBombRadius);
 
-        launchBombToDestination(hostLocation, destination, bombPower, bombRadius, this.bombDelay);
+        return this.generateBombToDestination(hostLocation, destination, bombPower, bombRadius, this.bombDelay);
+    }
+
+    public VolcanoBomb generateBombToDestination(
+            Location location,
+            Location destination,
+            float bombPower,
+            int bombRadius,
+            int bombDelay) {
+
+        VolcanoBomb bomb = new VolcanoBomb(
+                vent,
+                location,
+                destination,
+                bombPower,
+                bombRadius,
+                bombDelay);
+
+        bombMap.put(bomb.block, bomb);
+        return bomb;
+    }
+
+    public void requestBombLaunch() {
+        if (bombMap.size() > maximumFallingBlocks) {
+            VolcanoBomb bomb = this.generateBomb();
+            bomb.land();
+        } else {
+            this.launchBomb();
+        }
     }
 
     public void launchBomb() {
-        Location hostLocation = this.getLaunchLocation();
-        launchBomb(hostLocation);
+        VolcanoBomb bomb = this.generateBomb();
+
+        bombMap.put(bomb.block, bomb);
+        bomb.launch();
+    }
+
+    public void launchBombToDestination(Location location) {
+        VolcanoBomb bomb = this.generateBomb(location);
+        
+        bombMap.put(bomb.block, bomb);
+        bomb.launch();
     }
 
     public void shutdown() {
@@ -194,14 +209,19 @@ public class VolcanoBombs {
             }
 
             // Living over 1 min
-            if (bomb.lifeTime >= 120) {
+            if (bomb.lifeTime >= 60) {
                 // Bukkit.getLogger().log(Level.INFO, "Volcano Bomb from Volcano
                 // "+volcano.name+"
                 // died.");
                 bomb.stopTrail();
-                bomb.block.remove();
-                bomb.block.getLocation().getBlock().setType(Material.AIR);
 
+                if (bomb.block != null) {
+                    bomb.block.remove();
+                    bomb.block.getLocation().getBlock().setType(Material.AIR);
+                    bomb.block = null;
+                }
+
+                bomb.land();
                 iterator.remove();
             } else {
                 bomb.lifeTime++;

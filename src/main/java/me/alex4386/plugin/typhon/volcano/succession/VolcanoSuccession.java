@@ -24,6 +24,8 @@ public class VolcanoSuccession {
     // Implements Primary Succession
     Volcano volcano;
     boolean isEnabled = true;
+
+    double cyclesPerTick = 1;
     
     public VolcanoSuccession(Volcano volcano) {
         this.volcano = volcano;
@@ -54,7 +56,7 @@ public class VolcanoSuccession {
                         this.runSuccessionCycle();
                     },
                     0L,
-                    (long) TyphonPlugin.minecraftTicksPerSeconds * 10);
+                    (long) (TyphonPlugin.minecraftTicksPerSeconds * cyclesPerTick));
         }
     }
 
@@ -78,9 +80,13 @@ public class VolcanoSuccession {
         if (vent.getStatus() == VolcanoVentStatus.ERUPTING) {
             successionCount = (int) (Math.random() * 2);
         } else if (Math.random() > vent.getStatus().getScaleFactor()) {
-            double count = vent.longestNormalLavaFlowLength * Math.PI * 2;
-            int referenceSuccessionCount = (int) ((1.0 - vent.getStatus().getScaleFactor()) * Math.min(2000, count / 15) * Math.random());
-            successionCount = referenceSuccessionCount / 20;
+            double circumference = vent.longestNormalLavaFlowLength * Math.PI * 2;
+            double successionScale = (1.0 - vent.getStatus().getScaleFactor());
+
+            double maxCount = Math.min(Math.max(0, circumference / 20), 200 / cyclesPerTick);
+
+            double cycleCount = successionScale * maxCount;
+            successionCount = (int) cycleCount;
         }
 
         for (int i = 0; i < successionCount; i++) {
@@ -129,7 +135,10 @@ public class VolcanoSuccession {
         double longestFlow = vent.longestNormalLavaFlowLength;
 
         if (Math.random() < 0.2) {
-            longestFlow = Math.max(vent.longestNormalLavaFlowLength, vent.bombs.maxDistance);
+            longestFlow = Math.max(vent.longestNormalLavaFlowLength, vent.longestFlowLength);
+            if (Math.random() < 0.2) {
+                longestFlow = Math.max(vent.longestNormalLavaFlowLength, vent.bombs.maxDistance);
+            }
         }
 
         double skipZone = (vent.getType() == VolcanoVentType.CRATER ? vent.craterRadius : 0);
@@ -141,7 +150,7 @@ public class VolcanoSuccession {
             }
         }
         
-        double random = ((longestFlow - skipZone) * Math.random()) + skipZone;
+        double random = ((longestFlow - skipZone) * (1 - VolcanoMath.getZeroFocusedRandom())) + skipZone;
 
         double angle = Math.random() * Math.PI * 2;
         double x = Math.sin(angle) * random;
@@ -265,6 +274,14 @@ public class VolcanoSuccession {
             VolcanoVent vent = this.volcano.manager.getNearestVent(targetBlock);
             if (isTypeOfVolcanicOre(targetBlock.getType())) {
                 targetBlock.setType(VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
+            } else if (targetBlock.getType() == Material.BLACKSTONE) {
+                if (Math.random() < 0.01) {
+                    targetBlock.setType(Material.NETHERRACK);
+                }
+            } else if (targetBlock.getType() == Material.NETHERRACK) {
+                if (Math.random() < 0.01 * 0.01) {
+                    targetBlock.setType(Material.BLACKSTONE);
+                }
             }
         }
     }

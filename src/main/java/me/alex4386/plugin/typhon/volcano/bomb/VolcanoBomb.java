@@ -30,6 +30,8 @@ public class VolcanoBomb {
     public int bombTrailScheduleId;
 
     public Location landingLocation;
+    public Location targetLocation;
+
     public Location prevLocation = null;
     public int bombDelay;
     public boolean isTrailOn = false;
@@ -53,12 +55,11 @@ public class VolcanoBomb {
         this.block = block;
     }
 
+
     public VolcanoBomb(
             VolcanoVent vent,
             Location loc,
-            float bombLaunchPowerX,
-            float bombLaunchPowerY,
-            float bombLaunchPowerZ,
+            Location targetLocation,
             float bombPower,
             int bombRadius,
             int bombDelay) {
@@ -68,11 +69,21 @@ public class VolcanoBomb {
         this.bombDelay = bombDelay;
 
         this.launchLocation = loc;
+        this.targetLocation = targetLocation;
+    }
 
-        Vector launchVector = new Vector(bombLaunchPowerX, bombLaunchPowerY, bombLaunchPowerZ);
-        this.block = loc.getWorld()
+    public void launch() {
+        int maxY = vent.getSummitBlock().getY();
+        int yToLaunch = maxY - this.launchLocation.getWorld().getHighestBlockYAt(launchLocation);
+
+        Vector launchVector = TyphonUtils.calculateVelocity(
+                new Vector(0, 0, 0),
+                targetLocation.toVector().subtract(launchLocation.toVector()),
+                yToLaunch + 6);
+
+        this.block = this.launchLocation.getWorld()
                 .spawnFallingBlock(
-                        loc,
+                        this.launchLocation,
                         new MaterialData(
                                 VolcanoComposition.getBombRock(
                                         this.vent.lavaFlow.settings.silicateLevel)));
@@ -92,6 +103,7 @@ public class VolcanoBomb {
                         VolcanoLogClass.BOMB_LAUNCHER,
                         "Volcanic Bomb Just launched from: "
                                 + TyphonUtils.blockLocationTostring(launchLocation.getBlock()));
+
     }
 
     public double getLifetimeSeconds() {
@@ -99,14 +111,16 @@ public class VolcanoBomb {
     }
 
     public void createSmoke() {
-        Location loc = block.getLocation();
-        loc.getChunk().load();
-
-        loc.getWorld().spawnParticle(Particle.LAVA, loc, 1);
+        if (this.block != null) {
+            Location loc = block.getLocation();
+            loc.getChunk().load();
+    
+            loc.getWorld().spawnParticle(Particle.LAVA, loc, 1);
+        }
     }
 
     public void startTrail() {
-        if (!isTrailOn) {
+        if (!isTrailOn && this.block != null) {
             bombTrailScheduleId = Bukkit.getScheduler()
                     .scheduleSyncRepeatingTask(
                             TyphonPlugin.plugin,
@@ -120,23 +134,27 @@ public class VolcanoBomb {
     }
 
     public void stopTrail() {
-        if (isTrailOn) {
+        if (isTrailOn && this.block != null) {
             Bukkit.getScheduler().cancelTask(bombTrailScheduleId);
             isTrailOn = false;
         }
     }
 
     public void skipMe() {
-        this.block.remove();
-        this.isLanded = true;
-
-        this.block.getLocation().getBlock().setType(Material.AIR);
+        if (this.block != null) {
+            this.block.remove();
+            this.isLanded = true;
+    
+            this.block.getLocation().getBlock().setType(Material.AIR);
+        }
     }
 
     public void land() {
         Volcano volcano = this.vent.getVolcano();
 
-        this.landingLocation = block.getLocation();
+        if (this.block != null) {
+            this.landingLocation = block.getLocation();            
+        }
 
         // calculate even more fall.
         Block block = this.landingLocation.getBlock();
@@ -154,13 +172,10 @@ public class VolcanoBomb {
             block = block.getRelative(BlockFace.DOWN);
         }
 
-        this.landingLocation = block.getLocation();
-
         Location loc = block.getLocation();
 
-        String ventName = "";
         VolcanoVent nearestVent = this.vent.getVolcano().manager.getNearestVent(loc);
-        double distance = TyphonUtils.getTwoDimensionalDistance(nearestVent.location, block.getLocation());
+        double distance = TyphonUtils.getTwoDimensionalDistance(nearestVent.location, loc);
 
         if (!VolcanoBombListener.groundChecker(loc, bombRadius)) {
             volcano.logger.debug(
@@ -168,7 +183,7 @@ public class VolcanoBomb {
                     "Volcanic Bomb from "
                             + TyphonUtils.blockLocationTostring(this.launchLocation.getBlock())
                             + " did not landed properly at "
-                            + TyphonUtils.blockLocationTostring(this.landingLocation.getBlock()));
+                            + TyphonUtils.blockLocationTostring(block));
             isLanded = true;
             return;
         }
@@ -186,8 +201,8 @@ public class VolcanoBomb {
         stopTrail();
 
         if (vent != null) {
-            if (vent.bombs.maxDistance < vent.getTwoDimensionalDistance(loc)) {
-                vent.bombs.maxDistance = vent.getTwoDimensionalDistance(loc);
+            if (vent.bombs.maxDistance < vent.getTwoDimensionalDistance(targetLocation)) {
+                vent.bombs.maxDistance = vent.getTwoDimensionalDistance(targetLocation);
             }
         }
 
