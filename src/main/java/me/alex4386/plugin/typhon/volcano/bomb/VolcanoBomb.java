@@ -190,6 +190,33 @@ public class VolcanoBomb {
             if (nearestVent.getStatus() == VolcanoVentStatus.ERUPTING) {
                 nearestVent.bombs.requestBombLaunch();
             }
+
+            if (Math.random() < 0.01) {
+                if (nearestVent == this.vent) {
+                    boolean shouldGrowUp = true;
+
+                    double average = 0; 
+                    int summit = Integer.MIN_VALUE, count = 0;
+        
+                    for (Block ventBlock : this.vent.getVentBlocks()) {
+                        if (ventBlock.getType() == Material.LAVA || ventBlock.getRelative(BlockFace.UP).getType() == Material.LAVA) {
+                            shouldGrowUp = false;
+                            break;
+                        } 
+                        int y = ventBlock.getY();
+
+                        average += y;
+                        if (y > summit) summit = y;
+                        count++;
+                    }
+
+                    average /= (double) count;
+
+                    if (average + 2 > summit && summit != Integer.MIN_VALUE) {
+                        this.vent.lavaFlow.flowLavaFromBomb(this.vent.requestFlow());
+                    }
+                }
+            }
             return;
         }
 
