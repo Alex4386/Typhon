@@ -75,6 +75,10 @@ public class TyphonCommand {
                                 volcano.mainVent.setType(VolcanoVentType.FISSURE);
                             }
                         }
+                    } else if (args.length == 2) {
+                        // Fallback mode to Diwaly's volcano plugin style.
+                        volcano.mainVent.erupt.setStyle(VolcanoEruptStyle.HAWAIIAN);
+                        volcano.mainVent.setType(VolcanoVentType.CRATER);
                     }
                     
                     volcano.trySave();
