@@ -165,9 +165,11 @@ public class VolcanoBombs {
             FallingBlock block = entry.getKey();
             VolcanoBomb bomb = entry.getValue();
 
-            bomb.isLanded = true;
-            iterator.remove();
+            if (!bomb.isLanded) {
+                bomb.emergencyLand();
+            }
 
+            iterator.remove();
             block.remove();
         }
     }
@@ -218,12 +220,12 @@ public class VolcanoBombs {
                     bomb.stopTrail();
     
                     if (bomb.block != null) {
-                        bomb.block.remove();
                         bomb.block.getLocation().getBlock().setType(Material.AIR);
-                        bomb.block = null;
+                        bomb.emergencyLand();
+                    } else {
+                        bomb.land();
                     }
     
-                    bomb.land();
                     iterator.remove();
                 } else {
                     bomb.lifeTime++;

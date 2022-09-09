@@ -149,6 +149,13 @@ public class VolcanoBomb {
         }
     }
 
+    public void emergencyLand() {
+        this.isLanded = true;
+        if (this.block != null) this.block.remove();
+        this.block = null;
+        this.land();
+    }
+
     public void land() {
         Volcano volcano = this.vent.getVolcano();
 
