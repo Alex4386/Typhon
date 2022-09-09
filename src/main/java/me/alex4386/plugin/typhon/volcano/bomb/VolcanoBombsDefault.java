@@ -7,7 +7,7 @@ public class VolcanoBombsDefault {
     public static float maxBombPower = 4.0f;
 
     public static int minBombRadius = 1;
-    public static int maxBombRadius = 2;
+    public static int maxBombRadius = 3;
 
     public static int bombDelay = 20;
 

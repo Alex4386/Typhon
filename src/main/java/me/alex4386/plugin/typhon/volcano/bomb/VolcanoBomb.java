@@ -7,6 +7,7 @@ import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoLavaFlow;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 
 import org.bukkit.*;
 import org.bukkit.block.Block;
@@ -39,23 +40,6 @@ public class VolcanoBomb {
     public int lifeTime = 0;
 
     public boolean isLanded = false;
-
-    public VolcanoBomb(
-            VolcanoVent vent,
-            Location loc,
-            FallingBlock block,
-            float bombPower,
-            int bombRadius,
-            int bombDelay) {
-        this.vent = vent;
-        this.launchLocation = loc;
-        this.bombPower = bombPower;
-        this.bombRadius = bombRadius;
-        this.bombDelay = bombDelay;
-        this.block = block;
-    }
-
-
     public VolcanoBomb(
             VolcanoVent vent,
             Location loc,
@@ -161,6 +145,12 @@ public class VolcanoBomb {
 
         if (this.block != null) {
             this.landingLocation = block.getLocation();            
+        } else if (this.landingLocation == null) {
+            this.isLanded = true;
+            if (this.block != null) {
+                this.block.remove();
+            }
+            return;
         }
 
         // calculate even more fall.
@@ -197,10 +187,8 @@ public class VolcanoBomb {
 
         if (distance < nearestVent.craterRadius * 0.7) {
             this.skipMe();
-            if (this.vent.erupt.getStyle().bombMultiplier == 0) {
-                this.vent.lavaFlow.extendLava();
-            } else {
-                this.vent.lavaFlow.flowLavaFromBomb(vent.requestFlow());
+            if (nearestVent.getStatus() == VolcanoVentStatus.ERUPTING) {
+                nearestVent.bombs.requestBombLaunch();
             }
             return;
         }
