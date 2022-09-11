@@ -9,6 +9,8 @@ public class VolcanoLogger {
     Volcano volcano = null;
     boolean isDebug = false;
 
+    String typhonHeader = "[Typhon] ";
+
     public VolcanoLogger() {
     }
 
@@ -65,7 +67,7 @@ public class VolcanoLogger {
     // Use this when the logging is unnecessary but
     // developer or advanced user needs to see.
     public void debug(VolcanoLogClass logClass, String string) {
-        String headers = logClass.getStrippedHeader() + this.getStrippedHeader();
+        String headers = typhonHeader + logClass.getStrippedHeader() + this.getStrippedHeader();
 
         if (getDebug()) {
             Bukkit.getLogger().info(headers + string);
@@ -75,7 +77,7 @@ public class VolcanoLogger {
     // Use this when the logging to terminal is absolutely necessary.
     // and admin needs to know what is happening on volcano.
     public void log(VolcanoLogClass logClass, String string) {
-        String headers = logClass.getStrippedHeader() + this.getStrippedHeader();
+        String headers = typhonHeader + logClass.getStrippedHeader() + this.getStrippedHeader();
 
         Bukkit.getLogger().info(headers + string);
     }
@@ -83,7 +85,7 @@ public class VolcanoLogger {
     // Use this something is wrong with the plugin but plugin can continue.
     // admin needs to acknowledge this issue asap and fix it.
     public void warn(VolcanoLogClass logClass, String string) {
-        String headers = logClass.getStrippedHeader() + this.getStrippedHeader();
+        String headers = typhonHeader + logClass.getStrippedHeader() + this.getStrippedHeader();
 
         string.replace(ChatColor.RESET.toString(), ChatColor.YELLOW.toString());
         Bukkit.getLogger().severe(headers + string);
@@ -92,7 +94,7 @@ public class VolcanoLogger {
     // Use this something is wrong with the plugin but plugin can NOT continue.
     // admin needs to fix this issue immediately
     public void error(VolcanoLogClass logClass, String string) {
-        String headers = logClass.getStrippedHeader() + this.getStrippedHeader();
+        String headers = typhonHeader + logClass.getStrippedHeader() + this.getStrippedHeader();
 
         string.replace(ChatColor.RESET.toString(), ChatColor.RED.toString());
         Bukkit.getLogger().severe(headers + string);

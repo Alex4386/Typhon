@@ -172,7 +172,7 @@ public class VolcanoBomb {
         Location loc = block.getLocation();
 
         VolcanoVent nearestVent = this.vent.getVolcano().manager.getNearestVent(loc);
-        double distance = TyphonUtils.getTwoDimensionalDistance(nearestVent.location, loc);
+        double distance = TyphonUtils.getTwoDimensionalDistance(nearestVent.getNearestVentBlock(loc).getLocation(), loc);
 
         if (!VolcanoBombListener.groundChecker(loc, bombRadius)) {
             volcano.logger.debug(
@@ -187,31 +187,14 @@ public class VolcanoBomb {
 
         if (distance < nearestVent.craterRadius * 0.7) {
             this.skipMe();
+            double targetHeight = Math.max(0, vent.bombs.maxDistance / Math.sqrt(3));
 
             if (Math.random() < 0.01) {
-                if (nearestVent == this.vent) {
-                    boolean shouldGrowUp = true;
-
-                    double average = 0; 
-                    int summit = Integer.MIN_VALUE, count = 0;
-        
-                    for (Block ventBlock : this.vent.getVentBlocks()) {
-                        if (ventBlock.getType() == Material.LAVA || ventBlock.getRelative(BlockFace.UP).getType() == Material.LAVA) {
-                            shouldGrowUp = false;
-                            break;
-                        } 
-                        int y = ventBlock.getY();
-
-                        average += y;
-                        if (y > summit) summit = y;
-                        count++;
-                    }
-
-                    average /= (double) count;
-
-                    if (shouldGrowUp) {
-                        if (average + 2 > summit && summit != Integer.MIN_VALUE) {
-                            this.vent.lavaFlow.flowLavaFromBomb(this.vent.requestFlow());
+                if (this.vent.averageVentHeight() < targetHeight) {
+                    List<Block> toFlows = this.vent.requestFlows((int) (VolcanoMath.getZeroFocusedRandom() * 5));
+                    for (Block toFlow : toFlows) {
+                        if (toFlow.getType() != Material.LAVA && toFlow.getRelative(BlockFace.UP).getType() != Material.LAVA) {
+                            this.vent.lavaFlow.flowLavaFromBomb(toFlow);
                         }
                     }
                 }
@@ -232,7 +215,7 @@ public class VolcanoBomb {
 
         double currentBlockHeight = Math.max(0, block.getY() - nearestVent.location.getBlockY());
 
-        if (distance < coneBase && heightOfCone > 5) {
+        if (distance < coneBase) {
             double fromEndOfCone = coneBase - distance;
 
             double adequateHeight = fromEndOfCone / Math.sqrt(3);
@@ -347,16 +330,30 @@ public class VolcanoBomb {
                             + this.getLifetimeSeconds()
                             + "s)");
 
-            VolcanoBombListener.lavaSplashExplosions.put(
-                    bombCenter.getLocation().getBlock(), this.vent);
+            if (this.vent != null) {
+                boolean shouldExplode = true;
 
-            landingLocation
-                    .getWorld()
-                    .createExplosion(
-                            bombCenter.getLocation(),
-                            bombPower,
-                            true,
-                            !volcano.manager.isInAnyVent(landingLocation));
+                if (this.vent.erupt.getStyle().lavaMultiplier == 0) {
+                    int height = Math.max(0, this.vent.getSummitBlock().getY() - this.vent.location.getBlockY());
+                    if (this.vent.getTwoDimensionalDistance(bombCenter.getLocation()) <= (height * Math.sqrt(3))) {
+                        shouldExplode = false;
+                    }
+                }
+
+                if (shouldExplode) {
+                    VolcanoBombListener.lavaSplashExplosions.put(
+                        bombCenter.getLocation().getBlock(), this.vent);
+    
+                    landingLocation
+                            .getWorld()
+                            .createExplosion(
+                                    bombCenter.getLocation(),
+                                    bombPower,
+                                    true,
+                                    !volcano.manager.isInAnyVent(landingLocation));
+                }
+            }
+            
 
             if (bombRadius > 4) {
                 List<Block> circle = VolcanoMath.getCircle(bombCenter, bombRadius * 2, bombRadius + 1);

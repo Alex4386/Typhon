@@ -102,12 +102,18 @@ public class VolcanoLavaCoolData {
         return (int) Math.floor(value) + extra;
     }
 
+    public boolean shouldCooldown() {
+        return this.tickPassed() && !this.isProcessed;
+    }
+
+    public boolean shouldTickPass() {
+        return !this.shouldCooldown() && !this.isProcessed;
+    }
+
     public void tickPass() {
-        if (this.isProcessed) {
-            return;
-        } else if (this.tickPassed()) {
+        if (this.shouldCooldown()) {
             this.coolDown();
-        } else {
+        } else if (!this.isProcessed) {
             this.ticks--;
         }
     }

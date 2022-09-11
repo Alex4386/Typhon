@@ -237,6 +237,34 @@ public class TyphonUtils {
         }
     }
 
+    public static long getBlockUpdatesPerSecond() {
+        World world = Bukkit.getWorlds().get(0);
+        Location spawnLoc = world.getSpawnLocation();
+        Location baseLocation = new Location(world, spawnLoc.getX(), world.getMinHeight(), spawnLoc.getZ());
+
+        Block baseBlock = baseLocation.getBlock();
+        Material baseBlockMaterial = baseBlock.getType();
+
+        long blockUpdateStartTime = System.nanoTime();
+        baseLocation.getBlock().setType(Material.LAVA);
+
+        long blockUpdateEndTime = System.nanoTime();
+        long elapsedNanoSecondPerBlockUpdate = blockUpdateEndTime - blockUpdateStartTime;
+
+        baseBlock.setType(baseBlockMaterial);
+
+        long blockUpdatesPerMilliSecond = 1000000 / elapsedNanoSecondPerBlockUpdate;
+        long blockUpdatesPerSecond = blockUpdatesPerMilliSecond * 1000;
+
+        TyphonPlugin.logger.debug(
+                VolcanoLogClass.CONSTRUCTION,
+                "block update took:" + elapsedNanoSecondPerBlockUpdate + "ns.");
+        TyphonPlugin.logger.debug(
+                VolcanoLogClass.CONSTRUCTION, blockUpdatesPerSecond + " block updates per second");
+
+        return blockUpdatesPerSecond;
+    }
+
     public static boolean isMaterialTree(org.bukkit.Material material) {
         String materialType = material.name().toLowerCase();
         return (materialType.contains("leaves")

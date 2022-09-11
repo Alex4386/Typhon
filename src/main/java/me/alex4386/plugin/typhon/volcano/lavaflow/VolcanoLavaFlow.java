@@ -25,10 +25,15 @@ import org.bukkit.plugin.PluginManager;
 import org.json.simple.JSONObject;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 public class VolcanoLavaFlow implements Listener {
     public VolcanoVent vent = null;
+
+    public static List<VolcanoVent> flowingVents = new ArrayList<>();
+
+    private static long maxBlockUpdates = TyphonUtils.getBlockUpdatesPerSecond();
 
     public List<Chunk> lavaFlowChunks = new ArrayList<>();
     public Map<Block, VolcanoLavaCoolData> lavaCoolHashMap = new HashMap<>();
@@ -51,6 +56,10 @@ public class VolcanoLavaFlow implements Listener {
     public VolcanoLavaFlow(VolcanoVent vent) {
         this.vent = vent;
         this.registerEvent();
+    }
+
+    public static long getBlockUpdateLimitPerVents() {
+        return maxBlockUpdates / flowingVents.size();
     }
 
     public Volcano getVolcano() {
@@ -764,7 +773,6 @@ public class VolcanoLavaFlow implements Listener {
             
             if (underData != null) {
                 if (!underData.tickPassed()) {
-                    underData.coolDown();
                     this.extendLava();
                     continue;
                 }
@@ -1008,6 +1016,14 @@ public class VolcanoLavaFlow implements Listener {
         }
     }
 
+    public long getNormalLavaProcessLimit() {
+        return getBlockUpdateLimitPerVents() - getPillowLavaProcessLimit();
+    }
+
+    public long getPillowLavaProcessLimit() {
+        return getBlockUpdateLimitPerVents() * (1 / 3);
+    }
+
     private void autoFlowLava() {
         long timeNow = System.currentTimeMillis();
         if (timeNow >= nextFlowTime) {
@@ -1028,9 +1044,23 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     private void runCooldownTick() {
+        if (lavaCoolHashMap.isEmpty()) {
+            if (flowingVents.contains(this.vent)) {
+                flowingVents.remove(this.vent);
+            }
+            return;
+        }
+
+        if (!flowingVents.contains(this.vent)) {
+            flowingVents.add(this.vent);
+        }
+
         Iterator<Map.Entry<Block, VolcanoLavaCoolData>> iterator =
                 lavaCoolHashMap.entrySet().iterator();
         List<Block> removeTargets = new ArrayList<Block>();
+
+        long cooledDowns = 0;
+        long limits = this.getNormalLavaProcessLimit();
 
         try {
             while (iterator.hasNext()) {
@@ -1038,35 +1068,19 @@ public class VolcanoLavaFlow implements Listener {
                 VolcanoLavaCoolData coolData = entry.getValue();
 
                 if (coolData.tickPassed()) {
-                    if (lavaCoolHashMap.keySet().contains(coolData.block)) {
-                        removeTargets.add(entry.getKey());
-                    }
+                    if (entry.getKey().getType() == Material.LAVA) {
+                        if (cooledDowns < limits) {
+                            cooledDowns++;
+                            coolData.coolDown();
+                        }
 
-                    if (!coolData.isBomb) {
-                        Random random = new Random();
-                        if (random.nextDouble() < 0.2f) {
-                            int i = random.nextInt(5) + 1;
-
-                            int x = i % 2 == 0 && i < 5 ? 1 : -1;
-                            int z = i / 2 > 0 ? 1 : -1;
-
-                            int y = i == 5 ? -1 : 0;
-
-                            Block block = coolData.block.getRelative(x, y, z);
-                            block.setType(coolData.material);
-
-                            if (block.getType().isAir()) {
-                                this.registerLavaCoolData(
-                                        coolData.source,
-                                        coolData.fromBlock,
-                                        block,
-                                        coolData.isBomb);
-                            }
+                        if (lavaCoolHashMap.keySet().contains(coolData.block)) {
+                            removeTargets.add(entry.getKey());
                         }
                     }
+                } else {
+                    coolData.ticks--;
                 }
-
-                coolData.tickPass();
             }
         } catch (ConcurrentModificationException e) {
             e.printStackTrace();

@@ -7,9 +7,10 @@ public enum VolcanoLogClass {
     CORE("Core"),
     ASH("Ash"),
     AUTOSTART("Autostart"),
+    BENCHMARK("Benchmark"),
     BOMB("Bomb"),
     BOMB_LAUNCHER("Bomb Launcher"),
-    BLUE_MAP("Blue Map"),
+    BLUE_MAP("BlueMap"),
     COMMAND("Command"),
     COMPOSITION("Composition"),
     CONSTRUCTION("Construction"),
@@ -37,10 +38,10 @@ public enum VolcanoLogClass {
     }
 
     public String getHeader() {
-        return ChatColor.RED + "[" + this.string + "]" + ChatColor.RESET + " ";
+        return ChatColor.RED + "[" + this.string + "]" + " ";
     }
 
     public String getStrippedHeader() {
-        return "[" + this.string + "]" + ChatColor.RESET + " ";
+        return "[" + this.string + "]" + " ";
     }
 }
