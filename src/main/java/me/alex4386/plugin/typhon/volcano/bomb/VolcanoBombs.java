@@ -61,6 +61,16 @@ public class VolcanoBombs {
     }
 
     public VolcanoBomb generateBomb(Location hostLocation) {
+        if (Math.random() < 0.8) {
+            VolcanoBomb bomb = this.generateConeBuildingBomb();
+            if (bomb == null) return this.generateRandomBomb(hostLocation);
+            return bomb;
+        } else {
+            return this.generateRandomBomb(hostLocation);
+        }
+    }
+
+    public VolcanoBomb generateRandomBomb(Location hostLocation) {
         double multiplier = this.vent.erupt.getStyle().bombMultiplier;
         if (multiplier < 0)
             return null;
@@ -96,22 +106,48 @@ public class VolcanoBombs {
     }
 
 
-    public VolcanoBomb generateBombToDestination(Location destination) {
+    public VolcanoBomb generateBombToDestination(Location destination, int bombRadius) {
         Location hostLocation = this.getLaunchLocation();
 
+
+        float bombPower = (float) VolcanoMath.getZeroFocusedRandom() * (maxBombPower - minBombPower)
+                + minBombPower;
+
+        return this.generateBombToDestination(hostLocation, destination, bombPower, bombRadius, this.bombDelay);
+    }
+
+    public VolcanoBomb generateBombToDestination(Location destination) {
         Random random = new Random();
 
         double volcanoHeight = vent.averageVentHeight() - vent.location.getY();
         double volcanoMax = Math.min(vent.location.getWorld().getMaxHeight() - vent.location.getY(), 150.0);
-        float volcanoScaleVar = Math.min(1, (float) (volcanoHeight / volcanoMax));
 
-        float bombPower = (float) VolcanoMath.getZeroFocusedRandom() * (maxBombPower - minBombPower)
-                + minBombPower;
+        float volcanoScaleVar = Math.min(1, (float) (volcanoHeight / volcanoMax));
         int bombRadius = (int) ((Math.floor(random.nextDouble() * (maxBombRadius - minBombRadius))
                 * volcanoScaleVar)
                 + minBombRadius);
 
-        return this.generateBombToDestination(hostLocation, destination, bombPower, bombRadius, this.bombDelay);
+        return this.generateBombToDestination(destination, bombRadius);
+    }
+
+    public VolcanoBomb generateConeBuildingBomb() {
+        double distance = (int) Math.random() * (this.vent.longestNormalLavaFlowLength + (Math.random() * 75));
+        double adequateHeight = this.vent.getSummitBlock().getY() - (distance / Math.sqrt(3));
+
+        double distanceFromCore = this.vent.getRadius() + distance;
+
+        Block randomBlock = TyphonUtils.getHighestRocklikes(TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), (int) distanceFromCore, (int) distanceFromCore));
+        double diff = adequateHeight - randomBlock.getY();
+
+        if (diff > 0) {
+            int radius = 0;
+            if (diff < 3) radius = 0;
+            radius = (int) Math.min(6, (diff - 1) / 2);
+
+            this.generateBombToDestination(randomBlock.getLocation(), radius);
+        }
+
+        return null;
     }
 
     public VolcanoBomb generateBombToDestination(

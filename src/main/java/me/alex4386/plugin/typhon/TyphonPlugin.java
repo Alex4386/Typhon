@@ -111,18 +111,23 @@ public final class TyphonPlugin extends JavaPlugin {
 
         if (enableBlueMap) {
             logger.log(VolcanoLogClass.INIT, "Initializing Bluemap Integration if available!");
-        
-            BlueMapAPI.onEnable(blueMapAPI -> {
-                this.blueMap = blueMapAPI;
-    
-                TyphonBlueMapUtils.loadImages(blueMapAPI);
-    
-                for (Map.Entry<String, Volcano> volcanoEntry : listVolcanoes.entrySet()) {
-                    Volcano volcano = volcanoEntry.getValue();
-    
-                    TyphonBlueMapUtils.addVolcanoOnMap(volcano);
-                }
-            });
+
+            try {
+                BlueMapAPI.onEnable(blueMapAPI -> {
+                    this.blueMap = blueMapAPI;
+
+                    TyphonBlueMapUtils.loadImages(blueMapAPI);
+
+                    for (Map.Entry<String, Volcano> volcanoEntry : listVolcanoes.entrySet()) {
+                        Volcano volcano = volcanoEntry.getValue();
+
+                        TyphonBlueMapUtils.addVolcanoOnMap(volcano);
+                    }
+                });
+            } catch(NoClassDefFoundError e) {
+                logger.warn(VolcanoLogClass.INIT, "Bluemap Integration failed due to missing API Class");
+            }
+
         }
 
         logger.log(VolcanoLogClass.PLAYER_EVENT, "Initializing...");

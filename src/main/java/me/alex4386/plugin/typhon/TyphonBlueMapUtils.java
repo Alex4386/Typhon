@@ -23,7 +23,6 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 
 public class TyphonBlueMapUtils {
   public static String eruptingImgUrl = null, dormantImgUrl = null;
-  public static Vector2i iconSize = new Vector2i(18, 18);
 
   public static BlueMapAPI getBlueMapAPI() {
     return TyphonPlugin.blueMap;
@@ -34,10 +33,12 @@ public class TyphonBlueMapUtils {
   }
 
   public static void loadImages() {
+    if (!getBlueMapAvailable()) return;
     loadImages(getBlueMapAPI());
   }
 
   public static void loadImages(BlueMapAPI api) {
+    if (!getBlueMapAvailable()) return;
     TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Loading Images for BlueMap Integration...");
     try {
       InputStream eruptingImg = TyphonPlugin.plugin.getResource("volcano_erupting.png");
@@ -77,6 +78,7 @@ public class TyphonBlueMapUtils {
   }
 
   public static void addVolcanoOnMap(Volcano volcano) {
+    if (!TyphonBlueMapUtils.getBlueMapAvailable()) return;
     runOnMap(volcano, map -> {
       TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Adding volcano "+volcano.name+" on map.");
       MarkerSet volcanoSet = getVolcanoMarkers(volcano);
@@ -93,6 +95,7 @@ public class TyphonBlueMapUtils {
   }
 
   public static MarkerSet getVolcanoMarkers(Volcano volcano) {
+    if (!TyphonBlueMapUtils.getBlueMapAvailable()) return null;
     final MarkerSet volcanoMarkerSet = MarkerSet.builder().label(volcano.name+" volcano").build();
 
     for (VolcanoVent vent: volcano.manager.getVents()) {
@@ -116,11 +119,12 @@ public class TyphonBlueMapUtils {
   }
 
   public static POIMarker getVolcanoVentMarker(VolcanoVent vent) {
+    if (!TyphonBlueMapUtils.getBlueMapAvailable()) return null;
     Vector3d v3d = Vector3d.from(vent.location.getX(), vent.getSummitBlock().getY(), vent.location.getZ());
 
     POIMarker ventMarker = POIMarker.toBuilder()
       .label(vent.isMainVent() ? vent.volcano.name+" Volcano" : vent.name+" ("+vent.volcano.name+")")
-      .icon(getIconURLByStatus(vent), iconSize)
+      .icon(getIconURLByStatus(vent), TyphonBlueMapUtils.getIconSize())
       .position(v3d)
       .build();
 
@@ -134,6 +138,7 @@ public class TyphonBlueMapUtils {
   }
 
   public static void addVolcanoVentToMarkerSet(MarkerSet set, VolcanoVent vent) {
+    if (!TyphonBlueMapUtils.getBlueMapAvailable()) return;
     TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Adding vent "+vent.getName()+" of "+vent.volcano.name+" on map.");
     String markerId = getVolcanoVentMarkerID(vent);
 
@@ -154,13 +159,18 @@ public class TyphonBlueMapUtils {
     });
   }
 
+  public static Vector2i getIconSize() {
+    return new Vector2i(18, 18);
+  }
+
   public static void updateVolcanoVentIcon(VolcanoVent vent) {
     runOnVolcanoVentMarker(vent, marker -> {
-      marker.setIcon(getIconURLByStatus(vent), iconSize);
+      marker.setIcon(getIconURLByStatus(vent), TyphonBlueMapUtils.getIconSize());
     });
   }
 
   public static void runOnMap(World bukkitWorld, Consumer<? super BlueMapMap> run) {
+    if (!getBlueMapAvailable()) return;
     getBlueMapAPI().getWorld(bukkitWorld.getUID()).ifPresent(world -> world.getMaps().forEach(run));
   }
 

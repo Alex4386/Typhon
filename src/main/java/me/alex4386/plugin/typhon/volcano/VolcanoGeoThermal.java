@@ -7,11 +7,13 @@ import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Zombie;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFormEvent;
@@ -131,13 +133,23 @@ public class VolcanoGeoThermal implements Listener {
     }
   }
 
-  public void runCraterGeoThermalCycle(VolcanoVent vent) {
-    double circumference = vent.craterRadius * Math.PI * 2;
-    double thermalScale = (vent.getStatus().getScaleFactor());
+  public double getCraterCycleCount(VolcanoVent vent) {
+    double circumference;
+    if (vent.getType() == VolcanoVentType.CRATER) {
+      circumference = vent.craterRadius * Math.PI * 2;
+    } else {
+      circumference = vent.fissureLength;
+    }
 
     double cyclesPerTick = (double) 20.0 / geoThermalUpdateRate;
+    double maxCount = Math.min(Math.max(1, circumference / 50), 100 / cyclesPerTick);
+    return maxCount;
+  }
 
-    double maxCount = Math.min(Math.max(1, circumference / 20), 200 / cyclesPerTick);
+  public void runCraterGeoThermalCycle(VolcanoVent vent) {
+    double thermalScale = Math.pow(vent.getStatus().getScaleFactor(), 1.5);
+    double maxCount = this.getCraterCycleCount(vent);
+
     double cycleCount = thermalScale * maxCount * Math.random();
 
     for (int i = 0; i < cycleCount; i++) {
@@ -146,25 +158,30 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runVolcanoGeoThermalCycle(VolcanoVent vent) {
-    double circumference = vent.longestNormalLavaFlowLength * Math.PI * 2;
-    double thermalScale = (vent.getStatus().getScaleFactor());
+    double volcanoRange = (Math.PI * Math.pow(vent.longestNormalLavaFlowLength, 2));
 
-    double cyclesPerTick = (double) 20.0 / geoThermalUpdateRate;
+    double radius = 10;
+    if (vent.getType() == VolcanoVentType.CRATER) {
+      radius = vent.craterRadius;
+    }
 
-    double maxCount = Math.min(Math.max(0, circumference / 20), 200 / cyclesPerTick);
+    volcanoRange -= (Math.PI * Math.pow(vent.craterRadius, 2));
+    double craterRange = (Math.PI * Math.pow(radius, 2));
+    double volcanoMultiplier = Math.max(Math.min(100, volcanoRange / craterRange), 1);
+
+    double maxCount = this.getCraterCycleCount(vent) * volcanoMultiplier;
+    double thermalScale = Math.pow(vent.getStatus().getScaleFactor(), 1.5);
     double cycleCount = thermalScale * maxCount * Math.random();
 
-    double multiplier = Math.max(Math.min(1, (vent.longestNormalLavaFlowLength - vent.craterRadius) / (vent.craterRadius * 4)), 0);
-    cycleCount = (int) (cycleCount * multiplier);
+    cycleCount = (int) cycleCount;
 
     if (vent.lavaFlow.hasAnyLavaFlowing()) {
-      int lavaFlowCount = (int) (cycleCount * 9 / 10);
+      int lavaFlowCount = (int) (cycleCount / 2);
       List<Block> targets = vent.lavaFlow.getRandomLavaBlocks(lavaFlowCount);
       for (Block target: targets) {
         Block actualTarget = TyphonUtils.getRandomBlockInRange(target, 1, Math.max(2, (int) (2 + (4 * vent.getHeatValue(target.getLocation())))));
-        this.runVolcanoGeoThermal(vent, actualTarget);
+        this.runVolcanoGeoThermal(vent, actualTarget, false);
       }
-      cycleCount -= lavaFlowCount;
     }
 
     for (int i = 0; i < cycleCount; i++) {
@@ -203,34 +220,30 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public Block getVolcanoGeoThermalBlock(VolcanoVent vent) {
+    int radius = 0;
+    if (vent.getType() == VolcanoVentType.CRATER) {
+      radius = vent.craterRadius;
+    }
+
     Block block;
 
-    if (Math.random() < 0.75) {
-      block = 
-            TyphonUtils
-                .getRandomBlockInRange(
-                    vent.getCoreBlock(),
-                    0,
-                    (int) Math
-                        .floor(
-                          vent.longestNormalLavaFlowLength));
-    } else {
-      block = 
+    block =
           TyphonUtils
               .getRandomBlockInRange(
                   vent.getCoreBlock(),
+                  radius,
                   (int) Math
                       .floor(
-                          vent.longestNormalLavaFlowLength),
-                  (int) Math
-                      .floor(
-                        vent.longestFlowLength));
-    }
+                        vent.longestNormalLavaFlowLength));
 
     return block;
   }
 
   public void runVolcanoGeoThermal(VolcanoVent vent, Block block) {
+    this.runVolcanoGeoThermal(vent, block, true);
+  }
+
+  public void runVolcanoGeoThermal(VolcanoVent vent, Block block, boolean allowSteam) {
     Block targetBlock = TyphonUtils.getHighestRocklikes(block);
     Location targetLoc = targetBlock.getLocation().add(0,1,0);
 
@@ -249,10 +262,10 @@ public class VolcanoGeoThermal implements Listener {
     }
 
     if (Math.random() < heatValue) {
-      if (letOffSteam) {
+      if (letOffSteam && allowSteam) {
         double burnRange = 3 * scaleFactor * heatValue;
 
-        TyphonUtils.createRisingSteam(targetLoc, 0, 1);
+        TyphonUtils.createRisingSteam(targetLoc, 1, 3);
         if (burnRange > 0) {
           this.burnNearbyEntities(targetLoc, 3);
         }
@@ -425,8 +438,7 @@ public class VolcanoGeoThermal implements Listener {
                     this.runGeoThermalCycle(vent);
                   }
                 }
-              },
-              0,
+              }, 0,
               Math.min(
                   (long) ((geoThermalUpdateRate / 20.0)
                       * volcano.updateRate),

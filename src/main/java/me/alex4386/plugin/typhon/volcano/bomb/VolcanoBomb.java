@@ -59,11 +59,12 @@ public class VolcanoBomb {
     public void launch() {
         int maxY = vent.getSummitBlock().getY();
         int yToLaunch = maxY - this.launchLocation.getWorld().getHighestBlockYAt(launchLocation);
+        if (yToLaunch < 0) yToLaunch = 0;
 
         Vector launchVector = TyphonUtils.calculateVelocity(
                 new Vector(0, 0, 0),
                 targetLocation.toVector().subtract(launchLocation.toVector()),
-                yToLaunch + 6);
+                yToLaunch + 3 + (int) (Math.random() * 9));
 
         this.block = this.launchLocation.getWorld()
                 .spawnFallingBlock(
@@ -172,7 +173,7 @@ public class VolcanoBomb {
         Location loc = block.getLocation();
 
         VolcanoVent nearestVent = this.vent.getVolcano().manager.getNearestVent(loc);
-        double distance = TyphonUtils.getTwoDimensionalDistance(nearestVent.getNearestVentBlock(loc).getLocation(), loc);
+        double distance = TyphonUtils.getTwoDimensionalDistance(nearestVent.getNearestCoreBlock(loc).getLocation(), loc);
 
         if (!VolcanoBombListener.groundChecker(loc, bombRadius)) {
             volcano.logger.debug(
@@ -186,18 +187,12 @@ public class VolcanoBomb {
         }
 
         if (distance < nearestVent.craterRadius * 0.7) {
-            this.skipMe();
-            double targetHeight = Math.max(0, vent.bombs.maxDistance / Math.sqrt(3));
+            VolcanoBomb bomb = this.vent.bombs.generateBomb();
+            bomb.land();
 
-            if (Math.random() < 0.01) {
-                if (this.vent.averageVentHeight() < targetHeight) {
-                    List<Block> toFlows = this.vent.requestFlows((int) (VolcanoMath.getZeroFocusedRandom() * 5));
-                    for (Block toFlow : toFlows) {
-                        if (toFlow.getType() != Material.LAVA && toFlow.getRelative(BlockFace.UP).getType() != Material.LAVA) {
-                            this.vent.lavaFlow.flowLavaFromBomb(toFlow);
-                        }
-                    }
-                }
+            Block craterInsideBlock = TyphonUtils.getHighestRocklikes(TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), 0, (int) (this.vent.craterRadius * 1.2))).getRelative(BlockFace.UP);
+            if (craterInsideBlock.getY() < this.vent.averageVentHeight() - (this.vent.craterRadius * 0.8)) {
+                this.vent.lavaFlow.flowLavaFromBomb(craterInsideBlock);
             }
             return;
         }
@@ -209,6 +204,9 @@ public class VolcanoBomb {
                 vent.bombs.maxDistance = vent.getTwoDimensionalDistance(targetLocation);
             }
         }
+
+        /*
+        // TODO: Shit code, fix later.
 
         double heightOfCone = Math.max(0, nearestVent.getSummitBlock().getY() - nearestVent.location.getBlockY());
         double coneBase = Math.max(0, heightOfCone * Math.sqrt(3));
@@ -249,6 +247,7 @@ public class VolcanoBomb {
                 }
             }
         }
+         */
 
         final Block finalBlock = block;
         Bukkit.getScheduler()

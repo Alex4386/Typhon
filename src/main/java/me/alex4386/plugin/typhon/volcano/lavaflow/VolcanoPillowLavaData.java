@@ -22,7 +22,8 @@ public class VolcanoPillowLavaData {
                 vent,
                 sourceBlock,
                 fromBlock,
-                VolcanoLavaCoolData.calculateExtensionCount(vent.lavaFlow.settings.silicateLevel));
+                (int) (VolcanoLavaCoolData.calculateExtensionCount(vent.lavaFlow.settings.silicateLevel) / (8 + (Math.random() * 2)))
+            );
     }
 
     VolcanoPillowLavaData(VolcanoVent vent, Block source, Block fromBlock2, int extensionCount) {

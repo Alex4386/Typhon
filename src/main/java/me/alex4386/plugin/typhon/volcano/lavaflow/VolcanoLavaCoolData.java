@@ -129,6 +129,7 @@ public class VolcanoLavaCoolData {
         return true;
     }
 
+
     public void coolDown() {
         BlockData bd = block.getBlockData();
         Location flowVector = block.getLocation().subtract(fromBlock.getLocation());
@@ -140,6 +141,13 @@ public class VolcanoLavaCoolData {
         }
 
         if (this.runExtensionCount > 0 && this.extensionCapable()) {
+            int targetExtensionValue = this.runExtensionCount - 1;
+            if (this.flowedFromVent != null) {
+                if (!this.flowedFromVent.isFlowingLava()) {
+                    targetExtensionValue -= (int) (Math.random() * 2);
+                }
+            }
+
             if (bd instanceof Levelled && this.flowedFromVent != null) {
                 if (fromBlock != null
                         && flowVector.getBlockY() == 0
@@ -164,7 +172,7 @@ public class VolcanoLavaCoolData {
                                     block,
                                     flowDirectionBlock,
                                     isBomb,
-                                    this.runExtensionCount - 1
+                                    targetExtensionValue
                                 );
                             }
                         }
@@ -185,7 +193,7 @@ public class VolcanoLavaCoolData {
                                 block,
                                 flowDirectionBlock,
                                 isBomb,
-                                this.runExtensionCount - 1
+                                targetExtensionValue
                             );
                          }
 
@@ -201,12 +209,6 @@ public class VolcanoLavaCoolData {
                     }
                 } else {
 
-                }
-            }
-        } else if (this.runExtensionCount == 0) {
-            if (6 <= level && level < 8) {
-                if (this.flowedFromVent != null && !this.isBomb) {
-                    this.flowedFromVent.lavaFlow.handleLavaTerminal(this.source, block);
                 }
             }
         }

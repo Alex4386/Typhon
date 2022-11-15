@@ -4,7 +4,7 @@ public enum VolcanoVentStatus {
     EXTINCT("EXTINCT", 0.0),
     DORMANT("DORMANT", 0.04),
     MINOR_ACTIVITY("MINOR_ACTIVITY", 0.1),
-    MAJOR_ACTIVITY("MAJOR_ACTIVITY", 0.8),
+    MAJOR_ACTIVITY("MAJOR_ACTIVITY", 0.4),
     ERUPTING("ERUPTING", 1);
 
     String string;

@@ -437,6 +437,7 @@ public class TyphonUtils {
             case KELP_PLANT:
             case SEAGRASS:
             case TALL_SEAGRASS:
+            case BUBBLE_COLUMN:
                 return true;
 
             default:
@@ -465,8 +466,13 @@ public class TyphonUtils {
         double baseZ = loc.getZ();
 
         if (radius == 0) {
+            Location tmpLoc = loc;
+            Vector vector = new Vector(offsetX, offsetY, offsetZ);
+            Vector normalized = vector.normalize().multiply(-0.25);
+
             for (int i = 0; i < count; i++) {
-                world.spawnParticle(particle, loc, 0, offsetX, offsetY, offsetZ);
+                world.spawnParticle(particle, tmpLoc, 0, offsetX, offsetY, offsetZ);
+                tmpLoc.add(normalized.getX(), normalized.getY(), normalized.getZ());
             }
             return;
         }
@@ -524,18 +530,20 @@ public class TyphonUtils {
             }
         }
 
+        Location cloudSpawnTarget = TyphonUtils.getHighestRocklikes(location).getLocation().add(0,0.5,0);
+
         TyphonUtils.spawnParticleWithVelocity(
                 type,
-                TyphonUtils.getHighestRocklikes(location).getLocation(),
-                radius,
-                (int) (count * (4 / 3) * Math.pow(radius, 3)),
+                cloudSpawnTarget,
+                0,
+                10,
                 0,
                 0.4,
                 0);
 
         if (!mute) {
-            location.getWorld().playSound(location, Sound.BLOCK_LAVA_POP, .1f * count, 0);
-            location.getWorld().playSound(location, Sound.BLOCK_LAVA_EXTINGUISH, .05f * count, 0);
+            location.getWorld().playSound(location, Sound.BLOCK_LAVA_POP, .15f * count, 0);
+            location.getWorld().playSound(location, Sound.BLOCK_LAVA_EXTINGUISH, .2f * count, 0);
         }
     }
 
@@ -574,6 +582,9 @@ public class TyphonUtils {
         int gain = heightGain;
 
         double maxGain = gain > (endGain + gain) ? gain : (endGain + gain);
+        if (maxGain < 0) {
+            maxGain = 0;
+        }
 
         // Solve quadratic equation for velocity
         double a = -horizDist * horizDist / (4 * maxGain);
@@ -592,8 +603,14 @@ public class TyphonUtils {
         int dx = to.getBlockX() - from.getBlockX();
         int dz = to.getBlockZ() - from.getBlockZ();
         double mag = Math.sqrt(dx * dx + dz * dz);
+
         double dirx = dx / mag;
         double dirz = dz / mag;
+
+        if (mag == 0) {
+            dirx = 0;
+            dirz = 0;
+        }
 
         // Horizontal velocity components
         double vx = vh * dirx;
