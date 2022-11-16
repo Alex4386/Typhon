@@ -61,9 +61,9 @@ public class VolcanoBombs {
     }
 
     public VolcanoBomb generateBomb(Location hostLocation) {
-        if (Math.random() < 0.8) {
+        if (Math.random() < 0.95) {
             VolcanoBomb bomb = this.generateConeBuildingBomb();
-            if (bomb == null) return this.generateRandomBomb(hostLocation);
+            if (bomb == null) bomb = this.generateRandomBomb(hostLocation);
             return bomb;
         } else {
             return this.generateRandomBomb(hostLocation);
@@ -84,7 +84,7 @@ public class VolcanoBombs {
         double hawaiianFlow = vent.longestNormalLavaFlowLength / 2;
 
         // 30 degrees
-        double adequateCinderConeBaseWidth = (vent.getSummitBlock().getY() - vent.location.getY()) * Math.sqrt(3);
+        double adequateCinderConeBaseWidth = (vent.getSummitBlock().getY() - vent.location.getY()) * this.distanceHeightRatio();
         double calculatedConeBaseWidth = Math.max(absoluteMinimumForMax, adequateCinderConeBaseWidth);
 
         maxRadius = Math.min(300, Math.max(hawaiianFlow, calculatedConeBaseWidth)) * multiplier;
@@ -130,21 +130,40 @@ public class VolcanoBombs {
         return this.generateBombToDestination(destination, bombRadius);
     }
 
-    public VolcanoBomb generateConeBuildingBomb() {
-        double distance = (int) Math.random() * (this.vent.longestNormalLavaFlowLength + (Math.random() * 75));
-        double adequateHeight = this.vent.getSummitBlock().getY() - (distance / Math.sqrt(3));
+    public double distanceHeightRatio() {
+        double silicateLevel = this.vent.lavaFlow.settings.silicateLevel;
+        double ratio = Math.min(Math.max(0, (silicateLevel - 0.45) / (0.7 - 0.45)), 1);
+        return ((Math.sqrt(3) - 1) * (1 - ratio)) + 1;
+    }
 
+    public VolcanoBomb generateConeBuildingBomb() {
+        double height = Math.min(
+                this.vent.longestNormalLavaFlowLength / this.distanceHeightRatio(),
+                Math.max(
+                        this.vent.getSummitBlock().getY() - this.vent.location.getBlockY(),
+                        this.vent.getSummitBlock().getY() - TyphonUtils.getHighestRocklikes(this.vent.location).getY()
+                ));
+
+        if (height <= 2) height = 2;
+
+        double distance = Math.pow(Math.random(), 2) * height * this.distanceHeightRatio();
+        double adequateHeight = this.vent.getSummitBlock().getY() - (distance / this.distanceHeightRatio());
         double distanceFromCore = this.vent.getRadius() + distance;
 
         Block randomBlock = TyphonUtils.getHighestRocklikes(TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), (int) distanceFromCore, (int) distanceFromCore));
         double diff = adequateHeight - randomBlock.getY();
 
         if (diff > 0) {
-            int radius = 0;
-            if (diff < 3) radius = 0;
-            radius = (int) Math.min(6, (diff - 1) / 2);
+            int maxRadius = 1;
+            if (distanceFromCore < this.vent.craterRadius * 2) maxRadius = 1;
+            else maxRadius = (int) Math.min(4, (distanceFromCore / this.vent.craterRadius));
 
-            this.generateBombToDestination(randomBlock.getLocation(), radius);
+            int radius = 0;
+            if (diff < 1) radius = 0;
+            else if (diff <= 3) radius = 1;
+            else radius = (int) Math.min(maxRadius, (diff - 1) / 2);
+
+            return this.generateBombToDestination(randomBlock.getLocation(), radius);
         }
 
         return null;

@@ -4,6 +4,7 @@ import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.ash.VolcanoAsh;
+import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBomb;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombs;
 import me.alex4386.plugin.typhon.volcano.dome.VolcanoLavaDome;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoErupt;
@@ -83,6 +84,52 @@ public class VolcanoVent {
 
     public VolcanoVentStatus getStatus() {
         return this.status;
+    }
+
+    public Block getLowestCoreBlock() {
+        List<Block> coreBlocks = this.getCoreBlocks();
+        Block lowestCoreBlock = coreBlocks.get(0);
+
+        for (Block coreBlock : coreBlocks) {
+            if (coreBlock.getY() < lowestCoreBlock.getY()) {
+                lowestCoreBlock = coreBlock;
+            }
+        }
+
+        return lowestCoreBlock;
+    }
+
+    int surtseyanRange = 5;
+
+    public boolean isBlockInSurtseyanRange(Block block) {
+        if (block.getY() <= block.getWorld().getSeaLevel() && block.getY() >= block.getWorld().getSeaLevel() - surtseyanRange) {
+            if (TyphonUtils.containsLiquidWater(block.getRelative(BlockFace.UP))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public boolean isCraterFilledWithSeaWater() {
+        Block summitBlock = this.getSummitBlock();
+        Block lowestCoreOceanFloor = TyphonUtils.getHighestOceanFloor(this.getLowestCoreBlock().getLocation()).getBlock();
+
+        boolean summitIsIsland = summitBlock.getY() >= summitBlock.getWorld().getSeaLevel();
+        boolean craterUnderWater = lowestCoreOceanFloor.getY() <= summitBlock.getWorld().getSeaLevel();
+
+        boolean hasSeaWaterAbove = TyphonUtils.containsLiquidWater(lowestCoreOceanFloor.getRelative(BlockFace.UP));
+        return summitIsIsland && craterUnderWater && hasSeaWaterAbove;
+    }
+
+    public boolean isSurtseyan() {
+        Block summitBlock = this.getSummitBlock();
+
+        if (this.isBlockInSurtseyanRange(summitBlock) || this.isCraterFilledWithSeaWater()) {
+            return true;
+        }
+
+        return false;
     }
 
     public void setStatus(VolcanoVentStatus status) {
@@ -303,6 +350,15 @@ public class VolcanoVent {
             }
         }
         return false;
+    }
+
+    public void eruptSurtseyan(int count) {
+        for (int i = 0; i < count; i++) {
+            VolcanoBomb bomb = this.bombs.generateConeBuildingBomb();
+            if (bomb == null) bomb = this.bombs.generateRandomBomb(this.bombs.getLaunchLocation());
+
+            this.bombs.launchSpecifiedBomb(bomb);
+        }
     }
 
     public double getHeatValue(Location loc) {

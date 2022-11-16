@@ -88,12 +88,6 @@ public class VolcanoExplosion {
         VolcanoEruptStyle style = this.vent.erupt.getStyle();
         double bombMultiplier = style.bombMultiplier;
 
-        if (this.vent.shouldRunSurseyan()) {
-            if (style.bombMultiplier < VolcanoEruptStyle.SURTSEYAN.bombMultiplier) {
-                bombMultiplier = VolcanoEruptStyle.SURTSEYAN.bombMultiplier;
-            }
-        }
-
         int bombCount = (int) (
             (
                 Math.random() * 

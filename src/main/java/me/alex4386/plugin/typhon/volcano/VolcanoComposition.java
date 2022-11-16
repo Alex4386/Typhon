@@ -9,7 +9,7 @@ public class VolcanoComposition {
     public static Material getBombRock(double silicateLevel) {
         Random random = new Random();
 
-        if (random.nextDouble() < 0.8) {
+        if (random.nextDouble() < 0.65) {
             return Material.TUFF;
         }
 
@@ -25,7 +25,11 @@ public class VolcanoComposition {
                 return Material.DEEPSLATE;
             } else {
                 // purple-red scoria
-                return Material.NETHERRACK;
+                if (Math.random() < 0.0001) {
+                    return Material.NETHER_QUARTZ_ORE;
+                } else {
+                    return Material.NETHERRACK;
+                }
             }
         } else if (silicateLevel < 0.60) {
             double ratio = (silicateLevel - 0.56) / (0.60 - 0.56);
@@ -41,11 +45,11 @@ public class VolcanoComposition {
 
             // obsidian
             if (s < (1 / 2)) {
-                if (random.nextDouble() < 0.75) {
+                //if (random.nextDouble() < 0.75) {
                     return Material.OBSIDIAN;
-                } else {
-                    return Material.CRYING_OBSIDIAN;
-                }
+                //} else {
+                //    return Material.CRYING_OBSIDIAN;
+                //}
             } else {
                 // trachyandesite
                 return Material.ANDESITE;
@@ -66,11 +70,18 @@ public class VolcanoComposition {
             } else if (s > 0.1) {
                 return Material.AMETHYST_BLOCK;
             } else {
-                return Material.QUARTZ_BLOCK;
+                if (Math.random() < 0.9) {
+                    return Material.NETHER_QUARTZ_ORE;
+                } else {
+                    return Material.QUARTZ_BLOCK;
+                }
             }
         } else {
-            return Material.QUARTZ_BLOCK;
-        }
+            if (Math.random() < 0.9) {
+                return Material.NETHER_QUARTZ_ORE;
+            } else {
+                return Material.QUARTZ_BLOCK;
+            }        }
     }
 
     public static Material getExtrusiveRock(double silicateLevel) {

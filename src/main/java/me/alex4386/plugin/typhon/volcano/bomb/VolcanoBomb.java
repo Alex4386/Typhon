@@ -154,6 +154,14 @@ public class VolcanoBomb {
             return;
         }
 
+        if (this.targetLocation != null) {
+            double error = TyphonUtils.getTwoDimensionalDistance(this.landingLocation, this.targetLocation);
+            if (error > 7) {
+                this.vent.getVolcano().logger.log(VolcanoLogClass.BOMB, "Volcano Bomb targetted for "+TyphonUtils.blockLocationTostring(this.targetLocation.getBlock())+" is wrongly landed at "+TyphonUtils.blockLocationTostring(this.block.getLocation().getBlock())+". Relocating.");
+                this.landingLocation = this.targetLocation.getWorld().getHighestBlockAt(this.targetLocation).getLocation().add(0, 1, 0);
+            }
+        }
+
         // calculate even more fall.
         Block block = this.landingLocation.getBlock();
         while (!TyphonUtils.isMaterialRocklikes(block.getRelative(BlockFace.DOWN).getType())) {

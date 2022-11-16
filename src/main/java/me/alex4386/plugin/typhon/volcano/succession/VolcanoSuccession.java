@@ -77,11 +77,11 @@ public class VolcanoSuccession {
 
     public void runSuccessionCycle(VolcanoVent vent) {
         int successionCount = 0;
-        if (vent.getStatus() == VolcanoVentStatus.ERUPTING) {
+        if (vent.getStatus() == VolcanoVentStatus.ERUPTING || vent.lavaFlow.hasAnyLavaFlowing()) {
             successionCount = (int) (Math.random() * 2);
         } else if (Math.random() > vent.getStatus().getScaleFactor()) {
             double circumference = vent.longestNormalLavaFlowLength * Math.PI * 2;
-            double successionScale = (1.0 - vent.getStatus().getScaleFactor());
+            double successionScale = Math.pow((1.0 - vent.getStatus().getScaleFactor()), 2);
 
             double maxCount = Math.min(Math.max(0, circumference / 20), 200 / cyclesPerTick);
 

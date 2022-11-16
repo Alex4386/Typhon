@@ -293,8 +293,17 @@ public class VolcanoLavaFlow implements Listener {
             } else if (data.isBomb) {
                 if (this.vent != null && data.source != null) {
                     if (!this.vent.isInVent(toBlock.getLocation())) {
-                        if (TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation()) > 10) {
-                            if (this.vent.getTwoDimensionalDistance(toBlock.getLocation()) > this.vent.getRadius() + 20) {
+                        if (this.vent.getType() == VolcanoVentType.CRATER && Math.floor(this.vent.getTwoDimensionalDistance(data.source.getLocation())) == this.vent.craterRadius) {
+                            double distance = this.vent.getTwoDimensionalDistance(toBlock.getLocation());
+                            int y = toBlock.getY();
+                            int targetY = (int) (this.vent.getSummitBlock().getY() - (distance / this.vent.bombs.distanceHeightRatio()));
+
+                            if (y > targetY) {
+                                event.setCancelled(true);
+                                return;
+                            }
+                        } else {
+                            if (TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation()) > 10) {
                                 event.setCancelled(true);
                                 return;
                             }
@@ -820,6 +829,8 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void runPillowLavaTick() {
+        this.handleSurtseyan();
+
         Iterator<Map.Entry<Block, VolcanoPillowLavaData>> iterator =
                 pillowLavaMap.entrySet().iterator();
         List<Block> flowedBlocks = new ArrayList<Block>();
@@ -996,8 +1007,22 @@ public class VolcanoLavaFlow implements Listener {
 
             flowLava(fittedActualFlows);
             nextFlowTime = timeNow + (int) (settings.delayFlowed * (1000 * (1 / getTickFactor())));
+
+            this.handleSurtseyan();
         }
     }
+
+    public void handleSurtseyan() {
+        this.handleSurtseyan(Math.min(this.vent.craterRadius / 2, 10));
+    }
+
+    public void handleSurtseyan(int count) {
+        if (this.vent.isSurtseyan()) {
+            this.vent.eruptSurtseyan(count);
+        }
+    }
+
+
 
     private void runCooldownTick() {
         if (lavaCoolHashMap.isEmpty()) {

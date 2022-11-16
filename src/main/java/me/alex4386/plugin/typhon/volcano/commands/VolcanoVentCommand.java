@@ -24,6 +24,7 @@ public class VolcanoVentCommand {
     String[] configNodes = {
             "lavaflow:delay",
             "lavaflow:flowed",
+            "lavaflow:silicateLevel",
             "bombs:explosionPower:min",
             "bombs:explosionPower:max",
             "bombs:radius:min",
@@ -92,6 +93,17 @@ public class VolcanoVentCommand {
                             for (VolcanoVentStatus status : VolcanoVentStatus.values()) {
                                 if (status.name().startsWith(searchQuery)) {
                                     searchResults.add(status.name());
+                                }
+                            }
+                            return searchResults;
+                        }
+                    } else if (action == VolcanoVentCommandAction.STYLE) {
+                        if (args.length == baseOffset + 2) {
+                            String searchQuery = args[baseOffset + 1];
+                            List<String> searchResults = new ArrayList<>();
+                            for (VolcanoEruptStyle style : VolcanoEruptStyle.values()) {
+                                if (style.name().toLowerCase().startsWith(searchQuery)) {
+                                    searchResults.add(style.name().toLowerCase());
                                 }
                             }
                             return searchResults;
@@ -235,8 +247,12 @@ public class VolcanoVentCommand {
                 break;
             case STYLE:
                 if (newArgs.length < 2) {
+                    String isSurtsey = "";
+                    if (this.vent.isSurtseyan()) {
+                        isSurtsey = " (Surtseyan)";
+                    }
                     msg.info("Vent Type: " + vent.getType());
-                    msg.info("Eruption Style: " + vent.erupt.getStyle());
+                    msg.info("Eruption Style: " + vent.erupt.getStyle()+isSurtsey);
                     return true;
                 }
 
@@ -285,6 +301,18 @@ public class VolcanoVentCommand {
                                 "lavaflow:delay - "
                                         + vent.lavaFlow.settings.delayFlowed
                                         + " ticks");
+                    }
+                } else if (newArgs[1].equalsIgnoreCase("lavaflow:silicateLevel")) {
+                    if (newArgs.length >= 2) {
+                        if (newArgs.length == 3)
+                            vent.lavaFlow.settings.silicateLevel = Math.min(0.9, Math.max(0.3, Double.parseDouble(newArgs[2])));
+                        msg.info(
+                                "lavaflow:silicateLevel - "
+                                    + vent.lavaFlow.settings.silicateLevel
+                                    + " ("
+                                    + String.format("%.2f", vent.lavaFlow.settings.silicateLevel * 100)
+                                    + "%)"
+                        );
                     }
                 } else if (newArgs[1].equalsIgnoreCase("lavaflow:flowed")) {
                     if (newArgs.length >= 2) {

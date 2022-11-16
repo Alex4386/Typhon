@@ -67,16 +67,25 @@ public class VolcanoGeoThermal implements Listener {
     final Location targetLoc = block
       .getLocation()
       .add(0, 1, 0);
+
+    scaleFactor *= (0.8) + (0.8 * Math.random());
+    scaleFactor = Math.min(1, scaleFactor);
       
     boolean letOffSteam = false;
     boolean runPoison = false;
 
     if (scaleFactor >= 0.1) {
-      this.burnNearbyEntities(targetLoc, 3);
-      this.playLavaBubbling(targetLoc);
+      if (Math.random() < scaleFactor) {
+        this.burnNearbyEntities(targetLoc, 3);
+        if (scaleFactor > 0.12) {
+          if (Math.random() < ((scaleFactor - 0.12) / (1 - 0.12))) {
+            this.playLavaBubbling(targetLoc);
+          }
+        }
 
-      letOffSteam = true;
-      runPoison = Math.random() < scaleFactor;
+        letOffSteam = true;
+        runPoison = Math.random() < scaleFactor;
+      }
     } else if (scaleFactor >= 0.04) {
       this.burnNearbyEntities(targetLoc, 1);
     

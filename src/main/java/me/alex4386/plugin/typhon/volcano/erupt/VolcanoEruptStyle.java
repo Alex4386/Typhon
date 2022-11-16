@@ -28,17 +28,13 @@ public enum VolcanoEruptStyle {
     // tuff)
     // less volume but range is plinian or vulcanian
     // tuff pyroclastic flows
-    PELEAN("pelean", new String[] { "pelèan" }, VolcanoEruptCauseType.MAGMATIC, 1, 5, 5),
+    PELEAN("pelean", new String[] { "pelèan" }, VolcanoEruptCauseType.MAGMATIC, 1, 3, 2),
 
     // no lava overflow + caldera + top collapse + (granite) rhyolite volcano bombs
     // (A LOT)
     // **RAINING TUFF**
     PLINIAN("plinian", new String[] { "vesuvian" }, VolcanoEruptCauseType.MAGMATIC, 0.1, 10, 10),
-
-    // slight lava flow (-> basalt + andesite) + volcano bombs (TUFF)
-    // water vapor + ash jet
-    SURTSEYAN("surtseyan", new String[] { "island" }, VolcanoEruptCauseType.PHREATOMAGMATIC, 4, 3, 3),
-
+    
     // NO LAVA + generate maar (basically no cone generation and explode in ground)
     // + volcano bombs
     // (mostly tuff, and really little)
