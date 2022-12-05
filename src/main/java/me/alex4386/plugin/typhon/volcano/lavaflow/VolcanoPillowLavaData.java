@@ -23,7 +23,8 @@ public class VolcanoPillowLavaData {
 
         int extCount = VolcanoLavaCoolData.calculateExtensionCount(
                 vent.lavaFlow.settings.silicateLevel,
-                TyphonUtils.getTwoDimensionalDistance(sourceBlock.getLocation(), fromBlock.getLocation())
+                TyphonUtils.getTwoDimensionalDistance(sourceBlock.getLocation(), fromBlock.getLocation()),
+                Math.max(5, vent.getSummitBlock().getY() - vent.location.getY())
         );
         extCount = pillowifyExtensionCount(extCount);
 

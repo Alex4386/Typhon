@@ -61,7 +61,9 @@ public class VolcanoLavaCoolData {
 
         this.runExtensionCount = VolcanoLavaCoolData.calculateExtensionCount(
                 this.flowedFromVent.lavaFlow.settings.silicateLevel,
-                TyphonUtils.getTwoDimensionalDistance(source.getLocation(), fromBlock.getLocation()));
+                TyphonUtils.getTwoDimensionalDistance(source.getLocation(), fromBlock.getLocation()),
+                Math.max(5, this.flowedFromVent.getSummitBlock().getY() - this.flowedFromVent.location.getY())
+        );
         
         if (this.isBomb) {
             this.runExtensionCount = 0;
@@ -83,11 +85,9 @@ public class VolcanoLavaCoolData {
         this.runExtensionCount = runExtensionCount;
     }
 
-    public static int calculateExtensionCount(double silicateLevel, double distance) {
+    public static int calculateExtensionCount(double silicateLevel, double distance, double height) {
         // 0.48 is lower end. minimum travel distance should be 10km. 
         // but this is Minecraft. 10000 blocks is way too much. scaling down
-
-        int countRatio = 60;
 
         double extBySilicateLevel = silicateLevel < 0.68
             ? (int) Math.floor(
@@ -99,10 +99,18 @@ public class VolcanoLavaCoolData {
                 )
             ) : 0;
 
-        double extendLimit = extBySilicateLevel * countRatio;
-        double calibratedExtension = (extendLimit - distance) * extBySilicateLevel;
+        if (extBySilicateLevel == 0) {
+            return 0;
+        } else {
+            double extendLimit = extBySilicateLevel * height;
+            double distanceRatio = Math.min(Math.max(0, distance / extendLimit), 1);
 
-        return (int) Math.max(0, calibratedExtension);
+            double silicateRatio = (Math.max(0.48, silicateLevel) - 0.48) / (0.68 - 0.48);
+            double targetMultiplier = Math.pow(distanceRatio, (1.2 + (silicateRatio * 0.8)));
+
+            double calibratedExtension = extBySilicateLevel * targetMultiplier;
+            return (int) Math.max(0, calibratedExtension);
+        }
     }
 
     public boolean shouldCooldown() {
