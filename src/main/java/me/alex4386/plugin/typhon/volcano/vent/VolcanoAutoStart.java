@@ -133,6 +133,8 @@ public class VolcanoAutoStart implements Listener {
                         }
 
                         VolcanoVent newVent = vent.erupt.openFissure();
+                        if (newVent == null) continue;
+
                         if (migrateLavaFlow) {
                             vent.erupt.stop();
                         }

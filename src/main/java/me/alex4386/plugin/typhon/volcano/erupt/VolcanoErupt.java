@@ -135,6 +135,7 @@ public class VolcanoErupt {
         }
 
         Location location = this.getVentLocation();
+        if (location == null) generated = false;
 
         if (generated) {
             VolcanoVent newVent = new VolcanoVent(volcano, location, name);
