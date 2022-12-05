@@ -121,11 +121,11 @@ public class VolcanoAutoStart implements Listener {
 
                 for (VolcanoVent vent : vents) {
                     double silicateLevel = vent.lavaFlow.settings.silicateLevel;
-                    double basaltness = Math.min(1, Math.max(0, (0.53 - silicateLevel) / (0.53 - 0.46)));
+                    double basaltiness = Math.min(1, Math.max(0, (0.53 - silicateLevel) / (0.53 - 0.46)));
 
                     // flank eruption / parasitic cone should be only generated on basaltic eruptions
                     if ((vent.erupt.isErupting() || volcano.isVolcanicField()) && silicateLevel < 0.53) {
-                        if (Math.random() > 0.7 - (0.3 * basaltness)) continue;
+                        if (Math.random() > 0.7 - (0.3 * basaltiness)) continue;
 
                         boolean migrateLavaFlow = false;
                         if (Math.random() < 0.5) {
