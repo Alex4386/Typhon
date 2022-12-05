@@ -10,7 +10,7 @@ api_ver_name="${version_name/$HOME\/.m2\/repository\/org\/spigotmc\/spigot-api\/
 api_ver=$(echo "$api_ver_name" | cut -f1,2 -d'.')
 
 echo "Target Spigot-API version: $api_ver_name, api-version: $api_ver"
-sed -i s/1.16.5-R0.1-SNAPSHOT/$api_ver_name/g ./pom.xml
-sed -i s/1.16/$api_ver/g ./src/main/resources/plugin.yml
+sed -i s/1.18.2-R0.1-SNAPSHOT/$api_ver_name/g ./pom.xml
+sed -i s/1.18/$api_ver/g ./src/main/resources/plugin.yml
 
 echo "Done."

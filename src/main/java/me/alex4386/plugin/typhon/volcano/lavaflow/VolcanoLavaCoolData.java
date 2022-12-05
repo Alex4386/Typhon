@@ -103,7 +103,7 @@ public class VolcanoLavaCoolData {
             return 0;
         } else {
             double extendLimit = extBySilicateLevel * height;
-            double distanceRatio = Math.min(Math.max(0, distance / extendLimit), 1);
+            double distanceRatio = Math.min(Math.max(0, (extendLimit - distance) / extendLimit), 1);
 
             double silicateRatio = (Math.max(0.48, silicateLevel) - 0.48) / (0.68 - 0.48);
             double targetMultiplier = Math.pow(distanceRatio, (1.2 + (silicateRatio * 0.8)));

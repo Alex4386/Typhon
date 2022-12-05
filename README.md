@@ -6,7 +6,8 @@ Currently This code is literal spaghetti.
 Will work on cleanup when I feel like to.
 
 ## System Requirements
-* Spigot (or compatibles) for Minecraft® 1.18.2
+* Spigot (or compatibles) for Minecraft® 1.18.2.  
+  (Paper Recommended)
 * A Really beefy (multithreading capable) computer/server
 * Bandwidth to cover up extreme usage of FallingBlock and Particles
 
@@ -23,10 +24,10 @@ Visit: [minehub.kr](https://minehub.kr) for more information! (South Korea Resid
 -->
 
 ## TODO
-* Automatic vent openings
 * Caldera formation
   - Due to mass block updates, This causes bukkit to crash due to watchdog.
     Should come up with mitigations to implement this.
+* Automatic Volcano creation  
 
 ## Docs
 Please refer to [DOCS.md](./DOCS.md).  
@@ -43,7 +44,10 @@ Distributed under GNU General Public License Version 3.
 See [LICENSE](LICENSE) file for more details.  
 
 ### Acknowledgements  
-This plugin was initially forked developing MintNetwork Season 3::The Endless Survival.  
+This plugin was initially forked developing MintNetwork Season 3::The Endless Survival.
 Since I am no longer part of MintNetwork, This is moved from MintNetwork group repository to this repository.  
 
-This plugin might contains several code traces from Diwaly's Volcano Plugin.
+The archival version of Volcano plugin for MintNetwork Season 3 is available [here](https://github.com/Alex4386-vault/ultimateVolcano).  
+This plugin might contain several code traces from Diwaly's Volcano Plugin.  
+
+
