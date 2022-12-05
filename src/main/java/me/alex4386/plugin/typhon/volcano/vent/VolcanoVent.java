@@ -41,7 +41,7 @@ public class VolcanoVent {
     public Location location;
     public int craterRadius = defaultVentRadius;
 
-    public double fissureAngle = 0.0;
+    public double fissureAngle = Math.random() * Math.PI * 2;
     public int fissureLength = 20;
     public int maxFissureLength = 100;
 
