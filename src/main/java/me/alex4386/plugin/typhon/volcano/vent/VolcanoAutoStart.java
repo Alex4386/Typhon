@@ -124,7 +124,7 @@ public class VolcanoAutoStart implements Listener {
                     double basaltness = Math.min(1, Math.max(0, (0.53 - silicateLevel) / (0.53 - 0.46)));
 
                     // flank eruption / parasitic cone should be only generated on basaltic eruptions
-                    if (vent.erupt.isErupting() && silicateLevel < 0.53) {
+                    if ((vent.erupt.isErupting() || volcano.isVolcanicField()) && silicateLevel < 0.53) {
                         if (Math.random() > 0.7 - (0.3 * basaltness)) continue;
 
                         boolean migrateLavaFlow = false;
