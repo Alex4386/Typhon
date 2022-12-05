@@ -362,7 +362,11 @@ public class VolcanoLavaFlow implements Listener {
 
                 if (!data.isBomb) {
                     if (flowVector.getBlockY() < 0) {
-                        extensionCount = -1;
+                        if (Math.random() < 0.1)
+                            extensionCount = -1;
+                        else {
+                            if (Math.random() < 0.4) extensionCount++;
+                        }
                     }
                 }
             }
@@ -394,10 +398,6 @@ public class VolcanoLavaFlow implements Listener {
                 }
             }
         }
-    }
-
-    private void registerLavaCoolData(Block block, boolean isBomb) {
-        this.registerLavaCoolData(block, block, block, isBomb, -1);
     }
 
     private void registerLavaCoolData(Block block, boolean isBomb, int extension) {
