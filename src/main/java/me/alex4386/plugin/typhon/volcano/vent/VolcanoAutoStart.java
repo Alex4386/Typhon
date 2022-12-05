@@ -55,8 +55,11 @@ public class VolcanoAutoStart implements Listener {
                         () -> {
                             updateStatus();
 
-                            if (flankTriggered) createFissure();
-                            else flankTriggered = true;
+                            if (flankTriggered) {
+                                createFissure();
+                            } else {
+                                flankTriggered = true;
+                            }
                         },
                         0L,
                         Math.max(1, (statusCheckInterval / 20) * volcano.updateRate));
