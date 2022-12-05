@@ -9,6 +9,7 @@ import me.alex4386.plugin.typhon.volcano.succession.VolcanoSuccession;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoAutoStart;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentGenesis;
 import org.apache.commons.io.FileUtils;
 import org.bukkit.*;
 import org.bukkit.event.Listener;
@@ -65,6 +66,12 @@ public class Volcano implements Listener {
 
     // updateRate
     public long updateRate = 20;
+
+    // max concurrent eruption
+    public int maxEruptions = 3;
+
+    // on volcanic field only
+    public int fieldRange = 600;
 
     public Volcano(Path basePath) throws IOException, ParseException {
         this.name = basePath.getFileName().toString();
@@ -184,6 +191,10 @@ public class Volcano implements Listener {
 
         for (VolcanoVent vent : vents) {
             vent.shutdown();
+
+            if (vent.erupt.isErupting() && !vent.genesis.canEruptAgain()) {
+                vent.stop();
+            }
         }
 
         if (runQuickCool) {
@@ -287,6 +298,8 @@ public class Volcano implements Listener {
         this.isDebug = (boolean) configData.get("isDebug");
         this.updateRate = (long) configData.get("updateRate");
         this.succession.importConfig((JSONObject) configData.get("succession"));
+        this.maxEruptions = (int) configData.get("maxEruptions");
+        this.fieldRange = (int) configData.get("fieldRange");
     }
 
     public JSONObject exportConfig() {
@@ -297,6 +310,8 @@ public class Volcano implements Listener {
         configData.put("isDebug", this.isDebug);
         configData.put("updateRate", this.updateRate);
         configData.put("succession", this.succession.exportConfig());
+        configData.put("maxEruptions", this.maxEruptions);
+        configData.put("fieldRange", this.fieldRange);
 
         return configData;
     }
@@ -315,5 +330,22 @@ public class Volcano implements Listener {
         for (VolcanoVent vent : startedVents) {
             vent.stop();
         }
+    }
+
+    public List<VolcanoVent> getEruptingVents() {
+        List<VolcanoVent> vents = this.manager.getVents();
+        List<VolcanoVent> eruptingVents = new ArrayList<>();
+
+        for (VolcanoVent vent : vents) {
+            if (vent.erupt.isErupting()) {
+                eruptingVents.add(vent);
+            }
+        }
+
+        return eruptingVents;
+    }
+
+    public boolean isVolcanicField() {
+        return this.mainVent.genesis == VolcanoVentGenesis.MONOGENETIC;
     }
 }

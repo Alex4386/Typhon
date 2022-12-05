@@ -60,7 +60,8 @@ public class VolcanoLavaCoolData {
         this.isBomb = isBomb;
 
         this.runExtensionCount = VolcanoLavaCoolData.calculateExtensionCount(
-                this.flowedFromVent.lavaFlow.settings.silicateLevel);
+                this.flowedFromVent.lavaFlow.settings.silicateLevel,
+                TyphonUtils.getTwoDimensionalDistance(source.getLocation(), fromBlock.getLocation()));
         
         if (this.isBomb) {
             this.runExtensionCount = 0;
@@ -82,11 +83,13 @@ public class VolcanoLavaCoolData {
         this.runExtensionCount = runExtensionCount;
     }
 
-    public static int calculateExtensionCount(double silicateLevel) {
+    public static int calculateExtensionCount(double silicateLevel, double distance) {
         // 0.48 is lower end. minimum travel distance should be 10km. 
         // but this is Minecraft. 10000 blocks is way too much. scaling down
 
-        double value = silicateLevel < 0.68
+        int countRatio = 60;
+
+        double extBySilicateLevel = silicateLevel < 0.68
             ? (int) Math.floor(
                 Math.min(
                     Math.max(
@@ -96,10 +99,10 @@ public class VolcanoLavaCoolData {
                 )
             ) : 0;
 
-        double probability = value - Math.floor(value);
-        int extra = Math.random() < probability ? 1 : 0;
+        double extendLimit = extBySilicateLevel * countRatio;
+        double calibratedExtension = (extendLimit - distance) * extBySilicateLevel;
 
-        return (int) Math.floor(value) + extra;
+        return (int) Math.max(0, calibratedExtension);
     }
 
     public boolean shouldCooldown() {

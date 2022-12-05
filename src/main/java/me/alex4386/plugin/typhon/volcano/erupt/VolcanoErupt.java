@@ -1,10 +1,16 @@
 package me.alex4386.plugin.typhon.volcano.erupt;
 
+import me.alex4386.plugin.typhon.TyphonUtils;
+import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentGenesis;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
+import org.bukkit.Location;
 import org.json.simple.JSONObject;
+
+import java.util.List;
 
 public class VolcanoErupt {
     VolcanoVent vent;
@@ -73,10 +79,109 @@ public class VolcanoErupt {
                 } else {
                 }
             } else if (this.style == VolcanoEruptStyle.PELEAN) {
-                // requires build up of lava dome before hand
+                // TODO: requires build up of lava dome before hand
 
             } else {
             }
+        }
+    }
+
+    public Location getVentLocation() {
+        Volcano volcano = this.vent.getVolcano();
+
+        if (volcano.isVolcanicField()) {
+            Location location = TyphonUtils.getRandomBlockInRange(this.vent.location.getBlock(), 40, (int) Math.max(80, this.vent.longestNormalLavaFlowLength)).getLocation();
+
+            if (TyphonUtils.getTwoDimensionalDistance(location, this.vent.location) > volcano.fieldRange) {
+                return null;
+            }
+
+            return location;
+        } else {
+            Location location = TyphonUtils.getRandomBlockInRange(this.vent.location.getBlock(), this.vent.craterRadius + 30, (int) Math.max(this.vent.craterRadius + 60, this.vent.longestNormalLavaFlowLength + 60)).getLocation();
+
+            if (volcano.manager.getNearestVent(location).isInVent(location)) {
+                return null;
+            }
+
+            return location;
+        }
+    }
+
+    public VolcanoVentType getNewVentType() {
+        double fissureProbability = 0;
+        if (this.vent.lavaFlow.settings.silicateLevel < 0.53) {
+            fissureProbability = Math.max(1 - Math.min(0.9, Math.max((this.vent.lavaFlow.settings.silicateLevel - 0.47 / (0.53 - 0.47)), 0)), 0);
+        }
+
+        if (fissureProbability > Math.random()) {
+            return VolcanoVentType.FISSURE;
+        }
+
+        return VolcanoVentType.CRATER;
+    }
+
+    public VolcanoVent openFissure() {
+        String name = "";
+        boolean generated = false;
+
+        Volcano volcano = this.vent.getVolcano();
+        for (int key = 1; key < 999; key++) {
+            name = "fissure" + String.format("%03d", key);
+            if (volcano.subVents.get(name) == null) {
+                generated = true;
+                break;
+            }
+        }
+
+        Location location = this.getVentLocation();
+
+        if (generated) {
+            VolcanoVent newVent = new VolcanoVent(volcano, location, name);
+
+            VolcanoVentType type = this.getNewVentType();
+
+            newVent.erupt.setStyle(this.vent.erupt.getStyle());
+
+            // propagate eruption setup
+            newVent.explosion.settings.explosionSize = this.vent.explosion.settings.explosionSize;
+            newVent.explosion.settings.maxBombCount = this.vent.explosion.settings.maxBombCount;
+            newVent.explosion.settings.minBombCount = this.vent.explosion.settings.minBombCount;
+            newVent.explosion.settings.damagingExplosionSize = this.vent.explosion.settings.damagingExplosionSize;
+
+            newVent.lavaFlow.settings.flowed = this.vent.lavaFlow.settings.flowed;
+            newVent.lavaFlow.settings.flowing = this.vent.lavaFlow.settings.flowing;
+
+            newVent.lavaFlow.settings.silicateLevel = this.vent.lavaFlow.settings.silicateLevel;
+
+            // if eruption style changes, apply it.
+            if (newVent.erupt.getStyle() == VolcanoEruptStyle.HAWAIIAN && type == VolcanoVentType.CRATER) {
+                newVent.erupt.setStyle(VolcanoEruptStyle.STROMBOLIAN);
+
+                newVent.explosion.settings.minBombCount = 3;
+                newVent.explosion.settings.maxBombCount = 5;
+            } else if (newVent.erupt.getStyle() == VolcanoEruptStyle.STROMBOLIAN && type == VolcanoVentType.FISSURE) {
+                newVent.erupt.setStyle(VolcanoEruptStyle.HAWAIIAN);
+
+                newVent.fissureAngle = this.vent.fissureAngle;
+
+                newVent.explosion.settings.minBombCount = 0;
+                newVent.explosion.settings.maxBombCount = 2;
+            }
+
+            // volcanic vent genesis type
+            newVent.genesis = VolcanoVentGenesis.MONOGENETIC;
+            if (!volcano.isVolcanicField() && Math.random() < 0.25) {
+                newVent.genesis = VolcanoVentGenesis.POLYGENETIC;
+            }
+
+            newVent.setType(type);
+            volcano.subVents.put(name, newVent);
+
+            volcano.trySave(true);
+            return newVent;
+        } else {
+            return null;
         }
     }
 

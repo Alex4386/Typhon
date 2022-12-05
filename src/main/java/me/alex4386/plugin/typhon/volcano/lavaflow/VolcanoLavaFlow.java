@@ -1017,12 +1017,10 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void handleSurtseyan(int count) {
-        if (this.vent.isSurtseyan()) {
-            this.vent.eruptSurtseyan(count);
+        if (this.vent.surtseyan.isSurtseyan()) {
+            this.vent.surtseyan.eruptSurtseyan(count);
         }
     }
-
-
 
     private void runCooldownTick() {
         if (lavaCoolHashMap.isEmpty()) {

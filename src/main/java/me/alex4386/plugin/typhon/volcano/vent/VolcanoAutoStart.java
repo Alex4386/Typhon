@@ -32,7 +32,7 @@ public class VolcanoAutoStart implements Listener {
     public VolcanoAutoStartProbability probability = new VolcanoAutoStartProbability();
 
     public long statusCheckInterval = 72000;
-    public long subVentInterval = 72000;
+    public long flankEruptionGracePeriod = 6000;
 
     public long eruptionTimer = 12000;
     public int scheduleID = -1;
@@ -52,10 +52,10 @@ public class VolcanoAutoStart implements Listener {
                         TyphonPlugin.plugin,
                         () -> {
                             updateStatus();
-                            autoStartCreateSubVent();
+                            createFissure();
                         },
                         0L,
-                        Math.max(1, statusCheckInterval / 20 * volcano.updateRate));
+                        Math.max(1, (statusCheckInterval / 20) * volcano.updateRate));
     }
 
     public void unregisterTask() {
@@ -107,143 +107,53 @@ public class VolcanoAutoStart implements Listener {
         }
     }
 
-    public VolcanoVent createSubVent(Location location) {
-        String name = "";
-        boolean generated = false;
+    public void createFissure() {
+        if (volcano.autoStart.canAutoStart) {
+            volcano.logger.debug(
+                    VolcanoLogClass.AUTOSTART, "Volcano Fissure Opening interval Checking...");
 
-        for (int key = 1; key < 999; key++) {
-            name = "fissure_" + String.format("%03d", key);
-            if (volcano.subVents.get(name) == null) {
-                generated = true;
-                break;
+            int erupting = volcano.getEruptingVents().size();
+            int eruptables = volcano.maxEruptions - erupting;
+
+            if (eruptables > 0) {
+                List<VolcanoVent> vents = volcano.manager.getVents();
+                Collections.shuffle(vents);
+
+                for (VolcanoVent vent : vents) {
+                    double silicateLevel = vent.lavaFlow.settings.silicateLevel;
+                    double basaltness = Math.min(1, Math.max(0, (0.53 - silicateLevel) / (0.53 - 0.46)));
+
+                    // flank eruption / parasitic cone should be only generated on basaltic eruptions
+                    if (vent.erupt.isErupting() && silicateLevel < 0.53) {
+                        if (Math.random() > 0.7 - (0.3 * basaltness)) continue;
+
+                        boolean migrateLavaFlow = false;
+                        if (Math.random() < 0.5) {
+                            migrateLavaFlow = true;
+                        }
+
+                        VolcanoVent newVent = vent.erupt.openFissure();
+                        if (migrateLavaFlow) {
+                            vent.erupt.stop();
+                        }
+
+                        // emulate lava to migrating to target.
+                        newVent.setStatus(VolcanoVentStatus.MAJOR_ACTIVITY);
+                        Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
+                            newVent.start();
+
+                            Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
+                                newVent.stop();
+                            }, eruptionTimer);
+                        }, (flankEruptionGracePeriod / 20) * volcano.updateRate);
+
+                        eruptables--;
+                        if (eruptables <= 0) break;
+                    }
+                }
             }
         }
 
-        if (generated) {
-            VolcanoVent newVent = new VolcanoVent(volcano, location, name);
-            newVent.erupt.autoConfig();
-            
-            newVent.lavaFlow.settings.silicateLevel = volcano.mainVent.lavaFlow.settings.silicateLevel;
-            volcano.subVents.put(name, newVent);
-
-            volcano.trySave(true);
-            return newVent;
-        } else {
-            return null;
-        }
-    }
-
-    public VolcanoVent autoStartCreateSubVent() {
-        return this.autoStartCreateSubVent(null);
-    }
-
-    public VolcanoVent autoStartCreateSubVent(Player player) {
-        int availableHeight =
-                volcano.mainVent.location.getWorld().getMaxHeight()
-                        - volcano.mainVent.location.getBlockY();
-        int mainVentHeight =
-                ((int) volcano.mainVent.averageVentHeight())
-                        - volcano.mainVent.location.getBlockY();
-        boolean isMainventGrownEnough =
-                (volcano.mainVent.longestFlowLength > 150
-                        && mainVentHeight >= Math.min(100, availableHeight));
-
-        if (isMainventGrownEnough && createSubVent) {
-            VolcanoVent vent = volcano.mainVent;
-
-            Location location;
-            List<Player> players = volcano.manager.getAffectedPlayers();
-            Collections.shuffle(players);
-
-            if ((Math.random() < 0.7 || players.size() == 0) && player == null) {
-                location =
-                        TyphonUtils.getRandomBlockInRange(
-                                        vent.location.getBlock(),
-                                        (int) Math.max(volcano.mainVent.longestFlowLength, 100),
-                                        (int) Math.max(volcano.mainVent.longestFlowLength * 2, 200))
-                                .getLocation();
-
-                volcano.logger.log(VolcanoLogClass.AUTOSTART, "Volcano will now create a subvent!");
-            } else {
-                Player target = players.get(0);
-                if (player != null) {
-                    target = player;
-                }
-                double distance = volcano.mainVent.getTwoDimensionalDistance(target.getLocation());
-
-                double xDiff = target.getLocation().getX() - volcano.mainVent.location.getX();
-                double zDiff = target.getLocation().getZ() - volcano.mainVent.location.getZ();
-
-                double sin = 0;
-                double cos = 0;
-                if (Math.abs(xDiff) >= 1) {
-                    double tan = zDiff / xDiff;
-
-                    double rad = Math.atan(tan);
-                    sin = Math.sin(rad);
-                    cos = Math.cos(rad);
-                } else {
-                    sin = 1;
-                    cos = 0;
-                }
-
-                double newDistance = Math.max(volcano.mainVent.longestFlowLength + 50, distance);
-                double newXDiff = newDistance * cos;
-                double newZDiff = newDistance * sin;
-
-                volcano.logger.log(
-                        VolcanoLogClass.AUTOSTART,
-                        "Volcano will now create a subvent near-by a player " + target.getName());
-
-                location = volcano.mainVent.location.add(newXDiff, 0, newZDiff);
-
-                location =
-                        TyphonUtils.getRandomBlockInRange(
-                            location.getBlock(),
-                            0,
-                            (int)
-                                (volcano.mainVent.getTwoDimensionalDistance(location)
-                                            - volcano.mainVent.longestFlowLength))
-                        .getLocation();
-                location = TyphonUtils.getHighestLocation(location);
-            }
-
-            if (!volcano.manager.isInAnyLavaFlowArea(location)) {
-                int key;
-                String name;
-                Random random = new Random();
-
-                do {
-                    key = random.nextInt(999);
-                    name = volcano.name + "_a" + String.format("%03d", key);
-                } while (!volcano.subVents.containsKey(name));
-
-                VolcanoVent newVent = new VolcanoVent(volcano, location, name);
-
-                volcano.logger.log(
-                        VolcanoLogClass.AUTOSTART, "Volcano is now creating a new subvent " + name);
-
-                if (newVent != null) {
-                    newVent.start();
-                    newVent.getVolcano().trySave(true);
-
-                    Bukkit.getScheduler()
-                            .runTaskLater(
-                                    TyphonPlugin.plugin,
-                                    (Runnable)
-                                            () -> {
-                                                newVent.stop();
-                                            },
-                                    eruptionTimer);
-                }
-
-                return newVent;
-            }
-
-            return null;
-        }
-
-        return null;
     }
 
     public void updateStatus() {
@@ -252,18 +162,26 @@ public class VolcanoAutoStart implements Listener {
                     VolcanoLogClass.AUTOSTART, "Volcano AutoStart interval Checking...");
 
             for (VolcanoVent vent : volcano.manager.getVents()) {
+                boolean canEscalate = vent.genesis.canEruptAgain();
+
                 VolcanoVentStatus status = vent.getStatus();
                 double a = Math.random();
 
                 switch (vent.getStatus()) {
                     case DORMANT:
                         if (a <= probability.dormant.increase) {
-                            vent.setStatus(vent.getStatus().increase());
+                            if (canEscalate) vent.setStatus(vent.getStatus().increase());
+                        } else if (a <= probability.dormant.increase + probability.dormant.decrease) {
+                            if (!canEscalate) {
+                                if (!vent.isMainVent()) {
+                                    vent.setStatus(VolcanoVentStatus.EXTINCT);
+                                }
+                            }
                         }
                         break;
                     case MINOR_ACTIVITY:
                         if (a <= probability.minor_activity.increase) {
-                            vent.setStatus(vent.getStatus().increase());
+                            if (canEscalate) vent.setStatus(vent.getStatus().increase());
                         } else if (a
                                 <= probability.minor_activity.increase
                                         + probability.minor_activity.decrease) {
@@ -272,9 +190,11 @@ public class VolcanoAutoStart implements Listener {
                         break;
                     case MAJOR_ACTIVITY:
                         if (a <= probability.major_activity.increase) {
+                            if (!canEscalate) break;
+
                             vent.volcano.logger.log(
-                                    VolcanoLogClass.AUTOSTART,
-                                    "volcano starting due to increment from major_activity");
+                                VolcanoLogClass.AUTOSTART,
+                                "volcano starting due to increment from major_activity");
                             vent.setStatus(vent.getStatus().increase());
                             vent.start();
                             Bukkit.getScheduler()

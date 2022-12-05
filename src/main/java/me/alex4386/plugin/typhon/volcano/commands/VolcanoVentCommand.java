@@ -248,7 +248,7 @@ public class VolcanoVentCommand {
             case STYLE:
                 if (newArgs.length < 2) {
                     String isSurtsey = "";
-                    if (this.vent.isSurtseyan()) {
+                    if (this.vent.surtseyan.isSurtseyan()) {
                         isSurtsey = " (Surtseyan)";
                     }
                     msg.info("Vent Type: " + vent.getType());

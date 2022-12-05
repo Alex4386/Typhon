@@ -36,6 +36,7 @@ public class VolcanoVent {
     private VolcanoVentStatus status = VolcanoVentStatus.DORMANT;
 
     private VolcanoVentType type = VolcanoVentType.CRATER;
+    public VolcanoVentGenesis genesis = VolcanoVentGenesis.POLYGENETIC;
 
     public Location location;
     public int craterRadius = defaultVentRadius;
@@ -59,7 +60,7 @@ public class VolcanoVent {
     public VolcanoAsh ash = new VolcanoAsh(this);
     public VolcanoLavaDome lavadome = new VolcanoLavaDome(this);
 
-    public POIMarker ventMarker = null;
+    public VolcanoVentSurtseyan surtseyan = new VolcanoVentSurtseyan(this);
 
     public VolcanoVent(Volcano volcano) {
         this.volcano = volcano;
@@ -99,38 +100,6 @@ public class VolcanoVent {
         return lowestCoreBlock;
     }
 
-    int surtseyanRange = 5;
-
-    public boolean isBlockInSurtseyanRange(Block block) {
-        if (block.getY() <= block.getWorld().getSeaLevel() && block.getY() >= block.getWorld().getSeaLevel() - surtseyanRange) {
-            if (TyphonUtils.containsLiquidWater(block.getRelative(BlockFace.UP))) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    public boolean isCraterFilledWithSeaWater() {
-        Block summitBlock = this.getSummitBlock();
-        Block lowestCoreOceanFloor = TyphonUtils.getHighestOceanFloor(this.getLowestCoreBlock().getLocation()).getBlock();
-
-        boolean summitIsIsland = summitBlock.getY() >= summitBlock.getWorld().getSeaLevel();
-        boolean craterUnderWater = lowestCoreOceanFloor.getY() <= summitBlock.getWorld().getSeaLevel();
-
-        boolean hasSeaWaterAbove = TyphonUtils.containsLiquidWater(lowestCoreOceanFloor.getRelative(BlockFace.UP));
-        return summitIsIsland && craterUnderWater && hasSeaWaterAbove;
-    }
-
-    public boolean isSurtseyan() {
-        Block summitBlock = this.getSummitBlock();
-
-        if (this.isBlockInSurtseyanRange(summitBlock) || this.isCraterFilledWithSeaWater()) {
-            return true;
-        }
-
-        return false;
-    }
 
     public void setStatus(VolcanoVentStatus status) {
         this.status = status;
@@ -336,29 +305,6 @@ public class VolcanoVent {
         this.cachedVentBlocks = newCachedVentBlocks;
 
         return this.cachedVentBlocks;
-    }
-
-    public boolean shouldRunSurseyan() {
-        for (Block block : this.getCoreBlocks()) {
-            Block highest = block.getWorld().getHighestBlockAt(block.getLocation());
-            Block highestRock = TyphonUtils.getHighestRocklikes(block.getLocation());
-
-            if (highestRock.getY() >= highest.getY() - 10) {
-                if (block.getType() == Material.WATER && highest.getY() <= block.getWorld().getSeaLevel()) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    public void eruptSurtseyan(int count) {
-        for (int i = 0; i < count; i++) {
-            VolcanoBomb bomb = this.bombs.generateConeBuildingBomb();
-            if (bomb == null) bomb = this.bombs.generateRandomBomb(this.bombs.getLaunchLocation());
-
-            this.bombs.launchSpecifiedBomb(bomb);
-        }
     }
 
     public double getHeatValue(Location loc) {
@@ -751,6 +697,7 @@ public class VolcanoVent {
         this.lavadome.importConfig((JSONObject) configData.get("lavaDome"));
         this.longestFlowLength = (double) configData.get("longestFlowLength");
         this.longestNormalLavaFlowLength = (double) configData.get("longestNormalLavaFlowLength");
+        this.genesis = VolcanoVentGenesis.getGenesisType((String) configData.get("genesis"));
     }
 
     public JSONObject exportConfig() {
@@ -769,6 +716,8 @@ public class VolcanoVent {
         configData.put("fissureAngle", this.fissureAngle);
         configData.put("fissureLength", this.fissureLength);
         configData.put("maxFissureLength", this.maxFissureLength);
+
+        configData.put("genesis", this.genesis.getName());
 
         JSONObject bombConfig = this.bombs.exportConfig();
         configData.put("bombs", bombConfig);

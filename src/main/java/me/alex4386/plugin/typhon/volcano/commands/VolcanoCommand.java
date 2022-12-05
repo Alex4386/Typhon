@@ -219,8 +219,7 @@ public class VolcanoCommand {
                                                             + this.volcano.name
                                                             + "!");
                                         }
-                                    }
-                                    if (type.equalsIgnoreCase("fissure")) {
+                                    } else if (type.equalsIgnoreCase("fissure")) {
                                         if (this.volcano.subVents.get(name) == null) {
                                             VolcanoVent vent = new VolcanoVent(
                                                     volcano, player.getLocation(), name);
@@ -240,28 +239,6 @@ public class VolcanoCommand {
                                                             + this.volcano.name
                                                             + "!");
                                         }
-                                    } else if (type.equalsIgnoreCase("autovent")) {
-                                        if (args.length >= 5) {
-                                            String playerName = args[4];
-                                            Player target = Bukkit.getPlayer(playerName);
-
-                                            if (target == null) {
-                                                msg.error(sender, "Target player was not found!");
-                                                break;
-                                            }
-
-                                            VolcanoVent vent = this.volcano.autoStart.autoStartCreateSubVent(
-                                                    player);
-                                            msg.info(
-                                                    "subvent "
-                                                            + vent.getName()
-                                                            + " is generated near "
-                                                            + target.getName());
-                                        } else if (args.length == 4) {
-                                            VolcanoVent vent = this.volcano.autoStart.autoStartCreateSubVent(
-                                                    player);
-                                            msg.info("subvent " + vent.getName() + " is generated");
-                                        }
                                     }
                                 }
 
@@ -280,7 +257,7 @@ public class VolcanoCommand {
                                                 + volcano.name
                                                 + " create "
                                                 + ChatColor.YELLOW
-                                                + "<vent | dike | magmachamber>"
+                                                + "<crater | fissure>"
                                                 + ChatColor.GRAY
                                                 + " <name> ...");
                             }
