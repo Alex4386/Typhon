@@ -39,6 +39,6 @@ public class VolcanoPillowLavaData {
     }
 
     private static int pillowifyExtensionCount(int normalExtCount) {
-        return normalExtCount * 8;
+        return normalExtCount * 0;
     }
 }
