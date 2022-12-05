@@ -298,8 +298,8 @@ public class Volcano implements Listener {
         this.isDebug = (boolean) configData.get("isDebug");
         this.updateRate = (long) configData.get("updateRate");
         this.succession.importConfig((JSONObject) configData.get("succession"));
-        this.maxEruptions = (int) configData.get("maxEruptions");
-        this.fieldRange = (int) configData.get("fieldRange");
+        this.maxEruptions = (int) (long) configData.get("maxEruptions");
+        this.fieldRange = (int) (long) configData.get("fieldRange");
     }
 
     public JSONObject exportConfig() {
