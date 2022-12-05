@@ -90,7 +90,7 @@ public class VolcanoErupt {
         Volcano volcano = this.vent.getVolcano();
 
         if (volcano.isVolcanicField()) {
-            Location location = TyphonUtils.getRandomBlockInRange(this.vent.location.getBlock(), 40, (int) Math.max(80, this.vent.longestNormalLavaFlowLength)).getLocation();
+            Location location = TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), 40, (int) Math.max(80, this.vent.longestNormalLavaFlowLength)).getLocation();
 
             if (TyphonUtils.getTwoDimensionalDistance(location, this.vent.location) > volcano.fieldRange) {
                 return null;
@@ -98,7 +98,9 @@ public class VolcanoErupt {
 
             return location;
         } else {
-            Location location = TyphonUtils.getRandomBlockInRange(this.vent.location.getBlock(), this.vent.craterRadius + 30, (int) Math.max(this.vent.craterRadius + 60, this.vent.longestNormalLavaFlowLength + 60)).getLocation();
+            int minDistance = (int) Math.max(this.vent.craterRadius + 50, this.vent.longestNormalLavaFlowLength / 2);
+            int maxDistance = (int) Math.max(this.vent.longestFlowLength, Math.max(minDistance, this.vent.longestNormalLavaFlowLength + 60));
+            Location location = TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), minDistance, maxDistance).getLocation();
 
             if (volcano.manager.getNearestVent(location).isInVent(location)) {
                 return null;
