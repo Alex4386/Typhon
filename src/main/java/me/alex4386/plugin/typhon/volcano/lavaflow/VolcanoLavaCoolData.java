@@ -109,7 +109,9 @@ public class VolcanoLavaCoolData {
             double targetMultiplier = Math.pow(distanceRatio, (1.2 + (silicateRatio * 0.8)));
 
             double calibratedExtension = extBySilicateLevel * targetMultiplier;
-            return (int) Math.max(0, calibratedExtension);
+            double extension = calibratedExtension * Math.random()
+
+            return (int) Math.max(0, extension);
         }
     }
 
