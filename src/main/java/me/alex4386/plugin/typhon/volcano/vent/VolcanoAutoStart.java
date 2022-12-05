@@ -34,6 +34,8 @@ public class VolcanoAutoStart implements Listener {
     public long statusCheckInterval = 72000;
     public long flankEruptionGracePeriod = 6000;
 
+    private boolean flankTriggered = false;
+
     public long eruptionTimer = 12000;
     public int scheduleID = -1;
 
@@ -52,7 +54,9 @@ public class VolcanoAutoStart implements Listener {
                         TyphonPlugin.plugin,
                         () -> {
                             updateStatus();
-                            createFissure();
+
+                            if (flankTriggered) createFissure();
+                            else flankTriggered = true;
                         },
                         0L,
                         Math.max(1, (statusCheckInterval / 20) * volcano.updateRate));
