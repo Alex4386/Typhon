@@ -738,7 +738,7 @@ public class VolcanoLavaFlow implements Listener {
 
         for (Block whereToFlow : whereToFlows) {
             if (this.vent.getType() == VolcanoVentType.FISSURE) {
-                if (this.vent.longestNormalLavaFlowLength > 30) {
+                if (this.vent.longestFlowLength > 30) {
                     if (Math.random() < 0.7) {
                         this.extendLava();
                         continue;
