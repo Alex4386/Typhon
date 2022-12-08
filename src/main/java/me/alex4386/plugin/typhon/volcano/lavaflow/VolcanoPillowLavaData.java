@@ -19,8 +19,8 @@ public class VolcanoPillowLavaData {
     }
 
     VolcanoPillowLavaData(VolcanoVent vent, Block sourceBlock, Block fromBlock) {
-        this(vent, sourceBlock, fromBlock, 1);
-
+        this(vent, sourceBlock, fromBlock, 0);
+        /*
         int extCount = VolcanoLavaCoolData.calculateExtensionCount(
                 vent.lavaFlow.settings.silicateLevel,
                 TyphonUtils.getTwoDimensionalDistance(sourceBlock.getLocation(), fromBlock.getLocation()),
@@ -29,6 +29,7 @@ public class VolcanoPillowLavaData {
         extCount = pillowifyExtensionCount(extCount);
 
         this.extensionCount = extCount;
+        */
     }
 
     VolcanoPillowLavaData(VolcanoVent vent, Block source, Block fromBlock2, int extensionCount) {
@@ -40,6 +41,7 @@ public class VolcanoPillowLavaData {
     }
 
     private static int pillowifyExtensionCount(int normalExtCount) {
+        //return normalExtCount * 8;
         return normalExtCount * 0;
     }
 }
