@@ -54,12 +54,7 @@ public class VolcanoAutoStart implements Listener {
                         TyphonPlugin.plugin,
                         () -> {
                             updateStatus();
-
-                            if (flankTriggered) {
-                                createFissure();
-                            } else {
-                                flankTriggered = true;
-                            }
+                            requestFlankEruption();
                         },
                         0L,
                         Math.max(1, (statusCheckInterval / 20) * volcano.updateRate));
@@ -69,6 +64,14 @@ public class VolcanoAutoStart implements Listener {
         if (scheduleID >= 0) {
             Bukkit.getScheduler().cancelTask(scheduleID);
             scheduleID = -1;
+        }
+    }
+
+    public void requestFlankEruption() {
+        if (flankTriggered) {
+            createFissure();
+        } else {
+            flankTriggered = true;
         }
     }
 
@@ -132,7 +135,7 @@ public class VolcanoAutoStart implements Listener {
 
                     // flank eruption / parasitic cone should be only generated on basaltic eruptions
                     if ((vent.erupt.isErupting() || volcano.isVolcanicField()) && silicateLevel < 0.53) {
-                        if (Math.random() > 0.7 - (0.3 * basaltiness)) continue;
+                        if (Math.random() < 0.7 - (0.6 * basaltiness)) continue;
 
                         boolean migrateLavaFlow = false;
                         if (Math.random() < 0.5) {
