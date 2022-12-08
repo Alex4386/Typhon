@@ -176,7 +176,7 @@ public class VolcanoLavaCoolData {
 
                         Block flowDirectionBlock = block.getRelative(bf);
                         if (flowDirectionBlock.getType().isAir()) {
-                            if (this.flowedFromVent.lavaFlow.isLavaRegistered(flowDirectionBlock)) {
+                            if (!this.flowedFromVent.lavaFlow.isLavaRegistered(flowDirectionBlock)) {
                                 this.flowedFromVent.lavaFlow.registerLavaCoolData(
                                         source,
                                         block,
@@ -211,7 +211,7 @@ public class VolcanoLavaCoolData {
                     if (targetFlowFace != null) {
                         Block flowDirectionBlock = block.getRelative(targetFlowFace);
 
-                        if (this.flowedFromVent.lavaFlow.isLavaRegistered(flowDirectionBlock)) {
+                        if (!this.flowedFromVent.lavaFlow.isLavaRegistered(flowDirectionBlock)) {
                             this.flowedFromVent.lavaFlow.registerLavaCoolData(
                                     source,
                                     block,
@@ -226,7 +226,7 @@ public class VolcanoLavaCoolData {
                 Block flowDirectionBlock = block.getLocation().add(flowVector).getBlock();
                 Block bottomBlock = flowDirectionBlock.getRelative(BlockFace.DOWN);
 
-                if (this.flowedFromVent.lavaFlow.isLavaRegistered(flowDirectionBlock)) {
+                if (!this.flowedFromVent.lavaFlow.isLavaRegistered(flowDirectionBlock)) {
                     flowDirectionBlock.setType(material);
 
                     this.flowedFromVent.lavaFlow.registerLavaCoolData(

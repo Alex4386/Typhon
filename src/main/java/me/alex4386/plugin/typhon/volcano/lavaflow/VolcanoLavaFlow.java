@@ -964,8 +964,7 @@ public class VolcanoLavaFlow implements Listener {
                             || TyphonUtils.containsLiquidWater(flowTarget)) {
 
                         TyphonUtils.removeSeaGrass(flowTarget);
-                        VolcanoPillowLavaData pillowData = pillowLavaMap.get(flowTarget);
-                        if (pillowData == null) {
+                        if (!isPillowLavaRegistered(flowTarget)) {
                             registerLavaCoolData(
                                 lavaData.sourceBlock,
                                 lavaData.fromBlock,
@@ -977,7 +976,7 @@ public class VolcanoLavaFlow implements Listener {
                             if (coolData != null) {
                                 coolData.skipNormalLavaFlowLengthCheck = true;
                             } else {
-                                pillowData = cachedPillowLavaMap.get(flowTarget);
+                                VolcanoPillowLavaData pillowData = cachedPillowLavaMap.get(flowTarget);
                                 if (pillowData != null) {
                                     pillowData.fluidLevel = level;
                                 }
