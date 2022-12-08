@@ -11,6 +11,7 @@ import me.alex4386.plugin.typhon.volcano.log.VolcanoLogger;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoConstructionStatus;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.Plugin;
@@ -107,27 +108,28 @@ public final class TyphonPlugin extends JavaPlugin {
 
         logger.debug(VolcanoLogClass.CORE, "Loaded Volcanoes!");
 
-        if (enableBlueMap) {
-            logger.log(VolcanoLogClass.INIT, "Initializing Bluemap Integration if available!");
+        if (Bukkit.getServer().getPluginManager().getPlugin("BlueMap") != null) {
+            if (enableBlueMap) {
+                logger.log(VolcanoLogClass.INIT, "Initializing Bluemap Integration if available!");
 
-            try {
-                Optional<BlueMapAPI> blueMapAPIOptional = BlueMapAPI.getInstance();
-                blueMap = blueMapAPIOptional.orElseThrow();
-                logger.log(VolcanoLogClass.INIT, "Bluemap Detected. Integrating...");
+                try {
+                    Optional<BlueMapAPI> blueMapAPIOptional = BlueMapAPI.getInstance();
+                    blueMap = blueMapAPIOptional.orElseThrow();
+                    logger.log(VolcanoLogClass.INIT, "Bluemap Detected. Integrating...");
 
-                TyphonBlueMapUtils.loadImages(blueMap);
+                    TyphonBlueMapUtils.loadImages(blueMap);
 
-                for (Map.Entry<String, Volcano> volcanoEntry : listVolcanoes.entrySet()) {
-                    Volcano volcano = volcanoEntry.getValue();
+                    for (Map.Entry<String, Volcano> volcanoEntry : listVolcanoes.entrySet()) {
+                        Volcano volcano = volcanoEntry.getValue();
 
-                    TyphonBlueMapUtils.addVolcanoOnMap(volcano);
+                        TyphonBlueMapUtils.addVolcanoOnMap(volcano);
+                    }
+
+                    logger.log(VolcanoLogClass.INIT, "Bluemap Integration Complete.");
+                } catch (NoClassDefFoundError | NoSuchElementException e) {
+                    logger.warn(VolcanoLogClass.INIT, "Bluemap Integration failed due to missing API Class. Skipping Integration.");
                 }
-
-                logger.log(VolcanoLogClass.INIT, "Bluemap Integration Complete.");
-            } catch(NoClassDefFoundError e) {
-                logger.warn(VolcanoLogClass.INIT, "Bluemap Integration failed due to missing API Class. Skipping Integration.");
             }
-
         }
 
         logger.log(VolcanoLogClass.PLAYER_EVENT, "Initializing...");
