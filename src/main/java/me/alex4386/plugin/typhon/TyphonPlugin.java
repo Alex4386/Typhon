@@ -114,8 +114,9 @@ public final class TyphonPlugin extends JavaPlugin {
 
             try {
                 BlueMapAPI.onEnable(blueMapAPI -> {
-                    this.blueMap = blueMapAPI;
+                    logger.log(VolcanoLogClass.INIT, "Bluemap Detected. Integrating...");
 
+                    blueMap = blueMapAPI;
                     TyphonBlueMapUtils.loadImages(blueMapAPI);
 
                     for (Map.Entry<String, Volcano> volcanoEntry : listVolcanoes.entrySet()) {
@@ -123,6 +124,8 @@ public final class TyphonPlugin extends JavaPlugin {
 
                         TyphonBlueMapUtils.addVolcanoOnMap(volcano);
                     }
+
+                    logger.log(VolcanoLogClass.INIT, "Bluemap Integration Complete.");
                 });
             } catch(NoClassDefFoundError e) {
                 logger.warn(VolcanoLogClass.INIT, "Bluemap Integration failed due to missing API Class");
