@@ -195,20 +195,18 @@ public class VolcanoErupt {
         if (this.style == VolcanoEruptStyle.HAWAIIAN
                 || this.style == VolcanoEruptStyle.STROMBOLIAN) {
             if (this.vent.getType() == VolcanoVentType.FISSURE) {
-
                 int prevFissureLength = this.vent.fissureLength;
-                double targetLength = Math.max(
+                int targetLength = (int) Math.max(
+                    this.vent.longestNormalLavaFlowLength * 2,
+                    this.vent.fissureLength);
 
-                                this.vent.longestNormalLavaFlowLength * 2,
-
-                                this.vent.fissureLength);
                 if (this.vent.fissureLength >= 0) {
-                this.vent.fissureLength = (int) Math.min(
+                    this.vent.fissureLength = Math.min(
                         targetLength,
                         this.vent.maxFissureLength);
-                        } else {
+                } else {
                         this.vent.fissureLength = targetLength;
-                        }
+                }
                 
                 if (prevFissureLength != this.vent.fissureLength) {
                     this.vent.flushCache();
