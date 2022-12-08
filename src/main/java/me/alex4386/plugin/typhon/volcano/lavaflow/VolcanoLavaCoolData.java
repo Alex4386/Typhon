@@ -94,17 +94,13 @@ public class VolcanoLavaCoolData {
         double silicateRatio = (Math.max(0.48, silicateLevel) - 0.48) / (0.68 - 0.48);
         double extensionRate = 0.1;
 
-        if (distance < 30) {
-            return Math.random() < 0.5 ? 1 : 0;
-        }
-
         //if (Math.random() > extensionRate) return 0;
         if (Math.random() < Math.pow(silicateRatio, 1.5)) return 0;
 
         double extBySilicateLevel = Math.max(Math.sqrt(3), (1 - Math.pow(silicateRatio, 2)) * 4);
         double extendLimit = Math.max(20, extBySilicateLevel * height);
 
-        if (extendLimit > distance) {
+        if (extendLimit > distance || distance < 30) {
             double probability = Math.pow(distance / extendLimit, 2);
             if (Math.random() < probability) {
                 return 1;
