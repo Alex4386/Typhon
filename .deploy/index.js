@@ -69,7 +69,6 @@ const minehubCloudCrongifyAPI = "https://cloud.minehub.kr/crongify";
             secrets.refreshToken = result.data.refresh_token ?? secrets.refreshToken;
         } catch(e) {
             console.error(chalk.redBright("x"), "Failed to issue new valid access token with refresh token, It seems refresh token has been invalidated");
-            console.error(e);
             process.exit(1);
         }
 
@@ -174,8 +173,8 @@ const minehubCloudCrongifyAPI = "https://cloud.minehub.kr/crongify";
         console.log(chalk.greenBright("v"), "Restart Success!");
         process.exit(0);
     } catch(e) {
-        console.error(chalk.redBright("x"), "Failed while processing request with Minehub Crongify API. Here are the details");
-        console.error(e);
+        console.error(chalk.redBright("x"), "Failed while processing request with Minehub Crongify API.");
+        //console.error(e);
         process.exit(1);
     }  
 })();
