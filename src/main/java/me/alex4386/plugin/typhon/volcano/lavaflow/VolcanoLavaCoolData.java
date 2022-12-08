@@ -94,6 +94,10 @@ public class VolcanoLavaCoolData {
         double silicateRatio = (Math.max(0.48, silicateLevel) - 0.48) / (0.68 - 0.48);
         double extensionRate = 0.1;
 
+        if (distance < 30) {
+            return Math.random() < 0.5 ? 1 : 0;
+        }
+
         //if (Math.random() > extensionRate) return 0;
         if (Math.random() < Math.pow(silicateRatio, 1.5)) return 0;
 
@@ -153,12 +157,6 @@ public class VolcanoLavaCoolData {
         }
 
         int targetExtensionValue = this.runExtensionCount - 1;
-        if (this.flowedFromVent != null) {
-            if (!this.flowedFromVent.isFlowingLava()) {
-                targetExtensionValue -= (int) (Math.random() * 2);
-            }
-        }
-
         if (bd instanceof Levelled && this.flowedFromVent != null) {
             if (fromBlock != null
                     && flowVector.getBlockY() == 0
@@ -198,8 +196,6 @@ public class VolcanoLavaCoolData {
                     BlockFace targetFlowFace = null;
 
                     for (BlockFace bf : flowableFaces) {
-                        if (Math.random() < 0.2) continue;
-
                         Block flowDirectionBlock = block.getRelative(bf);
                         if (flowDirectionBlock.getType().isAir()) {
                             if (lavaPushingDirection.angle(new Vector(bf.getModX(), bf.getModY(), bf.getModZ())) <= Math.PI / 4) {
