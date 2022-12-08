@@ -43,7 +43,7 @@ public class VolcanoVent {
 
     public double fissureAngle = Math.random() * Math.PI * 2;
     public int fissureLength = 10;
-    public int maxFissureLength = 35;
+    public int maxFissureLength = 200;
 
     public double longestFlowLength = 0.0;
     public double longestNormalLavaFlowLength = 0.0;
