@@ -760,6 +760,15 @@ public class VolcanoLavaFlow implements Listener {
         List<Block> whereToFlows = vent.requestFlows(flowCount);
 
         for (Block whereToFlow : whereToFlows) {
+            if (this.vent.getType() == VolcanoVentType.FISSURE) {
+                if (this.vent.longestNormalLavaFlowLength > 30) {
+                    if (Math.random() < 0.7) {
+                        this.extendLava();
+                        continue;
+                    }
+                }
+            }
+
             VolcanoLavaCoolData coolData = lavaCoolHashMap.get(whereToFlow);
             VolcanoLavaCoolData underData = lavaCoolHashMap.get(whereToFlow.getRelative(BlockFace.DOWN));
             underData = (underData == null) ? cachedLavaCoolHashMap.get(whereToFlow.getRelative(BlockFace.DOWN)) : underData;
@@ -806,7 +815,6 @@ public class VolcanoLavaFlow implements Listener {
         if (this.vent != null && this.vent.erupt != null) {
             this.vent.erupt.updateVentConfig();
         }
-
     }
 
     public void flowLavaFromBomb(Block bomb) {
@@ -820,7 +828,7 @@ public class VolcanoLavaFlow implements Listener {
         double minimumSafeOffset = 20;
 
         if (safeRange > minimumSafeRange + minimumSafeOffset && Math.random() > stickiness) {
-            Block targetBlock = TyphonUtils.getRandomBlockInRange(this.vent.location.getBlock(), (int) (minimumSafeRange + minimumSafeOffset), (int) safeRange);
+            Block targetBlock = TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), (int) (minimumSafeRange + minimumSafeOffset), (int) safeRange);
             Block highestBlock = TyphonUtils.getHighestRocklikes(targetBlock.getLocation()).getRelative(BlockFace.UP);
 
             this.extendLava(highestBlock);
