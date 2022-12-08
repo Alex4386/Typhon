@@ -21,9 +21,9 @@ jobs:
         java-version: 17
         cache: 'maven'
     - name: change version to SNAPSHOT
-        run: |
-          VER_TAG=$(git describe --tags --abbrev=0)
-          mvn versions:set -DnewVersion=${VER_TAG}-SNAPSHOT
+      run: |
+        VER_TAG=$(git describe --tags --abbrev=0)
+        mvn versions:set -DnewVersion=${VER_TAG}-SNAPSHOT
     - name: Build with Maven
       run: mvn package
     - name: Upload a Build Artifact
