@@ -2,10 +2,8 @@ package me.alex4386.plugin.typhon;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombListener;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
@@ -113,22 +111,21 @@ public final class TyphonPlugin extends JavaPlugin {
             logger.log(VolcanoLogClass.INIT, "Initializing Bluemap Integration if available!");
 
             try {
-                BlueMapAPI.getInstance().ifPresent(blueMapAPI -> {
-                    logger.log(VolcanoLogClass.INIT, "Bluemap Detected. Integrating...");
+                Optional<BlueMapAPI> blueMapAPIOptional = BlueMapAPI.getInstance();
+                blueMap = blueMapAPIOptional.orElseThrow();
+                logger.log(VolcanoLogClass.INIT, "Bluemap Detected. Integrating...");
 
-                    blueMap = blueMapAPI;
-                    TyphonBlueMapUtils.loadImages(blueMapAPI);
+                TyphonBlueMapUtils.loadImages(blueMap);
 
-                    for (Map.Entry<String, Volcano> volcanoEntry : listVolcanoes.entrySet()) {
-                        Volcano volcano = volcanoEntry.getValue();
+                for (Map.Entry<String, Volcano> volcanoEntry : listVolcanoes.entrySet()) {
+                    Volcano volcano = volcanoEntry.getValue();
 
-                        TyphonBlueMapUtils.addVolcanoOnMap(volcano);
-                    }
+                    TyphonBlueMapUtils.addVolcanoOnMap(volcano);
+                }
 
-                    logger.log(VolcanoLogClass.INIT, "Bluemap Integration Complete.");
-                });
+                logger.log(VolcanoLogClass.INIT, "Bluemap Integration Complete.");
             } catch(NoClassDefFoundError e) {
-                logger.warn(VolcanoLogClass.INIT, "Bluemap Integration failed due to missing API Class");
+                logger.warn(VolcanoLogClass.INIT, "Bluemap Integration failed due to missing API Class. Skipping Integration.");
             }
 
         }

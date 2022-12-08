@@ -769,10 +769,9 @@ public class VolcanoLavaFlow implements Listener {
                 }
             }
 
-            VolcanoLavaCoolData coolData = lavaCoolHashMap.get(whereToFlow);
-            VolcanoLavaCoolData underData = lavaCoolHashMap.get(whereToFlow.getRelative(BlockFace.DOWN));
-            underData = (underData == null) ? cachedLavaCoolHashMap.get(whereToFlow.getRelative(BlockFace.DOWN)) : underData;
-            
+            VolcanoLavaCoolData coolData = this.getLavaCoolData(whereToFlow);
+
+            VolcanoLavaCoolData underData = this.getLavaCoolData(whereToFlow.getRelative(BlockFace.DOWN));
             if (underData != null) {
                 if (!underData.tickPassed()) {
                     this.extendLava();
