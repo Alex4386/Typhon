@@ -113,7 +113,7 @@ public final class TyphonPlugin extends JavaPlugin {
             logger.log(VolcanoLogClass.INIT, "Initializing Bluemap Integration if available!");
 
             try {
-                BlueMapAPI.onEnable(blueMapAPI -> {
+                BlueMapAPI.getInstance().ifPresent(blueMapAPI -> {
                     logger.log(VolcanoLogClass.INIT, "Bluemap Detected. Integrating...");
 
                     blueMap = blueMapAPI;
