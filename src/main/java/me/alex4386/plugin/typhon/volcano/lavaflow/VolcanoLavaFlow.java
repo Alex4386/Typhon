@@ -313,7 +313,7 @@ public class VolcanoLavaFlow implements Listener {
             }
 
             Block underToBlock = toBlock.getRelative(BlockFace.DOWN);
-            VolcanoLavaCoolData underData = lavaCoolHashMap.get(underToBlock);
+            VolcanoLavaCoolData underData = this.getLavaCoolData(underToBlock);
 
             if (underData != null && !underData.tickPassed()) {
                 if (underData.fromBlock != toBlock) {
@@ -331,29 +331,6 @@ public class VolcanoLavaFlow implements Listener {
             if (!toBlockChunk.isLoaded()) {
                 toBlockChunk.load();
             }
-
-            /*
-            List<Block> nearByBlocks = TyphonUtils.getNearByBlocks(toBlock);
-            boolean isFlowBlocked = false;
-
-            for (Block nearByBlock : nearByBlocks) {
-                if (nearByBlock.getType().isAir()) {
-                    isFlowBlocked = false;
-                    continue;
-                }
-
-                if (nearByBlock.getY() == toBlock.getY()) {
-                    if (Math.abs(nearByBlock.getX() - toBlock.getX()) == 0
-                            ^ Math.abs(nearByBlock.getZ() - toBlock.getZ()) == 0) {
-                        if (nearByBlock.getType().isAir()) {
-                            isFlowBlocked = false;
-                        }
-                    }
-                }
-
-                getVolcano().metamorphism.metamorphoseBlock(nearByBlock);
-            }
-            */
 
             if (!underToBlock.getType().isAir()) {
                 getVolcano().metamorphism.metamorphoseBlock(underToBlock);
