@@ -20,7 +20,7 @@ jobs:
         distribution: 'temurin'
         java-version: 17
         cache: 'maven'
-    - name: Update version of maven file to ${{ github.event.release.tag_name }}
+    - name: change version to SNAPSHOT
         run: |
           VER_TAG=$(git describe --tags --abbrev=0)
           mvn versions:set -DnewVersion=${VER_TAG}-SNAPSHOT
