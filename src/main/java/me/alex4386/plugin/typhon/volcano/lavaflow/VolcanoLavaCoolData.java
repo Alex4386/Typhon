@@ -157,7 +157,7 @@ public class VolcanoLavaCoolData {
         if (bd instanceof Levelled && this.flowedFromVent != null) {
             if (fromBlock != null
                     && flowVector.getBlockY() == 0
-                    && 6 <= level
+                    && 4 <= level
                     && level < 8) {
                 block.setType(material);
 
