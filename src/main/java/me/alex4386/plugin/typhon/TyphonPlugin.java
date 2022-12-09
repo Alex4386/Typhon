@@ -114,7 +114,7 @@ public final class TyphonPlugin extends JavaPlugin {
 
                 try {
                     Optional<BlueMapAPI> blueMapAPIOptional = BlueMapAPI.getInstance();
-                    blueMap = blueMapAPIOptional.orElseThrow();
+                    blueMap = blueMapAPIOptional.get();
                     logger.log(VolcanoLogClass.INIT, "Bluemap Detected. Integrating...");
 
                     TyphonBlueMapUtils.loadImages(blueMap);
@@ -127,7 +127,8 @@ public final class TyphonPlugin extends JavaPlugin {
 
                     logger.log(VolcanoLogClass.INIT, "Bluemap Integration Complete.");
                 } catch (NoClassDefFoundError | NoSuchElementException e) {
-                    logger.warn(VolcanoLogClass.INIT, "Bluemap Integration failed due to missing API Class. Skipping Integration.");
+                    logger.warn(VolcanoLogClass.INIT, "Bluemap Integration failed due to missing API Class. Skipping Integration. See stacktrace below:");
+                    e.printStackTrace();
                 }
             }
         }
