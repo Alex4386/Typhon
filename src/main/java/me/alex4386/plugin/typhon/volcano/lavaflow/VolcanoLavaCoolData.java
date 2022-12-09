@@ -227,7 +227,7 @@ public class VolcanoLavaCoolData {
                             block,
                             flowDirectionBlock,
                             isBomb,
-                            targetExtensionValue
+                            -1
                     );
                 }
 
