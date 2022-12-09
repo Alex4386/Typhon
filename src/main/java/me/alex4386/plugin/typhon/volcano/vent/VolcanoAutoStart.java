@@ -139,7 +139,13 @@ public class VolcanoAutoStart implements Listener {
 
                         boolean migrateLavaFlow = false;
                         if (Math.random() < 0.5) {
-                            migrateLavaFlow = true;
+                            if (vent.isMainVent()) {
+                                if (Math.random() < 0.1) {
+                                    migrateLavaFlow = true;
+                                }
+                            } else {
+                                migrateLavaFlow = true;
+                            }
                         }
 
                         VolcanoVent newVent = vent.erupt.openFissure();
