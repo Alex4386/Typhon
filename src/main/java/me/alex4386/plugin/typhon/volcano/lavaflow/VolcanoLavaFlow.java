@@ -345,9 +345,9 @@ public class VolcanoLavaFlow implements Listener {
 
                 if (!data.isBomb) {
                     if (flowVector.getBlockY() < 0) {
-                        if (Math.random() < 0.1) {
+                        
                             extensionCount = -1;
-                        }
+                        
                     }
                 }
             }
