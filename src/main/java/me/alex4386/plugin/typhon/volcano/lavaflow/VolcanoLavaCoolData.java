@@ -157,7 +157,7 @@ public class VolcanoLavaCoolData {
         if (bd instanceof Levelled && this.flowedFromVent != null) {
             if (fromBlock != null
                     && flowVector.getBlockY() == 0
-                    && 4 <= level
+                    && 6 <= level
                     && level < 8) {
                 block.setType(material);
 
@@ -246,6 +246,8 @@ public class VolcanoLavaCoolData {
 
 
     public void coolDown() {
+        if (this.runExtensionCount > 0 && this.extensionCapable()) this.handleExtension();
+
         block.setType(material);
         BlockData bd = block.getBlockData();
         
@@ -260,8 +262,6 @@ public class VolcanoLavaCoolData {
                 block.setBlockData(d);
             }
         }
-
-        if (this.runExtensionCount > 0 && this.extensionCapable()) this.handleExtension();
     }
 
     public void forceCoolDown() {
