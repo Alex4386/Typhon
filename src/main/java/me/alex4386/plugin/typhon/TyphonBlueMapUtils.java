@@ -2,6 +2,8 @@ package me.alex4386.plugin.typhon;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.function.Consumer;
 
 import javax.imageio.ImageIO;
@@ -22,10 +24,42 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 
 public class TyphonBlueMapUtils {
+  public static boolean enabled = false;
+  public static boolean isInitialized = false;
   public static String eruptingImgUrl = null, dormantImgUrl = null;
 
   public static BlueMapAPI getBlueMapAPI() {
+    if (!enabled) return null;
+
+    if (TyphonPlugin.blueMap == null) {
+      if (!isInitialized) {
+        try {
+          TyphonPlugin.blueMap = BlueMapAPI.getInstance().get();
+
+          TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Bluemap Detected. Integrating...");
+          initialize();
+        } catch(NoClassDefFoundError | NoSuchElementException e) {
+          return null;
+        }
+      }
+    }
     return TyphonPlugin.blueMap;
+  }
+
+  public static void initialize() {
+    isInitialized = true;
+    loadImages();
+    loadTyphonVolcanoes();
+  }
+
+  public static void loadTyphonVolcanoes() {
+    TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Integrating volcanoes to Bluemap");
+
+    for (Map.Entry<String, Volcano> volcanoEntry : TyphonPlugin.listVolcanoes.entrySet()) {
+      Volcano volcano = volcanoEntry.getValue();
+
+      TyphonBlueMapUtils.addVolcanoOnMap(volcano);
+    }
   }
 
   public static boolean getBlueMapAvailable() {

@@ -110,26 +110,11 @@ public final class TyphonPlugin extends JavaPlugin {
 
         if (Bukkit.getServer().getPluginManager().getPlugin("BlueMap") != null) {
             if (enableBlueMap) {
-                logger.log(VolcanoLogClass.INIT, "Initializing Bluemap Integration if available!");
+                TyphonBlueMapUtils.enabled = true;
 
-                try {
-                    Optional<BlueMapAPI> blueMapAPIOptional = BlueMapAPI.getInstance();
-                    blueMap = blueMapAPIOptional.get();
-                    logger.log(VolcanoLogClass.INIT, "Bluemap Detected. Integrating...");
-
-                    TyphonBlueMapUtils.loadImages(blueMap);
-
-                    for (Map.Entry<String, Volcano> volcanoEntry : listVolcanoes.entrySet()) {
-                        Volcano volcano = volcanoEntry.getValue();
-
-                        TyphonBlueMapUtils.addVolcanoOnMap(volcano);
-                    }
-
-                    logger.log(VolcanoLogClass.INIT, "Bluemap Integration Complete.");
-                } catch (NoClassDefFoundError | NoSuchElementException e) {
-                    logger.warn(VolcanoLogClass.INIT, "Bluemap Integration failed due to missing API Class. Skipping Integration. See stacktrace below:");
-                    e.printStackTrace();
-                }
+                BlueMapAPI.onEnable(blueMapAPI -> {
+                    TyphonBlueMapUtils.initialize();
+                });
             }
         }
 

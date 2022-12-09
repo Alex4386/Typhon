@@ -13,6 +13,7 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
 import org.bukkit.entity.Zombie;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -254,11 +255,23 @@ public class VolcanoGeoThermal implements Listener {
 
   public void runVolcanoGeoThermal(VolcanoVent vent, Block block, boolean allowSteam) {
     Block targetBlock = TyphonUtils.getHighestRocklikes(block);
-    Location targetLoc = targetBlock.getLocation().add(0,1,0);
 
+    this.runGeothermalActivity(vent, targetBlock, allowSteam);
+  }
+
+  public void runGeothermalActivity(Block block, boolean allowSteam) {
+    VolcanoVent vent = volcano.manager.getNearestVent(block);
+    if (vent == null) vent = volcano.mainVent;
+
+    this.runGeothermalActivity(vent, block, allowSteam);
+  }
+
+  public void runGeothermalActivity(VolcanoVent vent, Block block, boolean allowSteam) {
     double scaleFactor = vent.getStatus().getScaleFactor();
-    double heatValue = vent.getHeatValue(block.getLocation());
-      
+    double heatValue = volcano.manager.getHeatValue(block.getLocation());
+
+    Location targetLoc = block.getLocation().add(0,1,0);
+
     boolean letOffSteam = false;
     boolean runPoison = false;
 
@@ -285,10 +298,10 @@ public class VolcanoGeoThermal implements Listener {
 
         if (burnRange > 1) {
           vent.volcano.metamorphism.evaporateBlock(block);
-          Block upperBlock = targetBlock.getRelative(BlockFace.UP);
+          Block upperBlock = block.getRelative(BlockFace.UP);
 
-          if (!VolcanoComposition.isVolcanicRock(targetBlock.getType())) {
-            vent.volcano.metamorphism.metamorphoseBlock(targetBlock);
+          if (!VolcanoComposition.isVolcanicRock(block.getType())) {
+            vent.volcano.metamorphism.metamorphoseBlock(block);
           } else if (TyphonUtils.isMaterialTree(upperBlock.getType())) {
             vent.volcano.metamorphism.removeTree(upperBlock);
           }
@@ -332,6 +345,48 @@ public class VolcanoGeoThermal implements Listener {
       
       if (distance < range && entity.getMaxFireTicks() != 0 ) {
         entity.setFireTicks((int) fireTicks);
+      }
+    }
+  }
+
+  public void runUnderground() {
+    List<Player> players = volcano.manager.getAffectedPlayers();
+
+    for (Player player : players) {
+      Block baseBlock = player.getLocation().getBlock();
+      int highestY = baseBlock.getWorld().getHighestBlockYAt(baseBlock.getLocation());
+      if (baseBlock.getY() <= highestY - 3) {
+        // player is at underground
+
+        int y = baseBlock.getY();
+        int diggingInY = highestY - y;
+
+        double referenceCount = Math.pow((diggingInY / 5), 1.1);
+        int count = (int) (volcano.manager.getHeatValue(baseBlock.getLocation()) * referenceCount);
+
+        int radius = 15;
+        for (int i = 0; i < count; i++) {
+          double yAngle = Math.random() * 2 * Math.PI;
+          double xAngle = Math.random() * 2 * Math.PI;
+          double yOffset = radius * Math.sin(yAngle);
+
+          double twoDimRadius = radius * Math.cos(yAngle);
+
+          double xOffset = twoDimRadius * Math.sin(xAngle);
+          double zOffset = twoDimRadius * Math.cos(xAngle);
+
+          Block target = baseBlock.getLocation().add(xOffset, yOffset, zOffset).getBlock();
+          if (target.getRelative(BlockFace.UP).getType().isAir()) {
+            this.runGeothermalActivity(target, true);
+
+            if (diggingInY > 32) {
+              double probability = (diggingInY - 32) / 32;
+              if (Math.random() < probability) {
+                this.playLavaBubbling(target.getLocation());
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -443,6 +498,7 @@ public class VolcanoGeoThermal implements Listener {
               TyphonPlugin.plugin,
               (Runnable) () -> {
                 if (enable) {
+                  this.runUnderground();
                   for (VolcanoVent vent : volcano.manager.getVents()) {
                     this.runGeoThermalCycle(vent);
                   }

@@ -32,12 +32,14 @@ public class VolcanoAutoStart implements Listener {
     public VolcanoAutoStartProbability probability = new VolcanoAutoStartProbability();
 
     public long statusCheckInterval = 72000;
+    public long flankEruptionInterval = 12000;
     public long flankEruptionGracePeriod = 6000;
 
     private boolean flankTriggered = false;
 
-    public long eruptionTimer = 12000;
+    public long eruptionTimer = 18000;
     public int scheduleID = -1;
+    public int flankScheduleID = -1;
 
     public boolean registeredEvent = false;
 
@@ -49,15 +51,23 @@ public class VolcanoAutoStart implements Listener {
         if (scheduleID >= 0) {
             return;
         }
-        Bukkit.getScheduler()
+        scheduleID = Bukkit.getScheduler()
                 .scheduleSyncRepeatingTask(
                         TyphonPlugin.plugin,
                         () -> {
                             updateStatus();
-                            requestFlankEruption();
                         },
                         0L,
                         Math.max(1, (statusCheckInterval / 20) * volcano.updateRate));
+
+        flankScheduleID = Bukkit.getScheduler()
+                .scheduleSyncRepeatingTask(
+                        TyphonPlugin.plugin,
+                        () -> {
+                            requestFlankEruption();
+                        },
+                        0L,
+                        Math.max(1, (flankEruptionInterval / 20) * volcano.updateRate));
     }
 
     public void unregisterTask() {
@@ -65,11 +75,22 @@ public class VolcanoAutoStart implements Listener {
             Bukkit.getScheduler().cancelTask(scheduleID);
             scheduleID = -1;
         }
+        if (flankScheduleID >= 0) {
+            Bukkit.getScheduler().cancelTask(flankScheduleID);
+            flankScheduleID = -1;
+        }
     }
 
     public void requestFlankEruption() {
         if (flankTriggered) {
-            createFissure();
+            int maximumOpenups = this.volcano.maxEruptions - this.volcano.getEruptingVents().size();
+
+            if (maximumOpenups >= 2) {
+                int target = Math.random() < 0.5 ? 1 : 2;
+                for (int i = 0; i < target; i++) {
+                    createFissure();
+                }
+            }
         } else {
             flankTriggered = true;
         }
