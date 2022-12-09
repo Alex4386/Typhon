@@ -315,11 +315,11 @@ public class VolcanoLavaFlow implements Listener {
             Block underToBlock = toBlock.getRelative(BlockFace.DOWN);
             VolcanoLavaCoolData underData = this.getLavaCoolData(underToBlock);
 
-            if (underData != null && !underData.tickPassed()) {
-                if (underData.fromBlock != toBlock) {
-                    underData.forceCoolDown();
-                }
-            }
+            
+      
+                    
+                
+
 
             if (!lavaFlowChunks.contains(toBlock.getChunk())) {
                 lavaFlowChunks.add(toBlock.getLocation().getChunk());
@@ -332,7 +332,7 @@ public class VolcanoLavaFlow implements Listener {
                 toBlockChunk.load();
             }
 
-            if (!underToBlock.getType().isAir()) {
+            if (!underToBlock.getType().isAir() && underToBlock.getType() != Material.LAVA) {
                 getVolcano().metamorphism.metamorphoseBlock(underToBlock);
             }
 
