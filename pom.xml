@@ -6,7 +6,7 @@
 
     <groupId>me.alex4386.plugin</groupId>
     <artifactId>typhon</artifactId>
-    <version>0.6.27</version>
+    <version>0.6.28</version>
     <packaging>jar</packaging>
 
     <name>Typhon</name>
