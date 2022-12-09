@@ -113,7 +113,7 @@ public class VolcanoErupt {
     public VolcanoVentType getNewVentType() {
         double fissureProbability = 0;
         if (this.vent.lavaFlow.settings.silicateLevel < 0.53) {
-            fissureProbability = Math.max(1 - Math.min(0.8, Math.max((this.vent.lavaFlow.settings.silicateLevel - 0.47 / (0.53 - 0.47)), 0)), 0);
+            fissureProbability = Math.max(1 - Math.min(0.8, Math.max((this.vent.lavaFlow.settings.silicateLevel - 0.47 / (0.53 - 0.47)), 0)), 0) * 0.75;
         }
 
         if (fissureProbability > Math.random()) {
