@@ -185,9 +185,7 @@ public class VolcanoVentCommand {
                             "Since this vent is main vent, you should delete the entire volcano."
                                     + " instead of deleting this.");
                 } else {
-                    vent.stop();
-                    vent.shutdown();
-                    vent.volcano.subVents.remove(vent.name);
+                    vent.delete();
                     msg.info("Vent " + vent.name + " has been deleted!");
                 }
                 break;

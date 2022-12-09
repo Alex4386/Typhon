@@ -24,6 +24,7 @@ import org.json.simple.JSONObject;
 
 import de.bluecolored.bluemap.api.markers.POIMarker;
 
+import java.io.IOException;
 import java.util.*;
 
 public class VolcanoVent {
@@ -156,6 +157,23 @@ public class VolcanoVent {
         lavadome.shutdown();
 
         volcano.logger.log(VolcanoLogClass.VENT, "Shutted down vent " + name);
+    }
+
+    public void delete() {
+        this.stop();
+        this.shutdown();
+
+        if (volcano != null) {
+            // delete subvent file
+            if (this.isMainVent()) {
+                try {
+                    volcano.delete();
+                } catch (IOException e) {}
+            } else {
+                volcano.subVents.remove(name);
+                volcano.dataLoader.deleteSubVentConfig(this.getName());
+            }
+        }
     }
 
     public String getName() {
