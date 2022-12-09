@@ -315,12 +315,6 @@ public class VolcanoLavaFlow implements Listener {
             Block underToBlock = toBlock.getRelative(BlockFace.DOWN);
             VolcanoLavaCoolData underData = this.getLavaCoolData(underToBlock);
 
-            
-      
-                    
-                
-
-
             if (!lavaFlowChunks.contains(toBlock.getChunk())) {
                 lavaFlowChunks.add(toBlock.getLocation().getChunk());
                 toBlock.getLocation().getChunk().setForceLoaded(true);
