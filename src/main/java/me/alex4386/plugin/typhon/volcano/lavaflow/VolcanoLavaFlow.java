@@ -829,15 +829,15 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void runPillowLavaTick() {
-        this.handleSurtseyan();
-
         Iterator<Map.Entry<Block, VolcanoPillowLavaData>> iterator =
                 pillowLavaMap.entrySet().iterator();
         List<Block> flowedBlocks = new ArrayList<Block>();
 
+        boolean ranTick = false;
         try {
             while (iterator.hasNext()) {
                 Map.Entry<Block, VolcanoPillowLavaData> data = iterator.next();
+                ranTick = true;
 
                 Block block = data.getKey();
                 VolcanoPillowLavaData lavaData = data.getValue();
@@ -973,6 +973,9 @@ public class VolcanoLavaFlow implements Listener {
             e.printStackTrace();
         }
 
+        if (ranTick) this.handleSurtseyan();
+
+
         for (Block flowedBlock : flowedBlocks) {
             pillowLavaMap.remove(flowedBlock);
         }
@@ -1007,7 +1010,7 @@ public class VolcanoLavaFlow implements Listener {
             flowLava(fittedActualFlows);
             nextFlowTime = timeNow + (int) (settings.delayFlowed * (1000 * (1 / getTickFactor())));
 
-            this.handleSurtseyan();
+            if (fittedActualFlows > 0) this.handleSurtseyan();
         }
     }
 
