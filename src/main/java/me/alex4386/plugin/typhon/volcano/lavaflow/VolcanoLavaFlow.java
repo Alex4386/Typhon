@@ -732,12 +732,10 @@ public class VolcanoLavaFlow implements Listener {
 
         for (Block whereToFlow : whereToFlows) {
             if (this.vent.getType() == VolcanoVentType.FISSURE) {
-                
-                    if (Math.random() < 0.7) {
-                        this.extendLava();
-                        continue;
-                    }
-                
+                if (this.vent.fissureLength < 30 || Math.random() < 0.9) {
+                    this.extendLava();
+                    continue;
+                }
             }
 
             VolcanoLavaCoolData coolData = this.getLavaCoolData(whereToFlow);
