@@ -65,7 +65,7 @@ public class VolcanoLavaCoolData {
                 TyphonUtils.getTwoDimensionalDistance(source.getLocation(), fromBlock.getLocation()),
                 Math.max(5, this.flowedFromVent.getSummitBlock().getY() - this.flowedFromVent.location.getY())
         );
-        
+
         if (this.isBomb) {
             this.runExtensionCount = 0;
         }
@@ -97,14 +97,14 @@ public class VolcanoLavaCoolData {
         //if (Math.random() > extensionRate) return 0;
         if (Math.random() < Math.pow(silicateRatio, 1.5)) return 0;
 
-        double extBySilicateLevel = Math.max(Math.sqrt(3), (1 - Math.pow(silicateRatio, 2)) * 4);
+        double extBySilicateLevel = Math.max(0, Math.pow((1 - silicateRatio), 2.5) * 4);
         double extendLimit = Math.max(20, extBySilicateLevel * height);
 
         if (extendLimit > distance || distance < 30) {
             double probability = Math.pow(distance / extendLimit, 2);
 
             if (Math.random() > probability) {
-                return 1;
+                return (int) extBySilicateLevel;
             }
         }
         return 0;
