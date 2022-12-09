@@ -104,7 +104,7 @@ public class VolcanoLavaCoolData {
             double probability = Math.pow(distance / extendLimit, 2);
 
             if (Math.random() > probability) {
-                return 1;
+                return (int) extBySilicateLevel;
             }
         }
         return 0;
