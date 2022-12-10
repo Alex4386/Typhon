@@ -25,6 +25,7 @@ import org.bukkit.plugin.PluginManager;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Random;
@@ -267,6 +268,10 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runGeothermalActivity(VolcanoVent vent, Block block, boolean allowSteam) {
+    this.runGeothermalActivity(vent, block, allowSteam, true);
+  }
+
+  public void runGeothermalActivity(VolcanoVent vent, Block block, boolean allowSteam, boolean isTop) {
     double scaleFactor = vent.getStatus().getScaleFactor();
     double heatValue = volcano.manager.getHeatValue(block.getLocation());
 
@@ -286,6 +291,8 @@ public class VolcanoGeoThermal implements Listener {
     if (Math.random() < heatValue) {
       if (letOffSteam && allowSteam) {
         double burnRange = 3 * scaleFactor * heatValue;
+
+        if (isTop) this.triggerUndergrounds(vent, block);
 
         TyphonUtils.createRisingSteam(targetLoc, 1, 3);
         if (burnRange > 0) {
@@ -308,6 +315,62 @@ public class VolcanoGeoThermal implements Listener {
         }
       }
     }
+  }
+
+  public void triggerUndergrounds(VolcanoVent vent, Block block) {
+    int radius = 16;
+    int scanRadius = (block.getY() - block.getWorld().getMinHeight()) / 2;
+    Collection<Entity> entities = block.getWorld().getNearbyEntities(block.getLocation().subtract(0, scanRadius, 0), radius, scanRadius, radius);
+    entities.removeIf(e -> e.getLocation().getBlockY() >= TyphonUtils.getHighestRocklikes(e.getLocation()).getY() - 3);
+
+    if (entities.size() > 0) {
+      Block scanBaseBlock = block.getRelative(0, 3, 0);
+      List<Block> underGroundActivityBlocks = new ArrayList<>();
+
+      for (Block scanBlock = scanBaseBlock; scanBlock.getY() >= scanBlock.getWorld().getMinHeight(); scanBlock = scanBlock.getRelative(BlockFace.DOWN)) {
+        if (scanBlock.getType().isAir()) continue;
+
+        if (TyphonUtils.isMaterialRocklikes(scanBlock.getType())) {
+          if (scanBlock.getRelative(BlockFace.UP).getType().isAir()) {
+            underGroundActivityBlocks.add(scanBlock);
+          }
+        }
+      }
+
+      for (Block activityBlock : underGroundActivityBlocks) {
+        this.runUndergroundActivity(vent, activityBlock);
+      }
+    }
+  }
+
+  public void runUndergroundActivity(VolcanoVent vent, Block block) {
+    this.runGeothermalActivity(vent, block, true, false);
+
+    int diggingInY = TyphonUtils.getHighestRocklikes(block).getY() - block.getY();
+    if (block.getRelative(BlockFace.UP).getType().isAir()) {
+      if (vent.isFlowingLava() && Math.random() < 0.25) {
+        if (diggingInY > 15) {
+          double distance = TyphonUtils.getTwoDimensionalDistance(block.getLocation(), vent.getNearestCoreBlock(block.getLocation()).getLocation());
+          int summitY = vent.getSummitBlock().getY();
+          double magmaConduitBase = vent.getRadius() + (summitY / Math.sqrt(3));
+          if (distance < magmaConduitBase + (10 * Math.random())) {
+            Block lavaTarget = block.getRelative(BlockFace.UP);
+            this.playLavaBubbling(lavaTarget.getLocation());
+
+            vent.lavaFlow.flowLava(lavaTarget);
+            return;
+          }
+        }
+      }
+
+      if (diggingInY > 32) {
+        double probability = (diggingInY - 32) / 32;
+        if (Math.random() < probability) {
+          this.playLavaBubbling(block.getLocation());
+        }
+      }
+    }
+
   }
 
   public void playLavaBubbling(Location location) {
@@ -341,72 +404,10 @@ public class VolcanoGeoThermal implements Listener {
     
     for (Entity entity : entities) {
       double distance = entity.getLocation().distance(location);
-      double fireTicks = (120 * volcano.manager.getHeatValue(location)) * (distance / range);
+      double fireTicks = Math.max(30, (300 * volcano.manager.getHeatValue(location)) * (distance / range));
       
       if (distance < range && entity.getMaxFireTicks() != 0 ) {
         entity.setFireTicks((int) fireTicks);
-      }
-    }
-  }
-
-  public void runUnderground() {
-    List<Player> players = volcano.manager.getAffectedPlayers();
-
-    for (Player player : players) {
-      Block baseBlock = player.getLocation().getBlock();
-      int highestY = baseBlock.getWorld().getHighestBlockYAt(baseBlock.getLocation());
-      if (baseBlock.getY() <= highestY - 3) {
-        // player is at underground
-
-        int y = baseBlock.getY();
-        int diggingInY = highestY - y;
-
-        double referenceCount = Math.pow((diggingInY / 5), 1.1);
-        int count = (int) (volcano.manager.getHeatValue(baseBlock.getLocation()) * referenceCount);
-        VolcanoVent vent = volcano.manager.getNearestVent(baseBlock);
-
-        int maxRadius = 15;
-        for (int i = 0; i < count; i++) {
-          double radius = Math.max(1, maxRadius * Math.random());
-
-          double yAngle = Math.random() * 2 * Math.PI;
-          double xAngle = Math.random() * 2 * Math.PI;
-          double yOffset = radius * Math.sin(yAngle);
-
-          double twoDimRadius = radius * Math.cos(yAngle);
-
-          double xOffset = twoDimRadius * Math.sin(xAngle);
-          double zOffset = twoDimRadius * Math.cos(xAngle);
-
-          Block target = baseBlock.getLocation().add(xOffset, yOffset, zOffset).getBlock();
-          if (target.getY() <= target.getWorld().getHighestBlockYAt(target.getLocation()) - 3) {
-            if (target.getRelative(BlockFace.UP).getType().isAir()) {
-              if (vent.isFlowingLava() && Math.random() < 0.25) {
-                if (diggingInY > 15) {
-                  double distance = TyphonUtils.getTwoDimensionalDistance(target.getLocation(), vent.getNearestCoreBlock(target.getLocation()).getLocation());
-                  int summitY = vent.getSummitBlock().getY();
-                  double magmaConduitBase = vent.getRadius() + (summitY / Math.sqrt(3));
-                  if (distance < magmaConduitBase + (10 * Math.random())) {
-                    Block lavaTarget = target.getRelative(BlockFace.UP);
-                    this.playLavaBubbling(lavaTarget.getLocation());
-
-                    vent.lavaFlow.flowLava(lavaTarget);
-                    continue;
-                  }
-                }
-              }
-
-              this.runGeothermalActivity(target, true);
-
-              if (diggingInY > 32) {
-                double probability = (diggingInY - 32) / 32;
-                if (Math.random() < probability) {
-                  this.playLavaBubbling(target.getLocation());
-                }
-              }
-            }
-          }
-        }
       }
     }
   }
@@ -518,7 +519,6 @@ public class VolcanoGeoThermal implements Listener {
               TyphonPlugin.plugin,
               (Runnable) () -> {
                 if (enable) {
-                  this.runUnderground();
                   for (VolcanoVent vent : volcano.manager.getVents()) {
                     this.runGeoThermalCycle(vent);
                   }
