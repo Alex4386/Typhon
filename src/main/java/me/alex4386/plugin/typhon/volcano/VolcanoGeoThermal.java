@@ -363,9 +363,12 @@ public class VolcanoGeoThermal implements Listener {
 
         double referenceCount = Math.pow((diggingInY / 5), 1.1);
         int count = (int) (volcano.manager.getHeatValue(baseBlock.getLocation()) * referenceCount);
+        VolcanoVent vent = volcano.manager.getNearestVent(baseBlock);
 
-        int radius = 15;
+        int maxRadius = 15;
         for (int i = 0; i < count; i++) {
+          double radius = Math.max(1, maxRadius * Math.random());
+
           double yAngle = Math.random() * 2 * Math.PI;
           double xAngle = Math.random() * 2 * Math.PI;
           double yOffset = radius * Math.sin(yAngle);
@@ -377,6 +380,18 @@ public class VolcanoGeoThermal implements Listener {
 
           Block target = baseBlock.getLocation().add(xOffset, yOffset, zOffset).getBlock();
           if (target.getRelative(BlockFace.UP).getType().isAir()) {
+            if (vent.isFlowingLava() && Math.random() < 0.25) {
+              double distance = TyphonUtils.getTwoDimensionalDistance(target.getLocation(), vent.getNearestCoreBlock(target.getLocation()).getLocation());
+              int summitY = vent.getSummitBlock().getY();
+              double magmaConduitBase = vent.getRadius() + (summitY / Math.sqrt(3));
+              if (distance < magmaConduitBase + (10 * Math.random())) {
+                Block lavaTarget = target.getRelative(BlockFace.UP);
+                this.playLavaBubbling(lavaTarget.getLocation());
+
+                vent.lavaFlow.flowLava(lavaTarget);
+              }
+            }
+
             this.runGeothermalActivity(target, true);
 
             if (diggingInY > 32) {

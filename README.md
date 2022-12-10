@@ -27,7 +27,8 @@ Visit: [minehub.kr](https://minehub.kr) for more information! (South Korea Resid
 * Caldera formation
   - Due to mass block updates, This causes bukkit to crash due to watchdog.
     Should come up with mitigations to implement this.
-* Automatic Volcano creation  
+* Automatic Volcano creation 
+* Pyroclastic flows
 
 ## Docs
 Please refer to [DOCS.md](./DOCS.md).  
