@@ -379,25 +379,30 @@ public class VolcanoGeoThermal implements Listener {
           double zOffset = twoDimRadius * Math.cos(xAngle);
 
           Block target = baseBlock.getLocation().add(xOffset, yOffset, zOffset).getBlock();
-          if (target.getRelative(BlockFace.UP).getType().isAir()) {
-            if (vent.isFlowingLava() && Math.random() < 0.25) {
-              double distance = TyphonUtils.getTwoDimensionalDistance(target.getLocation(), vent.getNearestCoreBlock(target.getLocation()).getLocation());
-              int summitY = vent.getSummitBlock().getY();
-              double magmaConduitBase = vent.getRadius() + (summitY / Math.sqrt(3));
-              if (distance < magmaConduitBase + (10 * Math.random())) {
-                Block lavaTarget = target.getRelative(BlockFace.UP);
-                this.playLavaBubbling(lavaTarget.getLocation());
+          if (target.getY() <= target.getWorld().getHighestBlockYAt(target.getLocation()) - 3) {
+            if (target.getRelative(BlockFace.UP).getType().isAir()) {
+              if (vent.isFlowingLava() && Math.random() < 0.25) {
+                if (diggingInY > 15) {
+                  double distance = TyphonUtils.getTwoDimensionalDistance(target.getLocation(), vent.getNearestCoreBlock(target.getLocation()).getLocation());
+                  int summitY = vent.getSummitBlock().getY();
+                  double magmaConduitBase = vent.getRadius() + (summitY / Math.sqrt(3));
+                  if (distance < magmaConduitBase + (10 * Math.random())) {
+                    Block lavaTarget = target.getRelative(BlockFace.UP);
+                    this.playLavaBubbling(lavaTarget.getLocation());
 
-                vent.lavaFlow.flowLava(lavaTarget);
+                    vent.lavaFlow.flowLava(lavaTarget);
+                    continue;
+                  }
+                }
               }
-            }
 
-            this.runGeothermalActivity(target, true);
+              this.runGeothermalActivity(target, true);
 
-            if (diggingInY > 32) {
-              double probability = (diggingInY - 32) / 32;
-              if (Math.random() < probability) {
-                this.playLavaBubbling(target.getLocation());
+              if (diggingInY > 32) {
+                double probability = (diggingInY - 32) / 32;
+                if (Math.random() < probability) {
+                  this.playLavaBubbling(target.getLocation());
+                }
               }
             }
           }
