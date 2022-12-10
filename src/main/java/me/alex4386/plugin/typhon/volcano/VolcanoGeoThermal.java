@@ -290,7 +290,7 @@ public class VolcanoGeoThermal implements Listener {
 
     if (Math.random() < heatValue) {
       if (letOffSteam && allowSteam) {
-        double burnRange = 3 * scaleFactor * heatValue;
+        double burnRange = (int) (Math.sqrt(vent.getStatus().getScaleFactor()) * 6) * heatValue;
 
         if (isTop) this.triggerUndergrounds(vent, block);
 
@@ -437,7 +437,7 @@ public class VolcanoGeoThermal implements Listener {
     // System.out.println("calculated ppms / H2S: "+h2sGasPpm+", SO2: "+so2GasPpm+" / Range: "+range);
  */
 
-    int range = 3;
+    int range = (int) (Math.sqrt(vent.getStatus().getScaleFactor()) * 6 * Math.pow(vent.getHeatValue(location), 1.1));
     Collection<Entity> entities = location.getWorld().getNearbyEntities(location, range, range, range);
     
     for (Entity entity : entities) {
