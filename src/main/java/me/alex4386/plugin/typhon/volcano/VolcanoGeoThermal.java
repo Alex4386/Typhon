@@ -437,7 +437,8 @@ public class VolcanoGeoThermal implements Listener {
     // System.out.println("calculated ppms / H2S: "+h2sGasPpm+", SO2: "+so2GasPpm+" / Range: "+range);
  */
 
-    int range = (int) (Math.sqrt(vent.getStatus().getScaleFactor()) * 6 * Math.pow(vent.getHeatValue(location), 1.1));
+    double scaleValue = Math.sqrt(vent.getStatus().getScaleFactor()) * 6;
+    int range = (int) (scaleValue * Math.pow(vent.getHeatValue(location), 1.1));
     Collection<Entity> entities = location.getWorld().getNearbyEntities(location, range, range, range);
     
     for (Entity entity : entities) {
@@ -453,7 +454,7 @@ public class VolcanoGeoThermal implements Listener {
        */
 
       double intensity = distance / (double) range;
-      if (entity instanceof LivingEntity) {
+      if (entity instanceof LivingEntity && distance <= range) {
         LivingEntity livingEntity = (LivingEntity) entity;
 
         /*
@@ -488,7 +489,7 @@ public class VolcanoGeoThermal implements Listener {
         int timespan = (int) (20 * Math.max(h2sTimespan, so2Timespan));
         */
 
-        int timespan = 20 * 3;
+        int timespan = (int) (25 * scaleValue * Math.sqrt(1 - intensity));
         int poisonousLevel = 0;
 
         if (vent.getStatus().getScaleFactor() >= 0.1) {
