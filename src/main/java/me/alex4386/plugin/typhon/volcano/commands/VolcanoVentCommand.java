@@ -203,6 +203,10 @@ public class VolcanoVentCommand {
                             vent.caldera.forceShutdown();
                             msg.info("Plinian eruption has skipped.");
                         }
+                    } else if (newArgs[1].equalsIgnoreCase("clear")) {
+                        vent.calderaRadius = -1;
+                        vent.getVolcano().trySave();
+                        msg.info("current caldera data has been cleared");
                     } else {
                         try {
                             int radius, deep, oceanY;

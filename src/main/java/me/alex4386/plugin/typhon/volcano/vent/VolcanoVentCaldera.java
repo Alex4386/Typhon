@@ -26,6 +26,11 @@ public class VolcanoVentCaldera {
     int deep = -1;
     Block baseBlock = null;
 
+    long current = 0;
+    long total = 0;
+
+    long cycle = 0;
+
     int scheduleID = -1;
     int tuffLayer = 3;
 
@@ -151,6 +156,8 @@ public class VolcanoVentCaldera {
         target.addAll(calderaEntrySet);
         target.addAll(mountainTopEntrySet);
 
+        total = target.size();
+
         Iterator<Map.Entry<Block, Material>> result = target.iterator();
         this.work = result;
         this.radius = (int) radius;
@@ -167,6 +174,7 @@ public class VolcanoVentCaldera {
                 if (this.work.hasNext()) {
                     Map.Entry<Block, Material> entry = this.work.next();
                     entry.getKey().setType(entry.getValue());
+                    current++;
                 }
             }
 
@@ -231,6 +239,12 @@ public class VolcanoVentCaldera {
             for (int i = 0; i < bombCount; i++) {
                 if (this.work != null && this.work.hasNext()) {
                     double radius = this.excavateAndGetBombRadius();
+
+                    if (Math.random() > 0.01) {
+                        this.vent.record.addEjectaVolume((int) (Math.PI * Math.pow(radius, 2)));
+                        continue;
+                    }
+
                     int offset = 20;
                     int max = (int) Math.max(this.vent.longestNormalLavaFlowLength, this.radius * 2);
                     int min = max < this.radius + offset ? this.radius + offset : this.radius;
@@ -253,6 +267,12 @@ public class VolcanoVentCaldera {
 
             if (this.work == null || !this.work.hasNext()) {
                 this.endErupt();
+            }
+
+            cycle++;
+
+            if (cycle % 10 == 0) {
+                this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Current Cycle #"+cycle+" - ("+current+"/"+total+")");
             }
         }
     }
