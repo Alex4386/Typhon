@@ -3,6 +3,7 @@ package me.alex4386.plugin.typhon.volcano.commands;
 import me.alex4386.plugin.typhon.TyphonCommand;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
@@ -180,13 +181,33 @@ public class VolcanoVentCommand {
                                 sender, label, this.vent.volcano.name, vent.name));
                 break;
             case CALDERA:
-                if (!vent.caldera.canCreateCaldera()) {
-                    msg.error(
-                            "This vent is too small to create caldera.");
-                    break;
+                if (newArgs.length != 1 || !(newArgs.length >= 2 && newArgs[1].equalsIgnoreCase("clear"))) {
+                    if (vent.isCaldera()) {
+                        msg.error(
+                                "This vent already has caldera. If this is an error, run clear");
+                        break;
+                    } else if (!vent.caldera.canCreateCaldera()) {
+                        msg.error(
+                                "This vent is too small to create caldera.");
+                        break;
+                    }
                 }
 
-                if (newArgs.length >= 2) {
+                if (newArgs.length == 1) {
+                    long cycle = vent.caldera.cycle;
+                    long current = vent.caldera.current;
+                    long total = vent.caldera.total;
+
+                    sender.sendMessage(
+                            ChatColor.RED
+                                    + ""
+                                    + ChatColor.BOLD
+                                    + "[Typhon Plugin] "
+                                    + ChatColor.GOLD
+                                    + "Volcano Caldera");
+
+                    msg.info("Current Cycle #"+cycle+" - ("+current+"/"+total+")");
+                } else if (newArgs.length >= 2) {
                     if (newArgs[1].equalsIgnoreCase("start")) {
                         if (!vent.caldera.isSettedUp()) {
                             msg.error(

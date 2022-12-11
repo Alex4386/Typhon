@@ -26,10 +26,10 @@ public class VolcanoVentCaldera {
     int deep = -1;
     Block baseBlock = null;
 
-    long current = 0;
-    long total = 0;
+    public long current = 0;
+    public long total = 0;
 
-    long cycle = 0;
+    public long cycle = 0;
 
     int scheduleID = -1;
     int tuffLayer = 3;
