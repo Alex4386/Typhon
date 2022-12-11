@@ -240,7 +240,7 @@ public class VolcanoVentCaldera {
                 if (this.work != null && this.work.hasNext()) {
                     double radius = this.excavateAndGetBombRadius();
 
-                    if (Math.random() > 0.01) {
+                    if (Math.random() > 0.05) {
                         this.vent.record.addEjectaVolume((int) (Math.PI * Math.pow(radius, 2)));
                         continue;
                     }
@@ -250,7 +250,7 @@ public class VolcanoVentCaldera {
                     int min = max < this.radius + offset ? this.radius + offset : this.radius;
 
                     Location targetLocation = TyphonUtils.getRandomBlockInRange(this.baseBlock, min, max).getLocation();
-                    if (Math.random() < 0.9) {
+                    if (Math.random() < 0.7) {
                         targetLocation = TyphonUtils.getRandomBlockInRange(this.baseBlock, max, max * 2).getLocation();
                     }
 

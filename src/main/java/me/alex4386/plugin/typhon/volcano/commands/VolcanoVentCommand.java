@@ -181,7 +181,7 @@ public class VolcanoVentCommand {
                                 sender, label, this.vent.volcano.name, vent.name));
                 break;
             case CALDERA:
-                if (newArgs.length != 1 || !(newArgs.length >= 2 && newArgs[1].equalsIgnoreCase("clear"))) {
+                if (newArgs.length != 1 && !(newArgs.length >= 2 && newArgs[1].equalsIgnoreCase("clear"))) {
                     if (vent.isCaldera()) {
                         msg.error(
                                 "This vent already has caldera. If this is an error, run clear");
@@ -612,6 +612,10 @@ public class VolcanoVentCommand {
                                 + " blocks (VEI: "
                                 + TyphonUtils.getVEIScale(vent.record.getTotalEjecta())
                                 + ")");
+
+                msg.info(
+                        "Caldera  : "
+                                + (vent.isCaldera() ? vent.calderaRadius : "None"));
 
                 sender.sendMessage(
                         "type \"/"
