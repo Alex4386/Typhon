@@ -330,7 +330,7 @@ public class VolcanoGeoThermal implements Listener {
 
         if (isTop) this.triggerUndergroundsVolcanoGeothermal(vent, block);
         if (isTop) {
-          if (Math.random() < 0.02 && vent.getStatus().getScaleFactor() > 0.3) {
+          if (Math.random() < 0.0002 && vent.getStatus().getScaleFactor() > 0.3) {
             // generate tuff ring
             this.createTuffRing(block);
           }
