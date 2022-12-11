@@ -130,9 +130,8 @@ public class VolcanoAsh {
                         loc.getBlock(),
                         this.vent.getRadius(),
                         (int) Math.round(this.vent.longestNormalLavaFlowLength * 0.5 * multiplier));
-                Location finalLoc = TyphonUtils.getHighestRocklikes(loc.add(xz.x, 0, xz.z))
-                        .getRelative(0,5,0)
-                        .getLocation();
+                Block target = TyphonUtils.getHighestRocklikes(loc.add(xz.x, 1, xz.z));
+                Location finalLoc = target.getRelative(0,5,0).getLocation();
 
                 TyphonUtils.spawnParticleWithVelocity(
                         Particle.CAMPFIRE_SIGNAL_SMOKE,
@@ -143,7 +142,7 @@ public class VolcanoAsh {
                         -0.4,
                         0);
 
-                finalLoc.getBlock().setType(Material.TUFF);
+                target.getRelative(BlockFace.UP).setType(Material.TUFF);
                 vent.record.addEjectaVolume(1);
             }
         }
