@@ -11,6 +11,7 @@ public enum VolcanoLogClass {
     BOMB("Bomb"),
     BOMB_LAUNCHER("Bomb Launcher"),
     BLUE_MAP("BlueMap"),
+    CALDERA("Caldera"),
     COMMAND("Command"),
     COMPOSITION("Composition"),
     CONSTRUCTION("Construction"),

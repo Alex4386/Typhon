@@ -4,6 +4,8 @@ import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBomb;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoLogger;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -32,6 +34,7 @@ public class VolcanoVentCaldera {
     }
 
     public void registerTask() {
+        this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Registering Eruption tick");
         if (this.scheduleID < 0) {
             this.scheduleID = Bukkit.getScheduler().scheduleSyncRepeatingTask(
                     TyphonPlugin.plugin,
@@ -45,6 +48,7 @@ public class VolcanoVentCaldera {
     }
 
     public void unregisterTask() {
+        this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Unregistering Eruption tick");
         if (this.scheduleID >= 0) {
             Bukkit.getScheduler().cancelTask(this.scheduleID);
             this.scheduleID = -1;
@@ -76,6 +80,8 @@ public class VolcanoVentCaldera {
     }
 
     public HashMap<Block, Material> getMountainTops(Block coreBlock, double radius, int targetY) {
+        this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Fetching mountain tops from r="+radius+", y="+targetY);
+
         int summitY = vent.getSummitBlock().getY();
         List<Block> cylinder = VolcanoMath.getCylinder(coreBlock.getRelative(0, summitY - coreBlock.getY(), 0), (int) radius,targetY - summitY);
 
@@ -96,6 +102,8 @@ public class VolcanoVentCaldera {
     }
 
     public HashMap<Block, Material> getCalderaArea(Block coreBlock, double radius, int targetY, int deep, int oceanY) {
+        this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Fetching caldera rims from r="+radius+", y="+targetY+", depth="+deep);
+
         int actualDeep = Math.min(deep, targetY - (int) vent.location.getY());
         double actualRadius = (Math.pow(radius, 2)+Math.pow(deep, 2))/(2*deep);
 
@@ -128,6 +136,8 @@ public class VolcanoVentCaldera {
         int targetY = this.getTargetY(coreBlock, (int) radius);
         if (deep <= 0) deep = this.getDeep((int) radius);
         if (oceanY >= targetY) oceanY = Integer.MIN_VALUE;
+
+        this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Setting up 'work' iterator from r="+radius+", y="+targetY+", oceanY="+oceanY);
 
         HashMap<Block, Material> calderaArea = this.getCalderaArea(coreBlock, radius, targetY, deep, oceanY);
         List<Map.Entry<Block, Material>> calderaEntrySet = new ArrayList<>(calderaArea.entrySet());
@@ -208,6 +218,7 @@ public class VolcanoVentCaldera {
     }
 
     public void startErupt() {
+        this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Starting plinian eruption for caldera formation");
         this.vent.erupt.setStyle(VolcanoEruptStyle.PLINIAN);
         this.initialize();
     }
@@ -247,6 +258,8 @@ public class VolcanoVentCaldera {
     }
 
     public void endErupt() {
+        this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Ending caldera formation");
+
         this.bombardCaldera();
         this.shutdown();
         this.finalizeUpdateVentData();
@@ -265,6 +278,8 @@ public class VolcanoVentCaldera {
     }
 
     public void bombardCaldera(Block baseBlock, int radius) {
+        this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Bombarding caldera internals to look way more dynamic crater");
+
         for (int i = 0; i < Math.pow(radius, 1.1); i++) {
             int bombRadius = (int) Math.random() * 3;
             VolcanoBomb bomb = this.vent.bombs.generateBombToDestination(TyphonUtils.getHighestRocklikes(TyphonUtils.getRandomBlockInRange(baseBlock, radius)).getLocation(), bombRadius);
@@ -274,6 +289,7 @@ public class VolcanoVentCaldera {
     }
 
     public void forceShutdown() {
+        this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Forcefully shutting down caldera formation");
         this.shutdown();
 
         if (work != null) {
