@@ -122,8 +122,9 @@ public class VolcanoExplosion {
     }
 
     public void explodeQueued() {
-
         int bombCount = Math.min(settings.queueSize, queuedBombs);
+        if (queuedBombs == 0) return;
+        
         queuedBombs -= bombCount;
 
         boolean queueComplete = queuedBombs == 0;
