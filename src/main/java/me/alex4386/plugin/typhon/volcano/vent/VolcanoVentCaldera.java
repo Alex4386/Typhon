@@ -272,6 +272,7 @@ public class VolcanoVentCaldera {
             cycle++;
 
             if (cycle % 10 == 0) {
+                if (cycle % 100 == 0) this.vent.flushCache();
                 this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Current Cycle #"+cycle+" - ("+current+"/"+total+")");
             }
         }
@@ -290,6 +291,7 @@ public class VolcanoVentCaldera {
         this.work = null;
 
         this.vent.erupt.stop();
+        this.vent.flushCache();
         this.vent.erupt.setStyle(VolcanoEruptStyle.STROMBOLIAN);
     }
 
