@@ -245,12 +245,12 @@ public class VolcanoVentCaldera {
                         continue;
                     }
 
-                    int offset = 20;
+                    int offset = 60;
                     int max = (int) Math.max(this.vent.longestNormalLavaFlowLength, this.radius * 2);
                     int min = max < this.radius + offset ? this.radius + offset : this.radius;
 
                     Location targetLocation = TyphonUtils.getRandomBlockInRange(this.baseBlock, min, max).getLocation();
-                    if (Math.random() < 0.3) {
+                    if (Math.random() < 0.9) {
                         targetLocation = TyphonUtils.getRandomBlockInRange(this.baseBlock, max, max * 2).getLocation();
                     }
 
