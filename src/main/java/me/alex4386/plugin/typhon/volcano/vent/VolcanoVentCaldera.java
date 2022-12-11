@@ -83,7 +83,7 @@ public class VolcanoVentCaldera {
         this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Fetching mountain tops from r="+radius+", y="+targetY);
 
         int summitY = vent.getSummitBlock().getY();
-        List<Block> cylinder = VolcanoMath.getCylinder(coreBlock.getRelative(0, summitY - coreBlock.getY(), 0), (int) radius,targetY - summitY);
+        List<Block> cylinder = VolcanoMath.getCylinder(coreBlock.getRelative(0, targetY - coreBlock.getY(), 0), (int) radius, summitY - targetY);
 
         HashMap<Block, Material> result = new HashMap<>();
         for (Block block:cylinder) {
@@ -110,7 +110,7 @@ public class VolcanoVentCaldera {
         Block targetYCore = coreBlock.getRelative(0, targetY - coreBlock.getY(), 0);
         Location center = targetYCore.getLocation().add(0, actualRadius - deep, 0);
 
-        List<Block> calderaSphere = VolcanoMath.getCylinder(targetYCore, (int) radius,-actualDeep);
+        List<Block> calderaSphere = VolcanoMath.getCylinder(targetYCore.getRelative(0, -actualDeep, 0), (int) radius, actualDeep);
         calderaSphere.removeIf(block -> block.getLocation().distance(center) > actualRadius);
 
         boolean isOceanLava = coreBlock.getWorld().getEnvironment() == World.Environment.NETHER;
