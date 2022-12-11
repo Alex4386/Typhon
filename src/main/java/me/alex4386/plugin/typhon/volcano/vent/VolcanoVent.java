@@ -724,7 +724,7 @@ public class VolcanoVent {
         this.longestFlowLength = (double) configData.get("longestFlowLength");
         this.longestNormalLavaFlowLength = (double) configData.get("longestNormalLavaFlowLength");
         this.genesis = VolcanoVentGenesis.getGenesisType((String) configData.get("genesis"));
-        this.calderaRadius = (double) configData.getOrDefault("calderaRadius" , 0.0);
+        this.calderaRadius = (double) configData.getOrDefault("calderaRadius" , -1.0);
     }
 
     public JSONObject exportConfig() {

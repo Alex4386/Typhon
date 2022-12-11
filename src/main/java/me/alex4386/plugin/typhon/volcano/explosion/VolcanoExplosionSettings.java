@@ -19,8 +19,8 @@ public class VolcanoExplosionSettings {
         damagingExplosionSize = (int) (long) explosionSizeData.get("withDamage");
         minBombCount = (int) (long) bombCountData.get("min");
         maxBombCount = (int) (long) bombCountData.get("max");
-        delayTicks = (int) (long) configData.getOrDefault("delay", VolcanoExplosionDefaultSettings.delayTicks);
-        queueSize = (int) (long) configData.getOrDefault("queueSize", VolcanoExplosionDefaultSettings.queueSize);
+        delayTicks = (int) (long) configData.getOrDefault("delay", (long) VolcanoExplosionDefaultSettings.delayTicks);
+        queueSize = (int) (long) configData.getOrDefault("queueSize", (long) VolcanoExplosionDefaultSettings.queueSize);
     }
 
     public JSONObject exportConfig() {

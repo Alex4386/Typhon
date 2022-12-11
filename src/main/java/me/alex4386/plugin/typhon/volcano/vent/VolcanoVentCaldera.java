@@ -64,7 +64,7 @@ public class VolcanoVentCaldera {
     }
 
     public boolean canCreateCaldera() {
-        if (vent.calderaRadius >= 0) return false;
+        if (vent.calderaRadius > 0) return false;
         if (vent.getType() != VolcanoVentType.CRATER) return false;
         if (vent.longestNormalLavaFlowLength < 50) return false;
 
