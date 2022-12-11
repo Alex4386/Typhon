@@ -65,18 +65,8 @@ public class VolcanoErupt {
 
                 if (this.style == VolcanoEruptStyle.STROMBOLIAN) {
                     this.vent.lavaFlow.settings.silicateLevel = 0.49 + (Math.random() * (0.55 - 0.49));
-
-                    // little bit of ash plume (particle falling)
                 } else if (this.style == VolcanoEruptStyle.VULCANIAN) {
                     this.vent.lavaFlow.settings.silicateLevel = 0.54 + (Math.random() * (0.57 - 0.54));
-                    this.vent.lavaFlow.settings.delayFlowed = 10;
-                    this.vent.lavaFlow.settings.flowed = 7;
-
-                    this.vent.explosion.settings.minBombCount = 50;
-                    this.vent.explosion.settings.maxBombCount = 100;
-
-                    // cloud of ash plume (campfire smoke + particle falling)
-                } else {
                 }
             } else if (this.style == VolcanoEruptStyle.PELEAN) {
                 // TODO: requires build up of lava dome before hand
@@ -88,8 +78,13 @@ public class VolcanoErupt {
 
     public Location getVentLocation() {
         Volcano volcano = this.vent.getVolcano();
+        boolean isCalderaAvailable = this.vent.craterRadius + 10 < this.vent.calderaRadius * 0.7;
 
-        if (volcano.isVolcanicField()) {
+        if (this.vent.isCaldera() && isCalderaAvailable) {
+            Location location = TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), this.vent.craterRadius + 10, (int) (this.vent.calderaRadius * 0.7)).getLocation();
+
+            return location;
+        } else if (volcano.isVolcanicField()) {
             Location location = TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), 40, (int) Math.max(80, this.vent.longestNormalLavaFlowLength)).getLocation();
 
             if (TyphonUtils.getTwoDimensionalDistance(location, this.vent.location) > volcano.fieldRange) {
@@ -109,6 +104,7 @@ public class VolcanoErupt {
             return location;
         }
     }
+
 
     public VolcanoVentType getNewVentType() {
         double fissureProbability = 0;
@@ -256,6 +252,11 @@ public class VolcanoErupt {
         this.vent.initialize();
         this.vent.setStatus(VolcanoVentStatus.ERUPTING);
         this.vent.explosion.running = true;
+
+        if (this.vent.erupt.getStyle().canFormCaldera) {
+            if (!this.vent.caldera.isSettedUp()) this.vent.caldera.autoSetup();
+            this.vent.caldera.startErupt();
+        }
     }
 
     public void stopExploding() {

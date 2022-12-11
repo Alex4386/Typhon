@@ -19,8 +19,7 @@ public enum VolcanoEruptStyle {
 
     // stromboli but, range longer + with ash
     // rocks: andestic volcanic bombs (+ tuff)
-    // starts with lavadome growth
-    VULCANIAN("vulcanian", new String[] {}, VolcanoEruptCauseType.MAGMATIC, 0.3, 3, 1),
+    VULCANIAN("vulcanian", new String[] {}, VolcanoEruptCauseType.MAGMATIC, 0.3, 5, 1),
 
     // BUILD Lava dome first.
     // andesite lava dome -> explode it. + lava overflow + pyroclastic flows +
@@ -28,18 +27,12 @@ public enum VolcanoEruptStyle {
     // tuff)
     // less volume but range is plinian or vulcanian
     // tuff pyroclastic flows
-    PELEAN("pelean", new String[] { "pelèan" }, VolcanoEruptCauseType.MAGMATIC, 1, 3, 2),
+    PELEAN("pelean", new String[] { "pelèan" }, VolcanoEruptCauseType.MAGMATIC, 1, 5, 2),
 
     // no lava overflow + caldera + top collapse + (granite) rhyolite volcano bombs
     // (A LOT)
     // **RAINING TUFF**
-    PLINIAN("plinian", new String[] { "vesuvian" }, VolcanoEruptCauseType.MAGMATIC, 0.1, 10, 10),
-    
-    // NO LAVA + generate maar (basically no cone generation and explode in ground)
-    // + volcano bombs
-    // (mostly tuff, and really little)
-    // water vapor (toxic), no smoke
-    PHREATIC("phreatic", new String[] { "hydrothermal" }, VolcanoEruptCauseType.PHREATIC, 0, 1, 1),
+    PLINIAN("plinian", new String[] { "vesuvian" }, VolcanoEruptCauseType.MAGMATIC, 0, 0, 2),
     ;
 
     String rawType;
@@ -50,14 +43,7 @@ public enum VolcanoEruptStyle {
     public double bombMultiplier;
     public double ashMultiplier;
 
-    VolcanoEruptStyle(String rawType, String[] aliases, VolcanoEruptCauseType causeType) {
-        this(rawType, aliases, causeType, 1, 1, 1);
-
-        if (causeType == VolcanoEruptCauseType.PHREATIC) {
-            this.lavaMultiplier = 0;
-            this.ashMultiplier = 3;
-        }
-    }
+    public boolean canFormCaldera = false;
 
     VolcanoEruptStyle(
             String rawType,
@@ -74,6 +60,26 @@ public enum VolcanoEruptStyle {
         this.lavaMultiplier = lavaMultiplier;
         this.bombMultiplier = bombMultiplier;
         this.ashMultiplier = ashMultiplier;
+    }
+
+    VolcanoEruptStyle(
+            String rawType,
+            String[] aliases,
+            VolcanoEruptCauseType causeType,
+            double lavaMultiplier,
+            double bombMultiplier,
+            double ashMultiplier,
+            boolean canFormCaldera
+    ) {
+        this(rawType, aliases, causeType, lavaMultiplier, bombMultiplier, ashMultiplier);
+        this.canFormCaldera = canFormCaldera;
+    }
+
+    public double getPyroclasticFlowMultiplier() {
+        if (this == VolcanoEruptStyle.VULCANIAN || this == VolcanoEruptStyle.PLINIAN) return 0.2;
+        else if (this == VolcanoEruptStyle.PELEAN) return 0.6;
+
+        return 0;
     }
 
     public static VolcanoEruptStyle getVolcanoEruptStyle(String name) {

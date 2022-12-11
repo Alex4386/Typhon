@@ -49,6 +49,8 @@ public class VolcanoVent {
     public double longestFlowLength = 0.0;
     public double longestNormalLavaFlowLength = 0.0;
 
+    public double calderaRadius = 0.0;
+
     private List<Block> cachedVentBlocks = null;
     public List<Block> coreBlocks = null;
 
@@ -60,6 +62,7 @@ public class VolcanoVent {
     public VolcanoErupt erupt = new VolcanoErupt(this);
     public VolcanoAsh ash = new VolcanoAsh(this);
     public VolcanoLavaDome lavadome = new VolcanoLavaDome(this);
+    public VolcanoVentCaldera caldera = new VolcanoVentCaldera(this);
 
     public VolcanoVentSurtseyan surtseyan = new VolcanoVentSurtseyan(this);
 
@@ -155,6 +158,7 @@ public class VolcanoVent {
         record.endEjectaTrack();
         bombs.shutdown();
         lavadome.shutdown();
+        caldera.forceShutdown();
 
         volcano.logger.log(VolcanoLogClass.VENT, "Shutted down vent " + name);
     }
@@ -174,6 +178,10 @@ public class VolcanoVent {
                 volcano.dataLoader.deleteSubVentConfig(this.getName());
             }
         }
+    }
+
+    public boolean isCaldera() {
+        return this.calderaRadius > 0;
     }
 
     public String getName() {
@@ -716,6 +724,7 @@ public class VolcanoVent {
         this.longestFlowLength = (double) configData.get("longestFlowLength");
         this.longestNormalLavaFlowLength = (double) configData.get("longestNormalLavaFlowLength");
         this.genesis = VolcanoVentGenesis.getGenesisType((String) configData.get("genesis"));
+        this.calderaRadius = (double) configData.getOrDefault("calderaRadius" , 0.0);
     }
 
     public JSONObject exportConfig() {
@@ -754,6 +763,8 @@ public class VolcanoVent {
 
         JSONObject recordConfig = this.record.exportConfig();
         configData.put("record", recordConfig);
+
+        configData.put("calderaRadius", calderaRadius);
 
         return configData;
     }

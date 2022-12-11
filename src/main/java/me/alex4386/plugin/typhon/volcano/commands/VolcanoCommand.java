@@ -64,13 +64,18 @@ public class VolcanoCommand {
                         }
                     } else if (action.equals(VolcanoCommandAction.CREATE)) {
                         if (args.length == 3) {
-                            String[] types = { "vent", "fissure", "autovent" };
+                            String[] types = { "vent", "fissure", "flank", "autovent" };
                             return Arrays.asList(types.clone());
                         } else if (args.length > 3) {
                             String option = args[2];
                             if (option.toLowerCase().equals("vent")) {
                                 String[] result = { "<name>" };
                                 return Arrays.asList(result);
+                            } else if (option.toLowerCase().equals("flank")) {
+                                if (args.length == 4) {
+                                    String[] result = { "<name>" };
+                                    return Arrays.asList(result);
+                                }
                             } else if (option.toLowerCase().equals("autovent")) {
                                 if (args.length == 4) {
                                     String[] result = { "<playerName>" };
@@ -230,6 +235,41 @@ public class VolcanoCommand {
 
                                             vent.initialize();
                                             msg.info("Vent " + vent.name + " has been created!");
+                                        } else {
+                                            msg.error(
+                                                    sender,
+                                                    "Vent "
+                                                            + name
+                                                            + " already exists on Volcano "
+                                                            + this.volcano.name
+                                                            + "!");
+                                        }
+                                    } else if (type.equalsIgnoreCase("flank")) {
+                                        if (this.volcano.subVents.get(name) == null) {
+                                            if (this.volcano.autoStart.canDoFlankEruption()) {
+                                                VolcanoVent vent = this.volcano.mainVent.erupt.openFissure();
+                                                if (vent != null) {
+                                                    vent.shutdown();
+                                                    this.volcano.subVents.remove(vent.name);
+                                                    this.volcano.subVents.put(name, vent);
+                                                    vent.initialize();
+                                                    msg.info("Vent " + vent.name + " has been created!");
+                                                } else {
+                                                    msg.error(
+                                                            sender,
+                                                            "Failed to generate flank eruption vent "
+                                                                    + name
+                                                                    + " on Volcano "
+                                                                    + this.volcano.name
+                                                                    + "! Try it again.");
+                                                }
+                                            } else {
+                                                msg.error(
+                                                        sender,
+                                                                "Volcano "
+                                                                + this.volcano.name
+                                                                + " is incapable of creating flank eruption!");
+                                            }
                                         } else {
                                             msg.error(
                                                     sender,

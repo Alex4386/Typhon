@@ -32,12 +32,12 @@ public class VolcanoAutoStart implements Listener {
     public VolcanoAutoStartProbability probability = new VolcanoAutoStartProbability();
 
     public long statusCheckInterval = 72000;
-    public long flankEruptionInterval = 12000;
-    public long flankEruptionGracePeriod = 6000;
+    public long flankEruptionInterval = 20*60*10;
+    public long flankEruptionGracePeriod = 20*60*5;
 
     private boolean flankTriggered = false;
 
-    public long eruptionTimer = 18000;
+    public long eruptionTimer = 20*60*30;
     public int scheduleID = -1;
     public int flankScheduleID = -1;
 
@@ -138,8 +138,17 @@ public class VolcanoAutoStart implements Listener {
         }
     }
 
+    public boolean canDoFlankEruption() {
+        double silicateLevel = volcano.mainVent.lavaFlow.settings.silicateLevel;
+        double basaltiness = (0.53 - silicateLevel) / (0.53 - 0.46);
+
+        return basaltiness >= 0;
+    }
+
     public void createFissure() {
         if (volcano.autoStart.canAutoStart) {
+            if (!canDoFlankEruption()) return;
+
             volcano.logger.debug(
                     VolcanoLogClass.AUTOSTART, "Volcano Fissure Opening interval Checking...");
 
@@ -155,7 +164,7 @@ public class VolcanoAutoStart implements Listener {
                     double basaltiness = Math.min(1, Math.max(0, (0.53 - silicateLevel) / (0.53 - 0.46)));
 
                     // flank eruption / parasitic cone should be only generated on basaltic eruptions
-                    if ((vent.erupt.isErupting() || volcano.isVolcanicField()) && silicateLevel < 0.53) {
+                    if ((vent.erupt.isErupting() || vent.isCaldera() || volcano.isVolcanicField()) && silicateLevel < 0.53) {
                         if (Math.random() < 0.7 - (0.6 * basaltiness)) continue;
 
                         boolean migrateLavaFlow = false;
@@ -176,15 +185,11 @@ public class VolcanoAutoStart implements Listener {
                             vent.erupt.stop();
                         }
 
-                        // emulate lava to migrating to target.
-                        newVent.setStatus(VolcanoVentStatus.MAJOR_ACTIVITY);
-                        Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
-                            newVent.start();
-
+                        this.startVentWithGracePeriod(newVent, () -> {
                             Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
-                                newVent.stop();
+                                vent.stop();
                             }, eruptionTimer);
-                        }, (flankEruptionGracePeriod / 20) * volcano.updateRate);
+                        });
 
                         eruptables--;
                         if (eruptables <= 0) break;
@@ -192,7 +197,20 @@ public class VolcanoAutoStart implements Listener {
                 }
             }
         }
+    }
 
+    public void startVentWithGracePeriod(VolcanoVent vent) {
+        this.startVentWithGracePeriod(vent, null);
+    }
+
+    public void startVentWithGracePeriod(VolcanoVent vent, Runnable callback) {
+        // emulate lava to migrating to target.
+        vent.setStatus(VolcanoVentStatus.MAJOR_ACTIVITY);
+        Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
+            vent.start();
+
+            if (callback != null) callback.run();
+        }, (flankEruptionGracePeriod / 20) * volcano.updateRate);
     }
 
     public void updateStatus() {
@@ -230,6 +248,30 @@ public class VolcanoAutoStart implements Listener {
                     case MAJOR_ACTIVITY:
                         if (a <= probability.major_activity.increase) {
                             if (!canEscalate) break;
+                            boolean canTryFlank = (vent.getSummitBlock().getY() - vent.location.getY() > 60);
+                            boolean reachedWorldHeight = vent.getSummitBlock().getY() >= vent.location.getWorld().getMaxHeight();
+
+                            if (reachedWorldHeight || canTryFlank && Math.random() < 0.1) {
+                                if (vent.erupt.getStyle().flowsLava() && !vent.erupt.getStyle().canFormCaldera) {
+                                    if (this.canDoFlankEruption()) {
+                                        vent.volcano.logger.log(
+                                                VolcanoLogClass.AUTOSTART,
+                                                "volcano starting flank eruption due to increment from major_activity");
+
+                                        VolcanoVent flankVent = vent.erupt.openFissure();
+                                        if (flankVent != null) this.startVentWithGracePeriod(flankVent, () -> {
+                                            Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin,
+                                                    () -> {
+                                                        flankVent.stop();
+                                                        flankVent.setStatus(flankVent.getStatus().decrease());
+                                                    },
+                                                    volcano.autoStart.eruptionTimer);
+                                        });
+
+                                        if (reachedWorldHeight) break;
+                                    }
+                                }
+                            }
 
                             vent.volcano.logger.log(
                                 VolcanoLogClass.AUTOSTART,

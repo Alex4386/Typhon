@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Random;
+import java.util.function.Consumer;
 
 public class VolcanoGeoThermal implements Listener {
   public Volcano volcano;
@@ -62,8 +63,14 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runCraterGeothermal(VolcanoVent vent) {
-    Block block = this.getBlockToRunCraterCycle(vent);
+    this.runCraterGeothermal(vent, this.getBlockToRunCraterCycle(vent));
+  }
 
+  public void runCraterGeothermal(VolcanoVent vent, Block block) {
+    this.runCraterGeothermal(vent, block, true);
+  }
+
+  public void runCraterGeothermal(VolcanoVent vent, Block block, boolean onTop) {
     double scaleFactor = vent.getStatus().getScaleFactor();
 
     final Location targetLoc = block
@@ -111,6 +118,8 @@ public class VolcanoGeoThermal implements Listener {
 
     if (Math.random() < scaleFactor) {
       if (letOffSteam) {
+        if (onTop) this.triggerUndergroundsCraterGeothermal(vent, block);
+
         if (runPoison || Math.random() < scaleFactor) {
           vent.volcano.metamorphism.evaporateBlock(block);
         }
@@ -168,6 +177,10 @@ public class VolcanoGeoThermal implements Listener {
     }  
   }
 
+  public void runCalderaGeoThermalCycle(VolcanoVent vent) {
+
+  }
+
   public void runVolcanoGeoThermalCycle(VolcanoVent vent) {
     double volcanoRange = (Math.PI * Math.pow(vent.longestNormalLavaFlowLength, 2));
 
@@ -195,6 +208,14 @@ public class VolcanoGeoThermal implements Listener {
       }
     }
 
+    if (vent.isCaldera()) {
+      for (int i = 0; i < cycleCount / 2; i++) {
+        this.runVolcanoGeoThermal(vent, this.getCalderaGeoThermalBlock(vent));
+      }
+
+      cycleCount /= 2;
+    }
+
     for (int i = 0; i < cycleCount; i++) {
       this.runVolcanoGeoThermal(vent, this.getVolcanoGeoThermalBlock(vent));
     }
@@ -208,7 +229,7 @@ public class VolcanoGeoThermal implements Listener {
     Block block = vent.location.getBlock();
 
     int craterRadius = vent.craterRadius;
-    double range = this.getCraterGeoThermalRadius(vent) - craterRadius;
+    double range = geoThermalRadius - craterRadius;
     double offset = VolcanoMath.getZeroFocusedRandom() * range;
 
     block = TyphonUtils
@@ -228,6 +249,28 @@ public class VolcanoGeoThermal implements Listener {
     int geothermalRange = Math.min(100, (int) (vent.craterRadius * 2.5));
 
     return geothermalRange;
+  }
+
+  public Block getCalderaGeoThermalBlock(VolcanoVent vent) {
+    if (!vent.isCaldera()) return null;
+
+    int radius = 0;
+    if (vent.getType() == VolcanoVentType.CRATER) {
+      radius = vent.craterRadius;
+    }
+
+    Block block;
+
+    block =
+            TyphonUtils
+                    .getRandomBlockInRange(
+                            vent.getCoreBlock(),
+                            radius,
+                            (int) Math
+                                    .floor(
+                                            vent.calderaRadius));
+
+    return block;
   }
 
   public Block getVolcanoGeoThermalBlock(VolcanoVent vent) {
@@ -260,13 +303,6 @@ public class VolcanoGeoThermal implements Listener {
     this.runGeothermalActivity(vent, targetBlock, allowSteam);
   }
 
-  public void runGeothermalActivity(Block block, boolean allowSteam) {
-    VolcanoVent vent = volcano.manager.getNearestVent(block);
-    if (vent == null) vent = volcano.mainVent;
-
-    this.runGeothermalActivity(vent, block, allowSteam);
-  }
-
   public void runGeothermalActivity(VolcanoVent vent, Block block, boolean allowSteam) {
     this.runGeothermalActivity(vent, block, allowSteam, true);
   }
@@ -292,7 +328,13 @@ public class VolcanoGeoThermal implements Listener {
       if (letOffSteam && allowSteam) {
         double burnRange = (int) (Math.sqrt(vent.getStatus().getScaleFactor()) * 6) * heatValue;
 
-        if (isTop) this.triggerUndergrounds(vent, block);
+        if (isTop) this.triggerUndergroundsVolcanoGeothermal(vent, block);
+        if (isTop) {
+          if (Math.random() < 0.02 && vent.getStatus().getScaleFactor() > 0.3) {
+            // generate tuff ring
+            this.createTuffRing(block);
+          }
+        }
 
         TyphonUtils.createRisingSteam(targetLoc, 1, 3);
         if (burnRange > 0) {
@@ -317,7 +359,40 @@ public class VolcanoGeoThermal implements Listener {
     }
   }
 
-  public void triggerUndergrounds(VolcanoVent vent, Block block) {
+  public void createTuffRing(Block block) {
+    int radius = 2 + (int) (Math.random() * 3);
+
+    int deep = Math.random() < 2 ? 1 : 2;
+    double actualRadius = (Math.pow(radius, 2)+Math.pow(deep, 2))/(2*deep);
+    Block center = block.getRelative(0, radius - deep, 0);
+
+    List<Block> tuffRingBlocks = VolcanoMath.getCylinder(block, radius, -deep);
+    tuffRingBlocks.removeIf(block1 -> block.getLocation().distance(center.getLocation()) > actualRadius);
+
+    block.getWorld().createExplosion(block.getLocation(), (float) radius, false, false);
+
+    for (Block tuffRingBlock : tuffRingBlocks) {
+      tuffRingBlock.setType(Material.AIR);
+
+      Block bottomBlock = tuffRingBlock.getRelative(BlockFace.DOWN);
+      if (!bottomBlock.getType().isAir())
+        bottomBlock.setType(Material.TUFF);
+    }
+  }
+
+  public void triggerUndergroundsVolcanoGeothermal(VolcanoVent vent, Block block) {
+    this.triggerUndergrounds(block, (underBlock) -> {
+      this.runUndergroundVolcanoGeothermalActivity(vent, underBlock);
+    });
+  }
+
+  public void triggerUndergroundsCraterGeothermal(VolcanoVent vent, Block block) {
+    this.triggerUndergrounds(block, (underBlock) -> {
+      this.runUndergroundCraterGeothermalActivity(vent, underBlock);
+    });
+  }
+
+  public void triggerUndergrounds(Block block, Consumer<Block> blockConsumer) {
     int radius = 16;
     int scanRadius = (block.getY() - block.getWorld().getMinHeight()) / 2;
     Collection<Entity> entities = block.getWorld().getNearbyEntities(block.getLocation().subtract(0, scanRadius, 0), radius, scanRadius, radius);
@@ -338,13 +413,13 @@ public class VolcanoGeoThermal implements Listener {
       }
 
       for (Block activityBlock : underGroundActivityBlocks) {
-        this.runUndergroundActivity(vent, activityBlock);
+        blockConsumer.accept(activityBlock);
       }
     }
   }
 
-  public void runUndergroundActivity(VolcanoVent vent, Block block) {
-    this.runGeothermalActivity(vent, block, true, false);
+  public void runUndergroundVolcanoGeothermalActivity(VolcanoVent vent, Block block) {
+    this.runCraterGeothermal(vent, block, false);
 
     int diggingInY = TyphonUtils.getHighestRocklikes(block).getY() - block.getY();
     if (block.getRelative(BlockFace.UP).getType().isAir()) {
@@ -370,7 +445,22 @@ public class VolcanoGeoThermal implements Listener {
         }
       }
     }
+  }
 
+  public void runUndergroundCraterGeothermalActivity(VolcanoVent vent, Block block) {
+    this.runGeothermalActivity(vent, block, true, false);
+
+    int diggingInY = TyphonUtils.getHighestRocklikes(block).getY() - block.getY();
+    if (block.getRelative(BlockFace.UP).getType().isAir()) {
+      if (vent.isFlowingLava() && Math.random() < 0.5) {
+        if (diggingInY > 15) {
+          Block lavaTarget = block.getRelative(BlockFace.UP);
+
+          vent.lavaFlow.flowLava(lavaTarget);
+          return;
+        }
+      }
+    }
   }
 
   public void playLavaBubbling(Location location) {

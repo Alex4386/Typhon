@@ -179,6 +179,61 @@ public class VolcanoVentCommand {
                         VolcanoVentCommandAction.getAllManual(
                                 sender, label, this.vent.volcano.name, vent.name));
                 break;
+            case CALDERA:
+                if (!vent.caldera.canCreateCaldera()) {
+                    msg.error(
+                            "This vent is too small to create caldera.");
+                    break;
+                }
+
+                if (newArgs.length >= 2) {
+                    if (newArgs[1].equalsIgnoreCase("start")) {
+                        if (!vent.caldera.isSettedUp()) {
+                            msg.error(
+                                    "The caldera creation settings are not configured.");
+                        } else {
+                            vent.caldera.startErupt();
+                            msg.info("Plinian eruption has started.");
+                        }
+                    } else if (newArgs[1].equalsIgnoreCase("skip")) {
+                        if (!vent.caldera.isSettedUp()) {
+                            msg.error(
+                                    "The caldera creation settings are not configured.");
+                        } else {
+                            vent.caldera.forceShutdown();
+                            msg.info("Plinian eruption has skipped.");
+                        }
+                    } else {
+                        try {
+                            int radius, deep, oceanY;
+                            if (newArgs.length >= 2) {
+                                radius = Integer.parseInt(newArgs[1]);
+                                msg.info("caldera settings:");
+                                msg.info("radius = "+radius);
+                                if (newArgs.length == 2) {
+                                    vent.caldera.autoSetup(radius);
+                                    break;
+                                }
+
+                                deep = Integer.parseInt(newArgs[2]);
+                                msg.info("depth = "+deep);
+                                if (newArgs.length == 3) {
+                                    vent.caldera.autoSetup(radius, deep);
+                                    break;
+                                }
+
+                                oceanY = Integer.parseInt(newArgs[3]);
+                                msg.info("oceanY = "+deep);
+                                if (newArgs.length >= 4) {
+                                    vent.caldera.autoSetup(radius, deep, oceanY);
+                                }
+                            }
+                        } catch(Exception e) {
+                            msg.error("Failed to parse user input.");
+                        }
+                    }
+                }
+                break;
             case DELETE:
                 if (vent.isMainVent()) {
                     msg.error(

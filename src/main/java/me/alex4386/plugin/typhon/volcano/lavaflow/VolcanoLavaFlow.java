@@ -277,10 +277,18 @@ public class VolcanoLavaFlow implements Listener {
                     trySave = true;
                 }
 
-                if (distance > vent.longestNormalLavaFlowLength && !data.skipNormalLavaFlowLengthCheck) {
-                    vent.longestNormalLavaFlowLength = distance;
-                    trySave = true;
+                if (!data.skipNormalLavaFlowLengthCheck) {
+                    if (distance > vent.longestNormalLavaFlowLength) {
+                        vent.longestNormalLavaFlowLength = distance;
+                        trySave = true;
+                    }
+
+                    if (vent.calderaRadius < distance) {
+                        vent.calderaRadius = -1;
+                        trySave = true;
+                    }
                 }
+
 
                 if (trySave) {
                     vent.getVolcano().trySave(false);
@@ -792,6 +800,10 @@ public class VolcanoLavaFlow implements Listener {
     public void extendLava() {
         double stickiness = ((this.settings.silicateLevel - 0.45) / (0.53 - 0.45));
         double safeRange = this.vent.longestNormalLavaFlowLength * 7 / 10.0;
+        if (this.vent.calderaRadius >= 0) {
+            safeRange = this.vent.calderaRadius * 7 / 10.0;
+        }
+
         double minimumSafeRange = this.vent.getType() == VolcanoVentType.CRATER ? this.vent.craterRadius : 0;
         double minimumSafeOffset = 20;
 
@@ -986,6 +998,8 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     private void autoFlowLava() {
+        if (this.vent.erupt.getStyle().canFormCaldera) return;
+
         long timeNow = System.currentTimeMillis();
         if (timeNow >= nextFlowTime) {
             double missedFlowTime = timeNow - nextFlowTime;

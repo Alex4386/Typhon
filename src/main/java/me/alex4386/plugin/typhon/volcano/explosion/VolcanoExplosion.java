@@ -23,6 +23,9 @@ public class VolcanoExplosion {
     public VolcanoExplosionSettings settings = new VolcanoExplosionSettings();
 
     public int scheduleID = -1;
+    public int queueScheduleID = -1;
+
+    public int queuedBombs = 0;
 
     public VolcanoExplosion(VolcanoVent vent) {
         this.vent = vent;
@@ -37,12 +40,25 @@ public class VolcanoExplosion {
                     .scheduleSyncRepeatingTask(
                             TyphonPlugin.plugin,
                             () -> {
-                                if (this.enabled && this.running) {
-                                    explode();
+                                if (this.enabled) {
+                                    explodeQueued();
                                 }
                             },
                             0l,
-                            5l);
+                            4l);
+        }
+
+        if (this.queueScheduleID < 0) {
+            this.queueScheduleID = Bukkit.getScheduler()
+                    .scheduleSyncRepeatingTask(
+                            TyphonPlugin.plugin,
+                            () -> {
+                                if (this.enabled && this.running) {
+                                    if (!this.vent.erupt.getStyle().canFormCaldera) explode();
+                                }
+                            },
+                            0l,
+                            settings.delayTicks);
         }
     }
 
@@ -52,7 +68,9 @@ public class VolcanoExplosion {
                     VolcanoLogClass.EXPLOSION,
                     "Unregistering VolcanoExplosion for vent " + vent.getName());
             Bukkit.getScheduler().cancelTask(scheduleID);
+            Bukkit.getScheduler().cancelTask(queueScheduleID);
             scheduleID = -1;
+            queueScheduleID = -1;
         }
     }
 
@@ -100,56 +118,34 @@ public class VolcanoExplosion {
     }
 
     public void explode(int bombCount) {
-        explode(bombCount, true);
+        queuedBombs += bombCount;
     }
 
-    public void explode(int bombCount, boolean tremor) {
-        explode(bombCount, tremor, true);
-    }
+    public void explodeQueued() {
 
-    public void explode(int bombCount, boolean tremor, boolean smoke) {
-        explode(bombCount, tremor, smoke, true);
-    }
+        int bombCount = Math.min(settings.queueSize, queuedBombs);
+        queuedBombs -= bombCount;
 
-    public void explode(int bombCount, boolean tremor, boolean smoke, boolean summitExplode) {
-        if (bombCount <= 0) return;
+        boolean queueComplete = queuedBombs == 0;
 
-        if (summitExplode) {
-            vent.location
-                    .getWorld()
-                    .createExplosion(
-                            this.selectEruptionVent(), settings.explosionSize, true, false);
-            vent.location
-                    .getWorld()
-                    .createExplosion(
-                            this.selectEruptionVent(), settings.damagingExplosionSize, false, true);
-        }
+        Location targetVent = this.selectEruptionVent();
 
-        if (tremor) {
-            // vent.tremor.eruptTremor();
-        }
+        vent.location.getWorld().playSound(targetVent, Sound.ENTITY_BLAZE_SHOOT, 2F, 0.5F);
 
-        if (smoke) {
-            // Random random = new Random();
-            // int size = 4 + random.nextInt(3);
-            // for (int i = 0; i < 30; i++) {
-            //     Bukkit.getScheduler()
-            //             .runTaskLater(
-            //                     TyphonPlugin.plugin,
-            //                     (Runnable) () -> {
-            //                         vent.ash.createAshPlume();
-            //                     },
-            //                     5L * i);
-            // }
+        vent.location
+                .getWorld()
+                .createExplosion(
+                        targetVent, settings.explosionSize, true, false);
+        vent.location
+                .getWorld()
+                .createExplosion(
+                        targetVent, settings.damagingExplosionSize, false, true);
 
-            // vent.generateSteam(5);
-        }
+        vent.ash.createAshPlume(targetVent);
 
         for (int i = 0; i < bombCount; i++) {
             vent.bombs.requestBombLaunch();
         }
-
-        
 
         // sentient mode.
         List<Player> players = vent.getPlayersInRange();
@@ -168,6 +164,21 @@ public class VolcanoExplosion {
                     for (int i = 0; i < sentientBombs; i++) {
                         vent.bombs.launchBombToDestination(player.getLocation());
                     }
+                }
+            }
+        }
+
+        if (queueComplete) {
+            this.runQueueComplete(targetVent);
+        }
+    }
+
+    public void runQueueComplete(Location targetVent) {
+        if (this.vent != null) {
+            double pyroclast = this.vent.erupt.getStyle().getPyroclasticFlowMultiplier();
+            if (pyroclast > 0) {
+                if (Math.random() < pyroclast) {
+                    this.vent.ash.triggerPyroclasticFlow();
                 }
             }
         }

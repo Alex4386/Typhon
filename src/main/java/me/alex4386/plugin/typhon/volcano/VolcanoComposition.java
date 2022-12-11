@@ -10,7 +10,7 @@ public class VolcanoComposition {
         Random random = new Random();
 
         if (random.nextDouble() < 0.65) {
-            return Material.TUFF;
+            return getExtrusiveRock(silicateLevel);
         }
 
         if (silicateLevel < 0.57) {
