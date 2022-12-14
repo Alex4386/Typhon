@@ -5,6 +5,7 @@ import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentGenesis;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
@@ -294,6 +295,31 @@ public class VolcanoVentCommand {
                         "Vent Status: "
                                 + vent.volcano.manager.getVentChatColor(vent)
                                 + vent.getStatus().toString());
+                break;
+            case GENESIS:
+                if (newArgs.length <= 1) {
+                    msg.info(
+                            "Vent Genesis Type: " +
+                                    vent.genesis.getName()
+                    );
+                    if (vent.genesis == VolcanoVentGenesis.MONOGENETIC) {
+                        msg.info(" - This vent will erupt only once.");
+                    } else if (vent.genesis == VolcanoVentGenesis.POLYGENETIC) {
+                        msg.info(" - This vent can erupt multiple time");
+                    }
+                } else if (newArgs.length >= 2) {
+                    String genesisTypeRaw = newArgs[1];
+                    VolcanoVentGenesis genesisType = VolcanoVentGenesis.getGenesisType(genesisTypeRaw);
+                    if (genesisType == null) {
+                        msg.error("Specified genesis type does not exist!");
+                    } else {
+                        vent.genesis = genesisType;
+                        msg.info(
+                                "Vent Genesis Type: " +
+                                        vent.genesis.getName()
+                        );
+                    }
+                }
                 break;
             case LAVA_DOME:
                 if (newArgs.length <= 1) {

@@ -192,6 +192,21 @@ public class VolcanoVent {
         return this.cachedVentBlocks != null;
     }
 
+    public void removeInvalidVentBlocks() {
+        double averageY = this.averageVentHeight();
+
+        for (Block block : this.getVentBlocks()) {
+            if (block.getY() > averageY + 5) {
+                Block highest = TyphonUtils.getHighestRocklikes(block);
+                Block underHighest = highest.getRelative(BlockFace.DOWN);
+                if (underHighest.getType().isAir()) {
+                    highest.setType(Material.AIR);
+                    averageY = this.averageVentHeight();
+                }
+            }
+        }
+    }
+
     public List<Block> getVentBlocksScaffold() {
         List<Block> scaffoldBlocks = new ArrayList<>();
 
