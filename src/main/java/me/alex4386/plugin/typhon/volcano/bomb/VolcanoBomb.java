@@ -211,7 +211,12 @@ public class VolcanoBomb {
             if (vent.bombs.maxDistance < vent.getTwoDimensionalDistance(targetLocation)) {
                 vent.bombs.maxDistance = vent.getTwoDimensionalDistance(targetLocation);
             }
+
+            if (vent.caldera.isForming() && vent.caldera.isInCalderaRange(targetLocation)) {
+                return;
+            }
         }
+
 
         /*
         // TODO: Shit code, fix later.

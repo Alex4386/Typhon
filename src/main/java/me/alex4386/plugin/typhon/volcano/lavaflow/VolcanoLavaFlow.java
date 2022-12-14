@@ -846,6 +846,12 @@ public class VolcanoLavaFlow implements Listener {
                 Block block = data.getKey();
                 VolcanoPillowLavaData lavaData = data.getValue();
 
+                if (this.vent.caldera.isForming() && this.vent.caldera.isInCalderaRange(block.getLocation())) {
+                    block.setType(Material.WATER);
+                    flowedBlocks.add(block);
+                    continue;
+                }
+
                 // don't flow.
                 if (Math.random() < 0.2) {
                     continue;

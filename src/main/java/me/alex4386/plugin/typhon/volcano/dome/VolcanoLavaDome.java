@@ -198,6 +198,7 @@ public class VolcanoLavaDome {
 
     public void build() {
         int currentlyBuiltHeight = 0;
+        if (this.vent.caldera.isForming()) return;
 
         for (int i = (int) Math.ceil(this.calculateRadius(this.height)); i >= 0; i--) {
             int height = (int) this.getHeight(i);

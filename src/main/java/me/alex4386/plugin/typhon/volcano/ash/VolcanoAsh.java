@@ -142,8 +142,15 @@ public class VolcanoAsh {
                         -0.4,
                         0);
 
-                target.getRelative(BlockFace.UP).setType(Material.TUFF);
-                vent.record.addEjectaVolume(1);
+                boolean shouldDoIt = true;
+                if (this.vent.caldera.isForming()) {
+                    if (this.vent.caldera.isInCalderaRange(target.getLocation())) shouldDoIt = false;
+                }
+
+                if (shouldDoIt) {
+                    target.getRelative(BlockFace.UP).setType(Material.TUFF);
+                    vent.record.addEjectaVolume(1);
+                }
             }
         }
     }

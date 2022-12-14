@@ -246,6 +246,13 @@ public class VolcanoLavaCoolData {
 
 
     public void coolDown() {
+        if (this.flowedFromVent != null) {
+            if (this.flowedFromVent.caldera.isForming() && this.flowedFromVent.caldera.isInCalderaRange(block.getLocation())) {
+                if (block.getType() == Material.LAVA) block.setType(Material.AIR);
+                return;
+            }
+        }
+
         if (this.runExtensionCount > 0 && this.extensionCapable()) this.handleExtension();
 
         block.setType(material);

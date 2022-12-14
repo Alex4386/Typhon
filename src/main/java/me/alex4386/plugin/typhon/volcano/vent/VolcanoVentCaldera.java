@@ -26,6 +26,8 @@ public class VolcanoVentCaldera {
     int deep = -1;
     Block baseBlock = null;
 
+    boolean isRunning = false;
+
     public long current = 0;
     public long total = 0;
 
@@ -77,10 +79,17 @@ public class VolcanoVentCaldera {
     }
 
     public int getTargetY(Block coreBlock, int radius) {
-        Block block = TyphonUtils.getRandomBlockInRange(coreBlock, radius, radius);
-        block = TyphonUtils.getHighestRocklikes(block);
+        int sampleSize = 5 + (int) (Math.random() * 5);
 
-        int targetY = block.getY();
+        int totalY = 0;
+        for (int i = 0; i < sampleSize; i++) {
+            Block block = TyphonUtils.getRandomBlockInRange(coreBlock, radius, radius);
+            block = TyphonUtils.getHighestRocklikes(block);
+
+            totalY += block.getY();
+        }
+
+        int targetY = totalY / sampleSize;
         return targetY;
     }
 
@@ -88,7 +97,7 @@ public class VolcanoVentCaldera {
         this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Fetching mountain tops from r="+radius+", y="+targetY);
 
         int summitY = vent.getSummitBlock().getY();
-        List<Block> cylinder = VolcanoMath.getCylinder(coreBlock.getRelative(0, targetY - coreBlock.getY(), 0), (int) radius, summitY - targetY);
+        List<Block> cylinder = VolcanoMath.getCylinder(coreBlock.getRelative(0, targetY - coreBlock.getY(), 0), (int) radius, summitY - targetY + 2);
 
         HashMap<Block, Material> result = new HashMap<>();
         for (Block block:cylinder) {
@@ -167,6 +176,8 @@ public class VolcanoVentCaldera {
 
     public double excavateAndGetBombRadius() {
         if (this.work != null) {
+            this.isRunning = true;
+
             double bombRadius = Math.random() * 6;
             double volume = (4 / 3) * Math.PI * Math.pow(bombRadius, 3);
 
@@ -219,6 +230,19 @@ public class VolcanoVentCaldera {
         Block block = this.vent.getCoreBlock();
 
         this.setupWork(block, radius, deep, oceanY);
+    }
+
+    public boolean isForming() {
+        return this.isSettedUp() && this.work.hasNext() && this.isRunning;
+    }
+
+    public boolean isInCalderaRange(Location location) {
+        if (!this.isSettedUp()) {
+            return false;
+        }
+
+        boolean inCalderaRange = TyphonUtils.getTwoDimensionalDistance(this.baseBlock.getLocation(), location) < this.radius;
+        return inCalderaRange;
     }
 
     public boolean isSettedUp() {
@@ -293,6 +317,8 @@ public class VolcanoVentCaldera {
         this.vent.erupt.stop();
         this.vent.flushCache();
         this.vent.erupt.setStyle(VolcanoEruptStyle.STROMBOLIAN);
+
+        this.isRunning = false;
     }
 
     public void bombardCaldera() {
