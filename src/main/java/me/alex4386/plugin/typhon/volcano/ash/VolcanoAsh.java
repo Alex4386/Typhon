@@ -56,7 +56,7 @@ public class VolcanoAsh {
 
     public void initialize() {
         this.vent.volcano.logger.log(
-                VolcanoLogClass.ASH, "Intializing VolcanoAsh for vent " + vent.getName());
+                VolcanoLogClass.ASH, "Initializing VolcanoAsh for vent " + vent.getName());
         this.registerTask();
     }
 
