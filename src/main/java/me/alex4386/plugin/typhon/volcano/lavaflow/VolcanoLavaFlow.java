@@ -820,6 +820,12 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void extendLava(Block block) {
+        if (this.vent.caldera.isForming()) {
+            if (this.vent.caldera.isInCalderaRange(block.getLocation())) {
+                return;
+            }
+        }
+        
         Block fromVent = TyphonUtils.getHighestRocklikes(this.vent.getNearestVentBlock(block.getLocation()));
 
         flowLava(fromVent, block);
