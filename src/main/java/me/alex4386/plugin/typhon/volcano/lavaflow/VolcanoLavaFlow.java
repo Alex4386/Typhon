@@ -801,7 +801,11 @@ public class VolcanoLavaFlow implements Listener {
         double stickiness = ((this.settings.silicateLevel - 0.45) / (0.53 - 0.45));
         double safeRange = this.vent.longestNormalLavaFlowLength * 7 / 10.0;
         if (this.vent.calderaRadius >= 0) {
-            safeRange = this.vent.calderaRadius * 7 / 10.0;
+            if (Math.random() < (this.vent.calderaRadius / safeRange)) {
+                safeRange = this.vent.calderaRadius * 7 / 10.0;
+            } else {
+                return;
+            }
         }
 
         double minimumSafeRange = this.vent.getType() == VolcanoVentType.CRATER ? this.vent.craterRadius : 0;
