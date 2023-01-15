@@ -233,6 +233,7 @@ public class VolcanoErupt {
     public void startFlowingLava() {
         this.vent.initialize();
         this.vent.setStatus(VolcanoVentStatus.ERUPTING);
+        this.vent.lavaFlow.resetThisFlow();
         this.vent.lavaFlow.settings.flowing = true;
     }
 

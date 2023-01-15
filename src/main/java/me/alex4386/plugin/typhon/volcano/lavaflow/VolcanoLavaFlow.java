@@ -49,6 +49,9 @@ public class VolcanoLavaFlow implements Listener {
 
     private int highestY = Integer.MIN_VALUE;
 
+    private double hawaiianBaseY = Double.NEGATIVE_INFINITY;
+    private double thisMaxFlowLength = 0;
+
     // core methods
     public VolcanoLavaFlow(VolcanoVent vent) {
         this.vent = vent;
@@ -57,6 +60,11 @@ public class VolcanoLavaFlow implements Listener {
 
     public Volcano getVolcano() {
         return vent.getVolcano();
+    }
+
+    public void resetThisFlow() {
+        this.hawaiianBaseY = this.vent.averageVentHeight();
+        this.thisMaxFlowLength = 0;
     }
 
     public void registerEvent() {
@@ -275,6 +283,10 @@ public class VolcanoLavaFlow implements Listener {
                 if (distance > vent.longestFlowLength) {
                     vent.longestFlowLength = distance;
                     trySave = true;
+                }
+
+                if (distance > this.thisMaxFlowLength) {
+                    this.thisMaxFlowLength = distance;
                 }
 
                 if (!data.skipNormalLavaFlowLengthCheck) {
@@ -737,27 +749,20 @@ public class VolcanoLavaFlow implements Listener {
         // blocks of lava flow at vent "+vent.getName()+"...");
 
         List<Block> whereToFlows = vent.requestFlows(flowCount);
+        double stickiness = ((this.settings.silicateLevel - 0.45) / (0.53 - 0.45));
 
         for (Block whereToFlow : whereToFlows) {
-            if (this.vent.getType() == VolcanoVentType.FISSURE) {
-                if (this.vent.fissureLength < 30 || Math.random() < 0.9) {
+            if (stickiness < 1) {
+                double stepLength = (1 - stickiness) * 20;
+                double targetFloorY = this.hawaiianBaseY + Math.max(0, ((this.thisMaxFlowLength - this.vent.getRadius()) / stepLength));
+
+                if (targetFloorY + 1 < whereToFlow.getY()) {
                     this.extendLava();
                     continue;
-                } else if (this.vent.fissureLength < this.vent.maxFissureLength || this.vent.maxFissureLength <= 0) {
-                    if (Math.random() > 0.0001) {
-                        this.extendLava();
-
-                        if (Math.random() < 0.01) {
-                            this.vent.fissureLength++;
-                        }
-
-                        continue;
-                    }
                 }
             }
 
             VolcanoLavaCoolData coolData = this.getLavaCoolData(whereToFlow);
-
             VolcanoLavaCoolData underData = this.getLavaCoolData(whereToFlow.getRelative(BlockFace.DOWN));
             if (underData != null) {
                 if (!underData.tickPassed()) {
@@ -809,7 +814,7 @@ public class VolcanoLavaFlow implements Listener {
 
     public void extendLava() {
         double stickiness = ((this.settings.silicateLevel - 0.45) / (0.53 - 0.45));
-        double safeRange = this.vent.longestNormalLavaFlowLength * 7 / 10.0;
+        double safeRange = this.thisMaxFlowLength > 0 ? this.thisMaxFlowLength : (this.vent.longestFlowLength * 7 / 10.0);
         if (this.vent.calderaRadius >= 0) {
             if (Math.random() < (this.vent.calderaRadius / safeRange)) {
                 safeRange = this.vent.calderaRadius * 7 / 10.0;
