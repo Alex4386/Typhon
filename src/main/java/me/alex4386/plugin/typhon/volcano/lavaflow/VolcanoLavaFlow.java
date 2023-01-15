@@ -743,6 +743,16 @@ public class VolcanoLavaFlow implements Listener {
                 if (this.vent.fissureLength < 30 || Math.random() < 0.9) {
                     this.extendLava();
                     continue;
+                } else if (this.vent.fissureLength < this.vent.maxFissureLength || this.vent.maxFissureLength <= 0) {
+                    if (Math.random() > 0.0001) {
+                        this.extendLava();
+
+                        if (Math.random() < 0.01) {
+                            this.vent.fissureLength++;
+                        }
+
+                        continue;
+                    }
                 }
             }
 
@@ -825,7 +835,7 @@ public class VolcanoLavaFlow implements Listener {
                 return;
             }
         }
-        
+
         Block fromVent = TyphonUtils.getHighestRocklikes(this.vent.getNearestVentBlock(block.getLocation()));
 
         flowLava(fromVent, block);
