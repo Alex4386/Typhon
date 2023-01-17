@@ -111,7 +111,7 @@ public class VolcanoExplosion {
                 Math.random() * 
                 (settings.maxBombCount - settings.minBombCount)
                 + settings.minBombCount
-            ) * bombMultiplier
+            ) * bombMultiplier * this.vent.lavaFlow.settings.gasContent
         );
         
         explode(bombCount);

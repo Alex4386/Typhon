@@ -216,6 +216,29 @@ public class TyphonUtils {
         return block.getRelative(offsetX, 0, offsetZ);
     }
 
+    public static org.bukkit.block.Block getFairRandomBlockInRange(
+        org.bukkit.block.Block block, int minRange, int maxRange) {
+        Random random = new Random();
+        
+        // mitigation
+        int range = maxRange - minRange;
+
+        // If this is happening, something have been gone wrong
+        if (range < 0) {
+            // TyphonUtils.stackTraceMe();
+            range = 0;
+        }
+
+        double offset = range * (1 - Math.pow(Math.random(), 2.0)) + minRange;
+        double angle = random.nextDouble() * 2 * Math.PI;
+
+        int offsetX = (int) (Math.sin(angle) * offset);
+        int offsetZ = (int) (Math.cos(angle) * offset);
+
+        return block.getRelative(offsetX, 0, offsetZ);
+    }
+
+
     public static org.bukkit.block.Block getRandomBlockInRange(
             org.bukkit.block.Block block, int range) {
         Random random = new Random();

@@ -27,6 +27,7 @@ public class VolcanoVentCommand {
             "lavaflow:delay",
             "lavaflow:flowed",
             "lavaflow:silicateLevel",
+            "lavaflow:gasContent",
             "bombs:explosionPower:min",
             "bombs:explosionPower:max",
             "bombs:radius:min",
@@ -413,6 +414,18 @@ public class VolcanoVentCommand {
                         msg.info(
                                 "lavaflow:silicateLevel - "
                                     + vent.lavaFlow.settings.silicateLevel
+                                    + " ("
+                                    + String.format("%.2f", vent.lavaFlow.settings.silicateLevel * 100)
+                                    + "%)"
+                        );
+                    }
+                } else if (newArgs[1].equalsIgnoreCase("lavaflow:gasContent")) {
+                    if (newArgs.length >= 2) {
+                        if (newArgs.length == 3)
+                            vent.lavaFlow.settings.gasContent = Math.min(1.0, Math.max(0.0, Double.parseDouble(newArgs[2])));
+                        msg.info(
+                                "lavaflow:gasContent - "
+                                    + vent.lavaFlow.settings.gasContent
                                     + " ("
                                     + String.format("%.2f", vent.lavaFlow.settings.silicateLevel * 100)
                                     + "%)"

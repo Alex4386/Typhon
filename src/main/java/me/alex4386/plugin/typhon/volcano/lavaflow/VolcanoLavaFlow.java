@@ -64,6 +64,7 @@ public class VolcanoLavaFlow implements Listener {
 
     public void resetThisFlow() {
         this.hawaiianBaseY = this.vent.averageVentHeight();
+        
         this.thisMaxFlowLength = 0;
     }
 
@@ -815,6 +816,7 @@ public class VolcanoLavaFlow implements Listener {
     public void extendLava() {
         double stickiness = ((this.settings.silicateLevel - 0.45) / (0.53 - 0.45));
         double safeRange = this.thisMaxFlowLength > 0 ? this.thisMaxFlowLength : (this.vent.longestFlowLength * 7 / 10.0);
+
         if (this.vent.calderaRadius >= 0) {
             if (Math.random() < (this.vent.calderaRadius / safeRange)) {
                 safeRange = this.vent.calderaRadius * 7 / 10.0;
@@ -826,11 +828,43 @@ public class VolcanoLavaFlow implements Listener {
         double minimumSafeRange = this.vent.getType() == VolcanoVentType.CRATER ? this.vent.craterRadius : 0;
         double minimumSafeOffset = 20;
 
-        if (safeRange > minimumSafeRange + minimumSafeOffset && Math.random() > stickiness) {
-            Block targetBlock = TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), (int) (minimumSafeRange + minimumSafeOffset), (int) safeRange);
-            Block highestBlock = TyphonUtils.getHighestRocklikes(targetBlock.getLocation()).getRelative(BlockFace.UP);
+        if (safeRange > minimumSafeRange + minimumSafeOffset) {
+            Block coreBlock = this.vent.getCoreBlock();
+            Block targetBlock, highestBlock;
 
-            this.extendLava(highestBlock);
+            if (stickiness < 1) {
+                targetBlock = TyphonUtils.getFairRandomBlockInRange(coreBlock, (int) (minimumSafeRange + minimumSafeOffset), (int) safeRange);
+                highestBlock = TyphonUtils.getHighestRocklikes(targetBlock.getLocation()).getRelative(BlockFace.UP);
+    
+                // slope check
+                double distance = TyphonUtils.getTwoDimensionalDistance(coreBlock.getLocation(), targetBlock.getLocation());
+    
+                int coreY = TyphonUtils.getHighestRocklikes(coreBlock).getY();
+                double stepLength = (1 - stickiness) * 20;
+
+                double targetYOffset = (distance / stepLength);
+                double targetY = coreY - targetYOffset;
+
+                int roundedTargetY = (int) Math.round(targetY);
+                if (highestBlock.getY() <= roundedTargetY) {
+                    this.extendLava(highestBlock);
+                }
+            } else {
+                if (Math.random() < 0.7) {
+                    if (this.vent.longestNormalLavaFlowLength > 50) {
+                        targetBlock = TyphonUtils.getRandomBlockInRange(coreBlock, 0, (int) this.vent.longestFlowLength);
+                        highestBlock = TyphonUtils.getHighestRocklikes(targetBlock.getLocation()).getRelative(BlockFace.UP);
+                        this.extendLava(highestBlock);
+                    } 
+                } else {
+                    if (this.vent.longestFlowLength > 50) {
+                        targetBlock = TyphonUtils.getRandomBlockInRange(coreBlock, 0, (int) this.vent.longestFlowLength);
+                        highestBlock = TyphonUtils.getHighestRocklikes(targetBlock.getLocation()).getRelative(BlockFace.UP);
+                        this.extendLava(highestBlock);    
+                    } 
+                }
+            }
+
         }
     }
 

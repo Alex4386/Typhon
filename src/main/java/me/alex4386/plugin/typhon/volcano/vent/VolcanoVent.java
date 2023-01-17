@@ -53,6 +53,7 @@ public class VolcanoVent {
 
     private List<Block> cachedVentBlocks = null;
     public List<Block> coreBlocks = null;
+    private List<Block> leeveBlocks = null;
 
     public VolcanoBombs bombs = new VolcanoBombs(this);
     public VolcanoExplosion explosion = new VolcanoExplosion(this);
@@ -214,6 +215,7 @@ public class VolcanoVent {
             scaffoldBlocks =
                     VolcanoMath.getCircle(this.location.getBlock(), craterRadius, craterRadius - 1);
         } else if (type == VolcanoVentType.FISSURE) {
+            /*
             double rightAngledAngle = (Math.PI / 2) + this.fissureAngle;
             int xRadiusOffset = (int) Math.cos(rightAngledAngle) * this.craterRadius;
             int zRadiusOffset = (int) Math.sin(rightAngledAngle) * this.craterRadius;
@@ -225,6 +227,13 @@ public class VolcanoVent {
                     VolcanoMath.getLine(fromBlock, this.fissureAngle, this.fissureLength));
 
             fromBlock = this.location.getBlock().getRelative(-xRadiusOffset, 0, -zRadiusOffset);
+            ventBlocksWithCrater.addAll(
+                    VolcanoMath.getLine(fromBlock, this.fissureAngle, this.fissureLength));
+            */
+
+            List<Block> ventBlocksWithCrater = new ArrayList<Block>();
+
+            Block fromBlock = this.location.getBlock();
             ventBlocksWithCrater.addAll(
                     VolcanoMath.getLine(fromBlock, this.fissureAngle, this.fissureLength));
 
@@ -327,7 +336,7 @@ public class VolcanoVent {
         if (isFirstLoad)
             this.volcano.logger.log(
                     VolcanoLogClass.VENT,
-                    "Calculating highest points of vent blocksof " + this.getName() + "...");
+                    "Calculating highest points of vent blocks of " + this.getName() + "...");
         List<Block> newCachedVentBlocks = new ArrayList<>();
         for (Block block : this.cachedVentBlocks) {
             if (block.getType() == Material.LAVA) {
@@ -388,6 +397,7 @@ public class VolcanoVent {
     public void flushCache() {
         this.cachedVentBlocks = null;
         this.coreBlocks = null;
+        this.leeveBlocks = null;
     }
 
     public void setRadius(int ventRadius) {
@@ -407,6 +417,54 @@ public class VolcanoVent {
         }
 
         return (double) totalY / this.cachedVentBlocks.size();
+    }
+
+    public List<Block> getLeeveBlockScffolds() {
+        double rightAngledAngle = (Math.PI / 2) + this.fissureAngle;
+        int xRadiusOffset = (int) Math.cos(rightAngledAngle) * this.craterRadius;
+        int zRadiusOffset = (int) Math.sin(rightAngledAngle) * this.craterRadius;
+
+        List<Block> ventBlocksWithCrater = new ArrayList<Block>();
+
+        Block fromBlock = this.location.getBlock().getRelative(xRadiusOffset, 0, zRadiusOffset);
+        ventBlocksWithCrater.addAll(
+                VolcanoMath.getLine(fromBlock, this.fissureAngle, this.fissureLength));
+
+        fromBlock = this.location.getBlock().getRelative(-xRadiusOffset, 0, -zRadiusOffset);
+        ventBlocksWithCrater.addAll(
+                VolcanoMath.getLine(fromBlock, this.fissureAngle, this.fissureLength));
+
+        return ventBlocksWithCrater;            
+    }
+
+    public List<Block> getLeeveBlocks() {
+        List<Block> target = this.leeveBlocks;
+
+        if (target == null) {
+            target = this.getLeeveBlockScffolds();
+        }
+
+        for (int i = 0; i < target.size(); i++) {
+            Block block = TyphonUtils.getHighestRocklikes(target.get(i));
+            target.set(i, block);
+        }
+
+        this.leeveBlocks = target;
+        return target;
+    }
+
+    public double averageLeeveHeight() {
+        if (this.type == VolcanoVentType.FISSURE) {
+            double total = 0;
+            List<Block> leeveBlocks = this.getLeeveBlocks();
+            for (Block block : leeveBlocks) {
+                total += block.getY();
+            }            
+
+            return total / leeveBlocks.size();
+        } else {
+            return this.averageVentHeight();
+        }
     }
 
     public Block lowestVentBlock() {
@@ -550,6 +608,9 @@ public class VolcanoVent {
 
     public Block getSummitBlock() {
         List<Block> cachedVentBlocks = this.getVentBlocks();
+        if (this.type == VolcanoVentType.FISSURE) {
+            cachedVentBlocks.addAll(this.getLeeveBlocks());
+        }
 
         int highestY = 0;
         Block highestBlock = null;

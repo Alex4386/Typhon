@@ -9,6 +9,7 @@ public class VolcanoLavaFlowSettings {
     public int delayFlowed = VolcanoLavaFlowDefaultSettings.delayFlowed;
 
     public double silicateLevel = 0.63;
+    public double gasContent = 0.4;
 
     public void importConfig(JSONObject configData) {
         this.flowing = (boolean) configData.get("flowing");
@@ -17,6 +18,7 @@ public class VolcanoLavaFlowSettings {
         this.delayFlowed = (int) (long) configData.get("delay");
 
         this.silicateLevel = (double) configData.get("silicateLevel");
+        this.gasContent = (double) configData.getOrDefault("gasContent", 0.4);
     }
 
     public JSONObject exportConfig() {
@@ -28,6 +30,7 @@ public class VolcanoLavaFlowSettings {
         configData.put("delay", this.delayFlowed);
 
         configData.put("silicateLevel", this.silicateLevel);
+        configData.put("gasContent", this.gasContent);
 
         return configData;
     }
