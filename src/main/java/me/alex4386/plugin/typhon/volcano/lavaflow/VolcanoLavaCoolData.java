@@ -277,6 +277,8 @@ public class VolcanoLavaCoolData {
         if (this.flowedFromVent != null) {
             if (this.flowedFromVent.volcano.manager.isInAnyFormingCaldera(block.getLocation())) {
                 block.setType(Material.AIR);
+                this.ticks = 0;
+                return;
             }
         }
 

@@ -19,8 +19,8 @@ public class VolcanoVentCaldera {
     public VolcanoVent vent;
     public Iterator<Map.Entry<Block, Material>> work = null;
 
-    int minBombs = 20;
-    int maxBombs = 40;
+    int minBombs = 50;
+    int maxBombs = 100;
 
     int radius = -1;
     int deep = -1;
@@ -182,7 +182,13 @@ public class VolcanoVentCaldera {
         if (this.work != null) {
             this.isRunning = true;
 
-            double bombRadius = Math.random() * 3;
+            double bombRadius = 1;
+            if (Math.random() < 0.5) {
+                bombRadius = 2;
+                if (Math.random() < 0.75) {
+                    bombRadius = Math.random() * 3;
+                }
+            }
             double volume = (4 / 3) * Math.PI * Math.pow(bombRadius, 3);
 
             for (int i = 0; i < volume; i++) {
