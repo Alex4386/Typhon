@@ -6,7 +6,7 @@ Currently This code is literal spaghetti.
 Will work on cleanup when I feel like to.
 
 ## System Requirements
-* Spigot (or compatibles) for Minecraft® 1.18.2.  
+* Spigot (or compatibles) for Minecraft® 1.19.  
   (Paper Recommended)
 * A Really beefy (multithreading capable) computer/server
 * Bandwidth to cover up extreme usage of FallingBlock and Particles
@@ -24,7 +24,8 @@ Visit: [minehub.kr](https://minehub.kr) for more information! (South Korea Resid
 -->
 
 ## TODO
-* Automatic Volcano creation 
+* Automatic Volcano creation
+* Automatic conversion to cinder cone on pro-longed eruption (depending on gas content)
 
 ## Docs
 Please refer to [DOCS.md](./DOCS.md).  

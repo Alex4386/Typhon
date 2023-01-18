@@ -8,7 +8,7 @@ import me.alex4386.plugin.typhon.TyphonUtils;
 
 public enum VolcanoEruptStyle {
     // lava lake + lava fountain (minimal), lava flow is everything of this.
-    HAWAIIAN("hawaiian", new String[] { "effusive" }, VolcanoEruptCauseType.MAGMATIC, 4, 1, 0.1),
+    HAWAIIAN("hawaiian", new String[] { "effusive" }, VolcanoEruptCauseType.MAGMATIC, 10, 1, 0.1),
 
     // Lava fountain (with volcanic bombs) + can have lava flows, but minimal.
     // Usually goes into

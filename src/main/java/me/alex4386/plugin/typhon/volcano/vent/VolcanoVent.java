@@ -384,7 +384,7 @@ public class VolcanoVent {
 
     public double getHeatValue(Location loc) {
         double distance = this.getTwoDimensionalDistance(loc);
-        double killZone = this.getType() == VolcanoVentType.CRATER ? this.craterRadius : 0;
+        double killZone = this.getRadius();
 
         boolean isInSea = distance <= this.longestNormalLavaFlowLength;
         double pillowRatio = 0.2;
@@ -728,7 +728,7 @@ public class VolcanoVent {
 
         while (iterator.hasNext()) {
             Block block = iterator.next();
-            double currentDistance = block.getLocation().distance(loc);
+            double currentDistance = TyphonUtils.getTwoDimensionalDistance(block.getLocation(), loc);
 
             if (currentDistance < lowest) {
                 lowest = currentDistance;
@@ -751,7 +751,7 @@ public class VolcanoVent {
 
         while (iterator.hasNext()) {
             Block block = iterator.next();
-            double currentDistance = block.getLocation().distance(loc);
+            double currentDistance = TyphonUtils.getTwoDimensionalDistance(block.getLocation(), loc);
 
             if (currentDistance < lowest) {
                 lowest = currentDistance;

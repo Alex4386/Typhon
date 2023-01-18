@@ -106,6 +106,11 @@ public class VolcanoExplosion {
         VolcanoEruptStyle style = this.vent.erupt.getStyle();
         double bombMultiplier = style.bombMultiplier;
 
+        int fissureLengthMultiplier = 1;
+        if (this.vent.getType() == VolcanoVentType.FISSURE) {
+            fissureLengthMultiplier = this.vent.getVentBlocksScaffold().size() / this.vent.craterRadius;
+        }
+
         int bombCount = (int) (
             (
                 Math.random() * 

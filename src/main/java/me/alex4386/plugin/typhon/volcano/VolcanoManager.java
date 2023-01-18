@@ -207,7 +207,8 @@ public class VolcanoManager {
     public double getHeatValue(Location loc) {
         double accumulatedHeat = 0.0f;
         for (VolcanoVent vent : volcano.manager.getVents()) {
-            accumulatedHeat = Math.max(vent.getHeatValue(loc), accumulatedHeat);
+            double heat = vent.getHeatValue(loc);
+            if (accumulatedHeat < heat) accumulatedHeat = heat;
         }
         return Math.min(accumulatedHeat, 1.0);
     }
