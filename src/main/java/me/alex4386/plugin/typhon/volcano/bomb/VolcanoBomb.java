@@ -195,6 +195,7 @@ public class VolcanoBomb {
             return;
         }
 
+        /*
         if (nearestVent.getStatus() == VolcanoVentStatus.ERUPTING) {
             if (distance < nearestVent.craterRadius * 0.7) {
                 VolcanoBomb bomb = this.vent.bombs.generateBomb();
@@ -207,6 +208,7 @@ public class VolcanoBomb {
                 return;
             }    
         }
+        */
 
         if (this.vent.volcano.manager.isInAnyFormingCaldera(loc)) {
             return;
