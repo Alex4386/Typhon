@@ -83,7 +83,7 @@ public class VolcanoBombListener implements Listener {
     }
 
     public static boolean groundChecker(Location location, int offset) {
-        return (location.getBlockY() - TyphonUtils.getHighestOceanFloor(location).getY() <= offset);
+        return (location.getBlockY() - TyphonUtils.getHighestRocklikes(location).getY() <= offset);
     }
 
     @EventHandler

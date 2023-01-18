@@ -19,8 +19,8 @@ public class VolcanoVentCaldera {
     public VolcanoVent vent;
     public Iterator<Map.Entry<Block, Material>> work = null;
 
-    int minBombs = 10;
-    int maxBombs = 20;
+    int minBombs = 20;
+    int maxBombs = 40;
 
     int radius = -1;
     int deep = -1;
@@ -35,6 +35,8 @@ public class VolcanoVentCaldera {
 
     int scheduleID = -1;
     int tuffLayer = 3;
+
+    int tmpTargetY = 0;
 
     VolcanoVentCaldera(VolcanoVent vent) {
         this.vent = vent;
@@ -148,6 +150,8 @@ public class VolcanoVentCaldera {
 
     public void setupWork(Block coreBlock, double radius, int deep, int oceanY) {
         int targetY = this.getTargetY(coreBlock, (int) radius);
+        this.tmpTargetY = targetY;
+
         if (deep <= 0) deep = this.getDeep((int) radius);
         if (oceanY >= targetY) oceanY = Integer.MIN_VALUE;
 
@@ -178,7 +182,7 @@ public class VolcanoVentCaldera {
         if (this.work != null) {
             this.isRunning = true;
 
-            double bombRadius = Math.random() * 6;
+            double bombRadius = Math.random() * 3;
             double volume = (4 / 3) * Math.PI * Math.pow(bombRadius, 3);
 
             for (int i = 0; i < volume; i++) {
@@ -283,11 +287,17 @@ public class VolcanoVentCaldera {
             }
 
             for (VolcanoBomb bomb : bombs) {
-                vent.bombs.launchSpecifiedBomb(bomb);
+                if (Math.random() < 0.1) { 
+                    vent.bombs.launchSpecifiedBomb(bomb);
+                } else {
+                    bomb.land();
+                }
             }
 
-            vent.ash.createAshPlume();
-            vent.ash.triggerAshFall();
+            this.vent.location
+                .getWorld()
+                .createExplosion(
+                        this.vent.getCoreBlock().getLocation(), 8F, true, false);
 
             if (this.work == null || !this.work.hasNext()) {
                 this.endErupt();
@@ -297,7 +307,7 @@ public class VolcanoVentCaldera {
 
             if (cycle % 10 == 0) {
                 if (cycle % 100 == 0) this.vent.flushCache();
-                this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Current Cycle #"+cycle+" - ("+current+"/"+total+")");
+                this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Current Cycle #"+cycle+" - ("+current+"/"+total+") - "+String.format("%.2f", current*100/(double) total)+"%");
             }
         }
     }
@@ -308,6 +318,25 @@ public class VolcanoVentCaldera {
         this.bombardCaldera();
         this.shutdown();
         this.finalizeUpdateVentData();
+
+        this.vent.erupt.stop();
+        this.vent.volcano.quickCool();
+        this.vent.bombs.bombMap.clear();
+        
+        this.cleanupLeftovers();
+    }
+
+    public void cleanupLeftovers() {
+        HashMap<Block, Material> leftovers = this.getMountainTops(this.baseBlock, this.radius, this.tmpTargetY);
+
+        this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Starting cleanup...");
+        for (Block block : leftovers.keySet()) {
+            if (block.getType() != Material.AIR) {
+                block.setType(Material.AIR);
+            }
+        }
+
+        this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Cleanup Complete!");
     }
 
     public void finalizeUpdateVentData() {

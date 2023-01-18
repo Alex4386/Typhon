@@ -45,6 +45,24 @@ public class VolcanoManager {
         return false;
     }
 
+    public boolean isInAnyCaldera(Location loc) {
+        List<VolcanoVent> vents = this.getVents();
+
+        for (VolcanoVent vent : vents) {
+            if (vent.caldera.isInCalderaRange(loc)) return true;
+        }
+        return false;
+    }
+
+    public boolean isInAnyFormingCaldera(Location loc) {
+        List<VolcanoVent> vents = this.getVents();
+
+        for (VolcanoVent vent : vents) {
+            if (vent.caldera.isInCalderaRange(loc) && vent.caldera.isForming()) return true;
+        }
+        return false;
+    }
+
     public List<Player> getAffectedPlayers() {
         Collection<Player> onlinePlayers = (Collection<Player>) Bukkit.getOnlinePlayers();
         List<Player> targetPlayers = new ArrayList<>();

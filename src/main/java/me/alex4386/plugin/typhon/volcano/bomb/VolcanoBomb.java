@@ -143,6 +143,7 @@ public class VolcanoBomb {
 
     public void land() {
         Volcano volcano = this.vent.getVolcano();
+        if (this.targetLocation != null && this.landingLocation == null) this.landingLocation = this.targetLocation;
 
         if (this.block != null) {
             this.landingLocation = block.getLocation();            
@@ -194,14 +195,20 @@ public class VolcanoBomb {
             return;
         }
 
-        if (distance < nearestVent.craterRadius * 0.7) {
-            VolcanoBomb bomb = this.vent.bombs.generateBomb();
-            bomb.land();
+        if (nearestVent.getStatus() == VolcanoVentStatus.ERUPTING) {
+            if (distance < nearestVent.craterRadius * 0.7) {
+                VolcanoBomb bomb = this.vent.bombs.generateBomb();
+                bomb.land();
+    
+                Block craterInsideBlock = TyphonUtils.getHighestRocklikes(TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), 0, (int) (this.vent.craterRadius * 1.2))).getRelative(BlockFace.UP);
+                if (craterInsideBlock.getY() < this.vent.averageVentHeight() - (this.vent.craterRadius * 0.8)) {
+                    this.vent.lavaFlow.flowLavaFromBomb(craterInsideBlock);
+                }
+                return;
+            }    
+        }
 
-            Block craterInsideBlock = TyphonUtils.getHighestRocklikes(TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), 0, (int) (this.vent.craterRadius * 1.2))).getRelative(BlockFace.UP);
-            if (craterInsideBlock.getY() < this.vent.averageVentHeight() - (this.vent.craterRadius * 0.8)) {
-                this.vent.lavaFlow.flowLavaFromBomb(craterInsideBlock);
-            }
+        if (this.vent.volcano.manager.isInAnyFormingCaldera(loc)) {
             return;
         }
 
@@ -212,9 +219,6 @@ public class VolcanoBomb {
                 vent.bombs.maxDistance = vent.getTwoDimensionalDistance(targetLocation);
             }
 
-            if (vent.caldera.isForming() && vent.caldera.isInCalderaRange(targetLocation)) {
-                return;
-            }
         }
 
 

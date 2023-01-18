@@ -11,20 +11,16 @@ public class VolcanoComposition {
     public static Material getBombRock(double silicateLevel) {
         Random random = new Random();
 
-        if (random.nextDouble() < 0.65) {
-            return getExtrusiveRock(silicateLevel);
-        }
-
         if (silicateLevel < 0.57) {
             double s = random.nextDouble();
 
             // bunch of scoria
-            if (s < (1 / 3)) {
+            if (s < (1.0 / 3.0)) {
                 // black scoria
                 return Material.BLACKSTONE;
-            } else if (s < (2 / 3)) {
+            } else if (s < (2.0 / 3.0)) {
                 // gray scoria
-                return Material.DEEPSLATE;
+                return Material.COBBLED_DEEPSLATE;
             } else {
                 // purple-red scoria
                 if (Math.random() < 0.0001) {
@@ -33,44 +29,27 @@ public class VolcanoComposition {
                     return Material.NETHERRACK;
                 }
             }
-        } else if (silicateLevel < 0.60) {
-            double ratio = (silicateLevel - 0.56) / (0.60 - 0.56);
+        } else {
+            if (silicateLevel < 0.60) {
 
-            double s = random.nextDouble();
-            if (s > ratio) {
-                return getBombRock(0.56);
-            } else {
-                return getBombRock(0.61);
-            }
-        } else if (silicateLevel < 0.65) {
-            double s = random.nextDouble();
+                if (random.nextDouble() < 0.65) {
+                    return Material.TUFF;
+                }
 
-            // obsidian
-            if (s < (1 / 2)) {
-                //if (random.nextDouble() < 0.75) {
-                    return Material.OBSIDIAN;
-                //} else {
-                //    return Material.CRYING_OBSIDIAN;
-                //}
-            } else {
-                // trachyandesite
-                return Material.ANDESITE;
-            }
-        } else if (silicateLevel < 0.70) {
-            double ratio = (silicateLevel - 0.65) / (0.70 - 0.65);
-
-            double s = random.nextDouble();
-            if (s > ratio) {
-                return getBombRock(0.64);
-            } else {
-                return getBombRock(0.71);
-            }
-        } else if (silicateLevel < 0.90) {
-            double s = random.nextDouble();
-            if (s > 0.2) {
-                return Material.TUFF;
-            } else if (s > 0.1) {
-                return Material.AMETHYST_BLOCK;
+                return getExtrusiveRock(silicateLevel);
+            } else if (silicateLevel < 0.90) {
+                double s = random.nextDouble();
+                if (s > 0.2) {
+                    return Material.TUFF;
+                } else if (s > 0.1) {
+                    return Material.AMETHYST_BLOCK;
+                } else {
+                    if (Math.random() < 0.9) {
+                        return Material.NETHER_QUARTZ_ORE;
+                    } else {
+                        return Material.QUARTZ_BLOCK;
+                    }
+                }
             } else {
                 if (Math.random() < 0.9) {
                     return Material.NETHER_QUARTZ_ORE;
@@ -78,12 +57,7 @@ public class VolcanoComposition {
                     return Material.QUARTZ_BLOCK;
                 }
             }
-        } else {
-            if (Math.random() < 0.9) {
-                return Material.NETHER_QUARTZ_ORE;
-            } else {
-                return Material.QUARTZ_BLOCK;
-            }        }
+        }
     }
 
     public static Material getExtrusiveRock(double silicateLevel) {
@@ -124,7 +98,7 @@ public class VolcanoComposition {
                 return Material.ANDESITE;
             } else {
                 if (random.nextDouble() < 0.01 * ratio) return Material.QUARTZ_BLOCK;
-                if (random.nextDouble() < 0.5 * ratio) return Material.OBSIDIAN;
+                if (random.nextDouble() < 0.5 * ratio) { return (random.nextDouble() < 0.9) ? Material.OBSIDIAN : Material.CRYING_OBSIDIAN; }
                 if (random.nextDouble() < 0.1 * ratio) return Material.GRANITE;
                 return Material.STONE;
             }
@@ -268,7 +242,8 @@ public class VolcanoComposition {
         return (
                 material == Material.STONE ||
                         material == Material.DEEPSLATE ||
-                        material == Material.NETHERRACK ||
+			material == Material.COBBLED_DEEPSLATE ||
+			material == Material.NETHERRACK ||
                         material == Material.DIORITE ||
                         material == Material.ANDESITE ||
                         materialName.contains("ore") ||

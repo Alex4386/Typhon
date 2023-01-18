@@ -108,7 +108,7 @@ public class VolcanoExplosion {
 
         int fissureLengthMultiplier = 1;
         if (this.vent.getType() == VolcanoVentType.FISSURE) {
-            fissureLengthMultiplier = this.vent.getVentBlocksScaffold().size() / this.vent.craterRadius;
+            fissureLengthMultiplier = this.vent.fissureLength / this.vent.craterRadius;
         }
 
         int bombCount = (int) (
@@ -116,7 +116,7 @@ public class VolcanoExplosion {
                 Math.random() * 
                 (settings.maxBombCount - settings.minBombCount)
                 + settings.minBombCount
-            ) * bombMultiplier * this.vent.lavaFlow.settings.gasContent
+            ) * bombMultiplier * this.vent.lavaFlow.settings.gasContent * fissureLengthMultiplier
         );
         
         explode(bombCount);

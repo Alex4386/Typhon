@@ -34,7 +34,7 @@ public class VolcanoAsh {
                             (Runnable) () -> {
                                 if (vent.erupt.isErupting()) {
                                     vent.ash.createAshPlume();
-                                    vent.ash.triggerAshFall();
+                                    //vent.ash.triggerAshFall();
                                 }
                             },
                             0L,
@@ -143,8 +143,8 @@ public class VolcanoAsh {
                         0);
 
                 boolean shouldDoIt = true;
-                if (this.vent.caldera.isForming()) {
-                    if (this.vent.caldera.isInCalderaRange(target.getLocation())) shouldDoIt = false;
+                if (this.vent.volcano.manager.isInAnyFormingCaldera(loc)) {
+                    shouldDoIt = false;
                 }
 
                 if (shouldDoIt) {

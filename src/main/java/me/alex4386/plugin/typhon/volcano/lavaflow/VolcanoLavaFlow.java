@@ -330,6 +330,7 @@ public class VolcanoLavaFlow implements Listener {
                 if (!vent.location.getChunk().isLoaded()) vent.location.getChunk().load();
             } else if (data.isBomb) {
                 if (this.vent != null && data.source != null) {
+                    /*
                     if (!this.vent.isInVent(toBlock.getLocation())) {
                         if (this.vent.getType() == VolcanoVentType.CRATER && Math.floor(this.vent.getTwoDimensionalDistance(data.source.getLocation())) == this.vent.craterRadius) {
                             double distance = this.vent.getTwoDimensionalDistance(toBlock.getLocation());
@@ -347,6 +348,15 @@ public class VolcanoLavaFlow implements Listener {
                             }
                         }
                     }
+                    */
+                    
+                    if (!this.vent.isInVent(toBlock.getLocation())) {
+                        if (TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation()) > 10) {
+                            event.setCancelled(true);
+                            return;
+                        }
+                    }
+
                 }
             }
 
@@ -608,6 +618,8 @@ public class VolcanoLavaFlow implements Listener {
             case TUFF:
                 return Material.TUFF;
             case DEEPSLATE:
+	    case COBBLED_DEEPSLATE:
+	    case BLACKSTONE:
             case BASALT:
             case POLISHED_BASALT:
                 targetMaterial = Material.getMaterial("DEEPSLATE_"+source.name());
@@ -1157,31 +1169,16 @@ public class VolcanoLavaFlow implements Listener {
                 lavaCoolHashMap.entrySet().iterator();
         List<Block> removeTargets = new ArrayList<Block>();
 
-        long cooledDowns = 0;
-        // optimization trial. just ignore
-        //long limits = Math.min(Math.max(100, maxBlockUpdates / 2), Integer.MAX_VALUE);
-
-        long limits = Long.MAX_VALUE;
-
         try {
             while (iterator.hasNext()) {
                 Map.Entry<Block, VolcanoLavaCoolData> entry = iterator.next();
                 VolcanoLavaCoolData coolData = entry.getValue();
-
+                
                 if (coolData.tickPassed()) {
-                    if (entry.getKey().getType() == Material.LAVA) {
-                        if (cooledDowns < limits) {
-                            cooledDowns++;
-                            coolData.coolDown();
-                        }
-
-                        if (lavaCoolHashMap.keySet().contains(coolData.block)) {
-                            removeTargets.add(entry.getKey());
-                        }
-                    }
-                } else {
-                    coolData.ticks--;
+                    removeTargets.add(entry.getKey());
                 }
+                coolData.tickPass();
+
             }
         } catch (ConcurrentModificationException e) {
             e.printStackTrace();

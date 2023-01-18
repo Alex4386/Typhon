@@ -210,7 +210,7 @@ public class VolcanoVentCommand {
                                     + ChatColor.GOLD
                                     + "Volcano Caldera");
 
-                    msg.info("Current Cycle #"+cycle+" - ("+current+"/"+total+")");
+                    msg.info("Current Cycle #"+cycle+" - ("+current+"/"+total+") "+String.format("%.2f", current*100/(double) total)+"% Complete");
                 } else if (newArgs.length >= 2) {
                     if (newArgs[1].equalsIgnoreCase("start")) {
                         if (!vent.caldera.isSettedUp()) {
@@ -252,7 +252,7 @@ public class VolcanoVentCommand {
                                 }
 
                                 oceanY = Integer.parseInt(newArgs[3]);
-                                msg.info("oceanY = "+deep);
+                                msg.info("oceanY = "+oceanY);
                                 if (newArgs.length >= 4) {
                                     vent.caldera.autoSetup(radius, deep, oceanY);
                                 }
@@ -429,7 +429,7 @@ public class VolcanoVentCommand {
                                 "lavaflow:gasContent - "
                                     + vent.lavaFlow.settings.gasContent
                                     + " ("
-                                    + String.format("%.2f", vent.lavaFlow.settings.silicateLevel * 100)
+                                    + String.format("%.2f", vent.lavaFlow.settings.gasContent * 100)
                                     + "%)"
                         );
                     }

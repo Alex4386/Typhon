@@ -247,8 +247,8 @@ public class VolcanoLavaCoolData {
 
     public void coolDown() {
         if (this.flowedFromVent != null) {
-            if (this.flowedFromVent.caldera.isForming() && this.flowedFromVent.caldera.isInCalderaRange(block.getLocation())) {
-                if (block.getType() == Material.LAVA) block.setType(Material.AIR);
+            if (this.flowedFromVent.volcano.manager.isInAnyFormingCaldera(block.getLocation())) {
+                block.setType(Material.AIR);
                 return;
             }
 
@@ -274,6 +274,12 @@ public class VolcanoLavaCoolData {
     }
 
     public void forceCoolDown() {
+        if (this.flowedFromVent != null) {
+            if (this.flowedFromVent.volcano.manager.isInAnyFormingCaldera(block.getLocation())) {
+                block.setType(Material.AIR);
+            }
+        }
+
         this.ticks = 0;
         block.setType(material);
     }

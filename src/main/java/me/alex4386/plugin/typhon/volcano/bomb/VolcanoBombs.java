@@ -150,7 +150,7 @@ public class VolcanoBombs {
         double adequateHeight = this.vent.getSummitBlock().getY() - (distance / this.distanceHeightRatio());
         double distanceFromCore = this.vent.getRadius() + distance;
 
-        Block randomBlock = TyphonUtils.getHighestRocklikes(TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), (int) distanceFromCore, (int) distanceFromCore));
+        Block randomBlock = TyphonUtils.getHighestRocklikes(TyphonUtils.getFairRandomBlockInRange(this.vent.getCoreBlock(), (int) distanceFromCore, (int) distanceFromCore));
         double diff = adequateHeight - randomBlock.getY();
 
         if (diff > 0) {
