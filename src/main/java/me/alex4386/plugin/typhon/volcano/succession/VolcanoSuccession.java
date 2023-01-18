@@ -322,7 +322,7 @@ public class VolcanoSuccession {
 
     public boolean isTypeOfVolcanicOre(Material material) {
         return material == Material.ANCIENT_DEBRIS ||
-            material.name().toLowerCase().contains("ore");
+            TyphonUtils.toLowerCaseDumbEdition(material.name()).contains("ore");
     }
 
     public void spreadSoil(Block block) {

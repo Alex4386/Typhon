@@ -2,6 +2,8 @@ package me.alex4386.plugin.typhon.volcano;
 
 import org.bukkit.Material;
 
+import me.alex4386.plugin.typhon.TyphonUtils;
+
 import java.util.Random;
 
 public class VolcanoComposition {
@@ -261,7 +263,7 @@ public class VolcanoComposition {
     */
 
     public static boolean isVolcanicRock(Material material) {
-        String materialName = material.name().toLowerCase();
+        String materialName = TyphonUtils.toLowerCaseDumbEdition(material.name());
 
         return (
                 material == Material.STONE ||

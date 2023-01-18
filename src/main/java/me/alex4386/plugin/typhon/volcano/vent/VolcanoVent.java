@@ -367,7 +367,7 @@ public class VolcanoVent {
                 continue;
             }
 
-            newCachedVentBlocks.add(TyphonUtils.getHighestNonTreeSolid(block.getLocation()));
+            newCachedVentBlocks.add(TyphonUtils.getHighestRocklikes(block.getLocation()));
             // newCachedVentBlocks.add(TyphonUtils.getHighestLocation(block.getLocation()).getBlock());
         }
 
@@ -769,7 +769,10 @@ public class VolcanoVent {
     }
 
     public double getThreeDimensionalDistance(Location loc) {
-        return this.getNearestCoreBlock(loc).getLocation().distance(loc);
+        if (loc.getWorld() != this.location.getWorld()) return Double.MAX_VALUE;
+
+        Block coreBlock = this.getNearestCoreBlock(loc);
+        return Math.sqrt(Math.pow(coreBlock.getX() - loc.getX(), 2) + Math.pow(coreBlock.getZ() - loc.getZ(), 2) + Math.pow(coreBlock.getY() - loc.getY(), 2));
     }
 
     public void explode() {

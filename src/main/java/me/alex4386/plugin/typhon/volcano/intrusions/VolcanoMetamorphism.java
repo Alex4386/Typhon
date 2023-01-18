@@ -33,7 +33,7 @@ public class VolcanoMetamorphism {
 
     public void metamorphoseBlock(VolcanoVent vent, Block block, boolean isBomb) {
         Material material = block.getType();
-        String blockTypeName = material.name().toLowerCase();
+        String blockTypeName = TyphonUtils.toLowerCaseDumbEdition(material.name());
 
         if (blockTypeName.contains("log") || blockTypeName.contains("leaves")) {
             removeTree(block);    
@@ -113,7 +113,9 @@ public class VolcanoMetamorphism {
             }
         }
 
-        if (baseBlock.getType().name().toLowerCase().contains("log")) {
+        String name = TyphonUtils.toLowerCaseDumbEdition(baseBlock.getType().name());
+
+        if (name.contains("log")) {
             baseBlock.setType(Material.COAL_BLOCK);
         } else {
             baseBlock.setType(Material.AIR);
@@ -122,7 +124,7 @@ public class VolcanoMetamorphism {
 
     public void evaporateBlock(Block block) {
         Material material = block.getType();
-        String blockTypeName = material.name().toLowerCase();
+        String blockTypeName = TyphonUtils.toLowerCaseDumbEdition(material.name());
 
         VolcanoVent vent = volcano.manager.getNearestVent(block);
         double silicateLevel = vent == null ? 0.45 : vent.lavaFlow.settings.silicateLevel;
@@ -154,7 +156,7 @@ public class VolcanoMetamorphism {
             block.setType(Material.CAULDRON);
         } else if (material == Material.MOSS_BLOCK) {
             block.setType(Material.DIRT);
-        } else if (material.name().toLowerCase().contains("infested")) {
+        } else if (blockTypeName.contains("infested")) {
             block.setType(VolcanoComposition.getExtrusiveRock(silicateLevel));
         }
     }

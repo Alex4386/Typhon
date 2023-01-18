@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import me.alex4386.plugin.typhon.TyphonUtils;
+
 public enum VolcanoEruptStyle {
     // lava lake + lava fountain (minimal), lava flow is everything of this.
     HAWAIIAN("hawaiian", new String[] { "effusive" }, VolcanoEruptCauseType.MAGMATIC, 4, 1, 0.1),
@@ -87,7 +89,7 @@ public enum VolcanoEruptStyle {
             List<String> names = new ArrayList<String>(Arrays.asList(type.aliases));
             names.add(type.rawType);
 
-            if (names.contains(name.toLowerCase())) {
+            if (names.contains(TyphonUtils.toLowerCaseDumbEdition(name))) {
                 return type;
             }
         }

@@ -9,6 +9,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentGenesis;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -105,8 +106,9 @@ public class VolcanoVentCommand {
                             String searchQuery = args[baseOffset + 1];
                             List<String> searchResults = new ArrayList<>();
                             for (VolcanoEruptStyle style : VolcanoEruptStyle.values()) {
-                                if (style.name().toLowerCase().startsWith(searchQuery)) {
-                                    searchResults.add(style.name().toLowerCase());
+                                String name = TyphonUtils.toLowerCaseDumbEdition(style.name());
+                                if (name.startsWith(searchQuery)) {
+                                    searchResults.add(name);
                                 }
                             }
                             return searchResults;
@@ -590,16 +592,28 @@ public class VolcanoVentCommand {
                 break;
 
             case TELEPORT:
-                if (sender instanceof Entity) {
-                    Entity senderEntity = (Entity) sender;
-                    vent.teleport(senderEntity);
-                    msg.info(
-                            "You have been teleported to vent "
-                                    + vent.getName()
-                                    + " of Volcano "
-                                    + vent.volcano.name);
+                if (newArgs.length >= 2) {
+                    Player player = Bukkit.getPlayer(newArgs[1]);
+                    if (player == null) {
+                        vent.teleport((Entity) player);
+                        msg.info(
+                                "Player "+player.getName()+" have been teleported to vent "
+                                        + vent.getName()
+                                        + " of Volcano "
+                                        + vent.volcano.name);
+                    }
                 } else {
-                    msg.error("This command can not be used by console.");
+                    if (sender instanceof Entity) {
+                        Entity senderEntity = (Entity) sender;
+                        vent.teleport(senderEntity);
+                        msg.info(
+                                "You have been teleported to vent "
+                                        + vent.getName()
+                                        + " of Volcano "
+                                        + vent.volcano.name);
+                    } else {
+                        msg.error("This command can not be used by console without specifying player name");
+                    }    
                 }
                 break;
 

@@ -654,7 +654,8 @@ public class VolcanoGeoThermal implements Listener {
 
     for (VolcanoVent vent : vents) {
       if (shouldDoIt(vent, e.getBlock().getLocation())) {
-        if (e.getBlock().getType().name().toLowerCase().contains("snow")) {
+        String name = TyphonUtils.toLowerCaseDumbEdition(e.getBlock().getType().name());
+        if (name.contains("snow")) {
           e.setCancelled(true);
           return;
         }

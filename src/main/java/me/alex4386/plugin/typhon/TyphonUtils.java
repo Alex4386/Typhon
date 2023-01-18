@@ -180,6 +180,21 @@ public class TyphonUtils {
         writer.close();
     }
 
+    public static String toLowerCaseDumbEdition(String pString) {
+        if (pString != null) {
+            char[] retChar = pString.toCharArray();
+            for (int idx = 0; idx < pString.length(); idx++) {
+                char c = retChar[idx];
+                if (c >= 'A' && c <= 'Z') {
+                    retChar[idx] = (char) (c | 32);
+                }
+            }
+            return new String(retChar);
+        } else {
+            return null;
+        }
+    }
+
     public static org.bukkit.block.Block getHighestNonTreeSolid(org.bukkit.block.Block block) {
         return getHighestNonTreeSolid(block.getLocation());
     }
@@ -289,7 +304,7 @@ public class TyphonUtils {
     }
 
     public static boolean isMaterialTree(org.bukkit.Material material) {
-        String materialType = material.name().toLowerCase();
+        String materialType = TyphonUtils.toLowerCaseDumbEdition(material.name());
         return (materialType.contains("leaves")
                 || materialType.contains("log")
                 || materialType.contains("plank")
@@ -315,7 +330,7 @@ public class TyphonUtils {
     }
 
     public static boolean isMaterialRocklikes(org.bukkit.Material material) {
-        String materialType = material.name().toLowerCase();
+        String materialType = TyphonUtils.toLowerCaseDumbEdition(material.name());
         return (materialType.contains("stone")
                 || materialType.contains("deepslate")
                 || materialType.contains("netherrack")

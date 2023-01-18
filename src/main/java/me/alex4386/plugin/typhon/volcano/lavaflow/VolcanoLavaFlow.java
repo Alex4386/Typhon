@@ -5,6 +5,7 @@ import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
+import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
@@ -62,15 +63,22 @@ public class VolcanoLavaFlow implements Listener {
         return vent.getVolcano();
     }
 
+    public boolean shouldFlowOverLeeve() {
+        double baseY = this.vent.averageVentHeight();
+        if (this.vent.getType() == VolcanoVentType.FISSURE) {
+            double leeveY = this.vent.averageLeeveHeight();
+            if (leeveY > baseY) return true;
+        }
+        return false;
+    }
+
     public void resetThisFlow() {
         double baseY = this.vent.averageVentHeight();
         double flowLength = 0;
-        if (this.vent.getType() == VolcanoVentType.FISSURE) {
+        if (this.shouldFlowOverLeeve()) {
             double leeveY = this.vent.averageLeeveHeight();
-            if (leeveY > baseY) {
-                baseY = Math.round((leeveY + baseY) / 2);
-                flowLength = this.vent.craterRadius * 2;
-            }
+            baseY = Math.round((leeveY + baseY) / 2);
+            flowLength = this.vent.craterRadius * 2;
         }
 
         this.hawaiianBaseY = baseY;
@@ -847,6 +855,17 @@ public class VolcanoLavaFlow implements Listener {
         double minimumSafeRange = this.vent.getType() == VolcanoVentType.CRATER ? this.vent.craterRadius : 0;
         double minimumSafeOffset = 20;
 
+        if (this.vent.getType() == VolcanoVentType.CRATER && this.vent.erupt.getStyle() == VolcanoEruptStyle.STROMBOLIAN) {
+            // In this case, lava should ooze out from side, cause this is cinder cone.
+            if (Math.random() > this.settings.gasContent && this.hawaiianBaseY >= this.vent.location.getWorld().getMinHeight()) {
+                double ratio = this.vent.bombs.distanceHeightRatio();
+                double distance = ratio * (this.vent.getSummitBlock().getY() - this.hawaiianBaseY) - minimumSafeOffset;
+
+                minimumSafeRange = (int) (Math.max(distance, 0) + this.vent.getRadius());
+                safeRange = minimumSafeOffset + minimumSafeRange + this.vent.getRadius();
+            }
+        }
+
         if (safeRange > minimumSafeRange + minimumSafeOffset) {
             Block coreBlock = this.vent.getCoreBlock();
             Block targetBlock, highestBlock;
@@ -1095,9 +1114,16 @@ public class VolcanoLavaFlow implements Listener {
             int requiredFlows = (int) ((float) (1 + missedFlows) * ((Math.random() * 1.5) + 1));
             int actualFlows =
                     (int) ((double) requiredFlows * this.vent.erupt.getStyle().lavaMultiplier);
+            
+            int lavaFlowableBlocks = vent.getVentBlocksScaffold().size();
+            if (this.shouldFlowOverLeeve()) {
+                lavaFlowableBlocks = (int) (Math.PI * Math.pow(Math.min(5, Math.max(2, this.vent.craterRadius)), 2));
+            }
+
+            int requiredLavaPlumbing = (int) (lavaFlowableBlocks / (4 + (2 * Math.random() - 1)));
 
             int fittedActualFlows = (int)
-                    Math.min(actualFlows, vent.getVentBlocksScaffold().size() / (4 + (2 * Math.random() - 1)));
+                    Math.min(actualFlows, requiredLavaPlumbing);
 
             flowLava(fittedActualFlows);
             nextFlowTime = timeNow + (int) (settings.delayFlowed * (1000 * (1 / getTickFactor())));
