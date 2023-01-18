@@ -330,12 +330,12 @@ public class VolcanoLavaFlow implements Listener {
                 if (!vent.location.getChunk().isLoaded()) vent.location.getChunk().load();
             } else if (data.isBomb) {
                 if (this.vent != null && data.source != null) {
-                    /*
                     if (!this.vent.isInVent(toBlock.getLocation())) {
                         if (this.vent.getType() == VolcanoVentType.CRATER && Math.floor(this.vent.getTwoDimensionalDistance(data.source.getLocation())) == this.vent.craterRadius) {
                             double distance = this.vent.getTwoDimensionalDistance(toBlock.getLocation());
                             int y = toBlock.getY();
-                            int targetY = (int) (this.vent.getSummitBlock().getY() - (distance / this.vent.bombs.distanceHeightRatio()));
+
+                            int targetY = (int) (this.vent.getSummitBlock().getY() - ((distance / this.vent.bombs.distanceHeightRatio()));
 
                             if (y > targetY) {
                                 event.setCancelled(true);
@@ -348,15 +348,6 @@ public class VolcanoLavaFlow implements Listener {
                             }
                         }
                     }
-                    */
-                    
-                    if (!this.vent.isInVent(toBlock.getLocation())) {
-                        if (TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation()) > 10) {
-                            event.setCancelled(true);
-                            return;
-                        }
-                    }
-
                 }
             }
 
