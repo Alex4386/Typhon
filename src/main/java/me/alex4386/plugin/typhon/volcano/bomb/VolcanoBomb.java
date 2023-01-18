@@ -307,6 +307,7 @@ public class VolcanoBomb {
                             }
 
                             vent.record.addEjectaVolume(totalEjecta);
+                            vent.flushSummitCacheByLocation(finalBlock);
 
                             Bukkit.getScheduler()
                                     .scheduleSyncDelayedTask(

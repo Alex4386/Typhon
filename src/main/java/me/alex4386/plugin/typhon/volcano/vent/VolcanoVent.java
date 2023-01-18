@@ -50,8 +50,12 @@ public class VolcanoVent {
     public double longestNormalLavaFlowLength = 0.0;
 
     public double calderaRadius = 0.0;
+    private Block cachedSummitBlock = null;
+    private long cachedSummitBlockLastSync = 0;
 
     private List<Block> cachedVentBlocks = null;
+    private long cachedVentBlocksLastSync = 0;
+
     public List<Block> coreBlocks = null;
     private List<Block> leeveBlocks = null;
 
@@ -337,6 +341,25 @@ public class VolcanoVent {
             this.volcano.logger.log(
                     VolcanoLogClass.VENT,
                     "Calculating highest points of vent blocks of " + this.getName() + "...");
+        
+        
+        if (this.cachedVentBlocksLastSync != 0) {
+            // check if summit has updated from since:
+            boolean isCacheExpired = false;
+
+            if (!this.cachedSummitBlock == null) {
+                isCacheExpired = true;
+            } else {
+                if (this.cachedSummitBlockLastSync > this.cachedVentBlocksLastSync) isCacheExpired = true;
+                if (this.cachedVentBlocksLastSync < System.currentTimeMillis() - 500) { 
+                    isCacheExpired = true;
+                }
+            }
+
+            // if not expired, update it.
+            if (!isCacheExpired) return this.cachedVentBlocks;
+        }
+            
         List<Block> newCachedVentBlocks = new ArrayList<>();
         for (Block block : this.cachedVentBlocks) {
             if (block.getType() == Material.LAVA) {
@@ -352,7 +375,9 @@ public class VolcanoVent {
             this.volcano.logger.log(
                     VolcanoLogClass.VENT,
                     "Vent block calculation of " + this.getName() + " complete.");
+
         this.cachedVentBlocks = newCachedVentBlocks;
+        this.cachedSummitBlockLastSync = System.currentTimeMillis();
 
         return this.cachedVentBlocks;
     }
@@ -398,6 +423,7 @@ public class VolcanoVent {
         this.cachedVentBlocks = null;
         this.coreBlocks = null;
         this.leeveBlocks = null;
+        this.flushSummitCache();
     }
 
     public void setRadius(int ventRadius) {
@@ -606,7 +632,28 @@ public class VolcanoVent {
         return lavaFlowBlocks;
     }
 
+    public boolean isBlockPotentialSummitUpdate(Block block) {
+        Block coreBlock = this.getNearestCoreBlock(block.getLocation());
+        return TyphonUtils.getTwoDimensionalDistance(coreBlock.getLocation(), block.getLocation()) < (this.craterRadius * 1.3);
+    }
+
+    public void flushSummitCache() {
+        this.cachedSummitBlock = null;
+    }
+
+    public void flushSummitCacheByLocation(Block block) {
+        if (this.isBlockPotentialSummitUpdate(block)) {
+            this.flushSummitCache();
+        }
+    }
+
     public Block getSummitBlock() {
+        if (this.cachedSummitBlock != null) {
+            if (this.cachedSummitBlockLastSync > System.currentTimeMillis() - 500) {
+                return this.cachedSummitBlock;                
+            }
+        }
+
         List<Block> cachedVentBlocks = this.getVentBlocks();
         if (this.type == VolcanoVentType.FISSURE) {
             cachedVentBlocks.addAll(this.getLeeveBlocks());
@@ -626,6 +673,8 @@ public class VolcanoVent {
             highestBlock = cachedVentBlocks.get(0);
         }
 
+        this.cachedSummitBlock = highestBlock;
+        this.cachedSummitBlockLastSync = System.currentTimeMillis();
         return highestBlock;
     }
 

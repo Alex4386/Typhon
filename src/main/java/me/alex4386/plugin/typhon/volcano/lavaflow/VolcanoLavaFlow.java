@@ -767,8 +767,7 @@ public class VolcanoLavaFlow implements Listener {
                 double targetFloorY = this.hawaiianBaseY + Math.max(0, ((this.thisMaxFlowLength - this.vent.getRadius()) / stepLength));
 
                 if (targetFloorY + 1 < whereToFlow.getY()) {
-                    this.extendLava();
-                    continue;
+                    if (this.extendLava()) continue;
                 }
             }
 
@@ -776,7 +775,7 @@ public class VolcanoLavaFlow implements Listener {
             VolcanoLavaCoolData underData = this.getLavaCoolData(whereToFlow.getRelative(BlockFace.DOWN));
             if (underData != null) {
                 if (!underData.tickPassed()) {
-                    this.extendLava();
+                    this.tryExtend();
                     continue;
                 }
             }
@@ -794,10 +793,21 @@ public class VolcanoLavaFlow implements Listener {
                 if (this.settings.silicateLevel < 0.58) {
                     double fitted = Math.max(0.41, Math.min(this.settings.silicateLevel, 0.57)) / (0.57 - 0.40);
                     if (Math.random() > fitted) {
-                        this.extendLava();
+                        this.tryExtend();
+                        continue;
                     }
                 }
             }
+        }
+    }
+
+    public void tryExtend() {
+        this.tryExtend(50);
+    }
+
+    public void tryExtend(int maxTrial) {
+        for (int i = 0; i < maxTrial; i++) {
+            if (this.extendLava()) return;
         }
     }
 
@@ -822,7 +832,7 @@ public class VolcanoLavaFlow implements Listener {
         this.registerLavaCoolData(bomb, true, 0);
     }
 
-    public void extendLava() {
+    public boolean extendLava() {
         double stickiness = ((this.settings.silicateLevel - 0.45) / (0.53 - 0.45));
         double safeRange = this.thisMaxFlowLength > 0 ? this.thisMaxFlowLength : (this.vent.longestFlowLength * 7 / 10.0);
 
@@ -830,7 +840,7 @@ public class VolcanoLavaFlow implements Listener {
             if (Math.random() < (this.vent.calderaRadius / safeRange)) {
                 safeRange = this.vent.calderaRadius * 7 / 10.0;
             } else {
-                return;
+                return false;
             }
         }
 
@@ -873,8 +883,9 @@ public class VolcanoLavaFlow implements Listener {
                     } 
                 }
             }
-
         }
+
+        return true;
     }
 
     public void extendLava(Block block) {
@@ -941,6 +952,7 @@ public class VolcanoLavaFlow implements Listener {
                         material;
 
                     block.setType(material);
+                    vent.flushSummitCacheByLocation(block);
 
                     BlockData bd = block.getBlockData();
                     BlockFace f = block.getFace(lavaData.fromBlock);

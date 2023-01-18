@@ -251,6 +251,8 @@ public class VolcanoLavaCoolData {
                 if (block.getType() == Material.LAVA) block.setType(Material.AIR);
                 return;
             }
+
+            this.flowedFromVent.flushSummitCacheByLocation(block);
         }
 
         if (this.runExtensionCount > 0 && this.extensionCapable()) this.handleExtension();
