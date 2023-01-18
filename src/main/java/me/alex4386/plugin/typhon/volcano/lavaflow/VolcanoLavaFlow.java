@@ -63,9 +63,18 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void resetThisFlow() {
-        this.hawaiianBaseY = this.vent.averageVentHeight();
-        
-        this.thisMaxFlowLength = 0;
+        double baseY = this.vent.averageVentHeight();
+        double flowLength = 0;
+        if (this.vent.getType() == VolcanoVentType.FISSURE) {
+            double leeveY = this.vent.averageLeeveHeight();
+            if (leeveY > baseY) {
+                baseY = Math.round((leeveY + baseY) / 2);
+                flowLength = this.vent.craterRadius * 2;
+            }
+        }
+
+        this.hawaiianBaseY = baseY;
+        this.thisMaxFlowLength = flowLength;
     }
 
     public void registerEvent() {
