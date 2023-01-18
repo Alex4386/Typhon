@@ -347,7 +347,7 @@ public class VolcanoVent {
             // check if summit has updated from since:
             boolean isCacheExpired = false;
 
-            if (!this.cachedSummitBlock == null) {
+            if (this.cachedSummitBlock == null) {
                 isCacheExpired = true;
             } else {
                 if (this.cachedSummitBlockLastSync > this.cachedVentBlocksLastSync) isCacheExpired = true;
