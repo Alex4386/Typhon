@@ -335,7 +335,7 @@ public class VolcanoLavaFlow implements Listener {
                             double distance = this.vent.getTwoDimensionalDistance(toBlock.getLocation());
                             int y = toBlock.getY();
 
-                            int targetY = (int) (this.vent.getSummitBlock().getY() - ((distance / this.vent.bombs.distanceHeightRatio()));
+                            int targetY = (int) (this.vent.getSummitBlock().getY() - (distance / this.vent.bombs.distanceHeightRatio()));
 
                             if (y > targetY) {
                                 event.setCancelled(true);
