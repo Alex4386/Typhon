@@ -252,6 +252,11 @@ public class VolcanoLavaCoolData {
                 return;
             }
 
+            if (!this.flowedFromVent.isFlowingLava()) {
+                if (TyphonUtils.toLowerCaseDumbEdition(material.name()).contains("ore")) {
+                    material = VolcanoComposition.getExtrusiveRock(this.flowedFromVent.lavaFlow.settings.silicateLevel);
+                }
+            }
             this.flowedFromVent.flushSummitCacheByLocation(block);
         }
 
@@ -274,15 +279,24 @@ public class VolcanoLavaCoolData {
     }
 
     public void forceCoolDown() {
+        Material material = this.material;
+
         if (this.flowedFromVent != null) {
             if (this.flowedFromVent.volcano.manager.isInAnyFormingCaldera(block.getLocation())) {
                 block.setType(Material.AIR);
                 this.ticks = 0;
                 return;
             }
+
+            if (!this.flowedFromVent.isFlowingLava()) {
+                if (TyphonUtils.toLowerCaseDumbEdition(material.name()).contains("ore")) {
+                    material = VolcanoComposition.getExtrusiveRock(this.flowedFromVent.lavaFlow.settings.silicateLevel);
+                }
+            }
         }
 
         this.ticks = 0;
+
         block.setType(material);
     }
 }
