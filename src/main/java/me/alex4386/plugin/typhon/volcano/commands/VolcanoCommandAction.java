@@ -29,6 +29,7 @@ public enum VolcanoCommandAction {
     TELEPORT("teleport", "", "teleport to mainvent of this volcano"),
     RECORD("record", "", "see the volcano's record"),
 
+    RENAME("rename", "<name>", "rename this volcano"),
     DELETE("delete", "", "Delete this volcano");
 
     String cmdline;

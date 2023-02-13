@@ -16,6 +16,7 @@ import org.bukkit.event.Listener;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.ParseException;
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.*;
@@ -285,10 +286,40 @@ public class Volcano implements Listener {
         logger.log(VolcanoLogClass.CORE, "Deleting...");
 
         this.shutdown();
-        FileUtils.deleteDirectory(this.basePath.toFile());
+        this.deleteFileSystem();
         TyphonPlugin.listVolcanoes.remove(this.name);
 
         logger.log(VolcanoLogClass.CORE, "Delete Complete!");
+    }
+
+    private void deleteFileSystem() throws IOException {
+        deleteFileSystem(this.basePath);
+    }
+
+    private static void deleteFileSystem(Path basePath) throws IOException {
+        FileUtils.deleteDirectory(basePath.toFile());
+    }
+
+    public void rename(String newName) throws IOException {
+        logger.log(VolcanoLogClass.CORE, "Renaming...");
+
+        Path basePath = this.basePath;
+        TyphonPlugin.listVolcanoes.remove(this.name);
+
+        File volcanoPath = TyphonPlugin.volcanoDir;
+
+        this.name = newName;
+        File dir = new File(volcanoPath.getPath(), this.name);
+        dir.mkdir();
+
+        this.basePath = dir.toPath();
+
+        TyphonPlugin.listVolcanoes.put(newName, this);
+        this.trySave();
+
+        deleteFileSystem(basePath);
+
+        logger.log(VolcanoLogClass.CORE, "Rename Complete!");
     }
 
     public void importConfig(JSONObject configData) {

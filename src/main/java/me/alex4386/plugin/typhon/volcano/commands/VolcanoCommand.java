@@ -123,6 +123,19 @@ public class VolcanoCommand {
                             this.volcano.stop();
                             msg.info(sender, "Volcano " + this.volcano.name + " has stopped!");
                             break;
+                        case RENAME:
+                        {
+                            String prevName = this.volcano.name;
+                            try {
+                                String newName = args[2];
+                                this.volcano.rename(newName);
+                            } catch(IOException e) {
+                                msg.error(
+                                        sender,
+                                        "Volcano " + prevName + " has failed to rename!");
+                                e.printStackTrace();
+                            }
+                        }
                         case DELETE:
                             try {
                                 this.volcano.delete();
@@ -199,7 +212,7 @@ public class VolcanoCommand {
                             if (args.length >= 4) {
 
                                 // vol wa create dike aaa
-                                // 0 1 2 3
+                                //      0      1    2   3
 
                                 String type = args[2];
                                 String name = args[3];
