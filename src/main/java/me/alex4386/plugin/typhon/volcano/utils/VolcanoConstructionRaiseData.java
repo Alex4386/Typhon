@@ -28,7 +28,7 @@ public class VolcanoConstructionRaiseData extends VolcanoConstructionData {
 
         int surfaceY = TyphonUtils.getHighestOceanFloor(this.baseBlock.getLocation()).getBlockY();
         int bedrockY =
-                TyphonUtils.getLowestBedrockCeiling(this.baseBlock.getLocation()).getBlockY();
+                TyphonUtils.getHighestBedrock(this.baseBlock.getLocation()).getBlockY();
         int blockY = baseBlock.getY();
 
         World world = baseBlock.getWorld();

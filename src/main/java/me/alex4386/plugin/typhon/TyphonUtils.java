@@ -1,8 +1,7 @@
 package me.alex4386.plugin.typhon;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
+
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import org.bukkit.*;
 import org.bukkit.block.*;
@@ -12,6 +11,8 @@ import org.bukkit.util.Vector;
 import org.json.simple.JSONObject;
 
 public class TyphonUtils {
+
+    private static Map<Block, TyphonCache<org.bukkit.block.Block>> highestRocklikesBlockCacheMap = new HashMap<>();
 
     public static int getMinimumY(org.bukkit.World world) {
         return world.getMinHeight();
@@ -35,7 +36,7 @@ public class TyphonUtils {
         return getNearByBlocks(baseBlock, 1);
     }
 
-    public static org.bukkit.Location getLowestBedrockCeiling(org.bukkit.Location loc) {
+    public static org.bukkit.Location getHighestBedrock(org.bukkit.Location loc) {
         int x = loc.getBlockX();
         int z = loc.getBlockZ();
 
@@ -312,10 +313,27 @@ public class TyphonUtils {
     }
 
     public static org.bukkit.block.Block getHighestRocklikes(org.bukkit.block.Block block) {
-        return getHighestRocklikes(block.getLocation());
+        return getHighestRocklikes(block, true);
     }
 
-    public static org.bukkit.block.Block getHighestRocklikes(org.bukkit.Location loc) {
+    public static org.bukkit.block.Block getHighestRocklikes(org.bukkit.block.Block block, boolean useCache) {
+        return getHighestRocklikes(block.getLocation(), useCache);
+    }
+
+    public static org.bukkit.block.Block getHighestRocklikes(org.bukkit.Location location) {
+        return getHighestRocklikes(location, true);
+    }
+
+    public static org.bukkit.block.Block getHighestRocklikes(org.bukkit.Location loc, boolean useCache) {
+        org.bukkit.block.Block block = loc.getBlock();
+
+        if (useCache) {
+            TyphonCache<org.bukkit.block.Block> t = highestRocklikesBlockCacheMap.get(block);
+            if (t != null) {
+                if (!t.isExpired()) return t.getTarget();
+            }
+        }
+
         org.bukkit.block.Block highestBlock = getHighestLocation(loc).getBlock();
 
         while (!isMaterialRocklikes(highestBlock.getType())) {
@@ -326,6 +344,7 @@ public class TyphonUtils {
             }
         }
 
+        highestRocklikesBlockCacheMap.put(block, new TyphonCache<>(highestBlock));
         return highestBlock;
     }
 
@@ -356,67 +375,6 @@ public class TyphonUtils {
                 || materialType.contains("terracotta")
             );
     }
-
-    public static String getDirections(org.bukkit.Location from, org.bukkit.Location to) {
-        if (!from.getWorld().equals(to.getWorld())) {
-            return "Different World";
-        }
-
-        TyphonNavigationResult navigationResult = getNavigation(from, to);
-
-        double destinationYaw = navigationResult.yawDegree;
-        double directDistance = navigationResult.distance;
-
-        String destinationString =
-                Math.abs(Math.floor(destinationYaw))
-                        + " degrees "
-                        + ((Math.abs(destinationYaw) < 1)
-                                ? "Forward"
-                                : (destinationYaw < 0) ? "Left" : "Right")
-                        + ((Math.abs(destinationYaw) > 135) ? " Backward" : "");
-
-        if (Double.isNaN(destinationYaw) || directDistance < 1) {
-            return "Arrived!";
-        }
-
-        destinationString += " / " + String.format("%.2f", directDistance) + " blocks";
-
-        return destinationString;
-    }
-
-    public static TyphonNavigationResult getNavigation(
-            org.bukkit.Location from, org.bukkit.Location to) {
-        if (from.getWorld().getUID() != to.getWorld().getUID()) {
-            return null;
-        }
-
-        float userYawN = from.getYaw() - 180;
-        userYawN = (userYawN < 0) ? userYawN + 360 : userYawN;
-
-        double distanceN = from.getBlockZ() - to.getBlockZ();
-        double distanceE = to.getBlockX() - from.getBlockX();
-        double distanceDirect = Math.sqrt(Math.pow(distanceN, 2) + Math.pow(distanceE, 2));
-
-        double theta;
-        theta = Math.toDegrees(Math.acos(distanceN / distanceDirect));
-
-        TyphonPlugin.logger.debug(
-                VolcanoLogClass.MATH,
-                "Caclulated Navigation / target theta: " + theta + ", userYawN: " + userYawN);
-
-        double destinationYaw = theta - userYawN;
-        destinationYaw =
-                destinationYaw > 180
-                        ? -(360 - destinationYaw)
-                        : destinationYaw < -180 ? (360 + destinationYaw) : destinationYaw;
-
-        if (Double.isNaN(destinationYaw)) {
-            destinationYaw = 0;
-        }
-
-        return new TyphonNavigationResult(destinationYaw, distanceDirect);
-    }
-
     public static boolean containsWater(Block block) {
         return containsLiquidWater(block) || containsIce(block) || containsSnow(block);
     }

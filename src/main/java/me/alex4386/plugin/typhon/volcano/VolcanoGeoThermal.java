@@ -177,10 +177,6 @@ public class VolcanoGeoThermal implements Listener {
     }  
   }
 
-  public void runCalderaGeoThermalCycle(VolcanoVent vent) {
-
-  }
-
   public void runVolcanoGeoThermalCycle(VolcanoVent vent) {
     double volcanoRange = (Math.PI * Math.pow(vent.longestNormalLavaFlowLength, 2));
 
@@ -206,18 +202,14 @@ public class VolcanoGeoThermal implements Listener {
         Block actualTarget = TyphonUtils.getRandomBlockInRange(target, 1, Math.max(2, (int) (2 + (4 * vent.getHeatValue(target.getLocation())))));
         this.runVolcanoGeoThermal(vent, actualTarget, false);
       }
-    }
 
-    if (vent.isCaldera()) {
-      for (int i = 0; i < cycleCount / 2; i++) {
+      for (int i = 0; i < lavaFlowCount; i++) {
+        this.runVolcanoGeoThermal(vent, this.getVolcanoGeoThermalBlock(vent));
+      }
+    } else if (vent.isCaldera()) {
+      for (int i = 0; i < cycleCount; i++) {
         this.runVolcanoGeoThermal(vent, this.getCalderaGeoThermalBlock(vent));
       }
-
-      cycleCount /= 2;
-    }
-
-    for (int i = 0; i < cycleCount; i++) {
-      this.runVolcanoGeoThermal(vent, this.getVolcanoGeoThermalBlock(vent));
     }
   }
 
@@ -226,7 +218,7 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public Block getBlockToRunCraterCycle(VolcanoVent vent, double geoThermalRadius) {
-    Block block = vent.location.getBlock();
+    Block block;
 
     int craterRadius = vent.craterRadius;
     double range = geoThermalRadius - craterRadius;

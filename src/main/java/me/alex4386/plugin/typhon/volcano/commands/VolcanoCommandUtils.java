@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.commands;
 
+import me.alex4386.plugin.typhon.TyphonNavigation;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 
@@ -17,8 +18,14 @@ public class VolcanoCommandUtils {
 
         if (sender instanceof Player) {
             Player player = ((Player) sender).getPlayer();
+            String directions;
 
-            String directions = TyphonUtils.getDirections(player.getLocation(), summitBlock.getLocation());
+            if (player.getWorld() != summitBlock.getWorld()) {
+                TyphonNavigation navigation = TyphonNavigation.getNavigation(player.getLocation(), summitBlock.getLocation());
+                directions = navigation.getNavigation();
+            } else {
+                directions = "Different world!";
+            }
 
             int toClimb = summitBlock.getY() - player.getLocation().getBlockY();
 

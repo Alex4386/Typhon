@@ -194,12 +194,13 @@ public class VolcanoSuccession {
                 // since volcano is hot. probability scales down.
                 probability = (probability - 0.4) / (heatValueThreshold - 0.4);
                 probability = Math.pow(0.5, Math.max(probability * 10, 1));
-
-                if (Math.random() < probability) {
-                    return;
-                }
             }
 
+            // succession usually takes minimum "years"
+            probability *= 0.1;
+            if (Math.random() < probability) {
+                return;
+            }
 
             // stage 3. is grass?
             boolean isGrass = targetBlock.getType() == Material.GRASS_BLOCK || targetBlock.getType() == Material.DIRT;
