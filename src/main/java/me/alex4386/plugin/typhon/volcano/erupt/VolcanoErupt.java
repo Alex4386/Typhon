@@ -2,6 +2,7 @@ package me.alex4386.plugin.typhon.volcano.erupt;
 
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
+import me.alex4386.plugin.typhon.volcano.utils.VolcanoNamer;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentGenesis;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
@@ -125,7 +126,7 @@ public class VolcanoErupt {
 
         Volcano volcano = this.vent.getVolcano();
         for (int key = 1; key < 999; key++) {
-            name = "fissure" + String.format("%03d", key);
+            name = "fiss_"+key;
             if (volcano.subVents.get(name) == null) {
                 generated = true;
                 break;
@@ -156,6 +157,9 @@ public class VolcanoErupt {
             // if eruption style changes, apply it.
             if (newVent.erupt.getStyle() == VolcanoEruptStyle.HAWAIIAN && type == VolcanoVentType.CRATER) {
                 newVent.erupt.setStyle(VolcanoEruptStyle.STROMBOLIAN);
+
+                newVent.name = VolcanoNamer.generate();
+                name = newVent.name;
 
                 newVent.explosion.settings.minBombCount = 3;
                 newVent.explosion.settings.maxBombCount = 5;

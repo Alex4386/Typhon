@@ -71,6 +71,9 @@ public class VolcanoVent {
 
     public VolcanoVentSurtseyan surtseyan = new VolcanoVentSurtseyan(this);
 
+    // get update via VolcanoAutoStart?
+    public boolean autoStyleUpdate = false;
+
     public VolcanoVent(Volcano volcano) {
         this.volcano = volcano;
         this.location = volcano.location;
@@ -853,7 +856,7 @@ public class VolcanoVent {
         this.longestNormalLavaFlowLength = (double) configData.get("longestNormalLavaFlowLength");
         this.genesis = VolcanoVentGenesis.getGenesisType((String) configData.get("genesis"));
         this.calderaRadius = (double) configData.getOrDefault("calderaRadius" , -1.0);
-    }
+        this.autoStyleUpdate = (boolean) configData.getOrDefault("autoStyleUpdate", true);    }
 
     public JSONObject exportConfig() {
         JSONObject configData = new JSONObject();
@@ -871,6 +874,8 @@ public class VolcanoVent {
         configData.put("fissureAngle", this.fissureAngle);
         configData.put("fissureLength", this.fissureLength);
         configData.put("maxFissureLength", this.maxFissureLength);
+
+        configData.put("autoStyleUpdate", this.autoStyleUpdate);
 
         configData.put("genesis", this.genesis.getName());
 

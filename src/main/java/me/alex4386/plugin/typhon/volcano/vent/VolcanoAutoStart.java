@@ -3,6 +3,7 @@ package me.alex4386.plugin.typhon.volcano.vent;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
+import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 
 import org.bukkit.Bukkit;
@@ -31,17 +32,28 @@ public class VolcanoAutoStart implements Listener {
 
     public VolcanoAutoStartProbability probability = new VolcanoAutoStartProbability();
 
-    public long statusCheckInterval = 72000;
-    public long flankEruptionInterval = 20*60*10;
-    public long flankEruptionGracePeriod = 20*60*5;
+    // 72000 / 20 = 1h
+    public long statusCheckInterval = getMinutes(60);
+
+    public long flankEruptionInterval = getMinutes(10);
+    public long flankEruptionGracePeriod = getMinutes(5);
 
     private boolean flankTriggered = false;
 
     public long eruptionTimer = 20*60*30;
     public int scheduleID = -1;
     public int flankScheduleID = -1;
+    public int styleChangeId = -1;
 
     public boolean registeredEvent = false;
+
+    public static long getSeconds(long seconds) {
+        return seconds * 20;
+    }
+
+    public static long getMinutes(long minutes) {
+        return getSeconds(minutes * 60);
+    }
 
     public VolcanoAutoStart(Volcano volcano) {
         this.volcano = volcano;
@@ -51,6 +63,7 @@ public class VolcanoAutoStart implements Listener {
         if (scheduleID >= 0) {
             return;
         }
+
         scheduleID = Bukkit.getScheduler()
                 .scheduleSyncRepeatingTask(
                         TyphonPlugin.plugin,
@@ -68,6 +81,16 @@ public class VolcanoAutoStart implements Listener {
                         },
                         0L,
                         Math.max(1, (flankEruptionInterval / 20) * volcano.updateRate));
+
+        styleChangeId = Bukkit.getScheduler()
+                .scheduleSyncRepeatingTask(
+                        TyphonPlugin.plugin,
+                        () -> {
+                            updateStyles();
+                        },
+                        0L,
+                        Math.max(1, (statusCheckInterval / 20) * volcano.updateRate));
+
     }
 
     public void unregisterTask() {
@@ -78,6 +101,10 @@ public class VolcanoAutoStart implements Listener {
         if (flankScheduleID >= 0) {
             Bukkit.getScheduler().cancelTask(flankScheduleID);
             flankScheduleID = -1;
+        }
+        if (styleChangeId >= 0) {
+            Bukkit.getScheduler().cancelTask(styleChangeId);
+            styleChangeId = -1;
         }
     }
 
@@ -133,6 +160,49 @@ public class VolcanoAutoStart implements Listener {
             for (VolcanoVent vent : volcano.manager.getVents()) {
                 if (vent.isInVent(player.getLocation())) {
                     // start lava flow on vent.
+                }
+            }
+        }
+    }
+
+    public void updateStyles() {
+        for (VolcanoVent vent : volcano.manager.getVents()) {
+            if (vent.getType() == VolcanoVentType.FISSURE) {
+                if (vent.record.getTotalEjecta() >= 100000) {
+                    if (Math.random() < 0.7 || vent.lavaFlow.settings.silicateLevel > 0.5) {
+                        vent.setType(VolcanoVentType.CRATER);
+                    }
+                }
+            } else {
+                // try to do magma evolutions
+                double random = Math.random();
+                if (random < 0.002) {
+                    vent.lavaFlow.settings.silicateLevel += 0.001;
+                } else if (random < 0.003) {
+                    vent.lavaFlow.settings.silicateLevel -= 0.001;
+                }
+
+                if (vent.lavaFlow.settings.silicateLevel < 0.2) {
+                    vent.lavaFlow.settings.silicateLevel = 0.2;
+                }
+
+                if (vent.lavaFlow.settings.silicateLevel > 0.75) {
+                    vent.erupt.setStyle(VolcanoEruptStyle.PLINIAN);
+                    vent.lavaFlow.settings.silicateLevel = 0.63;
+                } else if (vent.lavaFlow.settings.silicateLevel > 0.63) {
+                    if (Math.random() < 0.125) {
+                        if (vent.erupt.getStyle() == VolcanoEruptStyle.VULCANIAN) {
+                            vent.erupt.setStyle(VolcanoEruptStyle.PELEAN);
+                        } else {
+                            vent.erupt.setStyle(VolcanoEruptStyle.VULCANIAN);
+                        }
+                    }
+                } else {
+                    if (Math.random() < 0.25) {
+                        if (vent.erupt.getStyle() == VolcanoEruptStyle.HAWAIIAN) {
+                            vent.erupt.setStyle(VolcanoEruptStyle.STROMBOLIAN);
+                        }
+                    }
                 }
             }
         }
@@ -249,11 +319,23 @@ public class VolcanoAutoStart implements Listener {
                         if (a <= probability.major_activity.increase) {
                             if (!canEscalate) break;
                             boolean canTryFlank = (vent.getSummitBlock().getY() - vent.location.getY() > 60);
-                            boolean reachedWorldHeight = vent.getSummitBlock().getY() >= vent.location.getWorld().getMaxHeight();
+                            boolean reachedWorldHeight = vent.getSummitBlock().getY() >= vent.location.getWorld().getMaxHeight() - 5;
 
                             if (reachedWorldHeight || canTryFlank && Math.random() < 0.1) {
                                 if (vent.erupt.getStyle().flowsLava() && !vent.erupt.getStyle().canFormCaldera) {
                                     if (this.canDoFlankEruption()) {
+                                        if (reachedWorldHeight) {
+                                            if (Math.random() < 0.1) {
+                                                vent.volcano.logger.log(
+                                                        VolcanoLogClass.AUTOSTART,
+                                                        "volcano starting flank eruption due to increment from major_activity");
+
+                                                vent.caldera.autoSetup();
+                                                vent.caldera.startErupt();
+                                            }
+                                            break;
+                                        }
+
                                         vent.volcano.logger.log(
                                                 VolcanoLogClass.AUTOSTART,
                                                 "volcano starting flank eruption due to increment from major_activity");
@@ -267,8 +349,6 @@ public class VolcanoAutoStart implements Listener {
                                                     },
                                                     volcano.autoStart.eruptionTimer);
                                         });
-
-                                        if (reachedWorldHeight) break;
                                     }
                                 }
                             }

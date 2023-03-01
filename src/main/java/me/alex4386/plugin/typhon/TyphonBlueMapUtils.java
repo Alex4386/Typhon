@@ -24,13 +24,10 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 
 public class TyphonBlueMapUtils {
-  public static boolean enabled = false;
   public static boolean isInitialized = false;
   public static String eruptingImgUrl = null, dormantImgUrl = null;
 
   public static BlueMapAPI getBlueMapAPI() {
-    if (!enabled) return null;
-
     if (TyphonPlugin.blueMap == null) {
       if (!isInitialized) {
         try {

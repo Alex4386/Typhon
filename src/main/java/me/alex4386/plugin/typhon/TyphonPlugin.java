@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
+import me.alex4386.plugin.typhon.gaia.TyphonGaia;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombListener;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
@@ -14,6 +15,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.json.simple.parser.ParseException;
@@ -108,14 +110,10 @@ public final class TyphonPlugin extends JavaPlugin {
 
         logger.debug(VolcanoLogClass.CORE, "Loaded Volcanoes!");
 
-        if (Bukkit.getServer().getPluginManager().getPlugin("BlueMap") != null) {
-            if (enableBlueMap) {
-                TyphonBlueMapUtils.enabled = true;
-
-                BlueMapAPI.onEnable(blueMapAPI -> {
-                    TyphonBlueMapUtils.initialize();
-                });
-            }
+        if (enableBlueMap) {
+            BlueMapAPI.onEnable(blueMapAPI -> {
+                TyphonBlueMapUtils.initialize();
+            });
         }
 
         logger.log(VolcanoLogClass.PLAYER_EVENT, "Initializing...");
@@ -176,6 +174,7 @@ public final class TyphonPlugin extends JavaPlugin {
 
     public static void loadConfig() {
         enableBlueMap = plugin.getConfig().getBoolean("blueMap.enable", true);
+        TyphonGaia.loadConfig(plugin.getConfig());
     }
 
     @Override

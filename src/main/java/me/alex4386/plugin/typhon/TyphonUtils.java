@@ -1,6 +1,8 @@
 package me.alex4386.plugin.typhon;
 
+import java.io.File;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import org.bukkit.*;
@@ -623,5 +625,26 @@ public class TyphonUtils {
         }
 
         return true;
+    }
+
+    public static List<File> getAllChunkFiles(World world) {
+        File regionDirectory = new File(world.getWorldFolder(), "region");
+        File[] regions = regionDirectory.listFiles();
+        List<File> regionFiles = Arrays.stream(regions)
+                .filter(file ->
+                        !file.isDirectory() && file.getName().endsWith(".mcr")
+                )
+                .collect(Collectors.toList());
+
+        return regionFiles;
+    }
+
+    public static long getChunkCount(World world) {
+        List<File> regionFiles = getAllChunkFiles(world);
+        return regionFiles.size();
+    }
+
+    public static long getWorldArea(World world) {
+        return getChunkCount(world) * 16 * 16;
     }
 }

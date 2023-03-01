@@ -5,6 +5,7 @@ import org.bukkit.ChatColor;
 public enum VolcanoLogClass {
     INIT("Init"),
     CORE("Core"),
+    GAIA("Gaia"),
     ASH("Ash"),
     AUTOSTART("Autostart"),
     BENCHMARK("Benchmark"),

@@ -3,6 +3,8 @@ package me.alex4386.plugin.typhon;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
+
+import me.alex4386.plugin.typhon.gaia.TyphonGaiaCommand;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.commands.VolcanoCommand;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
@@ -361,6 +363,8 @@ public class TyphonCommand {
                     case CONSTRUCTIONS:
                         showConstructions(sender, command, label, args);
                         break;
+                    case GAIA:
+                        return TyphonGaiaCommand.onCommand(sender, command, label, args);
                     case DEBUG:
                         if (TyphonDebugCommand.canRunDebug(sender)) {
                             return TyphonDebugCommand.onCommand(

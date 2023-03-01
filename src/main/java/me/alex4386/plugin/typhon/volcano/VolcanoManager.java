@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano;
 
+import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
@@ -8,12 +9,14 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class VolcanoManager {
     public Volcano volcano;
@@ -350,4 +353,10 @@ public class VolcanoManager {
         volcano.subVents.put(vent.name, vent);
         return vent;
     }
+
+    public static List<Volcano> getVolcanoesOnWorld(World world) {
+        Collection<Volcano> volcanoes = TyphonPlugin.listVolcanoes.values();
+        return volcanoes.stream().filter(volcano -> volcano.location.getWorld().equals(world)).collect(Collectors.toList());
+    }
+
 }
