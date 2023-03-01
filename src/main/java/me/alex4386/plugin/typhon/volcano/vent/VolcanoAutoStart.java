@@ -7,13 +7,8 @@ import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFromToEvent;
-import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.plugin.PluginManager;
 import org.json.simple.JSONObject;
 
@@ -34,15 +29,10 @@ public class VolcanoAutoStart implements Listener {
 
     // 72000 / 20 = 1h
     public long statusCheckInterval = getMinutes(60);
-
-    public long flankEruptionInterval = getMinutes(10);
     public long flankEruptionGracePeriod = getMinutes(5);
-
-    private boolean flankTriggered = false;
 
     public long eruptionTimer = 20*60*30;
     public int scheduleID = -1;
-    public int flankScheduleID = -1;
     public int styleChangeId = -1;
 
     public boolean registeredEvent = false;
@@ -60,7 +50,7 @@ public class VolcanoAutoStart implements Listener {
     }
 
     public void registerTask() {
-        if (scheduleID >= 0) {
+        if (scheduleID >= 0 || styleChangeId >= 0) {
             return;
         }
 
@@ -72,15 +62,6 @@ public class VolcanoAutoStart implements Listener {
                         },
                         0L,
                         Math.max(1, (statusCheckInterval / 20) * volcano.updateRate));
-
-        flankScheduleID = Bukkit.getScheduler()
-                .scheduleSyncRepeatingTask(
-                        TyphonPlugin.plugin,
-                        () -> {
-                            requestFlankEruption();
-                        },
-                        0L,
-                        Math.max(1, (flankEruptionInterval / 20) * volcano.updateRate));
 
         styleChangeId = Bukkit.getScheduler()
                 .scheduleSyncRepeatingTask(
@@ -98,28 +79,9 @@ public class VolcanoAutoStart implements Listener {
             Bukkit.getScheduler().cancelTask(scheduleID);
             scheduleID = -1;
         }
-        if (flankScheduleID >= 0) {
-            Bukkit.getScheduler().cancelTask(flankScheduleID);
-            flankScheduleID = -1;
-        }
         if (styleChangeId >= 0) {
             Bukkit.getScheduler().cancelTask(styleChangeId);
             styleChangeId = -1;
-        }
-    }
-
-    public void requestFlankEruption() {
-        if (flankTriggered) {
-            int maximumOpenups = this.volcano.maxEruptions - this.volcano.getEruptingVents().size();
-
-            if (maximumOpenups >= 2) {
-                int target = Math.random() < 0.5 ? 1 : 2;
-                for (int i = 0; i < target; i++) {
-                    createFissure();
-                }
-            }
-        } else {
-            flankTriggered = true;
         }
     }
 
@@ -150,19 +112,6 @@ public class VolcanoAutoStart implements Listener {
 
         this.unregisterTask();
         this.unregisterEvent();
-    }
-
-    @EventHandler
-    public void playerLavaFlow(PlayerBucketEmptyEvent event) {
-        Material bucket = event.getBucket();
-        if (bucket == Material.LAVA_BUCKET || bucket == Material.LAVA) {
-            Player player = event.getPlayer();
-            for (VolcanoVent vent : volcano.manager.getVents()) {
-                if (vent.isInVent(player.getLocation())) {
-                    // start lava flow on vent.
-                }
-            }
-        }
     }
 
     public void updateStyles() {
@@ -213,60 +162,6 @@ public class VolcanoAutoStart implements Listener {
         double basaltiness = (0.53 - silicateLevel) / (0.53 - 0.46);
 
         return basaltiness >= 0;
-    }
-
-    public void createFissure() {
-        if (volcano.autoStart.canAutoStart) {
-            if (!canDoFlankEruption()) return;
-
-            volcano.logger.debug(
-                    VolcanoLogClass.AUTOSTART, "Volcano Fissure Opening interval Checking...");
-
-            int erupting = volcano.getEruptingVents().size();
-            int eruptables = volcano.maxEruptions - erupting;
-
-            if (eruptables > 0) {
-                List<VolcanoVent> vents = volcano.manager.getVents();
-                Collections.shuffle(vents);
-
-                for (VolcanoVent vent : vents) {
-                    double silicateLevel = vent.lavaFlow.settings.silicateLevel;
-                    double basaltiness = Math.min(1, Math.max(0, (0.53 - silicateLevel) / (0.53 - 0.46)));
-
-                    // flank eruption / parasitic cone should be only generated on basaltic eruptions
-                    if ((vent.erupt.isErupting() || vent.isCaldera() || volcano.isVolcanicField()) && silicateLevel < 0.53) {
-                        if (Math.random() < 0.7 - (0.6 * basaltiness)) continue;
-
-                        boolean migrateLavaFlow = false;
-                        if (Math.random() < 0.5) {
-                            if (vent.isMainVent()) {
-                                if (Math.random() < 0.1) {
-                                    migrateLavaFlow = true;
-                                }
-                            } else {
-                                migrateLavaFlow = true;
-                            }
-                        }
-
-                        VolcanoVent newVent = vent.erupt.openFissure();
-                        if (newVent == null) continue;
-
-                        if (migrateLavaFlow) {
-                            vent.erupt.stop();
-                        }
-
-                        this.startVentWithGracePeriod(newVent, () -> {
-                            Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
-                                vent.stop();
-                            }, eruptionTimer);
-                        });
-
-                        eruptables--;
-                        if (eruptables <= 0) break;
-                    }
-                }
-            }
-        }
     }
 
     public void startVentWithGracePeriod(VolcanoVent vent) {
