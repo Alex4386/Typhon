@@ -23,7 +23,7 @@ public class VolcanoNamer {
     public static Random random = new Random();
 
     public static String generate() {
-        int syllables = random.nextInt(MAX_SYLLABLES - MIN_SYLLABLES + 1) + MIN_SYLLABLES;
+        int syllables = (int) ((MAX_SYLLABLES - MIN_SYLLABLES) * Math.random()) + MIN_SYLLABLES;
         int length = syllables * 2 - 1;
         StringBuilder nameBuilder = new StringBuilder(length);
         boolean isVowel = Math.random() < 0.3;
@@ -39,11 +39,11 @@ public class VolcanoNamer {
     }
 
     private static String getRandomVowel() {
-        return vowels[random.nextInt(vowels.length)];
+        return vowels[(int) (Math.random() * vowels.length)];
     }
 
     private static String getRandomConsonant() {
-        return consonants[random.nextInt(consonants.length)];
+        return consonants[(int) (Math.random() * vowels.length)];
     }
 
     private static String randomSound() {
