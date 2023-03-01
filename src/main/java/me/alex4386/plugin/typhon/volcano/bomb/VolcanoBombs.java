@@ -35,7 +35,7 @@ public class VolcanoBombs {
 
     public int getBaseY() {
         if (baseY == Integer.MIN_VALUE) {
-            baseY = vent.getLowestCoreBlock().getY();
+            baseY = (int) vent.averageVentHeight();
         }
 
         return baseY;
