@@ -220,9 +220,11 @@ public class VolcanoBomb {
                 vent.bombs.maxDistance = vent.getTwoDimensionalDistance(targetLocation);
             }
 
-            if (vent.isInVent(this.block.getLocation())) {
-                this.block.remove();
-                this.block.getLocation().getBlock().setType(Material.AIR);
+            if (this.block != null) {
+                if (vent.isInVent(this.block.getLocation())) {
+                    this.block.remove();
+                    this.block.getLocation().getBlock().setType(Material.AIR);
+                }
             }
         }
 
