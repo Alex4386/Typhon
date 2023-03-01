@@ -154,6 +154,7 @@ public class VolcanoBomb {
             }
             return;
         }
+        this.block.remove();
 
         if (this.targetLocation != null) {
             double error = TyphonUtils.getTwoDimensionalDistance(this.landingLocation, this.targetLocation);
@@ -195,7 +196,6 @@ public class VolcanoBomb {
             return;
         }
 
-        /*
         if (nearestVent.getStatus() == VolcanoVentStatus.ERUPTING) {
             if (distance < nearestVent.craterRadius * 0.7) {
                 VolcanoBomb bomb = this.vent.bombs.generateBomb();
@@ -208,7 +208,6 @@ public class VolcanoBomb {
                 return;
             }    
         }
-        */
 
         if (this.vent.volcano.manager.isInAnyFormingCaldera(loc)) {
             return;
@@ -221,6 +220,10 @@ public class VolcanoBomb {
                 vent.bombs.maxDistance = vent.getTwoDimensionalDistance(targetLocation);
             }
 
+            if (vent.isInVent(this.block.getLocation())) {
+                this.block.remove();
+                this.block.getLocation().getBlock().setType(Material.AIR);
+            }
         }
 
 

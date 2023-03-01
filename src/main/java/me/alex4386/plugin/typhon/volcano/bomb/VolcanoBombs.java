@@ -273,7 +273,7 @@ public class VolcanoBombs {
                     // "+volcano.name+"
                     // died.");
                     bomb.stopTrail();
-    
+
                     if (bomb.block != null) {
                         bomb.block.getLocation().getBlock().setType(Material.AIR);
                         bomb.emergencyLand();
