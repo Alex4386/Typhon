@@ -27,7 +27,7 @@ public class TyphonGaia {
 
     //  if we were to imagine a hypothetical scenario in which all active volcanoes were evenly spaced,
     //  the average distance between them would be approximately 40 to 50 kilometers (25 to 31 miles) apart.
-    public static int bubbleRadius = 5000;
+    public static int bubbleRadius = 4000;
     public static List<World> enabledWorlds = new ArrayList<>();
 
 
@@ -136,7 +136,7 @@ public class TyphonGaia {
         // utilize minecraft scaling - realworld / 10
         // 1.5km ~ 4.5km
         int baseRadius = 150;
-        baseRadius += (int) (Math.random() * 300);
+        baseRadius += (int) (Math.random() * 150);
 
         // chunk * 7
         int viewableDistance = 16 * (4 + (int) (Math.random() * 3));
@@ -225,6 +225,8 @@ public class TyphonGaia {
 
             volcano.mainVent.setType(type);
             volcano.mainVent.erupt.setStyle(eruptStyle);
+            volcano.mainVent.erupt.autoConfig();
+
             volcano.mainVent.setStatus(VolcanoVentStatus.MAJOR_ACTIVITY);
 
             volcano.trySave(true);
