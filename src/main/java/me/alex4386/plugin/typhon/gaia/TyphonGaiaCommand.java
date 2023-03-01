@@ -129,6 +129,26 @@ public class TyphonGaiaCommand {
                 }
             } else if (cmd.equalsIgnoreCase("help")) {
                 sendHelp(sender);
+            } else if (cmd.equalsIgnoreCase("bubble")) {
+                if (newArgs.length == 1) {
+                    sender.sendMessage(ChatColor.DARK_RED + "Gaia Volcano Bubble Radius: "+TyphonGaia.bubbleRadius);
+                } else if (newArgs.length == 2) {
+                    String valueRaw = newArgs[1];
+                    int value = Integer.parseInt(valueRaw);
+
+                    if (value <= 0) {
+                        errorMessage(sender, "Value must be greater than 0.");
+                        return true;
+                    }
+
+                    TyphonGaia.bubbleRadius = value;
+                    TyphonGaia.saveConfig();
+
+                    sender.sendMessage(ChatColor.DARK_RED + "Bubble radius set to " + value);
+                } else {
+                    errorMessage(sender, "Usage: /typhon gaia bubble <?value>");
+                }
+                return true;
             } else {
                 errorMessage(sender, "Unknown command.");
                 sender.sendMessage("Usage: /typhon gaia help");
@@ -142,6 +162,7 @@ public class TyphonGaiaCommand {
         sender.sendMessage("Commands:");
         sender.sendMessage("/typhon gaia worlds: Use Gaia world management commands.");
         sender.sendMessage("/typhon gaia spawn : Use Gaia volcano spawn commands.");
+        sender.sendMessage("/typhon gaia bubble <?value> : Get/Set Gaia volcano spawn \"bubble\".");
         sender.sendMessage("/typhon gaia enable-world <? world>: Enable world for Gaia.");
         sender.sendMessage("/typhon gaia disable-world <? world>: Disable world for Gaia.");
     }

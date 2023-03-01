@@ -116,6 +116,8 @@ public class VolcanoAutoStart implements Listener {
 
     public void updateStyles() {
         for (VolcanoVent vent : volcano.manager.getVents()) {
+            if (!vent.autoStyleUpdate) continue;
+
             if (vent.getType() == VolcanoVentType.FISSURE) {
                 if (vent.record.getTotalEjecta() >= 100000) {
                     if (Math.random() < 0.7 || vent.lavaFlow.settings.silicateLevel > 0.5) {
@@ -135,10 +137,16 @@ public class VolcanoAutoStart implements Listener {
                     vent.lavaFlow.settings.silicateLevel = 0.2;
                 }
 
+                VolcanoEruptStyle prevStyle = vent.erupt.getStyle();
+
                 if (vent.lavaFlow.settings.silicateLevel > 0.75) {
                     vent.erupt.setStyle(VolcanoEruptStyle.PLINIAN);
                     vent.lavaFlow.settings.silicateLevel = 0.63;
-                } else if (vent.lavaFlow.settings.silicateLevel > 0.63) {
+                } else if (vent.lavaFlow.settings.silicateLevel > 0.57) {
+                    if (vent.erupt.getStyle() == VolcanoEruptStyle.PLINIAN) {
+                        vent.erupt.setStyle(VolcanoEruptStyle.VULCANIAN);
+                    }
+
                     if (Math.random() < 0.125) {
                         if (vent.erupt.getStyle() == VolcanoEruptStyle.VULCANIAN) {
                             vent.erupt.setStyle(VolcanoEruptStyle.PELEAN);
@@ -147,11 +155,20 @@ public class VolcanoAutoStart implements Listener {
                         }
                     }
                 } else {
+                    if (vent.erupt.getStyle() != VolcanoEruptStyle.HAWAIIAN &&
+                        vent.erupt.getStyle() != VolcanoEruptStyle.STROMBOLIAN) {
+                        vent.erupt.setStyle(Math.random() < 0.5 ? VolcanoEruptStyle.HAWAIIAN : VolcanoEruptStyle.STROMBOLIAN);
+                    }
+
                     if (Math.random() < 0.25) {
                         if (vent.erupt.getStyle() == VolcanoEruptStyle.HAWAIIAN) {
                             vent.erupt.setStyle(VolcanoEruptStyle.STROMBOLIAN);
                         }
                     }
+                }
+
+                if (prevStyle != vent.erupt.getStyle()) {
+                    vent.erupt.autoConfig(false);
                 }
             }
         }

@@ -30,7 +30,6 @@ public class TyphonGaia {
     public static int bubbleRadius = 4000;
     public static List<World> enabledWorlds = new ArrayList<>();
 
-
     public static int scheduleId = -1;
     public static long interval = 20 * 60 * 60;
 
@@ -94,6 +93,7 @@ public class TyphonGaia {
                 enabledWorlds.add(world);
             }
         }
+        bubbleRadius = config.getInt("gaia.bubbleRadius", 4000);
 
         TyphonPlugin.logger.log(VolcanoLogClass.GAIA, "Loaded Gaia enabled worlds! "+enabledWorlds.size()+" worlds loaded.");
     }
@@ -107,6 +107,7 @@ public class TyphonGaia {
         }
 
         TyphonPlugin.plugin.getConfig().set("gaia.worlds", worldRawStrings);
+        TyphonPlugin.plugin.getConfig().set("gaia.bubbleRadius", bubbleRadius);
         TyphonPlugin.plugin.saveConfig();
     }
 
@@ -225,7 +226,7 @@ public class TyphonGaia {
 
             volcano.mainVent.setType(type);
             volcano.mainVent.erupt.setStyle(eruptStyle);
-            volcano.mainVent.erupt.autoConfig();
+            volcano.mainVent.erupt.autoConfig(false);
 
             volcano.mainVent.setStatus(VolcanoVentStatus.MAJOR_ACTIVITY);
 

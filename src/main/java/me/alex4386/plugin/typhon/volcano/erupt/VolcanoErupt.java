@@ -46,32 +46,53 @@ public class VolcanoErupt {
     }
 
     public void autoConfig() {
+        this.autoConfig(true);
+    }
+
+    public void autoConfig(boolean updateSilicate) {
         if (this.style == VolcanoEruptStyle.HAWAIIAN) {
             this.vent.lavaFlow.settings.silicateLevel = 0.45 + (Math.random() * (0.52 - 0.45));
             this.vent.lavaFlow.settings.flowed = 10;
             this.vent.lavaFlow.settings.delayFlowed = 14;
 
             this.vent.explosion.settings.minBombCount = 0;
-            this.vent.explosion.settings.maxBombCount = 5;
+            this.vent.explosion.settings.maxBombCount = 7;
+            this.vent.explosion.settings.queueSize = 2;
 
         } else {
             this.vent.explosion.enabled = true;
             if (this.style == VolcanoEruptStyle.STROMBOLIAN
                     || this.style == VolcanoEruptStyle.VULCANIAN) {
+                if (this.vent.lavaFlow.settings.silicateLevel > 0.57 && updateSilicate) {
+                    this.vent.lavaFlow.settings.silicateLevel = 0.45 + (Math.random() * (0.57 - 0.45));
+                }
+
                 this.vent.lavaFlow.settings.delayFlowed = 10;
                 this.vent.lavaFlow.settings.flowed = 7;
 
-                this.vent.explosion.settings.minBombCount = 10;
-                this.vent.explosion.settings.maxBombCount = 20;
+                this.vent.explosion.settings.minBombCount = 15;
+                this.vent.explosion.settings.maxBombCount = 70;
+                this.vent.explosion.settings.queueSize = 10;
 
                 if (this.style == VolcanoEruptStyle.STROMBOLIAN) {
-                    this.vent.lavaFlow.settings.silicateLevel = 0.49 + (Math.random() * (0.55 - 0.49));
+                    this.vent.explosion.settings.minBombCount = 15;
+                    this.vent.explosion.settings.maxBombCount = 70;
+                    this.vent.explosion.settings.queueSize = 10;
                 } else if (this.style == VolcanoEruptStyle.VULCANIAN) {
-                    this.vent.lavaFlow.settings.silicateLevel = 0.54 + (Math.random() * (0.57 - 0.54));
-                }
-            } else if (this.style == VolcanoEruptStyle.PELEAN) {
-                // TODO: requires build up of lava dome before hand
+                    if (this.vent.lavaFlow.settings.silicateLevel < 0.50 && updateSilicate) {
+                        this.vent.lavaFlow.settings.silicateLevel = 0.50 + (Math.random() * (0.62 - 0.50));
+                    }
 
+                    this.vent.explosion.settings.minBombCount = 30;
+                    this.vent.explosion.settings.maxBombCount = 140;
+                    this.vent.explosion.settings.queueSize = 20;
+                } else if (this.style == VolcanoEruptStyle.PELEAN) {
+                    if (this.vent.lavaFlow.settings.silicateLevel < 0.72 && updateSilicate) {
+                        this.vent.lavaFlow.settings.silicateLevel = 0.61 + (Math.random() * (0.72 - 0.61));
+                    }
+
+                }
+                // TODO: requires build up of lava dome before hand
             } else {
             }
         }
