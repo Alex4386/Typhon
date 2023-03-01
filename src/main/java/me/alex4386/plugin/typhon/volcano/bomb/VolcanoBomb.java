@@ -75,7 +75,15 @@ public class VolcanoBomb {
 
         this.block.setGlowing(true);
         this.block.setFireTicks(1000);
-        this.block.setVelocity(launchVector);
+        try {
+            this.block.setVelocity(launchVector);
+        } catch (Exception e) {
+            this.block.remove();
+            this.block = null;
+
+            this.land();
+            return;
+        }
 
         this.block.setGravity(true);
         this.block.setInvulnerable(true);

@@ -140,9 +140,9 @@ public class VolcanoBombs {
             outsideCone = true;
         }
 
-        int distance = (int) (1 - Math.pow(Math.random(), 2) * (maxRadius - minRadius) + minRadius);
+        int distance = (int) ((1 - Math.pow(Math.random(), 2)) * (maxRadius - minRadius) + minRadius);
         if (outsideCone) {
-            distance = (int) (1 - Math.random() * (maxRadius - minRadius) + minRadius);
+            distance = (int) (Math.random() * (maxRadius - minRadius) + minRadius);
         }
 
         double adequateHeight = this.vent.getSummitBlock().getY() - (distance / this.distanceHeightRatio());
