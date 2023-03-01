@@ -199,7 +199,7 @@ public class VolcanoBombs {
                         randomBlock.getWorld().createExplosion(
                                 randomBlock.getLocation(),
                                 (float) (2f + (Math.random() * 4f))
-                        )
+                        );
                     }
                 }
             }
