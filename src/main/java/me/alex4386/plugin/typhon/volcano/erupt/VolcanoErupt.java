@@ -273,6 +273,7 @@ public class VolcanoErupt {
         }
 
         this.vent.lavadome.postConeBuildHandler();
+        this.vent.bombs.reset();
     }
 
     public void importConfig(JSONObject json) {

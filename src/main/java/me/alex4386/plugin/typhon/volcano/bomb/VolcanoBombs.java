@@ -31,12 +31,33 @@ public class VolcanoBombs {
     public double maxDistance = 0;
 
     public int maximumFallingBlocks = 1000;
+    public int baseY = Integer.MIN_VALUE;
+
+    public int getBaseY() {
+        if (baseY == Integer.MIN_VALUE) {
+            baseY = vent.getLowestCoreBlock().getY();
+        }
+
+        return baseY;
+    }
+
+    public void resetBaseY() {
+        this.baseY = Integer.MIN_VALUE;
+    }
 
     public VolcanoBombs(VolcanoVent vent) {
         this.vent = vent;
 
         Vector vector = TyphonUtils.calculateVelocity(
                 new Vector(0, 0, 0), new Vector(0, 0, vent.craterRadius), 4);
+    }
+
+    public void initialize() {
+        this.reset();
+    }
+
+    public void reset() {
+        this.resetBaseY();
     }
 
 
@@ -127,7 +148,7 @@ public class VolcanoBombs {
     }
 
     public VolcanoBomb generateConeBuildingBomb() {
-        int baseYHeight = this.vent.getSummitBlock().getY() - this.vent.location.getBlockY();
+        int baseYHeight = this.vent.getSummitBlock().getY() - this.getBaseY();
         int minRadius = this.vent.craterRadius;
 
         double coneRadius = (baseYHeight * this.distanceHeightRatio());

@@ -147,6 +147,7 @@ public class VolcanoVent {
         lavaFlow.initialize();
         tremor.initialize();
         lavadome.initialize();
+        bombs.initialize();
 
         volcano.logger.log(VolcanoLogClass.VENT, "Started" + " up vent " + name);
     }
