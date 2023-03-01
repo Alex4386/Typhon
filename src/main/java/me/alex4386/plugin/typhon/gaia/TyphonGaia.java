@@ -97,6 +97,7 @@ public class TyphonGaia {
         }
 
         TyphonPlugin.plugin.getConfig().set("gaia.worlds", worldRawStrings);
+        TyphonPlugin.plugin.saveConfig();
     }
 
     public static long getAdequateVolcanoCount(World world) {

@@ -118,8 +118,9 @@ public class TyphonGaiaCommand {
                             sender.sendMessage("Gaia just balanced the world with adequate amount of volcanoes.");
                         } else {
                             sender.sendMessage("Usage: /typhon gaia worlds <world> help");
-                            return true;
                         }
+
+                        return true;
                     }
 
                     sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Typhon Gaia]");
