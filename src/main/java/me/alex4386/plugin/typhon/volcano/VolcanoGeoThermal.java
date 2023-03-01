@@ -11,16 +11,17 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Player;
-import org.bukkit.entity.Zombie;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.inventory.EntityEquipment;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -536,6 +537,9 @@ public class VolcanoGeoThermal implements Listener {
        */
 
       double intensity = distance / (double) range;
+      double heatValue = volcano.manager.getHeatValue(location);
+      double multiplier = Math.random() < vent.getStatus().getScaleFactor() ? 5 : 1 + (Math.random() * 2);
+
       if (entity instanceof LivingEntity && distance <= range) {
         LivingEntity livingEntity = (LivingEntity) entity;
 
@@ -558,7 +562,7 @@ public class VolcanoGeoThermal implements Listener {
 
         // 250ppm = risk of death
         if (localH2sGasPpm > 250) poisonousLevel = Math.max(poisonousLevel, (int) Math.min((localH2sGasPpm + 250) / 250, 5));
-        
+
         // acute intoxication. just die.
         if (localH2sGasPpm > 1000 && !livingEntity.isInvulnerable()) livingEntity.setHealth(0);
 
@@ -575,8 +579,6 @@ public class VolcanoGeoThermal implements Listener {
         int poisonousLevel = 0;
 
         if (vent.getStatus().getScaleFactor() >= 0.1) {
-          double heatValue = volcano.manager.getHeatValue(location);
-          double multiplier = Math.random() < vent.getStatus().getScaleFactor() ? 5 : 1 + (Math.random() * 2);
           double total = Math.min(Math.max(heatValue * multiplier, 1), 5);
 
           poisonousLevel = (int) total;
@@ -589,9 +591,49 @@ public class VolcanoGeoThermal implements Listener {
         if (poisonousLevel > 0) {
           poisonousLevel = Math.max((int) (poisonousLevel * intensity), 1);
           livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.POISON, timespan, poisonousLevel));
-        }        
+
+          EntityEquipment equipment = livingEntity.getEquipment();
+          this.doSOxDamage(equipment.getHelmet(), poisonousLevel);
+          this.doSOxDamage(equipment.getChestplate(), poisonousLevel);
+          this.doSOxDamage(equipment.getLeggings(), poisonousLevel);
+          this.doSOxDamage(equipment.getBoots(), poisonousLevel);
+
+          this.doSOxDamage(equipment.getItemInMainHand(), poisonousLevel);
+          this.doSOxDamage(equipment.getItemInOffHand(), poisonousLevel);
+        }
+      } else if (entity instanceof Item) {
+        double total = Math.min(Math.max(heatValue * multiplier, 1), 5);
+
+        int acidLevel = (int) (total * intensity);
+        if (acidLevel > 0) {
+          Item item = (Item) entity;
+          ItemStack stack = item.getItemStack();
+          this.doSOxDamage(stack, acidLevel);
+        }
       }
     }
+  }
+
+  public void doSOxDamage(ItemStack stack, int level) {
+    if (stack == null) {
+      return;
+    }
+
+    ItemMeta meta = stack.getItemMeta();
+    if (meta == null) {
+      if (meta instanceof Damageable) {
+        ((Damageable) meta).damage(getSOxDamageMultiplier(stack.getType()) * level);
+      }
+    }
+  }
+
+  public double getSOxDamageMultiplier(Material material) {
+    String name = TyphonUtils.toLowerCaseDumbEdition(material.name());
+
+    if (name.startsWith("wood")) { return 1; }
+    if (name.startsWith("iron")) { return 1.5; }
+
+    return 0;
   }
 
   public void registerTask() {
