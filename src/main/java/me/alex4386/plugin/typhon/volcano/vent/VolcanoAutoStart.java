@@ -328,7 +328,7 @@ public class VolcanoAutoStart implements Listener {
                                             if (Math.random() < 0.1) {
                                                 vent.volcano.logger.log(
                                                         VolcanoLogClass.AUTOSTART,
-                                                        "volcano starting flank eruption due to increment from major_activity");
+                                                        "volcano starting caldera forming eruption since it has reached the world height");
 
                                                 vent.caldera.autoSetup();
                                                 vent.caldera.startErupt();
