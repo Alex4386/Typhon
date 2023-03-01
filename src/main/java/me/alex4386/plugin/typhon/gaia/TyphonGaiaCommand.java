@@ -2,6 +2,8 @@ package me.alex4386.plugin.typhon.gaia;
 
 import me.alex4386.plugin.typhon.TyphonMessage;
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonUtils;
+import me.alex4386.plugin.typhon.volcano.VolcanoManager;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.World;
@@ -35,13 +37,36 @@ public class TyphonGaiaCommand {
         } else {
             String cmd = newArgs[0].toLowerCase();
 
-            if (cmd.equalsIgnoreCase("worlds")) {
-                if (newArgs.length == 1) {
-                    if (!sender.hasPermission("typhon.gaia.worlds")) {
-                        noPermission(sender);
-                        return true;
-                    }
+            if (cmd.equalsIgnoreCase("enable-world") || cmd.equalsIgnoreCase("disable-world")) {
+                String worldName = newArgs[1];
+                String currentCmd = cmd.replace("-world", "");
 
+                if (!sender.hasPermission("typhon.gaia.worlds." + currentCmd)) {
+                    noPermission(sender);
+                    return true;
+                }
+
+                World world = Bukkit.getWorld(worldName);
+                if (world == null) {
+                    errorMessage(sender, "The specified world does not exist.");
+                    return true;
+                }
+
+                if (currentCmd.equalsIgnoreCase("enable")) {
+                    TyphonGaia.enableWorld(world);
+                } else {
+                    TyphonGaia.disableWorld(world);
+                }
+
+                sender.sendMessage(ChatColor.DARK_GREEN + "The specified world (" + world.getName() + ") has been " + currentCmd + "d.");
+                return true;
+            } else if (cmd.equalsIgnoreCase("worlds")) {
+                if (!sender.hasPermission("typhon.gaia.worlds")) {
+                    noPermission(sender);
+                    return true;
+                }
+
+                if (newArgs.length == 1) {
                     sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "Enabled Worlds:");
                     for (World world : TyphonGaia.enabledWorlds) {
                         sender.sendMessage("- "+world.getName());
@@ -49,35 +74,50 @@ public class TyphonGaiaCommand {
 
                     sender.sendMessage("");
                     sender.sendMessage("Commands:");
-                    sender.sendMessage("/typhon gaia worlds enable <world> : Enable the specified world");
-                    sender.sendMessage("/typhon gaia worlds disable <world> : Disable the specified world");
+                    sender.sendMessage("/typhon gaia worlds <world> : Gaia world settings commands");
                 } else if (newArgs.length >= 2) {
-                    if (newArgs.length >= 3) {
-                        String action = newArgs[1].toLowerCase();
-                        World world = Bukkit.getWorld(newArgs[2]);
-                        if (world == null) {
-                            errorMessage(sender, "The specified world does not exist.");
-                            return true;
-                        }
+                    World world = Bukkit.getWorld(newArgs[2]);
+                    if (world == null) {
+                        errorMessage(sender, "The specified world does not exist.");
+                        return true;
+                    } else if (!TyphonGaia.enabledWorlds.contains(world)) {
+                        errorMessage(sender, "The World "+world.getName()+" is not enabled.");
+                        sender.sendMessage("Enable it with /typhon gaia enable-world "+world.getName());
+                        return true;
+                    }
 
-                        if (action.equalsIgnoreCase("enable")) {
-                            if (!sender.hasPermission("typhon.gaia.worlds.enable")) {
-                                noPermission(sender);
-                                return true;
-                            }
+                    if (newArgs.length == 2) {
+                        sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Typhon Gaia]");
+                        sender.sendMessage("World Chunk count  : " + TyphonUtils.getChunkCount(world));
+                        sender.sendMessage("World Area (Loaded): " + TyphonUtils.getChunkCount(world) * 256);
+                        sender.sendMessage("Adequate volcanoes : " + TyphonGaia.getAdequateVolcanoCount(world));
+                        sender.sendMessage("Current Volcanoes  : " +  VolcanoManager.getVolcanoesOnWorld(world).size());
+                        sender.sendMessage("Active Volcanoes   : " +  VolcanoManager.getActiveVolcanoesOnWorld(world).size());
+                        sender.sendMessage("");
+                        sender.sendMessage("Usage: /typhon gaia worlds <world> help");
+                        return true;
+                    } else if (newArgs.length >= 3) {
+                        String action = newArgs[2].toLowerCase();
 
-                            TyphonGaia.enableWorld(world);
-                            sender.sendMessage(ChatColor.DARK_GREEN + "The specified world ("+world.getName()+") has been enabled.");
-                            return true;
-                        } else if (action.equalsIgnoreCase("disable")) {
-                            if (!sender.hasPermission("typhon.gaia.worlds.disable")) {
-                                noPermission(sender);
-                                return true;
-                            }
-
-                            TyphonGaia.disableWorld(world);
-                            sender.sendMessage(ChatColor.DARK_GREEN + "The specified world ("+world.getName()+") has been disabled.");
-
+                        if (action.equalsIgnoreCase("help")) {
+                            sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Typhon Gaia] "+ChatColor.GOLD+"Gaia World commands");
+                            sender.sendMessage("/typhon gaia worlds <world> help   : Show this help");
+                            sender.sendMessage("/typhon gaia worlds <world> volcano: List currently detected volcanoes by gaia.");
+                            sender.sendMessage("/typhon gaia worlds <world> balance: Balance the world with adequate amount of volcanoes.");
+                        } else if (action.equalsIgnoreCase("volcano")) {
+                            sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Typhon Gaia] " + ChatColor.GOLD + "Active Volcanoes");
+                            VolcanoManager.getActiveVolcanoesOnWorld(world).forEach(volcano -> {
+                                sender.sendMessage(
+                                    ChatColor.DARK_RED
+                                            + " - "
+                                            + volcano.manager.getVolcanoChatColor()
+                                            + volcano.name);
+                            });
+                        } else if (action.equalsIgnoreCase("balance")) {
+                            TyphonGaia.runVolcanoSpawn();
+                            sender.sendMessage("Gaia just balanced the world with adequate amount of volcanoes.");
+                        } else {
+                            sender.sendMessage("Usage: /typhon gaia worlds <world> help");
                             return true;
                         }
                     }
@@ -100,6 +140,9 @@ public class TyphonGaiaCommand {
     public static void sendHelp(CommandSender sender) {
         sender.sendMessage("Commands:");
         sender.sendMessage("/typhon gaia worlds: Use Gaia world management commands.");
+        sender.sendMessage("/typhon gaia spawn : Use Gaia volcano spawn commands.");
+        sender.sendMessage("/typhon gaia enable-world <? world>: Enable world for Gaia.");
+        sender.sendMessage("/typhon gaia disable-world <? world>: Disable world for Gaia.");
     }
 
     public static void noPermission(CommandSender sender) {

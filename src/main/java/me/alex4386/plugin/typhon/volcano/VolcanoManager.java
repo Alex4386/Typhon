@@ -359,4 +359,9 @@ public class VolcanoManager {
         return volcanoes.stream().filter(volcano -> volcano.location.getWorld().equals(world)).collect(Collectors.toList());
     }
 
+    public static List<Volcano> getActiveVolcanoesOnWorld(World world) {
+        Collection<Volcano> volcanoes = TyphonPlugin.listVolcanoes.values();
+        return volcanoes.stream().filter(volcano -> volcano.location.getWorld().equals(world) && volcano.manager.getHighestStatusVent().getStatus().isActive()).collect(Collectors.toList());
+    }
+
 }

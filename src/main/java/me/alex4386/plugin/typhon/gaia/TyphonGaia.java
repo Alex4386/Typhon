@@ -157,7 +157,7 @@ public class TyphonGaia {
 
     public static void runVolcanoSpawn() {
         for (World world : enabledWorlds) {
-            int count = VolcanoManager.getVolcanoesOnWorld(world).size();
+            int count = VolcanoManager.getActiveVolcanoesOnWorld(world).size();
             long adeqCount = getAdequateVolcanoCount(world);
             
             int diff = (int) (adeqCount - count);
@@ -187,21 +187,7 @@ public class TyphonGaia {
         return volcano;
     }
 
-    private static Volcano trySpawnRandomVolcano(World world) {
-        List<File> regionFiles = TyphonUtils.getAllChunkFiles(world);
-        if (regionFiles.size() == 0) return null;
-
-        Collections.shuffle(regionFiles);
-        GaiaChunkCoordIntPair region = parseRegionFilename(regionFiles.get(0).getName());
-        if (region == null) return null;
-
-        Chunk chunk = world.getChunkAt(region.x, region.z);
-        int distance = getRandomViewableDistance();
-
-        Block chunkCenter = chunk.getBlock(8, 0, 8);
-        Block target = TyphonUtils.getFairRandomBlockInRange(chunkCenter, distance, distance);
-
-        if (isObstructingOtherVolcanosBubble(target.getLocation())) return null;
+    public static Volcano spawnVolcano(Location target) {
         Block baseBlock = TyphonUtils.getHighestRocklikes(target);
 
         String name = VolcanoNamer.generate();
@@ -213,6 +199,8 @@ public class TyphonGaia {
 
             // vent type
             VolcanoVentType type = VolcanoVentType.CRATER;
+            volcano.mainVent.fissureAngle = Math.random() * 2 * Math.PI;
+
             VolcanoEruptStyle eruptStyle = VolcanoEruptStyle.HAWAIIAN;
 
             // volcano lava silicate content
@@ -233,6 +221,24 @@ public class TyphonGaia {
 
             return volcano;
         } catch (Exception e) { return null; }
+    }
+
+    private static Volcano trySpawnRandomVolcano(World world) {
+        List<File> regionFiles = TyphonUtils.getAllChunkFiles(world);
+        if (regionFiles.size() == 0) return null;
+
+        Collections.shuffle(regionFiles);
+        GaiaChunkCoordIntPair region = parseRegionFilename(regionFiles.get(0).getName());
+        if (region == null) return null;
+
+        Chunk chunk = world.getChunkAt(region.x, region.z);
+        int distance = getRandomViewableDistance();
+
+        Block chunkCenter = chunk.getBlock(8, 0, 8);
+        Block target = TyphonUtils.getFairRandomBlockInRange(chunkCenter, distance, distance);
+
+        if (isObstructingOtherVolcanosBubble(target.getLocation())) return null;
+        return spawnVolcano(target.getLocation());
     }
 }
 

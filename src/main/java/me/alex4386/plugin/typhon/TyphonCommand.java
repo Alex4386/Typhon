@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
+import me.alex4386.plugin.typhon.gaia.TyphonGaia;
 import me.alex4386.plugin.typhon.gaia.TyphonGaiaCommand;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.commands.VolcanoCommand;
@@ -26,20 +27,36 @@ public class TyphonCommand {
             return;
         }
 
-        if (args.length >= 2) {
+        if (!(sender instanceof Player)) {
+            TyphonMessage.error(
+                    sender, "Unable to generate volcano from console!");
+            return;
+        }
+
+        Location location = ((Player) sender).getLocation();
+
+        if (args.length == 1) {
+            sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Create Volcano]");
+            sender.sendMessage("Gaia is generating adequate volcano at your location.");
+
+            Volcano volcano = TyphonGaia.spawnVolcano(location);
+
+            if (volcano == null) {
+                TyphonMessage.error(
+                        sender, "Gaia has failed to generate adequate volcano!");
+                return;
+            }
+
+            sender.sendMessage(ChatColor.DARK_RED + "New volcano has been generated!");
+            sender.sendMessage(ChatColor.DARK_RED + "Name : " + volcano.name);
+            sender.sendMessage(ChatColor.DARK_RED + "Vent : " + volcano.mainVent.getType().toString());
+            sender.sendMessage(ChatColor.DARK_RED + "Style: " + volcano.mainVent.erupt.getStyle().toString());
+            sender.sendMessage(ChatColor.DARK_RED + "SiO2%: " + String.format("%.2f", volcano.mainVent.lavaFlow.settings.silicateLevel)+"%");
+        } else if (args.length >= 2) {
             String volcanoName = args[1];
             File volcanoDir = new File(TyphonPlugin.volcanoDir, volcanoName);
 
             if (TyphonPlugin.listVolcanoes.get(volcanoName) == null) {
-
-                if (!(sender instanceof Player)) {
-                    TyphonMessage.error(
-                            sender, "Unable to generate " + volcanoName + " from console!");
-                    return;
-                }
-
-                Location location = ((Player) sender).getLocation();
-
                 try {
                     Volcano volcano = new Volcano(volcanoDir.toPath(), location);
                     volcano.load();
@@ -69,7 +86,7 @@ public class TyphonCommand {
                                     TyphonMessage.info(
                                             sender,
                                             "Fissure angle was setted to your current viewing"
-                                                + " direction");
+                                                    + " direction");
                                 } else {
                                     volcano.mainVent.fissureAngle = Math.random() * Math.PI * 2;
                                 }
@@ -82,7 +99,7 @@ public class TyphonCommand {
                         volcano.mainVent.erupt.setStyle(VolcanoEruptStyle.HAWAIIAN);
                         volcano.mainVent.setType(VolcanoVentType.CRATER);
                     }
-                    
+
                     volcano.trySave();
 
                     TyphonPlugin.listVolcanoes.put(volcanoName, volcano);
@@ -105,9 +122,6 @@ public class TyphonCommand {
             } else {
                 TyphonMessage.error(sender, "Volcano " + volcanoName + " already exists!");
             }
-
-        } else {
-            TyphonMessage.error(sender, "Invalid Command! Usage: /typhon create <name>");
         }
     }
 
