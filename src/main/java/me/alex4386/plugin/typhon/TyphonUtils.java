@@ -632,7 +632,7 @@ public class TyphonUtils {
         File[] regions = regionDirectory.listFiles();
         List<File> regionFiles = Arrays.stream(regions)
                 .filter(file ->
-                        !file.isDirectory() && file.getName().endsWith(".mcr")
+                        !file.isDirectory() && file.getName().endsWith(".mca")
                 )
                 .collect(Collectors.toList());
 

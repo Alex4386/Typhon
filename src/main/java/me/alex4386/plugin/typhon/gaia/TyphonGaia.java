@@ -137,7 +137,7 @@ public class TyphonGaia {
     public static GaiaChunkCoordIntPair parseRegionFilename(String filename) {
         String extension = filename.substring(filename.lastIndexOf(".") + 1);
 
-        if (extension.equalsIgnoreCase("mcr")) {
+        if (extension.equalsIgnoreCase("mca")) {
             String name = filename.substring(0, filename.lastIndexOf("."));
 
             String[] parts = name.split("\\.");
