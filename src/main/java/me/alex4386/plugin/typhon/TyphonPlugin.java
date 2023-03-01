@@ -129,6 +129,10 @@ public final class TyphonPlugin extends JavaPlugin {
 
         logger.log(VolcanoLogClass.BOMB, "Initialization Complete!");
 
+        logger.log(VolcanoLogClass.GAIA, "Initializing...");
+        TyphonGaia.initialize();
+        logger.log(VolcanoLogClass.GAIA, "Initialization Complete!");
+
         logger.log(VolcanoLogClass.INIT, "Initialization Complete!");
     }
 
@@ -184,6 +188,8 @@ public final class TyphonPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         logger.debug(VolcanoLogClass.CORE, "Disabling Plugin...");
+
+        TyphonGaia.shutdown();
 
         // Plugin shutdown logic
         for (Volcano volcano : listVolcanoes.values()) {

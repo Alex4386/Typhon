@@ -34,6 +34,14 @@ public class TyphonGaia {
     public static int scheduleId = -1;
     public static long interval = 20 * 60 * 60;
 
+    public static void initialize() {
+        registerTask();
+    }
+
+    public static void shutdown() {
+        unregisterTask();
+    }
+
     public static void registerTask() {
         if (scheduleId == -1) {
             scheduleId =
@@ -78,6 +86,8 @@ public class TyphonGaia {
     public static void loadConfig(FileConfiguration config) {
         TyphonPlugin.logger.log(VolcanoLogClass.GAIA, "Loading gaia config....");
         List<String> worldRawStrings = config.getStringList("gaia.worlds");
+
+        enabledWorlds.clear();
         for (String worldString : worldRawStrings) {
             World world = Bukkit.getWorld(worldString);
             if (world != null) {
