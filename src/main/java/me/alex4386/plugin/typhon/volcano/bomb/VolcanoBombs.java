@@ -80,16 +80,6 @@ public class VolcanoBombs {
                 * multiplier;
         double minRadius = Math.min(vent.craterRadius * 0.7, 20);
 
-        double absoluteMinimumForMax = Math.max(vent.craterRadius * 2, 40);
-        double hawaiianFlow = vent.longestNormalLavaFlowLength / 2;
-
-        // 30 degrees
-        double adequateCinderConeBaseWidth = (vent.getSummitBlock().getY() - vent.location.getY()) * this.distanceHeightRatio();
-        double calculatedConeBaseWidth = Math.max(absoluteMinimumForMax, adequateCinderConeBaseWidth);
-
-        maxRadius = Math.min(300, Math.max(hawaiianFlow, calculatedConeBaseWidth)) * multiplier;
-        maxRadius = Math.min(300 * multiplier, Math.max(maxDistance, maxRadius));
-
         VolcanoCircleOffsetXZ offsetXZ = VolcanoMath.getCenterFocusedCircleOffset(
                 hostLocation.getBlock(), (int) maxRadius, (int) minRadius);
         Block destination = hostLocation.getBlock().getRelative((int) offsetXZ.x, 0, (int) offsetXZ.z);
@@ -146,9 +136,14 @@ public class VolcanoBombs {
 
         if (height <= 2) height = 2;
 
-        double distance = Math.pow(Math.random(), 2) * height * this.distanceHeightRatio();
+        double distance = height * this.distanceHeightRatio();
         double adequateHeight = this.vent.getSummitBlock().getY() - (distance / this.distanceHeightRatio());
         double distanceFromCore = this.vent.getRadius() + distance;
+
+        System.out.println("distance: "+distance);
+        System.out.println("height: "+height);
+        System.out.println("adequateHeight: "+adequateHeight);
+        System.out.println("distanceFromCore: "+distanceFromCore);
 
         Block randomBlock = TyphonUtils.getHighestRocklikes(TyphonUtils.getFairRandomBlockInRange(this.vent.getCoreBlock(), (int) distanceFromCore, (int) distanceFromCore));
         double diff = adequateHeight - randomBlock.getY();
