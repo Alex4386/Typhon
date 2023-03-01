@@ -148,8 +148,15 @@ public class VolcanoBombs {
     }
 
     public VolcanoBomb generateConeBuildingBomb() {
-        int baseYHeight = this.vent.getSummitBlock().getY() - this.getBaseY();
         int minRadius = this.vent.craterRadius;
+        int baseY = this.getBaseY();
+
+        int minimumScaffoldBombRadius = minRadius * 2;
+        double minimumScaffoldConeHeight = (minimumScaffoldBombRadius / this.distanceHeightRatio());
+        double minimumRequiredSummitHeight = baseY + minimumScaffoldConeHeight;
+
+        double effectiveSummitHeight = Math.max(minimumRequiredSummitHeight, this.vent.getSummitBlock().getY());
+        int baseYHeight = (int) (effectiveSummitHeight - baseY);
 
         double coneRadius = (baseYHeight * this.distanceHeightRatio());
         int maxRadius = (int) Math.max(coneRadius, minRadius);
@@ -166,14 +173,8 @@ public class VolcanoBombs {
             distance = (int) (Math.random() * (maxRadius - minRadius) + minRadius);
         }
 
-        double adequateHeight = this.vent.getSummitBlock().getY() - (distance / this.distanceHeightRatio());
+        double adequateHeight = baseY + effectiveSummitHeight - (distance / this.distanceHeightRatio());
         double distanceFromCore = distance;
-
-        System.out.println("distance: "+distance);
-        System.out.println("adequateHeight: "+adequateHeight);
-        System.out.println("distanceFromCore: "+distanceFromCore);
-        System.out.println("coneRadius: "+coneRadius);
-        System.out.println("maxRadius: "+maxRadius);
 
         Block randomBlock = TyphonUtils.getHighestRocklikes(TyphonUtils.getFairRandomBlockInRange(this.vent.getCoreBlock(), (int) distanceFromCore, (int) distanceFromCore));
         double diff = adequateHeight - randomBlock.getY();
