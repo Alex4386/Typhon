@@ -154,7 +154,7 @@ public class VolcanoBomb {
             }
             return;
         }
-        this.block.remove();
+        if (this.block != null) this.block.remove();
 
         if (this.targetLocation != null) {
             double error = TyphonUtils.getTwoDimensionalDistance(this.landingLocation, this.targetLocation);
