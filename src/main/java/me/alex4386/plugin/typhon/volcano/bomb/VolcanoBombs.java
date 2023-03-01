@@ -160,6 +160,7 @@ public class VolcanoBombs {
 
         double coneRadius = (baseYHeight * this.distanceHeightRatio());
         int maxRadius = (int) Math.max(coneRadius * 1.5, minRadius);
+        int defaultRadius = maxRadius;
 
         boolean outsideCinderCone = false;
         if (Math.random() < 0.25) {
@@ -169,7 +170,7 @@ public class VolcanoBombs {
 
         int distance = (int) ((1 - Math.pow(Math.random(), 2)) * (maxRadius - minRadius) + minRadius);
         if (outsideCinderCone) {
-            distance = (int) (Math.random() * (maxRadius - minRadius) + minRadius);
+            distance = (int) (Math.random() * (maxRadius - defaultRadius) + defaultRadius);
         }
 
         double adequateHeight = baseY + effectiveSummitHeight - (distance / this.distanceHeightRatio());
