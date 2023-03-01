@@ -111,9 +111,13 @@ public final class TyphonPlugin extends JavaPlugin {
         logger.debug(VolcanoLogClass.CORE, "Loaded Volcanoes!");
 
         if (enableBlueMap) {
-            BlueMapAPI.onEnable(blueMapAPI -> {
-                TyphonBlueMapUtils.initialize();
-            });
+            try {
+                BlueMapAPI.onEnable(blueMapAPI -> {
+                    TyphonBlueMapUtils.initialize();
+                });
+            } catch (NoClassDefFoundError e) {
+                logger.warn(VolcanoLogClass.CORE, "Could not find BlueMapAPI, disabling BlueMap!");
+            }
         }
 
         logger.log(VolcanoLogClass.PLAYER_EVENT, "Initializing...");

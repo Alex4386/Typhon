@@ -1,5 +1,5 @@
 # Docs
-<p align="right">Last Updated: <b>2021-07-25</b> for v0.5.0</p>
+<p align="right">Last Updated: <b>2023-03-01</b> for v0.7.0-rc2</p>
 
 ## Welcome to Typhon Plugin!
 Typhon plugin is a Minecraft Plugin aims to implement real-life volcanoes and its behavior in Spigot within the borders of vanilla minecraft (no mods/texturepacks)
@@ -7,6 +7,8 @@ Typhon plugin is a Minecraft Plugin aims to implement real-life volcanoes and it
 > **Warning:**  
 > Typhon Plugin is still in early development, and might introduce feature that might break other features.  
 > Use at your own risk!
+
+##
 
 ## Testing your gear against Typhon Plugin
 Any minecraft servers supports Spigot API can work with Typhon Plugin. 

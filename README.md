@@ -24,8 +24,8 @@ Visit: [minehub.kr](https://minehub.kr) for more information! (South Korea Resid
 -->
 
 ## TODO
-* Automatic Volcano creation
-* Automatic conversion to cinder cone on pro-longed eruption (depending on gas content)
+* Implement Volcanic Landslides
+* Optimization Jobs
 
 ## Docs
 Please refer to [DOCS.md](./DOCS.md).  
