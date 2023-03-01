@@ -76,7 +76,7 @@ public class TyphonGaiaCommand {
                     sender.sendMessage("Commands:");
                     sender.sendMessage("/typhon gaia worlds <world> : Gaia world settings commands");
                 } else if (newArgs.length >= 2) {
-                    World world = Bukkit.getWorld(newArgs[2]);
+                    World world = Bukkit.getWorld(newArgs[1]);
                     if (world == null) {
                         errorMessage(sender, "The specified world does not exist.");
                         return true;
