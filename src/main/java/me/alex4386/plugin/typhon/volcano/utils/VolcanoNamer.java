@@ -14,7 +14,7 @@ public class VolcanoNamer {
 
     // Define the rules for generating names
     public static int MIN_SYLLABLES = 3;
-    public static int MAX_SYLLABLES = 5;
+    public static int MAX_SYLLABLES = 7;
 
     public static boolean startByVowels = true; // always start with a vowel sound
     public static boolean alternatingVC = true; // alternate between vowel and consonant sounds
