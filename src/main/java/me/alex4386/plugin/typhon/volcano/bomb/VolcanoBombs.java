@@ -159,17 +159,16 @@ public class VolcanoBombs {
         int baseYHeight = (int) (effectiveSummitHeight - baseY);
 
         double coneRadius = (baseYHeight * this.distanceHeightRatio());
-        int maxRadius = (int) Math.max(coneRadius, minRadius);
+        int maxRadius = (int) Math.max(coneRadius * 1.5, minRadius);
 
-        boolean outsideCone = false;
-
+        boolean outsideCinderCone = false;
         if (Math.random() < 0.25) {
-            maxRadius *= (1 + (Math.random() * 0.5));
-            outsideCone = true;
+            maxRadius = (int) Math.max(this.vent.longestNormalLavaFlowLength, maxRadius);
+            outsideCinderCone = true;
         }
 
         int distance = (int) ((1 - Math.pow(Math.random(), 2)) * (maxRadius - minRadius) + minRadius);
-        if (outsideCone) {
+        if (outsideCinderCone) {
             distance = (int) (Math.random() * (maxRadius - minRadius) + minRadius);
         }
 
