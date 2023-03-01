@@ -53,7 +53,7 @@ public class VolcanoBombs {
     }
 
     public void initialize() {
-        this.reset();
+
     }
 
     public void reset() {
@@ -326,6 +326,7 @@ public class VolcanoBombs {
         maxBombRadius = (int) ((long) bombRadius.get("max"));
         bombDelay = (int) ((long) configData.get("delay"));
         maxDistance = (double) configData.get("maxDistance");
+        baseY = (int) ((long) configData.get("baseY"));
     }
 
     public JSONObject exportConfig() {
@@ -343,6 +344,7 @@ public class VolcanoBombs {
         configData.put("radius", bombRadius);
         configData.put("delay", bombDelay);
         configData.put("maxDistance", maxDistance);
+        configData.put("baseY", baseY);
 
         return configData;
     }

@@ -35,6 +35,11 @@ public class VolcanoErupt {
             this.startExploding();
         }
 
+        if (this.style == VolcanoEruptStyle.HAWAIIAN) {
+            // this kind of eruption generates bigger base, therefore we should reset baseY.
+            this.vent.bombs.resetBaseY();
+        }
+
         this.erupting = true;
     }
 
@@ -294,7 +299,6 @@ public class VolcanoErupt {
         }
 
         this.vent.lavadome.postConeBuildHandler();
-        this.vent.bombs.reset();
     }
 
     public void importConfig(JSONObject json) {
