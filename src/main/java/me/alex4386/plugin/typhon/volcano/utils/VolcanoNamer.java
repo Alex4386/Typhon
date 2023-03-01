@@ -16,9 +16,6 @@ public class VolcanoNamer {
     public static int MIN_SYLLABLES = 3;
     public static int MAX_SYLLABLES = 5;
 
-    public static int MIN_LENGTH = MIN_SYLLABLES * 2 - 1; // minimum length to satisfy alternating rule
-    public static int MAX_LENGTH = MAX_SYLLABLES * 2 - 1; // maximum length for 5 syllables
-
     public static boolean startByVowels = true; // always start with a vowel sound
     public static boolean alternatingVC = true; // alternate between vowel and consonant sounds
 
@@ -29,20 +26,16 @@ public class VolcanoNamer {
         int syllables = random.nextInt(MAX_SYLLABLES - MIN_SYLLABLES + 1) + MIN_SYLLABLES;
         int length = syllables * 2 - 1;
         StringBuilder nameBuilder = new StringBuilder(length);
-        boolean isVowel = startByVowels;
-        for (int i = 0; i < syllables; i++) {
-            if (alternatingVC) {
-                // Alternate between vowel and consonant sounds
-                String sound = isVowel ? getRandomVowel() : getRandomConsonant();
-                nameBuilder.append(sound);
-                isVowel = !isVowel;
-            } else {
-                // Choose sounds randomly
-                String sound = randomSound();
-                nameBuilder.append(sound);
-            }
+        boolean isVowel = Math.random() < 0.3;
+        for (int i = 0; i < length; i++) {
+            // Alternate between vowel and consonant sounds
+            String sound = isVowel ? getRandomVowel() : getRandomConsonant();
+            nameBuilder.append(sound);
+            isVowel = !isVowel;
         }
-        return nameBuilder.toString().substring(0, length).toUpperCase();
+
+        String targetName = nameBuilder.toString();
+        return targetName;
     }
 
     private static String getRandomVowel() {
