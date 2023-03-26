@@ -1,3 +1,5 @@
+[< Return to Volcano Page](index.md)
+
 # Typhon Vent Config Nodes
 
 <p align="right">Last Updated: <b>v0.7.0-rc2</b></p>
