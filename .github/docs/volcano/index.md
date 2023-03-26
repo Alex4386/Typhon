@@ -50,14 +50,21 @@ You can configure this by running command `/volcano <name> mainvent style <vent_
 ## Eruption Styles
 Typhon Plugin currently implements the following with predefined typhon eruption style presets:  
 
-* hawaiian eruption
-* strombolian eruption
-* vulcanian eruption
-* peléan eruption
-* plinian eruption (caldera formation)
-* surtseyan eruption (automatic)
+- **Hawaiian:** This is a relatively calm, effusive style of eruption, characterized by the steady flow of lava. Hawaiian eruptions are associated with shield volcanoes and typically produce flat, gently sloping lava flows.
+- **Strombolian:** This eruption style is characterized by periodic explosive bursts of lava and ash. Strombolian eruptions are typically associated with basaltic lava and are characterized by the formation of cinder cones.
+- **Vulcanian:** This eruption style is characterized by short, violent explosions of gas and ash. Vulcanian eruptions are associated with stratovolcanoes and can produce dense ash clouds that can pose a hazard to aviation.
+- **Peléan:** This is a highly explosive eruption style, characterized by the rapid release of gas and ash. Pelean eruptions are associated with stratovolcanoes and are characterized by pyroclastic flows.
 
-You can force the eruption (unless it is plinian/surtseyan) via running `/volcano <name> mainvent style <style>`.  
+You can force the eruption style via running `/volcano <name> mainvent style <style>`.  
+
+> This configuration will automatically configure your eruption style and other config nodes. via running autoConfig.
+> if you don't want to do that, configure with config nodes instead.
+
+### Unconfigurable styles
+The following eruption styles are activated when the conditions are met:  
+
+- **Plinian:** This is a highly explosive eruption style, characterized by the ejection of large amounts of gas, ash, and pumice. In typhon, it will generate obnoxiously big chunk of volcanic bombs, shooting from the specified caldera when the caldera formation is triggered.
+- **Surtseyan:** This eruption style is characterized by the interaction of lava and water, producing steam-driven explosions. In Typhon, if the volcano eruption sequence detects if its eruption phase is occurring in shallow water, it automatically activates surtseyan eruption.
 
 ## Lava flows
 ### Lava compositions
