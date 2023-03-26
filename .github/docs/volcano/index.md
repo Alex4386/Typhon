@@ -1,3 +1,5 @@
+[< Return to Typhon Docs](/DOCS.md)  
+
 # Volcano
 Typhon plugin tries to mimick real-life volcanoes as much as possible.
 
