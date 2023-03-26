@@ -1,5 +1,7 @@
 # Typhon Vent Config Nodes
 
+<p align="right">Last Updated: <b>v0.7.0-rc2</b></p>
+
 ## Lavaflow
 
 ### lavaflow:delay
