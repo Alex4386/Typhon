@@ -336,7 +336,7 @@ public class VolcanoBombs {
         minBombRadius = (int) ((long) bombRadius.get("min"));
         maxBombRadius = (int) ((long) bombRadius.get("max"));
         bombDelay = (int) ((long) configData.get("delay"));
-        maxDistance = (double) configData.get("maxDistance");
+        maxDistance = (double) configData.getOrDefault("maxDistance", 0);
         baseY = (int) ((long) configData.get("baseY"));
     }
 
