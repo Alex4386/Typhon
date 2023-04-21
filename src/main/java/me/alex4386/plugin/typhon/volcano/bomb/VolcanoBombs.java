@@ -99,11 +99,10 @@ public class VolcanoBombs {
         double maxRadius = (1.25 + (Math.random() * 1.0))
                 * hostLocation.getWorld().getHighestBlockYAt(hostLocation)
                 * multiplier;
-        double minRadius = Math.min(vent.craterRadius * 0.7, 20);
 
-        VolcanoCircleOffsetXZ offsetXZ = VolcanoMath.getCenterFocusedCircleOffset(
-                hostLocation.getBlock(), (int) maxRadius, (int) minRadius);
-        Block destination = hostLocation.getBlock().getRelative((int) offsetXZ.x, 0, (int) offsetXZ.z);
+        double minRadius = Math.max(vent.craterRadius, 20);
+
+        Block destination = TyphonUtils.getFairRandomBlockInRange(hostLocation.getBlock(), (int) minRadius, (int) maxRadius);
 
         float bombPower = (float) VolcanoMath.getZeroFocusedRandom(0) * (maxBombPower - minBombPower)
                 + minBombPower;
