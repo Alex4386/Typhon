@@ -115,7 +115,12 @@ public class VolcanoAsh {
     }
 
     public void createAshPlume() {
-        createAshPlume(this.getRandomAshPlumeLocation());
+        VolcanoEruptStyle style = vent.erupt.getStyle();
+        if (style.ashMultiplier >= 1) {
+            for (int i = 0; i < Math.pow(100, 1 + style.ashMultiplier); i++) {
+                createAshPlume(this.getRandomAshPlumeLocation());
+            }
+        }
     }
 
     public void createAshPlume(Location loc) {
@@ -126,7 +131,7 @@ public class VolcanoAsh {
                 || style == VolcanoEruptStyle.VULCANIAN
                 || style == VolcanoEruptStyle.PELEAN) {
 
-            loc.getWorld().spawnParticle(Particle.CAMPFIRE_SIGNAL_SMOKE, loc, style.ashMultiplier);
+            loc.getWorld().spawnParticle(Particle.CAMPFIRE_SIGNAL_SMOKE, loc, (int) style.ashMultiplier);
         }
     }
 
