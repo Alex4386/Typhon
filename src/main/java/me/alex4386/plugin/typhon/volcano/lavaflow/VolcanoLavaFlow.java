@@ -609,8 +609,8 @@ public class VolcanoLavaFlow implements Listener {
             case TUFF:
                 return Material.TUFF;
             case DEEPSLATE:
-	    case COBBLED_DEEPSLATE:
-	    case BLACKSTONE:
+            case COBBLED_DEEPSLATE:
+            case BLACKSTONE:
             case BASALT:
             case POLISHED_BASALT:
                 targetMaterial = Material.getMaterial("DEEPSLATE_"+source.name());
