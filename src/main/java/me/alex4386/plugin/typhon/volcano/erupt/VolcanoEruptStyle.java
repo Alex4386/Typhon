@@ -21,7 +21,7 @@ public enum VolcanoEruptStyle {
 
     // stromboli but, range longer + with ash
     // rocks: andestic volcanic bombs (+ tuff)
-    VULCANIAN("vulcanian", new String[] {}, VolcanoEruptCauseType.MAGMATIC, 0.3, 5, 1),
+    VULCANIAN("vulcanian", new String[] {}, VolcanoEruptCauseType.MAGMATIC, 5, 5, 1),
 
     // BUILD Lava dome first.
     // andesite lava dome -> explode it. + lava overflow + pyroclastic flows +
@@ -29,7 +29,7 @@ public enum VolcanoEruptStyle {
     // tuff)
     // less volume but range is plinian or vulcanian
     // tuff pyroclastic flows
-    PELEAN("pelean", new String[] { "pelèan" }, VolcanoEruptCauseType.MAGMATIC, 1, 5, 1.4),
+    PELEAN("pelean", new String[] { "pelèan" }, VolcanoEruptCauseType.MAGMATIC, 3, 5, 1.4),
 
     // no lava overflow + caldera + top collapse + (granite) rhyolite volcano bombs
     // (A LOT)
