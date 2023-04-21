@@ -30,13 +30,8 @@ public class VolcanoComposition {
                 }
             }
         } else {
-            if (silicateLevel < 0.60) {
-
-                if (random.nextDouble() < 0.65) {
-                    return Material.TUFF;
-                }
-
-                return getExtrusiveRock(silicateLevel);
+            if (silicateLevel < 0.7) {
+                return Material.TUFF;
             } else if (silicateLevel < 0.90) {
                 double s = random.nextDouble();
                 if (s > 0.2) {
@@ -86,16 +81,17 @@ public class VolcanoComposition {
                 if (random.nextBoolean()) return Material.POLISHED_BASALT;
                 return Material.BASALT;
             } else {
-                return Material.ANDESITE;
+                return getExtrusiveRock(0.64);
             }
         } else if (silicateLevel < 0.65) {
+            if (Math.random() < 0.3) return Material.TUFF;
             return Material.ANDESITE;
         } else if (silicateLevel < 0.69) {
             double ratio = (silicateLevel - 0.65) / (0.69 - 0.65);
 
             double s = random.nextDouble();
             if (s > ratio) {
-                return Material.ANDESITE;
+                return getExtrusiveRock(0.64);
             } else {
                 if (random.nextDouble() < 0.01 * ratio) return Material.QUARTZ_BLOCK;
                 if (random.nextDouble() < 0.5 * ratio) { return (random.nextDouble() < 0.9) ? Material.OBSIDIAN : Material.CRYING_OBSIDIAN; }
