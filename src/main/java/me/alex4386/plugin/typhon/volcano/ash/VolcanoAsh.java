@@ -125,16 +125,8 @@ public class VolcanoAsh {
         } else if (style == VolcanoEruptStyle.STROMBOLIAN
                 || style == VolcanoEruptStyle.VULCANIAN
                 || style == VolcanoEruptStyle.PELEAN) {
-            double multiplier = style.ashMultiplier;
 
-            TyphonUtils.spawnParticleWithVelocity(
-                    Particle.CAMPFIRE_COSY_SMOKE,
-                    loc,
-                    0,
-                    (int) (3 * multiplier),
-                    0,
-                    0.4,
-                    0);
+            loc.getWorld().spawnParticle(Particle.CAMPFIRE_SIGNAL_SMOKE, loc, style.ashMultiplier);
         }
     }
 

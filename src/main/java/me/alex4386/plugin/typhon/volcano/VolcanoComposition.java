@@ -96,7 +96,7 @@ public class VolcanoComposition {
                 if (random.nextDouble() < 0.01 * ratio) return Material.QUARTZ_BLOCK;
                 if (random.nextDouble() < 0.5 * ratio) { return (random.nextDouble() < 0.9) ? Material.OBSIDIAN : Material.CRYING_OBSIDIAN; }
                 if (random.nextDouble() < 0.1 * ratio) return Material.GRANITE;
-                return Material.STONE;
+                return (Math.random() < 0.3) ? Material.COBBLESTONE : Material.STONE;
             }
         } else if (silicateLevel < 0.77) {
             double ratio = (silicateLevel - 0.77) / (0.83 - 0.77);
