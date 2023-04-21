@@ -469,6 +469,12 @@ public class VolcanoVentCommand {
                             vent.bombs.bombDelay = Integer.parseInt(newArgs[2]);
                         msg.info("bombs:delay - " + vent.bombs.bombDelay);
                     }
+                } else if (newArgs[1].equalsIgnoreCase("bombs:baseY")) {
+                    if (newArgs.length >= 2) {
+                        if (newArgs.length == 3)
+                            vent.bombs.baseY = Integer.parseInt(newArgs[2]);
+                        msg.info("bombs:baseY - " + vent.bombs.baseY);
+                    }
                 } else if (newArgs[1].equalsIgnoreCase("erupt:style")) {
                     if (newArgs.length >= 2) {
                         if (newArgs.length == 3) {
