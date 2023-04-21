@@ -73,10 +73,49 @@ public class VolcanoAsh {
         }
     }
 
+    public Location getRandomAshPlumeLocation() {
+        VolcanoEruptStyle style = vent.erupt.getStyle();
+        if (style == VolcanoEruptStyle.HAWAIIAN || style == VolcanoEruptStyle.STROMBOLIAN) {
+            return TyphonUtils.getHighestLocation(this.vent.selectCoreBlock().getLocation())
+                    .add(0, 1, 0);
+        }
+
+        double baseRadius = vent.craterRadius;
+        Block targetBlock = this.vent.selectCoreBlock();
+
+        int y = TyphonUtils.getHighestLocation(targetBlock.getLocation()).getBlockY();
+
+        World world = vent.location.getWorld();
+
+        int targetY = world.getSeaLevel();
+        double heightPercent = Math.random();
+
+        if (y < world.getSeaLevel()) {
+            int diff = (vent.location.getWorld().getMaxHeight() - world.getSeaLevel());
+            targetY = targetY + (int) (diff * heightPercent);
+        } else {
+            int diff = (vent.location.getWorld().getMaxHeight() - y);
+            targetY = y + (int) (diff * heightPercent);
+        }
+
+        double multiplier = style.bombMultiplier * 0.4 + 0.8;
+        double plumeRadius = baseRadius * (1 + (multiplier * heightPercent));
+
+        double currentRadius = plumeRadius * Math.random();
+        double angle = Math.random() * 2 * Math.PI;
+
+        Location location = new Location(
+                targetBlock.getWorld(),
+                targetBlock.getX() + (currentRadius * Math.sin(angle)),
+                targetY,
+                targetBlock.getZ() + (currentRadius * Math.cos(angle))
+        );
+
+        return location;
+    }
+
     public void createAshPlume() {
-        createAshPlume(
-                TyphonUtils.getHighestLocation(this.vent.selectCoreBlock().getLocation())
-                        .add(0, 1, 0));
+        createAshPlume(this.getRandomAshPlumeLocation());
     }
 
     public void createAshPlume(Location loc) {
