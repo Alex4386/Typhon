@@ -147,7 +147,7 @@ public class VolcanoExplosion {
                 .createExplosion(
                         targetVent, settings.damagingExplosionSize, false, true);
 
-        vent.ash.createAshPlume(targetVent);
+        vent.ash.createAshPlume();
 
         for (int i = 0; i < bombCount; i++) {
             vent.bombs.requestBombLaunch();

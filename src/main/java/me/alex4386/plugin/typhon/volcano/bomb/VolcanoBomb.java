@@ -13,8 +13,10 @@ import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.FallingBlock;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.material.MaterialData;
 import org.bukkit.metadata.FixedMetadataValue;
+import org.bukkit.potion.PotionEffect;
 import org.bukkit.util.Vector;
 
 import java.util.Collections;
@@ -74,6 +76,7 @@ public class VolcanoBomb {
                                         this.vent.lavaFlow.settings.silicateLevel)));
 
         this.block.setGlowing(true);
+
         this.block.setFireTicks(1000);
         try {
             this.block.setVelocity(launchVector);

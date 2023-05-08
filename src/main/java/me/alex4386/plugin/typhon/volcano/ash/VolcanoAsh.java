@@ -33,7 +33,7 @@ public class VolcanoAsh {
                             TyphonPlugin.plugin,
                             (Runnable) () -> {
                                 if (vent.erupt.isErupting()) {
-                                    vent.ash.createAshPlume();
+                                    //vent.ash.createAshPlume();
                                     //vent.ash.triggerAshFall();
                                 }
                             },
@@ -117,8 +117,12 @@ public class VolcanoAsh {
     public void createAshPlume() {
         VolcanoEruptStyle style = vent.erupt.getStyle();
         if (style.ashMultiplier >= 1) {
-            for (int i = 0; i < Math.pow(100, 1 + style.ashMultiplier); i++) {
+            for (int i = 0; i < Math.pow(50, 1 + style.ashMultiplier); i++) {
                 createAshPlume(this.getRandomAshPlumeLocation());
+
+                for (int j = 0; j < Math.pow(5, 1 + style.ashMultiplier); j++) {
+                    this.triggerRandomAshFall();
+                }
             }
         }
     }
@@ -131,12 +135,49 @@ public class VolcanoAsh {
                 || style == VolcanoEruptStyle.VULCANIAN
                 || style == VolcanoEruptStyle.PELEAN) {
 
-            loc.getWorld().spawnParticle(Particle.CAMPFIRE_SIGNAL_SMOKE, loc, (int) style.ashMultiplier);
+            loc.getWorld().spawnParticle(Particle.CAMPFIRE_SIGNAL_SMOKE, loc, (int) 0);
         }
     }
 
     public void triggerPyroclasticFlow() {
         this.triggerPyroclasticFlow(this.vent.selectFlowVentBlock(Math.random() < 0.6));
+    }
+
+    public void triggerRandomAshFall() {
+        if (vent.caldera.isForming()) return;
+
+        double radiusRatio = 1 - Math.pow(Math.random(), 2);
+
+        double coneSlopeRatio = (-1 * Math.sqrt(3 * Math.abs(radiusRatio) / 2)) + 1;
+        double coneBaseSlopeRatio = -1 * (Math.abs(radiusRatio) / 3) + (1/3);
+
+        double targetHeightRatio = Math.max(coneSlopeRatio, coneBaseSlopeRatio);
+        targetHeightRatio = Math.max(0, Math.min(1, targetHeightRatio));
+
+        double targetRadius = ((vent.longestNormalLavaFlowLength - vent.getRadius()) * radiusRatio) + vent.getRadius();
+
+        int coneHeight = vent.getSummitBlock().getY() - vent.location.getBlockY();
+        double targetConeHeight = targetHeightRatio * coneHeight;
+
+        double targetY = vent.location.getBlockY() + targetConeHeight;
+
+        double angle = Math.random() * 2 * Math.PI;
+        Block targetBlock = vent.getCoreBlock();
+
+        Location location = new Location(
+                targetBlock.getWorld(),
+                targetBlock.getX() + (targetRadius * Math.sin(angle)),
+                targetBlock.getY(),
+                targetBlock.getZ() + (targetRadius * Math.cos(angle))
+        );
+
+        Block surfaceBlock = TyphonUtils.getHighestRocklikes(location);
+
+        // cone building ash fall
+        if (surfaceBlock.getY() + 1 < targetY) {
+            surfaceBlock.getRelative(BlockFace.UP).setType(Material.TUFF);
+            //System.out.println("Ash is falling @ "+TyphonUtils.blockLocationTostring(surfaceBlock));
+        }
     }
 
     public void triggerPyroclasticFlow(Block block) {
