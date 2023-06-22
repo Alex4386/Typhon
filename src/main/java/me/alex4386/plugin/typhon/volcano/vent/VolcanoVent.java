@@ -858,6 +858,14 @@ public class VolcanoVent {
         this.genesis = VolcanoVentGenesis.getGenesisType((String) configData.get("genesis"));
         this.calderaRadius = (double) configData.getOrDefault("calderaRadius" , -1.0);
         this.autoStyleUpdate = (boolean) configData.getOrDefault("autoStyleUpdate", true);
+
+        this.postProcessImport();
+    }
+
+    public void postProcessImport() {
+        if (this.isFlowingLava() || this.isExploding()) {
+            this.erupt.start();
+        }
     }
 
     public JSONObject exportConfig() {

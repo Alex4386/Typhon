@@ -172,6 +172,7 @@ public class VolcanoGeoThermal implements Listener {
     double maxCount = this.getCraterCycleCount(vent);
 
     double cycleCount = thermalScale * maxCount * Math.random();
+    volcano.logger.debug(VolcanoLogClass.GEOTHERMAL, "Triggering "+cycleCount+" cycles on crater");
 
     for (int i = 0; i < cycleCount; i++) {
       this.runCraterGeothermal(vent);
@@ -195,6 +196,7 @@ public class VolcanoGeoThermal implements Listener {
     double cycleCount = thermalScale * maxCount * Math.random();
 
     cycleCount = (int) cycleCount;
+    volcano.logger.debug(VolcanoLogClass.GEOTHERMAL, "Triggering "+cycleCount+" cycles on volcano");
 
     if (vent.lavaFlow.hasAnyLavaFlowing()) {
       int lavaFlowCount = (int) (cycleCount / 2);
@@ -301,6 +303,12 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runGeothermalActivity(VolcanoVent vent, Block block, boolean allowSteam, boolean isTop) {
+    Chunk chunk = block.getChunk();
+    if (chunk.getInhabitedTime() == 0) {
+      // skip geothermal process since it is not loaded yet.
+      volcano.logger.debug(VolcanoLogClass.GEOTHERMAL, "Skip geothermal due to chunk was not loaded. chunk @ ("+chunk.getX()+", "+chunk.getZ()+")");
+    }
+
     double scaleFactor = vent.getStatus().getScaleFactor();
     double heatValue = volcano.manager.getHeatValue(block.getLocation());
 

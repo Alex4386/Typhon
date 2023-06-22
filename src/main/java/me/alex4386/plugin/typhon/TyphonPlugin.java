@@ -38,6 +38,8 @@ public final class TyphonPlugin extends JavaPlugin {
     public static BlueMapAPI blueMap = null;
     public static boolean enableBlueMap = true;
 
+    public static boolean isShuttingdown = false;
+
     public static int minecraftTicksPerSeconds = 20;
 
     public static String version = "";
@@ -113,6 +115,7 @@ public final class TyphonPlugin extends JavaPlugin {
         if (enableBlueMap) {
             try {
                 BlueMapAPI.onEnable(blueMapAPI -> {
+                    TyphonPlugin.blueMap = blueMapAPI;
                     TyphonBlueMapUtils.initialize();
                 });
             } catch (NoClassDefFoundError e) {
@@ -188,6 +191,7 @@ public final class TyphonPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         logger.debug(VolcanoLogClass.CORE, "Disabling Plugin...");
+        isShuttingdown = true;
 
         TyphonGaia.shutdown();
 
@@ -202,6 +206,7 @@ public final class TyphonPlugin extends JavaPlugin {
         }
 
         vbl.shutdown();
+        isShuttingdown = false;
     }
 
     @Override

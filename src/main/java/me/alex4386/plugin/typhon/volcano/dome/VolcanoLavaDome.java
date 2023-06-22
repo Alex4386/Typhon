@@ -227,7 +227,12 @@ public class VolcanoLavaDome {
         double radius = this.calculateRadius(this.height);
         Block toFlowBottom = TyphonUtils.getRandomBlockInRange(
                 this.getLocation().getBlock(), (int) (radius * 0.2), (int) (radius * 0.95));
-        Block toFlow = TyphonUtils.getHighestRocklikes(toFlowBottom);
+        Block toFlowTop = this.getLocation().getWorld().getBlockAt(
+                toFlowBottom.getX(),
+                (int) (this.baseY + this.height + 5),
+                toFlowBottom.getZ()
+        );
+        Block toFlow = TyphonUtils.getHighestRocklikes(toFlowTop);
 
         this.vent.lavaFlow.flowLava(toFlow);
     }

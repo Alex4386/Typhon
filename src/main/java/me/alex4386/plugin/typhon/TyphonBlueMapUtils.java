@@ -2,12 +2,14 @@ package me.alex4386.plugin.typhon;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.function.Consumer;
 
 import javax.imageio.ImageIO;
 
+import de.bluecolored.bluemap.api.AssetStorage;
 import org.bukkit.World;
 
 import com.flowpowered.math.vector.Vector2i;
@@ -36,6 +38,7 @@ public class TyphonBlueMapUtils {
           TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Bluemap Detected. Integrating...");
           initialize();
         } catch(NoClassDefFoundError | NoSuchElementException e) {
+          TyphonPlugin.logger.error(VolcanoLogClass.BLUE_MAP, "Failed to integrate with Bluemap! "+e.getLocalizedMessage());
           return null;
         }
       }
@@ -45,7 +48,6 @@ public class TyphonBlueMapUtils {
 
   public static void initialize() {
     isInitialized = true;
-    loadImages();
     loadTyphonVolcanoes();
   }
 
@@ -63,41 +65,62 @@ public class TyphonBlueMapUtils {
     return getBlueMapAPI() != null;
   }
 
-  public static void loadImages() {
-    if (!getBlueMapAvailable()) return;
-    loadImages(getBlueMapAPI());
+  public static boolean checkIfAssetExists(World world, String id) {
+    try {
+      AssetStorage storage = getBlueMapAPI().getMap(world.getName()).get().getAssetStorage();
+      return storage.assetExists(id);
+    } catch (IOException e) {
+      return false;
+    }
   }
 
-  public static void loadImages(BlueMapAPI api) {
-    if (!getBlueMapAvailable()) return;
-    TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Loading Images for BlueMap Integration...");
+  public static String uploadAndGetURLIfAssetNotExist(World world, String id, byte[] data) {
+    AssetStorage storage = getBlueMapAPI().getMap(world.getName()).get().getAssetStorage();
+    if (checkIfAssetExists(world, id)) return storage.getAssetUrl(id);
+
     try {
       InputStream eruptingImg = TyphonPlugin.plugin.getResource("volcano_erupting.png");
-      if (eruptingImg != null) {
-        eruptingImgUrl = api.getWebApp().createImage(ImageIO.read(eruptingImg), "typhon/vol_erupt");
-      }
-    } catch(IOException e) {
-      
+      OutputStream out = storage.writeAsset(id);
+      out.write(eruptingImg.readAllBytes());
+      out.flush();
+      out.close();
+
+      return storage.getAssetUrl(id);
+    } catch (IOException e) {
+      return null;
     }
+  }
+
+  public static String getEruptingImgUrl(World world) {
+    AssetStorage storage = getBlueMapAPI().getMap(world.getName()).get().getAssetStorage();
+    String id = "typhon/vol_erupting";
 
     try {
-      InputStream dormantImg = TyphonPlugin.plugin.getResource("volcano_dormant.png");
-      if (dormantImg != null) {
-        dormantImgUrl = api.getWebApp().createImage(ImageIO.read(dormantImg), "typhon/vol_dormant");
-      }
-    } catch(IOException e) {
-      
+      if (checkIfAssetExists(world, id)) return storage.getAssetUrl(id);
+
+      InputStream eruptingImg = TyphonPlugin.plugin.getResource("volcano_erupting.png");
+      byte[] data = eruptingImg.readAllBytes();
+
+      return uploadAndGetURLIfAssetNotExist(world, id, data);
+    } catch (IOException e) {
+      return null;
     }
   }
 
-  public static String getEruptingImgUrl() {
-    if (eruptingImgUrl == null) loadImages();
-    return eruptingImgUrl;
-  }
+  public static String getDormantImgUrl(World world) {
+    AssetStorage storage = getBlueMapAPI().getMap(world.getName()).get().getAssetStorage();
+    String id = "typhon/vol_dormant";
 
-  public static String getDormantImgUrl() {
-    if (dormantImgUrl == null) loadImages();
-    return dormantImgUrl;
+    try {
+      if (checkIfAssetExists(world, id)) return storage.getAssetUrl(id);
+
+      InputStream eruptingImg = TyphonPlugin.plugin.getResource("volcano_dormant.png");
+      byte[] data = eruptingImg.readAllBytes();
+
+      return uploadAndGetURLIfAssetNotExist(world, id, data);
+    } catch (IOException e) {
+      return null;
+    }
   }
 
   public static String getVolcanoMarkerSetID(Volcano volcano) {
@@ -138,14 +161,14 @@ public class TyphonBlueMapUtils {
 
 
   public static String getIconURLByStatus(VolcanoVent vent) {
-    return getIconURLByStatus(vent.getStatus());
+    return getIconURLByStatus(vent.location.getWorld(), vent.getStatus());
   }
 
-  public static String getIconURLByStatus(VolcanoVentStatus status) {
+  public static String getIconURLByStatus(World world, VolcanoVentStatus status) {
     if (status.getScaleFactor() >= VolcanoVentStatus.ERUPTING.getScaleFactor()) {
-      return getEruptingImgUrl();
+      return getEruptingImgUrl(world);
     } else {
-      return getDormantImgUrl();
+      return getDormantImgUrl(world);
     }
   }
 
@@ -153,7 +176,7 @@ public class TyphonBlueMapUtils {
     if (!TyphonBlueMapUtils.getBlueMapAvailable()) return null;
     Vector3d v3d = Vector3d.from(vent.location.getX(), vent.getSummitBlock().getY(), vent.location.getZ());
 
-    POIMarker ventMarker = POIMarker.toBuilder()
+    POIMarker ventMarker = POIMarker.builder()
       .label(vent.isMainVent() ? vent.volcano.name+" Volcano" : vent.name+" ("+vent.volcano.name+")")
       .icon(getIconURLByStatus(vent), TyphonBlueMapUtils.getIconSize())
       .position(v3d)

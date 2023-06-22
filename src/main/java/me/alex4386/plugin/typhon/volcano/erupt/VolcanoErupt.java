@@ -60,8 +60,8 @@ public class VolcanoErupt {
             this.vent.lavaFlow.settings.flowed = 10;
             this.vent.lavaFlow.settings.delayFlowed = 14;
 
-            this.vent.explosion.settings.minBombCount = 0;
-            this.vent.explosion.settings.maxBombCount = 7;
+            this.vent.explosion.settings.minBombCount = 10;
+            this.vent.explosion.settings.maxBombCount = 20;
             this.vent.explosion.settings.queueSize = 2;
 
         } else {
@@ -75,22 +75,18 @@ public class VolcanoErupt {
                 this.vent.lavaFlow.settings.delayFlowed = 10;
                 this.vent.lavaFlow.settings.flowed = 7;
 
-                this.vent.explosion.settings.minBombCount = 15;
-                this.vent.explosion.settings.maxBombCount = 70;
-                this.vent.explosion.settings.queueSize = 10;
+                this.vent.explosion.settings.minBombCount = 60;
+                this.vent.explosion.settings.maxBombCount = 120;
+                this.vent.explosion.settings.queueSize = 15;
 
-                if (this.style == VolcanoEruptStyle.STROMBOLIAN) {
-                    this.vent.explosion.settings.minBombCount = 15;
-                    this.vent.explosion.settings.maxBombCount = 70;
-                    this.vent.explosion.settings.queueSize = 10;
-                } else if (this.style == VolcanoEruptStyle.VULCANIAN) {
+                 if (this.style == VolcanoEruptStyle.VULCANIAN) {
                     if (this.vent.lavaFlow.settings.silicateLevel < 0.50 && updateSilicate) {
                         this.vent.lavaFlow.settings.silicateLevel = 0.50 + (Math.random() * (0.62 - 0.50));
                     }
 
-                    this.vent.explosion.settings.minBombCount = 30;
-                    this.vent.explosion.settings.maxBombCount = 140;
-                    this.vent.explosion.settings.queueSize = 20;
+                    this.vent.explosion.settings.minBombCount = 120;
+                    this.vent.explosion.settings.maxBombCount = 200;
+                    this.vent.explosion.settings.queueSize = 25;
                 } else if (this.style == VolcanoEruptStyle.PELEAN) {
                     if (this.vent.lavaFlow.settings.silicateLevel < 0.72 && updateSilicate) {
                         this.vent.lavaFlow.settings.silicateLevel = 0.61 + (Math.random() * (0.72 - 0.61));

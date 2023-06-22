@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.explosion;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
@@ -8,6 +9,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
 import org.bukkit.*;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Player;
 import org.json.simple.JSONObject;
 
@@ -45,7 +47,7 @@ public class VolcanoExplosion {
                                 }
                             },
                             0l,
-                            4l);
+                            2l);
         }
 
         if (this.queueScheduleID < 0) {
@@ -147,8 +149,6 @@ public class VolcanoExplosion {
                 .createExplosion(
                         targetVent, settings.damagingExplosionSize, false, true);
 
-        vent.ash.createAshPlume();
-
         for (int i = 0; i < bombCount; i++) {
             vent.bombs.requestBombLaunch();
         }
@@ -175,7 +175,22 @@ public class VolcanoExplosion {
         }
 
         if (queueComplete) {
+            vent.volcano.logger.log(
+                    VolcanoLogClass.EXPLOSION,
+                    "bomb throwing Queue completed"
+            );
             this.runQueueComplete(targetVent);
+        } else {
+            vent.volcano.logger.log(
+                    VolcanoLogClass.EXPLOSION,
+                    bombCount+" bombs thrown. Currently Queued: "+queuedBombs
+            );
+
+            Location plumeSrc = TyphonUtils.getHighestLocation(
+                    TyphonUtils.getRandomBlockInRange(targetVent.getBlock(),
+                            0, (int) (this.vent.getRadius() * 0.7)).getLocation()
+            ).getBlock().getRelative(BlockFace.UP).getLocation();
+            this.vent.ash.createAshPlume(plumeSrc);
         }
     }
 
@@ -184,6 +199,7 @@ public class VolcanoExplosion {
             double pyroclast = this.vent.erupt.getStyle().getPyroclasticFlowMultiplier();
             if (pyroclast > 0) {
                 if (Math.random() < pyroclast) {
+                    this.vent.ash.createAshPlume(targetVent);
                     this.vent.ash.triggerPyroclasticFlow();
                 }
             }

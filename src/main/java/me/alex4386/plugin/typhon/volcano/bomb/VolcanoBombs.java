@@ -1,11 +1,13 @@
 package me.alex4386.plugin.typhon.volcano.bomb;
 
+import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoCircleOffsetXZ;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -20,6 +22,8 @@ public class VolcanoBombs {
 
     // changed to hashmap to make indexing and querying way faster.
     public Map<FallingBlock, VolcanoBomb> bombMap = new HashMap<>();
+
+    public int exploderJob = -1;
 
     public float minBombPower = VolcanoBombsDefault.minBombPower;
     public float maxBombPower = VolcanoBombsDefault.maxBombPower;
@@ -53,13 +57,71 @@ public class VolcanoBombs {
     }
 
     public void initialize() {
+        this.registerTask();
+    }
 
+    public void shutdown() {
+        this.unregisterTask();
+        this.cleanupAllBombs();
     }
 
     public void reset() {
         this.resetBaseY();
     }
 
+    public void registerTask() {
+        if (exploderJob < 0) {
+            this.exploderJob = Bukkit.getScheduler().scheduleSyncRepeatingTask(
+                    TyphonPlugin.plugin,
+                    () -> {
+                        this.processExploderTimer();
+                    },
+                    0L,
+                    this.vent.getVolcano().updateRate
+            );
+        }
+    }
+
+    public void unregisterTask() {
+        if (exploderJob >= 0) {
+            Bukkit.getScheduler().cancelTask(this.exploderJob);
+            this.exploderJob = -1;
+        }
+    }
+
+    public void processExploderTimer() {
+        for (VolcanoBomb bomb : this.bombMap.values()) {
+            if (bomb.explodeTimer < 0) continue;
+
+            if (bomb.explodeTimer > 0) {
+                bomb.explodeTimer = bomb.explodeTimer - (int) this.vent.getVolcano().updateRate;
+
+                // safety net - always false, but just to make sure
+                if (bomb.explodeTimer < 0) bomb.explodeTimer = 0;
+            } else {
+                // should explode
+                bomb.explode();
+                bomb.explodeTimer = -1;
+            }
+        }
+    }
+
+    public void cleanupAllBombs() {
+        Iterator<Map.Entry<FallingBlock, VolcanoBomb>> iterator = bombMap.entrySet().iterator();
+
+        while (iterator.hasNext()) {
+            Map.Entry<FallingBlock, VolcanoBomb> entry = iterator.next();
+            FallingBlock block = entry.getKey();
+            VolcanoBomb bomb = entry.getValue();
+
+            if (!bomb.isLanded) {
+                bomb.emergencyLand();
+            }
+
+            iterator.remove();
+            block.remove();
+        }
+    }
 
     public Location getLaunchLocation() {
         Location hostLocation;
@@ -98,11 +160,11 @@ public class VolcanoBombs {
 
         double maxRadius = (1.25 + (Math.random() * 1.0))
                 * hostLocation.getWorld().getHighestBlockYAt(hostLocation)
-                * multiplier;
+                * Math.pow(1.1, multiplier);
 
         double minRadius = Math.max(vent.craterRadius, 20);
 
-        Block destination = TyphonUtils.getFairRandomBlockInRange(hostLocation.getBlock(), (int) minRadius, (int) maxRadius);
+        Block destination = TyphonUtils.getHighestRocklikes(TyphonUtils.getFairRandomBlockInRange(hostLocation.getBlock(), (int) minRadius, (int) maxRadius));
 
         float bombPower = (float) VolcanoMath.getZeroFocusedRandom(0) * (maxBombPower - minBombPower)
                 + minBombPower;
@@ -248,24 +310,6 @@ public class VolcanoBombs {
             bombMap.put(bomb.block, bomb);
         }
     }
-
-    public void shutdown() {
-        Iterator<Map.Entry<FallingBlock, VolcanoBomb>> iterator = bombMap.entrySet().iterator();
-
-        while (iterator.hasNext()) {
-            Map.Entry<FallingBlock, VolcanoBomb> entry = iterator.next();
-            FallingBlock block = entry.getKey();
-            VolcanoBomb bomb = entry.getValue();
-
-            if (!bomb.isLanded) {
-                bomb.emergencyLand();
-            }
-
-            iterator.remove();
-            block.remove();
-        }
-    }
-
     public void trackAll() {
         Iterator<Map.Entry<FallingBlock, VolcanoBomb>> iterator = bombMap.entrySet().iterator();
 
