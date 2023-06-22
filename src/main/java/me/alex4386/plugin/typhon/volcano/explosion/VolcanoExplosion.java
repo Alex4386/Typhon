@@ -175,13 +175,13 @@ public class VolcanoExplosion {
         }
 
         if (queueComplete) {
-            vent.volcano.logger.log(
+            vent.volcano.logger.debug(
                     VolcanoLogClass.EXPLOSION,
                     "bomb throwing Queue completed"
             );
             this.runQueueComplete(targetVent);
         } else {
-            vent.volcano.logger.log(
+            vent.volcano.logger.debug(
                     VolcanoLogClass.EXPLOSION,
                     bombCount+" bombs thrown. Currently Queued: "+queuedBombs
             );
