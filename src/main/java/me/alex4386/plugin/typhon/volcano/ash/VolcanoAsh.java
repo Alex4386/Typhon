@@ -28,6 +28,7 @@ public class VolcanoAsh {
     VolcanoVent vent;
 
     public static int ashFallScheduleId = -1;
+    public static int ashPlumeScheduleId = -1;
     public static int ashCloudScheduleId = -1;
     public static int updatesPerSeconds = 4;
 
@@ -35,18 +36,31 @@ public class VolcanoAsh {
     List<BlockDisplay> ashBlockDisplays = new ArrayList<>();
 
     public void registerTask() {
-        if (ashFallScheduleId < 0) {
+        if (ashPlumeScheduleId < 0) {
             ashFallScheduleId = Bukkit.getScheduler()
                     .scheduleSyncRepeatingTask(
                             TyphonPlugin.plugin,
                             (Runnable) () -> {
                                 if (vent.erupt.isErupting()) {
                                     vent.ash.createAshPlume();
-                                    vent.ash.triggerAshFall();
+                                    //vent.ash.triggerAshFall();
                                 }
                             },
                             0L,
                             (long) 2L);
+        }
+
+        if (ashFallScheduleId < 0) {
+            ashFallScheduleId = Bukkit.getScheduler()
+                    .scheduleSyncRepeatingTask(
+                            TyphonPlugin.plugin,
+                            (Runnable) () -> {
+                                if (vent.erupt.isErupting()) {
+                                    vent.ash.triggerAshFall();
+                                }
+                            },
+                            0L,
+                            (long) this.vent.volcano.updateRate);
         }
 
 
@@ -292,7 +306,7 @@ public class VolcanoAsh {
 
     public void triggerPyroclasticFlow(Block block) {
         this.vent.getVolcano().logger.log(VolcanoLogClass.ASH, "Triggering Pyroclastic Flows @ "+TyphonUtils.blockLocationTostring(block));
-        VolcanoPyroclasticFlow flow = new VolcanoPyroclasticFlow(block.getLocation().add(0, 1, 0), this);
+        VolcanoPyroclasticFlow flow = new VolcanoPyroclasticFlow(TyphonUtils.getHighestRocklikes(block).getLocation().add(0, 1, 0), this);
         this.pyroclasticFlows.add(flow);
         flow.initialize();
     }
@@ -309,12 +323,9 @@ public class VolcanoAsh {
         if (style == VolcanoEruptStyle.STROMBOLIAN
                 || style == VolcanoEruptStyle.VULCANIAN
                 || style == VolcanoEruptStyle.PELEAN) {
-            int count = this.vent.explosion.settings.minBombCount
-                    + ((int) Math.random() * this.vent.explosion.settings.maxBombCount);
-
             double multiplier = style.ashMultiplier;
 
-            for (int i = 0; i < count * multiplier; i++) {
+            for (int i = 0; i < multiplier; i++) {
                 VolcanoCircleOffsetXZ xz = VolcanoMath.getCenterFocusedCircleOffset(
                         loc.getBlock(),
                         this.vent.getRadius(),
@@ -354,13 +365,21 @@ class VolcanoPyroclasticFlow {
     static int maxRadius = 8;
 
     int life = 5;
-    static int maxLife = 10;
+    static int maxLife = 30;
 
     boolean isFinished = false;
     int scheduleID = -1;
 
     HashMap<Block, Boolean> flowedBlocks = new HashMap<>();
     List<BlockDisplay> pyroclasticClouds = new ArrayList<>();
+
+    public static int getMaxLife(VolcanoVent vent) {
+        return getMaxLife(vent, maxLife);
+    }
+
+    public static int getMaxLife(VolcanoVent vent, int radius) {
+        return (int) (vent.longestNormalLavaFlowLength / (radius * 1.5));
+    }
 
     public VolcanoPyroclasticFlow(Location location, VolcanoAsh ash) {
         this(location, ash, calculateInitialDirection(ash.vent, location));
@@ -371,7 +390,7 @@ class VolcanoPyroclasticFlow {
     }
 
     public VolcanoPyroclasticFlow(Location location, VolcanoAsh ash, Vector direction, int radius) {
-        this(location, ash, direction, radius, maxLife);
+        this(location, ash, direction, radius, getMaxLife(ash.vent, radius));
     }
 
     public VolcanoPyroclasticFlow(Location location, VolcanoAsh ash, Vector direction, int radius, int life) {
@@ -383,7 +402,8 @@ class VolcanoPyroclasticFlow {
     }
 
     public static Vector calculateInitialDirection(VolcanoVent vent, Location location) {
-        return location.subtract(vent.getNearestCoreBlock(location).getLocation()).toVector().normalize();
+        Location tmpLoc = location.clone();
+        return tmpLoc.subtract(vent.getNearestCoreBlock(location).getLocation()).toVector().normalize();
     }
 
     public void registerTask() {
@@ -453,6 +473,8 @@ class VolcanoPyroclasticFlow {
         if (Math.random() < 0.2) {
             this.location.getWorld().playSound(this.location, Sound.ENTITY_BLAZE_DEATH, 3F, 0.5F);
         }
+
+        this.ash.vent.getVolcano().logger.log(VolcanoLogClass.ASH, "ash trail @ "+TyphonUtils.blockLocationTostring(prevLoc.getBlock())+" -> "+TyphonUtils.blockLocationTostring(this.location.getBlock()));
 
         isFinished = this.finishConditionCheck();
         if (isFinished) {
@@ -555,18 +577,20 @@ class VolcanoPyroclasticFlow {
     }
 
     public void playAshTrail() {
-        this.ash.vent.getVolcano().logger.log(VolcanoLogClass.ASH, "Spawning ash trail @ "+TyphonUtils.blockLocationTostring(location.getBlock()));
-        float radiusHalf = radius / 2.0f;
+        int ashTrailRadius = (int) (radius * 2);
+        float radiusHalf = ashTrailRadius / 2.0f;
 
         BlockDisplay bd = location.getWorld().spawn(location, BlockDisplay.class, (_bd) -> {
-            _bd.setBlock(Material.TUFF.createBlockData());
+            _bd.setBlock(Material.BLACKSTONE.createBlockData());
             _bd.setTransformation(new Transformation(
                     new Vector3f(-radiusHalf,-radiusHalf,-radiusHalf),
                     new AxisAngle4f(),
-                    new Vector3f(radius, radius, radius),
+                    new Vector3f(ashTrailRadius, ashTrailRadius, ashTrailRadius),
                     new AxisAngle4f()
             ));
         });
+
+        //Bukkit.getPlayer("Alex4386").teleport(location.add(0, 10, 0));
 
         pyroclasticClouds.add(bd);
         Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
