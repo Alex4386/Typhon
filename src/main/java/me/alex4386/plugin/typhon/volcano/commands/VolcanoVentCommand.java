@@ -11,6 +11,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
@@ -621,6 +622,20 @@ public class VolcanoVentCommand {
                         msg.error("This command can not be used by console without specifying player name");
                     }    
                 }
+                break;
+            case PYROCLAST:
+                if (sender instanceof Player) {
+                    Player player = (Player) sender;
+                    Location loc = player.getLocation();
+                    if (vent.getTwoDimensionalDistance(loc) < vent.craterRadius * 2) {
+                        sender.sendMessage(ChatColor.RED+"Pyrocalstic flow just have spawned at your coords!");
+                        vent.ash.triggerPyroclasticFlow(loc.getBlock());
+                        break;
+                    }
+                }
+
+                sender.sendMessage(ChatColor.RED+"Pyrocalstic flow just have spawned at the vent "+vent.getName()+"!");
+                vent.ash.triggerPyroclasticFlow();
                 break;
 
             case INFO:

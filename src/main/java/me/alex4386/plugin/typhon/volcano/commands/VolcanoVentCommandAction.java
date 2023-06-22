@@ -19,6 +19,7 @@ public enum VolcanoVentCommandAction {
     LAVA_DOME("lavadome", "<start/stop/explode>", "start/stop building or explode this lavadome"),
     GENESIS("genesis", "<monogenesis/polygenesis>", "setup genesis type for this vent"),
     TREMOR("tremor", "<? power>", "create volcano tremor"),
+    PYROCLAST("pyroclast", "", "create pyroclastic flow from current location"),
     CALDERA("caldera", "<? radius/start> <? deep> <? oceanY>", "Create caldera via Plinian eruption"),
     STATUS("status", "<? status>", "get/set status of this vent"),
     TELEPORT("teleport", "", "teleport to this vent"),

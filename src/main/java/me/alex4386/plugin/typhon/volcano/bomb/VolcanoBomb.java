@@ -316,7 +316,8 @@ public class VolcanoBomb {
 
         Block finalBlock = this.landingLocation.getBlock();
         if (!finalBlock.getRelative(BlockFace.DOWN).getType().isBlock()) {
-            finalBlock = TyphonUtils.getHighestRocklikes(finalBlock).getRelative(BlockFace.UP);
+            Block temp = TyphonUtils.getHighestRocklikes(finalBlock).getRelative(BlockFace.UP);
+            if (temp.getY() < finalBlock.getY()) finalBlock = temp;
         }
 
         if (bombRadius <= 1) {

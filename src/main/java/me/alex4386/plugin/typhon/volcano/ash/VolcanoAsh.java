@@ -3,6 +3,7 @@ package me.alex4386.plugin.typhon.volcano.ash;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
+import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoCircleOffsetXZ;
@@ -16,6 +17,8 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Damageable;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.util.Transformation;
 import org.bukkit.util.Vector;
 import org.checkerframework.checker.units.qual.A;
@@ -37,13 +40,12 @@ public class VolcanoAsh {
 
     public void registerTask() {
         if (ashPlumeScheduleId < 0) {
-            ashFallScheduleId = Bukkit.getScheduler()
+            ashPlumeScheduleId = Bukkit.getScheduler()
                     .scheduleSyncRepeatingTask(
                             TyphonPlugin.plugin,
                             (Runnable) () -> {
                                 if (vent.erupt.isErupting()) {
                                     vent.ash.createAshPlume();
-                                    //vent.ash.triggerAshFall();
                                 }
                             },
                             0L,
@@ -77,9 +79,17 @@ public class VolcanoAsh {
     }
 
     public void unregisterTask() {
+        if (ashPlumeScheduleId >= 0) {
+            Bukkit.getScheduler().cancelTask(ashPlumeScheduleId);
+            ashPlumeScheduleId = -1;
+        }
         if (ashFallScheduleId >= 0) {
             Bukkit.getScheduler().cancelTask(ashFallScheduleId);
             ashFallScheduleId = -1;
+        }
+        if (ashCloudScheduleId >= 0) {
+            Bukkit.getScheduler().cancelTask(ashCloudScheduleId);
+            ashCloudScheduleId = -1;
         }
     }
 
@@ -188,7 +198,6 @@ public class VolcanoAsh {
         }
 
         Transformation transformation = bd.getTransformation();
-
         Vector3f scale = transformation.getScale().mul((float) Math.pow(scalePerY, ashCloudStep));
 
         float half = scale.x() / 2;
@@ -211,12 +220,20 @@ public class VolcanoAsh {
             }
         }
 
+        if (bd.getLocation().getY() >= yLimit && scale.x() >= 20) {
+            scale.x = 20;
+            scale.y = 20;
+            scale.z = 20;
+        }
+
         bd.setTransformation(new Transformation(
                 translation,
                 transformation.getLeftRotation(),
                 scale,
                 transformation.getRightRotation()
         ));
+
+        processAshCloudHeat(bd);
     }
 
     public void processAshClouds() {
@@ -317,6 +334,44 @@ public class VolcanoAsh {
                         .add(0, 1, 0));
     }
 
+    public void processAshCloudHeat(BlockDisplay bd) {
+        if (bd.isValid()) {
+            float radius = bd.getTransformation().getScale().x;
+
+            // add lava particles in pyroclastic clouds
+            for (int i = 0; i < 8 * Math.random(); i++) {
+                double distance = Math.random() * radius;
+                double theta = Math.random() * 2 * Math.PI;
+                double theta2 = Math.random() * 2 * Math.PI;
+
+                double x = distance * Math.sin(theta);
+                double twoDimBit = distance * Math.cos(theta);
+
+                double y = twoDimBit * Math.sin(theta2);
+                double z = twoDimBit * Math.cos(theta2);
+
+                Location particleLoc = bd.getLocation().clone();
+                particleLoc.add(x,y,z);
+
+                bd.getWorld().spawnParticle(Particle.LAVA, particleLoc, 1);
+            }
+
+            Collection<Entity> entities = bd.getWorld().getNearbyEntities(bd.getLocation(), radius, radius, radius);
+            for (Entity entity : entities) {
+                if (entity instanceof Damageable) {
+                    Damageable target = (Damageable) entity;
+                    if (!target.isInvulnerable() && target.getHealth() > 0 && target.isValid()) {
+                        EntityDamageEvent event = new EntityDamageEvent(entity, EntityDamageEvent.DamageCause.FIRE, target.getHealth());
+                        target.setLastDamageCause(event);
+                        target.setHealth(0.1);
+                        target.setFireTicks(100);
+                        if (!(entity instanceof Player)) entity.remove();
+                    }
+                }
+            }
+        }
+    }
+
     public void triggerAshFall(Location loc) {
         VolcanoEruptStyle style = vent.erupt.getStyle();
 
@@ -367,6 +422,8 @@ class VolcanoPyroclasticFlow {
     int life = 5;
     static int maxLife = 30;
 
+    boolean isStarting = true;
+
     boolean isFinished = false;
     int scheduleID = -1;
 
@@ -378,7 +435,7 @@ class VolcanoPyroclasticFlow {
     }
 
     public static int getMaxLife(VolcanoVent vent, int radius) {
-        return (int) (vent.longestNormalLavaFlowLength / (radius * 1.5));
+        return (int) (vent.longestNormalLavaFlowLength / (radius));
     }
 
     public VolcanoPyroclasticFlow(Location location, VolcanoAsh ash) {
@@ -410,7 +467,8 @@ class VolcanoPyroclasticFlow {
         if (scheduleID < 0) {
             this.scheduleID = Bukkit.getScheduler().scheduleSyncRepeatingTask(TyphonPlugin.plugin, () -> {
                 this.runTick();
-            }, 0L, 5L);
+                this.processAllPyroclasticClouds();
+            }, 0L, 2L);
         }
     }
 
@@ -432,6 +490,12 @@ class VolcanoPyroclasticFlow {
         this.removeAllPyroclasticClouds();
     }
 
+    public void processAllPyroclasticClouds() {
+        for (BlockDisplay bd : this.pyroclasticClouds) {
+            ash.processAshCloudHeat(bd);
+        }
+    }
+
     public void removeAllPyroclasticClouds() {
         for (BlockDisplay bd : this.pyroclasticClouds) {
             if (bd.isValid()) {
@@ -444,7 +508,6 @@ class VolcanoPyroclasticFlow {
         if (isFinished) return;
 
         this.runAsh();
-        this.killInRange();
 
         if (Math.random() < 0.2) {
             if (radius < maxRadius) radius++;
@@ -454,8 +517,14 @@ class VolcanoPyroclasticFlow {
             life--;
         }
 
-        this.calculateDirection();
+
         Location prevLoc = this.location;
+
+        if (!isStarting) {
+            this.calculateDirection();
+        } else {
+            isStarting = false;
+        }
 
         this.location = this.location.add(direction.normalize().multiply(radius));
         this.location = TyphonUtils.getHighestRocklikes(this.location).getLocation();
@@ -470,15 +539,13 @@ class VolcanoPyroclasticFlow {
             }
         }
 
-        if (Math.random() < 0.2) {
-            this.location.getWorld().playSound(this.location, Sound.ENTITY_BLAZE_DEATH, 3F, 0.5F);
-        }
-
-        this.ash.vent.getVolcano().logger.log(VolcanoLogClass.ASH, "ash trail @ "+TyphonUtils.blockLocationTostring(prevLoc.getBlock())+" -> "+TyphonUtils.blockLocationTostring(this.location.getBlock()));
+        this.ash.vent.getVolcano().logger.debug(VolcanoLogClass.ASH, "ash trail @ "+TyphonUtils.blockLocationTostring(prevLoc.getBlock())+" -> "+TyphonUtils.blockLocationTostring(this.location.getBlock()));
 
         isFinished = this.finishConditionCheck();
         if (isFinished) {
-            this.shutdown();
+            Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
+                this.shutdown();
+            }, 100L);
         }
     }
 
@@ -505,31 +572,38 @@ class VolcanoPyroclasticFlow {
 
 
     public void calculateDirection() {
+        double prevDistance = this.ash.vent.getTwoDimensionalDistance(this.location);
+
         List<Block> blocks = VolcanoMath.getCircle(this.location.getBlock(), radius, radius - 1);
         Block lowestBlock = blocks.get(0);
 
         for (Block block : blocks) {
             if (block.getY() < lowestBlock.getY()) {
-                lowestBlock = block;
+                if (this.ash.vent.getTwoDimensionalDistance(block.getLocation()) >= prevDistance) {
+                    lowestBlock = block;
+                }
             }
         }
 
-        Location target = lowestBlock.getLocation().subtract(this.location);
-        direction.add(target.multiply(0.1).toVector());
+        Vector target = lowestBlock.getLocation().subtract(this.location).toVector().normalize();
+        direction.add(target.multiply(0.01));
     }
 
     public void runAsh() {
         this.putAsh();
+        this.killTrees();
         this.playAshTrail();
     }
 
-    public void killInRange() {
-        Collection<Entity> entities = this.location.getWorld().getNearbyEntities(this.location, radius, radius, radius);
-        for (Entity entity : entities) {
-            if (entity instanceof Damageable) {
-                Damageable target = (Damageable) entity;
-                target.setHealth(1);
-                entity.setFireTicks(10000);
+    public void killTrees() {
+        List<Block> blocks = VolcanoMath.getSphere(this.location.getBlock(), radius);
+        for (Block block : blocks) {
+            if (TyphonUtils.isMaterialTree(block.getType())) {
+                if (TyphonUtils.toLowerCaseDumbEdition(block.getType().name()).contains("log")) {
+                    block.setType(Material.COAL_BLOCK);
+                } else {
+                    block.setType(Material.AIR);
+                }
             }
         }
     }
@@ -540,15 +614,38 @@ class VolcanoPyroclasticFlow {
                 int target = this.getTargetHeight(block.getLocation());
                 if (block.getY() < target) {
                     int offset = target - block.getY();
+
+                    double distance = ash.vent.getTwoDimensionalDistance(block.getLocation());
+                    double craterRadius = ash.vent.craterRadius;
+
+                    if (distance < craterRadius * 1.5) {
+                        if (VolcanoComposition.isVolcanicRock(block.getType())) {
+                            block.setType(Material.TUFF);
+                        }
+                    } else if (distance < craterRadius * 3) {
+                        offset = Math.max(2, offset);
+                    }
+
                     if (offset >= 2) {
+                        for (int i = 0; i < Math.min(radius, offset); i++) {
+                            block.getRelative(0, i, 0).setType(Material.TUFF);
+                        }
+                    } else if (offset >= 1) {
                         block.getRelative(BlockFace.UP).setType(Material.TUFF);
-                        block.getRelative(0, 2, 0).setType(Material.TUFF);
+                    } else if (VolcanoComposition.isVolcanicRock(block.getType())) {
+                        block.setType(Material.TUFF);
                     }
                 } else {
                     if (block.getY() > target + 2) {
                         block.setType(Material.TUFF);
                     } else {
                         block.getRelative(BlockFace.UP).setType(Material.TUFF);
+                    }
+                }
+            } else {
+                if (block.getY() >= block.getWorld().getSeaLevel() - 3) {
+                    for (int i = 0; i < block.getWorld().getSeaLevel() - block.getY(); i++) {
+                        block.getRelative(0, i, 0).setType(Material.AIR);
                     }
                 }
             }
@@ -568,7 +665,6 @@ class VolcanoPyroclasticFlow {
 
         List<Block> extBlocks = VolcanoMath.getCircle(this.location.getBlock(), radius + 3, radius);
         for (Block baseBlock : extBlocks) {
-            if (Math.random() > (life / maxLife)) continue;
             if (Math.random() < 0.5) continue;
 
             Block block = TyphonUtils.getHighestRocklikes(baseBlock);
@@ -581,7 +677,7 @@ class VolcanoPyroclasticFlow {
         float radiusHalf = ashTrailRadius / 2.0f;
 
         BlockDisplay bd = location.getWorld().spawn(location, BlockDisplay.class, (_bd) -> {
-            _bd.setBlock(Material.BLACKSTONE.createBlockData());
+            _bd.setBlock(Material.TUFF.createBlockData());
             _bd.setTransformation(new Transformation(
                     new Vector3f(-radiusHalf,-radiusHalf,-radiusHalf),
                     new AxisAngle4f(),
