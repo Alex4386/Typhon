@@ -45,6 +45,7 @@ public class VolcanoVentCommand {
             "vent:type",
             "vent:fissureLength",
             "vent:fissureAngle",
+            "succession:enable",
     };
 
     public VolcanoVentCommand(VolcanoVent vent) {
@@ -558,6 +559,14 @@ public class VolcanoVentCommand {
                                         + Math.toDegrees(vent.fissureAngle)
                                         + " deg)");
                     }
+                } else if (newArgs[1].equalsIgnoreCase("succession:enable")) {
+                    if (newArgs.length >= 2) {
+                        if (newArgs.length == 3) {
+                            vent.enableSuccession = Boolean.parseBoolean(newArgs[2]);
+                        }
+                        msg.info("succession:enable - " + vent.enableSuccession);
+                    }
+
                 } else if (newArgs[1].equalsIgnoreCase("vent:fissureLength")) {
                     if (newArgs.length >= 2) {
                         if (newArgs.length == 3) {

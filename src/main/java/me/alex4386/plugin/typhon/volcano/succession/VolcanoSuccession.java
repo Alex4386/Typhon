@@ -70,7 +70,7 @@ public class VolcanoSuccession {
     public void runSuccessionCycle() {
         if (this.isEnabled) {
             for (VolcanoVent vent : this.volcano.manager.getVents()) {
-                runSuccessionCycle(vent);
+                if (vent.enableSuccession) runSuccessionCycle(vent);
             }
         }
     }

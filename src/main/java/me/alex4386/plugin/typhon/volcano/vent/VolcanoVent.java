@@ -74,6 +74,8 @@ public class VolcanoVent {
     // get update via VolcanoAutoStart?
     public boolean autoStyleUpdate = false;
 
+    public boolean enableSuccession = true;
+
     public VolcanoVent(Volcano volcano) {
         this.volcano = volcano;
         this.location = volcano.location;
@@ -858,6 +860,7 @@ public class VolcanoVent {
         this.genesis = VolcanoVentGenesis.getGenesisType((String) configData.get("genesis"));
         this.calderaRadius = (double) configData.getOrDefault("calderaRadius" , -1.0);
         this.autoStyleUpdate = (boolean) configData.getOrDefault("autoStyleUpdate", true);
+        this.enableSuccession = (boolean) configData.getOrDefault("enableSuccession", true);
 
         this.postProcessImport();
     }
@@ -886,6 +889,7 @@ public class VolcanoVent {
         configData.put("maxFissureLength", this.maxFissureLength);
 
         configData.put("autoStyleUpdate", this.autoStyleUpdate);
+        configData.put("enableSuccession", this.enableSuccession);
 
         configData.put("genesis", this.genesis.getName());
 
