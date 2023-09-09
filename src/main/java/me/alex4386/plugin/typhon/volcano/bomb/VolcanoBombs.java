@@ -2,6 +2,7 @@ package me.alex4386.plugin.typhon.volcano.bomb;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoCircleOffsetXZ;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
@@ -42,6 +43,7 @@ public class VolcanoBombs {
             baseY = (int) vent.averageVentHeight();
         }
 
+        this.vent.volcano.logger.log(VolcanoLogClass.BOMB, "baseY = "+baseY);
         return baseY;
     }
 
