@@ -445,7 +445,7 @@ public class VolcanoVent {
     public double averageVentHeight() {
         int totalY = 0;
         for (Block block : this.cachedVentBlocks) {
-            totalY = block.getY();
+            totalY += block.getY();
         }
 
         return (double) totalY / this.cachedVentBlocks.size();

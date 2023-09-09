@@ -43,7 +43,6 @@ public class VolcanoBombs {
             baseY = (int) vent.averageVentHeight();
         }
 
-        this.vent.volcano.logger.log(VolcanoLogClass.BOMB, "baseY = "+baseY);
         return baseY;
     }
 
