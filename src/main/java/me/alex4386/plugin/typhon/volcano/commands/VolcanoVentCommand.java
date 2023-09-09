@@ -35,6 +35,7 @@ public class VolcanoVentCommand {
             "bombs:radius:min",
             "bombs:radius:max",
             "bombs:delay",
+            "bombs:resetBaseY",
             "erupt:style",
             "erupt:autoconfig",
             "explosion:bombs:min",
@@ -493,6 +494,15 @@ public class VolcanoVentCommand {
                             msg.info("erupt:autoconfig applied!");
                         } else {
                             msg.info("run erupt:autoconfig with confirm to apply autoconfig.");
+                        }
+                    }
+                } else if (newArgs[1].equalsIgnoreCase("bombs:resetBaseY")) {
+                    if (newArgs.length >= 2) {
+                        if (newArgs.length == 3 && newArgs[2].equalsIgnoreCase("confirm")) {
+                            vent.bombs.resetBaseY();
+                            msg.info("bombs:resetBaseY applied!");
+                        } else {
+                            msg.info("run bombs:resetBaseY with confirm to reset baseY for building new cone.");
                         }
                     }
                 } else if (newArgs[1].equalsIgnoreCase("explosion:bombs:min")) {
