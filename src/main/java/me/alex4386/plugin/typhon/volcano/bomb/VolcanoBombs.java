@@ -224,7 +224,7 @@ public class VolcanoBombs {
         int defaultRadius = maxRadius;
 
         boolean outsideCinderCone = false;
-        if (Math.random() < 0.25) {
+        if (Math.random() < 0.001) {
             maxRadius = (int) Math.max(this.vent.longestNormalLavaFlowLength, maxRadius);
             outsideCinderCone = true;
         }
