@@ -1,5 +1,6 @@
 # Typhon Plugin
 Typhon Plugin aims to implement real-life volcanoes and its behavior in the restriction of vanilla as much as possible.  
+See plugin in action: [YouTube](https://www.youtube.com/watch?v=DDnQDAdq1Ok)
 
 ## Warning!
 Currently This code is literal spaghetti.  
