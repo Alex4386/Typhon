@@ -191,15 +191,7 @@ public class VolcanoBombs {
 
     public VolcanoBomb generateBombToDestination(Location destination) {
         Random random = new Random();
-
-        double volcanoHeight = vent.averageVentHeight() - vent.location.getY();
-        double volcanoMax = Math.min(vent.location.getWorld().getMaxHeight() - vent.location.getY(), 150.0);
-
-        float volcanoScaleVar = Math.min(1, (float) (volcanoHeight / volcanoMax));
-        int bombRadius = (int) ((Math.floor(random.nextDouble() * (maxBombRadius - minBombRadius))
-                * volcanoScaleVar)
-                + minBombRadius);
-
+        int bombRadius = (int) (Math.floor(random.nextDouble() * (maxBombRadius - minBombRadius)) + minBombRadius);
         return this.generateBombToDestination(destination, bombRadius);
     }
 
@@ -269,6 +261,8 @@ public class VolcanoBombs {
 
             // upper limiting
             if (radius >= 4) radius = 4;
+
+            this.vent.volcano.logger.log(VolcanoLogClass.BOMB_LAUNCHER, distanceFromCore+" distance. radius: "+radius);
 
             return this.generateBombToDestination(randomBlock.getLocation(), radius);
         } else if (diff < 0) {
