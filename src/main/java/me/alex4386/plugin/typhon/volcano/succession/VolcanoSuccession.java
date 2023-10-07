@@ -310,8 +310,7 @@ public class VolcanoSuccession {
             case COBBLESTONE_WALL:
             case NETHERRACK:
             case TUFF:
-            case BASALT:
-            case POLISHED_BASALT:
+            case BLACKSTONE:
                 return true;
         }
 
