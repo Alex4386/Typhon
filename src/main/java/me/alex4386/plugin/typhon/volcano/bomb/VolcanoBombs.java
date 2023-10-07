@@ -3,7 +3,6 @@ package me.alex4386.plugin.typhon.volcano.bomb;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
-import me.alex4386.plugin.typhon.volcano.utils.VolcanoCircleOffsetXZ;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
@@ -159,7 +158,7 @@ public class VolcanoBombs {
         if (multiplier < 0)
             return null;
 
-        double maxRadius = (1.25 + (Math.random() * 1.0))
+        double maxRadius = (1.25 + Math.random())
                 * hostLocation.getWorld().getHighestBlockYAt(hostLocation)
                 * Math.pow(1.1, multiplier);
 
@@ -201,8 +200,7 @@ public class VolcanoBombs {
         return ((Math.sqrt(3) - 1) * (1 - ratio)) + 1;
     }
 
-    public VolcanoBomb generateConeBuildingBomb() {
-        int minRadius = (int) (this.vent.craterRadius * 0.7);
+    public double getEffectiveConeY() {
         int baseY = this.getBaseY();
 
         int minimumScaffoldBombRadius = this.vent.craterRadius * 2;
@@ -210,9 +208,21 @@ public class VolcanoBombs {
         double minimumRequiredSummitHeight = baseY + minimumScaffoldConeHeight;
         double summitBlockTargetHeight = this.vent.getSummitBlock().getY() + minimumScaffoldConeHeight;
 
-        double effectiveSummitHeight = Math.max(minimumRequiredSummitHeight, summitBlockTargetHeight);
-        int baseYHeight = (int) (effectiveSummitHeight - baseY);
+        return Math.max(minimumRequiredSummitHeight, summitBlockTargetHeight);
+    }
 
+    public int getEffectiveConeHeight() {
+        return (int) (this.getEffectiveConeY() - this.getBaseY());
+    }
+
+    public double getAdequateHeightFromDistance(double distance) {
+        return this.getEffectiveConeY() - (distance / this.distanceHeightRatio());
+    }
+
+    public VolcanoBomb generateConeBuildingBomb() {
+        int minRadius = (int) (this.vent.craterRadius * 0.7);
+
+        int baseYHeight = this.getEffectiveConeHeight();
         double coneRadius = (baseYHeight * this.distanceHeightRatio());
         int maxRadius = (int) Math.max(coneRadius * 1.5, minRadius);
         int defaultRadius = maxRadius;
@@ -228,8 +238,8 @@ public class VolcanoBombs {
             distance = (int) (Math.pow(Math.random(), 2) * (maxRadius - defaultRadius) + defaultRadius);
         }
 
-        double adequateHeight = effectiveSummitHeight - (distance / this.distanceHeightRatio());
         double distanceFromCore = distance;
+        double adequateHeight = this.getAdequateHeightFromDistance(distanceFromCore);
 
         Block randomBlock = TyphonUtils.getHighestRocklikes(
                 TyphonUtils.getFairRandomBlockInRange(
@@ -257,13 +267,19 @@ public class VolcanoBombs {
             int radius = 0;
             if (diff < 1) radius = 0;
             else if (diff <= 3) radius = 1;
-            else radius = (int) Math.min(maxBombRadius, (diff - 1) / 2);
+            else radius = 2;
 
-            // upper limiting
-            if (radius >= 4) radius = 4;
+            double height = this.vent.averageVentHeight() - this.vent.location.getBlockY();
+            if ((height / 3) < radius) {
+                radius = Math.max(1, Math.min((int) (height / 3), radius));
+            }
 
-            this.vent.volcano.logger.log(VolcanoLogClass.BOMB_LAUNCHER, distanceFromCore+" distance. radius: "+radius);
+            int willGrowUpTo = randomBlock.getY() + radius;
+            if (willGrowUpTo > this.vent.averageVentHeight() + 2) {
+                radius -= (willGrowUpTo - (int) (this.vent.averageVentHeight() + 2));
+            }
 
+            if (radius < 0) return null;
             return this.generateBombToDestination(randomBlock.getLocation(), radius);
         } else if (diff < 0) {
             if (Math.random() < 0.25) {

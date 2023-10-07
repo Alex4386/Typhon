@@ -679,6 +679,15 @@ public class VolcanoVent {
             highestBlock = cachedVentBlocks.get(0);
         }
 
+        // update base, since it is now an island.
+        int seaLevel = highestBlock.getWorld().getSeaLevel();
+        if (bombs.getBaseY() < seaLevel) {
+            if (highestBlock.getY() > seaLevel + 2) {
+                bombs.baseY = seaLevel;
+                volcano.trySave();
+            }
+        }
+
         this.cachedSummitBlock = highestBlock;
         this.cachedSummitBlockLastSync = System.currentTimeMillis();
         return highestBlock;

@@ -134,7 +134,7 @@ public class VolcanoExplosion {
         
         queuedBombs -= bombCount;
 
-        boolean queueComplete = queuedBombs == 0;
+        boolean queueComplete = queuedBombs <= 0;
 
         Location targetVent = this.selectEruptionVent();
 
@@ -185,12 +185,7 @@ public class VolcanoExplosion {
                     VolcanoLogClass.EXPLOSION,
                     bombCount+" bombs thrown. Currently Queued: "+queuedBombs
             );
-
-            Location plumeSrc = TyphonUtils.getHighestLocation(
-                    TyphonUtils.getRandomBlockInRange(targetVent.getBlock(),
-                            0, (int) (this.vent.getRadius() * 0.7)).getLocation()
-            ).getBlock().getRelative(BlockFace.UP).getLocation();
-            this.vent.ash.createAshPlume(plumeSrc);
+            this.vent.ash.createAshPlume();
         }
     }
 

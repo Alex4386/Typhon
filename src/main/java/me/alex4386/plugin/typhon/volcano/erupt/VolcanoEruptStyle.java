@@ -8,7 +8,7 @@ import me.alex4386.plugin.typhon.TyphonUtils;
 
 public enum VolcanoEruptStyle {
     // lava lake + lava fountain (minimal), lava flow is everything of this.
-    HAWAIIAN("hawaiian", new String[] { "effusive" }, VolcanoEruptCauseType.MAGMATIC, 5, 1, 0.2),
+    HAWAIIAN("hawaiian", new String[] { "effusive" }, VolcanoEruptCauseType.MAGMATIC, 5, 0.2, 0.4),
 
     // Lava fountain (with volcanic bombs) + can have lava flows, but minimal.
     // Usually goes into
@@ -17,11 +17,11 @@ public enum VolcanoEruptStyle {
     // lessly used in
     // here
     STROMBOLIAN(
-            "strombolian", new String[] { "stromboli" }, VolcanoEruptCauseType.MAGMATIC, 1, 1, 0.7),
+            "strombolian", new String[] { "stromboli" }, VolcanoEruptCauseType.MAGMATIC, 1, 1, 1),
 
     // stromboli but, range longer + with ash
     // rocks: andestic volcanic bombs (+ tuff)
-    VULCANIAN("vulcanian", new String[] {}, VolcanoEruptCauseType.MAGMATIC, 8, 5, 1),
+    VULCANIAN("vulcanian", new String[] {}, VolcanoEruptCauseType.MAGMATIC, 8, 2, 1.3),
 
     // BUILD Lava dome first.
     // andesite lava dome -> explode it. + lava overflow + pyroclastic flows +
@@ -29,12 +29,12 @@ public enum VolcanoEruptStyle {
     // tuff)
     // less volume but range is plinian or vulcanian
     // tuff pyroclastic flows
-    PELEAN("pelean", new String[] { "pelèan" }, VolcanoEruptCauseType.MAGMATIC, 8, 5, 1.4),
+    PELEAN("pelean", new String[] { "pelèan" }, VolcanoEruptCauseType.MAGMATIC, 8, 4, 1.7),
 
     // no lava overflow + caldera + top collapse + (granite) rhyolite volcano bombs
     // (A LOT)
     // **RAINING TUFF**
-    PLINIAN("plinian", new String[] { "vesuvian" }, VolcanoEruptCauseType.MAGMATIC, 0, 0, 1.7),
+    PLINIAN("plinian", new String[] { "vesuvian" }, VolcanoEruptCauseType.MAGMATIC, 0, 0, 2.5),
     ;
 
     String rawType;

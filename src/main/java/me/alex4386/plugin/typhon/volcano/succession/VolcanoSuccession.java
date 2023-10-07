@@ -23,7 +23,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 public class VolcanoSuccession {
     // Implements Primary Succession
     Volcano volcano;
-    boolean isEnabled = true;
+    boolean isEnabled = false;
 
     double cyclesPerTick = 1;
     

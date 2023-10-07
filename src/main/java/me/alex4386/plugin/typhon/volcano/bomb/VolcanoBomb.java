@@ -369,7 +369,7 @@ public class VolcanoBomb {
     public void explode() {
         Volcano volcano = this.vent.getVolcano();
 
-        if (bombRadius >= 2) {
+        if (bombRadius >= 1) {
             Block bombCenter = landingLocation.add(0, bombRadius, 0).getBlock();
 
             volcano.logger.debug(

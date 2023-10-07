@@ -290,6 +290,38 @@ public class VolcanoLavaFlow implements Listener {
                 }
             }
             */
+            // calculate flow direction
+            boolean isPrimary = true;
+            if (data.fromBlock != null) {
+                BlockFace fromFace = data.fromBlock.getFace(block);
+                if (fromFace != BlockFace.DOWN) {
+                    if (fromFace != null) {
+                        isPrimary = face.getDirection().equals(fromFace.getDirection());
+                    }
+                }
+            }
+
+            if (face == BlockFace.DOWN) {
+                isPrimary = true;
+            }
+
+            int decrementAmount = block.getWorld().isUltraWarm() ? 1 : 2;
+            int levelConverted = level >= 8 ? 8 : (8 - level);
+
+            int levelT = isPrimary ? levelConverted : levelConverted - decrementAmount;
+            double ratio = Math.min(1, Math.max(0, levelT / (8.0 - decrementAmount)));
+
+            double levelProbability = Math.pow(ratio, 2);
+            if (isPrimary) {
+                levelProbability = Math.pow(ratio, 1.25);
+            }
+
+            if (Math.random() < this.getLavaStickiness()) {
+                if (Math.random() > levelProbability) {
+                    event.setCancelled(true);
+                    return;
+                }
+            }
 
             if (this.vent != null && !data.isBomb && data.source != null) {
                 double distance;
@@ -917,6 +949,10 @@ public class VolcanoLavaFlow implements Listener {
         flowLava(fromVent, block);
     }
 
+    public double getLavaStickiness() {
+        return (this.settings.silicateLevel - 0.48 / 0.63 - 0.48);
+    }
+
     public boolean extensionCapable(Location location) {
         if (this.vent != null) {
             if (this.vent.getType() == VolcanoVentType.CRATER) {
@@ -995,7 +1031,23 @@ public class VolcanoLavaFlow implements Listener {
 
 
                 if (underBlock.getType() == Material.MAGMA_BLOCK) {
-                    underBlock.setType(material);
+                    VolcanoPillowLavaData underLavaData = pillowLavaMap.get(underBlock);
+                    if (underLavaData != null) {
+                        int underFluidlevel = underLavaData.fluidLevel;
+                        int level = lavaData.fluidLevel;
+                        int levelSum = underFluidlevel + level;
+                        if (levelSum > 8) {
+                            flowedBlocks.add(underBlock);
+                            lavaData.fluidLevel = levelSum - 8;
+                        } else {
+                            underLavaData.fluidLevel += level;
+                            underLavaData.extensionCount += lavaData.extensionCount;
+                            flowedBlocks.add(block);
+                            continue;
+                        }
+                    } else {
+                        underBlock.setType(material);
+                    }
                 } else if (underBlock.isEmpty() || TyphonUtils.containsLiquidWater(underBlock)) {
                     if (!isPillowLavaRegistered(underBlock)) {
                         registerLavaCoolData(
@@ -1015,7 +1067,11 @@ public class VolcanoLavaFlow implements Listener {
                 // flow on surface
                 int extension = lavaData.extensionCount;
                 int level = lavaData.fluidLevel;
-                level -= Math.min((int) (Math.random() * 4) + 1, 1);
+
+                int levelDeductionRate = (this.settings.silicateLevel < 0.63) ? (
+                    (Math.random() > this.getLavaStickiness()) ? 1 : 2
+                ) : 2;
+                level -= levelDeductionRate;
 
                 if (!this.extensionCapable(block.getLocation())) {
                     extension = 0;
@@ -1036,6 +1092,14 @@ public class VolcanoLavaFlow implements Listener {
                     level = 8;
                 }
 
+                BlockFace primaryFlow = null;
+                if (lavaData.fromBlock != null) {
+                    primaryFlow = lavaData.fromBlock.getFace(block);
+                    if (primaryFlow != BlockFace.DOWN) {
+                        primaryFlow = null;
+                    }
+                }
+
                 BlockFace[] flowableFaces = {
                     BlockFace.NORTH,
                     BlockFace.WEST,
@@ -1045,10 +1109,26 @@ public class VolcanoLavaFlow implements Listener {
 
                 for (BlockFace flowableFace : flowableFaces) {
                     Block flowTarget = block.getRelative(flowableFace);
-                    if (level <= 4) {
-                        if (Math.random() > 0.2 * level) {
-                            continue;
-                        }
+
+                    boolean isPrimary = false;
+                    int levelT = (primaryFlow != null) ?
+                            level - levelDeductionRate : level;
+
+                    if (primaryFlow != null) {
+                        isPrimary = primaryFlow.getDirection().equals(flowableFace.getDirection());
+                        levelT = isPrimary ? level : levelT;
+                    }
+                    if (level <= 0) continue;
+
+                    double ratio = Math.min(1, Math.max(0, levelT / 6.0));
+
+                    double levelProbability = Math.pow(ratio, 2);
+                    if (isPrimary) {
+                        levelProbability = Math.pow(ratio, 1.25);
+                    }
+
+                    if (Math.random() > levelProbability) {
+                        continue;
                     }
 
                     if (flowTarget.getType().isAir()
@@ -1069,7 +1149,7 @@ public class VolcanoLavaFlow implements Listener {
                             } else {
                                 VolcanoPillowLavaData pillowData = cachedPillowLavaMap.get(flowTarget);
                                 if (pillowData != null) {
-                                    pillowData.fluidLevel = level;
+                                    pillowData.fluidLevel = levelT;
                                 }
                             }
                         }
