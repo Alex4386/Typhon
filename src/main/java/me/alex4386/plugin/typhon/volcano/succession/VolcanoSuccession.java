@@ -23,7 +23,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 public class VolcanoSuccession {
     // Implements Primary Succession
     Volcano volcano;
-    boolean isEnabled = false;
+    boolean isEnabled = true;
 
     double cyclesPerTick = 1;
     
@@ -132,7 +132,7 @@ public class VolcanoSuccession {
 
     public void runSuccession(VolcanoVent vent) {
         Block coreBlock = vent.getCoreBlock();
-        double longestFlow = vent.longestNormalLavaFlowLength;
+        double longestFlow = Math.max(vent.longestNormalLavaFlowLength, vent.getSummitBlock().getY() - vent.location.getWorld().getSeaLevel() * Math.sqrt(3));
 
         if (Math.random() < 0.2) {
             longestFlow = Math.max(vent.longestNormalLavaFlowLength, vent.longestFlowLength);
@@ -176,13 +176,9 @@ public class VolcanoSuccession {
         boolean isDebug = false;
 
         Block targetBlock = TyphonUtils.getHighestRocklikes(block);
-        double heatValue = this.volcano.manager.getHeatValue(block.getLocation());
+        double heatValue = Math.sqrt(this.volcano.manager.getHeatValue(block.getLocation()));
 
         double heatValueThreshold = 0.7;
-        if (!block.getWorld().isClearWeather()) {
-            heatValueThreshold = 0.8 + (0.1 * Math.random());
-        }
-
         if (targetBlock.getY() < block.getWorld().getSeaLevel() - 1) {
             return;
         }
@@ -251,6 +247,7 @@ public class VolcanoSuccession {
                             "Creating Soil on block "+TyphonUtils.blockLocationTostring(block));
 
                     runSoilGeneration(targetBlock);
+                    spreadSoil(targetBlock);
                 }
                 return;
             }
@@ -327,7 +324,7 @@ public class VolcanoSuccession {
     }
 
     public void spreadSoil(Block block) {
-        int spreadRange = (int) (Math.random() * 3) + 2;
+        int spreadRange = (int) (Math.pow(Math.random(), 1.5) * 10) + 5;
         spreadSoil(block, spreadRange, false);
     }
 

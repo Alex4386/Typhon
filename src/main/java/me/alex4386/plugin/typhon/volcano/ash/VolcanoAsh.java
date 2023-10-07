@@ -521,7 +521,7 @@ class VolcanoPyroclasticFlow {
         if (!checkIfFlowed(block)) {
             if (block.getY() >= block.getWorld().getSeaLevel()) {
                 int target = this.ash.getTargetY(block.getLocation());
-                this.ash.vent.volcano.logger.log(VolcanoLogClass.ASH, "adequateY: "+target+", current: "+block.getY());
+                this.ash.vent.volcano.logger.debug(VolcanoLogClass.ASH, "Putting Ash. AdequateY: "+target+", current: "+block.getY());
                 if (block.getY() < target) {
                     int offset = target - block.getY();
 
