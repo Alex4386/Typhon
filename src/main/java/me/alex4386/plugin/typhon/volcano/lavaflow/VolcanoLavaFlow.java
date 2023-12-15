@@ -169,7 +169,7 @@ public class VolcanoLavaFlow implements Listener {
 
     public void runQueueWithinTick() {
         // get starting time
-        long startTime = System.nanoTime();
+        long startTime = System.currentTimeMillis();
         long count = 0;
 
         while (true) {
@@ -184,7 +184,7 @@ public class VolcanoLavaFlow implements Listener {
 
             if (count % 1000 == 0) {
                 // if time is up, break
-                if (System.nanoTime() - startTime > 500000) break;
+                if (System.currentTimeMillis() - startTime > 50) break;
             }
 
             count++;

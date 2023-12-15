@@ -357,7 +357,7 @@ public class VolcanoBomb {
                     case 2:
                         if (flowLava) {
                             lavaFlow.flowLavaFromBomb(bombBlock);
-                            material = Material.LAVA;
+                            material = null;
                         }
                         break;
                 }
