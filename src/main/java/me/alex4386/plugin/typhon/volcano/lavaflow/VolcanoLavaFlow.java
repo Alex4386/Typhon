@@ -177,15 +177,12 @@ public class VolcanoLavaFlow implements Listener {
             if (entry != null) {
                 Block block = entry.getKey();
                 Material material = entry.getValue();
-
-                if (block.getType() != material) {
-                    block.setType(material);
-                }
+                block.setType(material);
             } else {
                 break;
             }
 
-            if (count % 100 == 0) {
+            if (count % 1000 == 0) {
                 // if time is up, break
                 if (System.nanoTime() - startTime > 500000) break;
             }
