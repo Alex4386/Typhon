@@ -15,6 +15,8 @@ import org.bukkit.block.data.Directional;
 import org.bukkit.block.data.Levelled;
 import org.bukkit.util.Vector;
 
+import java.util.Queue;
+
 public class VolcanoLavaCoolData {
     public int ticks;
     public Block block;
@@ -159,8 +161,8 @@ public class VolcanoLavaCoolData {
                     && flowVector.getBlockY() == 0
                     && 6 <= level
                     && level < 8) {
-                block.setType(material);
 
+                this.flowedFromVent.lavaFlow.queueBlockUpdate(block, material);
                 BlockFace[] flowableFaces = {
                         BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.NORTH,
                 };
@@ -220,7 +222,7 @@ public class VolcanoLavaCoolData {
                 Block bottomBlock = flowDirectionBlock.getRelative(BlockFace.DOWN);
 
                 if (!this.flowedFromVent.lavaFlow.isLavaRegistered(flowDirectionBlock)) {
-                    flowDirectionBlock.setType(material);
+                    this.flowedFromVent.lavaFlow.queueBlockUpdate(flowDirectionBlock, material);
 
                     this.flowedFromVent.lavaFlow.registerLavaCoolData(
                             source,
@@ -238,7 +240,7 @@ public class VolcanoLavaCoolData {
                     Material material = !this.isBomb
                             ? VolcanoComposition.getExtrusiveRock(silicateLevel)
                             : VolcanoComposition.getBombRock(silicateLevel);
-                    flowDirectionBlock.setType(material);
+                    this.flowedFromVent.lavaFlow.queueBlockUpdate(flowDirectionBlock, material);
                 }
             }
         }
@@ -248,7 +250,7 @@ public class VolcanoLavaCoolData {
     public void coolDown() {
         if (this.flowedFromVent != null) {
             if (this.flowedFromVent.volcano.manager.isInAnyFormingCaldera(block.getLocation())) {
-                block.setType(Material.AIR);
+                this.flowedFromVent.lavaFlow.queueBlockUpdate(block, Material.AIR);
                 return;
             }
 
@@ -262,20 +264,7 @@ public class VolcanoLavaCoolData {
 
         if (this.runExtensionCount > 0 && this.extensionCapable()) this.handleExtension();
 
-        block.setType(material);
-        BlockData bd = block.getBlockData();
-        
-        if (fromBlock != null) {
-            BlockFace f = block.getFace(fromBlock);
-    
-            if (bd instanceof Directional) {
-                Directional d = (Directional) bd;
-                if (f != null && f.isCartesian()) {
-                    d.setFacing(f);
-                }
-                block.setBlockData(d);
-            }
-        }
+        this.flowedFromVent.lavaFlow.queueBlockUpdate(block, Material.AIR);
     }
 
     public void forceCoolDown() {

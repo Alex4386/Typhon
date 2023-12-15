@@ -332,7 +332,11 @@ public class VolcanoBomb {
                 finalBlock.getWorld().createExplosion(finalBlock.getLocation(), 1, true, false);
             } else {
                 for (Block bombBlock : bomb) {
-                    bombBlock.setType(VolcanoComposition.getBombRock(lavaFlow.settings.silicateLevel));
+                    Material material = VolcanoComposition.getBombRock(lavaFlow.settings.silicateLevel);
+                    if (vent == null)
+                        bombBlock.setType(material);
+                    else
+                        vent.lavaFlow.queueBlockUpdate(bombBlock, material);
                 }
             }
 
@@ -343,20 +347,26 @@ public class VolcanoBomb {
 
             for (Block bombBlock : bomb) {
                 Random random = new Random();
+                Material material = VolcanoComposition.getBombRock(lavaFlow.settings.silicateLevel);
                 switch (random.nextInt(3)) {
                     case 0:
+                        material = null;
+                        break;
                     case 1:
-                        bombBlock.setType(
-                                VolcanoComposition.getBombRock(
-                                        vent.lavaFlow.settings.silicateLevel));
                         break;
                     case 2:
-                        if (flowLava) lavaFlow.flowLavaFromBomb(bombBlock);
-                        else
-                            bombBlock.setType(
-                                    VolcanoComposition.getBombRock(
-                                            vent.lavaFlow.settings.silicateLevel));
+                        if (flowLava) {
+                            lavaFlow.flowLavaFromBomb(bombBlock);
+                            material = Material.LAVA;
+                        }
                         break;
+                }
+
+                if (material != null) {
+                    if (vent == null)
+                        bombBlock.setType(material);
+                    else
+                        vent.lavaFlow.queueBlockUpdate(bombBlock, material);
                 }
             }
 

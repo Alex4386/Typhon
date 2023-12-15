@@ -705,6 +705,12 @@ public class VolcanoVentCommand {
                                 + " blocks (VEI: "
                                 + TyphonUtils.getVEIScale(vent.record.getTotalEjecta())
                                 + ")");
+                msg.info(
+                        "Ejecta/s: "
+                                + (vent.lavaFlow.lastQueueUpdates * 20)
+                                + " blocks/s (Unhandled: "
+                                + vent.lavaFlow.unprocessedQueueBlocks()
+                                + ")");
 
                 msg.info(
                         "Caldera  : "

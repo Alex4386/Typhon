@@ -34,8 +34,6 @@ public class VolcanoLavaFlow implements Listener {
 
     public static List<VolcanoVent> flowingVents = new ArrayList<>();
 
-    private static long maxBlockUpdates = TyphonUtils.getBlockUpdatesPerSecond();
-
     public List<Chunk> lavaFlowChunks = new ArrayList<>();
     public Map<Block, VolcanoLavaCoolData> lavaCoolHashMap = new HashMap<>();
     public Map<Block, VolcanoLavaCoolData> cachedLavaCoolHashMap = new HashMap<>();
@@ -44,6 +42,7 @@ public class VolcanoLavaFlow implements Listener {
 
     private int lavaFlowScheduleId = -1;
     private int lavaCoolScheduleId = -1;
+    private int queueScheduleId = -1;
     public VolcanoLavaFlowSettings settings = new VolcanoLavaFlowSettings();
 
     public boolean registeredEvent = false;
@@ -53,10 +52,22 @@ public class VolcanoLavaFlow implements Listener {
     private double hawaiianBaseY = Double.NEGATIVE_INFINITY;
     private double thisMaxFlowLength = 0;
 
+    public long lastQueueUpdates = 0;
+
+    // temporary queue to store Block and Material to update
+    private static Queue<Map.Entry<Block, Material>> blockUpdateQueue = new LinkedList<>();
+
     // core methods
     public VolcanoLavaFlow(VolcanoVent vent) {
         this.vent = vent;
         this.registerEvent();
+    }
+
+    public void queueBlockUpdate(Block block, Material material) {
+        blockUpdateQueue.add(new AbstractMap.SimpleEntry<>(block, material));
+    }
+    public long unprocessedQueueBlocks() {
+        return blockUpdateQueue.size();
     }
 
     public Volcano getVolcano() {
@@ -139,6 +150,45 @@ public class VolcanoLavaFlow implements Listener {
                                     0L,
                                     (long) getVolcano().updateRate);
         }
+        if (queueScheduleId == -1) {
+            this.vent.volcano.logger.log(
+                    VolcanoLogClass.LAVA_FLOW,
+                    "Intializing lava cooldown scheduler of VolcanoLavaFlow for vent "
+                            + vent.getName());
+            queueScheduleId =
+                    TyphonPlugin.plugin
+                            .getServer()
+                            .getScheduler()
+                            .scheduleSyncRepeatingTask(
+                                    TyphonPlugin.plugin,
+                                    this::runQueueWithinTick,
+                                    0L,
+                                    1L);
+        }
+    }
+
+    public void runQueueWithinTick() {
+        // get starting time
+        long startTime = System.nanoTime();
+        long count = 0;
+
+        while (blockUpdateQueue.size() > 0) {
+            Map.Entry<Block, Material> entry = blockUpdateQueue.poll();
+            if (entry != null) {
+                Block block = entry.getKey();
+                Material material = entry.getValue();
+
+                if (block.getType() != material) {
+                    block.setType(material);
+                }
+            }
+
+            // if time is up, break
+            if (System.nanoTime() - startTime > 500000) break;
+            count++;
+        }
+
+        lastQueueUpdates = count;
     }
 
     public void unregisterTask() {
@@ -699,7 +749,7 @@ public class VolcanoLavaFlow implements Listener {
         }
 
         if (!isUnderWater) {
-            block.setType(Material.LAVA);
+            this.queueBlockUpdate(block, Material.LAVA);
 
             if (extension < 0) {
                 cachedLavaCoolHashMap.put(
@@ -728,7 +778,7 @@ public class VolcanoLavaFlow implements Listener {
         } else {
             VolcanoPillowLavaData lavaData = cachedPillowLavaMap.get(block);
             if (lavaData == null) {
-                block.setType(Material.MAGMA_BLOCK);
+                this.queueBlockUpdate(block, Material.MAGMA_BLOCK);
 
                 if (extension < 0) {
                     cachedPillowLavaMap.put(block, new VolcanoPillowLavaData(this.vent, source, fromBlock));
@@ -979,7 +1029,7 @@ public class VolcanoLavaFlow implements Listener {
                 VolcanoPillowLavaData lavaData = data.getValue();
 
                 if (this.vent.caldera.isForming() && this.vent.caldera.isInCalderaRange(block.getLocation())) {
-                    block.setType(Material.WATER);
+                    this.queueBlockUpdate(block, Material.WATER);
                     flowedBlocks.add(block);
                     continue;
                 }
@@ -1004,7 +1054,7 @@ public class VolcanoLavaFlow implements Listener {
                         VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel) :
                         material;
 
-                    block.setType(material);
+                    this.queueBlockUpdate(block, material);
                     vent.flushSummitCacheByLocation(block);
 
                     BlockData bd = block.getBlockData();
@@ -1046,7 +1096,7 @@ public class VolcanoLavaFlow implements Listener {
                             continue;
                         }
                     } else {
-                        underBlock.setType(material);
+                        this.queueBlockUpdate(underBlock, material);
                     }
                 } else if (underBlock.isEmpty() || TyphonUtils.containsLiquidWater(underBlock)) {
                     if (!isPillowLavaRegistered(underBlock)) {
@@ -1060,7 +1110,7 @@ public class VolcanoLavaFlow implements Listener {
                         }
                         continue;
                     }
-                    underBlock.setType(material);
+                    this.queueBlockUpdate(underBlock, material);
                     flowedBlocks.add(underBlock);
                 }
 

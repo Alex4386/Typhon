@@ -17,6 +17,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockFromToEvent;
+import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.inventory.EntityEquipment;
@@ -59,6 +60,7 @@ public class VolcanoGeoThermal implements Listener {
     if (registeredEvent) {
       PlayerDropItemEvent.getHandlerList().unregisterAll(this);
       PlayerBucketEmptyEvent.getHandlerList().unregisterAll(this);
+      EntitySpawnEvent.getHandlerList().unregisterAll(this);
       registeredEvent = false;
     }
   }
@@ -736,6 +738,20 @@ public class VolcanoGeoThermal implements Listener {
       VolcanoVent vent = volcano.manager.getNearestVent(targetBlock);
       if (vent != null) {
         vent.lavaFlow.flowLava(targetBlock);
+      }
+    }
+  }
+
+  @EventHandler
+  public void onEntitySpawn(EntitySpawnEvent e) {
+    List<VolcanoVent> vents = volcano.manager.getVents();
+
+    // if the entity is mob or other friendly creatures, then we should check if it should be spawned.
+    if (e.getEntity() instanceof Monster || e.getEntity() instanceof Animals) {
+      for (VolcanoVent vent : vents) {
+        if (shouldDoIt(vent, e.getLocation())) {
+          e.setCancelled(true);
+        }
       }
     }
   }
