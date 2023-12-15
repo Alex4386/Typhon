@@ -333,6 +333,8 @@ class VolcanoPyroclasticFlow {
     Vector direction;
     VolcanoAsh ash;
 
+    int minY = Integer.MAX_VALUE;
+
     int radius;
     static int maxRadius = 8;
 
@@ -368,11 +370,17 @@ class VolcanoPyroclasticFlow {
     }
 
     public VolcanoPyroclasticFlow(Location location, VolcanoAsh ash, Vector direction, int radius, int life) {
+        this.minY = location.getBlockY();
+
         this.location = location;
         this.direction = direction;
         this.ash = ash;
         this.radius = radius;
         this.life = life;
+    }
+
+    public void updateMinY() {
+        this.minY = Math.min(this.minY, this.location.getBlockY());
     }
 
     public static Vector calculateInitialDirection(VolcanoVent vent, Location location) {
@@ -445,6 +453,8 @@ class VolcanoPyroclasticFlow {
 
         this.location = this.location.add(direction.normalize().multiply(radius));
         this.location = TyphonUtils.getHighestRocklikes(this.location).getLocation();
+
+        this.updateMinY();
 
         if (this.location.getY() >= prevLoc.getY()) {
             life -= ((this.location.getY() - prevLoc.getY()) + 1);
@@ -519,9 +529,13 @@ class VolcanoPyroclasticFlow {
 
     public void putAsh(Block block) {
         if (!checkIfFlowed(block)) {
-            if (block.getY() >= block.getWorld().getSeaLevel()) {
-                int target = this.ash.getTargetY(block.getLocation());
-                this.ash.vent.volcano.logger.debug(VolcanoLogClass.ASH, "Putting Ash. AdequateY: "+target+", current: "+block.getY());
+            int rawTarget = this.ash.getTargetY(block.getLocation());
+            int max = this.minY + Math.max(0, (int) (5 - TyphonUtils.getTwoDimensionalDistance(this.location, block.getLocation())));
+            int target = Math.min(rawTarget, max);
+
+            this.ash.vent.volcano.logger.debug(VolcanoLogClass.ASH, "Putting Ash. AdequateY (RAW): "+target+", current: "+block.getY()+", minY: "+this.minY+", limitedByMinY: "+target);
+
+            if (target >= block.getWorld().getSeaLevel()) {
                 if (block.getY() < target) {
                     int offset = target - block.getY();
 
@@ -570,6 +584,7 @@ class VolcanoPyroclasticFlow {
         for (Block baseBlock : blocks) {
             if (Math.random() > (life / maxLife)) continue;
             Block block = TyphonUtils.getHighestRocklikes(baseBlock);
+
             this.putAsh(block);
         }
 
