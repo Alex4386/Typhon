@@ -170,7 +170,7 @@ public class VolcanoLavaFlow implements Listener {
     public void runQueueWithinTick() {
         // get starting time
         long startTime = System.currentTimeMillis();
-        long count = 0;
+        long count = 1;
 
         while (true) {
             Map.Entry<Block, Material> entry = blockUpdateQueue.poll();
