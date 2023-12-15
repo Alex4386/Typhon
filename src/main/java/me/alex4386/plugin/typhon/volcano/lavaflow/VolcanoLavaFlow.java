@@ -751,7 +751,7 @@ public class VolcanoLavaFlow implements Listener {
         }
 
         if (!isUnderWater) {
-            this.queueBlockUpdate(block, Material.LAVA);
+            block.setType(Material.LAVA);
 
             if (extension < 0) {
                 cachedLavaCoolHashMap.put(
