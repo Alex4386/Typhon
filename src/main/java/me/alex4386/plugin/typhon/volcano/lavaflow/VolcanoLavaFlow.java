@@ -172,7 +172,7 @@ public class VolcanoLavaFlow implements Listener {
         long startTime = System.nanoTime();
         long count = 0;
 
-        while (blockUpdateQueue.size() > 0) {
+        while (true) {
             Map.Entry<Block, Material> entry = blockUpdateQueue.poll();
             if (entry != null) {
                 Block block = entry.getKey();
@@ -181,10 +181,15 @@ public class VolcanoLavaFlow implements Listener {
                 if (block.getType() != material) {
                     block.setType(material);
                 }
+            } else {
+                break;
             }
 
-            // if time is up, break
-            if (System.nanoTime() - startTime > 500000) break;
+            if (count % 100 == 0) {
+                // if time is up, break
+                if (System.nanoTime() - startTime > 500000) break;
+            }
+
             count++;
         }
 
