@@ -264,7 +264,11 @@ public class VolcanoLavaCoolData {
 
         if (this.runExtensionCount > 0 && this.extensionCapable()) this.handleExtension();
 
-        this.flowedFromVent.lavaFlow.queueBlockUpdate(block, Material.AIR);
+        if (this.flowedFromVent != null) {
+            this.flowedFromVent.lavaFlow.queueBlockUpdate(block, material);
+        } else {
+            block.setType(material);
+        }
     }
 
     public void forceCoolDown() {
