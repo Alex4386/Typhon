@@ -172,8 +172,6 @@ public class VolcanoLavaFlow implements Listener {
         long startTime = System.currentTimeMillis();
         long count = 1;
 
-        System.out.println("Volcano queue tick trigger: "+startTime);
-
         while (true) {
             Map.Entry<Block, Material> entry = blockUpdateQueue.poll();
             if (entry != null) {
@@ -191,9 +189,6 @@ public class VolcanoLavaFlow implements Listener {
 
             count++;
         }
-
-
-        System.out.println("Volcano queue tick end. count: "+count);
 
         lastQueueUpdates = count;
     }
