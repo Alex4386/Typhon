@@ -116,6 +116,16 @@ public class VolcanoVentCommand {
                             }
                             return searchResults;
                         }
+                    } else if (action == VolcanoVentCommandAction.SUMMIT) {
+                        if (args.length == baseOffset + 2) {
+                            String searchQuery = args[baseOffset + 1];
+                            List<String> results = new ArrayList<>();
+
+                            if ("reset".startsWith(searchQuery))
+                                results.add("reset");
+
+                            return results;
+                        }
                     }
                 }
             }
@@ -164,16 +174,31 @@ public class VolcanoVentCommand {
                 }
                 break;
             case SUMMIT:
-                sender.sendMessage(
-                        ChatColor.RED
-                                + ""
-                                + ChatColor.BOLD
-                                + "[Vent Summit] "
-                                + ChatColor.GOLD
-                                + "Summit of vent "
-                                + vent.name);
+                if (newArgs.length >= 1) {
+                    if (newArgs.length == 2 && newArgs[1].equalsIgnoreCase("reset")) {
+                        vent.flushSummitCache();
+                        sender.sendMessage(
+                                ChatColor.RED
+                                        + ""
+                                        + ChatColor.BOLD
+                                        + "[Vent Summit] "
+                                        + ChatColor.GOLD
+                                        + "Summit of vent "
+                                        + vent.name
+                                        + " has been reset.");
+                    }
 
-                VolcanoCommandUtils.findSummitAndSendToSender(sender, this.vent);
+                    sender.sendMessage(
+                            ChatColor.RED
+                                    + ""
+                                    + ChatColor.BOLD
+                                    + "[Vent Summit] "
+                                    + ChatColor.GOLD
+                                    + "Summit of vent "
+                                    + vent.name);
+
+                    VolcanoCommandUtils.findSummitAndSendToSender(sender, this.vent);
+                }
                 break;
             case HELP:
                 sender.sendMessage(
@@ -707,7 +732,7 @@ public class VolcanoVentCommand {
                                 + ")");
                 msg.info(
                         "Ejecta/s: "
-                                + (vent.lavaFlow.lastQueueUpdates * 20)
+                                + vent.lavaFlow.getProcessedBlocksPerSecond()
                                 + " blocks/s (Unhandled: "
                                 + vent.lavaFlow.unprocessedQueueBlocks()
                                 + ")");

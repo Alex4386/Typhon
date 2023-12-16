@@ -52,6 +52,10 @@ public class VolcanoLavaFlow implements Listener {
     private double hawaiianBaseY = Double.NEGATIVE_INFINITY;
     private double thisMaxFlowLength = 0;
 
+
+    public long lastQueueUpdatesPerSecond = 0;
+    public long lastQueueUpdatedPerSecondAt = 0;
+
     public long lastQueueUpdates = 0;
 
     // temporary queue to store Block and Material to update
@@ -68,6 +72,14 @@ public class VolcanoLavaFlow implements Listener {
     }
     public long unprocessedQueueBlocks() {
         return blockUpdateQueue.size();
+    }
+    public long getProcessedBlocksPerSecond() {
+        if (lastQueueUpdatedPerSecondAt == 0) return 0;
+
+        long passedMs = (System.currentTimeMillis() - lastQueueUpdatedPerSecondAt);
+        if (passedMs < 50) return lastQueueUpdates * 20;
+
+        return lastQueueUpdatesPerSecond / (passedMs / 1000);
     }
 
     public Volcano getVolcano() {
@@ -172,6 +184,11 @@ public class VolcanoLavaFlow implements Listener {
         long startTime = System.currentTimeMillis();
         long count = 1;
 
+        boolean shouldResetAfter = false;
+        if (startTime - lastQueueUpdatedPerSecondAt > 1000) {
+            shouldResetAfter = true;
+        }
+
         while (true) {
             Map.Entry<Block, Material> entry = blockUpdateQueue.poll();
             if (entry != null) {
@@ -191,6 +208,12 @@ public class VolcanoLavaFlow implements Listener {
         }
 
         lastQueueUpdates = count;
+        if (shouldResetAfter) {
+            lastQueueUpdatedPerSecondAt = startTime;
+            lastQueueUpdatesPerSecond = count;
+        } else {
+            lastQueueUpdatesPerSecond += count;
+        }
     }
 
     public void unregisterTask() {
@@ -436,7 +459,6 @@ public class VolcanoLavaFlow implements Listener {
             }
 
             Block underToBlock = toBlock.getRelative(BlockFace.DOWN);
-            VolcanoLavaCoolData underData = this.getLavaCoolData(underToBlock);
 
             if (!lavaFlowChunks.contains(toBlock.getChunk())) {
                 lavaFlowChunks.add(toBlock.getLocation().getChunk());
@@ -449,8 +471,23 @@ public class VolcanoLavaFlow implements Listener {
                 toBlockChunk.load();
             }
 
-            if (!underToBlock.getType().isAir() && underToBlock.getType() != Material.LAVA) {
+            Block underUnderToBlock = underToBlock.getRelative(BlockFace.DOWN);
+            boolean underIsAir = underToBlock.getType().isAir();
+
+            if (!underIsAir && underToBlock.getType() != Material.LAVA) {
                 getVolcano().metamorphism.metamorphoseBlock(underToBlock);
+            }
+
+            boolean fillUnderUnder = true;
+            if (data.isBomb) {
+                fillUnderUnder = Math.random() < 0.1;
+            }
+
+            if (underIsAir && underUnderToBlock.getType().isAir() && fillUnderUnder) {
+                underToBlock.setType(data.material);
+
+                // bifurcate lava
+                registerLavaCoolData(data.source, underToBlock, underUnderToBlock, data.isBomb);
             }
 
             int extensionCount = data.runExtensionCount;
@@ -462,9 +499,7 @@ public class VolcanoLavaFlow implements Listener {
 
                 if (!data.isBomb) {
                     if (flowVector.getBlockY() < 0) {
-                        
                             extensionCount = -1;
-                        
                     }
                 }
             }
@@ -895,21 +930,29 @@ public class VolcanoLavaFlow implements Listener {
         return false;
     }
 
+    public void createLavaParticle(Block currentBlock) {
+        World world = currentBlock.getWorld();
+
+        world.spawnParticle(Particle.CAMPFIRE_COSY_SMOKE, currentBlock.getLocation(), 2);
+        world.spawnParticle(Particle.LAVA, currentBlock.getLocation(), 10);
+    }
+
     public void flowLava(Block whereToFlow) {
         this.flowLava(whereToFlow, whereToFlow);
     }
 
     public void flowLava(Block source, Block currentBlock) {
-        World world = currentBlock.getWorld();
-
-        world.spawnParticle(Particle.CAMPFIRE_COSY_SMOKE, currentBlock.getLocation(), 2);
-        world.spawnParticle(Particle.LAVA, currentBlock.getLocation(), 10);
-
+        this.createLavaParticle(currentBlock);
         registerLavaCoolData(source, currentBlock, currentBlock, false);
 
         if (this.vent != null && this.vent.erupt != null) {
             this.vent.erupt.updateVentConfig();
         }
+    }
+
+    public void flowVentLavaFromBomb(Block bomb) {
+        this.createLavaParticle(bomb);
+        this.flowLavaFromBomb(bomb);
     }
 
     public void flowLavaFromBomb(Block bomb) {

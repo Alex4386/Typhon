@@ -6,6 +6,7 @@ import java.util.Map;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.TreeType;
+import org.bukkit.block.Biome;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.json.simple.JSONObject;
@@ -418,38 +419,24 @@ public class VolcanoSuccession {
     }
 
     public TreeType randomTreeType() {
-        TreeType[] adequateTreeTypes = {
-            TreeType.ACACIA,
-            TreeType.TREE,
-            TreeType.BIRCH,
-            TreeType.REDWOOD,
-            TreeType.DARK_OAK,
-            TreeType.SMALL_JUNGLE,
-        };
+        double random = Math.random();
 
-        TreeType type = adequateTreeTypes[(int) (Math.random() * adequateTreeTypes.length)];
-
-        /* 
-        // do not spawn big trees
-        if (Math.random() < 0.05) {
-            type = getBiggerEquivalent(type);
+        boolean isSecondary = Math.random() < 0.1;
+        if (isSecondary) {
+            if (random < 0.5) {
+                return TreeType.CHERRY;
+            } else if (random < 0.7) {
+                return TreeType.REDWOOD;
+            } else {
+                return Math.random() < 0.5 ? TreeType.TREE : TreeType.DARK_OAK;
+            }
         }
-        */
 
-        return type;
-    }
-
-    public TreeType getBiggerEquivalent(TreeType type) {
-        switch (type) {
-            case BIRCH:
-                return TreeType.TALL_BIRCH;
-            case REDWOOD:
-                return TreeType.TALL_REDWOOD;
-            case SMALL_JUNGLE:
-                return TreeType.JUNGLE;
-            case TREE:
-            default:
-                return TreeType.BIG_TREE;
+        // get adequate tree type for current biome
+        if (random < 0.7) {
+            return TreeType.BIRCH;
+        } else {
+            return TreeType.ACACIA;
         }
     }
 
@@ -508,6 +495,9 @@ public class VolcanoSuccession {
         }
 
         scanBaseBlock.setType(Material.AIR);
+
+        // get adequate tree type for current biome
+        Biome biome = scanBaseBlock.getBiome();
 
         TreeType type = randomTreeType();
         boolean isCreated = block.getWorld().generateTree(scanBaseBlock.getLocation(), type);

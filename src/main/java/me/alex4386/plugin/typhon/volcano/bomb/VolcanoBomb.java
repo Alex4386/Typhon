@@ -210,16 +210,47 @@ public class VolcanoBomb {
         }
 
         if (nearestVent.getStatus() == VolcanoVentStatus.ERUPTING) {
-            if (distance < nearestVent.craterRadius * 0.7) {
-                VolcanoBomb bomb = this.vent.bombs.generateBomb();
-                bomb.land();
-    
-                Block craterInsideBlock = TyphonUtils.getHighestRocklikes(TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), 0, (int) (this.vent.craterRadius * 1.2))).getRelative(BlockFace.UP);
-                if (craterInsideBlock.getY() < this.vent.averageVentHeight() - (this.vent.craterRadius * 0.8)) {
-                    if (!TyphonPlugin.isShuttingdown) this.vent.lavaFlow.flowLavaFromBomb(craterInsideBlock);
+            if (distance < nearestVent.craterRadius) {
+                if (!TyphonPlugin.isShuttingdown) {
+                    VolcanoBomb bomb = this.vent.bombs.generateBomb();
+                    bomb.land();
+                }
+            }
+
+            int summitRange = nearestVent.craterRadius + (int) Math.max(Math.min(nearestVent.craterRadius * 0.5, 20), 10);
+            if (distance < summitRange) {
+                // build up the cone.
+                if (this.block != null) {
+                    this.block.remove();
+                }
+
+                if (TyphonPlugin.isShuttingdown) return;
+                Block targetBlock = TyphonUtils.getHighestRocklikes(nearestVent.getNearestVentBlock(this.landingLocation));
+                boolean isAllowedToGrowUp = nearestVent.averageVentHeight() == nearestVent.getSummitBlock().getY();
+
+                if (!isAllowedToGrowUp) {
+                    isAllowedToGrowUp = Math.random() < 0.1;
+                }
+
+                int targetHeight = nearestVent.getSummitBlock().getY();
+                if (isAllowedToGrowUp) targetHeight += 1;
+
+                if (targetBlock.getY() <= targetHeight) {
+                    targetBlock = TyphonUtils.getHighestRocklikes(nearestVent.selectFlowVentBlock(true));
+                }
+
+                // if targetBlock's Y is lower than the vent's summitY or equal, then flow the lava.
+                if (targetBlock.getY() <= targetHeight) {
+                    if (targetBlock.getType() != Material.LAVA) {
+                        nearestVent.lavaFlow.flowVentLavaFromBomb(targetBlock.getRelative(BlockFace.UP));
+                    }
+
+                    if (isAllowedToGrowUp) {
+                        nearestVent.flushSummitCache();
+                    }
                 }
                 return;
-            }    
+            }
         }
 
         if (this.vent.volcano.manager.isInAnyFormingCaldera(loc)) {
