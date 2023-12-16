@@ -79,7 +79,7 @@ public class VolcanoLavaFlow implements Listener {
         long passedMs = (System.currentTimeMillis() - lastQueueUpdatedPerSecondAt);
         if (passedMs < 50) return lastQueueUpdates * 20;
 
-        return lastQueueUpdatesPerSecond / (passedMs / 1000);
+        return (long) (lastQueueUpdatesPerSecond / (passedMs / (double) 1000));
     }
 
     public Volcano getVolcano() {
