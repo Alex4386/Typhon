@@ -233,6 +233,14 @@ public class VolcanoLavaFlow implements Listener {
             TyphonPlugin.plugin.getServer().getScheduler().cancelTask(lavaCoolScheduleId);
             lavaCoolScheduleId = -1;
         }
+        if (queueScheduleId != -1) {
+            this.vent.volcano.logger.log(
+                    VolcanoLogClass.LAVA_FLOW,
+                    "Shutting down lava cooldown queue handler of VolcanoLavaFlow for vent "
+                            + vent.getName());
+            TyphonPlugin.plugin.getServer().getScheduler().cancelTask(lavaCoolScheduleId);
+            lavaCoolScheduleId = -1;
+        }
     }
 
     public void initialize() {

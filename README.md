@@ -7,7 +7,7 @@ Currently This code is literal spaghetti.
 Will work on cleanup when I feel like to.
 
 ## System Requirements
-* Spigot (or compatibles) for Minecraft® 1.19.  
+* Spigot (or compatibles) for Minecraft® 1.20.  
   (Paper Recommended)
 * A Really beefy (multithreading capable) computer/server
 * Bandwidth to cover up extreme usage of FallingBlock and Particles
