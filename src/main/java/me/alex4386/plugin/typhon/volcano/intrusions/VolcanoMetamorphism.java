@@ -105,11 +105,24 @@ public class VolcanoMetamorphism {
     public void removeTree(Block baseBlock, int maxRecursion) {
         if (maxRecursion < 0 || !TyphonUtils.isMaterialTree(baseBlock.getType())) return;
 
-        BlockFace[] facesToSearch = {BlockFace.UP, BlockFace.WEST, BlockFace.DOWN, BlockFace.EAST, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.DOWN};
+        BlockFace[] facesToSearch = {BlockFace.UP, BlockFace.DOWN, BlockFace.WEST, BlockFace.DOWN, BlockFace.EAST, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.DOWN};
+
         for (BlockFace face : facesToSearch) {
             Block block = baseBlock.getRelative(face);
             if (TyphonUtils.isMaterialTree(block.getType())) {
                 removeTree(block, maxRecursion - 1);
+            }
+        }
+
+        // improvise cherry log detection algorithm
+        if (baseBlock.getType() == Material.CHERRY_LOG) {
+            // extra search
+            Block upBlock = baseBlock.getRelative(BlockFace.UP);
+            for (BlockFace face : facesToSearch) {
+                Block block = upBlock.getRelative(face);
+                if (TyphonUtils.isMaterialTree(block.getType())) {
+                    removeTree(block, maxRecursion - 1);
+                }
             }
         }
 
@@ -120,6 +133,49 @@ public class VolcanoMetamorphism {
         } else {
             baseBlock.setType(Material.AIR);
         }
+    }
+
+    public boolean isFlower(Material material) {
+        return material == Material.DANDELION ||
+                material == Material.POPPY ||
+                material == Material.BLUE_ORCHID ||
+                material == Material.ALLIUM ||
+                material == Material.AZURE_BLUET ||
+                material == Material.RED_TULIP ||
+                material == Material.ORANGE_TULIP ||
+                material == Material.WHITE_TULIP ||
+                material == Material.PINK_TULIP ||
+                material == Material.OXEYE_DAISY ||
+                material == Material.CORNFLOWER ||
+                material == Material.LILY_OF_THE_VALLEY ||
+                material == Material.TORCHFLOWER ||
+                material == Material.WITHER_ROSE ||
+                material == Material.SUNFLOWER ||
+                material == Material.LILAC ||
+                material == Material.ROSE_BUSH ||
+                material == Material.PEONY ||
+                material == Material.PITCHER_PLANT ||
+                material == Material.PITCHER_POD;
+    }
+
+    public boolean isPlantlike(Material material) {
+        return isFlower(material) ||
+                material == Material.SMALL_DRIPLEAF ||
+                material == Material.BIG_DRIPLEAF ||
+                material == Material.BIG_DRIPLEAF_STEM ||
+                material == Material.GLOW_LICHEN ||
+                material == Material.HANGING_ROOTS ||
+                material == Material.ROOTED_DIRT ||
+                material == Material.MANGROVE_ROOTS ||
+                material == Material.MUDDY_MANGROVE_ROOTS ||
+                material == Material.SPORE_BLOSSOM;
+    }
+
+    public boolean isPlaceableAnimalEgg(Material material) {
+        return material == Material.DRAGON_EGG ||
+                material == Material.TURTLE_EGG ||
+                material == Material.SNIFFER_EGG ||
+                material == Material.FROGSPAWN;
     }
 
     public void evaporateBlock(Block block) {
@@ -144,13 +200,27 @@ public class VolcanoMetamorphism {
             block.setType(Material.AIR);
         } else if (blockTypeName.contains("coral")) {
             block.setType(Material.SAND);
-        } else if (material == Material.GRASS) {
+        } else if (material == Material.GRASS || material == Material.PINK_PETALS) {
             block.setType(Material.AIR);
-        } else if (material == Material.GRASS_BLOCK) {
+        } else if (material == Material.GRASS_BLOCK || material == Material.ROOTED_DIRT || material == Material.MUDDY_MANGROVE_ROOTS) {
             block.setType(Material.DIRT);
-        } else if (material == Material.TALL_GRASS || material == Material.GRASS) {
+        } else if (material == Material.TALL_GRASS || material == Material.LARGE_FERN || material == Material.BAMBOO) {
+            // check under block is not the same type
+            Block underBlock = block.getRelative(BlockFace.DOWN);
+            if (underBlock.getType() == material) {
+                block.setType(Material.AIR);
+            } else {
+                block.setType(Material.DEAD_BUSH);
+            }
+        } else if (blockTypeName.contains("sapling") || material == Material.MANGROVE_PROPAGULE) {
             block.setType(Material.DEAD_BUSH);
-        } else if (material == Material.SEAGRASS || material == Material.WATER) {
+        } else if (isFlower(material)) {
+            block.setType(Material.DEAD_BUSH);
+        } else if (isPlantlike(material)) {
+            block.setType(Material.AIR);
+        } else if (isPlaceableAnimalEgg(material)) {
+            block.setType(Material.AIR);
+        } else if (material == Material.SEAGRASS || material == Material.TALL_SEAGRASS) {
             block.setType(Material.AIR);
         } else if (material == Material.WATER_CAULDRON) {
             block.setType(Material.CAULDRON);
@@ -158,6 +228,8 @@ public class VolcanoMetamorphism {
             block.setType(Material.DIRT);
         } else if (blockTypeName.contains("infested")) {
             block.setType(VolcanoComposition.getExtrusiveRock(silicateLevel));
+        } else if (material == Material.SEA_PICKLE) {
+            block.setType(Material.AIR);
         }
     }
 }

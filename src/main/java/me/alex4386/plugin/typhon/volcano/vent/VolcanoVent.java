@@ -445,7 +445,11 @@ public class VolcanoVent {
     public double averageVentHeight() {
         int totalY = 0;
         for (Block block : this.cachedVentBlocks) {
-            totalY += block.getY();
+            Location loc = block.getLocation();
+            loc.setY(block.getWorld().getMaxHeight());
+
+            int highestY = TyphonUtils.getHighestRocklikes(loc.getBlock()).getY();
+            totalY += highestY;
         }
 
         return (double) totalY / this.cachedVentBlocks.size();

@@ -308,6 +308,7 @@ public class TyphonUtils {
 
     public static boolean isMaterialTree(org.bukkit.Material material) {
         String materialType = TyphonUtils.toLowerCaseDumbEdition(material.name());
+        
         return (materialType.contains("leaves")
                 || materialType.contains("log")
                 || materialType.contains("plank")

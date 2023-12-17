@@ -193,9 +193,11 @@ public class VolcanoExplosion {
         if (this.vent != null) {
             double pyroclast = this.vent.erupt.getStyle().getPyroclasticFlowMultiplier();
             if (pyroclast > 0) {
-                if (Math.random() < pyroclast) {
-                    this.vent.ash.createAshPlume(targetVent);
-                    this.vent.ash.triggerPyroclasticFlow();
+                for (int i = 0; i < pyroclast; i++) {
+                    if (Math.random() < 0.4) {
+                        this.vent.ash.createAshPlume(targetVent);
+                        this.vent.ash.triggerPyroclasticFlow();
+                    }
                 }
             }
         }

@@ -225,6 +225,7 @@ public class VolcanoBomb {
                 }
 
                 if (TyphonPlugin.isShuttingdown) return;
+
                 Block targetBlock = TyphonUtils.getHighestRocklikes(nearestVent.getNearestVentBlock(this.landingLocation));
                 boolean isAllowedToGrowUp = nearestVent.averageVentHeight() == nearestVent.getSummitBlock().getY();
 

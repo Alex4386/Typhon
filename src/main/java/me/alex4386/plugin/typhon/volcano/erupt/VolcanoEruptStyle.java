@@ -17,11 +17,11 @@ public enum VolcanoEruptStyle {
     // lessly used in
     // here
     STROMBOLIAN(
-            "strombolian", new String[] { "stromboli" }, VolcanoEruptCauseType.MAGMATIC, 1, 1, 1),
+            "strombolian", new String[] { "stromboli" }, VolcanoEruptCauseType.MAGMATIC, 0, 1, 1),
 
     // stromboli but, range longer + with ash
     // rocks: andestic volcanic bombs (+ tuff)
-    VULCANIAN("vulcanian", new String[] {}, VolcanoEruptCauseType.MAGMATIC, 8, 2, 1.3),
+    VULCANIAN("vulcanian", new String[] {}, VolcanoEruptCauseType.MAGMATIC, 8, 2, 2),
 
     // BUILD Lava dome first.
     // andesite lava dome -> explode it. + lava overflow + pyroclastic flows +
@@ -29,12 +29,12 @@ public enum VolcanoEruptStyle {
     // tuff)
     // less volume but range is plinian or vulcanian
     // tuff pyroclastic flows
-    PELEAN("pelean", new String[] { "pelèan" }, VolcanoEruptCauseType.MAGMATIC, 8, 4, 1.7),
+    PELEAN("pelean", new String[] { "pelèan" }, VolcanoEruptCauseType.MAGMATIC, 8, 4, 4),
 
     // no lava overflow + caldera + top collapse + (granite) rhyolite volcano bombs
     // (A LOT)
     // **RAINING TUFF**
-    PLINIAN("plinian", new String[] { "vesuvian" }, VolcanoEruptCauseType.MAGMATIC, 0, 0, 2.5),
+    PLINIAN("plinian", new String[] { "vesuvian" }, VolcanoEruptCauseType.MAGMATIC, 0, 0, 5),
     ;
 
     String rawType;
@@ -78,8 +78,9 @@ public enum VolcanoEruptStyle {
     }
 
     public double getPyroclasticFlowMultiplier() {
-        if (this == VolcanoEruptStyle.VULCANIAN || this == VolcanoEruptStyle.PLINIAN) return 0.2;
-        else if (this == VolcanoEruptStyle.PELEAN) return 0.6;
+        if (this.ashMultiplier > 1) {
+            return this.ashMultiplier - 1;
+        }
 
         return 0;
     }

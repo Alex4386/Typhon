@@ -2,12 +2,13 @@ package me.alex4386.plugin.typhon;
 
 public class TyphonCache<T>  {
     T target;
-    long lastUpdate = System.currentTimeMillis();
+    long lastUpdate;
 
     public long cacheValidity = 20;
 
     public TyphonCache(T target) {
         this.target = target;
+        this.lastUpdate = System.currentTimeMillis();
     }
 
     public TyphonCache(T target, long cacheValidity) {

@@ -81,7 +81,11 @@ public class VolcanoAsh {
         }
     }
     public int getTargetHeight(Location location) {
-        double distance = vent.getTwoDimensionalDistance(location);
+        double distance = Math.max(vent.getTwoDimensionalDistance(location) - vent.getRadius(), 0);
+        if (vent.isInVent(location)) {
+            return vent.getSummitBlock().getY() - (int) (vent.getRadius() - vent.getTwoDimensionalDistance(location));
+        }
+
         double height = Math.max(0, vent.getSummitBlock().getY() - vent.bombs.getBaseY());
         if (distance > (4 * Math.sqrt(3) * height / 3)) return 0;
 
@@ -189,14 +193,6 @@ public class VolcanoAsh {
             if (Math.random() < 0.1 * bd.multiplier) {
                 bd.fallAsh();
             }
-
-            if (bd.multiplier > 2) {
-                if (Math.random() < 0.02 * bd.multiplier) {
-                    if (vent.isInVent(bd.bd.getLocation())) {
-                        bd.lightning();
-                    }
-                }
-            }
         }
 
         this.clearOrphanedAshClouds(false);
@@ -248,7 +244,11 @@ public class VolcanoAsh {
         this.triggerPyroclasticFlow(this.vent.selectFlowVentBlock(Math.random() < 0.6));
     }
 
-    public void triggerPyroclasticFlow(Block block) {
+    public void triggerPyroclasticFlow(Block srcblock) {
+        Location target = srcblock.getLocation();
+        target.setY(srcblock.getWorld().getMaxHeight());
+        Block block = TyphonUtils.getHighestRocklikes(target);
+
         this.vent.getVolcano().logger.log(VolcanoLogClass.ASH, "Triggering Pyroclastic Flows @ "+TyphonUtils.blockLocationTostring(block));
         VolcanoPyroclasticFlow flow = new VolcanoPyroclasticFlow(TyphonUtils.getHighestRocklikes(block).getLocation().add(0, 1, 0), this);
         this.pyroclasticFlows.add(flow);

@@ -220,7 +220,7 @@ public class VolcanoBombs {
     }
 
     public VolcanoBomb generateConeBuildingBomb() {
-        int minRadius = (int) (this.vent.craterRadius * 0.7);
+        int minRadius = 3;
 
         int baseYHeight = this.getEffectiveConeHeight();
         double coneRadius = (baseYHeight * this.distanceHeightRatio());
