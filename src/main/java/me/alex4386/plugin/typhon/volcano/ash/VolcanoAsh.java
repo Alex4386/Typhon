@@ -57,9 +57,7 @@ public class VolcanoAsh {
         }
     }
 
-    public VolcanoAsh(VolcanoVent vent) {
-        this.vent = vent;
-    }
+    public VolcanoAsh(VolcanoVent vent) { this.vent = vent; }
 
     public void initialize() {
         this.vent.volcano.logger.log(
@@ -185,8 +183,6 @@ public class VolcanoAsh {
     public void processAshClouds() {
         this.vent.getVolcano().logger.debug(VolcanoLogClass.ASH, "Processing Ash Cloud...");
 
-        int clouds = this.ashBlockDisplays.size();
-
         for (VolcanoAshCloudData bd : this.ashBlockDisplays) {
             this.processAshCloud(bd);
 
@@ -248,6 +244,12 @@ public class VolcanoAsh {
         Location target = srcblock.getLocation();
         target.setY(srcblock.getWorld().getMaxHeight());
         Block block = TyphonUtils.getHighestRocklikes(target);
+
+        if (this.vent.caldera.isForming()) {
+            if (this.vent.caldera.isInCalderaRange(srcblock.getLocation())) {
+                return;
+            }
+        }
 
         this.vent.getVolcano().logger.log(VolcanoLogClass.ASH, "Triggering Pyroclastic Flows @ "+TyphonUtils.blockLocationTostring(block));
         VolcanoPyroclasticFlow flow = new VolcanoPyroclasticFlow(TyphonUtils.getHighestRocklikes(block).getLocation().add(0, 1, 0), this);
@@ -316,9 +318,11 @@ class VolcanoAshCloudData {
     }
 
     public void fallAsh() {
-        Block ashTarget = this.getAshFallTarget();
-        if (ashTarget.getY() <= ash.getTargetY(ashTarget.getLocation())) {
-            ashTarget.setType(Material.TUFF);
+        if (!ash.vent.caldera.isForming()) {
+            Block ashTarget = this.getAshFallTarget();
+            if (ashTarget.getY() <= ash.getTargetY(ashTarget.getLocation())) {
+                ashTarget.setType(Material.TUFF);
+            }
         }
     }
 

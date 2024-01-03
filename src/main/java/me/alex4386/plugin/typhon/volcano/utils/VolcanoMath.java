@@ -193,4 +193,17 @@ public class VolcanoMath {
 
         return new VolcanoCircleOffsetXZ(x, z);
     }
+
+    // generate white noise
+    public static double[][] generateWhiteNoise(int width, int height, Random random) {
+        double[][] noise = new double[width][height];
+
+        for (int i = 0; i < width; i++) {
+            for (int j = 0; j < height; j ++) {
+                noise[i][j] = random.nextDouble() % 1;
+            }
+        }
+
+        return noise;
+    }
 }

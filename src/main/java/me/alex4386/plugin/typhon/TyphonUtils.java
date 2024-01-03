@@ -376,6 +376,7 @@ public class TyphonUtils {
                 || materialType.contains("amethyst")
                 || materialType.contains("clay")
                 || materialType.contains("terracotta")
+                || materialType.contains("tuff")
             );
     }
     public static boolean containsWater(Block block) {

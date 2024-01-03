@@ -226,9 +226,8 @@ public class VolcanoVentCommand {
                 }
 
                 if (newArgs.length == 1) {
-                    long cycle = vent.caldera.cycle;
-                    long current = vent.caldera.current;
-                    long total = vent.caldera.total;
+                    long current = vent.caldera.currentRadius;
+                    long total = vent.caldera.radius;
 
                     sender.sendMessage(
                             ChatColor.RED
@@ -238,7 +237,7 @@ public class VolcanoVentCommand {
                                     + ChatColor.GOLD
                                     + "Volcano Caldera");
 
-                    msg.info("Current Cycle #"+cycle+" - ("+current+"/"+total+") "+String.format("%.2f", current*100/(double) total)+"% Complete");
+                    msg.info("Current Cycle #"+current+" - ("+current+"/"+total+") "+String.format("%.2f", current*100/(double) total)+"% Complete");
                 } else if (newArgs.length >= 2) {
                     if (newArgs[1].equalsIgnoreCase("start")) {
                         if (!vent.caldera.isSettedUp()) {
@@ -253,7 +252,6 @@ public class VolcanoVentCommand {
                             msg.error(
                                     "The caldera creation settings are not configured.");
                         } else {
-                            vent.caldera.forceShutdown();
                             msg.info("Plinian eruption has skipped.");
                         }
                     } else if (newArgs[1].equalsIgnoreCase("clear")) {

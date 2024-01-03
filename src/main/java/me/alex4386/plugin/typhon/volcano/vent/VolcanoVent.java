@@ -169,7 +169,6 @@ public class VolcanoVent {
         record.endEjectaTrack();
         bombs.shutdown();
         lavadome.shutdown();
-        caldera.forceShutdown();
 
         volcano.logger.log(VolcanoLogClass.VENT, "Shutted down vent " + name);
     }
