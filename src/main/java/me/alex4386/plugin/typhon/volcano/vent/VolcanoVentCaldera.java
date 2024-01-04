@@ -190,7 +190,7 @@ public class VolcanoVentCaldera {
 
     /* ====== WORK UTILS ====== */
     public void initializeNoise() {
-        if (this.noise == null) this.noise = this.generatePerlinNoise(this.radius * 2, this.radius * 2, 4);
+        if (this.noise == null) this.noise = VolcanoMath.generatePerlinNoise(this.radius * 2, this.radius * 2, 4);
     }
 
     public int excavateUntilSpecificY(Block block, int targetY) {
@@ -210,28 +210,6 @@ public class VolcanoVentCaldera {
         }
 
         return excavated;
-    }
-
-    // generate perlin noise
-    public double[][] generatePerlinNoise(int width, int height, int octaveCount) {
-        Random random = new Random();
-        double[][] smoothNoise = new double[width][height];
-
-        double persistance = 0.3;
-
-        for (int octave = octaveCount - 1; octave >= 0; octave--) {
-            double[][] octaveNoise = VolcanoMath.generateWhiteNoise(width, height, random);
-
-            for (int x = 0; x < width; x++) {
-                for (int y = 0; y < height; y ++) {
-                    smoothNoise[x][y] += octaveNoise[x][y] * persistance;
-                }
-            }
-
-            persistance /= 2;
-        }
-
-        return smoothNoise;
     }
 
     /* ====== WORK ====== */
@@ -299,7 +277,8 @@ public class VolcanoVentCaldera {
     }
 
     public void doEruptionPyroclasticFlows() {
-        Block randomBlock = TyphonUtils.getRandomBlockInRange(this.baseBlock, this.currentRadius);
+        // +5 to circumvent the caldera formation detection override
+        Block randomBlock = TyphonUtils.getRandomBlockInRange(this.baseBlock, this.currentRadius + 5);
         this.vent.ash.triggerPyroclasticFlow(TyphonUtils.getHighestRocklikes(randomBlock));
     }
 
@@ -314,12 +293,10 @@ public class VolcanoVentCaldera {
                 for (int i = 0; i < random; i++) {
                     if (this.notProcessedEjecta <= 0) break;
 
-                    this.doEruptionPlume();
-
                     int bombSize = (int) ((Math.random() * 3) + 2);
                     VolcanoBomb bomb = this.vent.bombs.generateBombToDestination(
                             TyphonUtils.getHighestRocklikes(
-                                    TyphonUtils.getFairRandomBlockInRange(this.baseBlock, this.radius + 10, (int) Math.max(this.radius + 100, this.vent.longestFlowLength))
+                                    TyphonUtils.getFairRandomBlockInRange(this.baseBlock, this.currentRadius, (int) Math.max(this.radius + 100, this.vent.longestFlowLength))
                             ).getLocation(), bombSize);
 
                     if (Math.random() < 0.95) {
@@ -330,6 +307,11 @@ public class VolcanoVentCaldera {
 
                     double bombVolume = (4.0 / 3.0) * Math.PI * Math.pow(bombSize, 3);
                     this.notProcessedEjecta -= (long) Math.ceil(bombVolume);
+                }
+
+                for (int i = 0; i < random / 10; i++) {
+                    this.doEruptionPlume();
+                    this.doEruptionPyroclasticFlows();
                 }
             }
         }

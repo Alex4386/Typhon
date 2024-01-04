@@ -206,4 +206,98 @@ public class VolcanoMath {
 
         return noise;
     }
+
+    private static double perlinNoiseFade(double t) {
+        return t * t * t * (t * (t * 6 - 15) + 10);
+    }
+
+    private static double perlinNoiseLinearInterpolate(double w, double x, double y) {
+        return x + w * (y - x);
+    }
+
+    private static double perlinNoiseGradientVector(int directionHash, double x, double y, double z) {
+        // 16 directions: 0-15 - utilize hash to optimize
+        int direction = directionHash & 15;
+
+        double u = direction < 8 ? x : y;
+        double v = direction < 4 ? y : direction == 12 || direction == 14 ? x : z;
+        return ((direction & 1) == 0 ? u : -u) + ((direction & 2) == 0 ? v : -v);
+    }
+
+    private static int[] generatePerlinNoisePermutation() {
+        // Initialize permutation array inside the function
+        int[] permutation = new int[512];
+        int[] p = new int[256];
+        for (int i = 0; i < 256; i++) {
+            p[i] = i;
+        }
+
+        Random random = new Random();
+        for (int i = 255; i > 0; i--) {
+            int index = random.nextInt(i + 1);
+            int temp = p[index];
+            p[index] = p[i];
+            p[i] = temp;
+        }
+
+        for (int i = 0; i < 512; i++) {
+            permutation[i] = p[i & 255];
+        }
+
+        return permutation;
+    }
+
+    private static double generatePerlinNoiseAt(double x, double y, double z) {
+        int X = (int) Math.floor(x) & 255;
+        int Y = (int) Math.floor(y) & 255;
+        int Z = (int) Math.floor(z) & 255;
+
+        x -= Math.floor(x);
+        y -= Math.floor(y);
+        z -= Math.floor(z);
+
+        double u = perlinNoiseFade(x);
+        double v = perlinNoiseFade(y);
+        double w = perlinNoiseFade(z);
+
+        int[] permutation = generatePerlinNoisePermutation();
+
+        int A = permutation[X] + Y;
+        int AA = permutation[A] + Z;
+        int AB = permutation[A + 1] + Z;
+        int B = permutation[X + 1] + Y;
+        int BA = permutation[B] + Z;
+        int BB = permutation[B + 1] + Z;
+
+        return perlinNoiseLinearInterpolate(w, perlinNoiseLinearInterpolate(v, perlinNoiseLinearInterpolate(u, perlinNoiseGradientVector(permutation[AA], x, y, z),
+                                perlinNoiseGradientVector(permutation[BA], x - 1, y, z)),
+                        perlinNoiseLinearInterpolate(u, perlinNoiseGradientVector(permutation[AB], x, y - 1, z),
+                                perlinNoiseGradientVector(permutation[BB], x - 1, y - 1, z))),
+                perlinNoiseLinearInterpolate(v, perlinNoiseLinearInterpolate(u, perlinNoiseGradientVector(permutation[AA + 1], x, y, z - 1),
+                                perlinNoiseGradientVector(permutation[BA + 1], x - 1, y, z - 1)),
+                        perlinNoiseLinearInterpolate(u, perlinNoiseGradientVector(permutation[AB + 1], x, y - 1, z - 1),
+                                perlinNoiseGradientVector(permutation[BB + 1], x - 1, y - 1, z - 1))));
+    }
+
+    // generate
+    public static double[][] generatePerlinNoise(int width, int height, double cellSize) {
+        double[][] noiseArray = new double[width][height];
+
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                double nx = x / cellSize;
+                double ny = y / cellSize;
+
+                // Generate raw Perlin noise value
+                double rawNoise = generatePerlinNoiseAt(nx, ny, 0);
+
+                // Adjust the raw noise with attenuation and scale it to the range of 0.0 to 1.0
+                noiseArray[x][y] = (rawNoise + 1) / 2;
+                if (noiseArray[x][y] > 1) noiseArray[x][y] = 1;
+                if (noiseArray[x][y] < 0) noiseArray[x][y] = 0;
+            }
+        }
+
+        return noiseArray;
+    }
 }
