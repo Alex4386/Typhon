@@ -237,7 +237,7 @@ public class VolcanoVentCommand {
                                     + ChatColor.GOLD
                                     + "Volcano Caldera");
 
-                    msg.info("Current Cycle #"+current+" - ("+current+"/"+total+") "+String.format("%.2f", current*100/(double) total)+"% Complete");
+                    msg.info("Current Cycle #"+current+" - ("+current+"/"+total+") "+String.format("%.2f", vent.caldera.getProgress() * 100)+"% Complete");
                 } else if (newArgs.length >= 2) {
                     if (newArgs[1].equalsIgnoreCase("start")) {
                         if (!vent.caldera.isSettedUp()) {

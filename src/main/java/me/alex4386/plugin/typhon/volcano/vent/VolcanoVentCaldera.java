@@ -41,6 +41,9 @@ public class VolcanoVentCaldera {
 
     double[][] noise = null;
 
+    int currentIteration = 0;
+    List<Block> currentIterationList = null;
+
     VolcanoVentCaldera(VolcanoVent vent) {
         this.vent = vent;
     }
@@ -214,16 +217,24 @@ public class VolcanoVentCaldera {
 
     /* ====== WORK ====== */
     public void runSession() {
-        List<Block> blocks = VolcanoMath.getCircle(this.baseBlock, this.currentRadius);
+        int sessionBlocks = 400000;
 
-        blocks.sort((o1, o2) -> {
-            double distance1 = TyphonUtils.getTwoDimensionalDistance(this.baseBlock.getLocation(), o1.getLocation());
-            double distance2 = TyphonUtils.getTwoDimensionalDistance(this.baseBlock.getLocation(), o2.getLocation());
+        if (currentIteration == 0) {
+            List<Block> blocks = VolcanoMath.getCircle(this.baseBlock, this.currentRadius);
 
-            return Double.compare(distance1, distance2);
-        });
+            blocks.sort((o1, o2) -> {
+                double distance1 = TyphonUtils.getTwoDimensionalDistance(this.baseBlock.getLocation(), o1.getLocation());
+                double distance2 = TyphonUtils.getTwoDimensionalDistance(this.baseBlock.getLocation(), o2.getLocation());
 
-        for (Block block : blocks) {
+                return Double.compare(distance1, distance2);
+            });
+
+            this.currentIterationList = blocks;
+        }
+
+        int listSize = currentIterationList.size();
+        for (int i = 0; i < sessionBlocks && currentIteration < listSize; i++, currentIteration++) {
+            Block block = currentIterationList.get(currentIteration);
             Block targetBlock = TyphonUtils.getHighestRocklikes(block);
             int targetY = this.getCurrentTargetY(block);
             if (targetBlock.getY() <= targetY) continue;
@@ -233,13 +244,22 @@ public class VolcanoVentCaldera {
                 this.vent.record.addEjectaVolume(excavated);
                 notProcessedEjecta += excavated;
             }
+
+            if (currentIteration > sessionBlocks) {
+                return;
+            }
         }
 
-        if (this.currentRadius < radius) {
-            this.currentRadius++;
-            this.currentBase = this.currentBase.getRelative(0, -1, 0);
-        } else {
-            this.endErupt();
+        if (currentIteration >= listSize) {
+            this.currentIteration = 0;
+            this.currentIterationList = null;
+
+            if (this.currentRadius < radius) {
+                this.currentRadius++;
+                this.currentBase = this.currentBase.getRelative(0, -1, 0);
+            } else {
+                this.endErupt();
+            }
         }
     }
 
@@ -255,6 +275,33 @@ public class VolcanoVentCaldera {
         }
 
         return TyphonUtils.getTwoDimensionalDistance(this.baseBlock.getLocation(), location) < this.radius;
+    }
+
+    private long getTotal() {
+        return this.getTotal(this.radius);
+    }
+
+    private long getTotal(int to) {
+        int from = this.vent.getRadius();
+        long total = 0;
+
+        for (int i = from; i < to; i++) {
+            total += (long) (Math.pow(i, 2) * Math.PI);
+        }
+
+        return total;
+    }
+
+    public double getProgress() {
+        if (!this.isSettedUp()) {
+            return 0;
+        }
+
+        long size = (long) (Math.pow(this.currentRadius, 2) * Math.PI);
+        double currentIterationPercent = (double) this.currentIteration / size;
+        double currentIterationInScale = (currentIterationPercent * size) / this.getTotal();
+
+        return ((this.getTotal(this.currentRadius) + currentIterationInScale) / this.getTotal());
     }
 
     public boolean isSettedUp() {
@@ -278,8 +325,29 @@ public class VolcanoVentCaldera {
 
     public void doEruptionPyroclasticFlows() {
         // +5 to circumvent the caldera formation detection override
-        Block randomBlock = TyphonUtils.getRandomBlockInRange(this.baseBlock, this.currentRadius + 5);
-        this.vent.ash.triggerPyroclasticFlow(TyphonUtils.getHighestRocklikes(randomBlock));
+        if (this.vent.ash.activePyroclasticFlows() > 20) return;
+
+        long total = 0;
+        Block lowestY;
+
+        List<Block> listBlocks = VolcanoMath.getCircle(this.baseBlock, this.currentRadius + 5, this.currentRadius + 4);
+        lowestY = TyphonUtils.getHighestRocklikes(listBlocks.get(0));
+        for (Block baseBlock : listBlocks) {
+            Block block = TyphonUtils.getHighestRocklikes(baseBlock);
+
+            total += block.getY();
+            if (block.getY() < lowestY.getY()) lowestY = block;
+        }
+
+        double average = (double) total / listBlocks.size();
+        Block targetBlock;
+        if (lowestY.getY() + 2 <= average) {
+            targetBlock = TyphonUtils.getRandomBlockInRange(this.baseBlock, this.currentRadius + 2, this.currentRadius + 4);
+        } else {
+            targetBlock = lowestY;
+        }
+
+        this.vent.ash.triggerPyroclasticFlow(TyphonUtils.getHighestRocklikes(targetBlock));
     }
 
     public void runEruptTick() {
@@ -294,23 +362,32 @@ public class VolcanoVentCaldera {
                     if (this.notProcessedEjecta <= 0) break;
 
                     int bombSize = (int) ((Math.random() * 3) + 2);
-                    VolcanoBomb bomb = this.vent.bombs.generateBombToDestination(
-                            TyphonUtils.getHighestRocklikes(
-                                    TyphonUtils.getFairRandomBlockInRange(this.baseBlock, this.currentRadius, (int) Math.max(this.radius + 100, this.vent.longestFlowLength))
-                            ).getLocation(), bombSize);
 
-                    if (Math.random() < 0.95) {
-                        bomb.land();
+                    VolcanoBomb bomb;
+                    if (Math.random() < 0.5) {
+                        bomb = this.vent.bombs.generateBombToDestination(
+                                TyphonUtils.getHighestRocklikes(
+                                        TyphonUtils.getFairRandomBlockInRange(this.baseBlock, this.currentRadius, (int) Math.max(this.radius + 100, this.vent.longestFlowLength))
+                                ).getLocation(), 1);
                     } else {
-                        vent.bombs.launchSpecifiedBomb(bomb);
+                        bomb = this.vent.bombs.generateConeBuildingBomb();
                     }
 
-                    double bombVolume = (4.0 / 3.0) * Math.PI * Math.pow(bombSize, 3);
-                    this.notProcessedEjecta -= (long) Math.ceil(bombVolume);
-                }
+                    if (bomb != null) {
+                        if (Math.random() < 0.95) {
+                            bomb.land();
+                        } else {
+                            vent.bombs.launchSpecifiedBomb(bomb);
+                        }
 
-                for (int i = 0; i < random / 10; i++) {
-                    this.doEruptionPlume();
+                        double bombVolume = (4.0 / 3.0) * Math.PI * Math.pow(bombSize, 3);
+                        this.notProcessedEjecta -= (long) Math.ceil(bombVolume);
+                    }
+
+                    for (int j = 0; j < random / 10; j++) {
+                        this.doEruptionPlume();
+                    }
+
                     this.doEruptionPyroclasticFlows();
                 }
             }

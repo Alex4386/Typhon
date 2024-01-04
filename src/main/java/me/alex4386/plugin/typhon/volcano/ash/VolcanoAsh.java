@@ -78,20 +78,18 @@ public class VolcanoAsh {
             pyroclasticFlow.shutdown();
         }
     }
-    public int getTargetHeight(Location location) {
-        double distance = Math.max(vent.getTwoDimensionalDistance(location) - vent.getRadius(), 0);
-        if (vent.isInVent(location)) {
-            return vent.getSummitBlock().getY() - (int) (vent.getRadius() - vent.getTwoDimensionalDistance(location));
-        }
-
-        double height = Math.max(0, vent.getSummitBlock().getY() - vent.bombs.getBaseY());
-        if (distance > (4 * Math.sqrt(3) * height / 3)) return 0;
-
-        return (int) ((Math.pow(((3 * (distance / height)) / 4) - Math.sqrt(3), 2) / 3) * height);
-    }
 
     public int getTargetY(Location location) {
-        return (this.getTargetHeight(location) + vent.bombs.getBaseY());
+        int baseY = Math.max(vent.location.getBlockY(), vent.location.getWorld().getSeaLevel());
+        int heightY = Math.max(vent.getSummitBlock().getY() - baseY, 0);
+
+        if (heightY == 0) return baseY;
+
+        int tmpSummit = heightY / 2;
+        double distance = TyphonUtils.getTwoDimensionalDistance(vent.getNearestCoreBlock(location).getLocation(), location);
+        double deductAmount = -(distance / 8);
+
+        return (int) (baseY + tmpSummit + deductAmount);
     }
 
     public void createAshPlume() {
@@ -245,16 +243,14 @@ public class VolcanoAsh {
         target.setY(srcblock.getWorld().getMaxHeight());
         Block block = TyphonUtils.getHighestRocklikes(target);
 
-        if (this.vent.caldera.isForming()) {
-            if (this.vent.caldera.isInCalderaRange(srcblock.getLocation())) {
-                return;
-            }
-        }
-
         this.vent.getVolcano().logger.log(VolcanoLogClass.ASH, "Triggering Pyroclastic Flows @ "+TyphonUtils.blockLocationTostring(block));
         VolcanoPyroclasticFlow flow = new VolcanoPyroclasticFlow(TyphonUtils.getHighestRocklikes(block).getLocation().add(0, 1, 0), this);
         this.pyroclasticFlows.add(flow);
         flow.initialize();
+    }
+
+    public int activePyroclasticFlows() {
+        return this.pyroclasticFlows.size();
     }
 
     public void processAshCloudHeat(BlockDisplay bd) {
@@ -533,10 +529,7 @@ class VolcanoPyroclasticFlow {
 
     public void putAsh(Block block) {
         if (!checkIfFlowed(block)) {
-            int rawTarget = this.ash.getTargetY(block.getLocation());
-            int max = this.minY + Math.max(0, (int) (5 - TyphonUtils.getTwoDimensionalDistance(this.location, block.getLocation())));
-            int target = Math.min(rawTarget, max);
-
+            int target = this.ash.getTargetY(block.getLocation());
             this.ash.vent.volcano.logger.debug(VolcanoLogClass.ASH, "Putting Ash. AdequateY (RAW): "+target+", current: "+block.getY()+", minY: "+this.minY+", limitedByMinY: "+target);
 
             if (target >= block.getWorld().getSeaLevel()) {
