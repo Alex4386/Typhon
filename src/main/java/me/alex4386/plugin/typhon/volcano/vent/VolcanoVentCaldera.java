@@ -187,8 +187,12 @@ public class VolcanoVentCaldera {
         if (x < 0 || x >= this.radius * 2 || z < 0 || z >= this.radius * 2) return 0;
 
         this.initializeNoise();
-
-        return (int) (Math.abs(this.noise[x][z]) * randomnessHeight);
+        try {
+            double data = this.noise[x][z];
+            return (int) (data * randomnessHeight);
+        } catch(Exception e) {
+            return 0;
+        }
     }
 
     /* ====== WORK UTILS ====== */
@@ -325,7 +329,7 @@ public class VolcanoVentCaldera {
 
     public void doEruptionPyroclasticFlows() {
         // +5 to circumvent the caldera formation detection override
-        if (this.vent.ash.activePyroclasticFlows() > 20) return;
+        if (this.vent.ash.activePyroclasticFlows() > 200) return;
 
         long total = 0;
         Block lowestY;
@@ -384,11 +388,14 @@ public class VolcanoVentCaldera {
                         this.notProcessedEjecta -= (long) Math.ceil(bombVolume);
                     }
 
-                    for (int j = 0; j < random / 10; j++) {
+                    int plumeCount = (int) (Math.pow(random / 100.0, 2) * 4) + 1;
+                    for (int j = 0; j < plumeCount; j++) {
                         this.doEruptionPlume();
                     }
 
-                    this.doEruptionPyroclasticFlows();
+                    if (Math.random() < 0.2) {
+                        this.doEruptionPyroclasticFlows();
+                    }
                 }
             }
         }
