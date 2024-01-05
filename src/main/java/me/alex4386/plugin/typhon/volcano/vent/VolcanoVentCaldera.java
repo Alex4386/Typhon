@@ -41,6 +41,8 @@ public class VolcanoVentCaldera {
 
     double[][] noise = null;
 
+    VolcanoEruptStyle backedupStyle = VolcanoEruptStyle.STROMBOLIAN;
+
     int currentIteration = 0;
     List<Block> currentIterationList = null;
 
@@ -316,6 +318,8 @@ public class VolcanoVentCaldera {
 
     public void startErupt() {
         this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Starting plinian eruption for caldera formation");
+
+        this.backedupStyle = this.vent.erupt.getStyle();
         this.vent.erupt.setStyle(VolcanoEruptStyle.PLINIAN);
         this.initialize();
 
@@ -410,6 +414,8 @@ public class VolcanoVentCaldera {
         this.vent.erupt.stop();
         this.vent.volcano.quickCool();
         this.vent.bombs.bombMap.clear();
+
+        this.vent.erupt.setStyle(backedupStyle);
     }
 
     public void finalizeUpdateVentData() {
