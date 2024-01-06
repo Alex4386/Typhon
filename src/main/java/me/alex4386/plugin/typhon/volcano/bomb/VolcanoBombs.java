@@ -289,16 +289,13 @@ public class VolcanoBombs {
 
             if (radius < 0) return null;
             return this.generateBombToDestination(randomBlock.getLocation(), radius);
-        } else if (diff < 0) {
-            if (Math.random() < 0.25) {
-                if (TyphonUtils.getTwoDimensionalDistance(this.vent.getNearestCoreBlock(randomBlock.getLocation()).getLocation(), randomBlock.getLocation()) < this.vent.longestNormalLavaFlowLength) {
-                    // inside volcano.
-                    if (randomBlock.getY() > randomBlock.getWorld().getSeaLevel()) {
-                        randomBlock.getWorld().createExplosion(
-                                randomBlock.getLocation(),
-                                (float) (2f + (Math.random() * 4f))
-                        );
-                    }
+        } else if (diff < 0 && (randomBlock.getY() > this.getBaseY())) {
+            if (Math.random() < 0.1 && diff < -3) {
+                if (randomBlock.getY() > randomBlock.getWorld().getSeaLevel()) {
+                    randomBlock.getWorld().createExplosion(
+                            randomBlock.getLocation(),
+                            (float) (2f + (Math.random() * 2f))
+                    );
                 }
             }
         }
