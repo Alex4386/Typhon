@@ -37,7 +37,7 @@ Stable builds: [Release Page](https://github.com/Alex4386/Typhon-Plugin/releases
 
 ## License
 Copyright &copy; Alex4386, Diwaly, MintNetwork.  
-Originally developed by [Diwaly](https://github.com/diwaly) at [original repo (broken link)](https://bitbucket.org/diwaly/volcano/src/default/).  
+Originally developed by [Diwaly](https://github.com/diwaly) at [original repo (broken link)](https://bitbucket.org/diwaly/volcano/src/default/) ([bukkit.org page](https://dev.bukkit.org/projects/volcano)).  
   
 Distributed under GNU General Public License Version 3.  
 See [LICENSE](LICENSE) file for more details.  
