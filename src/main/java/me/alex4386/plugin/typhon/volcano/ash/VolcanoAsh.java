@@ -75,7 +75,7 @@ public class VolcanoAsh {
 
     public void shutdownPyroclasticFlows() {
         for (VolcanoPyroclasticFlow pyroclasticFlow : this.pyroclasticFlows) {
-            pyroclasticFlow.shutdown();
+            pyroclasticFlow.shutdown(false);
         }
     }
 
@@ -422,6 +422,10 @@ class VolcanoPyroclasticFlow {
     }
 
     public void shutdown() {
+        this.shutdown(true);
+    }
+
+    public void shutdown(boolean removeMe) {
         this.ash.vent.getVolcano().logger.log(VolcanoLogClass.ASH, "Shutting down pyroclastic flow @ "+TyphonUtils.blockLocationTostring(this.location.getBlock()));
         this.unregisterTask();
         this.removeAllPyroclasticClouds();
@@ -470,7 +474,9 @@ class VolcanoPyroclasticFlow {
         this.location = this.location.add(direction.normalize().multiply(radius));
         this.location = TyphonUtils.getHighestRocklikes(this.location).getLocation();
 
-        if (this.location.getY() > tmpLocation.getY() + (this.radius)) {
+        int climbupLimit = this.radius / 2;
+
+        if (this.location.getY() > tmpLocation.getY() + climbupLimit) {
             this.location = tmpLocation;
             boolean whichWay = Math.random() < 0.5;
 
@@ -482,14 +488,14 @@ class VolcanoPyroclasticFlow {
             this.location = this.location.add(direction.normalize().multiply(radius));
 
             this.location = TyphonUtils.getHighestRocklikes(this.location).getLocation();
-            if (this.location.getY() > tmpLocation.getY() + (this.radius)) {
+            if (this.location.getY() > tmpLocation.getY() + climbupLimit) {
                 this.location = tmpLocation;
 
                 this.direction = new Vector(whichWay ? -z : z, 0, whichWay ? x: -x);
                 this.location = this.location.add(direction.normalize().multiply(radius));
 
                 this.location = TyphonUtils.getHighestRocklikes(this.location).getLocation();
-                if (this.location.getY() > tmpLocation.getY() + (this.radius)) {
+                if (this.location.getY() > tmpLocation.getY() + climbupLimit) {
                     this.location = tmpLocation;
                     life = 0;
                 }
@@ -497,6 +503,10 @@ class VolcanoPyroclasticFlow {
         }
 
         this.updateMinY();
+        if (this.location.getBlockY() > this.minY + this.radius) {
+            this.location = tmpLocation;
+            life = 0;
+        }
 
         if (this.location.getY() >= prevLoc.getY()) {
             life -= ((this.location.getY() - prevLoc.getY()) + 1);

@@ -37,9 +37,19 @@ public class VolcanoBombs {
     public int maximumFallingBlocks = 1000;
     public int baseY = Integer.MIN_VALUE;
 
+    boolean isBaseYConfigured = true;
+
     public int getBaseY() {
         if (baseY == Integer.MIN_VALUE) {
             baseY = (int) vent.averageVentHeight();
+        } else {
+            if (!isBaseYConfigured) {
+                int average = (int) vent.averageVentHeight();
+                if (average < baseY) {
+                    baseY = average;
+                }
+                isBaseYConfigured = true;
+            }
         }
 
         return baseY;
@@ -203,10 +213,12 @@ public class VolcanoBombs {
     public double getEffectiveConeY() {
         int baseY = this.getBaseY();
 
-        int minimumScaffoldBombRadius = this.vent.craterRadius * 2;
+        int minimumScaffoldBombRadius = this.vent.getRadius() * 2;
         double minimumScaffoldConeHeight = (minimumScaffoldBombRadius / this.distanceHeightRatio());
         double minimumRequiredSummitHeight = baseY + minimumScaffoldConeHeight;
-        double summitBlockTargetHeight = this.vent.getSummitBlock().getY() + minimumScaffoldConeHeight;
+
+        double fakeConeHeight = this.vent.getRadius() / this.distanceHeightRatio();
+        double summitBlockTargetHeight = this.vent.getSummitBlock().getY() + fakeConeHeight;
 
         return Math.max(minimumRequiredSummitHeight, summitBlockTargetHeight);
     }
@@ -250,11 +262,7 @@ public class VolcanoBombs {
         if (diff > 0) {
             int maxBombRadius = 1;
             if (distanceFromCore < this.vent.craterRadius * 1) maxBombRadius = 1;
-            else if (distanceFromCore < this.vent.craterRadius * 2) {
-                int tmpMax = (int) (distanceFromCore - this.vent.craterRadius);
-                if (diff > tmpMax) maxBombRadius = (int) Math.min(4, (distanceFromCore / this.vent.craterRadius));
-                else maxBombRadius = (int) Math.max(1, tmpMax);
-            } else maxBombRadius = (int) Math.min(4, (distanceFromCore / this.vent.craterRadius));
+            else maxBombRadius = (int) Math.min(4, (distanceFromCore / this.vent.craterRadius));
 
             // if diff is too big
             if (distanceFromCore < diff) {
@@ -411,6 +419,7 @@ public class VolcanoBombs {
         bombDelay = (int) ((long) configData.get("delay"));
         maxDistance = (double) configData.getOrDefault("maxDistance", 0);
         baseY = (int) ((long) configData.get("baseY"));
+        this.isBaseYConfigured = false;
     }
 
     public JSONObject exportConfig() {

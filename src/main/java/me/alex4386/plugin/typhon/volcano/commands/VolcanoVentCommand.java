@@ -35,7 +35,7 @@ public class VolcanoVentCommand {
             "bombs:radius:min",
             "bombs:radius:max",
             "bombs:delay",
-            "bombs:resetBaseY",
+            "bombs:baseY",
             "erupt:style",
             "erupt:autoconfig",
             "explosion:bombs:min",
@@ -213,10 +213,12 @@ public class VolcanoVentCommand {
                                 sender, label, this.vent.volcano.name, vent.name));
                 break;
             case CALDERA:
-                if (newArgs.length != 1 && !(newArgs.length >= 2 && newArgs[1].equalsIgnoreCase("clear"))) {
+                List<String> clearActions = Arrays.asList("clear", "reset");
+
+                if (newArgs.length != 1 && !(newArgs.length >= 2 && clearActions.contains(newArgs[1].toLowerCase()))) {
                     if (vent.isCaldera()) {
                         msg.error(
-                                "This vent already has caldera. If this is an error, run clear");
+                                "This vent already has caldera. If this is an error, run clear subcommand");
                         break;
                     } else if (!vent.caldera.canCreateCaldera()) {
                         msg.error(
@@ -254,34 +256,32 @@ public class VolcanoVentCommand {
                         } else {
                             msg.info("Plinian eruption has skipped.");
                         }
-                    } else if (newArgs[1].equalsIgnoreCase("clear")) {
+                    } else if (clearActions.contains(newArgs[1].toLowerCase())) {
                         vent.calderaRadius = -1;
                         vent.getVolcano().trySave();
                         msg.info("current caldera data has been cleared");
                     } else {
                         try {
                             int radius, deep, oceanY;
-                            if (newArgs.length >= 2) {
-                                radius = Integer.parseInt(newArgs[1]);
-                                msg.info("caldera settings:");
-                                msg.info("radius = "+radius);
-                                if (newArgs.length == 2) {
-                                    vent.caldera.autoSetup(radius);
-                                    break;
-                                }
+                            radius = Integer.parseInt(newArgs[1]);
+                            msg.info("caldera settings:");
+                            msg.info("radius = "+radius);
+                            if (newArgs.length == 2) {
+                                vent.caldera.autoSetup(radius);
+                                break;
+                            }
 
-                                deep = Integer.parseInt(newArgs[2]);
-                                msg.info("depth = "+deep);
-                                if (newArgs.length == 3) {
-                                    vent.caldera.autoSetup(radius, deep);
-                                    break;
-                                }
+                            deep = Integer.parseInt(newArgs[2]);
+                            msg.info("depth = "+deep);
+                            if (newArgs.length == 3) {
+                                vent.caldera.autoSetup(radius, deep);
+                                break;
+                            }
 
-                                oceanY = Integer.parseInt(newArgs[3]);
-                                msg.info("oceanY = "+oceanY);
-                                if (newArgs.length >= 4) {
-                                    vent.caldera.autoSetup(radius, deep, oceanY);
-                                }
+                            oceanY = Integer.parseInt(newArgs[3]);
+                            msg.info("oceanY = "+oceanY);
+                            if (newArgs.length >= 4) {
+                                vent.caldera.autoSetup(radius, deep, oceanY);
                             }
                         } catch(Exception e) {
                             msg.error("Failed to parse user input.");
@@ -497,8 +497,14 @@ public class VolcanoVentCommand {
                     }
                 } else if (newArgs[1].equalsIgnoreCase("bombs:baseY")) {
                     if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.bombs.baseY = Integer.parseInt(newArgs[2]);
+                        if (newArgs.length == 3) {
+                            if (newArgs[2].toLowerCase().equalsIgnoreCase("reset")) {
+                                vent.bombs.resetBaseY();
+                            } else {
+                                vent.bombs.baseY = Integer.parseInt(newArgs[2]);
+                            }
+                        }
+
                         msg.info("bombs:baseY - " + vent.bombs.baseY);
                     }
                 } else if (newArgs[1].equalsIgnoreCase("erupt:style")) {
@@ -517,15 +523,6 @@ public class VolcanoVentCommand {
                             msg.info("erupt:autoconfig applied!");
                         } else {
                             msg.info("run erupt:autoconfig with confirm to apply autoconfig.");
-                        }
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("bombs:resetBaseY")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3 && newArgs[2].equalsIgnoreCase("confirm")) {
-                            vent.bombs.resetBaseY();
-                            msg.info("bombs:resetBaseY applied!");
-                        } else {
-                            msg.info("run bombs:resetBaseY with confirm to reset baseY for building new cone.");
                         }
                     }
                 } else if (newArgs[1].equalsIgnoreCase("explosion:bombs:min")) {

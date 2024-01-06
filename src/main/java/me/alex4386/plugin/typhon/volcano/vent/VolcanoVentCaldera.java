@@ -417,9 +417,6 @@ public class VolcanoVentCaldera {
         this.vent.bombs.bombMap.clear();
 
         this.vent.flushSummitCache();
-        TyphonBlueMapUtils.updateVolcanoVentIcon(this.vent);
-
-        this.vent.erupt.setStyle(backedupStyle);
     }
 
     public void finalizeUpdateVentData() {
@@ -427,7 +424,11 @@ public class VolcanoVentCaldera {
 
         this.vent.erupt.stop();
         this.vent.flushCache();
-        this.vent.erupt.setStyle(VolcanoEruptStyle.STROMBOLIAN);
+
+        this.vent.bombs.resetBaseY();
+
+        TyphonBlueMapUtils.updateVolcanoVentIcon(this.vent);
+        this.vent.erupt.setStyle(backedupStyle);
 
         this.isRunning = false;
     }
