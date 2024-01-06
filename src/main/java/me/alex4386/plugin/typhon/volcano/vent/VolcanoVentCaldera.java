@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.vent;
 
+import me.alex4386.plugin.typhon.TyphonBlueMapUtils;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBomb;
@@ -414,6 +415,9 @@ public class VolcanoVentCaldera {
         this.vent.erupt.stop();
         this.vent.volcano.quickCool();
         this.vent.bombs.bombMap.clear();
+
+        this.vent.flushSummitCache();
+        TyphonBlueMapUtils.updateVolcanoVentIcon(this.vent);
 
         this.vent.erupt.setStyle(backedupStyle);
     }
