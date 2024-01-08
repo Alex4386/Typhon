@@ -87,7 +87,7 @@ public class VolcanoAsh {
 
         int tmpSummit = heightY / 2;
         double distance = TyphonUtils.getTwoDimensionalDistance(vent.getNearestCoreBlock(location).getLocation(), location);
-        double deductAmount = -(distance / 12);
+        double deductAmount = -(distance / 10);
 
         return (int) (baseY + tmpSummit + deductAmount);
     }
@@ -245,7 +245,7 @@ public class VolcanoAsh {
     }
 
     public void triggerPyroclasticFlow() {
-        this.triggerPyroclasticFlow(this.vent.selectFlowVentBlock(Math.random() < 0.6));
+        this.triggerPyroclasticFlow(this.vent.selectFlowVentBlock(Math.random() < 0.1));
     }
 
     public void triggerPyroclasticFlow(Block srcblock) {
@@ -564,8 +564,8 @@ class VolcanoPyroclasticFlow {
     }
 
     public void runAsh() {
-        this.putAsh();
         this.killTrees();
+        this.putAsh();
         this.playAshTrail();
     }
 

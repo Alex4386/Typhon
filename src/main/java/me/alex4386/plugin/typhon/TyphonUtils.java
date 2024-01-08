@@ -312,7 +312,22 @@ public class TyphonUtils {
         return (materialType.contains("leaves")
                 || materialType.contains("log")
                 || materialType.contains("plank")
-                || materialType.contains("wood"));
+                || materialType.contains("wood")
+                || materialType.contains("sapling")) || isMaterialNameContainsTreeName(materialType);
+    }
+
+    private static boolean isMaterialNameContainsTreeName(String materialType) {
+        return (materialType.contains("oak")
+                || materialType.contains("spruce")
+                || materialType.contains("birch")
+                || materialType.contains("jungle")
+                || materialType.contains("acacia")
+                || materialType.contains("dark_oak")
+                || materialType.contains("crimson")
+                || materialType.contains("warped")
+                || materialType.contains("mangrove")
+                || materialType.contains("cherry")
+                || materialType.contains("bamboo"));
     }
 
     public static org.bukkit.block.Block getHighestRocklikes(org.bukkit.block.Block block) {
