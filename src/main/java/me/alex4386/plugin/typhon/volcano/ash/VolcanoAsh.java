@@ -5,6 +5,7 @@ import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
+import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoCircleOffsetXZ;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
@@ -564,20 +565,30 @@ class VolcanoPyroclasticFlow {
     }
 
     public void runAsh() {
-        this.killTrees();
+        this.processNearby();
         this.putAsh();
         this.playAshTrail();
     }
 
-    public void killTrees() {
+    public void processNearby() {
         List<Block> blocks = VolcanoMath.getSphere(this.location.getBlock(), radius);
+        VolcanoMetamorphism metamorphism = this.ash.vent.volcano.metamorphism;
         for (Block block : blocks) {
             if (TyphonUtils.isMaterialTree(block.getType())) {
                 if (TyphonUtils.toLowerCaseDumbEdition(block.getType().name()).contains("log")) {
-                    block.setType(Material.COAL_BLOCK);
+                    metamorphism.removeTree(block);
                 } else {
                     block.setType(Material.AIR);
                 }
+                return;
+            }
+
+            if (metamorphism.isPlantlike(block.getType()) || metamorphism.isPlaceableAnimalEgg(block.getType())) {
+                block.setType(Material.AIR);
+            }
+
+            if (block.getType() == Material.WATER) {
+                block.setType(Material.TUFF);
             }
         }
     }
