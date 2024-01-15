@@ -656,7 +656,7 @@ class VolcanoPyroclasticFlow {
     public void putAsh() {
         List<Block> blocks = VolcanoMath.getCircle(this.location.getBlock(), radius);
         for (Block baseBlock : blocks) {
-            if (Math.random() > (life / maxLife)) continue;
+            if (Math.random() > ((double) life / maxLife)) continue;
             Block block = TyphonUtils.getHighestRocklikes(baseBlock);
 
             this.putAsh(block);
