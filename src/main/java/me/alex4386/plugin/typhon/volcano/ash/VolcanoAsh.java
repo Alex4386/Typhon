@@ -38,12 +38,15 @@ public class VolcanoAsh {
     List<VolcanoPyroclasticFlow> pyroclasticFlows = new ArrayList<>();
     List<VolcanoAshCloudData> ashBlockDisplays = new ArrayList<>();
 
+    private int queuedAshClouds = 0;
+
     public void registerTask() {
         if (ashCloudScheduleId < 0) {
             ashCloudScheduleId = Bukkit.getScheduler()
                     .scheduleSyncRepeatingTask(
                             TyphonPlugin.plugin,
                             (Runnable) () -> {
+                                vent.ash.processQueuedAshPlume();
                                 vent.ash.processAshClouds();
                             },
                             0L,
@@ -69,6 +72,7 @@ public class VolcanoAsh {
     public void shutdown() {
         this.vent.volcano.logger.log(
                 VolcanoLogClass.ASH, "Shutting down VolcanoAsh for vent " + vent.getName());
+        this.queuedAshClouds = 0;
         this.unregisterTask();
         this.shutdownPyroclasticFlows();
         this.clearOrphanedAshClouds();
@@ -222,6 +226,13 @@ public class VolcanoAsh {
             this.vent.getVolcano().logger.debug(VolcanoLogClass.ASH, "Clearing Ash Cloud @ "+TyphonUtils.blockLocationTostring(bd.getLocation().getBlock())+", isValid: "+bd.isValid());
             bd.remove();
             bdI.remove();
+        }
+    }
+
+    public void processQueuedAshPlume() {
+        if (queuedAshClouds > 0) {
+            this.createAshPlume();
+            queuedAshClouds--;
         }
     }
 
@@ -510,7 +521,7 @@ class VolcanoPyroclasticFlow {
         }
 
         if (this.location.getY() >= prevLoc.getY()) {
-            life -= ((this.location.getY() - prevLoc.getY()) + 1);
+            life -= (int) ((this.location.getY() - prevLoc.getY()) + 1);
         }
 
         if (Math.random() < 0.05) {
@@ -667,6 +678,7 @@ class VolcanoPyroclasticFlow {
         int ashTrailRadius = (int) (radius * 2);
         float radiusHalf = ashTrailRadius / 2.0f;
 
+     
         BlockDisplay bd = location.getWorld().spawn(location, BlockDisplay.class, (_bd) -> {
             _bd.setBlock(Material.TUFF.createBlockData());
             _bd.setTransformation(new Transformation(
