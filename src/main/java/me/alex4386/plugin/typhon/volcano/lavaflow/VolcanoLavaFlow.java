@@ -142,7 +142,7 @@ public class VolcanoLavaFlow implements Listener {
                                         if (settings.flowing) autoFlowLava();
                                     },
                                     0L,
-                                    (long) getVolcano().updateRate);
+                                    (long) 1);
         }
         if (lavaCoolScheduleId == -1) {
             this.vent.volcano.logger.log(
@@ -160,7 +160,7 @@ public class VolcanoLavaFlow implements Listener {
                                         runPillowLavaTick();
                                     },
                                     0L,
-                                    (long) getVolcano().updateRate);
+                                    (long) 1);
         }
         if (queueScheduleId == -1) {
             this.vent.volcano.logger.log(
@@ -1283,6 +1283,14 @@ public class VolcanoLavaFlow implements Listener {
         }
     }
 
+    private float getCurrentTPS() {
+        try {
+            return Bukkit.getServer().getServerTickManager().getTickRate()
+        } catch(Exception e) {
+            return 20;
+        }
+    }
+
     private void autoFlowLava() {
         if (this.vent.caldera.isForming()) return;
 
@@ -1290,7 +1298,7 @@ public class VolcanoLavaFlow implements Listener {
 
         if (timeNow >= nextFlowTime) {
             double missedFlowTime = timeNow - nextFlowTime;
-            double flowTick = settings.delayFlowed * (1000 * (1 / getTickFactor()));
+            double flowTick = ((settings.delayFlowed * (1000 * (1 / getTickFactor()))) / (this.getCurrentTPS() / 20.0));
 
             int missedFlows = (int) (missedFlowTime / flowTick) + 1;
             int requiredFlows = (int) ((float) (1 + missedFlows) * ((Math.random() * 1.5) + 1));
@@ -1308,7 +1316,7 @@ public class VolcanoLavaFlow implements Listener {
                     Math.min(actualFlows, requiredLavaPlumbing);
 
             flowLava(fittedActualFlows);
-            nextFlowTime = timeNow + (int) (settings.delayFlowed * (1000 * (1 / getTickFactor())));
+            nextFlowTime = timeNow + (int) flowTick;
 
             if (fittedActualFlows > 0) this.handleSurtseyan();
         }
