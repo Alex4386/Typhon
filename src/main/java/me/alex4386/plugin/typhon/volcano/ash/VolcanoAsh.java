@@ -319,10 +319,17 @@ class VolcanoAshCloudData {
     public BlockDisplay bd;
     public double multiplier = 0.2;
 
+    public int maxHeight;
+
     public VolcanoAshCloudData(VolcanoAsh ash, BlockDisplay bd, double multiplier) {
+        this(ash, bd, multiplier, ash.vent.location.getWorld().getMaxHeight() + 100);
+    }
+
+    public VolcanoAshCloudData(VolcanoAsh ash, BlockDisplay bd, double multiplier, int maxHeight) {
         this.ash = ash;
         this.bd = bd;
         this.multiplier = multiplier;
+        this.maxHeight = maxHeight;
     }
 
     public Block getAshFallTarget() {
