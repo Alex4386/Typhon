@@ -1285,7 +1285,7 @@ public class VolcanoLavaFlow implements Listener {
 
     private float getCurrentTPS() {
         try {
-            return Bukkit.getServer().getServerTickManager().getTickRate()
+            return Bukkit.getServer().getServerTickManager().getTickRate();
         } catch(Exception e) {
             return 20;
         }
