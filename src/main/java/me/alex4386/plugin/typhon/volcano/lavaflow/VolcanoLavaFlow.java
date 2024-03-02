@@ -84,6 +84,10 @@ public class VolcanoLavaFlow implements Listener {
         return configuredLavaInflux;
     }
 
+    public double getCurrentLavaInfluxPerTick() {
+        return (double) this.getCurrentLavaInflux() / 20.0;
+    }
+
     public void setLavaInflux(int currentLavaInflux) {
         this.configuredLavaInflux = currentLavaInflux;
     }
@@ -1332,7 +1336,7 @@ public class VolcanoLavaFlow implements Listener {
 
         double msPerTick = 1000 / getCurrentTPS();
         double passedTicks = (System.currentTimeMillis() - prevFlowTime) / msPerTick;
-        this.queuedLavaInflux += this.getCurrentLavaInflux() * passedTicks;
+        this.queuedLavaInflux += this.getCurrentLavaInfluxPerTick() * passedTicks;
     }
 
     private void autoFlowLava() {
