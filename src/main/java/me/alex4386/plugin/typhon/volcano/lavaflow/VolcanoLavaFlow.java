@@ -127,6 +127,7 @@ public class VolcanoLavaFlow implements Listener {
 
         this.hawaiianBaseY = baseY;
         this.thisMaxFlowLength = flowLength;
+        this.prevFlowTime = -1;
     }
 
     public void registerEvent() {
