@@ -42,6 +42,7 @@ public class VolcanoLavaFlow implements Listener {
 
     private int lavaFlowScheduleId = -1;
     private int lavaCoolScheduleId = -1;
+    private int lavaInfluxScheduleId = -1;
     private int queueScheduleId = -1;
     public VolcanoLavaFlowSettings settings = new VolcanoLavaFlowSettings();
 
@@ -61,10 +62,30 @@ public class VolcanoLavaFlow implements Listener {
     // temporary queue to store Block and Material to update
     private static Queue<Map.Entry<Block, Material>> blockUpdateQueue = new LinkedList<>();
 
+    private int configuredLavaInflux = -1;
+    private double queuedLavaInflux = 0;
+
     // core methods
     public VolcanoLavaFlow(VolcanoVent vent) {
         this.vent = vent;
         this.registerEvent();
+    }
+
+    public int getCurrentLavaInflux() {
+        if (configuredLavaInflux < 0) {
+            int lavaFlowableBlocks = vent.getVentBlocksScaffold().size();
+            if (this.shouldFlowOverLeeve()) {
+                lavaFlowableBlocks = (int) (Math.PI * Math.pow(Math.min(5, Math.max(2, this.vent.craterRadius)), 2));
+            }
+
+            return Math.max(1, Math.min((int) (lavaFlowableBlocks * Math.random()), 100));
+        }
+
+        return configuredLavaInflux;
+    }
+
+    public void setLavaInflux(int currentLavaInflux) {
+        this.configuredLavaInflux = currentLavaInflux;
     }
 
     public void queueBlockUpdate(Block block, Material material) {
@@ -139,7 +160,8 @@ public class VolcanoLavaFlow implements Listener {
                             .scheduleSyncRepeatingTask(
                                     TyphonPlugin.plugin,
                                     () -> {
-                                        if (settings.flowing) autoFlowLava();
+                                        if (settings.flowing) this.plumbLava();
+                                        this.autoFlowLava();
                                     },
                                     0L,
                                     (long) 1);
@@ -224,6 +246,14 @@ public class VolcanoLavaFlow implements Listener {
                             + vent.getName());
             TyphonPlugin.plugin.getServer().getScheduler().cancelTask(lavaFlowScheduleId);
             lavaFlowScheduleId = -1;
+        }
+        if (lavaInfluxScheduleId != -1) {
+            this.vent.volcano.logger.log(
+                    VolcanoLogClass.LAVA_FLOW,
+                    "Shutting down lava influx scheduler of VolcanoLavaFlow for vent "
+                            + vent.getName());
+            TyphonPlugin.plugin.getServer().getScheduler().cancelTask(lavaInfluxScheduleId);
+            lavaInfluxScheduleId = -1;
         }
         if (lavaCoolScheduleId != -1) {
             this.vent.volcano.logger.log(
@@ -879,8 +909,6 @@ public class VolcanoLavaFlow implements Listener {
         return targetBlocks;
     }
 
-    private long nextFlowTime = 0;
-
     public void flowLava(int flowCount) {
         /*
         int craterBlocks = Math.max(vent.getVentBlocksScaffold().size(), 1);
@@ -1285,41 +1313,47 @@ public class VolcanoLavaFlow implements Listener {
 
     private float getCurrentTPS() {
         try {
+            // Prepare for 1.20.4 tick commands
             return Bukkit.getServer().getServerTickManager().getTickRate();
         } catch(Exception e) {
+            // fallback for non-tick-command ready versions
             return 20;
         }
+    }
+
+    private long prevFlowTime = -1;
+
+    private void plumbLava() {
+        if (prevFlowTime < 0) {
+            prevFlowTime = System.currentTimeMillis();
+            return;
+        }
+
+        double msPerTick = 1000 / getCurrentTPS();
+        double passedTicks = (System.currentTimeMillis() - prevFlowTime) / msPerTick;
+        this.queuedLavaInflux += this.getCurrentLavaInflux() * passedTicks;
     }
 
     private void autoFlowLava() {
         if (this.vent.caldera.isForming()) return;
 
-        long timeNow = System.currentTimeMillis();
-
-        if (timeNow >= nextFlowTime) {
-            double missedFlowTime = timeNow - nextFlowTime;
-            double flowTick = ((settings.delayFlowed * (1000 * (1 / getTickFactor()))) / (this.getCurrentTPS() / 20.0));
-
-            int missedFlows = (int) (missedFlowTime / flowTick) + 1;
-            int requiredFlows = (int) ((float) (1 + missedFlows) * ((Math.random() * 1.5) + 1));
-            int actualFlows =
-                    (int) ((double) requiredFlows * this.vent.erupt.getStyle().lavaMultiplier);
-            
-            int lavaFlowableBlocks = vent.getVentBlocksScaffold().size();
-            if (this.shouldFlowOverLeeve()) {
-                lavaFlowableBlocks = (int) (Math.PI * Math.pow(Math.min(5, Math.max(2, this.vent.craterRadius)), 2));
-            }
-
-            int requiredLavaPlumbing = (int) (lavaFlowableBlocks / (4 + (2 * Math.random() - 1)));
-
-            int fittedActualFlows = (int)
-                    Math.min(actualFlows, requiredLavaPlumbing);
-
-            flowLava(fittedActualFlows);
-            nextFlowTime = timeNow + (int) flowTick;
-
-            if (fittedActualFlows > 0) this.handleSurtseyan();
+        int lavaFlowableBlocks = vent.getVentBlocksScaffold().size();
+        if (this.shouldFlowOverLeeve()) {
+            lavaFlowableBlocks = (int) (Math.PI * Math.pow(Math.min(5, Math.max(2, this.vent.craterRadius)), 2));
         }
+
+        double flowAmount = Math.floor(queuedLavaInflux);
+        if (flowAmount <= 0) return;
+
+        if (queuedLavaInflux > lavaFlowableBlocks) {
+            flowAmount = queuedLavaInflux;
+        }
+
+        queuedLavaInflux -= flowAmount;
+        if (queuedLavaInflux < 0) queuedLavaInflux = 0;
+
+        flowLava((int) flowAmount);
+        if (flowAmount > 0) this.handleSurtseyan();
     }
 
     public void handleSurtseyan() {
