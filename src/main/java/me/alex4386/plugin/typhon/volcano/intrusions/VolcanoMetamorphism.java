@@ -200,7 +200,7 @@ public class VolcanoMetamorphism {
             block.setType(Material.AIR);
         } else if (blockTypeName.contains("coral")) {
             block.setType(Material.SAND);
-        } else if (material == Material.GRASS || material == Material.PINK_PETALS) {
+        } else if (material == Material.SHORT_GRASS || material == Material.PINK_PETALS) {
             block.setType(Material.AIR);
         } else if (material == Material.GRASS_BLOCK || material == Material.ROOTED_DIRT || material == Material.MUDDY_MANGROVE_ROOTS) {
             block.setType(Material.DIRT);
