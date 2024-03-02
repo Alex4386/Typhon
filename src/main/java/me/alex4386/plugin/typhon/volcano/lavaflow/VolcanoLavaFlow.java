@@ -1342,22 +1342,43 @@ public class VolcanoLavaFlow implements Listener {
     private void autoFlowLava() {
         if (this.vent.caldera.isForming()) return;
 
-        int lavaFlowableBlocks = vent.getVentBlocksScaffold().size();
-        if (this.shouldFlowOverLeeve()) {
-            lavaFlowableBlocks = (int) (Math.PI * Math.pow(Math.min(5, Math.max(2, this.vent.craterRadius)), 2));
-        }
-
         double flowAmount = Math.floor(queuedLavaInflux);
         if (flowAmount <= 0) return;
 
-        if (queuedLavaInflux > lavaFlowableBlocks) {
-            flowAmount = queuedLavaInflux;
+        List<Block> ventBlocks = this.vent.getVentBlocks();
+
+        if (flowAmount < ((double) ventBlocks.size() / 3)) {
+            flowLava((int) flowAmount);
+            queuedLavaInflux -= flowAmount;
+        } else {
+            int alreadyFlowing = 0;
+            for (Block ventBlock: ventBlocks) {
+                Block target = ventBlock.getRelative(BlockFace.UP);
+                if (target.getType() == Material.LAVA) {
+                    alreadyFlowing++;
+                } else {
+                    this.flowLava(target);
+                }
+
+                flowAmount--;
+                if (flowAmount <= 0) break;
+            }
+
+            for (int i = 0; i < alreadyFlowing; i++) {
+                if (this.vent.erupt.getStyle().bombMultiplier < 1) {
+                    this.extendLava();
+                } else {
+                    if (Math.random() < 1.0/(this.vent.erupt.getStyle().bombMultiplier)) {
+                        this.extendLava();
+                    } else {
+                        this.vent.bombs.requestBombLaunch();
+                    }
+                }
+            }
         }
 
-        queuedLavaInflux -= flowAmount;
         if (queuedLavaInflux < 0) queuedLavaInflux = 0;
 
-        flowLava((int) flowAmount);
         if (flowAmount > 0) this.handleSurtseyan();
     }
 

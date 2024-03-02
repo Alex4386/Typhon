@@ -619,19 +619,11 @@ public class VolcanoVent {
     }
 
     public Block requestFlow() {
-        return requestFlow(Material.LAVA);
-    }
-
-    public Block requestFlow(Material material) {
         Block ventBlock = this.selectFlowVentBlock().getRelative(BlockFace.UP);
         return ventBlock;
     }
 
     public List<Block> requestFlows(int count) {
-        return this.requestFlows(Material.LAVA, count);
-    }
-
-    public List<Block> requestFlows(Material material, int count) {
         List<Block> ventBlocks = this.selectFlowVentBlocks(count);
         List<Block> lavaFlowBlocks = new ArrayList<>();
 
