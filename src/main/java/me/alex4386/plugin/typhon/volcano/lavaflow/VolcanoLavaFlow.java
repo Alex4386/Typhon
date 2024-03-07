@@ -1354,7 +1354,7 @@ public class VolcanoLavaFlow implements Listener {
             int alreadyFlowing = 0;
             for (Block ventBlock: ventBlocks) {
                 Block target = ventBlock.getRelative(BlockFace.UP);
-                if (target.getType() == Material.LAVA) {
+                if (target.getType() == Material.LAVA || ventBlock.getType() == Material.LAVA) {
                     alreadyFlowing++;
                 } else {
                     this.flowLava(target);
