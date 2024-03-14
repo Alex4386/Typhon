@@ -1002,7 +1002,7 @@ public class VolcanoLavaFlow implements Listener {
 
     public boolean extendLava() {
         double stickiness = ((this.settings.silicateLevel - 0.45) / (0.53 - 0.45));
-        double safeRange = this.thisMaxFlowLength > 0 ? this.thisMaxFlowLength : (this.vent.longestFlowLength * 7 / 10.0);
+        double safeRange = Math.max(this.thisMaxFlowLength, (this.vent.longestFlowLength * 7 / 10.0));
 
         if (this.vent.calderaRadius >= 0) {
             if (Math.random() < (this.vent.calderaRadius / safeRange)) {
