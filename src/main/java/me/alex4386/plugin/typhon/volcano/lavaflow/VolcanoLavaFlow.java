@@ -830,6 +830,7 @@ public class VolcanoLavaFlow implements Listener {
 
         if (!isUnderWater) {
             block.setType(Material.LAVA);
+            int ticks = 30;
 
             if (extension < 0) {
                 cachedLavaCoolHashMap.put(
@@ -840,7 +841,7 @@ public class VolcanoLavaFlow implements Listener {
                                 block,
                                 this.vent,
                                 targetMaterial,
-                                (int) (settings.flowed * this.getTickFactor()),
+                                ticks * this.settings.flowed,
                                 isBomb));
             } else {
                 cachedLavaCoolHashMap.put(
@@ -851,7 +852,7 @@ public class VolcanoLavaFlow implements Listener {
                                 block,
                                 this.vent,
                                 targetMaterial,
-                                (int) (settings.flowed * this.getTickFactor()),
+                                ticks * this.settings.flowed,
                                 isBomb,
                                 extension));
             }
@@ -1329,15 +1330,7 @@ public class VolcanoLavaFlow implements Listener {
 
             // all of them into extension
             for (int i = 0; i < leftOvers; i++) {
-                if (this.vent.erupt.getStyle().bombMultiplier < 1) {
-                    this.extendLava();
-                } else {
-                    if (Math.random() < 1.0/(this.vent.erupt.getStyle().bombMultiplier)) {
-                        this.extendLava();
-                    } else {
-                        this.vent.bombs.requestBombLaunch();
-                    }
-                }
+                this.vent.bombs.requestBombLaunch();
             }
         }
 
