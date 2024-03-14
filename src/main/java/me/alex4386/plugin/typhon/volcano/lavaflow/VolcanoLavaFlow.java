@@ -914,51 +914,6 @@ public class VolcanoLavaFlow implements Listener {
         return targetBlocks;
     }
 
-    public void flowLava(int flowCount) {
-        /*
-        int craterBlocks = Math.max(vent.getVentBlocksScaffold().size(), 1);
-
-        int boom = (int) (this.settings.flowed * this.vent.getVolcano().updateRate * 9);
-        int flowCount = Math.max(1, craterBlocks / boom);
-        */
-
-        /*
-            this.vent.getVolcano().logger.log(VolcanoLogClass.LAVA_FLOW, "Triggering "+flowCount
-                +"blocks of lava flow at vent "+vent.getName()+"...");
-        */
-
-        List<Block> whereToFlows = vent.requestFlows(flowCount);
-
-        for (Block whereToFlow : whereToFlows) {
-            VolcanoLavaCoolData coolData = this.getLavaCoolData(whereToFlow);
-            VolcanoLavaCoolData underData = this.getLavaCoolData(whereToFlow.getRelative(BlockFace.DOWN));
-            if (underData != null) {
-                if (!underData.tickPassed()) {
-                    if (this.tryExtend()) continue;
-                }
-            }
-
-            if (coolData != null && !coolData.tickPassed()) {
-                // extend lava flow instead of creating new flows.
-                if (this.settings.silicateLevel < 0.58) {
-                    double fitted = Math.max(0.41, Math.min(this.settings.silicateLevel, 0.57)) / (0.57 - 0.40);
-                    if (Math.random() > fitted) {
-                        if (this.tryExtend()) continue;
-                    }
-                }
-            }
-
-            // fallback routine
-            flowLava(whereToFlow);
-            if (whereToFlow.getY() > highestY) {
-                highestY = whereToFlow.getY();
-                if (TyphonBlueMapUtils.getBlueMapAvailable()) {
-                    TyphonBlueMapUtils.updateVolcanoVentMarkerHeight(this.vent);
-                }
-            }
-        }
-    }
-
     public boolean tryExtend() {
         return this.tryExtend(50);
     }
@@ -1342,29 +1297,38 @@ public class VolcanoLavaFlow implements Listener {
     private void autoFlowLava() {
         if (this.vent.caldera.isForming()) return;
 
-        double flowAmount = Math.floor(queuedLavaInflux);
+        int flowAmount = (int) Math.floor(queuedLavaInflux);
         if (flowAmount <= 0) return;
 
         List<Block> ventBlocks = this.vent.getVentBlocks();
 
-        if (flowAmount < ((double) ventBlocks.size() / 3)) {
-            flowLava((int) flowAmount);
-            queuedLavaInflux -= flowAmount;
-        } else {
-            int alreadyFlowing = 0;
-            for (Block ventBlock: ventBlocks) {
-                Block target = ventBlock.getRelative(BlockFace.UP);
-                if (target.getType() == Material.LAVA || ventBlock.getType() == Material.LAVA) {
-                    alreadyFlowing++;
-                } else {
-                    this.flowLava(target);
-                }
+        int actualFlowCounts = (int) Math.max(flowAmount, (double) ventBlocks.size() / 3);
+        List<Block> whereToFlows = vent.requestFlows(actualFlowCounts);
 
-                flowAmount--;
-                if (flowAmount <= 0) break;
+        int flowedBlocks = 0;
+        for (Block whereToFlow : whereToFlows) {
+            Block underBlock = whereToFlow.getRelative(BlockFace.DOWN);
+            if (underBlock.getType() == Material.LAVA || underBlock.getType() == Material.MAGMA_BLOCK) {
+                continue;
             }
 
-            for (int i = 0; i < alreadyFlowing; i++) {
+            flowedBlocks++;
+
+            // fallback routine
+            flowLava(whereToFlow);
+            if (whereToFlow.getY() > highestY) {
+                highestY = whereToFlow.getY();
+                if (TyphonBlueMapUtils.getBlueMapAvailable()) {
+                    TyphonBlueMapUtils.updateVolcanoVentMarkerHeight(this.vent);
+                }
+            }
+        }
+        
+        if (flowAmount - flowedBlocks > 0) {
+            int leftOvers = flowAmount - flowedBlocks;
+
+            // all of them into extension
+            for (int i = 0; i < leftOvers; i++) {
                 if (this.vent.erupt.getStyle().bombMultiplier < 1) {
                     this.extendLava();
                 } else {
@@ -1377,9 +1341,8 @@ public class VolcanoLavaFlow implements Listener {
             }
         }
 
-        if (queuedLavaInflux < 0) queuedLavaInflux = 0;
-
-        if (flowAmount > 0) this.handleSurtseyan();
+        queuedLavaInflux = 0;
+        this.handleSurtseyan();
     }
 
     public void handleSurtseyan() {
