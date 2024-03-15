@@ -49,8 +49,8 @@ public class VolcanoExplosionSettings {
 class VolcanoExplosionDefaultSettings {
     public static int explosionSize = 8;
     public static int damagingExplosionSize = 2;
-    public static int minBombCount = 30;
-    public static int maxBombCount = 40;
+    public static int minBombCount = 5;
+    public static int maxBombCount = 10;
     public static int delayTicks = 20 * 4;
     public static int queueSize = 20;
 

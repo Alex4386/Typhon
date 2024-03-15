@@ -226,27 +226,15 @@ public class VolcanoBomb {
 
                 if (TyphonPlugin.isShuttingdown) return;
 
-                Block targetBlock = TyphonUtils.getHighestRocklikes(nearestVent.getNearestVentBlock(this.landingLocation));
-                boolean isAllowedToGrowUp = nearestVent.averageVentHeight() + 3 <= nearestVent.getSummitBlock().getY();
-
-                if (!isAllowedToGrowUp) {
-                    isAllowedToGrowUp = Math.random() < 0.1;
-                }
-
-                int targetHeight = nearestVent.getSummitBlock().getY();
-                if (isAllowedToGrowUp) targetHeight += 1;
-
-                if (targetBlock.getY() <= targetHeight) {
-                    targetBlock = TyphonUtils.getHighestRocklikes(nearestVent.selectFlowVentBlock(Math.random() < 0.95));
-                }
-
-                // if targetBlock's Y is lower than the vent's summitY or equal, then flow the lava.
-                if (targetBlock.getY() <= targetHeight) {
-                    nearestVent.lavaFlow.flowVentLavaFromBomb(nearestVent.selectFlowVentBlock(true));
-
-                    if (isAllowedToGrowUp) {
-                        nearestVent.flushSummitCache();
+                Block targetVentBlock = nearestVent.requestFlow();
+                if (targetVentBlock.getType() != Material.LAVA) {
+                    targetVentBlock = targetVentBlock.getRelative(BlockFace.UP);
+                    if (targetVentBlock.getType() == Material.LAVA) {
+                        return;
                     }
+
+                    nearestVent.lavaFlow.flowVentLavaFromBomb(targetVentBlock);
+                    nearestVent.flushSummitCache();
                 }
                 return;
             }

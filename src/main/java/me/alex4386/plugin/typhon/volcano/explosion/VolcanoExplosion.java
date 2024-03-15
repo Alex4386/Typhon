@@ -47,7 +47,7 @@ public class VolcanoExplosion {
                                 }
                             },
                             0l,
-                            2l);
+                            1l);
         }
 
         if (this.queueScheduleID < 0) {
@@ -60,7 +60,7 @@ public class VolcanoExplosion {
                                 }
                             },
                             0l,
-                            settings.delayTicks);
+                            5l);
         }
     }
 

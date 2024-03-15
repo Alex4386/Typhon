@@ -5,6 +5,7 @@ import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
+import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBomb;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
@@ -78,7 +79,8 @@ public class VolcanoLavaFlow implements Listener {
                 lavaFlowableBlocks = (int) (Math.PI * Math.pow(Math.min(5, Math.max(2, this.vent.craterRadius)), 2));
             }
 
-            return Math.max(1, Math.min((int) (lavaFlowableBlocks * Math.random()), 100));
+            int influxRate =  Math.max(1, Math.min((int) (lavaFlowableBlocks * Math.random()), 100));
+            return influxRate;
         }
 
         return configuredLavaInflux;
@@ -958,7 +960,7 @@ public class VolcanoLavaFlow implements Listener {
 
     public boolean extendLava() {
         double stickiness = ((this.settings.silicateLevel - 0.45) / (0.53 - 0.45));
-        double safeRange = Math.max(this.thisMaxFlowLength, (this.vent.longestFlowLength * 7 / 10.0));
+        double safeRange = Math.max(this.thisMaxFlowLength * 0.8, (this.vent.longestFlowLength * 7 / 10.0));
 
         if (this.vent.calderaRadius >= 0) {
             if (Math.random() < (this.vent.calderaRadius / safeRange)) {
@@ -1291,19 +1293,23 @@ public class VolcanoLavaFlow implements Listener {
         }
 
         double msPerTick = 1000 / getCurrentTPS();
-        double passedTicks = (System.currentTimeMillis() - prevFlowTime) / msPerTick;
-        this.queuedLavaInflux += this.getCurrentLavaInfluxPerTick() * passedTicks;
+        long deltaTime = System.currentTimeMillis() - prevFlowTime;
+        double passedTicks = deltaTime / msPerTick;
+        double plumbingAmount = this.getCurrentLavaInfluxPerTick() * passedTicks;
+
+        this.queuedLavaInflux += plumbingAmount;
+        this.prevFlowTime = System.currentTimeMillis();
     }
 
     private void autoFlowLava() {
         if (this.vent.caldera.isForming()) return;
 
-        int flowAmount = (int) Math.floor(queuedLavaInflux);
-        if (flowAmount <= 0) return;
-
         List<Block> ventBlocks = this.vent.getVentBlocks();
 
-        int actualFlowCounts = (int) Math.max(flowAmount, (double) ventBlocks.size() / 3);
+        int flowAmount = (int) Math.min(Math.floor(queuedLavaInflux), ventBlocks.size());
+        if (flowAmount <= 0) return;
+
+        int actualFlowCounts = (int) Math.min(flowAmount, (double) ventBlocks.size() / 3);
         List<Block> whereToFlows = vent.requestFlows(actualFlowCounts);
 
         int flowedBlocks = 0;
@@ -1327,10 +1333,20 @@ public class VolcanoLavaFlow implements Listener {
         
         if (flowAmount - flowedBlocks > 0) {
             int leftOvers = flowAmount - flowedBlocks;
+            leftOvers = Math.min(10, leftOvers);
 
             // all of them into extension
             for (int i = 0; i < leftOvers; i++) {
-                this.vent.bombs.requestBombLaunch();
+                if (Math.random() < 0.1) {
+                    if (Math.random() < 1.0/this.vent.erupt.getStyle().bombMultiplier) {
+                        VolcanoBomb bomb = this.vent.bombs.generateConeBuildingBomb();
+                        if (bomb != null) {
+                            bomb.land();
+                        }
+                    }
+
+                    this.extendLava();
+                }
             }
         }
 
@@ -1440,7 +1456,7 @@ public class VolcanoLavaFlow implements Listener {
 class VolcanoLavaFlowDefaultSettings {
     public static boolean enabled = true;
 
-    public static int flowed = 10;
+    public static int flowed = 5;
     public static int delayFlowed = 7;
 
     public static void importConfig(JSONObject configData) {

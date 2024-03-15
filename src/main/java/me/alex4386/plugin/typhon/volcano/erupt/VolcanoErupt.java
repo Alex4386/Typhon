@@ -60,8 +60,8 @@ public class VolcanoErupt {
             this.vent.lavaFlow.settings.flowed = 10;
             this.vent.lavaFlow.settings.delayFlowed = 14;
 
-            this.vent.explosion.settings.minBombCount = 10;
-            this.vent.explosion.settings.maxBombCount = 20;
+            this.vent.explosion.settings.minBombCount = 3;
+            this.vent.explosion.settings.maxBombCount = 6;
             this.vent.explosion.settings.queueSize = 2;
 
         } else {
@@ -75,8 +75,8 @@ public class VolcanoErupt {
                 this.vent.lavaFlow.settings.delayFlowed = 10;
                 this.vent.lavaFlow.settings.flowed = 7;
 
-                this.vent.explosion.settings.minBombCount = 60;
-                this.vent.explosion.settings.maxBombCount = 120;
+                this.vent.explosion.settings.minBombCount = 10;
+                this.vent.explosion.settings.maxBombCount = 20;
                 this.vent.explosion.settings.queueSize = 15;
 
                  if (this.style == VolcanoEruptStyle.VULCANIAN) {
@@ -84,8 +84,8 @@ public class VolcanoErupt {
                         this.vent.lavaFlow.settings.silicateLevel = 0.50 + (Math.random() * (0.62 - 0.50));
                     }
 
-                    this.vent.explosion.settings.minBombCount = 120;
-                    this.vent.explosion.settings.maxBombCount = 200;
+                    this.vent.explosion.settings.minBombCount = 50;
+                    this.vent.explosion.settings.maxBombCount = 75;
                     this.vent.explosion.settings.queueSize = 25;
                 } else if (this.style == VolcanoEruptStyle.PELEAN) {
                     if (this.vent.lavaFlow.settings.silicateLevel < 0.72 && updateSilicate) {
