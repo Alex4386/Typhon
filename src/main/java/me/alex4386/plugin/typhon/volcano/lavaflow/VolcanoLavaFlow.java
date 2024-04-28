@@ -483,20 +483,23 @@ public class VolcanoLavaFlow implements Listener {
             } else if (data.isBomb) {
                 if (this.vent != null && data.source != null) {
                     if (!this.vent.isInVent(toBlock.getLocation())) {
-                        if (this.vent.getType() == VolcanoVentType.CRATER && Math.floor(this.vent.getTwoDimensionalDistance(data.source.getLocation())) == this.vent.craterRadius) {
-                            double distance = this.vent.getTwoDimensionalDistance(toBlock.getLocation());
-                            int y = toBlock.getY();
+                        if (data.flowLimit >= 0) {
+                            int limit = data.flowLimit == 0 ? this.vent.craterRadius : data.flowLimit;
+                            if (this.vent.getType() == VolcanoVentType.CRATER && Math.floor(this.vent.getTwoDimensionalDistance(data.source.getLocation())) >= limit) {
+                                double distance = this.vent.getTwoDimensionalDistance(toBlock.getLocation());
+                                int y = toBlock.getY();
 
-                            int targetY = (int) (this.vent.getSummitBlock().getY() - (distance / this.vent.bombs.distanceHeightRatio()));
+                                int targetY = (int) (this.vent.getSummitBlock().getY() - (distance / this.vent.bombs.distanceHeightRatio()));
 
-                            if (y > targetY) {
-                                event.setCancelled(true);
-                                return;
-                            }
-                        } else {
-                            if (TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation()) > 10) {
-                                event.setCancelled(true);
-                                return;
+                                if (y > targetY) {
+                                    event.setCancelled(true);
+                                    return;
+                                }
+                            } else {
+                                if (TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation()) > data.flowLimit) {
+                                    event.setCancelled(true);
+                                    return;
+                                }
                             }
                         }
                     }
@@ -555,6 +558,10 @@ public class VolcanoLavaFlow implements Listener {
             if (coolData != null) {
                 if (data.skipNormalLavaFlowLengthCheck) {
                     coolData.skipNormalLavaFlowLengthCheck = true;
+                }
+
+                if (data.isBomb) {
+                    coolData.flowLimit = data.flowLimit;
                 }
             }
         }
@@ -952,6 +959,13 @@ public class VolcanoLavaFlow implements Listener {
     public void flowVentLavaFromBomb(Block bomb) {
         this.createLavaParticle(bomb);
         this.flowLavaFromBomb(bomb);
+
+        VolcanoLavaCoolData data = this.getLavaCoolData(bomb);
+        if (data != null) {
+            // make it flow indefinitely
+            data.flowLimit = -1;
+            //System.out.println("New bomb lava flow from summit detected. setting flowLimit to infinite @ "+TyphonUtils.blockLocationTostring(bomb));
+        }
     }
 
     public void flowLavaFromBomb(Block bomb) {

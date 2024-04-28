@@ -573,7 +573,8 @@ public class VolcanoVent {
                     for (Block block : ventBlocks) {
                         if (this.lavaFlow.lavaCoolHashMap.get(block) == null) {
                             if (!selectedBlocks.contains(block)) {
-                                selectedBlocks.add(block);
+                                Block blockTop = TyphonUtils.getHighestRocklikes(block);
+                                selectedBlocks.add(blockTop);
                                 if (selectedBlocks.size() == count) return selectedBlocks;
                             }
                         }
@@ -594,7 +595,8 @@ public class VolcanoVent {
                 if (y < minimumTolerantHeight && this.lavaFlow.lavaCoolHashMap.get(block) == null) {
                     if (Math.random() < 0.2f) continue;
                     if (!selectedBlocks.contains(block)) {
-                        selectedBlocks.add(block);
+                        Block blockTop = TyphonUtils.getHighestRocklikes(block);
+                        selectedBlocks.add(blockTop);
                         if (selectedBlocks.size() == count) return selectedBlocks;
                     }
                 }
@@ -606,7 +608,8 @@ public class VolcanoVent {
             Block block = ventBlocks.get(idx);
 
             if (!selectedBlocks.contains(block)) {
-                selectedBlocks.add(block);
+                Block blockTop = TyphonUtils.getHighestRocklikes(block);
+                selectedBlocks.add(blockTop);
                 if (selectedBlocks.size() == count) return selectedBlocks;
             }
         }
