@@ -14,6 +14,24 @@ import org.json.simple.JSONObject;
 
 public class TyphonUtils {
 
+    public static boolean isBlockFlowable(Block block) {
+        BlockFace[] flowableFaces = new BlockFace[] {
+            BlockFace.DOWN,
+            BlockFace.NORTH,
+            BlockFace.SOUTH,
+            BlockFace.EAST,
+            BlockFace.WEST
+        };
+
+        for (BlockFace face : flowableFaces) {
+            if (block.getRelative(face).getType().isAir()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static Map<Block, TyphonCache<org.bukkit.block.Block>> highestRocklikesBlockCacheMap = new HashMap<>();
 
     public static int getMinimumY(org.bukkit.World world) {

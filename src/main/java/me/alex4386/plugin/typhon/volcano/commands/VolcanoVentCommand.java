@@ -173,6 +173,10 @@ public class VolcanoVentCommand {
                     msg.info("Creating tremor at " + vent.name + " with power: " + power);
                 }
                 break;
+            case RESET:
+                vent.reset();
+                msg.info("Vent " + vent.getName() + " has been reset!");
+                break;
             case SUMMIT:
                 if (newArgs.length >= 1) {
                     if (newArgs.length == 2 && newArgs[1].equalsIgnoreCase("reset")) {

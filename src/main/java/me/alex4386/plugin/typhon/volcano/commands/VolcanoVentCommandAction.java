@@ -23,6 +23,7 @@ public enum VolcanoVentCommandAction {
     CALDERA("caldera", "<? radius/start> <? deep> <? oceanY>", "Create caldera via Plinian eruption"),
     STATUS("status", "<? status>", "get/set status of this vent"),
     TELEPORT("teleport", "", "teleport to this vent"),
+    RESET("reset", "", "reset this vent's config for world reset"),
     DELETE("delete", "", "delete this vent"),
     STYLE(
             "style",

@@ -14,6 +14,9 @@ public class VolcanoPillowLavaData {
 
     int fluidLevel = 8;
 
+    int cooldownTick = 5 * 8;
+    boolean markAsFlowed = false;
+
     VolcanoPillowLavaData(VolcanoVent vent, Block sourceBlock) {
         this(vent, sourceBlock, sourceBlock);
     }
@@ -43,5 +46,27 @@ public class VolcanoPillowLavaData {
     private static int pillowifyExtensionCount(int normalExtCount) {
         //return normalExtCount * 8;
         return normalExtCount * 0;
+    }
+
+    public boolean isSource() {
+        return this.sourceBlock.equals(this.fromBlock);
+    }
+
+    public void runTick() {
+        if (cooldownTick > 0) {
+            cooldownTick--;
+        }
+    }
+
+    public boolean hasFlowed() {
+        return markAsFlowed;
+    }
+
+    public void markAsFlowed() {
+        markAsFlowed = true;
+    }
+
+    public boolean canCooldown() {
+        return cooldownTick <= 0;
     }
 }

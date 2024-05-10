@@ -138,6 +138,14 @@ public class VolcanoVent {
         return players;
     }
 
+    public void reset() {
+        this.maxFissureLength = 0;
+        this.longestFlowLength = 0;
+        this.longestNormalLavaFlowLength = 0;
+        this.bombs.maxDistance = 0;
+        this.getVolcano().trySave(true);
+    }
+
     public void initialize() {
         volcano.logger.log(VolcanoLogClass.VENT, "Starting up vent " + name);
 
