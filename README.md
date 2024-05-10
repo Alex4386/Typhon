@@ -1,7 +1,7 @@
 # Typhon Plugin
 Typhon Plugin aims to implement real-life volcanoes and its behavior in the restriction of vanilla as much as possible.  
 See plugin in action: [YouTube](https://www.youtube.com/watch?v=DDnQDAdq1Ok)  
-Try plugin in action (Minecraft 1.20.4): typhon-demo.alex4386.me
+Try plugin in action (Minecraft 1.20.4): `typhon-demo.alex4386.me`
 
 ## Warning!
 Currently This code is literal spaghetti.  
