@@ -26,8 +26,7 @@ Visit: [minehub.kr](https://minehub.kr) for more information! (South Korea Resid
 -->
 
 ## TODO
-* Implement Volcanic Landslides
-* Optimization Jobs
+* Implement Volcanic Landslides (~~LavaDome Collapse (In progress)~~, Lateral Blast)
 
 ## Docs
 Please refer to [DOCS.md](./DOCS.md).  
