@@ -125,17 +125,25 @@ public class VolcanoAsh {
     public void createAshCloud(Location loc, double ashMultiplier) {
         createAshCloud(loc, ashMultiplier, 5);
     }
+    public void createPumiceCloud(Location loc, double ashMultiplier) {
+        this.createAshCloudBlockDisplay(loc, ashMultiplier, 5, Material.NETHERRACK);
+    }
 
     public void createAshCloud(Location loc, double ashMultiplier, float size) {
+        this.createAshCloudBlockDisplay(loc, ashMultiplier, size, Material.TUFF);
+    }
+
+    public void createAshCloudBlockDisplay(Location loc, double ashMultiplier, float size, Material material) {
         this.vent.getVolcano().logger.debug(VolcanoLogClass.ASH, "Created Ash Cloud @ "+TyphonUtils.blockLocationTostring(loc.getBlock()));
         float sizeHalf = size / 2;
 
         BlockDisplay result = loc.getWorld().spawn(loc, BlockDisplay.class, (bd) -> {
-            bd.setBlock(Material.TUFF.createBlockData());
+            bd.setBlock(material.createBlockData());
             bd.setTransformation(new Transformation(new Vector3f(-sizeHalf, -sizeHalf, -sizeHalf), new AxisAngle4f(), new Vector3f(size, size, size), new AxisAngle4f()));
             bd.setInvulnerable(true);
         });
         ashBlockDisplays.add(new VolcanoAshCloudData(this, result, ashMultiplier));
+
     }
 
     public static float ashCloudStep = 0.3f;

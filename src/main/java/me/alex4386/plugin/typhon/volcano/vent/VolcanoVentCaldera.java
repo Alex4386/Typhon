@@ -329,7 +329,13 @@ public class VolcanoVentCaldera {
 
     public void doEruptionPlume() {
         Block randomBlock = TyphonUtils.getRandomBlockInRange(this.baseBlock, this.currentRadius);
-        this.vent.ash.createAshCloud(TyphonUtils.getHighestRocklikes(randomBlock).getLocation(), 1);
+        if (Math.random() < 0.95) {
+            this.vent.ash.createAshCloud(TyphonUtils.getHighestRocklikes(randomBlock).getLocation(), 1);
+        } else {
+            // 5% chance to create pumice cloud
+            // Stratovolcanoes have pumice on the top, making caldera formation cause pumice clouds.
+            this.vent.ash.createPumiceCloud(TyphonUtils.getHighestRocklikes(randomBlock).getLocation(), 2);
+        }
     }
 
     public void doEruptionPyroclasticFlows() {
