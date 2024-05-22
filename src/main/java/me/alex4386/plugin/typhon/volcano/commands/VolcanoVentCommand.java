@@ -362,24 +362,18 @@ public class VolcanoVentCommand {
 
                 String domeAction = newArgs[1];
                 if (domeAction.equalsIgnoreCase("start")) {
-                    vent.stop();
-                    if (vent.getStatus().getScaleFactor() < 0.5)
-                        vent.setStatus(VolcanoVentStatus.MAJOR_ACTIVITY);
-                    vent.lavadome.start();
-                    msg.info("Lavadome eruption started.");
-                } else if (domeAction.equalsIgnoreCase("stop")) {
-                    vent.lavadome.stop();
-                    msg.info("Lavadome eruption stopped.");
-                } else if (domeAction.equalsIgnoreCase("build")) {
-                    msg.info("Forcing lavadome build....");
-                    vent.lavadome.build();
-                    msg.info("Lavadome build complete!");
-                } else if (domeAction.equalsIgnoreCase("explode")) {
-                    vent.lavadome.explode();
+                    msg.info("The lavadome eruption has started.");
+                    vent.erupt.setStyle(VolcanoEruptStyle.LAVA_DOME);
                     vent.start();
-                    msg.info(
-                            "Lavadome has just exploded. Vent eruption was automatically"
-                                    + " triggered.");
+                } else if (domeAction.equalsIgnoreCase("stop")) {
+                    msg.info("The lavadome eruption has stopped.");
+                    vent.stop();
+                } else if (domeAction.equalsIgnoreCase("reset")) {
+                    msg.info("Resetting lavadome build args...");
+                    vent.lavadome.postConeBuildHandler();
+                    msg.info("Lavadome build args have been reset.");
+                } else if (domeAction.equalsIgnoreCase("explode")) {
+                    msg.warn("NOT IMPLEMENTED");
                 }
                 break;
             case STYLE:

@@ -92,6 +92,11 @@ public class VolcanoLavaDome {
         }
     }
 
+    public void postConeBuildHandler() {
+        this.resetBaseY();
+        this.plumbedLava = 0;
+    }
+
     public void unregisterTask() {
         if (domeScheduleId >= 0) {
             Bukkit.getScheduler().cancelTask(domeScheduleId);
