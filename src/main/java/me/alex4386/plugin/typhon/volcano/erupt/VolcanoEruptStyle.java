@@ -35,6 +35,10 @@ public enum VolcanoEruptStyle {
     // (A LOT)
     // **RAINING TUFF**
     PLINIAN("plinian", new String[] { "vesuvian" }, VolcanoEruptCauseType.MAGMATIC, 0, 0, 5),
+
+    // **SPECIAL**
+    // This is a special type of eruption for lava dome eruptions.
+    LAVA_DOME("lava_dome", new String[] { "dome" }, VolcanoEruptCauseType.MAGMATIC, 0, 0, 0),
     ;
 
     String rawType;
