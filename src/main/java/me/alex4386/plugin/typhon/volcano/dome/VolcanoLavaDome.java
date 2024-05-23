@@ -131,6 +131,29 @@ public class VolcanoLavaDome {
         this.plumbedLava++;
     }
 
+    public boolean isDomeLargeEnough() {
+        return this.plumbedLava >= 2000;
+    }
+
+    public void ooze() {
+        // if the dome is large enough, flow "real" lava from the side of the dome.
+        double randomRange = Math.pow(this.plumbedLava, 1/3.0);
+        double distance = Math.pow(1 - Math.random(), 2) * randomRange;
+
+        this.vent.lavaFlow.flowLava(TyphonUtils.getHighestRocklikes(
+                TyphonUtils.getRandomBlockInRange(this.baseLocation.getBlock(), (int) distance)
+        ).getRelative(BlockFace.UP));
+    }
+
+    public void explode() {
+        // if the dome is large enough, explode the dome.
+        Location targetLocation = TyphonUtils.getHighestRocklikes(this.baseLocation).getRelative(BlockFace.UP).getLocation();
+        this.vent.ash.createAshPlume(targetLocation, 5);
+        for (int i = 0; i < 5; i++) {
+            this.vent.bombs.generateRandomBomb(targetLocation);
+        }
+    }
+
     public JSONObject importConfig(JSONObject json) {
         this.plumbedLava = (long) json.get("plumbedLava");
         this.baseY = (int) (long) json.get("baseY");

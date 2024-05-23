@@ -1421,6 +1421,16 @@ public class VolcanoLavaFlow implements Listener {
                 this.vent.lavadome.flowLava();
                 flowedBlocks++;
             }
+
+            if (this.vent.lavadome.isDomeLargeEnough()) {
+                if (Math.random() < 0.1) {
+                    // the lava dome is large enough to explode.
+                    this.vent.lavadome.explode();
+                } else if (Math.random() < 0.3) {
+                    // the lava dome can ooze out lava.
+                    this.vent.lavadome.ooze();
+                }
+            }
         }
         
         if (flowAmount - flowedBlocks > 0) {
