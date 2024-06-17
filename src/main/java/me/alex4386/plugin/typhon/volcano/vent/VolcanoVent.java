@@ -9,6 +9,7 @@ import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombs;
 import me.alex4386.plugin.typhon.volcano.dome.VolcanoLavaDome;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoErupt;
 import me.alex4386.plugin.typhon.volcano.explosion.VolcanoExplosion;
+import me.alex4386.plugin.typhon.volcano.landslide.VolcanoLandslide;
 import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoLavaFlow;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoVentRecord;
@@ -68,6 +69,7 @@ public class VolcanoVent {
     public VolcanoAsh ash = new VolcanoAsh(this);
     public VolcanoLavaDome lavadome = new VolcanoLavaDome(this);
     public VolcanoVentCaldera caldera = new VolcanoVentCaldera(this);
+    public VolcanoLandslide landslide = new VolcanoLandslide(this);
 
     public VolcanoVentSurtseyan surtseyan = new VolcanoVentSurtseyan(this);
 
@@ -158,6 +160,7 @@ public class VolcanoVent {
         tremor.initialize();
         lavadome.initialize();
         bombs.initialize();
+        landslide.initialize();
 
         volcano.logger.log(VolcanoLogClass.VENT, "Started" + " up vent " + name);
     }
@@ -177,6 +180,7 @@ public class VolcanoVent {
         record.endEjectaTrack();
         bombs.shutdown();
         lavadome.shutdown();
+        landslide.shutdown();
 
         volcano.logger.log(VolcanoLogClass.VENT, "Shutted down vent " + name);
     }

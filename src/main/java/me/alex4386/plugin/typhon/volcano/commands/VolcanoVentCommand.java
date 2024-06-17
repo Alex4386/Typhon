@@ -126,6 +126,64 @@ public class VolcanoVentCommand {
 
                             return results;
                         }
+                    } else if (action == VolcanoVentCommandAction.LANDSLIDE) {
+                        if (args.length == baseOffset + 2) {
+                            String searchQuery = args[baseOffset + 1];
+                            List<String> results = new ArrayList<>();
+
+                            if ("start".startsWith(searchQuery))
+                                results.add("start");
+                            if ("setAngle".startsWith(searchQuery))
+                                results.add("setAngle");
+                            if ("config".startsWith(searchQuery))
+                                results.add("config");
+                            if ("clear".startsWith(searchQuery))
+                                results.add("clear");
+
+                            return results;
+                        }
+                    } else if (action == VolcanoVentCommandAction.CALDERA) {
+                        if (args.length == baseOffset + 2) {
+                            String searchQuery = args[baseOffset + 1];
+                            List<String> results = new ArrayList<>();
+
+                            if ("start".startsWith(searchQuery))
+                                results.add("start");
+                            if ("skip".startsWith(searchQuery))
+                                results.add("skip");
+                            if ("clear".startsWith(searchQuery))
+                                results.add("clear");
+
+                            return results;
+                        }
+                    } else if (action == VolcanoVentCommandAction.GENESIS) {
+                        if (args.length == baseOffset + 2) {
+                            String searchQuery = args[baseOffset + 1];
+                            List<String> results = new ArrayList<>();
+
+                            if ("polygenetic".startsWith(searchQuery))
+                                results.add("polygenetic");
+                            if ("monogenetic".startsWith(searchQuery))
+                                results.add("monogenetic");
+
+                            return results;
+                        }
+                    } else if (action == VolcanoVentCommandAction.LAVA_DOME) {
+                        if (args.length == baseOffset + 2) {
+                            String searchQuery = args[baseOffset + 1];
+                            List<String> results = new ArrayList<>();
+
+                            if ("start".startsWith(searchQuery))
+                                results.add("start");
+                            if ("stop".startsWith(searchQuery))
+                                results.add("stop");
+                            if ("reset".startsWith(searchQuery))
+                                results.add("reset");
+                            if ("explode".startsWith(searchQuery))
+                                results.add("explode");
+
+                            return results;
+                        }
                     }
                 }
             }
@@ -352,6 +410,53 @@ public class VolcanoVentCommand {
                                         vent.genesis.getName()
                         );
                     }
+                }
+                break;
+            case LANDSLIDE:
+                if (newArgs.length <= 1) {
+                    msg.info("Landslide configuration");
+                    msg.info(" - Angle: " + vent.landslide.landslideAngle);
+                    msg.info(" - Configured: " + vent.landslide.isConfigured());
+                    return true;
+                } else {
+                    String landslideAction = newArgs[1];
+                    if (landslideAction.equalsIgnoreCase("start")) {
+                        if (!vent.landslide.isConfigured()) {
+                            msg.error("Landslide is not configured yet!");
+                            return true;
+                        }
+                        msg.info("Starting landslide...");
+                        vent.landslide.start();
+                    } else if (landslideAction.equalsIgnoreCase("setAngle")) {
+                        if (newArgs.length >= 3) {
+                            if (newArgs[2].equalsIgnoreCase("auto")) {
+                                vent.landslide.landslideAngle = Math.random() * Math.PI * 2;
+                            } else {
+                                vent.landslide.landslideAngle = Double.parseDouble(newArgs[2]);
+                            }
+                        } else {
+                            // get player's yaw
+                            if (sender instanceof Player) {
+                                Player player = (Player) sender;
+
+                                float yaw = -1 * player.getLocation().getYaw();
+                                yaw = (yaw % 360 + 360) % 360;
+
+                                vent.landslide.landslideAngle = Math.toRadians(yaw);
+                            } else {
+                                msg.error("This command can not be used by console without specifying angle");
+                                return true;
+                            }
+                        }
+                        msg.info("Landslide angle: " + vent.landslide.landslideAngle);
+                    } else if (landslideAction.equalsIgnoreCase("config")) {
+                        vent.landslide.configure();
+                        msg.info("Landslide data has been configured.");
+                    } else if (landslideAction.equalsIgnoreCase("clear")) {
+                        vent.landslide.clear();
+                        msg.info("Landslide data has been cleared.");
+                    }
+
                 }
                 break;
             case LAVA_DOME:
