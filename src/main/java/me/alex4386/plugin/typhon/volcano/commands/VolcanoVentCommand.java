@@ -398,7 +398,7 @@ public class VolcanoVentCommand {
                     } else if (vent.genesis == VolcanoVentGenesis.POLYGENETIC) {
                         msg.info(" - This vent can erupt multiple time");
                     }
-                } else if (newArgs.length >= 2) {
+                } else {
                     String genesisTypeRaw = newArgs[1];
                     VolcanoVentGenesis genesisType = VolcanoVentGenesis.getGenesisType(genesisTypeRaw);
                     if (genesisType == null) {
