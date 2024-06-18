@@ -575,8 +575,8 @@ public class TyphonUtils {
                 0);
 
         if (!mute) {
-            location.getWorld().playSound(location, Sound.BLOCK_LAVA_POP, .15f * count, 0);
-            location.getWorld().playSound(location, Sound.BLOCK_LAVA_EXTINGUISH, .2f * count, 0);
+            location.getWorld().playSound(location, Sound.BLOCK_LAVA_AMBIENT, .15f * count, 0);
+            location.getWorld().playSound(location, Sound.ENTITY_WIND_CHARGE_WIND_BURST, .2f * count, 0);
         }
     }
 

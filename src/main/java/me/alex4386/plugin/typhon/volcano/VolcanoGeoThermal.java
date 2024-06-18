@@ -485,6 +485,14 @@ public class VolcanoGeoThermal implements Listener {
         1f);
 
     location
+            .getWorld()
+            .playSound(
+                    location,
+                    Sound.ENTITY_BREEZE_WIND_BURST,
+                    2f,
+                    0f);
+
+    location
       .getWorld()
       .spawnParticle(
         Particle.LAVA,

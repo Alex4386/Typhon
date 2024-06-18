@@ -138,7 +138,8 @@ public class VolcanoExplosion {
 
         Location targetVent = this.selectEruptionVent();
 
-        vent.location.getWorld().playSound(targetVent, Sound.ENTITY_BLAZE_SHOOT, 2F, 0.5F);
+        vent.location.getWorld().playSound(targetVent, Sound.AMBIENT_BASALT_DELTAS_MOOD, SoundCategory.HOSTILE, 10F, 0F);
+        vent.location.getWorld().playSound(targetVent, Sound.ENTITY_BREEZE_WIND_BURST, 2F, 0F);
 
         vent.location
                 .getWorld()

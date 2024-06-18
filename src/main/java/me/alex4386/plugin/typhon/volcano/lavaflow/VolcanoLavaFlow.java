@@ -18,6 +18,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Directional;
 import org.bukkit.block.data.Levelled;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFormEvent;
@@ -331,11 +332,16 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void createEffectOnLavaSeaEntry(Block block) {
-        if (Math.random() < 0.3) {
+        if (Math.random() < 0.2) {
+            // check if the block can be seen by players
+            if (!block.getWorld().getNearbyEntities(block.getLocation(), 16, 16, 16).stream().anyMatch(e -> e instanceof Player)) {
+                return;
+            }
             block
-                .getWorld()
-                .playSound(
-                        block.getLocation(), Sound.BLOCK_LAVA_EXTINGUISH, 1f, 0f);
+                    .getWorld()
+                    .playSound(
+                            block.getLocation(), Sound.BLOCK_LAVA_EXTINGUISH, 1f, 0f);
+
             TyphonUtils.createRisingSteam(block.getLocation(), 1, 2);
         }
     }
@@ -561,6 +567,9 @@ public class VolcanoLavaFlow implements Listener {
                 if (data.isBomb) {
                     coolData.flowLimit = data.flowLimit;
                 }
+            } else if (obj instanceof VolcanoPillowLavaData pillowData) {
+                Block targetBlock = TyphonUtils.getHighestRocklikes(pillowData.fromBlock);
+                this.createEffectOnLavaSeaEntry(targetBlock);
             }
         }
     }
