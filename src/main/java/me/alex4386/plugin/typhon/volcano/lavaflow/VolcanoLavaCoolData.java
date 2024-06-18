@@ -31,6 +31,8 @@ public class VolcanoLavaCoolData {
     public int runExtensionCount = 0;
     public boolean skipNormalLavaFlowLengthCheck = false;
 
+    public double plumbExtension = 1;
+
     public VolcanoLavaCoolData(
             Block source,
             Block fromBlock,
@@ -175,13 +177,17 @@ public class VolcanoLavaCoolData {
                         Block flowDirectionBlock = block.getRelative(bf);
                         if (flowDirectionBlock.getType().isAir()) {
                             if (!this.flowedFromVent.lavaFlow.isLavaRegistered(flowDirectionBlock)) {
-                                this.flowedFromVent.lavaFlow.registerLavaCoolData(
+                                Object obj = this.flowedFromVent.lavaFlow.registerLavaCoolData(
                                         source,
                                         block,
                                         flowDirectionBlock,
                                         isBomb,
                                         targetExtensionValue
                                 );
+
+                                if (obj instanceof VolcanoLavaCoolData data) {
+                                    data.plumbExtension = this.plumbExtension * (0.5 + (Math.random() * 0.25));
+                                }
                             }
                         }
                     }
@@ -263,7 +269,31 @@ public class VolcanoLavaCoolData {
             this.flowedFromVent.flushSummitCacheByLocation(block);
         }
 
-        if (this.runExtensionCount > 0 && this.extensionCapable()) this.handleExtension();
+        if (this.extensionCapable()) {
+            boolean isExtension = this.runExtensionCount > 0;
+
+            if (!isExtension) {
+                if (!isBomb) {
+                    // check if there is plumbed lava
+                    if (this.flowedFromVent != null) {
+                        // check if lava's silica level is low enough to flow even more
+                        double stickiness = ((this.flowedFromVent.lavaFlow.settings.silicateLevel - 0.45) / (0.53 - 0.45));
+
+                        if (Math.random() < stickiness) {
+                            if (this.flowedFromVent.lavaFlow.consumeLavaInflux(1)) {
+                                this.runExtensionCount = 1;
+                                isExtension = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (isExtension) {
+                this.handleExtension();
+            }
+        }
+
 
         if (this.flowedFromVent != null) {
             this.flowedFromVent.lavaFlow.queueBlockUpdate(block, material);

@@ -222,6 +222,7 @@ public class VolcanoLandslide {
     public void runPyroclasticFlow() {
         Block source = this.getPyroclasticFlowSource();
         this.vent.ash.triggerPyroclasticFlow(source);
+        this.vent.ash.createAshPlume();
     }
 
     public Block getPyroclasticFlowSource() {
