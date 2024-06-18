@@ -259,7 +259,7 @@ public class VolcanoAsh {
 
         this.createAshCloud(loc, ashMultiplier, size);
 
-        loc.getWorld().playSound(loc, Sound.AMBIENT_BASALT_DELTAS_MOOD, SoundCategory.HOSTILE, 10, 0.01f);
+        loc.getWorld().playSound(loc, Sound.AMBIENT_BASALT_DELTAS_MOOD, SoundCategory.BLOCKS, 10, 0.01f);
         Location tmp = loc.clone();
         float tmpSize = size;
         for (int i = 0; i < length; i++) {
@@ -547,7 +547,7 @@ class VolcanoPyroclasticFlow {
 
         if (Math.random() < 0.05) {
             if (Math.random() < 0.1) {
-                this.location.getWorld().playSound(this.location.add(0, 3, 0), Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 4F, 0.5F);
+                this.location.getWorld().playSound(this.location.add(0, 3, 0), Sound.ENTITY_LIGHTNING_BOLT_THUNDER, SoundCategory.WEATHER, 4F, 0.5F);
             }
         }
 

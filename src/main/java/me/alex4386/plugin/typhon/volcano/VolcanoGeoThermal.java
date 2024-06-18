@@ -473,6 +473,7 @@ public class VolcanoGeoThermal implements Listener {
       .playSound(
         location,
         Sound.BLOCK_LAVA_POP,
+        SoundCategory.BLOCKS,
         2f,
         1f);
 
@@ -481,6 +482,7 @@ public class VolcanoGeoThermal implements Listener {
       .playSound(
         location,
         Sound.BLOCK_LAVA_AMBIENT,
+              SoundCategory.BLOCKS,
         2f,
         1f);
 
@@ -489,6 +491,7 @@ public class VolcanoGeoThermal implements Listener {
             .playSound(
                     location,
                     Sound.ENTITY_BREEZE_WIND_BURST,
+                    SoundCategory.BLOCKS,
                     2f,
                     0f);
 

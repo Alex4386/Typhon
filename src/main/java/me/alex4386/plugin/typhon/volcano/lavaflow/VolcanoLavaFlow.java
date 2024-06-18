@@ -340,7 +340,7 @@ public class VolcanoLavaFlow implements Listener {
             block
                     .getWorld()
                     .playSound(
-                            block.getLocation(), Sound.BLOCK_LAVA_EXTINGUISH, 1f, 0f);
+                            block.getLocation(), Sound.BLOCK_LAVA_EXTINGUISH, SoundCategory.BLOCKS, 1f, 0f);
 
             TyphonUtils.createRisingSteam(block.getLocation(), 1, 2);
         }
@@ -1478,6 +1478,15 @@ public class VolcanoLavaFlow implements Listener {
 
         int flowedBlocks = 0;
         if (this.vent.erupt.getStyle().lavaMultiplier > 0) {
+            if (!ventBlocks.isEmpty()) {
+                ventBlocks.get(0).getWorld().playSound(
+                        vent.bombs.getLaunchLocation(),
+                        Sound.ENTITY_BREEZE_WIND_BURST,
+                        SoundCategory.BLOCKS,
+                        2f,
+                        0f
+                );
+            }
             for (Block whereToFlow : whereToFlows) {
                 Block underBlock = whereToFlow.getRelative(BlockFace.DOWN);
                 if (underBlock.getType() == Material.LAVA || underBlock.getType() == Material.MAGMA_BLOCK) {
