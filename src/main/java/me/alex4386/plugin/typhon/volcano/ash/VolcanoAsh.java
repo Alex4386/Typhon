@@ -198,6 +198,11 @@ public class VolcanoAsh {
                 transformation.getRightRotation()
         ));
 
+        if (Math.random() < 0.002) {
+            // do lightning!
+            data.lightning();
+        }
+
         processAshCloudHeat(bd);
     }
 
@@ -254,6 +259,7 @@ public class VolcanoAsh {
 
         this.createAshCloud(loc, ashMultiplier, size);
 
+        loc.getWorld().playSound(loc, Sound.AMBIENT_BASALT_DELTAS_MOOD, SoundCategory.HOSTILE, 10, 0.5f);
         Location tmp = loc.clone();
         float tmpSize = size;
         for (int i = 0; i < length; i++) {
