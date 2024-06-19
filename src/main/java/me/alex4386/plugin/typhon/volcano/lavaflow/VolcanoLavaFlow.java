@@ -1226,20 +1226,13 @@ public class VolcanoLavaFlow implements Listener {
                     continue;
                 }
 
-                // PILLOW STUFF START
-                boolean isFlowed = true;
-
                 lavaData.runTick();
-                if (!lavaData.canCooldown()) {
-                    isFlowed = false;
+                if (!lavaData.canCooldown() || lavaData.hasFlowed()) {
+                    continue;
                 }
 
                 // escape flowed
-                if (lavaData.hasFlowed()) continue;
-
-                if (isFlowed) {
-                    flowedBlocks.add(block);
-                }
+                flowedBlocks.add(block);
 
                 lavaData.markAsFlowed();
                 // PILLOW STUFF END
@@ -1518,6 +1511,8 @@ public class VolcanoLavaFlow implements Listener {
 
                         continue;
                     }
+
+                    whereToFlow = whereToFlow.getRelative(BlockFace.UP);
                 }
 
 

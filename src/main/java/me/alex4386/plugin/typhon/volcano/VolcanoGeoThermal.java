@@ -484,7 +484,7 @@ public class VolcanoGeoThermal implements Listener {
       location,
       Sound.ENTITY_BREEZE_WIND_BURST,
       SoundCategory.BLOCKS,
-      2f,
+      0.5f,
       0f);
 
 

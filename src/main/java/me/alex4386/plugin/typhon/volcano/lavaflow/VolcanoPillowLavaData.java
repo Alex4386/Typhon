@@ -48,10 +48,6 @@ public class VolcanoPillowLavaData {
         return normalExtCount * 0;
     }
 
-    public boolean isSource() {
-        return this.sourceBlock.equals(this.fromBlock);
-    }
-
     public void runTick() {
         if (cooldownTick > 0) {
             cooldownTick--;
