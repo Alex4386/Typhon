@@ -818,16 +818,6 @@ public class VolcanoVent {
         entity.teleport(location);
     }
 
-    public void generateSteam(int count) {
-        Random random = new Random();
-
-        Block randomBlock = TyphonUtils.getRandomBlockInRange(location.getBlock(), craterRadius);
-
-        int steamRadius = (int) (random.nextDouble() * craterRadius / 2);
-
-        TyphonUtils.createRisingSteam(randomBlock.getLocation(), steamRadius, count);
-    }
-
     public boolean isStarted() {
         return this.isFlowingLava() || this.isExploding();
     }

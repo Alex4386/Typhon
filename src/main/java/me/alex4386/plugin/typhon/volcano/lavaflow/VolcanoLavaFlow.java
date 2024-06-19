@@ -314,6 +314,8 @@ public class VolcanoLavaFlow implements Listener {
         if (targetBlock.getType() == Material.LAVA) {
             if (lavaCoolHashMap.get(targetBlock) != null
                     || this.getVolcano().manager.isInAnyLavaFlowArea(loc)) {
+
+                // this is from lava flow
                 TyphonUtils.createRisingSteam(loc, 1, 5);
 
                 event.getPlayer()
@@ -343,6 +345,7 @@ public class VolcanoLavaFlow implements Listener {
                     .playSound(
                             block.getLocation(), Sound.BLOCK_LAVA_EXTINGUISH, SoundCategory.BLOCKS, 1f, 0f);
 
+            // sea entry
             TyphonUtils.createRisingSteam(block.getLocation(), 1, 2);
         }
     }

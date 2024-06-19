@@ -109,14 +109,10 @@ public class VolcanoGeoThermal implements Listener {
     }
 
     if (letOffSteam) {
-      TyphonUtils.createRisingSteam(
-        targetLoc,
-        0,
-        1
-      );
+      this.playLavaGasReleasing(targetLoc);
 
       if (runPoison) {
-        this.volcanicGasDegassing(block);
+        this.runVolcanicGas(block.getLocation());
       }
     }
 
@@ -139,14 +135,8 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void volcanicGasDegassing(Block block) {
-    TyphonUtils.createRisingSteam(
-        block.getLocation(),
-        1,
-        2);
-
     // Oops~ 
     if (Math.random() < 0.3) {
-      this.runVolcanicGas(block.getLocation());
     }
   }
 
@@ -341,7 +331,7 @@ public class VolcanoGeoThermal implements Listener {
           }
         }
 
-        TyphonUtils.createRisingSteam(targetLoc, 1, 3);
+        this.playLavaGasReleasing(targetLoc);
         if (burnRange > 0) {
           this.burnNearbyEntities(targetLoc, 3);
         }
@@ -723,6 +713,8 @@ public class VolcanoGeoThermal implements Listener {
           || bucket == Material.WATER
           || bucket == Material.POWDER_SNOW_BUCKET
           || bucket == Material.POWDER_SNOW) {
+        // THIS IS WATER vaporizing, not volcanic gas escaping from ground.
+        // therefore use only createRisingSteam
         TyphonUtils.createRisingSteam(loc, 1, 5);
 
         event.getPlayer()
