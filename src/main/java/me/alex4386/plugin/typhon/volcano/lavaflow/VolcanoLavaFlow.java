@@ -1059,7 +1059,7 @@ public class VolcanoLavaFlow implements Listener {
     public void addRootlessCone(Location location) {
         Block baseBlock = TyphonUtils.getHighestRocklikes(location);
 
-        int height = 2 + (int) (Math.pow(Math.random(), 2) * 3);
+        int height = 1 + (int) (Math.pow(Math.random(), 2) * 3);
 
         int minY = baseBlock.getY();
         double radiusRaw = getRootlessConeRadius(height);
