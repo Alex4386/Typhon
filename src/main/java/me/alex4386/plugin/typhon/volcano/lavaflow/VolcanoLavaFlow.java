@@ -1060,7 +1060,6 @@ public class VolcanoLavaFlow implements Listener {
 
         int height = 1 + (int) (Math.pow(Math.random(), 2) * 2);
 
-        int minY = baseBlock.getY();
         double baseRaw = getRootlessConeRadius(height);
         int baseInt = (int) Math.ceil(baseRaw);
 
