@@ -1048,7 +1048,7 @@ public class VolcanoLavaFlow implements Listener {
 
     public int rootlessConeHeight(int height, double offset) {
         double radius = getRootlessConeRadius(height);
-        if (offset < radius) return (int) offset;
+        if (offset < height) return (int) offset;
 
         double distance = offset - height;
         double deduct = distance / Math.sqrt(3);
