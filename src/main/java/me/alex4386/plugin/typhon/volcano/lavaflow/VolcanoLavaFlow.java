@@ -1065,7 +1065,9 @@ public class VolcanoLavaFlow implements Listener {
         int baseInt = (int) Math.ceil(baseRaw);
         for (int i = -baseInt; i <= baseInt; i++) {
             for (int j = -baseInt; j <= baseInt; j++) {
-                Block block = TyphonUtils.getHighestRocklikes(baseBlock.getWorld().getHighestBlockAt(baseBlock.getRelative(i, 0, j).getLocation()));
+                Block blockAt = baseBlock.getRelative(i, height, j);
+
+                Block block = TyphonUtils.getHighestRocklikes(blockAt));
                 minY = Math.min(minY, block.getY());
             }
         }
@@ -1079,7 +1081,7 @@ public class VolcanoLavaFlow implements Listener {
         for (int x = -baseInt; x <= baseInt; x++) {
             for (int z = -baseInt; z <= baseInt; z++) {
                 int targetHeight = rootlessConeHeight(height, Math.sqrt(x * x + z * z));
-                Block baseBlockAt = baseBlock.getRelative(x, 0, z);
+                Block baseBlockAt = TyphonUtils.getHighestRocklikes(baseBlock.getRelative(x, 0, z));
 
                 for (int y = 1; y < targetHeight; y++) {
                     Block targetBlock = baseBlockAt.getRelative(0, y, 0);
