@@ -67,6 +67,7 @@ public class VolcanoLavaFlow implements Listener {
 
     private int configuredLavaInflux = -1;
     private double queuedLavaInflux = 0;
+    private double prevQueuedLavaInflux = 0;
 
     // core methods
     public VolcanoLavaFlow(VolcanoVent vent) {
@@ -1586,15 +1587,19 @@ public class VolcanoLavaFlow implements Listener {
             }
         }
 
+        prevQueuedLavaInflux = queuedLavaInflux;
         queuedLavaInflux = 0;
     }
 
     public boolean consumeLavaInflux(double amount) {
-        if (queuedLavaInflux < amount) {
+        double realQueuedLavaInflux = Math.max(queuedLavaInflux, prevQueuedLavaInflux);
+
+        if (realQueuedLavaInflux < amount) {
             return false;
         }
 
-        queuedLavaInflux -= amount;
+        realQueuedLavaInflux -= amount;
+        prevQueuedLavaInflux = realQueuedLavaInflux;
         return true;
     }
 
