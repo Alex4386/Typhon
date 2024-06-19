@@ -1516,7 +1516,9 @@ public class VolcanoLavaFlow implements Listener {
                     }
 
                     if (Math.random() > 0.01) {
-                        this.extendLava();
+                        if (this.vent.erupt.getStyle().flowsLava()) {
+                            this.extendLava();
+                        }
                         continue;
                     }
 
