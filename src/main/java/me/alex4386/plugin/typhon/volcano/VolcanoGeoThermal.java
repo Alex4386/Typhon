@@ -473,7 +473,7 @@ public class VolcanoGeoThermal implements Listener {
       TyphonSounds.EARTH_CRACKING.play(
               location,
                 SoundCategory.BLOCKS,
-              2f,
+              10f,
               1f
       );
     }
@@ -484,7 +484,7 @@ public class VolcanoGeoThermal implements Listener {
       location,
       Sound.ENTITY_BREEZE_WIND_BURST,
       SoundCategory.BLOCKS,
-      0.5f,
+            (float) (0.5f + (Math.random() * 0.5f)),
       0f);
 
 
