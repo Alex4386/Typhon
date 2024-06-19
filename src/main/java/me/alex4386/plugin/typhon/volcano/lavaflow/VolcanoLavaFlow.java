@@ -1050,7 +1050,7 @@ public class VolcanoLavaFlow implements Listener {
         double radius = getRootlessConeRadius(height);
         if (offset < radius) return (int) offset;
 
-        double distance = offset - radius;
+        double distance = offset - height;
         double deduct = distance / Math.sqrt(3);
 
         return (int) (height - deduct);
@@ -1059,12 +1059,11 @@ public class VolcanoLavaFlow implements Listener {
     public void addRootlessCone(Location location) {
         Block baseBlock = TyphonUtils.getHighestRocklikes(location);
 
-        int height = 1 + (int) (Math.pow(Math.random(), 2) * 3);
+        int height = 2 + (int) (Math.pow(Math.random(), 2) * 3);
 
         int minY = baseBlock.getY();
-        double radiusRaw = getRootlessConeRadius(height);
-        double base = radiusRaw * (1 + Math.sqrt(3));
-        int baseInt = (int) Math.ceil(base);
+        double baseRaw = getRootlessConeRadius(height);
+        int baseInt = (int) Math.ceil(baseRaw);
         for (int i = -baseInt; i <= baseInt; i++) {
             for (int j = -baseInt; j <= baseInt; j++) {
                 Block block = TyphonUtils.getHighestRocklikes(baseBlock.getWorld().getHighestBlockAt(baseBlock.getRelative(i, 0, j).getLocation()));
@@ -1075,9 +1074,8 @@ public class VolcanoLavaFlow implements Listener {
         int minOffset = minY - baseBlock.getY();
         baseBlock.getRelative(0, minOffset, 0);
         height -= minOffset;
-        radiusRaw = getRootlessConeRadius(height);
-        base = radiusRaw * (1 + Math.sqrt(3));
-        baseInt = (int) Math.ceil(base);
+        baseRaw = getRootlessConeRadius(height);
+        baseInt = (int) Math.ceil(baseRaw);
 
         for (int x = -baseInt; x <= baseInt; x++) {
             for (int z = -baseInt; z <= baseInt; z++) {
