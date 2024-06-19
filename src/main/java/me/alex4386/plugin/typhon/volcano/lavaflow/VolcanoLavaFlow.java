@@ -1096,12 +1096,13 @@ public class VolcanoLavaFlow implements Listener {
 
         // launch bombs
         Location launchLocation = baseBlock.getRelative(0, Math.max(1, height - 1), 0).getLocation();
-        int targetRadius = (int) (radiusRaw * 1.5);
+        int targetRadius = (int) (baseRaw * 3);
         int launchCount = (int) (Math.random() * 7) + 3;
 
         for (int i = 0; i < launchCount; i++) {
             double randomAngle = Math.PI * 2 * Math.random();
-            Location targetLocation = launchLocation.clone().add(Math.cos(randomAngle) * targetRadius, 0, Math.sin(randomAngle) * targetRadius);
+            double targetLength = (Math.random() * (targetRadius - height)) + height;
+            Location targetLocation = launchLocation.clone().add(Math.cos(randomAngle) * targetLength, 0, Math.sin(randomAngle) * targetLength);
 
             VolcanoBomb bomb = this.vent.bombs.generateBomb(targetLocation);
             bomb.launchLocation = launchLocation;
