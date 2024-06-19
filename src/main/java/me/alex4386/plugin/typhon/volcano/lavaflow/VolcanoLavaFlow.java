@@ -1037,9 +1037,13 @@ public class VolcanoLavaFlow implements Listener {
         Location location = this.vent.location;
         Location targetLocation = location.clone().add(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
 
-        this.addRootlessCone(targetLocation);
+        Block block = TyphonUtils.getHighestRocklikes(targetLocation);
+        if (VolcanoComposition.isVolcanicRock(block.getType())) {
+            this.addRootlessCone(targetLocation);
+            return true;
+        }
 
-        return true;
+        return false;
     }
 
     public int rootlessConeHeight(int height, double offset) {
