@@ -290,7 +290,7 @@ public class VolcanoLavaCoolData {
                         // check if lava's silica level is low enough to flow even more
                         double stickiness = ((this.flowedFromVent.lavaFlow.settings.silicateLevel - 0.45) / (0.53 - 0.45));
 
-                        if (Math.random() < stickiness) {
+                        if (Math.random() > stickiness) {
                             if (this.flowedFromVent.lavaFlow.consumeLavaInflux(1)) {
                                 this.runExtensionCount = 1;
                                 isExtension = true;
