@@ -1072,6 +1072,7 @@ public class VolcanoLavaFlow implements Listener {
 
         int minOffset = minY - baseBlock.getY();
         baseBlock.getRelative(0, minOffset, 0);
+        height -= minOffset;
 
         int radius = (int) Math.ceil(radiusRaw);
         for (int x = -radius; x <= radius; x++) {
