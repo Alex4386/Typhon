@@ -1084,7 +1084,7 @@ public class VolcanoLavaFlow implements Listener {
                 int current = currentY - baseBlock.getY();
                 for (int y = current + 1; y < targetHeight; y++) {
                     Block targetBlock = baseBlockAt.getRelative(0, y, 0);
-                    if (targetBlock.getType().isAir()) {
+                    if (targetBlock.getType().isAir() || targetBlock.getType() == Material.WATER) {
                         Material material = VolcanoComposition.getBombRock(this.settings.silicateLevel);
                         queueBlockUpdate(targetBlock, material);
                     }
