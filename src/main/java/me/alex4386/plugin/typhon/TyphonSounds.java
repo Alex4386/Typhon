@@ -41,10 +41,10 @@ public enum TyphonSounds {
                     Sound.ENTITY_BREEZE_WIND_BURST,
                     SoundCategory.BLOCKS,
                     volume,
-                    pitch
+                    0f
             );
 
-            TyphonSounds.DISTANT_EXPLOSION.play(location, category, volume, pitch);
+            TyphonSounds.DISTANT_EXPLOSION.play(location, category, volume, 1f);
             return;
         }
 

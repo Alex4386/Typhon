@@ -1473,7 +1473,7 @@ public class VolcanoLavaFlow implements Listener {
                         ventBlocks.get(0).getLocation(),
                         SoundCategory.BLOCKS,
                         2f,
-                        0f
+                        1f
                 );
             }
 
