@@ -157,7 +157,11 @@ public class VolcanoLavaDome {
     public JSONObject importConfig(JSONObject json) {
         this.plumbedLava = (long) json.get("plumbedLava");
         this.baseY = (int) (long) json.get("baseY");
-        this.baseLocation = TyphonUtils.deserializeLocationForJSON((JSONObject) json.get("baseLocation"));
+
+        JSONObject locationJSON = (JSONObject) json.get("baseLocation");
+        if (locationJSON != null) {
+            this.baseLocation = TyphonUtils.deserializeLocationForJSON((JSONObject) json.get("baseLocation"));
+        }
 
         return json;
     }
