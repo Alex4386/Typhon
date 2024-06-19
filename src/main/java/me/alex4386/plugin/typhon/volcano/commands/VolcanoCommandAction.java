@@ -28,6 +28,7 @@ public enum VolcanoCommandAction {
     HEAT("heat", "", "get heat value of current location"),
     TELEPORT("teleport", "", "teleport to mainvent of this volcano"),
     RECORD("record", "", "see the volcano's record"),
+    SUCCESSION("succession", "<?enable/disable>", "get/set primary succession state"),
 
     RENAME("rename", "<name>", "rename this volcano"),
     DELETE("delete", "", "Delete this volcano");

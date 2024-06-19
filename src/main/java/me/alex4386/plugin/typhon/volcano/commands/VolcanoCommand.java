@@ -163,6 +163,35 @@ public class VolcanoCommand {
                                             + this.volcano.name
                                             + " has cooled all flowing lava!");
                             break;
+                        case SUCCESSION:
+                            if (args.length >= 3) {
+
+                                if (args[2].equals("trigger")) {
+                                    if (sender instanceof Player player) {
+                                        this.volcano.succession.runSuccession(player.getLocation().getBlock());
+                                        msg.info("Primary Succession has been triggered at your location");
+
+                                    } else {
+                                        msg.error("This command can not be used by console.");
+                                    }
+                                    break;
+                                } else {
+                                    boolean state = Boolean.parseBoolean(args[2]);
+                                    this.volcano.succession.setEnabled(state);
+
+                                    if (state) {
+                                        msg.info("Primary Succession has been enabled!");
+                                    } else {
+                                        msg.info("Primary Succession has been disabled!");
+                                    }
+                                }
+                            } else {
+                                msg.info(
+                                        "Primary Succession: "
+                                                + (this.volcano.succession.isEnabled() ? "enabled" : "disabled")
+                                );
+                            }
+                            break;
                         case TELEPORT:
                             if (sender instanceof Entity) {
                                 Entity senderEntity = (Entity) sender;

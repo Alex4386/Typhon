@@ -41,6 +41,14 @@ public class VolcanoSuccession {
         this.registerTask();
     }
 
+    public boolean isEnabled() {
+        return this.isEnabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.isEnabled = enabled;
+    }
+
     public void shutdown() {
         this.volcano.logger.log(
             VolcanoLogClass.SUCCESSION,
