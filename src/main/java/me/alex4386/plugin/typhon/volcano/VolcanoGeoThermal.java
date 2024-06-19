@@ -463,7 +463,7 @@ public class VolcanoGeoThermal implements Listener {
       TyphonSounds.EARTH_CRACKING.play(
               location,
                 SoundCategory.BLOCKS,
-              10f,
+              0.5f,
               1f
       );
     }
