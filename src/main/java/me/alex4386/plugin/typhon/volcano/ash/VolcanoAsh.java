@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.ash;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
@@ -259,7 +260,7 @@ public class VolcanoAsh {
 
         this.createAshCloud(loc, ashMultiplier, size);
 
-        loc.getWorld().playSound(loc, Sound.AMBIENT_BASALT_DELTAS_MOOD, SoundCategory.BLOCKS, 10, 0.01f);
+        TyphonSounds.DISTANT_EXPLOSION.play(loc, SoundCategory.BLOCKS, 10, 0.01f);
         Location tmp = loc.clone();
         float tmpSize = size;
         for (int i = 0; i < length; i++) {
@@ -597,9 +598,14 @@ class VolcanoPyroclasticFlow {
     }
 
     public void runAsh() {
+        this.fallDown();
         this.processNearby();
         this.putAsh();
         this.playAshTrail();
+    }
+
+    public void fallDown() {
+        this.location = TyphonUtils.getHighestRocklikes(this.location).getLocation();
     }
 
     public void processNearby() {
@@ -618,10 +624,6 @@ class VolcanoPyroclasticFlow {
             if (metamorphism.isPlantlike(block.getType()) || metamorphism.isPlaceableAnimalEgg(block.getType())) {
                 block.setType(Material.AIR);
             }
-
-            if (block.getType() == Material.WATER) {
-                block.setType(Material.TUFF);
-            }
         }
     }
 
@@ -633,17 +635,8 @@ class VolcanoPyroclasticFlow {
         return this.coreTargetY() - (int) TyphonUtils.getTwoDimensionalDistance(block.getLocation(), this.location);
     }
 
-    public void putAsh(Block block) {
-        int target = this.getTargetY(block);
-
-        Block zeroBlock = block.getRelative(0, -block.getY(), 0);
-        if (initialY.get(zeroBlock) == null) {
-            initialY.put(zeroBlock, block.getY());
-        }
-
-        int maximum = initialY.get(zeroBlock) + Math.min(this.radius / 2, 1) - (int) (TyphonUtils.getTwoDimensionalDistance(block.getLocation(), this.location) / 2);
-        maximum = Math.min(target, maximum);
-
+    public void putAsh(Block block, int maxY) {
+        int maximum = maxY + Math.min(this.radius / 2, 1) - (int) (TyphonUtils.getTwoDimensionalDistance(block.getLocation(), this.location) / 2);
         if (block.getY() <= maximum) {
             int offset = maximum - block.getY();
 
@@ -687,11 +680,18 @@ class VolcanoPyroclasticFlow {
 
     public void putAsh() {
         List<Block> blocks = VolcanoMath.getCircle(this.location.getBlock(), radius);
+        int maxY = Integer.MIN_VALUE;
+
         for (Block baseBlock : blocks) {
             if (Math.random() > ((double) life / maxLife)) continue;
             Block block = TyphonUtils.getHighestRocklikes(baseBlock);
 
-            this.putAsh(block);
+            maxY = Math.max(maxY, block.getY());
+        }
+
+        for (Block baseBlock : blocks) {
+            Block block = TyphonUtils.getHighestRocklikes(baseBlock);
+            putAsh(baseBlock, maxY);
         }
     }
 

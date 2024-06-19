@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.explosion;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
@@ -138,8 +139,7 @@ public class VolcanoExplosion {
 
         Location targetVent = this.selectEruptionVent();
 
-        vent.location.getWorld().playSound(targetVent, Sound.AMBIENT_BASALT_DELTAS_MOOD, SoundCategory.BLOCKS, 10F, 0F);
-        vent.location.getWorld().playSound(targetVent, Sound.ENTITY_BREEZE_WIND_BURST, SoundCategory.BLOCKS, 2F, 0F);
+        TyphonSounds.DISTANT_EXPLOSION.play(targetVent, SoundCategory.BLOCKS, 10f, 0f);
 
         vent.location
                 .getWorld()

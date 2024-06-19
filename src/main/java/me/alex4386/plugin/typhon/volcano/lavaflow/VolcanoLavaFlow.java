@@ -2,6 +2,7 @@ package me.alex4386.plugin.typhon.volcano.lavaflow;
 
 import me.alex4386.plugin.typhon.TyphonBlueMapUtils;
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
@@ -964,8 +965,6 @@ public class VolcanoLavaFlow implements Listener {
 
     public void createLavaParticle(Block currentBlock) {
         World world = currentBlock.getWorld();
-
-        world.spawnParticle(Particle.CAMPFIRE_COSY_SMOKE, currentBlock.getLocation(), 2);
         world.spawnParticle(Particle.LAVA, currentBlock.getLocation(), 10);
     }
 
@@ -1072,7 +1071,8 @@ public class VolcanoLavaFlow implements Listener {
                         }
                     }
                 } else {
-                    for (int y = baseBlock.getY() + 1; y <= targetY; y++) {
+                    int target = targetY - baseBlock.getY();
+                    for (int y = 1; y <= target; y++) {
                         Block targetBlock = baseBlockAt.getRelative(0, y, 0);
                         if (targetBlock.getType().isAir()) {
                             Material material = VolcanoComposition.getBombRock(this.settings.silicateLevel);
@@ -1478,9 +1478,8 @@ public class VolcanoLavaFlow implements Listener {
         int flowedBlocks = 0;
         if (this.vent.erupt.getStyle().lavaMultiplier > 0) {
             if (!ventBlocks.isEmpty()) {
-                ventBlocks.get(0).getWorld().playSound(
-                        vent.bombs.getLaunchLocation(),
-                        Sound.ENTITY_BREEZE_WIND_BURST,
+                TyphonSounds.LAVA_ERUPTION.play(
+                        ventBlocks.get(0).getLocation(),
                         SoundCategory.BLOCKS,
                         2f,
                         0f

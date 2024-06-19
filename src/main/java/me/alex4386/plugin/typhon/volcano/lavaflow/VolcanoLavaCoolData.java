@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.lavaflow;
 
+import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
@@ -8,6 +9,7 @@ import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoPillowLavaData;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.SoundCategory;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
@@ -255,6 +257,15 @@ public class VolcanoLavaCoolData {
 
 
     public void coolDown() {
+        if (Math.random() < 0.05) {
+            TyphonSounds.LAVA_FLOW_FRAGMENTING.play(
+                    block.getLocation(),
+                    SoundCategory.BLOCKS,
+                    0.5f,
+                    (float) (0.5f + (Math.random() * 0.5))
+            );
+        }
+
         if (this.flowedFromVent != null) {
             if (this.flowedFromVent.volcano.manager.isInAnyFormingCaldera(block.getLocation())) {
                 this.flowedFromVent.lavaFlow.queueBlockUpdate(block, Material.AIR);

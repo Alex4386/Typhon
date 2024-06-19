@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
@@ -91,7 +92,7 @@ public class VolcanoGeoThermal implements Listener {
         this.burnNearbyEntities(targetLoc, 3);
         if (scaleFactor > 0.12) {
           if (Math.random() < ((scaleFactor - 0.12) / (1 - 0.12))) {
-            this.playLavaBubbling(targetLoc);
+            this.playLavaGasReleasing(targetLoc);
           }
         }
 
@@ -434,7 +435,7 @@ public class VolcanoGeoThermal implements Listener {
           double magmaConduitBase = vent.getRadius() + (summitY / Math.sqrt(3));
           if (distance < magmaConduitBase + (10 * Math.random())) {
             Block lavaTarget = block.getRelative(BlockFace.UP);
-            this.playLavaBubbling(lavaTarget.getLocation());
+            this.playLavaGasReleasing(lavaTarget.getLocation());
 
             vent.lavaFlow.flowLava(lavaTarget);
             return;
@@ -445,7 +446,7 @@ public class VolcanoGeoThermal implements Listener {
       if (diggingInY > 32) {
         double probability = (diggingInY - 32) / 32;
         if (Math.random() < probability) {
-          this.playLavaBubbling(block.getLocation());
+          this.playLavaGasReleasing(block.getLocation());
         }
       }
     }
@@ -467,40 +468,31 @@ public class VolcanoGeoThermal implements Listener {
     }
   }
 
-  public void playLavaBubbling(Location location) {
-    location
-      .getWorld()
-      .playSound(
-        location,
-        Sound.BLOCK_LAVA_POP,
-        SoundCategory.BLOCKS,
-        2f,
-        1f);
+  public void playLavaGasReleasing(Location location) {
+    if (Math.random() < 0.2) {
+      TyphonSounds.EARTH_CRACKING.play(
+              location,
+                SoundCategory.BLOCKS,
+              2f,
+              1f
+      );
+    }
 
     location
-      .getWorld()
-      .playSound(
-        location,
-        Sound.BLOCK_LAVA_AMBIENT,
-              SoundCategory.BLOCKS,
-        2f,
-        1f);
+    .getWorld()
+    .playSound(
+      location,
+      Sound.ENTITY_BREEZE_WIND_BURST,
+      SoundCategory.BLOCKS,
+      2f,
+      0f);
 
-    location
-            .getWorld()
-            .playSound(
-                    location,
-                    Sound.ENTITY_BREEZE_WIND_BURST,
-                    SoundCategory.BLOCKS,
-                    2f,
-                    0f);
 
-    location
-      .getWorld()
-      .spawnParticle(
-        Particle.LAVA,
-        location.add(0,1,0),
-        1
+    // gas releasing up
+    TyphonUtils.createRisingSteam(
+      location,
+      1,
+      2
     );
   }
 
