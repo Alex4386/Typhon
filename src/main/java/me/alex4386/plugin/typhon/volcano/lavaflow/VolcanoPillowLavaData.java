@@ -14,7 +14,7 @@ public class VolcanoPillowLavaData {
 
     int fluidLevel = 8;
 
-    int cooldownTick = 5 * 8;
+    int cooldownTick = 5;
     boolean markAsFlowed = false;
 
     VolcanoPillowLavaData(VolcanoVent vent, Block sourceBlock) {
@@ -23,6 +23,9 @@ public class VolcanoPillowLavaData {
 
     VolcanoPillowLavaData(VolcanoVent vent, Block sourceBlock, Block fromBlock) {
         this(vent, sourceBlock, fromBlock, 0);
+
+        this.cooldownTick += (int) (Math.random() * 3) - 1;
+
         /*
         int extCount = VolcanoLavaCoolData.calculateExtensionCount(
                 vent.lavaFlow.settings.silicateLevel,
