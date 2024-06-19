@@ -1063,20 +1063,6 @@ public class VolcanoLavaFlow implements Listener {
         int minY = baseBlock.getY();
         double baseRaw = getRootlessConeRadius(height);
         int baseInt = (int) Math.ceil(baseRaw);
-        for (int i = -baseInt; i <= baseInt; i++) {
-            for (int j = -baseInt; j <= baseInt; j++) {
-                Block blockAt = baseBlock.getRelative(i, height, j);
-
-                Block block = TyphonUtils.getHighestRocklikes(blockAt));
-                minY = Math.min(minY, block.getY());
-            }
-        }
-
-        int minOffset = minY - baseBlock.getY();
-        baseBlock.getRelative(0, minOffset, 0);
-        height -= minOffset;
-        baseRaw = getRootlessConeRadius(height);
-        baseInt = (int) Math.ceil(baseRaw);
 
         for (int x = -baseInt; x <= baseInt; x++) {
             for (int z = -baseInt; z <= baseInt; z++) {
