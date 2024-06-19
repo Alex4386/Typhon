@@ -1229,14 +1229,13 @@ public class VolcanoLavaFlow implements Listener {
                 // PILLOW STUFF START
                 boolean isFlowed = true;
 
-                if (lavaData.isSource()) {
-                    lavaData.runTick();
-                    if (!lavaData.canCooldown()) {
-                        isFlowed = false;
-                    }
-
-                    if (lavaData.hasFlowed()) continue;
+                lavaData.runTick();
+                if (!lavaData.canCooldown()) {
+                    isFlowed = false;
                 }
+
+                // escape flowed
+                if (lavaData.hasFlowed()) continue;
 
                 if (isFlowed) {
                     flowedBlocks.add(block);
