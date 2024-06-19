@@ -1049,8 +1049,7 @@ public class VolcanoLavaFlow implements Listener {
         double distance = offset - radius;
         double deduct = distance / Math.sqrt(3);
 
-        int result = (int) (height - deduct);
-        return Math.max(result, 0);
+        return (int) (height - deduct);
     }
 
     public void addRootlessCone(Location location) {
@@ -1066,22 +1065,14 @@ public class VolcanoLavaFlow implements Listener {
                 int targetY = baseBlock.getY() + targetHeight;
 
                 Block baseBlockAt = baseBlock.getRelative(x, 0, z);
-                if (targetY - baseBlockAt.getY() > 4) {
-                    for (int y = 1; y < 4; y++) {
-                        Block targetBlock = baseBlockAt.getRelative(0, y, 0);
-                        if (targetBlock.getType().isAir()) {
-                            Material material = VolcanoComposition.getBombRock(this.settings.silicateLevel);
-                            queueBlockUpdate(targetBlock, material);
-                        }
-                    }
-                } else {
-                    int target = targetY - baseBlock.getY();
-                    for (int y = 1; y <= target; y++) {
-                        Block targetBlock = baseBlockAt.getRelative(0, y, 0);
-                        if (targetBlock.getType().isAir()) {
-                            Material material = VolcanoComposition.getBombRock(this.settings.silicateLevel);
-                            queueBlockUpdate(targetBlock, material);
-                        }
+                int currentY = TyphonUtils.getHighestRocklikes(baseBlockAt).getY();
+
+                int current = currentY - baseBlock.getY();
+                for (int y = current + 1; y < targetY; y++) {
+                    Block targetBlock = baseBlockAt.getRelative(0, y, 0);
+                    if (targetBlock.getType().isAir()) {
+                        Material material = VolcanoComposition.getBombRock(this.settings.silicateLevel);
+                        queueBlockUpdate(targetBlock, material);
                     }
                 }
             }
