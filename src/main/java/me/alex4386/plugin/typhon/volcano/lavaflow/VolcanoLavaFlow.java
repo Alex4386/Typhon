@@ -1469,8 +1469,10 @@ public class VolcanoLavaFlow implements Listener {
         int flowAmount = (int) Math.min(Math.floor(queuedLavaInflux), ventBlocks.size());
         if (flowAmount <= 0) return;
 
-        int actualFlowCounts = (int) Math.min(flowAmount, (double) ventBlocks.size() / 3);
-        List<Block> whereToFlows = vent.requestFlows(actualFlowCounts);
+        int actualFlowMax = (int) Math.min(flowAmount, (double) ventBlocks.size() / 3);
+        int flowRequests = (int) Math.min(flowAmount, ventBlocks.size());
+
+        List<Block> whereToFlows = vent.requestFlows(flowRequests);
 
         int flowedBlocks = 0;
         if (this.vent.erupt.getStyle().lavaMultiplier > 0) {
@@ -1482,7 +1484,19 @@ public class VolcanoLavaFlow implements Listener {
                         0f
                 );
             }
+
+            int flowableCounts = 0;
             for (Block whereToFlow : whereToFlows) {
+                if (TyphonUtils.isBlockFlowable(whereToFlow)) {
+                    if (whereToFlow.getType() == Material.LAVA) continue;
+                    flowableCounts++;
+                }
+            }
+
+            int actaualFlowable = Math.min(actualFlowMax, flowableCounts);
+            for (Block whereToFlow : whereToFlows) {
+                if (flowedBlocks >= actaualFlowable) break;
+
                 Block underBlock = whereToFlow.getRelative(BlockFace.DOWN);
                 if (underBlock.getType() == Material.LAVA || underBlock.getType() == Material.MAGMA_BLOCK) {
                     continue;
