@@ -1515,6 +1515,11 @@ public class VolcanoLavaFlow implements Listener {
                         continue;
                     }
 
+                    if (Math.random() > 0.01) {
+                        this.extendLava();
+                        continue;
+                    }
+
                     whereToFlow = whereToFlow.getRelative(BlockFace.UP);
                 }
 
