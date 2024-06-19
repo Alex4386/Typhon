@@ -1493,33 +1493,35 @@ public class VolcanoLavaFlow implements Listener {
                     continue;
                 }
 
-                // check if underBlock is registered lava
-                if (isPillowLavaRegistered(underBlock)) {
-                    // get pillow lava
-                    VolcanoPillowLavaData pillowData = getPillowLavaCoolData(underBlock);
-                    if (pillowData != null) {
-                        if (!pillowData.canCooldown()) {
-                            // ignore.
-                            continue;
-                        }
-                    }
-                } else if (isNormalLavaRegistered(underBlock)) {
-                    // check if underBlock lava can not flow anywhere
-                    boolean canFlow = TyphonUtils.isBlockFlowable(underBlock);
-
-                    if (!canFlow) {
-                        // cooldown underBlock.
-                        VolcanoLavaCoolData coolData = getLavaCoolData(underBlock);
-                        if (coolData != null) {
-                            coolData.coolDown();
-                        }
-                    }
-
-                    continue;
-                } else if (!TyphonUtils.isBlockFlowable(whereToFlow)) {
+                if (!TyphonUtils.isBlockFlowable(whereToFlow)) {
                     whereToFlow.setType(VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel));
-                    continue;
+
+                    // check if underBlock is registered lava
+                    if (isPillowLavaRegistered(underBlock)) {
+                        // get pillow lava
+                        VolcanoPillowLavaData pillowData = getPillowLavaCoolData(underBlock);
+                        if (pillowData != null) {
+                            if (!pillowData.canCooldown()) {
+                                // ignore.
+                                continue;
+                            }
+                        }
+                    } else if (isNormalLavaRegistered(underBlock)) {
+                        // check if underBlock lava can not flow anywhere
+                        boolean canFlow = TyphonUtils.isBlockFlowable(underBlock);
+
+                        if (!canFlow) {
+                            // cooldown underBlock.
+                            VolcanoLavaCoolData coolData = getLavaCoolData(underBlock);
+                            if (coolData != null) {
+                                coolData.coolDown();
+                            }
+                        }
+
+                        continue;
+                    }
                 }
+
 
                 flowedBlocks++;
 
