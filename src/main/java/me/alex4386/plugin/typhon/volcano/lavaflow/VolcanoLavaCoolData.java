@@ -257,7 +257,7 @@ public class VolcanoLavaCoolData {
 
 
     public void coolDown() {
-        if (Math.random() < 0.05) {
+        if (Math.random() < 0.005) {
             TyphonSounds.LAVA_FLOW_FRAGMENTING.play(
                     block.getLocation(),
                     SoundCategory.BLOCKS,

@@ -152,6 +152,26 @@ public class VolcanoMath {
         return cylinderBlocks;
     }
 
+    public static List<Block> getCube(Block centerBlock, int radius) {
+        return getCube(centerBlock, radius, -1);
+    }
+
+    public static List<Block> getCube(Block centerBlock, int radius, int hollowRadius) {
+        List<Block> sphereBlocks = new ArrayList<>();
+
+        for (int x = -radius; x <= radius; x++) {
+            for (int y = -radius; y <= radius; y++) {
+                for (int z = -radius; z <= radius; z++) {
+                    if (Math.abs(x) > hollowRadius && Math.abs(y) > hollowRadius && Math.abs(z) > hollowRadius) {
+                        sphereBlocks.add(centerBlock.getRelative(x, y, z));
+                    }
+                }
+            }
+        }
+
+        return sphereBlocks;
+    }
+
     public static List<Block> getSphere(Block centerBlock, int radius) {
         return getSphere(centerBlock, radius, -1);
     }
