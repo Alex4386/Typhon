@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.dome;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombListener;
@@ -10,6 +11,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.SoundCategory;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.json.simple.JSONObject;
@@ -143,6 +145,10 @@ public class VolcanoLavaDome {
         this.vent.lavaFlow.flowLava(TyphonUtils.getHighestRocklikes(
                 TyphonUtils.getRandomBlockInRange(this.baseLocation.getBlock(), (int) distance)
         ).getRelative(BlockFace.UP));
+
+        if (Math.random() < 0.1) {
+            TyphonSounds.LAVA_FLOW_FRAGMENTING.play(this.baseLocation.getBlock().getLocation(), SoundCategory.BLOCKS, 1, 1);
+        }
     }
 
     public void explode() {
@@ -152,6 +158,8 @@ public class VolcanoLavaDome {
         for (int i = 0; i < 5; i++) {
             this.vent.bombs.generateRandomBomb(targetLocation);
         }
+
+        TyphonSounds.DISTANT_EXPLOSION.play(targetLocation, SoundCategory.BLOCKS, 2f, 0f);
     }
 
     public JSONObject importConfig(JSONObject json) {

@@ -1468,15 +1468,6 @@ public class VolcanoLavaFlow implements Listener {
 
         int flowedBlocks = 0;
         if (this.vent.erupt.getStyle().lavaMultiplier > 0) {
-            if (!ventBlocks.isEmpty()) {
-                TyphonSounds.LAVA_ERUPTION.play(
-                        ventBlocks.get(0).getLocation(),
-                        SoundCategory.BLOCKS,
-                        2f,
-                        1f
-                );
-            }
-
             int flowableCounts = 0;
             for (Block whereToFlow : whereToFlows) {
                 if (TyphonUtils.isBlockFlowable(whereToFlow)) {
@@ -1544,6 +1535,16 @@ public class VolcanoLavaFlow implements Listener {
                         TyphonBlueMapUtils.updateVolcanoVentMarkerHeight(this.vent);
                     }
                 }
+            }
+
+
+            if (flowedBlocks > 0) {
+                TyphonSounds.LAVA_ERUPTION.play(
+                        ventBlocks.get(0).getLocation(),
+                        SoundCategory.BLOCKS,
+                        2f,
+                        1f
+                );
             }
         } else if (this.vent.erupt.getStyle() == VolcanoEruptStyle.LAVA_DOME) {
             int count = whereToFlows.size();
