@@ -651,13 +651,16 @@ class VolcanoPyroclasticFlow {
         double slope = (maxYBlock.getY() - minYBlock.getY()) / TyphonUtils.getTwoDimensionalDistance(minYBlock.getLocation(), maxYBlock.getLocation());
 
         double maxPileup = this.maxPileup;
-        if (slope >= 0.9) {
+
+        double ashCoatStart = 0.9;
+        double startAccumulate = 0.7;
+
+        if (slope >= ashCoatStart) {
             // the slope is too steep. do not put ash.
-            this.putAshCoating(false);
             return;
         } else {
-            if (slope >= 0.6) {
-                double slopeMultiplier = 1 - (slope - 0.6) / 0.3;
+            if (slope >= startAccumulate) {
+                double slopeMultiplier = (slope - startAccumulate) / (ashCoatStart - startAccumulate);
                 maxPileup = Math.min(1, this.maxPileup * slopeMultiplier);
             }
 
@@ -677,11 +680,10 @@ class VolcanoPyroclasticFlow {
             double deduct = (maxPileup / (double) radius) * distance;
 
             int height = (int) Math.round(maxPileup - deduct);
-            int targetY = baseBlock.getY() + height;
 
             Block accumulateBase = TyphonUtils.getHighestRocklikes(block);
-            for (int y = accumulateBase.getY() + 1; y <= targetY; y++) {
-                Block targetBlock = block.getRelative(0, y - accumulateBase.getY(), 0);
+            for (int y = 1; y <= height; y++) {
+                Block targetBlock = accumulateBase.getRelative(0, y - accumulateBase.getY(), 0);
                 if (targetBlock.getType().isAir() || TyphonUtils.containsWater(targetBlock)) {
                     this.ash.vent.lavaFlow.queueBlockUpdate(targetBlock, Material.TUFF);
                 }
