@@ -145,8 +145,7 @@ public class VolcanoAsh {
             bd.setTransformation(new Transformation(new Vector3f(-sizeHalf, -sizeHalf, -sizeHalf), new AxisAngle4f(), new Vector3f(size, size, size), new AxisAngle4f()));
             bd.setInvulnerable(true);
         });
-        ashBlockDisplays.add(new VolcanoAshCloudData(this, result, ashMultiplier));
-
+        ashBlockDisplays.add(new VolcanoAshCloudData(this, result, 1));
     }
 
     public static float ashCloudStep = 0.3f;

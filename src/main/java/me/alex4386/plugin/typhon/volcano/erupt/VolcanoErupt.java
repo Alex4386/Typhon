@@ -80,8 +80,8 @@ public class VolcanoErupt {
                 this.vent.explosion.settings.queueSize = 15;
 
                  if (this.style == VolcanoEruptStyle.VULCANIAN) {
-                    if (this.vent.lavaFlow.settings.silicateLevel < 0.50 && updateSilicate) {
-                        this.vent.lavaFlow.settings.silicateLevel = 0.50 + (Math.random() * (0.62 - 0.50));
+                    if (this.vent.lavaFlow.settings.silicateLevel < 0.57 && updateSilicate) {
+                        this.vent.lavaFlow.settings.silicateLevel = 0.57 + (Math.random() * (0.62 - 0.57));
                     }
 
                     this.vent.explosion.settings.minBombCount = 50;
