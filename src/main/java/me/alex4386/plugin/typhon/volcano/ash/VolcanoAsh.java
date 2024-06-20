@@ -598,14 +598,9 @@ class VolcanoPyroclasticFlow {
     }
 
     public void runAsh() {
-        this.fallDown();
         this.processNearby();
         this.putAsh();
         this.playAshTrail();
-    }
-
-    public void fallDown() {
-        this.location = TyphonUtils.getHighestRocklikes(this.location).getLocation();
     }
 
     public void processNearby() {
