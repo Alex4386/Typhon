@@ -91,7 +91,6 @@ public class VolcanoErupt {
                     if (this.vent.lavaFlow.settings.silicateLevel < 0.72 && updateSilicate) {
                         this.vent.lavaFlow.settings.silicateLevel = 0.61 + (Math.random() * (0.72 - 0.61));
                     }
-
                 }
                 // TODO: requires build up of lava dome before hand
             } else {

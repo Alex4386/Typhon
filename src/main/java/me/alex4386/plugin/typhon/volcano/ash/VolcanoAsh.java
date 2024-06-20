@@ -669,16 +669,21 @@ class VolcanoPyroclasticFlow {
         Block maxYBlock = TyphonUtils.getHighestRocklikes(this.location.add(radiusVectorBack).getBlock());
         Block minYBlock = TyphonUtils.getHighestRocklikes(this.location.add(radiusVector).getBlock());
 
-        if (this.hasAshFell(maxYBlock) && !this.hasAshFell(minYBlock)) {
-            maxYBlock = maxYBlock.getRelative(0, -2, 0);
+
+        if (this.ash.vent.getTwoDimensionalDistance(this.location) > 130) {
+            if (this.hasAshFell(maxYBlock) && !this.hasAshFell(minYBlock)) {
+                maxYBlock = maxYBlock.getRelative(0, -2, 0);
+            }
         }
 
         double slopeDistance = TyphonUtils.getTwoDimensionalDistance(minYBlock.getLocation(), maxYBlock.getLocation());
         double slope = Math.abs(maxYBlock.getY() - minYBlock.getY()) / slopeDistance;
         double maxPileup = this.maxPileup;
 
+        /*
         this.ash.vent.getVolcano().logger.log(VolcanoLogClass.ASH,
                 "Current maxY:"+maxYBlock.getY()+", minY:"+minYBlock.getY()+", distance:"+slopeDistance+" maxPileup: "+maxPileup+", slope: "+slope+", radius: "+radius+", location: "+TyphonUtils.blockLocationTostring(this.location.getBlock()));
+        */
 
         double ashCoatStart = 0.5;
         double startAccumulate = 0.2;
