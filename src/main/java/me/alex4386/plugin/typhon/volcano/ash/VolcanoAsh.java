@@ -637,8 +637,8 @@ class VolcanoPyroclasticFlow {
         List<Block> blocks = VolcanoMath.getCircle(this.location.getBlock(), radius);
         Block base = TyphonUtils.getHighestRocklikes(this.location);
 
-        Vector radiusVector = this.direction.clone().normalize().multiply(radius);
-        Vector radiusVectorBack = radiusVector.normalize().multiply(-1).multiply(radius);
+        Vector radiusVector = new Vector().copy(this.direction).normalize().multiply(radius);
+        Vector radiusVectorBack = new Vector().copy(radiusVector).multiply(-1);
 
         Block maxYBlock = TyphonUtils.getHighestRocklikes(this.location.add(radiusVectorBack).getBlock());
         Block minYBlock = TyphonUtils.getHighestRocklikes(this.location.add(radiusVector).getBlock());
