@@ -146,8 +146,8 @@ public class VolcanoLavaDome {
                 TyphonUtils.getRandomBlockInRange(this.baseLocation.getBlock(), (int) distance)
         ).getRelative(BlockFace.UP));
 
-        if (Math.random() < 0.1) {
-            TyphonSounds.LAVA_FLOW_FRAGMENTING.play(this.baseLocation.getBlock().getLocation(), SoundCategory.BLOCKS, 1, 1);
+        if (Math.random() < 0.0001) {
+            TyphonSounds.LAVA_FLOW_FRAGMENTING.play(this.baseLocation.getBlock().getLocation(), SoundCategory.BLOCKS, 0.1f, 1);
         }
     }
 

@@ -432,7 +432,7 @@ class VolcanoPyroclasticFlow {
         this.ash = ash;
         this.radius = radius;
         this.life = life;
-        this.maxPileup = (double) radius / 2;
+        this.maxPileup = (double) radius / (1 + Math.random());
     }
     public void registerTask() {
         if (scheduleID < 0) {
@@ -640,9 +640,12 @@ class VolcanoPyroclasticFlow {
                 if (TyphonUtils.toLowerCaseDumbEdition(block.getType().name()).contains("log")) {
                     metamorphism.removeTree(block);
                 } else {
-                    block.setType(Material.AIR);
+                    if (Math.random() < 0.25) {
+                        metamorphism.removeTree(block);
+                    } else {
+                        block.setType(Material.AIR);
+                    }
                 }
-                return;
             }
 
             if (metamorphism.isPlantlike(block.getType()) || metamorphism.isPlaceableAnimalEgg(block.getType())) {
@@ -678,8 +681,8 @@ class VolcanoPyroclasticFlow {
         this.ash.vent.getVolcano().logger.log(VolcanoLogClass.ASH,
                 "Current maxY:"+maxYBlock.getY()+", minY:"+minYBlock.getY()+", distance:"+slopeDistance+" maxPileup: "+maxPileup+", slope: "+slope+", radius: "+radius+", location: "+TyphonUtils.blockLocationTostring(this.location.getBlock()));
 
-        double ashCoatStart = 0.6;
-        double startAccumulate = 0.3;
+        double ashCoatStart = 0.5;
+        double startAccumulate = 0.2;
 
         if (slope >= ashCoatStart) {
             // the slope is too steep. do not put ash.
@@ -739,7 +742,7 @@ class VolcanoPyroclasticFlow {
         pyroclasticClouds.add(bd);
         Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
             bd.remove();
-        }, 100L);
+        }, 60L);
     }
 
     public Block get2DBlock(Block block) {
