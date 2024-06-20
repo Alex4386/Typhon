@@ -662,12 +662,14 @@ class VolcanoPyroclasticFlow {
             if (slope >= startAccumulate) {
                 double slopeMultiplier = (slope - startAccumulate) / (ashCoatStart - startAccumulate);
                 maxPileup = Math.min(1, this.maxPileup * slopeMultiplier);
+            } else {
+                if (Math.random() > ((double) life / maxLife)) {
+                    maxPileup *= 0.95;
+                }
             }
 
             if (maxPileup < 1) {
                 maxPileup = 1;
-            } else if (Math.random() > ((double) life / maxLife)) {
-                maxPileup *= 0.95;
             }
         }
 
