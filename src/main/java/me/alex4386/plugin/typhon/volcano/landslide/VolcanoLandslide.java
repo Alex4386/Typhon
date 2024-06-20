@@ -1,13 +1,11 @@
 package me.alex4386.plugin.typhon.volcano.landslide;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.World;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.util.Vector;
@@ -59,14 +57,24 @@ public class VolcanoLandslide {
     public void runTask() {
         if (this.blockIterator == null) return;
 
-        int count = 5 + (int) (Math.random() * 5);
+        Block randomSrc = null;
+
+        int count = 5 + (int) (Math.random() * 10);
         for (int i = 0; i < count; i++) {
             if (!this.blockIterator.hasNext()) {
                 break;
             }
 
             Block block = this.blockIterator.next();
+
+            if (randomSrc == null) randomSrc = block;
+            else if (Math.random() < 0.1) randomSrc = block;
+
             this.runCollapse(block);
+        }
+
+        if (Math.random() < 0.1 && randomSrc != null) {
+            TyphonSounds.DISTANT_EXPLOSION.play(randomSrc.getLocation(), SoundCategory.BLOCKS, 2f, 1f);
         }
 
         this.runPyroclasticFlow();
