@@ -636,40 +636,38 @@ class VolcanoPyroclasticFlow {
 
         List<Block> blocks = VolcanoMath.getCircle(this.location.getBlock(), radius);
         Block base = TyphonUtils.getHighestRocklikes(this.location);
-        int maxY = base.getY() - radius;
-        int minY = base.getY() + radius;
+
+        Block maxYBlock = base;
+        Block minYBlock = base;
 
         for (Block baseBlock : blocks) {
-            if (Math.random() > ((double) life / maxLife)) continue;
             Block block = TyphonUtils.getHighestRocklikes(baseBlock);
 
             if (hasAshFell(block)) continue;
-            maxY = Math.max(maxY, block.getY());
-            minY = Math.min(minY, block.getY());
+            if (maxYBlock.getY() < block.getY()) maxYBlock = block;
+            if (minYBlock.getY() > block.getY()) minYBlock = block;
         }
 
-        if (maxY - minY < 0) {
-            maxY = base.getY();
-            minY = base.getY();
-        }
-
-        double slope = (maxY - minY) / (double) (2 * radius);
+        double slope = (maxYBlock.getY() - minYBlock.getY()) / TyphonUtils.getTwoDimensionalDistance(minYBlock.getLocation(), maxYBlock.getLocation());
 
         double maxPileup = this.maxPileup;
         if (slope >= 0.9) {
             // the slope is too steep. do not put ash.
             this.putAshCoating(false);
             return;
-        } else if (slope >= 0.6) {
-            double slopeMultiplier = 1 - (slope - 0.6) / 0.3;
-            maxPileup = Math.min(1, this.maxPileup * slopeMultiplier);
+        } else {
+            if (slope >= 0.6) {
+                double slopeMultiplier = 1 - (slope - 0.6) / 0.3;
+                maxPileup = Math.min(1, this.maxPileup * slopeMultiplier);
+            }
+
+            if (maxPileup < 1) {
+                maxPileup = 1;
+            } else if (Math.random() > ((double) life / maxLife)) {
+                maxPileup *= 0.95;
+            }
         }
 
-        if (maxPileup < 1) {
-            maxPileup = 1;
-        } else if (Math.random() < 0.1) {
-            maxPileup *= 0.95;
-        }
 
         Block baseBlock = TyphonUtils.getHighestRocklikes(this.location.getBlock());
         for (Block block : blocks) {
