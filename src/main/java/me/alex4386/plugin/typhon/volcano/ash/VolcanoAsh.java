@@ -360,6 +360,7 @@ class VolcanoAshCloudData {
     }
 
     public void fallAsh() {
+
         if (!ash.vent.caldera.isForming()) {
             Block ashTarget = this.getAshFallTarget();
             if (ashTarget.getY() <= ash.getTargetY(ashTarget.getLocation())) {
@@ -427,7 +428,7 @@ class VolcanoPyroclasticFlow {
         this.ash = ash;
         this.radius = radius;
         this.life = life;
-        this.maxPileup = radius / 2;
+        this.maxPileup = (double) radius / 2;
     }
     public void registerTask() {
         if (scheduleID < 0) {
@@ -510,6 +511,19 @@ class VolcanoPyroclasticFlow {
 
         Location tmpLocation = this.location;
 
+        if (Math.random() < 0.1) {
+            // rotate the direction vector within -25~25 degrees
+            double angle = Math.random() * Math.PI / 6;
+            double x = direction.getX();
+            double z = direction.getZ();
+
+            this.direction = new Vector(
+                    x * Math.cos(angle) - z * Math.sin(angle),
+                    0,
+                    x * Math.sin(angle) + z * Math.cos(angle)
+            );
+        }
+
         this.location = this.location.add(direction.normalize().multiply(radius));
         this.location = TyphonUtils.getHighestRocklikes(this.location).getLocation();
 
@@ -557,13 +571,18 @@ class VolcanoPyroclasticFlow {
             }
         }
 
+        if (tmpLocation != this.location) {
+            // do ash interpolation
+            //this.putInterpolationAsh(tmpLocation);
+        }
+
         this.ash.vent.getVolcano().logger.debug(VolcanoLogClass.ASH, "ash trail @ "+TyphonUtils.blockLocationTostring(prevLoc.getBlock())+" -> "+TyphonUtils.blockLocationTostring(this.location.getBlock()));
 
         isFinished = this.finishConditionCheck();
         if (isFinished) {
             Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
                 this.shutdown();
-            }, 100L);
+            }, 40L);
         }
     }
 
@@ -629,15 +648,15 @@ class VolcanoPyroclasticFlow {
 
     public void putAsh() {
         // if it is near the summit, just do not put ash.
-        if (TyphonUtils.getTwoDimensionalDistance(this.location, this.ash.vent.getSummitBlock().getLocation()) < (this.radius * 2)) {
-            this.putAshCoating(false);
+        if (TyphonUtils.getTwoDimensionalDistance(this.location, this.ash.vent.getSummitBlock().getLocation()) < 20) {
             return;
         }
 
         List<Block> blocks = VolcanoMath.getCircle(this.location.getBlock(), radius);
-        Block base = TyphonUtils.getHighestRocklikes(this.location);
+        Vector srcDirection = new Vector().copy(this.direction);
+        srcDirection.setY(0);
 
-        Vector radiusVector = new Vector().copy(this.direction).normalize().multiply(radius);
+        Vector radiusVector = new Vector().copy(srcDirection).normalize().multiply(radius);
         Vector radiusVectorBack = new Vector().copy(radiusVector).multiply(-1);
 
         Block maxYBlock = TyphonUtils.getHighestRocklikes(this.location.add(radiusVectorBack).getBlock());
@@ -647,11 +666,15 @@ class VolcanoPyroclasticFlow {
             maxYBlock = maxYBlock.getRelative(0, -2, 0);
         }
 
-        double slope = Math.max(0, maxYBlock.getY() - minYBlock.getY()) / TyphonUtils.getTwoDimensionalDistance(minYBlock.getLocation(), maxYBlock.getLocation());
+        double slopeDistance = TyphonUtils.getTwoDimensionalDistance(minYBlock.getLocation(), maxYBlock.getLocation());
+        double slope = Math.max(0, maxYBlock.getY() - minYBlock.getY()) / slopeDistance;
         double maxPileup = this.maxPileup;
 
-        double ashCoatStart = 0.9;
-        double startAccumulate = 0.7;
+        this.ash.vent.getVolcano().logger.log(VolcanoLogClass.ASH,
+                "Current maxY:"+maxYBlock.getY()+", minY:"+minYBlock.getY()+", distance:"+slopeDistance+" maxPileup: "+maxPileup+", slope: "+slope+", radius: "+radius+", location: "+TyphonUtils.blockLocationTostring(this.location.getBlock()));
+
+        double ashCoatStart = 0.7;
+        double startAccumulate = 0.5;
 
         if (slope >= ashCoatStart) {
             // the slope is too steep. do not put ash.
@@ -662,7 +685,7 @@ class VolcanoPyroclasticFlow {
                 maxPileup = Math.min(1, this.maxPileup * slopeMultiplier);
             } else {
                 if (Math.random() < 0.05) {
-                    maxPileup *= 0.999;
+                    maxPileup *= 0.95;
                 }
             }
 
@@ -683,21 +706,11 @@ class VolcanoPyroclasticFlow {
 
             Block accumulateBase = TyphonUtils.getHighestRocklikes(block);
             for (int y = 1; y <= height; y++) {
-                Block targetBlock = accumulateBase.getRelative(0, y - accumulateBase.getY(), 0);
+                Block targetBlock = accumulateBase.getRelative(0, y, 0);
                 if (targetBlock.getType().isAir() || TyphonUtils.containsWater(targetBlock)) {
-                    this.ash.vent.lavaFlow.queueBlockUpdate(targetBlock, Material.TUFF);
+                    targetBlock.setType(Material.TUFF);
                 }
             }
-        }
-    }
-
-    public void putAshCoating(boolean mark) {
-        List<Block> blocks = VolcanoMath.getCircle(this.location.getBlock(), radius);
-
-        for (Block block : blocks) {
-            Block highest = TyphonUtils.getHighestRocklikes(block);
-            this.ash.vent.lavaFlow.queueBlockUpdate(highest, Material.TUFF);
-            if (mark) this.markAshFell(highest);
         }
     }
 
