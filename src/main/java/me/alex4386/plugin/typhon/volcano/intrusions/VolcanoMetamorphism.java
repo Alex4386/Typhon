@@ -44,7 +44,8 @@ public class VolcanoMetamorphism {
 
             boolean typeOfDirt = (blockTypeName.contains("dirt")
                 || blockTypeName.contains("podzol")
-                || blockTypeName.contains("grass_block"));
+                || blockTypeName.contains("grass_block"))
+                || blockTypeName.contains("farmland");
 
             boolean isPassable = block.isPassable();
 

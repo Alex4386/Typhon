@@ -13,6 +13,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.FallingBlock;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
@@ -68,7 +69,7 @@ public class VolcanoBombListener implements Listener {
 
     public void unregisterEvent() {
         if (registeredEvent) {
-            PlayerMoveEvent.getHandlerList().unregisterAll(this);
+            HandlerList.unregisterAll(this);
         }
     }
 

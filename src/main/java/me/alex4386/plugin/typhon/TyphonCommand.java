@@ -16,6 +16,9 @@ import org.bukkit.*;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemRarity;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.json.simple.parser.ParseException;
 
 public class TyphonCommand {
@@ -385,6 +388,52 @@ public class TyphonCommand {
                                     sender, TyphonDebugCommand.convertToDebugNewArgs(args));
                         }
                         break;
+                    case SUCCESSOR: {
+                        if (!sender.hasPermission("typhon.successor")) {
+                            TyphonMessage.error(sender, "You don't have enough permission!");
+                            return true;
+                        }
+
+                        if (!(sender instanceof Player)) {
+                            TyphonMessage.error(sender, "This command can not be triggered from console.");
+                            return true;
+                        }
+                        Player player = (Player) sender;
+
+                        if (args.length == 1) {
+                            boolean isEnabled = TyphonToolEvents.successorEnabled.containsKey(sender);
+                            TyphonMessage.info(
+                                    sender,
+                                    "Successor tool is "
+                                            + (isEnabled ? "enabled" : "disabled")
+                                            + " for you.");
+                        } else if (args.length == 2) {
+                            String subCommand = args[1];
+                            if (subCommand.equalsIgnoreCase("enable")) {
+                                ItemStack stack = new ItemStack(Material.WOODEN_SHOVEL);
+
+                                ItemMeta meta = stack.getItemMeta();
+                                if (meta != null) {
+                                    meta.setItemName("Successor");
+                                    meta.setRarity(ItemRarity.EPIC);
+                                    meta.setDisplayName("Successor");
+                                    meta.setLore(
+                                            Arrays.asList(
+                                                    "Primary Successor Tool",
+                                                    "Use this tool to run primary succession on the ground."));
+                                    stack.setItemMeta(meta);
+                                }
+
+                                player.getInventory().addItem(stack);
+                                TyphonToolEvents.registerSuccessor(player);
+                                TyphonMessage.info(sender, "Successor tool has been given to you.");
+                            } else if (subCommand.equalsIgnoreCase("disable")) {
+                                TyphonToolEvents.unregisterSuccessor(player);
+                                TyphonMessage.info(sender, "Successor tool has been disabled for you.");
+                            }
+                        }
+                        break;
+                    }
                     default:
                         break;
                 }

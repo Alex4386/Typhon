@@ -29,7 +29,7 @@ public enum VolcanoCommandAction {
     TELEPORT("teleport", "", "teleport to mainvent of this volcano"),
     RECORD("record", "", "see the volcano's record"),
     SUCCESSION("succession", "<?enable/disable>", "get/set primary succession state"),
-
+    AUTO_START("autostart", "<enable/disable>", "enable/disable autostart"),
     RENAME("rename", "<name>", "rename this volcano"),
     DELETE("delete", "", "Delete this volcano");
 

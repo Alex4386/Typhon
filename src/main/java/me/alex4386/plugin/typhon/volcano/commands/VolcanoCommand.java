@@ -55,6 +55,9 @@ public class VolcanoCommand {
                                 return cmd.onTabComplete(sender, command, label, args);
                             }
                         }
+                    } else if (action.equals(VolcanoCommandAction.AUTO_START)) {
+                        String[] values = { "enable", "disable" };
+                        return Arrays.asList(values.clone());
                     } else if (action.equals(VolcanoCommandAction.MAIN_VENT)) {
                         // vent operation
                         VolcanoVent vent = volcano.mainVent;
@@ -163,6 +166,22 @@ public class VolcanoCommand {
                                             + this.volcano.name
                                             + " has cooled all flowing lava!");
                             break;
+                        case AUTO_START: {
+                            if (args.length == 2) {
+                                msg.info(
+                                        "AutoStart: "
+                                                + (this.volcano.autoStart.canAutoStart ? "enabled" : "disabled"));
+                            } else {
+                                String value = args[2];
+                                if (value.equalsIgnoreCase("enable")) {
+                                    this.volcano.autoStart.canAutoStart = true;
+                                    msg.info("AutoStart has been enabled!");
+                                } else if (value.equalsIgnoreCase("disable")) {
+                                    this.volcano.autoStart.canAutoStart = false;
+                                    msg.info("AutoStart has been disabled!");
+                                }
+                            }
+                        }
                         case SUCCESSION:
                             if (args.length >= 3) {
 

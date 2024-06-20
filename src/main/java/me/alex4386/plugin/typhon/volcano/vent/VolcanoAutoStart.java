@@ -18,7 +18,7 @@ import java.util.*;
 public class VolcanoAutoStart implements Listener {
     public Volcano volcano;
 
-    public static boolean defaultCanAutoStart = true;
+    public static boolean defaultCanAutoStart = false;
 
     public boolean canAutoStart = defaultCanAutoStart;
     public boolean pourLavaStart = true;

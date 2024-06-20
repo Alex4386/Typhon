@@ -165,7 +165,7 @@ public class TyphonBlueMapUtils {
   }
 
   public static String getIconURLByStatus(World world, VolcanoVentStatus status) {
-    if (status.getScaleFactor() >= VolcanoVentStatus.ERUPTING.getScaleFactor()) {
+    if (status == VolcanoVentStatus.ERUPTING) {
       return getEruptingImgUrl(world);
     } else {
       return getDormantImgUrl(world);
