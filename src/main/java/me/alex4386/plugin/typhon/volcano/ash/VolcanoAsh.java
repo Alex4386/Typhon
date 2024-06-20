@@ -667,7 +667,7 @@ class VolcanoPyroclasticFlow {
         }
 
         double slopeDistance = TyphonUtils.getTwoDimensionalDistance(minYBlock.getLocation(), maxYBlock.getLocation());
-        double slope = Math.max(0, maxYBlock.getY() - minYBlock.getY()) / slopeDistance;
+        double slope = Math.abs(maxYBlock.getY() - minYBlock.getY()) / slopeDistance;
         double maxPileup = this.maxPileup;
 
         this.ash.vent.getVolcano().logger.log(VolcanoLogClass.ASH,
