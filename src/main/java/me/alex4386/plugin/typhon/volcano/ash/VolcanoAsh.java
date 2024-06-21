@@ -721,6 +721,7 @@ class VolcanoPyroclasticFlow {
                 Block targetBlock = accumulateBase.getRelative(0, y, 0);
                 if (targetBlock.getType().isAir() || TyphonUtils.containsWater(targetBlock)) {
                     this.ash.vent.lavaFlow.queueBlockUpdate(targetBlock, Material.TUFF);
+                    this.ash.vent.record.addEjectaVolume(1);
                 }
             }
         }

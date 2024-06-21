@@ -69,6 +69,9 @@ public class VolcanoGeoThermal implements Listener {
   public void runCraterGeothermal(VolcanoVent vent) {
     this.runCraterGeothermal(vent, this.getBlockToRunCraterCycle(vent));
   }
+  public void runOuterCraterGeothermal(VolcanoVent vent) {
+    this.runCraterGeothermal(vent, this.getBlockToRunOuterCraterCycle(vent));
+  }
 
   public void runCraterGeothermal(VolcanoVent vent, Block block) {
     this.runCraterGeothermal(vent, block, true);
@@ -169,7 +172,12 @@ public class VolcanoGeoThermal implements Listener {
 
     for (int i = 0; i < cycleCount; i++) {
       this.runCraterGeothermal(vent);
-    }  
+    }
+
+    int extraCount = (int) (cycleCount * Math.pow(vent.getStatus().getScaleFactor(), 1.5));
+    for (int i = 0; i < extraCount; i++) {
+      this.runOuterCraterGeothermal(vent);
+    }
   }
 
   public void runVolcanoGeoThermalCycle(VolcanoVent vent) {
@@ -208,6 +216,30 @@ public class VolcanoGeoThermal implements Listener {
         this.runVolcanoGeoThermal(vent, this.getCalderaGeoThermalBlock(vent));
       }
     }
+
+    int extraCount = (int) (cycleCount * Math.pow(vent.getStatus().getScaleFactor(), 1.5));
+    for (int i = 0; i < extraCount; i++) {
+      this.runVolcanoGeoThermal(vent, this.getVolcanoGeoThermalBlock(vent));
+    }
+  }
+
+  public Block getBlockToRunOuterCraterCycle(VolcanoVent vent) {
+    Block block;
+
+    double range = 50 * Math.pow(vent.getStatus().getScaleFactor(), 1.5);
+    int craterRadius = vent.getRadius();
+    double offset = VolcanoMath.getZeroFocusedRandom() * range;
+
+    block = TyphonUtils
+            .getHighestRocklikes(
+                    TyphonUtils
+                            .getRandomBlockInRange(
+                                    vent.getCoreBlock(),
+                                    0,
+                                    (int) (craterRadius + offset)
+                            )
+            );
+    return block;
   }
 
   public Block getBlockToRunCraterCycle(VolcanoVent vent) {
@@ -227,7 +259,7 @@ public class VolcanoGeoThermal implements Listener {
               .getRandomBlockInRange(
                   vent.getCoreBlock(),
                   0,
-                  (int) (vent.craterRadius + offset)
+                  (int) (craterRadius + offset)
               )
       );
     return block;

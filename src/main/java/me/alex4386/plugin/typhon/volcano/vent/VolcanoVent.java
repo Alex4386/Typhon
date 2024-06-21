@@ -180,7 +180,10 @@ public class VolcanoVent {
         explosion.shutdown();
         lavaFlow.shutdown();
         tremor.shutdown();
+
         record.endEjectaTrack();
+        volcano.trySave(true);
+
         bombs.shutdown();
         lavadome.shutdown();
         landslide.shutdown();
@@ -587,7 +590,7 @@ public class VolcanoVent {
                     ventBlocks.sort((Block block1, Block block2) -> block1.getY() - block2.getY());
 
                     for (Block block : ventBlocks) {
-                        if (this.lavaFlow.lavaCoolHashMap.get(block) == null) {
+                        if (!this.lavaFlow.isLavaRegistered(block)) {
                             if (!selectedBlocks.contains(block)) {
                                 Block blockTop = TyphonUtils.getHighestRocklikes(block);
                                 selectedBlocks.add(blockTop);
@@ -608,7 +611,7 @@ public class VolcanoVent {
             for (Block block : ventBlocks) {
                 int y = block.getY();
 
-                if (y < minimumTolerantHeight && this.lavaFlow.lavaCoolHashMap.get(block) == null) {
+                if (y < minimumTolerantHeight && !this.lavaFlow.isLavaRegistered(block)) {
                     if (Math.random() < 0.2f) continue;
                     if (!selectedBlocks.contains(block)) {
                         Block blockTop = TyphonUtils.getHighestRocklikes(block);

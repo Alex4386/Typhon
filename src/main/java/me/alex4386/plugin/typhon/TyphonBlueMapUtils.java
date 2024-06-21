@@ -140,12 +140,12 @@ public class TyphonBlueMapUtils {
 
   public static String getEruptingImgUrl(World world) {
     AssetStorage storage = getBlueMapAPI().getMap(world.getName()).get().getAssetStorage();
-    String id = "typhon/vol_erupting";
+    String id = "typhon/erupting.png";
 
     try {
       if (checkIfAssetExists(world, id)) return storage.getAssetUrl(id);
 
-      InputStream eruptingImg = TyphonPlugin.plugin.getResource("volcano_erupting.png");
+      InputStream eruptingImg = TyphonPlugin.plugin.getResource("icons/erupting.png");
       byte[] data = eruptingImg.readAllBytes();
 
       return uploadAndGetURLIfAssetNotExist(world, id, data);
@@ -156,12 +156,60 @@ public class TyphonBlueMapUtils {
 
   public static String getDormantImgUrl(World world) {
     AssetStorage storage = getBlueMapAPI().getMap(world.getName()).get().getAssetStorage();
-    String id = "typhon/vol_dormant";
+    String id = "typhon/dormant.png";
 
     try {
       if (checkIfAssetExists(world, id)) return storage.getAssetUrl(id);
 
-      InputStream eruptingImg = TyphonPlugin.plugin.getResource("volcano_dormant.png");
+      InputStream eruptingImg = TyphonPlugin.plugin.getResource("icons/dormant.png");
+      byte[] data = eruptingImg.readAllBytes();
+
+      return uploadAndGetURLIfAssetNotExist(world, id, data);
+    } catch (IOException e) {
+      return null;
+    }
+  }
+
+  public static String getMinorActivityImgUrl(World world) {
+    AssetStorage storage = getBlueMapAPI().getMap(world.getName()).get().getAssetStorage();
+    String id = "typhon/minor-activity.png";
+
+    try {
+      if (checkIfAssetExists(world, id)) return storage.getAssetUrl(id);
+
+      InputStream eruptingImg = TyphonPlugin.plugin.getResource("icons/minor-activity.png");
+      byte[] data = eruptingImg.readAllBytes();
+
+      return uploadAndGetURLIfAssetNotExist(world, id, data);
+    } catch (IOException e) {
+      return null;
+    }
+  }
+
+  public static String getMajorActivityImgUrl(World world) {
+    AssetStorage storage = getBlueMapAPI().getMap(world.getName()).get().getAssetStorage();
+    String id = "typhon/major-activity.png";
+
+    try {
+      if (checkIfAssetExists(world, id)) return storage.getAssetUrl(id);
+
+      InputStream eruptingImg = TyphonPlugin.plugin.getResource("icons/major-activity.png");
+      byte[] data = eruptingImg.readAllBytes();
+
+      return uploadAndGetURLIfAssetNotExist(world, id, data);
+    } catch (IOException e) {
+      return null;
+    }
+  }
+
+  public static String getExtinctImgUrl(World world) {
+    AssetStorage storage = getBlueMapAPI().getMap(world.getName()).get().getAssetStorage();
+    String id = "typhon/extinct.png";
+
+    try {
+      if (checkIfAssetExists(world, id)) return storage.getAssetUrl(id);
+
+      InputStream eruptingImg = TyphonPlugin.plugin.getResource("icons/extinct.png");
       byte[] data = eruptingImg.readAllBytes();
 
       return uploadAndGetURLIfAssetNotExist(world, id, data);
@@ -214,8 +262,14 @@ public class TyphonBlueMapUtils {
   public static String getIconURLByStatus(World world, VolcanoVentStatus status) {
     if (status == VolcanoVentStatus.ERUPTING) {
       return getEruptingImgUrl(world);
-    } else {
+    } else if (status == VolcanoVentStatus.MAJOR_ACTIVITY || status == VolcanoVentStatus.ERUPTION_IMMINENT) {
+      return getMajorActivityImgUrl(world);
+    } else if (status == VolcanoVentStatus.MINOR_ACTIVITY) {
+      return getMinorActivityImgUrl(world);
+    } else if (status == VolcanoVentStatus.DORMANT) {
       return getDormantImgUrl(world);
+    } else {
+      return getExtinctImgUrl(world);
     }
   }
 

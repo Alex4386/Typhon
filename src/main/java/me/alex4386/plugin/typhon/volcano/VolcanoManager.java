@@ -151,7 +151,7 @@ public class VolcanoManager {
     }
 
     public ChatColor getVentChatColor(VolcanoVent vent) {
-        return ((vent.getStatus() == VolcanoVentStatus.ERUPTING)
+        return ((vent.getStatus() == VolcanoVentStatus.ERUPTING || vent.getStatus() == VolcanoVentStatus.ERUPTION_IMMINENT)
                 ? ChatColor.RED
                 : (vent.getStatus() == VolcanoVentStatus.MAJOR_ACTIVITY)
                         ? ChatColor.GOLD

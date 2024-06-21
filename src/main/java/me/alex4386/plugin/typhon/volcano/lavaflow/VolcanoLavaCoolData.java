@@ -25,7 +25,7 @@ public class VolcanoLavaCoolData {
     public Block fromBlock;
     public Material material;
     public Block source;
-    public int flowLimit = 0;
+    public int flowLimit = 10;
     public VolcanoVent flowedFromVent = null;
     boolean isBomb = false;
     public boolean isProcessed = false;

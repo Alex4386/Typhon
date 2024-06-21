@@ -5,6 +5,7 @@ public enum VolcanoVentStatus {
     DORMANT("DORMANT", 0.04),
     MINOR_ACTIVITY("MINOR_ACTIVITY", 0.1),
     MAJOR_ACTIVITY("MAJOR_ACTIVITY", 0.4),
+    ERUPTION_IMMINENT("ERUPTION_IMMINENT", 0.9),
     ERUPTING("ERUPTING", 1);
 
     String string;
@@ -50,6 +51,7 @@ public enum VolcanoVentStatus {
             case MINOR_ACTIVITY:
                 return MAJOR_ACTIVITY;
             case MAJOR_ACTIVITY:
+            case ERUPTION_IMMINENT:
             case ERUPTING:
             default:
                 return ERUPTING;
@@ -66,6 +68,7 @@ public enum VolcanoVentStatus {
             case MAJOR_ACTIVITY:
                 return MINOR_ACTIVITY;
             case ERUPTING:
+            case ERUPTION_IMMINENT:
             default:
                 return MAJOR_ACTIVITY;
         }

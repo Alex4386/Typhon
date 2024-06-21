@@ -26,6 +26,7 @@ import org.json.simple.JSONObject;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 
 public class VolcanoLavaFlow implements Listener {
@@ -34,8 +35,9 @@ public class VolcanoLavaFlow implements Listener {
     public static List<VolcanoVent> flowingVents = new ArrayList<>();
 
     public List<Chunk> lavaFlowChunks = new ArrayList<>();
-    public Map<Block, VolcanoLavaCoolData> lavaCoolHashMap = new HashMap<>();
-    public Map<Block, VolcanoLavaCoolData> cachedLavaCoolHashMap = new HashMap<>();
+
+    public Map<Chunk, Map<Block, VolcanoLavaCoolData>> lavaCools = new HashMap<>();
+    public Map<Chunk, Map<Block, VolcanoLavaCoolData>> cachedCools = new HashMap<>();
     public Map<Block, VolcanoPillowLavaData> pillowLavaMap = new HashMap<>();
     public Map<Block, VolcanoPillowLavaData> cachedPillowLavaMap = new HashMap<>();
 
@@ -188,17 +190,12 @@ public class VolcanoLavaFlow implements Listener {
                     "Intializing lava flow scheduler of VolcanoLavaFlow for vent "
                             + vent.getName());
             lavaFlowScheduleId =
-                    TyphonPlugin.plugin
-                            .getServer()
-                            .getScheduler()
-                            .scheduleSyncRepeatingTask(
-                                    TyphonPlugin.plugin,
-                                    () -> {
-                                        if (settings.flowing) this.plumbLava();
-                                        this.autoFlowLava();
-                                    },
-                                    0L,
-                                    (long) 1);
+                    TyphonScheduler.registerGlobalTask(
+                            () -> {
+                                this.plumbLava();
+                                this.autoFlowLava();
+                            },
+                            1L);
         }
         if (lavaCoolScheduleId == -1) {
             this.vent.volcano.logger.log(
@@ -308,7 +305,7 @@ public class VolcanoLavaFlow implements Listener {
                     VolcanoLogClass.LAVA_FLOW,
                     "Shutting down lava flow scheduler of VolcanoLavaFlow for vent "
                             + vent.getName());
-            TyphonPlugin.plugin.getServer().getScheduler().cancelTask(lavaFlowScheduleId);
+            TyphonScheduler.unregisterTask(lavaFlowScheduleId);
             lavaFlowScheduleId = -1;
         }
         if (lavaInfluxScheduleId != -1) {
@@ -316,7 +313,7 @@ public class VolcanoLavaFlow implements Listener {
                     VolcanoLogClass.LAVA_FLOW,
                     "Shutting down lava influx scheduler of VolcanoLavaFlow for vent "
                             + vent.getName());
-            TyphonPlugin.plugin.getServer().getScheduler().cancelTask(lavaInfluxScheduleId);
+            TyphonScheduler.unregisterTask(lavaInfluxScheduleId);
             lavaInfluxScheduleId = -1;
         }
         if (lavaCoolScheduleId != -1) {
@@ -324,7 +321,7 @@ public class VolcanoLavaFlow implements Listener {
                     VolcanoLogClass.LAVA_FLOW,
                     "Shutting down lava cooldown scheduler of VolcanoLavaFlow for vent "
                             + vent.getName());
-            TyphonPlugin.plugin.getServer().getScheduler().cancelTask(lavaCoolScheduleId);
+            TyphonScheduler.unregisterTask(lavaCoolScheduleId);
             lavaCoolScheduleId = -1;
         }
         if (queueScheduleId != -1) {
@@ -332,7 +329,7 @@ public class VolcanoLavaFlow implements Listener {
                     VolcanoLogClass.LAVA_FLOW,
                     "Shutting down lava cooldown queue handler of VolcanoLavaFlow for vent "
                             + vent.getName());
-            TyphonPlugin.plugin.getServer().getScheduler().cancelTask(lavaCoolScheduleId);
+            TyphonScheduler.unregisterTask(queueScheduleId);
             lavaCoolScheduleId = -1;
         }
     }
@@ -367,7 +364,7 @@ public class VolcanoLavaFlow implements Listener {
         Location loc = targetBlock.getLocation();
 
         if (targetBlock.getType() == Material.LAVA) {
-            if (lavaCoolHashMap.get(targetBlock) != null
+            if (this.getLavaCoolData(targetBlock) != null
                     || this.getVolcano().manager.isInAnyLavaFlowArea(loc)) {
 
                 // this is from lava flow
@@ -445,8 +442,8 @@ public class VolcanoLavaFlow implements Listener {
         Block toBlock = event.getToBlock();
         BlockFace face = event.getFace();
 
-        VolcanoLavaCoolData data = lavaCoolHashMap.get(block);
-        if (data == null) cachedLavaCoolHashMap.get(block);
+        VolcanoLavaCoolData data = this.getLavaCoolData(block);
+
 
         int level = -1;
         BlockData bd = block.getBlockData();
@@ -503,6 +500,8 @@ public class VolcanoLavaFlow implements Listener {
 
             if (Math.random() < this.getLavaStickiness()) {
                 if (Math.random() > levelProbability) {
+                    vent.volcano.logger.log(VolcanoLogClass.LAVA_FLOW, "Lava stickiness match! levelProbability: "+levelProbability);
+
                     event.setCancelled(true);
                     return;
                 }
@@ -549,22 +548,13 @@ public class VolcanoLavaFlow implements Listener {
                 if (this.vent != null && data.source != null) {
                     if (!this.vent.isInVent(toBlock.getLocation())) {
                         if (data.flowLimit >= 0) {
-                            int limit = data.flowLimit == 0 ? this.vent.craterRadius : data.flowLimit;
-                            if (this.vent.getType() == VolcanoVentType.CRATER && Math.floor(this.vent.getTwoDimensionalDistance(data.source.getLocation())) >= limit) {
-                                double distance = this.vent.getTwoDimensionalDistance(toBlock.getLocation());
-                                int y = toBlock.getY();
-
-                                int targetY = (int) (this.vent.getSummitBlock().getY() - (distance / this.vent.bombs.distanceHeightRatio()));
-
-                                if (y > targetY) {
-                                    event.setCancelled(true);
-                                    return;
-                                }
-                            } else {
-                                if (TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation()) > data.flowLimit) {
-                                    event.setCancelled(true);
-                                    return;
-                                }
+                            if (TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation()) > data.flowLimit) {
+//                                vent.volcano.logger.log(
+//                                        VolcanoLogClass.LAVA_FLOW,
+//                                        "flowLimit match! flowLimit: "+data.flowLimit
+//                                );
+                                event.setCancelled(true);
+                                return;
                             }
                         }
                     }
@@ -597,10 +587,11 @@ public class VolcanoLavaFlow implements Listener {
             }
 
             if (underIsAir && underUnderToBlock.getType().isAir() && fillUnderUnder) {
-                underToBlock.setType(data.material);
+                queueImmediateBlockUpdate(underToBlock, data.material);
 
                 // bifurcate lava
-                registerLavaCoolData(data.source, underToBlock, underUnderToBlock, data.isBomb);
+                registerLavaCoolData(data.source, underToBlock, underUnderToBlock, data.isBomb, -1, false, true);
+                queueBlockUpdate(underUnderToBlock, Material.LAVA);
             }
 
             int extensionCount = data.runExtensionCount;
@@ -634,12 +625,26 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     private VolcanoLavaCoolData getLavaCoolData(Block block) {
-        VolcanoLavaCoolData coolData = lavaCoolHashMap.get(block);
-        if (coolData == null) {
-            coolData = cachedLavaCoolHashMap.get(block);
+        Map<Block, VolcanoLavaCoolData> lavaCoolHashMap = this.lavaCools.get(block.getChunk());
+        if (lavaCoolHashMap == null) {
+            return this.getCachedLavaCoolData(block);
         }
 
-        return coolData;
+        VolcanoLavaCoolData data = lavaCoolHashMap.get(block);
+        if (data == null) {
+            return this.getCachedLavaCoolData(block);
+        }
+
+        return data;
+    }
+
+    private VolcanoLavaCoolData getCachedLavaCoolData(Block block) {
+        Map<Block, VolcanoLavaCoolData> lavaCoolHashMap = this.cachedCools.get(block.getChunk());
+        if (lavaCoolHashMap == null) {
+            return null;
+        }
+
+        return lavaCoolHashMap.get(block);
     }
 
     private VolcanoPillowLavaData getPillowLavaCoolData(Block block) {
@@ -889,7 +894,29 @@ public class VolcanoLavaFlow implements Listener {
             Block block,
             boolean isBomb,
             int extension,
-            boolean isUnderWater) {
+            boolean isUnderWater
+    ) {
+        return registerLavaCoolData(source, fromBlock, block, isBomb, extension, isUnderWater, false);
+    }
+
+    private void registerToCacheCools(Block block, VolcanoLavaCoolData data) {
+        Map<Block, VolcanoLavaCoolData> cachedLavaCoolHashMap = this.cachedCools.get(block.getChunk());
+        if (cachedLavaCoolHashMap == null) {
+            cachedLavaCoolHashMap = new HashMap<>();
+            this.cachedCools.put(block.getChunk(), cachedLavaCoolHashMap);
+        }
+
+        cachedLavaCoolHashMap.put(block, data);
+    }
+
+    private Object registerLavaCoolData(
+            Block source,
+            Block fromBlock,
+            Block block,
+            boolean isBomb,
+            int extension,
+            boolean isUnderWater,
+            boolean skipLava) {
         Object result = null;
         Material targetMaterial =
                 isBomb && !isUnderWater
@@ -905,7 +932,10 @@ public class VolcanoLavaFlow implements Listener {
         }
 
         if (!isUnderWater) {
-            block.setType(Material.LAVA);
+            if (!skipLava) {
+                block.setType(Material.LAVA);
+            }
+
             int ticks = 30;
             VolcanoLavaCoolData coolData;
 
@@ -919,10 +949,6 @@ public class VolcanoLavaFlow implements Listener {
                         ticks * this.settings.flowed,
                         isBomb);
                 result = coolData;
-
-                cachedLavaCoolHashMap.put(
-                        block,
-                        coolData);
             } else {
                 coolData = new VolcanoLavaCoolData(
                         source,
@@ -934,11 +960,8 @@ public class VolcanoLavaFlow implements Listener {
                         isBomb,
                         extension);
                 result = coolData;
-
-                cachedLavaCoolHashMap.put(
-                        block,
-                        coolData);
             }
+            registerToCacheCools(block, coolData);
         } else {
             VolcanoPillowLavaData lavaData = cachedPillowLavaMap.get(block);
             if (lavaData == null) {
@@ -975,14 +998,17 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public boolean hasAnyLavaFlowing() {
-        int counts = lavaCoolHashMap.size();
+        int counts = 0;
+        for (Map<Block, VolcanoLavaCoolData> lavaCoolMap : lavaCools.values())
+            counts += lavaCoolMap.size();
+
         counts += pillowLavaMap.size();
 
         return counts > 0;
     }
 
     public List<Block> getRandomLavaBlocks(int count) {
-        List<Block> lavaBlocks = (ArrayList<Block>) new ArrayList<>(lavaCoolHashMap.keySet());
+        List<Block> lavaBlocks = (ArrayList<Block>) new ArrayList<>(lavaCools.values().stream().map(Map::keySet).flatMap(Set::stream).collect(Collectors.toList()));
         List<Block> pillowBlocks = (ArrayList<Block>) new ArrayList<>(pillowLavaMap.keySet());
 
         Collections.shuffle(lavaBlocks);
@@ -1078,6 +1104,9 @@ public class VolcanoLavaFlow implements Listener {
 
         // check if the lava sillicalevel isn't too high
         if (this.settings.silicateLevel > 0.53) return false;
+
+        if (this.vent.erupt.getStyle() != VolcanoEruptStyle.HAWAIIAN)
+            return false;
 
         double radius = 100 + (Math.random() * (this.vent.longestNormalLavaFlowLength - 100));
         double angle = Math.random() * Math.PI * 2;
@@ -1677,72 +1706,92 @@ public class VolcanoLavaFlow implements Listener {
         }
     }
 
-    private void runCooldownTick() {
-        if (lavaCoolHashMap.isEmpty()) {
-            if (flowingVents.contains(this.vent)) {
-                flowingVents.remove(this.vent);
-            }
-        }
-
-        if (!flowingVents.contains(this.vent)) {
-            flowingVents.add(this.vent);
-        }
-
-        Iterator<Map.Entry<Block, VolcanoLavaCoolData>> iterator =
-                lavaCoolHashMap.entrySet().iterator();
+    private void runChunkCooldownTick(Map<Block, VolcanoLavaCoolData> lavaCoolMap) {
         List<Block> removeTargets = new ArrayList<Block>();
 
-        try {
-            while (iterator.hasNext()) {
-                Map.Entry<Block, VolcanoLavaCoolData> entry = iterator.next();
-                VolcanoLavaCoolData coolData = entry.getValue();
-                
-                if (coolData.tickPassed()) {
-                    removeTargets.add(entry.getKey());
-                }
-                coolData.tickPass();
-
-            }
-        } catch (ConcurrentModificationException e) {
-            e.printStackTrace();
-        }
-
-        //this.getVolcano().logger.log(VolcanoLogClass.LAVA_FLOW, "processed "+limits+" lava flows");
-
-        for (Block block : removeTargets) {
-            lavaCoolHashMap.remove(block);
-        }
-
-        Map<Block, VolcanoLavaCoolData> cache = cachedLavaCoolHashMap;
-        Iterator<Map.Entry<Block, VolcanoLavaCoolData>> iteratorCache = cache.entrySet().iterator();
-
-        while (iteratorCache.hasNext()) {
-            Map.Entry<Block, VolcanoLavaCoolData> entry = iteratorCache.next();
-
+        for (Map.Entry<Block, VolcanoLavaCoolData> entry : lavaCoolMap.entrySet()) {
             Block block = entry.getKey();
-            VolcanoLavaCoolData data = entry.getValue();
+            VolcanoLavaCoolData coolData = entry.getValue();
 
-            lavaCoolHashMap.put(block, data);
-            iteratorCache.remove();
+            if (coolData.tickPassed()) {
+                coolData.coolDown();
+                removeTargets.add(block);
+                continue;
+            }
+            coolData.tickPass();
+        }
+
+        for (Block removeTarget : removeTargets) {
+            lavaCoolMap.remove(removeTarget);
+        }
+    }
+
+    private Map<Block, VolcanoLavaCoolData> addCacheToLavaCoolMap(Chunk chunk) {
+        Map<Block, VolcanoLavaCoolData> lavaCoolMap = lavaCools.get(chunk);
+        if (lavaCoolMap == null) {
+            lavaCoolMap = new HashMap<>();
+            lavaCools.put(chunk, lavaCoolMap);
+        }
+
+        Map<Block, VolcanoLavaCoolData> cache = cachedCools.get(chunk);
+        if (cache == null) return lavaCoolMap;
+
+        for (Map.Entry<Block, VolcanoLavaCoolData> entry : cache.entrySet()) {
+            Block block = entry.getKey();
+            VolcanoLavaCoolData coolData = entry.getValue();
+
+            lavaCoolMap.put(block, coolData);
+        }
+
+        cache.clear();
+        return lavaCoolMap;
+    }
+
+
+    private void runCooldownTick() {
+        for (Map.Entry<Chunk, Map<Block, VolcanoLavaCoolData>> entry : cachedCools.entrySet()) {
+            addCacheToLavaCoolMap(entry.getKey());
+        }
+
+        boolean isEmpty = true;
+        for (Map.Entry<Chunk, Map<Block, VolcanoLavaCoolData>> entry : lavaCools.entrySet()) {
+            if (!entry.getValue().isEmpty()) isEmpty = false;
+            TyphonScheduler.run(entry.getKey(), () -> {
+                runChunkCooldownTick(entry.getValue());
+            });
+        }
+
+        if (isEmpty) {
+            flowingVents.remove(this.vent);
+        } else {
+            if (!flowingVents.contains(this.vent)) {
+                flowingVents.add(this.vent);
+            }
         }
     }
 
     public void cooldownAll() {
-        for (Map.Entry<Block, VolcanoLavaCoolData> entry : lavaCoolHashMap.entrySet()) {
-            Block block = entry.getKey();
-            VolcanoLavaCoolData coolData = entry.getValue();
+        for (Map.Entry<Chunk, Map<Block, VolcanoLavaCoolData>> coolEntry : lavaCools.entrySet()) {
+            for (Map.Entry<Block, VolcanoLavaCoolData> entry : coolEntry.getValue().entrySet()) {
+                Block block = entry.getKey();
+                VolcanoLavaCoolData coolData = entry.getValue();
 
-            block.setType(coolData.material);
+                block.setType(coolData.material);
+            }
+            coolEntry.getValue().clear();
         }
-        lavaCoolHashMap.clear();
+        lavaCools.clear();
 
-        for (Map.Entry<Block, VolcanoLavaCoolData> entry : cachedLavaCoolHashMap.entrySet()) {
-            Block block = entry.getKey();
-            VolcanoLavaCoolData coolData = entry.getValue();
+        for (Map.Entry<Chunk, Map<Block, VolcanoLavaCoolData>> coolEntry : cachedCools.entrySet()) {
+            for (Map.Entry<Block, VolcanoLavaCoolData> entry : coolEntry.getValue().entrySet()) {
+                Block block = entry.getKey();
+                VolcanoLavaCoolData coolData = entry.getValue();
 
-            block.setType(coolData.material);
+                block.setType(coolData.material);
+            }
+            coolEntry.getValue().clear();
         }
-        cachedLavaCoolHashMap.clear();
+        cachedCools.clear();
 
         for (Map.Entry<Block, VolcanoPillowLavaData> entry : pillowLavaMap.entrySet()) {
             Block block = entry.getKey();
