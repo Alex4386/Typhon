@@ -208,7 +208,7 @@ public class VolcanoSuccession {
             }
 
             // stage 3. is grass?
-            boolean isGrass = targetBlock.getType() == Material.GRASS_BLOCK || targetBlock.getType() == Material.DIRT;
+            boolean isGrass = targetBlock.getType() == Material.GRASS_BLOCK || targetBlock.getType() == Material.DIRT || targetBlock.getType() == Material.FARMLAND || targetBlock.getType() == Material.PODZOL || targetBlock.getType() == Material.DIRT_PATH || targetBlock.getType() == Material.COARSE_DIRT;
             if (isGrass) {
                 // let me run some randoms.
                 double growProbability = 0.2;

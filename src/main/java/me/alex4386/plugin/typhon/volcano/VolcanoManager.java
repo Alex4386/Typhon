@@ -364,4 +364,20 @@ public class VolcanoManager {
         return volcanoes.stream().filter(volcano -> volcano.location.getWorld().equals(world) && volcano.manager.getHighestStatusVent().getStatus().isActive()).collect(Collectors.toList());
     }
 
+    public static Volcano getNearestVolcano(Location loc) {
+        Collection<Volcano> volcanoes = VolcanoManager.getVolcanoesOnWorld(loc.getWorld());
+        Volcano nearestVolcano = null;
+
+        double nearestDistance = -1;
+        for (Volcano volcano : volcanoes) {
+            double distance = TyphonUtils.getTwoDimensionalDistance(loc, volcano.location);
+            if (nearestDistance < 0 || distance < nearestDistance) {
+                nearestDistance = distance;
+                nearestVolcano = volcano;
+            }
+        }
+
+        return nearestVolcano;
+    }
+
 }

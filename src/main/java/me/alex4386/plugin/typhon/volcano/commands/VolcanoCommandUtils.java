@@ -20,7 +20,7 @@ public class VolcanoCommandUtils {
             Player player = ((Player) sender).getPlayer();
             String directions;
 
-            if (player.getWorld() != summitBlock.getWorld()) {
+            if (player.getWorld().equals(summitBlock.getWorld())) {
                 TyphonNavigation navigation = TyphonNavigation.getNavigation(player.getLocation(), summitBlock.getLocation());
                 directions = navigation.getNavigation();
             } else {

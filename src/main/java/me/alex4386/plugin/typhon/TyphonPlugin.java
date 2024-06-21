@@ -34,6 +34,7 @@ public final class TyphonPlugin extends JavaPlugin {
 
     public static Plugin plugin;
     public static VolcanoBombListener vbl;
+    public static TyphonToolEvents events;
 
     public static BlueMapAPI blueMap = null;
     public static boolean enableBlueMap = true;
@@ -136,6 +137,9 @@ public final class TyphonPlugin extends JavaPlugin {
         TyphonGaia.initialize();
         logger.log(VolcanoLogClass.GAIA, "Initialization Complete!");
 
+        events = new TyphonToolEvents();
+        events.initialize();
+
         logger.log(VolcanoLogClass.INIT, "Initialization Complete!");
     }
 
@@ -206,6 +210,7 @@ public final class TyphonPlugin extends JavaPlugin {
         }
 
         vbl.shutdown();
+        events.shutdown();
         isShuttingdown = false;
     }
 

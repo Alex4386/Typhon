@@ -1052,13 +1052,13 @@ public class VolcanoLavaFlow implements Listener {
         double distance = offset - height;
         double deduct = distance / Math.sqrt(3);
 
-        return (int) (height - deduct);
+        return (int) Math.round(height - deduct);
     }
 
     public void addRootlessCone(Location location) {
         Block baseBlock = TyphonUtils.getHighestRocklikes(location);
 
-        int height = 1 + (int) (Math.pow(Math.random(), 2) * 2);
+        int height = 3 + (int) (Math.pow(Math.random(), 2) * 2);
 
         double baseRaw = getRootlessConeRadius(height);
         int baseInt = (int) Math.ceil(baseRaw);
@@ -1068,8 +1068,11 @@ public class VolcanoLavaFlow implements Listener {
                 int targetHeight = rootlessConeHeight(height, Math.sqrt(x * x + z * z));
                 Block baseBlockAt = TyphonUtils.getHighestRocklikes(baseBlock.getRelative(x, 0, z));
 
-                for (int y = 1; y < targetHeight; y++) {
+                for (int y = 1; y <= targetHeight; y++) {
                     Block targetBlock = baseBlockAt.getRelative(0, y, 0);
+                    if (targetBlock.getY() > baseBlock.getY() + height) {
+                        break;
+                    }
                     if (targetBlock.getType().isAir() || targetBlock.getType() == Material.WATER) {
                         Material material = VolcanoComposition.getBombRock(this.settings.silicateLevel);
                         queueBlockUpdate(targetBlock, material);

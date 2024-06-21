@@ -26,6 +26,7 @@ public enum VolcanoVentCommandAction {
     RESET("reset", "", "reset this vent's config for world reset"),
     DELETE("delete", "", "delete this vent"),
     LANDSLIDE("landslide", "<start/setAngle/config/clear>", "create landslide from this vent"),
+    SWITCH("switch", "", "switch this vent to a mainvent"),
     STYLE(
             "style",
             "<? hawaiian/strombolian/fissure/crater/etc.>",

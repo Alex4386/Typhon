@@ -481,6 +481,22 @@ public class VolcanoVentCommand {
                     msg.warn("NOT IMPLEMENTED");
                 }
                 break;
+            case SWITCH: {
+                if (vent.isMainVent()) {
+                    msg.error("This vent is already a main vent.");
+                    return true;
+                }
+
+                String thisVentName = vent.name;
+                VolcanoVent mainVent = vent.volcano.mainVent;
+                mainVent.name = thisVentName;
+                vent.volcano.subVents.put(thisVentName, mainVent);
+                vent.volcano.mainVent = vent;
+                vent.name = null;
+
+                msg.info("Vent " + thisVentName + " has been switched to main vent.");
+                vent.volcano.trySave(true);
+            }
             case STYLE:
                 if (newArgs.length < 2) {
                     String isSurtsey = "";
