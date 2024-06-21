@@ -1,39 +1,45 @@
 # Typhon Plugin
 Typhon Plugin aims to implement real-life volcanoes and its behavior in the restriction of vanilla as much as possible.  
-See plugin in action: [YouTube](https://www.youtube.com/watch?v=DDnQDAdq1Ok)  
-Try plugin in action (Minecraft 1.20.4): `typhon-demo.alex4386.me`
+See plugin in action: [YouTube](https://www.youtube.com/watch?v=DDnQDAdq1Ok)
 
-## Warning!
-Currently This code is literal spaghetti.  
-Will work on cleanup when I feel like to.
+## Public Test Server
+> [!INFO]  
+> **See Typhon Plugin in Action!**  
+> 
+> `typhon-demo.alex4386.me` (Minecraft version 1.21)
 
 ## System Requirements
-* Spigot (or compatibles) for Minecraft® 1.20.  
-  (Paper Recommended)
+* **PaperMC** for Minecraft® 1.21.  
+  > [!NOTE]  
+  > If you are using `Folia` or `Paper`,  
+  > Typhon plugin automatically utilizes the multithreading tick cycle automatically.
+  
+  > [!WARNING]  
+  > Although Typhon Plugin is compatible with Spigot, It was not thoroughly tested.  
+  > `Here be "dragons"`  
+
+* **Java 21** or higher
 * A Really beefy (multithreading capable) computer/server
 * Bandwidth to cover up extreme usage of FallingBlock and Particles
-
-### Notice
-This plugin utilizes a lot of particles and FallingBlock.  
-which could impact your Network bandwidth usage.  
-If you are going to use this in public server, **Please closely monitor your bandwidth usage.**
-
-<!--
-### Public Demo Server  
-Wanna check how Typhon behaves? try visiting `typhon.alex4386.mcsv.kr` (Powered by **Minehub.KR**, Automatically updates to latest version).  
-Want to open Minecraft Server free-of-charge?  
-Visit: [minehub.kr](https://minehub.kr) for more information! (South Korea Residents only, Non-commercial uses only)  
--->
-
-## TODO
-* Implement Volcanic Landslides (~~LavaDome Collapse (In progress)~~, Lateral Blast)
+  > [!WARNING]  
+  > The plugin require up to 1GiB/hr of bandwidth usage per player while in eruption in progress.  
+  > **Please closely monitor your bandwidth usage.**
+* **A lot of RAM** (4GiB or more recommended)
+  > [!WARNING]  
+  > The plugin may consume up to 8GiB of RAM per active vent.  
+  > If you have allocated less than the recommended setup, You might hit GC to fast triggering lag spikes or have OOM issues.
 
 ## Docs
-Please refer to [DOCS.md](./DOCS.md).  
+Please refer to [DOCS.md](./DOCS.md). _(NOT UPDATED)_  
 
 ## Downloads
 Nightly builds *(GitHub Login Required)*: [GitHub Actions](https://github.com/Alex4386/Typhon-Plugin/actions/workflows/maven.yml)  
 Stable builds: [Release Page](https://github.com/Alex4386/Typhon-Plugin/releases/latest)
+
+**Also available at:**
+- [SpigotMC](https://www.spigotmc.org/resources/typhon.91748/)
+- [Modrinth](https://modrinth.com/plugin/typhon)
+- [Hangar](https://hangar.papermc.io/Alex4386/Typhon)
 
 ## License
 Copyright &copy; Alex4386, Diwaly, MintNetwork.  
