@@ -83,6 +83,10 @@ public final class TyphonPlugin extends JavaPlugin {
 
         logger.debug(VolcanoLogClass.INIT, "Loading Volcanoes...");
 
+        if (TyphonMultithreading.isPaperMultithread) {
+            logger.log(VolcanoLogClass.INIT, "Paper/Folia detected! Enabling MultiThreading Schedulers!");
+        }
+
         File[] volcanoDirs = this.volcanoDir.listFiles();
         for (File volcanoDir : volcanoDirs) {
             if (volcanoDir.isDirectory()) {

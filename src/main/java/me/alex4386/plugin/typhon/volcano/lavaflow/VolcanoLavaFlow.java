@@ -1,15 +1,11 @@
 package me.alex4386.plugin.typhon.volcano.lavaflow;
 
-import me.alex4386.plugin.typhon.TyphonBlueMapUtils;
-import me.alex4386.plugin.typhon.TyphonPlugin;
-import me.alex4386.plugin.typhon.TyphonSounds;
-import me.alex4386.plugin.typhon.TyphonUtils;
+import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBomb;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
-import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
@@ -62,8 +58,10 @@ public class VolcanoLavaFlow implements Listener {
 
     public long lastQueueUpdates = 0;
 
+    private static Map<Chunk, Queue<Map.Entry<Block, Material>>> immediateBlockUpdateQueues = new HashMap<>();
+
     // temporary queue to store Block and Material to update
-    private static Queue<Map.Entry<Block, Material>> blockUpdateQueue = new LinkedList<>();
+    private static Map<Chunk, Queue<Map.Entry<Block, Material>>> blockUpdateQueues = new HashMap<>();
 
     private int configuredLavaInflux = -1;
     private double queuedLavaInflux = 0;
@@ -98,11 +96,33 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void queueBlockUpdate(Block block, Material material) {
+        Chunk chunk = block.getChunk();
+        if (!blockUpdateQueues.containsKey(chunk)) {
+            blockUpdateQueues.put(chunk, new LinkedList<>());
+        }
+
+        Queue<Map.Entry<Block, Material>> blockUpdateQueue = blockUpdateQueues.get(chunk);
         blockUpdateQueue.add(new AbstractMap.SimpleEntry<>(block, material));
     }
-    public long unprocessedQueueBlocks() {
-        return blockUpdateQueue.size();
+
+    public void queueImmediateBlockUpdate(Block block, Material material) {
+        Chunk chunk = block.getChunk();
+        if (!immediateBlockUpdateQueues.containsKey(chunk)) {
+            immediateBlockUpdateQueues.put(chunk, new LinkedList<>());
+        }
+
+        Queue<Map.Entry<Block, Material>> blockUpdateQueue = immediateBlockUpdateQueues.get(chunk);
+        blockUpdateQueue.add(new AbstractMap.SimpleEntry<>(block, material));
     }
+
+    public long unprocessedQueueBlocks() {
+        long count = 0;
+        for (Queue<Map.Entry<Block, Material>> blockUpdateQueue : blockUpdateQueues.values()) {
+            count += blockUpdateQueue.size();
+        }
+        return count;
+    }
+
     public long getProcessedBlocksPerSecond() {
         if (lastQueueUpdatedPerSecondAt == 0) return 0;
 
@@ -182,17 +202,12 @@ public class VolcanoLavaFlow implements Listener {
                     "Intializing lava cooldown scheduler of VolcanoLavaFlow for vent "
                             + vent.getName());
             lavaCoolScheduleId =
-                    TyphonPlugin.plugin
-                            .getServer()
-                            .getScheduler()
-                            .scheduleSyncRepeatingTask(
-                                    TyphonPlugin.plugin,
-                                    () -> {
-                                        runCooldownTick();
-                                        runPillowLavaTick();
-                                    },
-                                    0L,
-                                    (long) 1);
+                    TyphonScheduler.registerGlobalTask(
+                            () -> {
+                                runCooldownTick();
+                                runPillowLavaTick();
+                            },
+                            1L);
         }
         if (queueScheduleId == -1) {
             this.vent.volcano.logger.log(
@@ -200,26 +215,62 @@ public class VolcanoLavaFlow implements Listener {
                     "Intializing lava cooldown scheduler of VolcanoLavaFlow for vent "
                             + vent.getName());
             queueScheduleId =
-                    TyphonPlugin.plugin
-                            .getServer()
-                            .getScheduler()
-                            .scheduleSyncRepeatingTask(
-                                    TyphonPlugin.plugin,
-                                    this::runQueueWithinTick,
-                                    0L,
-                                    1L);
+                    TyphonScheduler.registerGlobalTask(
+                            this::delegateQueue,
+                            1L);
         }
     }
 
-    public void runQueueWithinTick() {
+    public void delegateQueue() {
+        Set<Chunk> updatedChunks = new HashSet<>();
+        for (Map.Entry<Chunk, Queue<Map.Entry<Block, Material>>> entry : immediateBlockUpdateQueues.entrySet()) {
+            if (entry.getValue().isEmpty()) continue;
+
+            TyphonScheduler.run(entry.getKey(),
+                    () -> {
+                        runQueue(entry.getValue());
+                    });
+            updatedChunks.add(entry.getKey());
+        }
+
+        for (Map.Entry<Chunk, Queue<Map.Entry<Block, Material>>> entry : blockUpdateQueues.entrySet()) {
+            if (entry.getValue().isEmpty()) continue;
+
+            TyphonScheduler.run(entry.getKey(),
+                    () -> {
+                        runQueueWithinTick(entry.getValue());
+                    });
+            updatedChunks.add(entry.getKey());
+        }
+
+        // update bluemap
+        TyphonBlueMapUtils.updateChunks(vent.location.getWorld(), updatedChunks);
+    }
+
+    public long runQueue(Queue<Map.Entry<Block, Material>> blockUpdateQueue) {
+        // get starting time
+        long count = 1;
+
+        while (true) {
+            Map.Entry<Block, Material> entry = blockUpdateQueue.poll();
+            if (entry != null) {
+                Block block = entry.getKey();
+                Material material = entry.getValue();
+                block.setType(material);
+            } else {
+                break;
+            }
+
+            count++;
+        }
+
+        return count;
+    }
+
+    public long runQueueWithinTick(Queue<Map.Entry<Block, Material>> blockUpdateQueue) {
         // get starting time
         long startTime = System.currentTimeMillis();
         long count = 1;
-
-        boolean shouldResetAfter = false;
-        if (startTime - lastQueueUpdatedPerSecondAt > 1000) {
-            shouldResetAfter = true;
-        }
 
         while (true) {
             Map.Entry<Block, Material> entry = blockUpdateQueue.poll();
@@ -239,13 +290,7 @@ public class VolcanoLavaFlow implements Listener {
             count++;
         }
 
-        lastQueueUpdates = count;
-        if (shouldResetAfter) {
-            lastQueueUpdatedPerSecondAt = startTime;
-            lastQueueUpdatesPerSecond = count;
-        } else {
-            lastQueueUpdatesPerSecond += count;
-        }
+        return count;
     }
 
     public void unregisterTask() {

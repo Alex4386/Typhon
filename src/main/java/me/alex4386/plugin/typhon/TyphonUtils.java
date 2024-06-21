@@ -32,6 +32,22 @@ public class TyphonUtils {
         return false;
     }
 
+    public static List<Chunk> getChunksInRadius(Chunk src, double radius) {
+        List<Chunk> chunks = new ArrayList<>();
+        int chunkRadius = (int) Math.ceil(radius / 16);
+
+        int srcX = src.getX();
+        int srcZ = src.getZ();
+
+        for (int x = -chunkRadius; x <= chunkRadius; x++) {
+            for (int z = -chunkRadius; z <= chunkRadius; z++) {
+                chunks.add(src.getWorld().getChunkAt(srcX + x, srcZ + z));
+            }
+        }
+
+        return chunks;
+    }
+
     private static Map<Block, TyphonCache<org.bukkit.block.Block>> highestRocklikesBlockCacheMap = new HashMap<>();
 
     public static int getMinimumY(org.bukkit.World world) {

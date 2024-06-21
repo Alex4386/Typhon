@@ -2,6 +2,7 @@ package me.alex4386.plugin.typhon.volcano.vent;
 
 import me.alex4386.plugin.typhon.TyphonBlueMapUtils;
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBomb;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
@@ -54,13 +55,9 @@ public class VolcanoVentCaldera {
     public void registerTask() {
         this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Registering Eruption tick");
         if (this.scheduleID < 0) {
-            this.scheduleID = Bukkit.getScheduler().scheduleSyncRepeatingTask(
-                    TyphonPlugin.plugin,
-                    () -> {
-                        this.runEruptTick();
-                    },
-                    0l,
-                    4l
+            this.scheduleID = TyphonScheduler.registerGlobalTask(
+                    this::runEruptTick,
+                    4L
             );
         }
     }
@@ -68,7 +65,7 @@ public class VolcanoVentCaldera {
     public void unregisterTask() {
         this.vent.getVolcano().logger.log(VolcanoLogClass.CALDERA, "Unregistering Eruption tick");
         if (this.scheduleID >= 0) {
-            Bukkit.getScheduler().cancelTask(this.scheduleID);
+            TyphonScheduler.unregisterTask(this.scheduleID);
             this.scheduleID = -1;
         }
     }

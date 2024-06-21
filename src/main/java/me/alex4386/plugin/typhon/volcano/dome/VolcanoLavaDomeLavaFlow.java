@@ -76,9 +76,15 @@ public class VolcanoLavaDomeLavaFlow {
             this.finished = true;
             this.coolDown();
         } else {
-            this.block.setType(Material.AIR);
+            this.dome.vent.lavaFlow.queueBlockUpdate(
+                    this.block,
+                    Material.AIR
+            );
             this.block = nextBlock;
-            this.block.setType(Material.MAGMA_BLOCK);
+            this.dome.vent.lavaFlow.queueBlockUpdate(
+                    this.block,
+                    Material.MAGMA_BLOCK
+            );
             this.dome.vent.lavaFlow.createLavaParticle(this.block);
         }
     }

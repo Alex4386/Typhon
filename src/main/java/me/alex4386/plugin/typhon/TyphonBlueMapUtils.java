@@ -3,13 +3,14 @@ package me.alex4386.plugin.typhon;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.Map;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.function.Consumer;
 
 import javax.imageio.ImageIO;
 
 import de.bluecolored.bluemap.api.AssetStorage;
+import de.bluecolored.bluemap.api.RenderManager;
+import org.bukkit.Chunk;
 import org.bukkit.World;
 
 import com.flowpowered.math.vector.Vector2i;
@@ -27,6 +28,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 
 public class TyphonBlueMapUtils {
   public static boolean isInitialized = false;
+  public static boolean bluemapFailNotified = false;
   public static String eruptingImgUrl = null, dormantImgUrl = null;
 
   public static BlueMapAPI getBlueMapAPI() {
@@ -38,12 +40,49 @@ public class TyphonBlueMapUtils {
           TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Bluemap Detected. Integrating...");
           initialize();
         } catch(NoClassDefFoundError | NoSuchElementException e) {
-          TyphonPlugin.logger.error(VolcanoLogClass.BLUE_MAP, "Failed to integrate with Bluemap! "+e.getLocalizedMessage());
+          if (!bluemapFailNotified) {
+            TyphonPlugin.logger.error(VolcanoLogClass.BLUE_MAP, "Failed to integrate with Bluemap! " + e.getLocalizedMessage());
+            bluemapFailNotified = true;
+          }
+
           return null;
         }
       }
     }
     return TyphonPlugin.blueMap;
+  }
+
+  public static void updateChunks(World world, Set<Chunk> chunks) {
+    if (!getBlueMapAvailable()) return;
+
+    // make it a Collection of Vector2i.
+    Vector2i[] chunkPositions = chunks.stream().filter(chunk -> chunk.getWorld().equals(world)).map(chunk -> new Vector2i(chunk.getX(), chunk.getZ())).toArray(Vector2i[]::new);
+
+    runOnMap(world,
+            map -> {
+      BlueMapAPI api = getBlueMapAPI();
+      if (api != null) {
+        RenderManager man = api.getRenderManager();
+        if (!map.isFrozen()) {
+          man.scheduleMapUpdateTask(map, List.of(chunkPositions), true);
+          if (!man.isRunning()) man.start();
+        }
+      }
+    });
+  }
+
+  public static void reRenderVolcano(Volcano volcano) {
+    Set<Chunk> chunks = new HashSet<>();
+
+    for (VolcanoVent vent: volcano.manager.getVents()) {
+      // radius
+      double radius = vent.longestFlowLength;
+
+      // get the chunks of the volcano from the center of the vent.
+      chunks.addAll(TyphonUtils.getChunksInRadius(vent.location.getChunk(), radius));
+    }
+
+    updateChunks(volcano.location.getWorld(), chunks);
   }
 
   public static void initialize() {
@@ -79,9 +118,8 @@ public class TyphonBlueMapUtils {
     if (checkIfAssetExists(world, id)) return storage.getAssetUrl(id);
 
     try {
-      InputStream eruptingImg = TyphonPlugin.plugin.getResource("volcano_erupting.png");
       OutputStream out = storage.writeAsset(id);
-      out.write(eruptingImg.readAllBytes());
+      out.write(data);
       out.flush();
       out.close();
 

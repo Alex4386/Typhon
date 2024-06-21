@@ -3,6 +3,7 @@ package me.alex4386.plugin.typhon.volcano.succession;
 import java.util.List;
 import java.util.Map;
 
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.TreeType;
@@ -58,20 +59,18 @@ public class VolcanoSuccession {
 
     public void registerTask() {
         if (successionScheduleId < 0) {
-            successionScheduleId = Bukkit.getScheduler()
-                .scheduleSyncRepeatingTask(
-                    TyphonPlugin.plugin,
-                    (Runnable) () -> {
+            successionScheduleId = TyphonScheduler
+                    .registerGlobalTask(
+                    () -> {
                         this.runSuccessionCycle();
                     },
-                    0L,
                     (long) (TyphonPlugin.minecraftTicksPerSeconds * cyclesPerTick));
         }
     }
 
     public void unregisterTask() {
         if (successionScheduleId >= 0) {
-            Bukkit.getScheduler().cancelTask(successionScheduleId);
+            TyphonScheduler.unregisterTask(successionScheduleId);
             successionScheduleId = -1;
         }
     }
@@ -130,12 +129,12 @@ public class VolcanoSuccession {
     
         List<Block> blocks = VolcanoMath.getSphere(block, 7, 6);
         for (Block calBlock: blocks) {
-            calBlock.setType(Material.CALCITE);
+            this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(calBlock, Material.CALCITE);
         }
 
         blocks = VolcanoMath.getSphere(block, 6, 5);
         for (Block calBlock: blocks) {
-            calBlock.setType(Material.AMETHYST_BLOCK);
+            this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(calBlock, Material.AMETHYST_BLOCK);
         }
     }
 
@@ -268,9 +267,9 @@ public class VolcanoSuccession {
             // Stage 1. just randomly change into cobblestone
             if (Math.random() < erodeProb) {
                 if (targetBlock.getType() == Material.DEEPSLATE || targetBlock.getType() == Material.BLACKSTONE) {
-                    targetBlock.setType(Material.COBBLED_DEEPSLATE);
+                    this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.COBBLED_DEEPSLATE);
                 } else if (VolcanoComposition.isVolcanicRock(targetBlock.getType())) {
-                    targetBlock.setType(Material.COBBLESTONE);
+                    this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.COBBLESTONE);
                 } else { return; }
 
                 if (isDebug) this.volcano.logger.log(
@@ -280,14 +279,14 @@ public class VolcanoSuccession {
         } else {
             VolcanoVent vent = this.volcano.manager.getNearestVent(targetBlock);
             if (isTypeOfVolcanicOre(targetBlock.getType())) {
-                targetBlock.setType(VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
+                vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
             } else if (targetBlock.getType() == Material.BLACKSTONE) {
                 if (Math.random() < 0.01) {
-                    targetBlock.setType(Material.NETHERRACK);
+                    vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.NETHERRACK);
                 }
             } else if (targetBlock.getType() == Material.NETHERRACK) {
                 if (Math.random() < 0.01 * 0.01) {
-                    targetBlock.setType(Material.BLACKSTONE);
+                    vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.TUFF);
                 }
             }
         }
@@ -373,14 +372,14 @@ public class VolcanoSuccession {
         if (scaleFactor >= 0.8) {
             if (heatValue > 0.9) {
                 if (isTypeOfVolcanicOre(rockBlock.getType())) {
-                    if (vent != null) rockBlock.setType(VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
+                    if (vent != null) vent.lavaFlow.queueBlockUpdate(rockBlock, VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
                 }
                 return false;
             }
         } else if (scaleFactor >= 0.1) {
             if (heatValue > 0.97) {
                 if (isTypeOfVolcanicOre(rockBlock.getType())) {
-                    if (vent != null) rockBlock.setType(VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
+                    if (vent != null) vent.lavaFlow.queueBlockUpdate(rockBlock, VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
                 }
                 return false;
             }
@@ -398,9 +397,9 @@ public class VolcanoSuccession {
 
         if (rockBlock.getType() != Material.GRASS_BLOCK && rockBlock.getType() != Material.DIRT) {
             if (surfaceBlock.getY() == block.getY()) {
-                rockBlock.setType(Material.GRASS_BLOCK);
+                volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(rockBlock, Material.GRASS_BLOCK);
             } else {
-                rockBlock.setType(Material.DIRT);
+                volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(rockBlock, Material.DIRT);
             }
         } else {
             Block underlyingSoil = rockBlock.getRelative(BlockFace.DOWN);
@@ -497,12 +496,12 @@ public class VolcanoSuccession {
         for (Block toRemove : requirementToGrow) {
             if (toRemove.getType() != Material.AIR) {
                 if (!toRemove.isPassable() || TyphonUtils.isMaterialRocklikes(toRemove.getType()) || toRemove.getType() == Material.TALL_GRASS) {
-                    toRemove.setType(Material.AIR);
+                    this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(toRemove, Material.AIR);
                 }
             }
         }
 
-        scanBaseBlock.setType(Material.AIR);
+        this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(scanBaseBlock, Material.AIR);
 
         // get adequate tree type for current biome
         Biome biome = scanBaseBlock.getBiome();

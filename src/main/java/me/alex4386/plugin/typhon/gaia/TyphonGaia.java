@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.gaia;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoManager;
@@ -44,23 +45,16 @@ public class TyphonGaia {
     public static void registerTask() {
         if (scheduleId == -1) {
             scheduleId =
-                    TyphonPlugin.plugin
-                            .getServer()
-                            .getScheduler()
-                            .scheduleSyncRepeatingTask(
-                                    TyphonPlugin.plugin,
-                                    () -> {
-                                        runVolcanoSpawn();
-                                    },
-                                    0L,
-                                    interval
-                            );
+                    TyphonScheduler.registerGlobalTask(
+                            TyphonGaia::runVolcanoSpawn,
+                            interval
+                    );
         }
     }
 
     public static void unregisterTask() {
         if (scheduleId >= 0) {
-            TyphonPlugin.plugin.getServer().getScheduler().cancelTask(scheduleId);
+            TyphonScheduler.unregisterTask(scheduleId);
             scheduleId = -1;
         }
     }

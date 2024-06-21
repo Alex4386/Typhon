@@ -10,15 +10,16 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoAutoStart;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentGenesis;
-import org.apache.commons.io.FileUtils;
 import org.bukkit.*;
 import org.bukkit.event.Listener;
+import org.codehaus.plexus.util.FileUtils;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.ParseException;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.*;
 import java.util.*;
 
@@ -297,7 +298,19 @@ public class Volcano implements Listener {
     }
 
     private static void deleteFileSystem(Path basePath) throws IOException {
-        FileUtils.deleteDirectory(basePath.toFile());
+        try {
+            Class<?> klass = Class.forName("org.apache.commons.io.FileUtils");
+            klass.getMethod("deleteDirectory", File.class).invoke(null, basePath.toFile());
+        } catch(InvocationTargetException e) {
+            if (e.getCause() instanceof IOException) {
+                throw (IOException) e.getCause();
+            }
+            FileUtils.deleteDirectory(basePath.toFile());
+        } catch (ClassNotFoundException | NoSuchMethodException | IllegalArgumentException |
+                 IllegalAccessException e) {
+
+            FileUtils.deleteDirectory(basePath.toFile());
+        }
     }
 
     public void rename(String newName) throws IOException {

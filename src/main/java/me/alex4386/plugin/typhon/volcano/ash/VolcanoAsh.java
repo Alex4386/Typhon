@@ -367,7 +367,7 @@ class VolcanoAshCloudData {
             if (hasAshFell.get(ashTarget) != null) return;
 
             if (ashTarget.getY() <= ash.getTargetY(ashTarget.getLocation())) {
-                ashTarget.setType(Material.TUFF);
+                this.ash.vent.lavaFlow.queueBlockUpdate(ashTarget, Material.TUFF);
             }
         }
     }
@@ -642,13 +642,13 @@ class VolcanoPyroclasticFlow {
                     if (Math.random() < 0.25) {
                         metamorphism.removeTree(block);
                     } else {
-                        block.setType(Material.AIR);
+                        this.ash.vent.lavaFlow.queueImmediateBlockUpdate(block, Material.AIR);
                     }
                 }
             }
 
             if (metamorphism.isPlantlike(block.getType()) || metamorphism.isPlaceableAnimalEgg(block.getType())) {
-                block.setType(Material.AIR);
+                this.ash.vent.lavaFlow.queueImmediateBlockUpdate(block, Material.AIR);
             }
         }
     }

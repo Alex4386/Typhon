@@ -367,11 +367,11 @@ public class VolcanoGeoThermal implements Listener {
     block.getWorld().createExplosion(block.getLocation(), (float) radius, false, false);
 
     for (Block tuffRingBlock : tuffRingBlocks) {
-      tuffRingBlock.setType(Material.AIR);
+      this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(tuffRingBlock, Material.AIR);
 
       Block bottomBlock = tuffRingBlock.getRelative(BlockFace.DOWN);
       if (!bottomBlock.getType().isAir())
-        bottomBlock.setType(Material.TUFF);
+        this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(bottomBlock, Material.TUFF);
     }
   }
 

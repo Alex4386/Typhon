@@ -188,7 +188,13 @@ public class VolcanoBomb {
                 TyphonUtils.getHighestNonTreeSolid(block).getLocation();
             }
 
-            block.setType(Material.AIR);
+            VolcanoLavaFlow flow;
+            if (this.vent != null) {
+                flow = this.vent.lavaFlow;
+                flow.queueImmediateBlockUpdate(block, Material.AIR);
+            } else {
+                block.setType(Material.AIR);
+            }
             block = block.getRelative(BlockFace.DOWN);
         }
 
@@ -254,7 +260,10 @@ public class VolcanoBomb {
             if (this.block != null) {
                 if (vent.isInVent(this.block.getLocation())) {
                     this.block.remove();
-                    this.block.getLocation().getBlock().setType(Material.AIR);
+                    vent.lavaFlow.queueImmediateBlockUpdate(
+                            this.block.getLocation().getBlock(),
+                            Material.AIR
+                    );
                 }
             }
         }
