@@ -32,7 +32,7 @@ public class TyphonScheduler {
                 scheduledTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(
                         TyphonPlugin.plugin,
                         _a -> task.run(),
-                        0L,
+                        1L,
                         interval
                 );
             } else {
@@ -42,7 +42,7 @@ public class TyphonScheduler {
                         chunk.getX(),
                         chunk.getZ(),
                         _a -> task.run(),
-                        0L,
+                        1L,
                         interval
                 );
             }
