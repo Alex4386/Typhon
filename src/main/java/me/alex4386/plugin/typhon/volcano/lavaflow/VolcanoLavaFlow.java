@@ -67,6 +67,10 @@ public class VolcanoLavaFlow implements Listener {
     private double queuedLavaInflux = 0;
     private double prevQueuedLavaInflux = 0;
 
+    private long previousRerender = 0;
+    private long rerenderInterval = 1000 * 60 * 5;
+    private Set<Chunk> rerenderTargets = new HashSet<>();
+
     // core methods
     public VolcanoLavaFlow(VolcanoVent vent) {
         this.vent = vent;
@@ -222,7 +226,6 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void delegateQueue() {
-        Set<Chunk> updatedChunks = new HashSet<>();
         for (Map.Entry<Chunk, Queue<Map.Entry<Block, Material>>> entry : immediateBlockUpdateQueues.entrySet()) {
             if (entry.getValue().isEmpty()) continue;
 
@@ -230,7 +233,7 @@ public class VolcanoLavaFlow implements Listener {
                     () -> {
                         runQueue(entry.getValue());
                     });
-            updatedChunks.add(entry.getKey());
+            rerenderTargets.add(entry.getKey());
         }
 
         for (Map.Entry<Chunk, Queue<Map.Entry<Block, Material>>> entry : blockUpdateQueues.entrySet()) {
@@ -240,11 +243,17 @@ public class VolcanoLavaFlow implements Listener {
                     () -> {
                         runQueueWithinTick(entry.getValue());
                     });
-            updatedChunks.add(entry.getKey());
+            rerenderTargets.add(entry.getKey());
         }
 
         // update bluemap
-        TyphonBlueMapUtils.updateChunks(vent.location.getWorld(), updatedChunks);
+        if (TyphonBlueMapUtils.isInitialized) {
+            if (previousRerender == 0 || System.currentTimeMillis() - previousRerender > rerenderInterval) {
+                TyphonBlueMapUtils.updateChunks(vent.location.getWorld(), rerenderTargets);
+                previousRerender = System.currentTimeMillis();
+                rerenderTargets.clear();
+            }
+        }
     }
 
     public long runQueue(Queue<Map.Entry<Block, Material>> blockUpdateQueue) {

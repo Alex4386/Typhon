@@ -116,6 +116,7 @@ public class VolcanoAutoStart implements Listener {
 
     public void updateStyles() {
         for (VolcanoVent vent : volcano.manager.getVents()) {
+            if (vent.builder.isRunning()) continue;
             if (!vent.autoStyleUpdate) continue;
 
             if (vent.getType() == VolcanoVentType.FISSURE) {
@@ -201,6 +202,8 @@ public class VolcanoAutoStart implements Listener {
                     VolcanoLogClass.AUTOSTART, "Volcano AutoStart interval Checking...");
 
             for (VolcanoVent vent : volcano.manager.getVents()) {
+                if (vent.builder.isRunning()) continue;
+
                 boolean canEscalate = vent.genesis.canEruptAgain();
 
                 VolcanoVentStatus status = vent.getStatus();

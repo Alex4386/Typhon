@@ -27,6 +27,7 @@ public enum VolcanoVentCommandAction {
     DELETE("delete", "", "delete this vent"),
     LANDSLIDE("landslide", "<start/setAngle/config/clear>", "create landslide from this vent"),
     SWITCH("switch", "", "switch this vent to a mainvent"),
+    BUILDER("builder", "<? type> <? value>", "get/set builder type for this vent"),
     STYLE(
             "style",
             "<? hawaiian/strombolian/fissure/crater/etc.>",

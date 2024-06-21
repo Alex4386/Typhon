@@ -72,6 +72,8 @@ public class VolcanoVent {
     public VolcanoLandslide landslide = new VolcanoLandslide(this);
 
     public VolcanoVentSurtseyan surtseyan = new VolcanoVentSurtseyan(this);
+    public VolcanoVentBuilder builder = new VolcanoVentBuilder(this);
+
 
     // get update via VolcanoAutoStart?
     public boolean autoStyleUpdate = false;
@@ -161,6 +163,7 @@ public class VolcanoVent {
         lavadome.initialize();
         bombs.initialize();
         landslide.initialize();
+        builder.initialize();
 
         volcano.logger.log(VolcanoLogClass.VENT, "Started" + " up vent " + name);
     }
@@ -181,6 +184,7 @@ public class VolcanoVent {
         bombs.shutdown();
         lavadome.shutdown();
         landslide.shutdown();
+        builder.shutdown();
 
         volcano.logger.log(VolcanoLogClass.VENT, "Shutted down vent " + name);
     }

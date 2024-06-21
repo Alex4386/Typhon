@@ -4,10 +4,7 @@ import me.alex4386.plugin.typhon.TyphonCommand;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
-import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
-import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentGenesis;
-import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
-import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
+import me.alex4386.plugin.typhon.volcano.vent.*;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -184,6 +181,19 @@ public class VolcanoVentCommand {
 
                             return results;
                         }
+                    } else if (action == VolcanoVentCommandAction.BUILDER) {
+                        if (args.length == baseOffset + 2) {
+                            String searchQuery = args[baseOffset + 1];
+                            List<String> results = new ArrayList<>();
+
+                            for (VolcanoVentBuilderType type : VolcanoVentBuilderType.values()) {
+                                if (type.name().startsWith(searchQuery)) {
+                                    results.add(type.name());
+                                }
+                            }
+
+                            return results;
+                        }
                     }
                 }
             }
@@ -234,6 +244,39 @@ public class VolcanoVentCommand {
             case RESET:
                 vent.reset();
                 msg.info("Vent " + vent.getName() + " has been reset!");
+                break;
+            case BUILDER:
+                if (newArgs.length >= 1) {
+                    if (newArgs.length == 1) {
+                        String type;
+                        if (vent.builder.getType() == null) {
+                            type = "Not configured";
+                        } else {
+                            type = vent.builder.getType().getName();
+                        }
+
+                        msg.info("Builder type: "+type);
+                    } else if (newArgs.length >= 2) {
+                        String typeString = newArgs[1];
+                        VolcanoVentBuilderType type = VolcanoVentBuilderType.fromName(typeString);
+
+                        if (type == null) {
+                            msg.error("Invalid builder type: "+typeString);
+                            return true;
+                        }
+
+                        vent.builder.setType(type);
+                        if (newArgs.length >= 3) {
+                            String[] builderArgs = Arrays.copyOfRange(newArgs, 2, newArgs.length);
+                            if (vent.builder.setArguments(builderArgs)) {
+                                msg.info("Builder type has been set to "+type.getName());
+                            } else {
+                                msg.error("Failed to set arguments for builder type "+type.getName());
+                                vent.builder = null;
+                            }
+                        }
+                    }
+                }
                 break;
             case SUMMIT:
                 if (newArgs.length >= 1) {

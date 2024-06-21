@@ -1,0 +1,42 @@
+package me.alex4386.plugin.typhon.volcano.vent;
+
+
+import java.util.function.Consumer;
+
+public enum VolcanoVentBuilderType {
+    Y_THRESHOLD("y_threshold");
+
+    private String name;
+    VolcanoVentBuilderType(String name) {
+        this.name = name;
+    }
+
+    public String getName() {
+        return this.name;
+    }
+
+    public boolean setArguments(VolcanoVentBuilder builder, String[] args) {
+        if (this == Y_THRESHOLD) {
+            if (args.length > 0) {
+                try {
+                    builder.yThreshold = Double.parseDouble(args[0]);
+                    return true;
+                } catch (NumberFormatException e) {
+                    return false;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public static VolcanoVentBuilderType fromName(String name) {
+        for (VolcanoVentBuilderType type : VolcanoVentBuilderType.values()) {
+            if (type.getName().equalsIgnoreCase(name)) {
+                return type;
+            }
+        }
+
+        return null;
+    }
+}

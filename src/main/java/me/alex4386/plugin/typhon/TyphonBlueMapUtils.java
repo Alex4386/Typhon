@@ -31,6 +31,9 @@ public class TyphonBlueMapUtils {
   public static boolean bluemapFailNotified = false;
   public static String eruptingImgUrl = null, dormantImgUrl = null;
 
+  public static Map<Volcano, Long> lastRerender = new HashMap<>();
+  public static long rerenderExpire = 1000 * 30;
+
   public static BlueMapAPI getBlueMapAPI() {
     if (TyphonPlugin.blueMap == null) {
       if (!isInitialized) {
@@ -71,7 +74,12 @@ public class TyphonBlueMapUtils {
     });
   }
 
-  public static void reRenderVolcano(Volcano volcano) {
+  public static boolean reRenderVolcano(Volcano volcano) {
+    if (!getBlueMapAvailable()) return false;
+    if (lastRerender.containsKey(volcano)) {
+        if (System.currentTimeMillis() - lastRerender.get(volcano) < rerenderExpire) return false;
+    }
+
     Set<Chunk> chunks = new HashSet<>();
 
     for (VolcanoVent vent: volcano.manager.getVents()) {
@@ -83,6 +91,7 @@ public class TyphonBlueMapUtils {
     }
 
     updateChunks(volcano.location.getWorld(), chunks);
+    return true;
   }
 
   public static void initialize() {
