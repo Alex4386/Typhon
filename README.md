@@ -1,8 +1,10 @@
 <p align="center">
-<img width="300px" src="https://github.com/Alex4386/Typhon/assets/27724108/7600bda5-02f6-4cf5-aec0-bcebd784bf3d" />
+<img height="150px" src="https://github.com/Alex4386/Typhon/assets/27724108/b09b204f-344f-4550-b844-3bfab731684c" />
 </p>
 
-<h1 align="center">Typhon</h1>
+<h1 align="center">
+Typhon
+</h1>
 <p align="center">
 Typhon Plugin aims to implement real-life volcanoes and its behavior in the restriction of vanilla as much as possible.<br>
 See plugin in action: <a href="https://www.youtube.com/watch?v=DDnQDAdq1Ok">YouTube</a>
