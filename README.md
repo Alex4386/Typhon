@@ -1,33 +1,29 @@
-# Typhon Plugin
-Typhon Plugin aims to implement real-life volcanoes and its behavior in the restriction of vanilla as much as possible.  
-See plugin in action: [YouTube](https://www.youtube.com/watch?v=DDnQDAdq1Ok)
+<p align="center">
+<img width="300px" src="https://github.com/Alex4386/Typhon/assets/27724108/7600bda5-02f6-4cf5-aec0-bcebd784bf3d" />
+</p>
+
+<h1 align="center">Typhon</h1>
+<p align="center">
+Typhon Plugin aims to implement real-life volcanoes and its behavior in the restriction of vanilla as much as possible.<br>
+See plugin in action: <a href="https://www.youtube.com/watch?v=DDnQDAdq1Ok">YouTube</a>
+</p>
+
 
 ## Public Test Server
-> [!INFO]  
-> **See Typhon Plugin in Action!**  
-> 
-> `typhon-demo.alex4386.me` (Minecraft version 1.21)
+
+> [!NOTE]  
+> **See Typhon Plugin in Action!**
+>
+> `typhon-demo.alex4386.me`_[Map](https://typhon-demo.alex4386.me/)_  
+> <sub>(Minecraft version 1.21)</sub>
 
 ## System Requirements
-* **PaperMC** for Minecraft® 1.21.  
-  > [!NOTE]  
-  > If you are using `Folia` or `Paper`,  
-  > Typhon plugin automatically utilizes the multithreading tick cycle automatically.
-  
-  > [!WARNING]  
-  > Although Typhon Plugin is compatible with Spigot, It was not thoroughly tested.  
-  > `Here be "dragons"`  
-
+* **PaperMC** for Minecraft® 1.21.
 * **Java 21** or higher
 * A Really beefy (multithreading capable) computer/server
-* Bandwidth to cover up extreme usage of FallingBlock and Particles
-  > [!WARNING]  
-  > The plugin require up to 1GiB/hr of bandwidth usage per player while in eruption in progress.  
-  > **Please closely monitor your bandwidth usage.**
+* Bandwidth to cover up extreme usage of FallingBlock and Particles  
+  (Can use up to `72Mbps` per player)
 * **A lot of RAM** (4GiB or more recommended)
-  > [!WARNING]  
-  > The plugin may consume up to 8GiB of RAM per active vent.  
-  > If you have allocated less than the recommended setup, You might hit GC to fast triggering lag spikes or have OOM issues.
 
 ## Docs
 Please refer to [DOCS.md](./DOCS.md). _(NOT UPDATED)_  
