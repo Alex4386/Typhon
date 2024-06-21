@@ -1,6 +1,8 @@
 package me.alex4386.plugin.typhon.volcano.vent;
 
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Consumer;
 
 public enum VolcanoVentBuilderType {
@@ -15,7 +17,7 @@ public enum VolcanoVentBuilderType {
         return this.name;
     }
 
-    public boolean setArguments(VolcanoVentBuilder builder, String[] args) {
+    boolean setArguments(VolcanoVentBuilder builder, String[] args) {
         if (this == Y_THRESHOLD) {
             if (args.length > 0) {
                 try {
@@ -25,6 +27,23 @@ public enum VolcanoVentBuilderType {
                     return false;
                 }
             }
+        }
+
+        return false;
+    }
+
+    Map<String, String> getArgumentMap(VolcanoVentBuilder builder) {
+        Map<String, String> map = new HashMap<>();
+        if (this == Y_THRESHOLD) {
+            map.put("y_threshold", String.valueOf(builder.yThreshold));
+        }
+
+        return map;
+    }
+
+    boolean isPredicateMatch(VolcanoVentBuilder builder) {
+        if (this == Y_THRESHOLD) {
+            return builder.vent.getSummitBlock().getY() >= builder.yThreshold;
         }
 
         return false;

@@ -17,6 +17,7 @@ import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 public class VolcanoVentCommand {
     VolcanoVent vent;
@@ -188,10 +189,17 @@ public class VolcanoVentCommand {
 
                             for (VolcanoVentBuilderType type : VolcanoVentBuilderType.values()) {
                                 if (type.name().startsWith(searchQuery)) {
-                                    results.add(type.name());
+                                    results.add(type.getName());
                                 }
                             }
 
+                            results.add("enable");
+                            results.add("disable");
+
+                            return results;
+                        } else if (args.length >= baseOffset + 3) {
+                            List<String> results = new ArrayList<>();
+                            results.add("<? args"+(args.length-(baseOffset + 3))+">");
                             return results;
                         }
                     }
@@ -256,8 +264,33 @@ public class VolcanoVentCommand {
                         }
 
                         msg.info("Builder type: "+type);
-                    } else if (newArgs.length >= 2) {
+                        msg.info("Enabled: "+(vent.builder.isRunning() ? "enabled" : "disabled"));
+                        if (vent.builder.getType() != null) {
+                            Map<String, String> argsMap = vent.builder.getArgumentMap();
+                            if (argsMap != null) {
+                                msg.info("Arguments: ");
+                                for (String key : argsMap.keySet()) {
+                                    msg.info(" - "+key+": "+argsMap.get(key));
+                                }
+                            }
+                        }
+                    } else {
                         String typeString = newArgs[1];
+                        if (typeString.equalsIgnoreCase("enable")) {
+                            if (vent.builder.getType() == null) {
+                                msg.error("Builder type is not set! Please set the builder type first.");
+                                return true;
+                            }
+
+                            vent.builder.setEnabled(true);
+                            msg.info("Builder has been enabled");
+                            return true;
+                        } else if (typeString.equalsIgnoreCase("disable")) {
+                            vent.builder.setEnabled(false);
+                            msg.info("Builder has been disabled");
+                            return true;
+                        }
+
                         VolcanoVentBuilderType type = VolcanoVentBuilderType.fromName(typeString);
 
                         if (type == null) {

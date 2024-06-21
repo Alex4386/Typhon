@@ -2,6 +2,8 @@ package me.alex4386.plugin.typhon.volcano.vent;
 
 import me.alex4386.plugin.typhon.TyphonScheduler;
 
+import java.util.Map;
+
 public class VolcanoVentBuilder {
     VolcanoVent vent;
 
@@ -56,29 +58,27 @@ public class VolcanoVentBuilder {
         return this.type.setArguments(this, args);
     }
 
-    public void enable() {
-        this.isEnabled = true;
+    public void setEnabled(boolean enabled) {
+        this.isEnabled = enabled;
     }
 
     public boolean isRunning() {
-        return this.isEnabled;
+        return this.vent != null && this.isEnabled;
     }
 
     private boolean isPredicateMatch() {
-        switch (type) {
-            case Y_THRESHOLD:
-                return vent.getSummitBlock().getY() > yThreshold;
-            default:
-                break;
-        }
-
-        return false;
+        return this.type.isPredicateMatch(this);
     }
 
     private void onPredicateMatch() {
         this.type = null;
         this.isEnabled = false;
         this.vent.stop();
+    }
+
+    public Map<String, String> getArgumentMap() {
+        if (this.type == null) return null;
+        return this.type.getArgumentMap(this);
     }
 
 }
