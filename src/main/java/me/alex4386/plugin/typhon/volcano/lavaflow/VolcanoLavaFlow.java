@@ -1092,6 +1092,8 @@ public class VolcanoLavaFlow implements Listener {
         if (data instanceof VolcanoLavaCoolData coolData) {
             if (flowLimit > 0) {
                 coolData.flowLimit = flowLimit;
+            } else {
+                coolData.flowLimit = -1;
             }
         }
     }
