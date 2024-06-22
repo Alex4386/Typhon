@@ -9,17 +9,17 @@ import java.util.Random;
 public class VolcanoComposition {
 
     public static Material getBombRock(double silicateLevel) {
+        return getBombRock(silicateLevel, 1);
+    }
+
+    public static Material getBombRock(double silicateLevel, double distanceScale) {
         Random random = new Random();
 
         if (silicateLevel < 0.57) {
+            double threshold = 0.5 + (distanceScale / 2);
             double s = random.nextDouble();
 
-            // bunch of scoria
-            if (s < (1.0 / 3.0)) {
-                // black scoria
-                return Material.BLACKSTONE;
-            } else if (s < (2.0 / 3.0)) {
-                // gray scoria
+            if (s < threshold) {
                 return Material.COBBLED_DEEPSLATE;
             } else {
                 // purple-red scoria

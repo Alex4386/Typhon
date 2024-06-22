@@ -60,6 +60,10 @@ public class VolcanoBomb {
         this.targetLocation = targetLocation;
     }
 
+    public double getDistanceRatio() {
+        return 1 - Math.pow(Math.min(TyphonUtils.getTwoDimensionalDistance(launchLocation, this.launchLocation), 50) / 50.0, 2);
+    }
+
     public void launch() {
         int maxY = vent.getSummitBlock().getY();
         int yToLaunch = maxY - this.launchLocation.getWorld().getHighestBlockYAt(launchLocation);
@@ -75,7 +79,8 @@ public class VolcanoBomb {
                         this.launchLocation,
                         new MaterialData(
                                 VolcanoComposition.getBombRock(
-                                        this.vent.lavaFlow.settings.silicateLevel)));
+                                        this.vent.lavaFlow.settings.silicateLevel,
+                                        this.getDistanceRatio())));
 
         this.block.setGlowing(true);
 
@@ -365,7 +370,7 @@ public class VolcanoBomb {
                 finalBlock.getWorld().createExplosion(finalBlock.getLocation(), 1, true, false);
             } else {
                 for (Block bombBlock : bomb) {
-                    Material material = VolcanoComposition.getBombRock(lavaFlow.settings.silicateLevel);
+                    Material material = VolcanoComposition.getBombRock(lavaFlow.settings.silicateLevel, this.getDistanceRatio());
                     if (vent == null)
                         bombBlock.setType(material);
                     else
@@ -380,7 +385,7 @@ public class VolcanoBomb {
 
             for (Block bombBlock : bomb) {
                 Random random = new Random();
-                Material material = VolcanoComposition.getBombRock(lavaFlow.settings.silicateLevel);
+                Material material = VolcanoComposition.getBombRock(lavaFlow.settings.silicateLevel, this.getDistanceRatio());
                 switch (random.nextInt(3)) {
                     case 0:
                         material = null;
