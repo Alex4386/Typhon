@@ -61,7 +61,8 @@ public class VolcanoBomb {
     }
 
     public double getDistanceRatio() {
-        return 1 - Math.pow(Math.min(TyphonUtils.getTwoDimensionalDistance(launchLocation, this.launchLocation), 50) / 50.0, 2);
+        if (this.vent == null) return 1;
+        return this.vent.lavaFlow.getDistanceRatio(this.landingLocation);
     }
 
     public void launch() {

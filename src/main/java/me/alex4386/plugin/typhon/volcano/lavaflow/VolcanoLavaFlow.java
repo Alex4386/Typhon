@@ -920,7 +920,7 @@ public class VolcanoLavaFlow implements Listener {
         Object result = null;
         Material targetMaterial =
                 isBomb && !isUnderWater
-                        ? VolcanoComposition.getBombRock(this.settings.silicateLevel)
+                        ? VolcanoComposition.getBombRock(this.settings.silicateLevel, this.getDistanceRatio(block.getLocation()))
                         : VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel);
         
         double distance = TyphonUtils.getTwoDimensionalDistance(source.getLocation(), block.getLocation());
@@ -1163,7 +1163,9 @@ public class VolcanoLavaFlow implements Listener {
                         break;
                     }
                     if (targetBlock.getType().isAir() || targetBlock.getType() == Material.WATER) {
-                        Material material = Math.random() < 0.5 ? VolcanoComposition.getBombRock(this.settings.silicateLevel) : VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel);
+                        Material material = Math.random() < 0.5 ? VolcanoComposition.getBombRock(this.settings.silicateLevel,
+                                    this.getDistanceRatio(targetBlock.getLocation())
+                                ) : VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel);
                         queueBlockUpdate(targetBlock, material);
                     }
                 }
@@ -1184,6 +1186,20 @@ public class VolcanoLavaFlow implements Listener {
             bomb.launchLocation = launchLocation;
             this.vent.bombs.launchSpecifiedBomb(bomb);
         }
+    }
+
+    public double getDistanceRatio(Location dest) {
+        double distance = TyphonUtils.getTwoDimensionalDistance(vent.location, dest);
+        int radius = 0;
+        if (vent != null) {
+            radius = vent.getRadius();
+        }
+
+        double maxRange = 50.0;
+        int distanceFromVent = (int) Math.max(0, Math.min(distance - radius, maxRange));
+        double scaledDistance = distanceFromVent / maxRange;
+
+        return Math.pow(scaledDistance, 2);
     }
 
     public boolean extendLava() {

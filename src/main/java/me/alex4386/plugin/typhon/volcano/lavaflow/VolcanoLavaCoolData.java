@@ -248,7 +248,7 @@ public class VolcanoLavaCoolData {
                     double silicateLevel = this.flowedFromVent.lavaFlow.settings.silicateLevel;
                     Material material = !this.isBomb
                             ? VolcanoComposition.getExtrusiveRock(silicateLevel)
-                            : VolcanoComposition.getBombRock(silicateLevel);
+                            : VolcanoComposition.getBombRock(silicateLevel, this.flowedFromVent.lavaFlow.getDistanceRatio(flowDirectionBlock.getLocation()));
                     this.flowedFromVent.lavaFlow.queueBlockUpdate(flowDirectionBlock, material);
                 }
             }
