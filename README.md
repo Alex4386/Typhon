@@ -16,8 +16,8 @@ See plugin in action: <a href="https://www.youtube.com/watch?v=DDnQDAdq1Ok">YouT
 > [!NOTE]  
 > **See Typhon Plugin in Action!**
 >
-> `typhon-demo.alex4386.me` _[Map](https://typhon-demo.alex4386.me/)_  
-> <sub>(Minecraft version 1.21)</sub>
+> <h1 align="center"><code>typhon-demo.alex4386.me</code></h1>
+> <p align="center"><a href="https://typhon-demo.alex4386.me/">Map</a> - Minecraft 1.21, Running PaperMC</p>  
 
 ## System Requirements
 * **PaperMC** for Minecraft® 1.21.
