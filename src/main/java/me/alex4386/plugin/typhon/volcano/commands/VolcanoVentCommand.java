@@ -188,15 +188,13 @@ public class VolcanoVentCommand {
                             List<String> results = new ArrayList<>();
 
                             for (VolcanoVentBuilderType type : VolcanoVentBuilderType.values()) {
-                                if (type.name().startsWith(searchQuery)) {
-                                    results.add(type.getName());
-                                }
+                                results.add(type.getName());
                             }
 
                             results.add("enable");
                             results.add("disable");
 
-                            return results;
+                            return results.stream().filter(str -> str.startsWith(searchQuery)).toList();
                         } else if (args.length >= baseOffset + 3) {
                             List<String> results = new ArrayList<>();
                             results.add("<? args"+(args.length-(baseOffset + 3))+">");
