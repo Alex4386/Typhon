@@ -668,12 +668,12 @@ public class VolcanoLavaFlow implements Listener {
         return this.isNormalLavaRegistered(block) || this.isPillowLavaRegistered(block);
     }
 
-    private void registerLavaCoolData(Block block, boolean isBomb, int extension) {
-        this.registerLavaCoolData(block, block, block, isBomb, extension);
+    private Object registerLavaCoolData(Block block, boolean isBomb, int extension) {
+        return this.registerLavaCoolData(block, block, block, isBomb, extension);
     }
 
-    private void registerLavaCoolData(Block source, Block fromBlock, Block block, boolean isBomb) {
-        this.registerLavaCoolData(source, fromBlock, block, isBomb, -1);
+    private Object registerLavaCoolData(Block source, Block fromBlock, Block block, boolean isBomb) {
+        return this.registerLavaCoolData(source, fromBlock, block, isBomb, -1);
     }
 
     public Object registerLavaCoolData(
@@ -1067,17 +1067,14 @@ public class VolcanoLavaFlow implements Listener {
 
     public void flowVentLavaFromBomb(Block bomb) {
         this.createLavaParticle(bomb);
-        this.flowLavaFromBomb(bomb);
-
-        VolcanoLavaCoolData data = this.getLavaCoolData(bomb);
-        if (data != null) {
-            // make it flow indefinitely
-            data.flowLimit = -1;
-            //System.out.println("New bomb lava flow from summit detected. setting flowLimit to infinite @ "+TyphonUtils.blockLocationTostring(bomb));
-        }
+        this.flowLavaFromBomb(bomb, -1);
     }
 
     public void flowLavaFromBomb(Block bomb) {
+        this.flowLavaFromBomb(bomb, 0);
+    }
+
+    public void flowLavaFromBomb(Block bomb, int flowLimit) {
         // if it is underwater, randomly give it an offset.
         if (TyphonUtils.containsLiquidWater(bomb)) {
             double multiplier = 1 - (Math.pow(Math.random(), 2));
@@ -1091,7 +1088,12 @@ public class VolcanoLavaFlow implements Listener {
             bomb = TyphonUtils.getHighestRocklikes(targetBlock).getRelative(BlockFace.UP);
         }
 
-        this.registerLavaCoolData(bomb, true, 0);
+        Object data = this.registerLavaCoolData(bomb, true, 0);
+        if (data instanceof VolcanoLavaCoolData coolData) {
+            if (flowLimit > 0) {
+                coolData.flowLimit = flowLimit;
+            }
+        }
     }
 
     public double getRootlessConeRadius(int height) {
@@ -1148,16 +1150,20 @@ public class VolcanoLavaFlow implements Listener {
 
         for (int x = -baseInt; x <= baseInt; x++) {
             for (int z = -baseInt; z <= baseInt; z++) {
-                int targetHeight = rootlessConeHeight(height, Math.sqrt(x * x + z * z));
+                double distance = Math.sqrt(x * x + z * z);
+                int targetHeight = rootlessConeHeight(height, distance);
                 Block baseBlockAt = TyphonUtils.getHighestRocklikes(baseBlock.getRelative(x, 0, z));
 
                 for (int y = 1; y <= targetHeight; y++) {
                     Block targetBlock = baseBlockAt.getRelative(0, y, 0);
-                    if (targetBlock.getY() > baseBlock.getY() + height) {
+                    int limit = baseBlock.getY() + height;
+                    if (distance < height) limit = (int) Math.round(baseBlock.getY() + distance);
+
+                    if (targetBlock.getY() > limit) {
                         break;
                     }
                     if (targetBlock.getType().isAir() || targetBlock.getType() == Material.WATER) {
-                        Material material = VolcanoComposition.getBombRock(this.settings.silicateLevel);
+                        Material material = Math.random() < 0.5 ? VolcanoComposition.getBombRock(this.settings.silicateLevel) : VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel);
                         queueBlockUpdate(targetBlock, material);
                     }
                 }
@@ -1529,6 +1535,8 @@ public class VolcanoLavaFlow implements Listener {
             prevFlowTime = System.currentTimeMillis();
             return;
         }
+
+        if (!this.settings.flowing) return;
 
         double msPerTick = 1000 / getCurrentTPS();
         long deltaTime = System.currentTimeMillis() - prevFlowTime;

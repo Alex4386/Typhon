@@ -352,13 +352,14 @@ public class VolcanoBomb {
             if (temp.getY() < finalBlock.getY()) finalBlock = temp;
         }
 
+        int baseFlowLimit = Math.max(this.bombRadius / 2, 2);
         if (bombRadius <= 1) {
             List<Block> bomb = VolcanoMath.getSphere(
                     finalBlock, this.bombRadius);
 
             if (flowLava) {
                 for (Block bombBlock : bomb) {
-                    lavaFlow.flowLavaFromBomb(bombBlock);
+                    lavaFlow.flowLavaFromBomb(bombBlock, baseFlowLimit);
                 }
 
                 finalBlock.getWorld().createExplosion(finalBlock.getLocation(), 1, true, false);
