@@ -515,8 +515,8 @@ class VolcanoPyroclasticFlow {
         Location tmpLocation = this.location;
 
         if (Math.random() < 0.1) {
-            // rotate the direction vector within -25~25 degrees
-            double angle = Math.random() * Math.PI / 6;
+            // rotate the direction vector within -6.25~6.25 degrees
+            double angle = Math.random() * Math.PI / 24;
             double x = direction.getX();
             double z = direction.getZ();
 
