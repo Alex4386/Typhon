@@ -16,7 +16,15 @@ public class VolcanoComposition {
         Random random = new Random();
 
         if (silicateLevel < 0.57) {
-            double threshold = 0.5 + (distanceScale / 2);
+            double redScoriaRatio = silicateLevel < 0.52 ?
+                    1 - ((silicateLevel - 0.45) / (0.52 - 0.45)) : 0;
+
+            double scoriaPercentage = Math.pow(redScoriaRatio, 2) * 0.75;
+            double otherPercentage = 1 - scoriaPercentage;
+
+            double scaled = Math.pow(distanceScale, 2) * scoriaPercentage;
+            double threshold = otherPercentage + scaled;
+
             double s = random.nextDouble();
 
             if (s < threshold) {
