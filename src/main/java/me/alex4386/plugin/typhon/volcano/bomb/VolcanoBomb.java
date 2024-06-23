@@ -61,8 +61,12 @@ public class VolcanoBomb {
     }
 
     public double getDistanceRatio() {
+        return this.getDistanceRatio(this.landingLocation);
+    }
+
+    public double getDistanceRatio(Location location) {
         if (this.vent == null) return 1;
-        return this.vent.lavaFlow.getDistanceRatio(this.landingLocation);
+        return this.vent.lavaFlow.getDistanceRatio(location);
     }
 
     public void launch() {
@@ -81,7 +85,7 @@ public class VolcanoBomb {
                         new MaterialData(
                                 VolcanoComposition.getBombRock(
                                         this.vent.lavaFlow.settings.silicateLevel,
-                                        this.getDistanceRatio())));
+                                        this.getDistanceRatio(null))));
 
         this.block.setGlowing(true);
 
@@ -371,7 +375,7 @@ public class VolcanoBomb {
                 finalBlock.getWorld().createExplosion(finalBlock.getLocation(), 1, true, false);
             } else {
                 for (Block bombBlock : bomb) {
-                    Material material = VolcanoComposition.getBombRock(lavaFlow.settings.silicateLevel, this.getDistanceRatio());
+                    Material material = VolcanoComposition.getBombRock(lavaFlow.settings.silicateLevel, this.getDistanceRatio(finalBlock.getLocation(bombBlock.getLocation())));
                     if (vent == null)
                         bombBlock.setType(material);
                     else

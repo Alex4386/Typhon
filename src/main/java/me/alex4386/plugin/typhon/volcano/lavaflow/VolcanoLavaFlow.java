@@ -520,7 +520,7 @@ public class VolcanoLavaFlow implements Listener {
                 }
 
                 if (distance > vent.currentFlowLength) {
-                    vent.longestFlowLength = distance;
+                    vent.currentFlowLength = distance;
                     trySave = true;
                 }
 
@@ -1201,17 +1201,23 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public double getDistanceRatio(Location dest) {
+        if (dest == null || this.vent == null) return 1;
         double distance = TyphonUtils.getTwoDimensionalDistance(vent.location, dest);
         int radius = 0;
         if (vent != null) {
             radius = vent.getRadius();
         }
 
-        double maxRange = 100.0;
-        int distanceFromVent = (int) Math.max(0, Math.min(distance - radius, maxRange));
-        double scaledDistance = distanceFromVent / maxRange;
+        assert this.vent != null;
 
-        return Math.pow(scaledDistance, 2);
+        double coneHeight = Math.max(1, this.vent.getSummitBlock().getY() - this.vent.bombs.baseY);
+
+        double distanceFromVent = Math.max(0, Math.min(distance - radius, coneHeight));
+        double scaledDistance = distanceFromVent / coneHeight;
+
+        System.out.println("coneHeight: "+coneHeight+", distance: "+distance+", radius: "+radius+", distanceFromVent: "+distanceFromVent+", scaledDistance: "+scaledDistance);
+
+        return Math.min(Math.pow(scaledDistance, 2), 1);
     }
 
     public boolean extendLava() {

@@ -16,18 +16,16 @@ public class VolcanoComposition {
         Random random = new Random();
 
         if (silicateLevel < 0.57) {
-            double redScoriaRatio = silicateLevel < 0.52 ?
-                    1 - ((silicateLevel - 0.45) / (0.52 - 0.45)) : 0;
+            double redScoriaRatio =
+                    1 - ((silicateLevel - 0.45) / (0.57 - 0.45));
 
-            double scoriaPercentage = Math.pow(redScoriaRatio, 2) * 0.75;
-            double otherPercentage = 1 - scoriaPercentage;
-
-            double scaled = Math.pow(distanceScale, 2) * scoriaPercentage;
-            double threshold = otherPercentage + scaled;
-
+            double redScoriaPercentage = Math.max(Math.pow(redScoriaRatio, 2), 0.99);
+            double scaled = distanceScale * redScoriaPercentage;
             double s = random.nextDouble();
 
-            if (s < threshold) {
+            System.out.println("redScoriaPercentage: "+redScoriaPercentage+", distanceScale:"+distanceScale+", Scaled: " + scaled);
+
+            if (s < scaled) {
                 return Material.COBBLED_DEEPSLATE;
             } else {
                 // purple-red scoria

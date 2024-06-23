@@ -303,7 +303,6 @@ public class VolcanoVentCommand {
                                 msg.info("Builder type has been set to "+type.getName());
                             } else {
                                 msg.error("Failed to set arguments for builder type "+type.getName());
-                                vent.builder = null;
                             }
                         }
                     }
@@ -895,6 +894,12 @@ public class VolcanoVentCommand {
                                 + " @ "
                                 + String.format("%.2f", vent.longestFlowLength)
                                 + "m");
+                msg.info(
+                        "    Normal: "
+                                + String.format("%.2f", vent.longestNormalLavaFlowLength) + "m (now: "
+                                + String.format("%.2f", vent.currentNormalLavaFlowLength) + "m"
+                        );
+
                 msg.info(
                         " - Bomb : "
                                 + vent.isExploding()

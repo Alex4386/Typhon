@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.explosion;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
@@ -39,28 +40,22 @@ public class VolcanoExplosion {
             this.vent.volcano.logger.log(
                     VolcanoLogClass.EXPLOSION,
                     "Registering VolcanoExplosion for vent " + vent.getName());
-            this.scheduleID = Bukkit.getScheduler()
-                    .scheduleSyncRepeatingTask(
-                            TyphonPlugin.plugin,
+            this.scheduleID = TyphonScheduler.registerGlobalTask(
                             () -> {
                                 if (this.enabled) {
                                     explodeQueued();
                                 }
                             },
-                            0l,
                             1l);
         }
 
         if (this.queueScheduleID < 0) {
-            this.queueScheduleID = Bukkit.getScheduler()
-                    .scheduleSyncRepeatingTask(
-                            TyphonPlugin.plugin,
+            this.queueScheduleID = TyphonScheduler.registerGlobalTask(
                             () -> {
                                 if (this.enabled && this.running) {
                                     if (!this.vent.erupt.getStyle().canFormCaldera) explode();
                                 }
                             },
-                            0l,
                             5l);
         }
     }
@@ -70,8 +65,8 @@ public class VolcanoExplosion {
             this.vent.volcano.logger.log(
                     VolcanoLogClass.EXPLOSION,
                     "Unregistering VolcanoExplosion for vent " + vent.getName());
-            Bukkit.getScheduler().cancelTask(scheduleID);
-            Bukkit.getScheduler().cancelTask(queueScheduleID);
+            TyphonScheduler.unregisterTask(scheduleID);
+            TyphonScheduler.unregisterTask(queueScheduleID);
             scheduleID = -1;
             queueScheduleID = -1;
         }
