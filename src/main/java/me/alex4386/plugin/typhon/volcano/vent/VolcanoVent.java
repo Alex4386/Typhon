@@ -49,6 +49,8 @@ public class VolcanoVent {
 
     public double longestFlowLength = 0.0;
     public double longestNormalLavaFlowLength = 0.0;
+    public double currentFlowLength = 0.0;
+    public double currentNormalLavaFlowLength = 0.0;
 
     public double calderaRadius = 0.0;
     private Block cachedSummitBlock = null;
@@ -118,6 +120,10 @@ public class VolcanoVent {
         return lowestCoreBlock;
     }
 
+    public void resetCurrentMetrics() {
+        this.currentFlowLength = 0;
+        this.currentNormalLavaFlowLength = 0;
+    }
 
     public void setStatus(VolcanoVentStatus status) {
         this.status = status;

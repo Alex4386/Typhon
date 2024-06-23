@@ -40,6 +40,7 @@ public class VolcanoErupt {
             this.vent.bombs.resetBaseY();
         }
 
+        this.vent.resetCurrentMetrics();
         this.erupting = true;
     }
 

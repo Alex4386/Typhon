@@ -519,6 +519,11 @@ public class VolcanoLavaFlow implements Listener {
                     trySave = true;
                 }
 
+                if (distance > vent.currentFlowLength) {
+                    vent.longestFlowLength = distance;
+                    trySave = true;
+                }
+
                 if (distance > this.thisMaxFlowLength) {
                     this.thisMaxFlowLength = distance;
                 }
@@ -526,6 +531,11 @@ public class VolcanoLavaFlow implements Listener {
                 if (!data.skipNormalLavaFlowLengthCheck) {
                     if (distance > vent.longestNormalLavaFlowLength) {
                         vent.longestNormalLavaFlowLength = distance;
+                        trySave = true;
+                    }
+
+                    if (distance > vent.currentNormalLavaFlowLength) {
+                        vent.currentNormalLavaFlowLength = distance;
                         trySave = true;
                     }
 
@@ -1197,7 +1207,7 @@ public class VolcanoLavaFlow implements Listener {
             radius = vent.getRadius();
         }
 
-        double maxRange = 50.0;
+        double maxRange = 100.0;
         int distanceFromVent = (int) Math.max(0, Math.min(distance - radius, maxRange));
         double scaledDistance = distanceFromVent / maxRange;
 
