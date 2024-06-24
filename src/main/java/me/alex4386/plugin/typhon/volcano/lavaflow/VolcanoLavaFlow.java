@@ -102,6 +102,10 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void queueBlockUpdate(Block block, Material material) {
+        if (this.queueScheduleId == -1) {
+            this.registerQueueUpdate();
+        }
+
         Chunk chunk = block.getChunk();
         if (!blockUpdateQueues.containsKey(chunk)) {
             blockUpdateQueues.put(chunk, new LinkedList<>());
@@ -210,6 +214,10 @@ public class VolcanoLavaFlow implements Listener {
                             },
                             1L);
         }
+        this.registerQueueUpdate();
+    }
+
+    public void registerQueueUpdate() {
         if (queueScheduleId == -1) {
             this.vent.volcano.logger.log(
                     VolcanoLogClass.LAVA_FLOW,
@@ -1225,7 +1233,7 @@ public class VolcanoLavaFlow implements Listener {
         double distanceFromVent = Math.max(0, Math.min(distance - radius, coneHeight));
         double scaledDistance = distanceFromVent / coneHeight;
 
-        System.out.println("coneHeight: "+coneHeight+", distance: "+distance+", radius: "+radius+", distanceFromVent: "+distanceFromVent+", scaledDistance: "+scaledDistance);
+        //System.out.println("coneHeight: "+coneHeight+", distance: "+distance+", radius: "+radius+", distanceFromVent: "+distanceFromVent+", scaledDistance: "+scaledDistance);
 
         return Math.min(Math.pow(scaledDistance, 2), 1);
     }

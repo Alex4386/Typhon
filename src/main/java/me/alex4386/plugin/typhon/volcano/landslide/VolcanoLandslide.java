@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.landslide;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
@@ -10,17 +11,15 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.util.Vector;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
 public class VolcanoLandslide {
     public VolcanoVent vent;
     public double landslideAngle = 0;
     public int initSummitY = Integer.MIN_VALUE;
 
-    public Iterator<Block> blockIterator = null
-            ;
+    public Map<Chunk, Iterator<Block>> iteratorPerChunk = null;
+
     public int landslideTimer = -1;
 
     public VolcanoLandslide(VolcanoVent vent) {
@@ -37,58 +36,91 @@ public class VolcanoLandslide {
 
     public void registerTask() {
         if (this.landslideTimer < 0) {
-            this.landslideTimer = Bukkit.getScheduler().scheduleSyncRepeatingTask(TyphonPlugin.plugin, this::runTask, 0, 1);
+            this.landslideTimer = TyphonScheduler.registerGlobalTask(
+                    this::runTask, 1
+            );
         }
     }
 
     public void unregisterTask() {
         if (this.landslideTimer >= 0) {
-            Bukkit.getScheduler().cancelTask(this.landslideTimer);
+            TyphonScheduler.unregisterTask(this.landslideTimer);
             this.landslideTimer = -1;
         }
     }
 
     public void clear() {
-        this.blockIterator = null;
+        this.iteratorPerChunk = null;
         this.initSummitY = Integer.MIN_VALUE;
         this.landslideAngle = 0;
     }
 
     public void runTask() {
-        if (this.blockIterator == null) return;
-
-        Block randomSrc = null;
-
-        int count = 5 + (int) (Math.random() * 10);
-        for (int i = 0; i < count; i++) {
-            if (!this.blockIterator.hasNext()) {
-                break;
-            }
-
-            Block block = this.blockIterator.next();
-
-            if (randomSrc == null) randomSrc = block;
-            else if (Math.random() < 0.1) randomSrc = block;
-
-            this.runCollapse(block);
+        if (this.iteratorPerChunk == null) return;
+        if (this.iteratorPerChunk.isEmpty()) {
+            this.clear();
+            return;
         }
 
-        if (Math.random() < 0.1 && randomSrc != null) {
-            TyphonSounds.DISTANT_EXPLOSION.play(randomSrc.getLocation(), SoundCategory.BLOCKS, 2f, 1f);
+        for (Chunk chunk : this.iteratorPerChunk.keySet()) {
+            if (this.iteratorPerChunk.get(chunk) == null || !this.iteratorPerChunk.get(chunk).hasNext()) {
+                this.iteratorPerChunk.remove(chunk);
+                continue;
+            }
+            TyphonScheduler.run(chunk, () -> this.runChunk(chunk));
+        }
+
+        if (Math.random() < 0.1) {
+            TyphonSounds.DISTANT_EXPLOSION.play(this.vent.location, SoundCategory.BLOCKS, 2f, 1f);
         }
 
         this.runPyroclasticFlow();
-        if (!this.blockIterator.hasNext()) {
-            this.blockIterator = null;
+    }
+
+    public void runChunk(Chunk chunk) {
+        Iterator<Block> iterator = this.iteratorPerChunk.get(chunk);
+        if (iterator == null) return;
+
+        int count = 0;
+        while (iterator.hasNext() && count < 100) {
+            Block block = iterator.next();
+            this.runCollapse(block);
+            count++;
+        }
+
+        if (!iterator.hasNext()) {
+            this.iteratorPerChunk.remove(chunk);
         }
     }
 
     public void start() {
         if (!this.isConfigured()) return;
 
-        if (this.blockIterator == null) {
-            this.blockIterator = this.getTargetBlocks().iterator();
+        if (this.iteratorPerChunk == null) {
+            this.generateIterator();
         }
+    }
+
+    public void generateIterator() {
+        List<Block> blocks = this.getTargetBlocks();
+        Map<Chunk, List<Block>> blocksPerChunk = new HashMap<>();
+
+        for (Block block : blocks) {
+            Chunk chunk = block.getChunk();
+            if (!blocksPerChunk.containsKey(chunk)) {
+                blocksPerChunk.put(chunk, new ArrayList<>());
+            }
+
+            blocksPerChunk.get(chunk).add(block);
+        }
+
+        Map<Chunk, Iterator<Block>> iteratorPerChunk = new HashMap<>();
+        for (Chunk chunk : blocksPerChunk.keySet()) {
+            List<Block> blockList = blocksPerChunk.get(chunk);
+            iteratorPerChunk.put(chunk, blockList.iterator());
+        }
+
+        this.iteratorPerChunk = iteratorPerChunk;
     }
 
     public boolean isConfigured() {
@@ -97,7 +129,9 @@ public class VolcanoLandslide {
 
     public void configure() {
         this.initSummitY = (int) (this.vent.getSummitBlock().getY() + (this.vent.getRadius() / Math.sqrt(3)));
-        this.landslideAngle = Math.random() * Math.PI * 2;
+        if (this.landslideAngle == 0) {
+            this.landslideAngle = Math.random() * Math.PI * 2;
+        }
     }
 
     public void setLandslideAngle(double angle) {
@@ -123,12 +157,12 @@ public class VolcanoLandslide {
     }
 
     public int getFloorY(double x) {
-        if (x < 0 && x > -this.getRadius()) {
+        if (x < 0) {
             return (int) (this.getRimSummitY() - this.getRadius() - x);
         }
 
         int zeroY = this.getRimSummitY() - this.getRadius();
-        double offset = ((1.0 / 16.0) * x);
+        double offset = ((1.0 / 12.0) * x);
         return (int) Math.round(zeroY - offset);
     }
 
@@ -186,25 +220,25 @@ public class VolcanoLandslide {
     }
 
     public List<Block> getTargetBlocks() {
-        List<Block> blocks = VolcanoMath.getCircle(this.vent.location.getBlock(), this.getRadius());
+        double radius = this.getRadius() * 1.25;
+
+        Set<Block> blocks = new HashSet<>(VolcanoMath.getCircle(this.vent.location.getBlock(), (int) radius));
 
         double cos = Math.cos(this.landslideAngle);
         double sin = Math.sin(this.landslideAngle);
 
         int length = this.getRadius() * 8;
-        for (int x = 0; x < length; x++) {
-            for (int z = -this.getRadius(); z < this.getRadius(); z++) {
+        for (double x = 0; x < length; x += 0.5) {
+            for (double z = -radius; z < radius; z += 0.5) {
                 double rotatedX = x * cos - z * sin;
                 double rotatedZ = x * sin + z * cos;
 
                 Block block = this.vent.location.getBlock().getRelative((int) rotatedX, 0, (int) rotatedZ);
-                if (!blocks.contains(block)) {
-                    blocks.add(block);
-                }
+                blocks.add(block);
             }
         }
 
-        return blocks;
+        return blocks.stream().toList();
     }
 
     public void runCollapse(Block block) {
@@ -212,12 +246,14 @@ public class VolcanoLandslide {
         Vector vector = this.getVector(block.getLocation());
         int y = this.getY(vector);
 
-        int currentY = TyphonUtils.getHighestRocklikes(block).getY();
+        Block topBlock = TyphonUtils.getHighestRocklikes(block);
+        int currentY = topBlock.getY();
+        System.out.println("Drilling down from " + currentY + " to " + y);
         if (currentY < y) return;
 
         for (int i = currentY; i > y; i--) {
-            Block targetBlock = block.getRelative(0, i - currentY, 0);
-            if (targetBlock.getType().isSolid()) {
+            Block targetBlock = topBlock.getRelative(0, i - currentY, 0);
+            if (!targetBlock.getType().isAir()) {
                 Material material = i <= world.getSeaLevel() ?
                         world.isUltraWarm() ? Material.LAVA : Material.WATER
                         : Material.AIR;
@@ -243,7 +279,10 @@ public class VolcanoLandslide {
         double x = xOffset * cos - zOffset * sin;
         double z = xOffset * sin + zOffset * cos;
 
-        return TyphonUtils.getHighestRocklikes(this.vent.location.clone().add(x, 0, z).getBlock()).getRelative(BlockFace.UP);
+        Block baseBlock = this.vent.location.clone().add(x, 255, z).getBlock();
+        baseBlock = TyphonUtils.getHighestRocklikes(baseBlock);
+
+        return TyphonUtils.getHighestRocklikes(baseBlock).getRelative(BlockFace.UP);
     }
 
 }
