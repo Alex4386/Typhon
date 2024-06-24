@@ -596,6 +596,16 @@ public class VolcanoLavaFlow implements Listener {
                 fillUnderUnder = Math.random() < 0.1;
             }
 
+            if (data.flowedFromVent != null) {
+                double silicateLevel = data.flowedFromVent.lavaFlow.settings.silicateLevel;
+                if (silicateLevel > 0.50) {
+                    double silicaRatio = Math.min(0.57, silicateLevel) - 0.50 / 0.07;
+                    if (silicaRatio > 1 - Math.pow(silicaRatio, 2)) {
+                        fillUnderUnder = false;
+                    }
+                }
+            }
+
             if (underIsAir && underUnderToBlock.getType().isAir() && fillUnderUnder) {
                 queueImmediateBlockUpdate(underToBlock, data.material);
 

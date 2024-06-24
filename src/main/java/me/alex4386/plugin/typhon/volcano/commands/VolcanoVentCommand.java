@@ -301,6 +301,8 @@ public class VolcanoVentCommand {
                             String[] builderArgs = Arrays.copyOfRange(newArgs, 2, newArgs.length);
                             if (vent.builder.setArguments(builderArgs)) {
                                 msg.info("Builder type has been set to "+type.getName());
+                                msg.info("The builder has been enabled!");
+                                vent.builder.setEnabled(true);
                             } else {
                                 msg.error("Failed to set arguments for builder type "+type.getName());
                             }
