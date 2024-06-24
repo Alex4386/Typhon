@@ -7,7 +7,7 @@ Typhon
 </h1>
 <p align="center">
 Typhon Plugin aims to implement real-life volcanoes and its behavior in the restriction of vanilla as much as possible.<br>
-See plugin in action: <a href="https://www.youtube.com/watch?v=DDnQDAdq1Ok">YouTube</a>
+See plugin in action: <a href="https://www.youtube.com/watch?v=DDnQDAdq1Ok">YouTube</a> - <a href="#public-test-server">Public Test Server</a>
 </p>
 
 
