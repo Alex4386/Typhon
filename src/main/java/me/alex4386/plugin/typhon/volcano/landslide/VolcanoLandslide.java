@@ -4,6 +4,7 @@ import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
+import me.alex4386.plugin.typhon.volcano.ash.VolcanoPyroclasticFlow;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import org.bukkit.*;
@@ -265,7 +266,23 @@ public class VolcanoLandslide {
 
     public void runPyroclasticFlow() {
         Block source = this.getPyroclasticFlowSource();
-        this.vent.ash.triggerPyroclasticFlow(source);
+        VolcanoPyroclasticFlow flow = this.vent.ash.triggerPyroclasticFlow(source);
+
+        Vector direction = new Vector(1,0,0);
+
+        double angle = this.landslideAngle;
+
+        // add -20~20 degrees
+        angle += ((Math.random() * 2) - 1) * Math.toRadians(20);
+
+        // rotate to landslideAngle
+        double cos = Math.cos(angle);
+        double sin = Math.sin(angle);
+
+        double x = direction.getX() * cos - direction.getZ() * sin;
+        double z = direction.getX() * sin + direction.getZ() * cos;
+
+        flow.setDirection(new Vector(x, 0, z));
         this.vent.ash.createAshPlume();
     }
 

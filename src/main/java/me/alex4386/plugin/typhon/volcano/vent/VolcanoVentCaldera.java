@@ -9,6 +9,7 @@ import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -46,7 +47,7 @@ public class VolcanoVentCaldera {
     VolcanoEruptStyle backedupStyle = VolcanoEruptStyle.STROMBOLIAN;
 
     int currentIteration = 0;
-    List<Block> currentIterationList = null;
+    Map<Chunk, List<Block>> currentIterationPerChunks = new HashMap<>();
 
     VolcanoVentCaldera(VolcanoVent vent) {
         this.vent = vent;
@@ -221,24 +222,46 @@ public class VolcanoVentCaldera {
 
     /* ====== WORK ====== */
     public void runSession() {
-        int sessionBlocks = 400000;
+        if (this.currentIterationPerChunks.isEmpty()) {
+            this.currentIteration = 0;
 
-        if (currentIteration == 0) {
+            if (this.currentRadius < radius) {
+                this.currentRadius++;
+                this.currentBase = this.currentBase.getRelative(0, -1, 0);
+            } else {
+                this.endErupt();
+                return;
+            }
+
             List<Block> blocks = VolcanoMath.getCircle(this.baseBlock, this.currentRadius);
+            Set<Chunk> chunks = new HashSet<>();
 
-            blocks.sort((o1, o2) -> {
-                double distance1 = TyphonUtils.getTwoDimensionalDistance(this.baseBlock.getLocation(), o1.getLocation());
-                double distance2 = TyphonUtils.getTwoDimensionalDistance(this.baseBlock.getLocation(), o2.getLocation());
+            for (Block block : blocks) {
+                chunks.add(block.getChunk());
+            }
 
-                return Double.compare(distance1, distance2);
-            });
+            for (Chunk chunk : chunks) {
+                List<Block> list = new ArrayList<>();
+                for (Block block : blocks) {
+                    if (block.getChunk().equals(chunk)) {
+                        list.add(block);
+                    }
+                }
 
-            this.currentIterationList = blocks;
+                this.currentIterationPerChunks.put(chunk, list);
+
+                TyphonScheduler.run(chunk, () -> {
+                    this.runSessionPerChunk(chunk);
+                });
+            }
         }
+    }
 
-        int listSize = currentIterationList.size();
-        for (int i = 0; i < sessionBlocks && currentIteration < listSize; i++, currentIteration++) {
-            Block block = currentIterationList.get(currentIteration);
+    public void runSessionPerChunk(Chunk chunk) {
+        List<Block> list = this.currentIterationPerChunks.get(chunk);
+        if (list == null) return;
+
+        for (Block block:list) {
             Block targetBlock = TyphonUtils.getHighestRocklikes(block);
             int targetY = this.getCurrentTargetY(block);
             if (targetBlock.getY() <= targetY) continue;
@@ -248,23 +271,9 @@ public class VolcanoVentCaldera {
                 this.vent.record.addEjectaVolume(excavated);
                 notProcessedEjecta += excavated;
             }
-
-            if (currentIteration > sessionBlocks) {
-                return;
-            }
         }
 
-        if (currentIteration >= listSize) {
-            this.currentIteration = 0;
-            this.currentIterationList = null;
-
-            if (this.currentRadius < radius) {
-                this.currentRadius++;
-                this.currentBase = this.currentBase.getRelative(0, -1, 0);
-            } else {
-                this.endErupt();
-            }
-        }
+        this.currentIterationPerChunks.remove(chunk);
     }
 
     /* ====== STATUS ====== */
