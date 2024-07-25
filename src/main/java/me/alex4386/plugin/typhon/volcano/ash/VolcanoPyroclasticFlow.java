@@ -14,10 +14,7 @@ import org.bukkit.util.Vector;
 import org.joml.AxisAngle4f;
 import org.joml.Vector3f;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class VolcanoPyroclasticFlow {
     Location location;
@@ -185,9 +182,12 @@ public class VolcanoPyroclasticFlow {
             );
         }
 
-        double forward = radius * (0.2 + Math.random() * 0.2);
+        double forward = Math.max(1, radius / (2.5 + (Math.random() * 1.5)));
 
-        this.location = this.location.add(direction.normalize().multiply(forward));
+        Vector copiedDirection = new Vector().copy(this.direction);
+        copiedDirection.multiply(forward);
+
+        this.location = this.location.add(copiedDirection);
         this.location = this.getBase(this.location.getBlock()).getLocation();
 
         int climbupLimit = Math.max(1, this.radius / 2);
@@ -201,14 +201,14 @@ public class VolcanoPyroclasticFlow {
             double z = direction.getZ();
 
             this.direction = new Vector(whichWay ? z : -z, 0, whichWay ? -x: x);
-            this.location = this.location.add(direction.normalize().multiply(forward));
+            this.location = this.location.add(copiedDirection);
 
             this.location = this.getBase(this.location.getBlock()).getLocation();
             if (this.location.getY() > tmpLocation.getY() + climbupLimit) {
                 this.location = tmpLocation;
 
                 this.direction = new Vector(whichWay ? -z : z, 0, whichWay ? x: -x);
-                this.location = this.location.add(direction.normalize().multiply(forward));
+                this.location = this.location.add(copiedDirection);
 
                 this.location = this.getBase(this.location.getBlock()).getLocation();
                 if (this.location.getY() > tmpLocation.getY() + climbupLimit) {
@@ -288,10 +288,6 @@ public class VolcanoPyroclasticFlow {
         this.processNearby();
         this.putAsh();
         this.playAshTrail();
-
-        if (Math.random() < 0.1) {
-            VolcanoMath.smoothOutRadius(this.location.getBlock(), radius, Material.TUFF);
-        }
     }
 
     public void processNearby() {
@@ -333,13 +329,6 @@ public class VolcanoPyroclasticFlow {
         Block maxYBlock = this.getBase(this.location.add(radiusVectorBack).getBlock());
         Block minYBlock = this.getBase(this.location.add(radiusVector).getBlock());
 
-
-        if (this.ash.vent.getTwoDimensionalDistance(this.location) > 130) {
-            if (this.hasAshFell(maxYBlock) && !this.hasAshFell(minYBlock)) {
-                maxYBlock = maxYBlock.getRelative(0, -2, 0);
-            }
-        }
-
         double slopeDistance = TyphonUtils.getTwoDimensionalDistance(minYBlock.getLocation(), maxYBlock.getLocation());
         double slope = Math.abs(maxYBlock.getY() - minYBlock.getY()) / slopeDistance;
         double maxPileup = this.maxPileup;
@@ -349,43 +338,57 @@ public class VolcanoPyroclasticFlow {
                 "Current maxY:"+maxYBlock.getY()+", minY:"+minYBlock.getY()+", distance:"+slopeDistance+" maxPileup: "+maxPileup+", slope: "+slope+", radius: "+radius+", location: "+TyphonUtils.blockLocationTostring(this.location.getBlock()));
         */
 
-        double ashCoatStart = 0.5;
-        double startAccumulate = 0.2;
+        double ashCoatStart = 0.25;
 
         if (slope >= ashCoatStart) {
             // the slope is too steep. do not put ash.
             return;
         } else {
-            if (slope >= startAccumulate) {
-                double slopeMultiplier = 1 - ((slope - startAccumulate) / (ashCoatStart - startAccumulate));
-                maxPileup = Math.min(1, this.maxPileup * Math.pow(slopeMultiplier, 2));
-            } else {
-                if (Math.random() < 0.05) {
-                    maxPileup *= 0.95;
-                }
-            }
-
             if (maxPileup < 1) {
                 maxPileup = 1;
+            } else if (Math.random() < 0.1) {
+                this.maxPileup *= 0.95;
             }
         }
 
 
         Block baseBlock = this.getBase(this.location.getBlock());
-        for (Block block : blocks) {
-            double distance = TyphonUtils.getTwoDimensionalDistance(baseBlock.getLocation(), block.getLocation());
+        double averageVentY = this.ash.vent.averageVentHeight();
 
-            if (distance > radius) continue;
-            double deduct = (maxPileup / (double) radius) * distance;
+        Set<Block> ashBlocks = new HashSet<>();
 
-            int height = (int) Math.round(maxPileup - deduct);
+        double deductMultiplier = 0.3;
+        double baseRadius = radius * deductMultiplier;
+        double halfRadius = radius / 2;
 
-            Block accumulateBase = this.getBase(block);
-            for (int y = 1; y <= height; y++) {
-                Block targetBlock = accumulateBase.getRelative(0, y, 0);
-                if (targetBlock.getType().isAir() || TyphonUtils.containsWater(targetBlock)) {
-                    this.ash.vent.lavaFlow.queueBlockUpdate(targetBlock, Material.TUFF);
-                    this.ash.vent.record.addEjectaVolume(1);
+        Vector srcDirectionNormalized = new Vector().copy(srcDirection).normalize();
+
+        for (double x = -halfRadius; x <= halfRadius; x += 0.25) {
+            for (double z = -halfRadius; z <= halfRadius; z += 0.25) {
+                // rotate in the direction to srcDirection
+                double rotatedX = x * srcDirectionNormalized.getX() - z * srcDirectionNormalized.getZ();
+                double rotatedZ = x * srcDirectionNormalized.getZ() + z * srcDirectionNormalized.getX();
+
+                Block block = baseBlock.getRelative((int) rotatedX, 0, (int) rotatedZ);
+                if (ashBlocks.contains(block)) continue;
+                ashBlocks.add(block);
+
+                double deduct = (maxPileup / baseRadius) * Math.abs(z * deductMultiplier);
+                int height = (int) Math.round(maxPileup - deduct);
+
+                Block accumulateBase = this.getBase(block);
+                if (hasAshFell(accumulateBase)) continue;
+                markAshFell(accumulateBase);
+
+                for (int y = 1; y <= height; y++) {
+                    Block targetBlock = accumulateBase.getRelative(0, y, 0);
+                    if (targetBlock.getY() > averageVentY + 2) {
+                        break;
+                    }
+                    if (targetBlock.getType().isAir() || TyphonUtils.containsWater(targetBlock)) {
+                        this.ash.vent.lavaFlow.queueBlockUpdate(targetBlock, Material.TUFF);
+                        this.ash.vent.record.addEjectaVolume(1);
+                    }
                 }
             }
         }

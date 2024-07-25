@@ -517,7 +517,7 @@ public class VolcanoVentCommand {
                                 float yaw = -1 * player.getLocation().getYaw();
                                 yaw = (yaw % 360 + 360) % 360;
 
-                                vent.landslide.landslideAngle = Math.toRadians(yaw);
+                                vent.landslide.landslideAngle = Math.toRadians(yaw) - Math.PI / 2;
                             } else {
                                 msg.error("This command can not be used by console without specifying angle");
                                 return true;
