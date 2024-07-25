@@ -1,5 +1,5 @@
 # Docs
-<p align="right">Last Updated: <b>2023-03-01</b> for v0.7.0-rc2</p>
+<p align="right">Last Updated: <b>2024-07-26</b> for v0.9.0-beta04</p>
 
 ## Welcome to Typhon Plugin!
 Typhon plugin is a Minecraft Plugin aims to implement real-life volcanoes and its behavior in Spigot within the borders of vanilla minecraft (no mods/texturepacks)
@@ -8,11 +8,13 @@ Typhon plugin is a Minecraft Plugin aims to implement real-life volcanoes and it
 > Typhon Plugin is still in early development, and might introduce feature that might break other features.  
 > Use at your own risk!
 
+<!--
 ## Using Typhon Plugin with Gaia
 Gaia is a new volcano management system that creates volcanoes, depending on your current world's size. [Learn more](/.github/docs/gaia.md)  
+-->
 
 ## Creating a new volcano
-Typhon plugin tries to mimick real volcanoes. Thus, has variety of options of eruption styles and configurations are available. [Learn more...](/.github/docs/volcano/index.md)  
+Typhon plugin tries to mimic real volcanoes. Thus, has variety of options of eruption styles and configurations are available. [Learn more...](/.github/docs/volcano/index.md)  
 
 ## Too-Long-Dont-Read
 1. Create your volcano
