@@ -43,6 +43,18 @@ public class VolcanoPyroclasticFlow {
 
     HashMap<Block, Boolean> hasAshFell = new HashMap<>();
     List<BlockDisplay> pyroclasticClouds = new ArrayList<>();
+    Map<Block, Block> initialBase = new HashMap<>();
+
+    private Block getBase(Block block) {
+        Block referenceBlock = block.getRelative(0, -block.getY(), 0);
+        if (initialBase.containsKey(referenceBlock)) {
+            return initialBase.get(referenceBlock);
+        }
+
+        Block lowestBlock = TyphonUtils.getHighestRocklikes(block);
+        initialBase.put(block, lowestBlock);
+        return lowestBlock;
+    }
 
     public static int getMaxLife(VolcanoVent vent) {
         return getMaxLife(vent, maxLife);
@@ -173,8 +185,10 @@ public class VolcanoPyroclasticFlow {
             );
         }
 
-        this.location = this.location.add(direction.normalize().multiply(radius));
-        this.location = TyphonUtils.getHighestRocklikes(this.location).getLocation();
+        double forward = radius * (0.2 + Math.random() * 0.2);
+
+        this.location = this.location.add(direction.normalize().multiply(forward));
+        this.location = this.getBase(this.location.getBlock()).getLocation();
 
         int climbupLimit = Math.max(1, this.radius / 2);
 
@@ -187,16 +201,16 @@ public class VolcanoPyroclasticFlow {
             double z = direction.getZ();
 
             this.direction = new Vector(whichWay ? z : -z, 0, whichWay ? -x: x);
-            this.location = this.location.add(direction.normalize().multiply(radius));
+            this.location = this.location.add(direction.normalize().multiply(forward));
 
-            this.location = TyphonUtils.getHighestRocklikes(this.location).getLocation();
+            this.location = this.getBase(this.location.getBlock()).getLocation();
             if (this.location.getY() > tmpLocation.getY() + climbupLimit) {
                 this.location = tmpLocation;
 
                 this.direction = new Vector(whichWay ? -z : z, 0, whichWay ? x: -x);
-                this.location = this.location.add(direction.normalize().multiply(radius));
+                this.location = this.location.add(direction.normalize().multiply(forward));
 
-                this.location = TyphonUtils.getHighestRocklikes(this.location).getLocation();
+                this.location = this.getBase(this.location.getBlock()).getLocation();
                 if (this.location.getY() > tmpLocation.getY() + climbupLimit) {
                     this.location = tmpLocation;
                     life = 0;
@@ -274,6 +288,10 @@ public class VolcanoPyroclasticFlow {
         this.processNearby();
         this.putAsh();
         this.playAshTrail();
+
+        if (Math.random() < 0.1) {
+            VolcanoMath.smoothOutRadius(this.location.getBlock(), radius, Material.TUFF);
+        }
     }
 
     public void processNearby() {
@@ -312,8 +330,8 @@ public class VolcanoPyroclasticFlow {
         Vector radiusVector = new Vector().copy(srcDirection).normalize().multiply(radius);
         Vector radiusVectorBack = new Vector().copy(radiusVector).multiply(-1);
 
-        Block maxYBlock = TyphonUtils.getHighestRocklikes(this.location.add(radiusVectorBack).getBlock());
-        Block minYBlock = TyphonUtils.getHighestRocklikes(this.location.add(radiusVector).getBlock());
+        Block maxYBlock = this.getBase(this.location.add(radiusVectorBack).getBlock());
+        Block minYBlock = this.getBase(this.location.add(radiusVector).getBlock());
 
 
         if (this.ash.vent.getTwoDimensionalDistance(this.location) > 130) {
@@ -353,7 +371,7 @@ public class VolcanoPyroclasticFlow {
         }
 
 
-        Block baseBlock = TyphonUtils.getHighestRocklikes(this.location.getBlock());
+        Block baseBlock = this.getBase(this.location.getBlock());
         for (Block block : blocks) {
             double distance = TyphonUtils.getTwoDimensionalDistance(baseBlock.getLocation(), block.getLocation());
 
@@ -362,7 +380,7 @@ public class VolcanoPyroclasticFlow {
 
             int height = (int) Math.round(maxPileup - deduct);
 
-            Block accumulateBase = TyphonUtils.getHighestRocklikes(block);
+            Block accumulateBase = this.getBase(block);
             for (int y = 1; y <= height; y++) {
                 Block targetBlock = accumulateBase.getRelative(0, y, 0);
                 if (targetBlock.getType().isAir() || TyphonUtils.containsWater(targetBlock)) {

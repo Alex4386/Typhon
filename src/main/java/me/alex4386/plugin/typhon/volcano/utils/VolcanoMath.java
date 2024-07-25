@@ -1,5 +1,8 @@
 package me.alex4386.plugin.typhon.volcano.utils;
 
+import com.flowpowered.math.vector.Vector3d;
+import me.alex4386.plugin.typhon.TyphonUtils;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
 
 import java.util.ArrayList;
@@ -21,6 +24,57 @@ public class VolcanoMath {
         double base = 1 / Math.sqrt(2 * Math.PI * variance);
         double pow = -(Math.pow((x - mean), 2) / (2 * variance));
         return Math.pow(Math.E, pow) * base;
+    }
+
+    public static List<Vector3d> getSmoothedOut(Block centerBlock, int radius) {
+        List<Block> smoothedOutTargetBlocks = getCircle(centerBlock, radius);
+        List<Block> highestBlocks = new ArrayList<>();
+
+        long ySum = 0;
+        for (Block block:smoothedOutTargetBlocks) {
+            Block highest = TyphonUtils.getHighestRocklikes(block);
+            highestBlocks.add(highest);
+
+            int highestY = highest.getY();
+            ySum += highestY;
+        }
+
+        double diffDivisor = 2;
+
+        List<Vector3d> smoothedOut = new ArrayList<>();
+        double yAverage = ySum / (double) smoothedOutTargetBlocks.size();
+        for (Block block:highestBlocks) {
+            double diff = block.getY() - yAverage;
+
+            double modAmount = (diff / diffDivisor);
+            modAmount = Math.max(-radius, Math.min(radius, modAmount));
+
+            double newY = block.getY() - modAmount;
+            smoothedOut.add(new Vector3d(block.getX(), newY, block.getZ()));
+        }
+
+        return smoothedOut;
+    }
+
+    public static void smoothOutRadius(Block centerBlock, int radius, Material fillMaterial) {
+        List<Vector3d> smoothedOut = getSmoothedOut(centerBlock, radius);
+
+        for (Vector3d vector:smoothedOut) {
+            Block block = centerBlock.getWorld().getBlockAt((int) vector.getX(), (int) vector.getY(), (int) vector.getZ());
+            Block highestBlock = TyphonUtils.getHighestRocklikes(block);
+
+            if (highestBlock.getY() < block.getY()) {
+                for (int y = highestBlock.getY(); y <= block.getY(); y++) {
+                    Block currentBlock = block.getWorld().getBlockAt(block.getX(), y, block.getZ());
+                    currentBlock.setType(fillMaterial);
+                }
+            } else if (highestBlock.getY() > block.getY()) {
+                for (int y = block.getY(); y > highestBlock.getY(); y--) {
+                    Block currentBlock = block.getWorld().getBlockAt(block.getX(), y, block.getZ());
+                    currentBlock.setType(Material.AIR);
+                }
+            }
+        }
     }
 
     public static double pdfMaxLimiter(double x, double max) {

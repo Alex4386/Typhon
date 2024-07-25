@@ -412,6 +412,7 @@ public class VolcanoVentCaldera {
 
                     if (Math.random() < 0.2) {
                         this.doEruptionPyroclasticFlows();
+                        this.notProcessedEjecta -= 1000;
                     }
                 }
             }
