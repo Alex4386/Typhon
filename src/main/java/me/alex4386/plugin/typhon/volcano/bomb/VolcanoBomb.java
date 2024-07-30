@@ -12,6 +12,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.BlockState;
 import org.bukkit.entity.FallingBlock;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.material.MaterialData;
@@ -79,31 +80,32 @@ public class VolcanoBomb {
                 targetLocation.toVector().subtract(launchLocation.toVector()),
                 yToLaunch + 3 + (int) (Math.random() * 9));
 
-        this.block = this.launchLocation.getWorld()
-                .spawnFallingBlock(
-                        this.launchLocation,
-                        new MaterialData(
-                                VolcanoComposition.getBombRock(
-                                        this.vent.lavaFlow.settings.silicateLevel,
-                                        this.getDistanceRatio(null))));
-
-        this.block.setGlowing(true);
-
-        this.block.setFireTicks(1000);
         try {
-            this.block.setVelocity(launchVector);
+           this.launchLocation.getWorld().spawn(
+                    this.launchLocation,
+                    FallingBlock.class,
+                    entity -> {
+                        FallingBlock block = (FallingBlock) entity;
+                        block.setGlowing(true);
+                        block.setInvulnerable(true);
+                        block.setMetadata("DropItem", new FixedMetadataValue(TyphonPlugin.plugin, 0));
+                        block.setDropItem(false);
+                        block.setGravity(true);
+                        block.setVelocity(launchVector);
+
+                        BlockState state = block.getBlockState();
+                        state.setType(Material.MAGMA_BLOCK);
+
+                        block.setBlockState(state);
+                        block.setFireTicks(1000);
+                    }
+                );
         } catch (Exception e) {
-            this.block.remove();
-            this.block = null;
+            if (this.block != null) this.block.remove();
 
             this.land();
             return;
         }
-
-        this.block.setGravity(true);
-        this.block.setInvulnerable(true);
-        this.block.setMetadata("DropItem", new FixedMetadataValue(TyphonPlugin.plugin, 0));
-        this.block.setDropItem(false);
 
         this.vent
                 .getVolcano().logger

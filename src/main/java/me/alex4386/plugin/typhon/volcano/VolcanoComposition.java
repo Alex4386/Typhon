@@ -19,11 +19,11 @@ public class VolcanoComposition {
             double redScoriaRatio =
                     1 - ((silicateLevel - 0.45) / (0.57 - 0.45));
 
-            double redScoriaPercentage = Math.max(Math.pow(redScoriaRatio, 2), 0.99);
+            double redScoriaPercentage = Math.min(Math.pow(redScoriaRatio, 2), 0.99) * 0.7;
             double scaled = distanceScale * redScoriaPercentage;
             double s = random.nextDouble();
 
-            //System.out.println("redScoriaPercentage: "+redScoriaPercentage+", distanceScale:"+distanceScale+", Scaled: " + scaled);
+            System.out.println("[BombDebug] redScoriaPercentage: "+redScoriaPercentage+", distanceScale:"+distanceScale+", Scaled: " + scaled);
 
             if (s < scaled) {
                 return Material.COBBLED_DEEPSLATE;

@@ -175,18 +175,21 @@ public class TyphonDebugCommand {
                         player.getLocation().add(powerX, powerY, powerZ);
                 FallingBlock block =
                         player.getWorld()
-                                .spawnFallingBlock(
-                                        startLocation,
-                                        new MaterialData(Material.GRAVEL));
-                block.setVelocity(
-                        TyphonUtils.calculateVelocity(
-                                new Vector(0, 0, 0),
-                                new Vector(powerX, powerY, powerZ),
-                                5));
+                            .spawn(
+                                    startLocation,
+                                    FallingBlock.class,
+                                    thisBlock -> {
+                                        thisBlock.getBlockState().setType(Material.GRAVEL);
+                                        thisBlock.setVelocity(
+                                                TyphonUtils.calculateVelocity(
+                                                        new Vector(0, 0, 0),
+                                                        new Vector(powerX, powerY, powerZ),
+                                                        5));
 
-                block.setGravity(true);
-                block.setInvulnerable(true);
-                block.setDropItem(false);
+                                        thisBlock.setGravity(true);
+                                        thisBlock.setInvulnerable(true);
+                                        thisBlock.setDropItem(false);
+                                    });
 
                 AtomicInteger i = new AtomicInteger();
                 final Location[] prevLocation = {player.getLocation()};
