@@ -75,9 +75,14 @@ public class VolcanoBomb {
         if (bombGlowTeam != null) return bombGlowTeam;
 
         ScoreboardManager scoreboardManager = Bukkit.getScoreboardManager();
-        Scoreboard scoreboard = scoreboardManager.getNewScoreboard();
+        Scoreboard scoreboard = scoreboardManager.getMainScoreboard();
 
-        bombGlowTeam = scoreboard.registerNewTeam("__Typhon_BombGlow");
+        Team team = scoreboard.registerNewTeam("__Typhon_BombGlow");
+
+        team.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.NEVER);
+        team.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
+        team.setCanSeeFriendlyInvisibles(true);
+        team.setAllowFriendlyFire(true);
 
         try {
             bombGlowTeam.color(NamedTextColor.RED);
