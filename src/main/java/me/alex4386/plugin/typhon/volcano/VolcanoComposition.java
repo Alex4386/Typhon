@@ -23,7 +23,7 @@ public class VolcanoComposition {
             double scaled = distanceScale * redScoriaPercentage;
             double s = random.nextDouble();
 
-            System.out.println("[BombDebug] redScoriaPercentage: "+redScoriaPercentage+", distanceScale:"+distanceScale+", Scaled: " + scaled);
+//            System.out.println("[BombDebug] redScoriaPercentage: "+redScoriaPercentage+", distanceScale:"+distanceScale+", Scaled: " + scaled);
 
             if (s < scaled) {
                 return Material.COBBLED_DEEPSLATE;

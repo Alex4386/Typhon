@@ -722,8 +722,14 @@ public class VolcanoVent {
 
         while (iterator.hasNext()) {
             Block block = iterator.next();
-            block.setType(
-                    VolcanoComposition.getExtrusiveRock(this.lavaFlow.settings.silicateLevel));
+
+            if (this.erupt.getStyle().lavaMultiplier < 1) {
+                block.setType(
+                        VolcanoComposition.getBombRock(this.lavaFlow.settings.silicateLevel, 0));
+            } else {
+                block.setType(
+                        VolcanoComposition.getExtrusiveRock(this.lavaFlow.settings.silicateLevel));
+            }
         }
     }
 
