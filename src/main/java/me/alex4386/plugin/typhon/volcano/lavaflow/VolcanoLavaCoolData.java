@@ -18,6 +18,7 @@ import org.bukkit.block.data.Levelled;
 import org.bukkit.util.Vector;
 
 import java.util.Queue;
+import java.util.function.Consumer;
 
 public class VolcanoLavaCoolData {
     public int ticks;
@@ -167,7 +168,8 @@ public class VolcanoLavaCoolData {
                     && 6 <= level
                     && level < 8) {
 
-                this.flowedFromVent.lavaFlow.queueBlockUpdate(block, material);
+                this.flowedFromVent.lavaFlow.queueBlockUpdate(block, material, TyphonUtils.getBlockFaceUpdater(flowVector.toVector()));
+
                 BlockFace[] flowableFaces = {
                         BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.NORTH,
                 };
@@ -231,7 +233,7 @@ public class VolcanoLavaCoolData {
                 Block bottomBlock = flowDirectionBlock.getRelative(BlockFace.DOWN);
 
                 if (!this.flowedFromVent.lavaFlow.isLavaRegistered(flowDirectionBlock)) {
-                    this.flowedFromVent.lavaFlow.queueBlockUpdate(flowDirectionBlock, material);
+                    this.flowedFromVent.lavaFlow.queueBlockUpdate(flowDirectionBlock, material, TyphonUtils.getBlockFaceUpdater(flowVector.toVector()));
 
                     this.flowedFromVent.lavaFlow.registerLavaCoolData(
                             source,
@@ -254,7 +256,6 @@ public class VolcanoLavaCoolData {
             }
         }
     }
-
 
     public void coolDown() {
         if (Math.random() < 0.0001) {
@@ -307,7 +308,9 @@ public class VolcanoLavaCoolData {
 
 
         if (this.flowedFromVent != null) {
-            this.flowedFromVent.lavaFlow.queueBlockUpdate(block, material);
+            this.flowedFromVent.lavaFlow.queueBlockUpdate(block, material, TyphonUtils.getBlockFaceUpdater(
+                    block.getLocation().subtract(fromBlock.getLocation()).toVector()
+            ));
         } else {
             block.setType(material);
         }

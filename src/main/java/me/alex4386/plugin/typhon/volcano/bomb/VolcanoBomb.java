@@ -134,8 +134,8 @@ public class VolcanoBomb {
 
                         try {
                             getBombGlowTeam().addEntity(block);
-                        } catch(Exception ignored) {
-
+                        } catch(Exception e) {
+                            e.printStackTrace();
                         }
                     }
                 );

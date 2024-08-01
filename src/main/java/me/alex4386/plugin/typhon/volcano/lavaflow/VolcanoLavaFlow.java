@@ -22,10 +22,11 @@ import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.plugin.PluginManager;
+import org.bukkit.util.Vector;
 import org.json.simple.JSONObject;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 
@@ -64,6 +65,7 @@ public class VolcanoLavaFlow implements Listener {
 
     // temporary queue to store Block and Material to update
     private static Map<Chunk, Queue<Map.Entry<Block, Material>>> blockUpdateQueues = new HashMap<>();
+    private static Map<Block, Consumer<Block>> postUpdater = new HashMap<>();
 
     private int configuredLavaInflux = -1;
     private double queuedLavaInflux = 0;
@@ -102,6 +104,10 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void queueBlockUpdate(Block block, Material material) {
+        this.queueBlockUpdate(block, material, null);
+    }
+
+    public void queueBlockUpdate(Block block, Material material, Consumer<Block> callback) {
         if (this.queueScheduleId == -1) {
             this.registerQueueUpdate();
         }
@@ -112,7 +118,9 @@ public class VolcanoLavaFlow implements Listener {
         }
 
         Queue<Map.Entry<Block, Material>> blockUpdateQueue = blockUpdateQueues.get(chunk);
+
         blockUpdateQueue.add(new AbstractMap.SimpleEntry<>(block, material));
+        if (callback != null) postUpdater.put(block, callback);
     }
 
     public void queueImmediateBlockUpdate(Block block, Material material) {
@@ -243,10 +251,9 @@ public class VolcanoLavaFlow implements Listener {
 
         for (Map.Entry<Chunk, Queue<Map.Entry<Block, Material>>> entry : blockUpdateQueues.entrySet()) {
             if (entry.getValue().isEmpty()) continue;
-
             TyphonScheduler.run(entry.getKey(),
                     () -> {
-                        runQueueWithinTick(entry.getValue());
+                        runBlockUpdateQueueWithinTick(entry.getValue());
                     });
             rerenderTargets.add(entry.getKey());
         }
@@ -281,7 +288,7 @@ public class VolcanoLavaFlow implements Listener {
         return count;
     }
 
-    public long runQueueWithinTick(Queue<Map.Entry<Block, Material>> blockUpdateQueue) {
+    public long runBlockUpdateQueueWithinTick(Queue<Map.Entry<Block, Material>> blockUpdateQueue) {
         // get starting time
         long startTime = System.currentTimeMillis();
         long count = 1;
@@ -292,6 +299,13 @@ public class VolcanoLavaFlow implements Listener {
                 Block block = entry.getKey();
                 Material material = entry.getValue();
                 block.setType(material);
+
+                if (postUpdater.containsKey(block)) {
+                    Consumer<Block> callback = postUpdater.get(block);
+                    callback.accept(block);
+
+                    postUpdater.remove(block);
+                }
             } else {
                 break;
             }
@@ -1196,7 +1210,8 @@ public class VolcanoLavaFlow implements Listener {
                         Material material = Math.random() < 0.5 ? VolcanoComposition.getBombRock(this.settings.silicateLevel,
                                     this.getDistanceRatio(targetBlock.getLocation())
                                 ) : VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel);
-                        queueBlockUpdate(targetBlock, material);
+
+                        queueBlockUpdate(targetBlock, material, TyphonUtils.getBlockFaceUpdater(new Vector(x, 0, z)));
                     }
                 }
             }
@@ -1235,7 +1250,7 @@ public class VolcanoLavaFlow implements Listener {
 
         //System.out.println("coneHeight: "+coneHeight+", distance: "+distance+", radius: "+radius+", distanceFromVent: "+distanceFromVent+", scaledDistance: "+scaledDistance);
 
-        return Math.min(Math.pow(scaledDistance, 2), 1);
+        return Math.min(scaledDistance, 1);
     }
 
     public boolean extendLava() {
@@ -1390,7 +1405,7 @@ public class VolcanoLavaFlow implements Listener {
                         VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel) :
                         material;
 
-                    this.queueBlockUpdate(block, material);
+                    this.queueBlockUpdate(block, material, TyphonUtils.getBlockFaceUpdater(fromBlock, block));
                     vent.flushSummitCacheByLocation(block);
 
                     BlockData bd = block.getBlockData();
