@@ -25,8 +25,8 @@ public class VolcanoComposition {
             double threshold = 0.6;
             double adapted = 1.0;
             if (distanceScale < threshold) {
-                adapted = 1.0 - (Math.pow((1.0 - distanceScale / threshold), 2));
-            }
+                    adapted = 1.0 - (Math.pow((1.0 - distanceScale / threshold), 2));
+                }
 
             double scaled = Math.max(0.1, adapted);
             double s = random.nextDouble();
