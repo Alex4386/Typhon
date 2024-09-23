@@ -2,12 +2,15 @@ package me.alex4386.plugin.typhon;
 
 import java.io.File;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import org.bukkit.*;
 import org.bukkit.block.*;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Directional;
+import org.bukkit.block.data.Orientable;
 import org.bukkit.block.data.Waterlogged;
 import org.bukkit.util.Vector;
 import org.json.simple.JSONObject;
@@ -46,6 +49,63 @@ public class TyphonUtils {
         }
 
         return chunks;
+    }
+
+    public static Consumer<Block> getBlockFaceUpdater(Block fromBlock, Block block) {
+        return getBlockFaceUpdater(block.getLocation().subtract(fromBlock.getLocation()).toVector());
+    }
+
+    public static Consumer<Block> getBlockFaceUpdater(Vector vector) {
+        return block -> {
+            BlockData blockData = block.getBlockData();
+            BlockFace face = TyphonUtils.getAdequateBlockFace(vector);
+
+            if (blockData instanceof Directional directional) {
+                directional.setFacing(face);
+                block.setBlockData(directional);
+            }
+
+            if (blockData instanceof Orientable orientable) {
+                if (face == BlockFace.UP || face == BlockFace.DOWN) {
+                    orientable.setAxis(Axis.Y);
+                } else if (face == BlockFace.NORTH || face == BlockFace.SOUTH) {
+                    orientable.setAxis(Axis.Z);
+                } else {
+                    orientable.setAxis(Axis.X);
+                }
+
+                block.setBlockData(orientable);
+            }
+        };
+    }
+
+    public static BlockFace getAdequateBlockFace(Block fromBlock, Block toBlock) {
+        Vector diff = toBlock.getLocation().toVector().subtract(fromBlock.getLocation().toVector());
+        return getAdequateBlockFace(diff);
+    }
+
+    public static BlockFace getAdequateBlockFace(Vector vector) {
+        double x = vector.getX();
+        double z = vector.getZ();
+
+        BlockFace face = BlockFace.DOWN;
+        if (x == 0 && z == 0) return face;
+
+        if (Math.abs(x) > Math.abs(z)) {
+            if (x > 0) {
+                face = BlockFace.EAST;
+            } else {
+                face = BlockFace.WEST;
+            }
+        } else {
+            if (z > 0) {
+                face = BlockFace.SOUTH;
+            } else {
+                face = BlockFace.NORTH;
+            }
+        }
+
+        return face;
     }
 
     private static Map<Block, TyphonCache<org.bukkit.block.Block>> highestRocklikesBlockCacheMap = new HashMap<>();

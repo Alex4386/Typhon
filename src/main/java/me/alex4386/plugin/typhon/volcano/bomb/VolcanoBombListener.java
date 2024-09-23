@@ -46,8 +46,7 @@ public class VolcanoBombListener implements Listener {
                                     }
                                 }
                             },
-                            (long) TyphonPlugin.minecraftTicksPerSeconds
-                                    / updatesPerSeconds);
+                            1L);
         }
     }
 

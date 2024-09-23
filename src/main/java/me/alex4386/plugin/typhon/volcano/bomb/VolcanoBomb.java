@@ -9,14 +9,16 @@ import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.BlockState;
 import org.bukkit.entity.FallingBlock;
-import org.bukkit.entity.LivingEntity;
-import org.bukkit.material.MaterialData;
 import org.bukkit.metadata.FixedMetadataValue;
-import org.bukkit.potion.PotionEffect;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.ScoreboardManager;
+import org.bukkit.scoreboard.Team;
 import org.bukkit.util.Vector;
 
 import java.util.Collections;
@@ -40,8 +42,12 @@ public class VolcanoBomb {
     public boolean isTrailOn = false;
 
     public int explodeTimer = -1;
+    public int heatTimer = 15;
 
     public int lifeTime = 0;
+    public static Material defaultBombMaterial = Material.MAGMA_BLOCK;
+
+    Material targetMaterial = null;
 
     public boolean isLanded = false;
     public VolcanoBomb(
@@ -58,6 +64,34 @@ public class VolcanoBomb {
 
         this.launchLocation = loc;
         this.targetLocation = targetLocation;
+
+        this.heatTimer = (int) (Math.pow(this.bombRadius, 1.25) * 10);
+    }
+
+
+    /* == SETUP GLOW == */
+    static Team bombGlowTeam = null;
+    public static Team getBombGlowTeam() {
+        if (bombGlowTeam != null) return bombGlowTeam;
+
+        ScoreboardManager scoreboardManager = Bukkit.getScoreboardManager();
+        Scoreboard scoreboard = scoreboardManager.getMainScoreboard();
+
+        Team team = scoreboard.registerNewTeam("__Typhon_BombGlow");
+
+        team.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.NEVER);
+        team.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
+        team.setCanSeeFriendlyInvisibles(true);
+        team.setAllowFriendlyFire(true);
+
+        try {
+            bombGlowTeam.color(NamedTextColor.RED);
+        } catch(Exception e) {
+            // fallback to spigot mode
+            bombGlowTeam.setColor(ChatColor.RED);
+        }
+
+        return bombGlowTeam;
     }
 
     public double getDistanceRatio() {
@@ -79,31 +113,38 @@ public class VolcanoBomb {
                 targetLocation.toVector().subtract(launchLocation.toVector()),
                 yToLaunch + 3 + (int) (Math.random() * 9));
 
-        this.block = this.launchLocation.getWorld()
-                .spawnFallingBlock(
-                        this.launchLocation,
-                        new MaterialData(
-                                VolcanoComposition.getBombRock(
-                                        this.vent.lavaFlow.settings.silicateLevel,
-                                        this.getDistanceRatio(null))));
-
-        this.block.setGlowing(true);
-
-        this.block.setFireTicks(1000);
         try {
-            this.block.setVelocity(launchVector);
+           this.block = this.launchLocation.getWorld().spawn(
+                    this.launchLocation,
+                    FallingBlock.class,
+                    entity -> {
+                        FallingBlock block = (FallingBlock) entity;
+                        block.setGlowing(true);
+                        block.setInvulnerable(true);
+                        block.setMetadata("DropItem", new FixedMetadataValue(TyphonPlugin.plugin, 0));
+                        block.setDropItem(false);
+                        block.setGravity(true);
+                        block.setVelocity(launchVector);
+
+                        BlockState state = block.getBlockState();
+                        state.setType(defaultBombMaterial);
+
+                        block.setBlockState(state);
+                        block.setFireTicks(1000);
+
+                        try {
+                            getBombGlowTeam().addEntity(block);
+                        } catch(Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                );
         } catch (Exception e) {
-            this.block.remove();
-            this.block = null;
+            if (this.block != null) this.block.remove();
 
             this.land();
             return;
         }
-
-        this.block.setGravity(true);
-        this.block.setInvulnerable(true);
-        this.block.setMetadata("DropItem", new FixedMetadataValue(TyphonPlugin.plugin, 0));
-        this.block.setDropItem(false);
 
         this.vent
                 .getVolcano().logger
@@ -122,6 +163,18 @@ public class VolcanoBomb {
         if (this.block != null) {
             Location loc = block.getLocation();
             loc.getWorld().spawnParticle(Particle.LAVA, loc, 1);
+        }
+    }
+
+    public void handleHeat() {
+//        System.out.println("[HandleHeat] HeatTimer: "+this.heatTimer);
+        if (this.heatTimer > 0) {
+            this.heatTimer--;
+        }
+
+        if (this.heatTimer == 0) {
+            // cooldown material
+            this.coolDownFallingBlock();
         }
     }
 
@@ -144,8 +197,23 @@ public class VolcanoBomb {
         }
     }
 
+    public void coolDownFallingBlock() {
+//        System.out.println("[HandleHeat] Cooling down");
+
+        this.heatTimer = 0;
+        if (this.block != null) {
+            BlockState state = this.block.getBlockState();
+//            System.out.println("[HandleHeat] Cooling down. current type: "+state.getType().name());
+            if (state.getType() == defaultBombMaterial) {
+                state.setType(VolcanoComposition.getBombRock(vent.lavaFlow.settings.silicateLevel, this.getDistanceRatio()));
+                this.block.setBlockState(state);
+            }
+        }
+    }
+
     public void skipMe() {
         if (this.block != null) {
+            this.coolDownFallingBlock();
             this.block.remove();
             this.isLanded = true;
     
@@ -169,11 +237,29 @@ public class VolcanoBomb {
         } else if (this.landingLocation == null) {
             this.isLanded = true;
             if (this.block != null) {
+                this.coolDownFallingBlock();
                 this.block.remove();
             }
             return;
         }
-        if (this.block != null) this.block.remove();
+
+        Material targetMaterial = VolcanoComposition.getBombRock(vent.lavaFlow.settings.silicateLevel, this.getDistanceRatio());
+        if (this.block != null) {
+            BlockState state = this.block.getBlockState();
+            if (state.getType() == defaultBombMaterial) {
+                targetMaterial = VolcanoComposition.getBombRock(vent.lavaFlow.settings.silicateLevel, this.getDistanceRatio());
+                state.setType(targetMaterial);
+
+                this.block.setBlockState(state);
+            } else {
+                targetMaterial = state.getType();
+            }
+
+            this.block.remove();
+        }
+
+        this.targetMaterial = targetMaterial;
+
         if (!this.isLanded) this.isLanded = true;
 
         if (this.targetLocation != null) {
@@ -374,6 +460,8 @@ public class VolcanoBomb {
             } else {
                 for (Block bombBlock : bomb) {
                     Material material = VolcanoComposition.getBombRock(lavaFlow.settings.silicateLevel, this.getDistanceRatio(finalBlock.getLocation(bombBlock.getLocation())));
+                    if (this.targetMaterial != null) material = this.targetMaterial;
+
                     if (vent == null)
                         bombBlock.setType(material);
                     else

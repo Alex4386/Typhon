@@ -90,7 +90,7 @@ public class VolcanoVentCaldera {
     }
 
     public int getDeep(int radius) {
-        return (int) Math.max(10, ((radius / Math.sqrt(3)) / 4));
+        return (int) Math.max(10, radius / (1.5 + (Math.random() * 0.5)));
     }
 
     /* ======= AUTOSETUP ======== */
@@ -179,7 +179,9 @@ public class VolcanoVentCaldera {
         int targetYFromHeightDeduct = (int) (this.targetY - heightDeduct);
         int baseBlockStairY = this.currentBase.getY() + (int) rawDistance;
 
-        return Math.max(targetYFromHeightDeduct, baseBlockStairY) + this.getRandomnessHeight(block);
+        int targetY = Math.max(targetYFromHeightDeduct, baseBlockStairY);
+
+        return targetY + this.getRandomnessHeight(block);
     }
 
     public int getRandomnessHeight(Block block) {

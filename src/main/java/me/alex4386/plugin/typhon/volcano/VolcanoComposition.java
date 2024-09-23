@@ -12,27 +12,36 @@ public class VolcanoComposition {
         return getBombRock(silicateLevel, 1);
     }
 
+    // distance = 0: close to the vent
+    // distance = 1: far away from the vent (linear)
     public static Material getBombRock(double silicateLevel, double distanceScale) {
         Random random = new Random();
 
         if (silicateLevel < 0.57) {
             double redScoriaRatio =
                     1 - ((silicateLevel - 0.45) / (0.57 - 0.45));
+            double redScoriaPercentage = Math.max(0, Math.min(Math.pow(redScoriaRatio, 2), 1));
 
-            double redScoriaPercentage = Math.max(Math.pow(redScoriaRatio, 2), 0.99);
-            double scaled = distanceScale * redScoriaPercentage;
+            double threshold = 0.6;
+            double adapted = 1.0;
+            if (distanceScale < threshold) {
+                    adapted = 1.0 - (Math.pow((1.0 - distanceScale / threshold), 2));
+                }
+
+            double scaled = Math.max(0.1, adapted);
             double s = random.nextDouble();
-
-            //System.out.println("redScoriaPercentage: "+redScoriaPercentage+", distanceScale:"+distanceScale+", Scaled: " + scaled);
 
             if (s < scaled) {
                 return Material.COBBLED_DEEPSLATE;
             } else {
-                // purple-red scoria
-                if (Math.random() < 0.0001) {
-                    return Material.NETHER_QUARTZ_ORE;
+                if (Math.random() > redScoriaPercentage) {
+                    if (Math.random() < 0.0001) {
+                        return Material.NETHER_QUARTZ_ORE;
+                    } else {
+                        return Material.NETHERRACK;
+                    }
                 } else {
-                    return Material.NETHERRACK;
+                    return Material.COBBLED_DEEPSLATE;
                 }
             }
         } else {
@@ -67,9 +76,9 @@ public class VolcanoComposition {
         if (silicateLevel < 0.41) {
             return Material.DEEPSLATE;
         } else if (silicateLevel < 0.45) {
-            double ratio = (silicateLevel - 0.45) / (0.45 - 0.41);
+                double ratio = (silicateLevel - 0.45) / (0.45 - 0.41);
 
-            double s = random.nextDouble();
+                double s = random.nextDouble();
             if (s > ratio) {
                 return Material.DEEPSLATE;
             } else {

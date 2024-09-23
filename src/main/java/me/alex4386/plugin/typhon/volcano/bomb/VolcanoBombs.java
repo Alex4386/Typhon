@@ -8,11 +8,16 @@ import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.FallingBlock;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.ScoreboardManager;
+import org.bukkit.scoreboard.Team;
 import org.bukkit.util.Vector;
 import org.json.simple.JSONObject;
 
@@ -345,6 +350,7 @@ public class VolcanoBombs {
         }
     }
     public void trackAll() {
+//        System.out.println("[BombTrack] trackingAll.");
         Iterator<Map.Entry<FallingBlock, VolcanoBomb>> iterator = bombMap.entrySet().iterator();
 
         while (iterator.hasNext()) {
@@ -359,12 +365,15 @@ public class VolcanoBombs {
                 block.setTicksLived(1);
     
                 if (bomb.isLanded) {
+//                    System.out.println("[BombTrack] hasLanded.");
+                    bomb.coolDownFallingBlock();
                     bomb.stopTrail();
                     iterator.remove();
                     continue;
                 }
     
                 Location bombLocation = block.getLocation();
+                bomb.handleHeat();
     
                 if (bomb.prevLocation == null) {
                     bomb.prevLocation = bombLocation;
@@ -372,7 +381,8 @@ public class VolcanoBombs {
                     if ((bomb.prevLocation.equals(bombLocation)
                             && VolcanoBombListener.groundChecker(bombLocation, bomb.bombRadius))
                             || block.isOnGround()) {
-    
+
+                        bomb.coolDownFallingBlock();
                         bomb.land();
                         bomb.stopTrail();
                         iterator.remove();
@@ -387,6 +397,7 @@ public class VolcanoBombs {
                     // Bukkit.getLogger().log(Level.INFO, "Volcano Bomb from Volcano
                     // "+volcano.name+"
                     // died.");
+                    bomb.coolDownFallingBlock();
                     bomb.stopTrail();
 
                     if (bomb.block != null) {
