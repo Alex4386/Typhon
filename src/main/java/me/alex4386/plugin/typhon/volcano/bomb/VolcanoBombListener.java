@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.bomb;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
@@ -34,9 +35,7 @@ public class VolcanoBombListener implements Listener {
 
     public void registerTask() {
         if (bombTrackingScheduleId < 0) {
-            bombTrackingScheduleId = Bukkit.getScheduler()
-                    .scheduleSyncRepeatingTask(
-                            TyphonPlugin.plugin,
+            bombTrackingScheduleId = TyphonScheduler.registerGlobalTask(
                             (Runnable) () -> {
                                 for (Map.Entry<String, Volcano> entry : TyphonPlugin.listVolcanoes.entrySet()) {
                                     Volcano volcano = entry.getValue();
@@ -47,7 +46,6 @@ public class VolcanoBombListener implements Listener {
                                     }
                                 }
                             },
-                            0L,
                             (long) TyphonPlugin.minecraftTicksPerSeconds
                                     / updatesPerSeconds);
         }
@@ -55,7 +53,7 @@ public class VolcanoBombListener implements Listener {
 
     public void unregisterTask() {
         if (bombTrackingScheduleId >= 0) {
-            Bukkit.getScheduler().cancelTask(bombTrackingScheduleId);
+            TyphonScheduler.unregisterTask(bombTrackingScheduleId);
             bombTrackingScheduleId = -1;
         }
     }

@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
@@ -681,17 +682,14 @@ public class VolcanoGeoThermal implements Listener {
 
   public void registerTask() {
     if (scheduleID == -1) {
-      scheduleID = Bukkit.getServer()
-          .getScheduler()
-          .scheduleSyncRepeatingTask(
-              TyphonPlugin.plugin,
+      scheduleID = TyphonScheduler.registerGlobalTask(
               (Runnable) () -> {
                 if (enable) {
                   for (VolcanoVent vent : volcano.manager.getVents()) {
                     this.runGeoThermalCycle(vent);
                   }
                 }
-              }, 0,
+              },
               Math.min(
                   (long) ((geoThermalUpdateRate / 20.0)
                       * volcano.updateRate),
@@ -701,7 +699,7 @@ public class VolcanoGeoThermal implements Listener {
 
   public void unregisterTask() {
     if (scheduleID != -1) {
-      Bukkit.getScheduler().cancelTask(scheduleID);
+      TyphonScheduler.unregisterTask(scheduleID);
       scheduleID = -1;
     }
   }

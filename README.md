@@ -28,7 +28,7 @@ See plugin in action: <a href="https://www.youtube.com/watch?v=DDnQDAdq1Ok">YouT
 * **A lot of RAM** (4GiB or more recommended)
 
 ## Docs
-Please refer to [DOCS.md](./DOCS.md). _(NOT UPDATED)_  
+Please refer to [DOCS.md](./DOCS.md)
 
 ## Downloads
 Nightly builds *(GitHub Login Required)*: [GitHub Actions](https://github.com/Alex4386/Typhon-Plugin/actions/workflows/maven.yml)  

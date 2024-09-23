@@ -24,6 +24,11 @@ public class TyphonScheduler {
     public static int registerTask(Chunk chunk, Runnable task, long interval) {
         int targetId;
 
+        // check if interval is less than 1, handle it.
+        if (interval < 1) {
+            interval = 1;
+        }
+
         // check if this is a paper
         if (TyphonMultithreading.isPaperMultithread) {
             ScheduledTask scheduledTask;
@@ -50,6 +55,7 @@ public class TyphonScheduler {
             targetId = TyphonScheduler.getNewTaskId();
             tasks.put(targetId, scheduledTask);
         } else {
+            // THIS IS NOT A DEPRECATION. THIS IS A FALLBACK FOR NON-PAPER SERVERS
             targetId = Bukkit.getScheduler().scheduleSyncRepeatingTask(
                     TyphonPlugin.plugin,
                     task,

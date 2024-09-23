@@ -1,10 +1,12 @@
 package me.alex4386.plugin.typhon.volcano.vent;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
@@ -49,21 +51,18 @@ public class VolcanoTremor {
         if (scheduleID >= 0) {
             return;
         }
-        Bukkit.getScheduler()
-                .scheduleSyncRepeatingTask(
-                        TyphonPlugin.plugin,
+        TyphonScheduler.registerGlobalTask(
                         () -> {
                             if (!vent.isExploding()) {
                                 // runTremorCycle();
                             }
                         },
-                        0L,
                         Math.max(1, tremorCycleRate / 20 * vent.volcano.updateRate));
     }
 
     public void unregisterTask() {
         if (scheduleID < 0) return;
-        Bukkit.getScheduler().cancelTask(scheduleID);
+        TyphonScheduler.unregisterTask(scheduleID);
         scheduleID = -1;
     }
 
@@ -152,15 +151,17 @@ public class VolcanoTremor {
                             if (loop.get() > termorLength.get()) {
                                 volcano.logger.debug(
                                         VolcanoLogClass.TREMOR, name + " termor sequence Pass.");
-                                Bukkit.getScheduler().cancelTask(scheduleID.get());
+                                TyphonScheduler.unregisterTask(scheduleID.get());
                             }
 
                             prevLocation.set(entity.getLocation());
                         };
 
         scheduleID.set(
-                Bukkit.getScheduler()
-                        .scheduleSyncRepeatingTask(TyphonPlugin.plugin, tremorRunnable, 0, 1));
+                TyphonScheduler.registerGlobalTask(
+                        tremorRunnable,
+                        1L
+                ));
     }
 
     public void showTremorActivity(Block block, double power) {
@@ -198,7 +199,8 @@ public class VolcanoTremor {
 
                 double impactFactor = vent.getHeatValue(player.getLocation());
 
-                Entity[] entities = player.getLocation().getChunk().getEntities();
+                Chunk chunk = player.getLocation().getChunk();
+                Entity[] entities = chunk.getEntities();
                 Map<Entity, Location> entityLocation = new HashMap<>();
                 for (Entity entity : entities) {
                     if (entity.isOnGround()) {
@@ -208,44 +210,43 @@ public class VolcanoTremor {
                     }
                 }
 
-                Bukkit.getScheduler()
-                        .runTaskLater(
-                                TyphonPlugin.plugin,
-                                (Runnable)
-                                        () -> {
-                                            for (Entity entity : entities) {
-                                                Location prevLocation = entityLocation.get(entity);
-                                                if (entity != null) {
-                                                    Location nowLocation = entity.getLocation();
+                TyphonScheduler.runDelayed(
+                        chunk,
+                    (Runnable)
+                            () -> {
+                                for (Entity entity : entities) {
+                                    Location prevLocation = entityLocation.get(entity);
+                                    if (entity != null) {
+                                        Location nowLocation = entity.getLocation();
 
-                                                    if (prevLocation != null) {
-                                                        if (impactFactor > 0
-                                                                && prevLocation.distance(
-                                                                                nowLocation)
-                                                                        == 0
-                                                                && prevLocation.getYaw()
-                                                                        == nowLocation.getYaw()
-                                                                && prevLocation.getPitch()
-                                                                        == nowLocation.getPitch()) {
-                                                            tremorOnEntity(
-                                                                    entity,
-                                                                    (int)
-                                                                            (2
-                                                                                    + Math.max(
-                                                                                            Math
-                                                                                                            .random()
-                                                                                                    * impactFactor,
-                                                                                            2)),
-                                                                    power * impactFactor);
-                                                        }
-                                                    }
-
-                                                    entityLocation.remove(entity);
-                                                    entityLocation.put(entity, nowLocation);
-                                                }
+                                        if (prevLocation != null) {
+                                            if (impactFactor > 0
+                                                    && prevLocation.distance(
+                                                                    nowLocation)
+                                                            == 0
+                                                    && prevLocation.getYaw()
+                                                            == nowLocation.getYaw()
+                                                    && prevLocation.getPitch()
+                                                            == nowLocation.getPitch()) {
+                                                tremorOnEntity(
+                                                        entity,
+                                                        (int)
+                                                                (2
+                                                                        + Math.max(
+                                                                                Math
+                                                                                                .random()
+                                                                                        * impactFactor,
+                                                                                2)),
+                                                        power * impactFactor);
                                             }
-                                        },
-                                2L);
+                                        }
+
+                                        entityLocation.remove(entity);
+                                        entityLocation.put(entity, nowLocation);
+                                    }
+                                }
+                            },
+                    2L);
             }
         }
     }

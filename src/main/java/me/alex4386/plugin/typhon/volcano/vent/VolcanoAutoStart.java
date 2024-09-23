@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.vent;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
@@ -54,33 +55,29 @@ public class VolcanoAutoStart implements Listener {
             return;
         }
 
-        scheduleID = Bukkit.getScheduler()
-                .scheduleSyncRepeatingTask(
-                        TyphonPlugin.plugin,
-                        () -> {
-                            updateStatus();
-                        },
-                        0L,
-                        Math.max(1, (statusCheckInterval / 20) * volcano.updateRate));
+        scheduleID = TyphonScheduler.registerTask(
+                null,
+                    () -> {
+                        updateStatus();
+                    },
+                    Math.max(1, (statusCheckInterval / 20) * volcano.updateRate));
 
-        styleChangeId = Bukkit.getScheduler()
-                .scheduleSyncRepeatingTask(
-                        TyphonPlugin.plugin,
-                        () -> {
-                            updateStyles();
-                        },
-                        0L,
-                        Math.max(1, (statusCheckInterval / 20) * volcano.updateRate));
+        styleChangeId = TyphonScheduler.registerTask(
+                null,
+                () -> {
+                    updateStyles();
+                },
+                Math.max(1, (statusCheckInterval / 20) * volcano.updateRate));
 
     }
 
     public void unregisterTask() {
         if (scheduleID >= 0) {
-            Bukkit.getScheduler().cancelTask(scheduleID);
+            TyphonScheduler.unregisterTask(scheduleID);
             scheduleID = -1;
         }
         if (styleChangeId >= 0) {
-            Bukkit.getScheduler().cancelTask(styleChangeId);
+            TyphonScheduler.unregisterTask(styleChangeId);
             styleChangeId = -1;
         }
     }
@@ -189,7 +186,7 @@ public class VolcanoAutoStart implements Listener {
     public void startVentWithGracePeriod(VolcanoVent vent, Runnable callback) {
         // emulate lava to migrating to target.
         vent.setStatus(VolcanoVentStatus.MAJOR_ACTIVITY);
-        Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
+        TyphonScheduler.runDelayed(vent.location.getChunk(), () -> {
             vent.start();
 
             if (callback != null) callback.run();
@@ -257,7 +254,7 @@ public class VolcanoAutoStart implements Listener {
 
                                         VolcanoVent flankVent = vent.erupt.openFissure();
                                         if (flankVent != null) this.startVentWithGracePeriod(flankVent, () -> {
-                                            Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin,
+                                            TyphonScheduler.runDelayed(flankVent.location.getChunk(),
                                                     () -> {
                                                         flankVent.stop();
                                                         flankVent.setStatus(flankVent.getStatus().decrease());
@@ -273,9 +270,8 @@ public class VolcanoAutoStart implements Listener {
                                 "volcano starting due to increment from major_activity");
                             vent.setStatus(vent.getStatus().increase());
                             vent.start();
-                            Bukkit.getScheduler()
-                                    .scheduleSyncDelayedTask(
-                                            TyphonPlugin.plugin,
+                            TyphonScheduler.runDelayed(
+                                    vent.location.getChunk(),
                                             () -> {
                                                 vent.volcano.logger.log(
                                                         VolcanoLogClass.AUTOSTART,

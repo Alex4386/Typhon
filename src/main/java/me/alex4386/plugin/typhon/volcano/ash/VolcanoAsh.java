@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.ash;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
@@ -45,21 +46,18 @@ public class VolcanoAsh {
 
     public void registerTask() {
         if (ashCloudScheduleId < 0) {
-            ashCloudScheduleId = Bukkit.getScheduler()
-                    .scheduleSyncRepeatingTask(
-                            TyphonPlugin.plugin,
+            ashCloudScheduleId = TyphonScheduler.registerGlobalTask(
                             (Runnable) () -> {
                                 vent.ash.processQueuedAshPlume();
                                 vent.ash.processAshClouds();
                             },
-                            0L,
                             (long) 1L);
         }
     }
 
     public void unregisterTask() {
         if (ashCloudScheduleId >= 0) {
-            Bukkit.getScheduler().cancelTask(ashCloudScheduleId);
+            TyphonScheduler.unregisterTask(ashCloudScheduleId);
             ashCloudScheduleId = -1;
         }
     }

@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.utils;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
@@ -154,9 +155,9 @@ public class VolcanoConstruction {
 
     public static <T extends VolcanoConstructionData> void runConstructionAsync(
             T data, boolean useNMS, Runnable callback) {
-        Bukkit.getScheduler()
-                .runTask(
-                        TyphonPlugin.plugin,
+        TyphonScheduler
+                .run(
+                        null,
                         (Runnable)
                                 () -> {
                                     runConstruction(data, useNMS);
@@ -185,9 +186,9 @@ public class VolcanoConstruction {
                                 }
                                 if (nextData != null) {
                                     // ah screw it
-                                    Bukkit.getScheduler()
-                                            .runTask(
-                                                    TyphonPlugin.plugin,
+                                    TyphonScheduler
+                                            .run(
+                                                    null,
                                                     (Runnable)
                                                             () -> {
                                                                 status.stageComplete();
@@ -223,9 +224,9 @@ public class VolcanoConstruction {
                 runConstruction(data, useNMS);
                 status.subStageComplete();
             }
-            Bukkit.getScheduler()
-                    .runTaskLater(
-                            TyphonPlugin.plugin,
+            TyphonScheduler
+                    .runDelayed(
+                            null,
                             (Runnable)
                                     () -> {
                                         if (iterationCallback != null) {

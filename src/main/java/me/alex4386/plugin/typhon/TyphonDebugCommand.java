@@ -269,8 +269,7 @@ public class TyphonDebugCommand {
                                                                 highestLocation
                                                                         .get()
                                                                         .getBlock()));
-                                        Bukkit.getScheduler()
-                                                .cancelTask(i.get());
+                                        TyphonScheduler.unregisterTask(i.get());
                                         block.getLocation()
                                                 .getBlock()
                                                 .setType(Material.AIR);

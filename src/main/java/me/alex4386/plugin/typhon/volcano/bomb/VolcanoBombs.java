@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.bomb;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
@@ -81,12 +82,10 @@ public class VolcanoBombs {
 
     public void registerTask() {
         if (exploderJob < 0) {
-            this.exploderJob = Bukkit.getScheduler().scheduleSyncRepeatingTask(
-                    TyphonPlugin.plugin,
+            this.exploderJob = TyphonScheduler.registerGlobalTask(
                     () -> {
                         this.processExploderTimer();
                     },
-                    0L,
                     this.vent.getVolcano().updateRate
             );
         }
@@ -94,7 +93,7 @@ public class VolcanoBombs {
 
     public void unregisterTask() {
         if (exploderJob >= 0) {
-            Bukkit.getScheduler().cancelTask(this.exploderJob);
+            TyphonScheduler.unregisterTask(this.exploderJob);
             this.exploderJob = -1;
         }
     }

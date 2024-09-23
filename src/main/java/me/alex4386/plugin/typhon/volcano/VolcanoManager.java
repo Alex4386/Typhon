@@ -28,7 +28,9 @@ public class VolcanoManager {
     public List<VolcanoVent> getVents() {
         List<VolcanoVent> vents = new ArrayList<>();
         vents.add(volcano.mainVent);
-        vents.addAll(volcano.subVents.values());
+        if (volcano.subVents != null) {
+            vents.addAll(volcano.subVents.values());
+        }
         return vents;
     }
 

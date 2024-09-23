@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.dome;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
@@ -73,11 +74,8 @@ public class VolcanoLavaDome {
 
     public void registerTask() {
         if (domeScheduleId < 0) {
-            domeScheduleId = Bukkit.getScheduler()
-                    .scheduleSyncRepeatingTask(
-                            TyphonPlugin.plugin,
+            domeScheduleId = TyphonScheduler.registerGlobalTask(
                             (Runnable) this::runDomeLavaTick,
-                            0L,
                             1L);
         }
     }
@@ -101,7 +99,7 @@ public class VolcanoLavaDome {
 
     public void unregisterTask() {
         if (domeScheduleId >= 0) {
-            Bukkit.getScheduler().cancelTask(domeScheduleId);
+            TyphonScheduler.unregisterTask(domeScheduleId);
             domeScheduleId = -1;
         }
     }

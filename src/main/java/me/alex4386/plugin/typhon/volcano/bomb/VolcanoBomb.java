@@ -127,13 +127,11 @@ public class VolcanoBomb {
 
     public void startTrail() {
         if (!isTrailOn && this.block != null) {
-            bombTrailScheduleId = Bukkit.getScheduler()
-                    .scheduleSyncRepeatingTask(
-                            TyphonPlugin.plugin,
+            bombTrailScheduleId = TyphonScheduler.registerTask(
+                            this.block.getChunk(),
                             (Runnable) () -> {
                                 createSmoke();
                             },
-                            0L,
                             1L);
             isTrailOn = true;
         }
@@ -141,7 +139,7 @@ public class VolcanoBomb {
 
     public void stopTrail() {
         if (isTrailOn && this.block != null) {
-            Bukkit.getScheduler().cancelTask(bombTrailScheduleId);
+            TyphonScheduler.unregisterTask(bombTrailScheduleId);
             isTrailOn = false;
         }
     }

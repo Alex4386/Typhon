@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.ash;
 
 import me.alex4386.plugin.typhon.TyphonPlugin;
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
@@ -90,16 +91,16 @@ public class VolcanoPyroclasticFlow {
 
     public void registerTask() {
         if (scheduleID < 0) {
-            this.scheduleID = Bukkit.getScheduler().scheduleSyncRepeatingTask(TyphonPlugin.plugin, () -> {
+            this.scheduleID = TyphonScheduler.registerGlobalTask(() -> {
                 this.runTick();
                 this.processAllPyroclasticClouds();
-            }, 0L, 2L);
+            }, 2L);
         }
     }
 
     public void unregisterTask() {
         if (scheduleID >= 0) {
-            Bukkit.getScheduler().cancelTask(this.scheduleID);
+            TyphonScheduler.unregisterTask(this.scheduleID);
             this.scheduleID = -1;
         }
     }
@@ -243,7 +244,7 @@ public class VolcanoPyroclasticFlow {
 
         isFinished = this.finishConditionCheck();
         if (isFinished) {
-            Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
+            TyphonScheduler.runDelayed(this.location.getChunk(), () -> {
                 this.shutdown();
             }, 40L);
         }
@@ -412,7 +413,7 @@ public class VolcanoPyroclasticFlow {
         //Bukkit.getPlayer("Alex4386").teleport(location.add(0, 10, 0));
 
         pyroclasticClouds.add(bd);
-        Bukkit.getScheduler().runTaskLater(TyphonPlugin.plugin, () -> {
+        TyphonScheduler.runDelayed(bd.getChunk(), () -> {
             bd.remove();
         }, 60L);
     }
