@@ -636,6 +636,13 @@ public class VolcanoGeoThermal implements Listener {
 
           this.doSOxDamage(equipment.getItemInMainHand(), poisonousLevel);
           this.doSOxDamage(equipment.getItemInOffHand(), poisonousLevel);
+
+          if (poisonousLevel > 3) {
+            if (Math.random() < ((double) (poisonousLevel - 3) / 2)) {
+              livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA, timespan, 1));
+            }
+
+          }
         }
       } else if (entity instanceof Item) {
         double total = Math.min(Math.max(heatValue * multiplier, 1), 5);
