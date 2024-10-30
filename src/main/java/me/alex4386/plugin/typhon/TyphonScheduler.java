@@ -3,12 +3,93 @@ package me.alex4386.plugin.typhon;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
-import java.util.HashMap;
-import java.util.Map;
+import org.bukkit.Material;
+import org.bukkit.block.Block;
+
+import java.util.*;
 
 public class TyphonScheduler {
     public static Map<Integer, Object> tasks = new HashMap<>();
     private static int taskId = 1;
+
+    private static Map<Chunk, Integer> chunkTasks = new HashMap<>();
+    private static Map<Chunk, Queue<Map.Entry<Block, Material>>> blockChanges = new HashMap<>();
+    private static Map<Chunk, Runnable> chunkRunOnceTasks = new HashMap<>();
+
+    private static Queue<Runnable> globalRunOnceTasks = new LinkedList<>();
+    private static int globalRunOnceTaskId = -1;
+
+    private static void runBlockUpdateTask(Chunk chunk) {
+        Queue<Map.Entry<Block, Material>> blockChangesQueue = blockChanges.get(chunk);
+        if (blockChangesQueue != null) {
+            while (!blockChangesQueue.isEmpty()) {
+                Map.Entry<Block, Material> blockChange = blockChangesQueue.poll();
+                blockChange.getKey().setType(blockChange.getValue());
+            }
+        }
+    }
+
+    private static void setupBlockUpdateTask(Chunk chunk) {
+        if (!blockChanges.containsKey(chunk)) {
+            blockChanges.put(chunk, new LinkedList<>());
+        }
+    }
+
+    public static void setBlockType(Block block, Material material) {
+        if (TyphonMultithreading.isPaperMultithread) {
+            Chunk chunk = block.getChunk();
+
+            setupBlockUpdateTask(chunk);
+            blockChanges.get(chunk).add(new AbstractMap.SimpleEntry<>(block, material));
+        } else {
+            block.setType(material);
+        }
+    }
+
+    private static void setupGlobalTask() {
+        if (globalRunOnceTaskId > 0) return;
+        globalRunOnceTaskId = registerGlobalTask(() -> {
+            while (!globalRunOnceTasks.isEmpty()) {
+                globalRunOnceTasks.poll().run();
+            }
+        }, 1L);
+    }
+
+    public static void runOnce(Runnable runnable) {
+        if (TyphonMultithreading.isFolia()) {
+            setupGlobalTask();
+            globalRunOnceTasks.add(runnable);
+        } else {
+            runnable.run();
+        }
+    }
+
+    private static void setupChunkTask(Chunk chunk) {
+        if (!chunkTasks.containsKey(chunk)) {
+            chunkTasks.put(chunk, registerTask(chunk, () -> {
+                runBlockUpdateTask(chunk);
+            }, 1L));
+        }
+    }
+
+    public static void runOnce(Chunk chunk, Runnable runnable) {
+        if (TyphonMultithreading.isFolia()) {
+            setupChunkTask(chunk);
+            chunkRunOnceTasks.put(chunk, runnable);
+        } else {
+            runnable.run();
+        }
+    }
+
+    public static void runOnce(Block block, Runnable runnable) {
+        if (TyphonMultithreading.isFolia()) {
+            block.getWorld().getChunkAtAsync(block).thenAccept(chunk -> {
+                runOnce(chunk, runnable);
+            });
+        } else {
+            runnable.run();
+        }
+    }
 
     private static synchronized int getNewTaskId() {
         while (tasks.containsKey(taskId)) {
@@ -64,14 +145,15 @@ public class TyphonScheduler {
             );
 
             if (targetId > taskId) taskId = targetId;
+            tasks.put(taskId, task);
         }
 
-        tasks.put(taskId, task);
         return taskId;
     }
 
     public static void unregisterTask(int taskId) {
         if (tasks.containsKey(taskId)) {
+            Object value = tasks.get(taskId);
             if (tasks.get(taskId) instanceof ScheduledTask) {
                 ((ScheduledTask) tasks.get(taskId)).cancel();
             } else {

@@ -26,6 +26,7 @@ import org.bukkit.util.Vector;
 import org.json.simple.JSONObject;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -157,7 +158,7 @@ public class VolcanoLavaFlow implements Listener {
     public boolean shouldFlowOverLeeve() {
         double baseY = this.vent.averageVentHeight();
         if (this.vent.getType() == VolcanoVentType.FISSURE) {
-            double leeveY = this.vent.averageLeeveHeight();
+            double leeveY = this.vent.averageLeveeHeight();
             if (leeveY > baseY) return true;
         }
         return false;
@@ -167,7 +168,7 @@ public class VolcanoLavaFlow implements Listener {
         double baseY = this.vent.averageVentHeight();
         double flowLength = 0;
         if (this.shouldFlowOverLeeve()) {
-            double leeveY = this.vent.averageLeeveHeight();
+            double leeveY = this.vent.averageLeveeHeight();
             baseY = Math.round((leeveY + baseY) / 2);
             flowLength = this.vent.craterRadius * 2;
         }
@@ -1629,83 +1630,91 @@ public class VolcanoLavaFlow implements Listener {
 
         int flowedBlocks = 0;
         if (this.vent.erupt.getStyle().lavaMultiplier > 0) {
-            int flowableCounts = 0;
-            for (Block whereToFlow : whereToFlows) {
-                if (TyphonUtils.isBlockFlowable(whereToFlow)) {
-                    if (whereToFlow.getType() == Material.LAVA) continue;
-                    flowableCounts++;
-                }
-            }
+            int actualFlowable = actualFlowMax;
 
-            int actaualFlowable = Math.min(actualFlowMax, flowableCounts);
-            for (Block whereToFlow : whereToFlows) {
-                if (flowedBlocks >= actaualFlowable) break;
+            AtomicInteger flowableChecked = new AtomicInteger(0);
+            AtomicInteger flowed = new AtomicInteger(0);
+            for (final Block whereToFlow : whereToFlows) {
+                TyphonScheduler.runOnce(whereToFlow, () -> {
+                    flowableChecked.incrementAndGet();
+                    if (TyphonUtils.isBlockFlowable(whereToFlow)) {
+                        Block block = whereToFlow;
+                        if (whereToFlow.getType() == Material.LAVA) {
+                            return;
+                        }
 
-                Block underBlock = whereToFlow.getRelative(BlockFace.DOWN);
-                if (underBlock.getType() == Material.LAVA || underBlock.getType() == Material.MAGMA_BLOCK) {
-                    continue;
-                }
+                        int res = flowed.get();
+                        if (res > actualFlowable) return;
 
-                if (!TyphonUtils.isBlockFlowable(whereToFlow)) {
-                    whereToFlow.setType(VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel));
+                        Block underBlock = whereToFlow.getRelative(BlockFace.DOWN);
+                        if (underBlock.getType() == Material.LAVA || underBlock.getType() == Material.MAGMA_BLOCK) {
+                            return;
+                        }
 
-                    // check if underBlock is registered lava
-                    if (isPillowLavaRegistered(underBlock)) {
-                        // get pillow lava
-                        VolcanoPillowLavaData pillowData = getPillowLavaCoolData(underBlock);
-                        if (pillowData != null) {
-                            if (!pillowData.canCooldown()) {
-                                // ignore.
-                                continue;
+                        if (!TyphonUtils.isBlockFlowable(whereToFlow)) {
+                            whereToFlow.setType(VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel));
+
+                            // check if underBlock is registered lava
+                            if (isPillowLavaRegistered(underBlock)) {
+                                // get pillow lava
+                                VolcanoPillowLavaData pillowData = getPillowLavaCoolData(underBlock);
+                                if (pillowData != null) {
+                                    if (!pillowData.canCooldown()) {
+                                        // ignore.
+                                        return;
+                                    }
+                                }
+                            } else if (isNormalLavaRegistered(underBlock)) {
+                                // check if underBlock lava can not flow anywhere
+                                boolean canFlow = TyphonUtils.isBlockFlowable(underBlock);
+
+                                if (!canFlow) {
+                                    // cooldown underBlock.
+                                    VolcanoLavaCoolData coolData = getLavaCoolData(underBlock);
+                                    if (coolData != null) {
+                                        coolData.coolDown();
+                                    }
+                                }
+
+                                return;
+                            }
+
+                            if (Math.random() > 0.01) {
+                                if (this.vent.erupt.getStyle().flowsLava()) {
+                                    this.extendLava();
+                                }
+                                return;
+                            }
+
+                            block = whereToFlow.getRelative(BlockFace.UP);
+                        }
+
+                        int v = flowed.getAndIncrement();
+                        if (v == 0) {
+                            TyphonSounds.LAVA_ERUPTION.play(
+                                    ventBlocks.get(0).getLocation(),
+                                    SoundCategory.BLOCKS,
+                                    2f,
+                                    1f
+                            );
+                        }
+
+                        // fallback routine
+                        flowLava(block);
+
+                        if (whereToFlow.getY() > highestY) {
+                            highestY = whereToFlow.getY();
+                            if (TyphonBlueMapUtils.getBlueMapAvailable()) {
+                                TyphonBlueMapUtils.updateVolcanoVentMarkerHeight(this.vent);
                             }
                         }
-                    } else if (isNormalLavaRegistered(underBlock)) {
-                        // check if underBlock lava can not flow anywhere
-                        boolean canFlow = TyphonUtils.isBlockFlowable(underBlock);
-
-                        if (!canFlow) {
-                            // cooldown underBlock.
-                            VolcanoLavaCoolData coolData = getLavaCoolData(underBlock);
-                            if (coolData != null) {
-                                coolData.coolDown();
-                            }
-                        }
-
-                        continue;
                     }
 
-                    if (Math.random() > 0.01) {
-                        if (this.vent.erupt.getStyle().flowsLava()) {
-                            this.extendLava();
-                        }
-                        continue;
+                    if (flowableChecked.get() == whereToFlows.size()) {
+                        int leftOver = actualFlowable - flowed.get();
+                        handleLeftoverLava(leftOver);
                     }
-
-                    whereToFlow = whereToFlow.getRelative(BlockFace.UP);
-                }
-
-
-                flowedBlocks++;
-
-                // fallback routine
-                flowLava(whereToFlow);
-
-                if (whereToFlow.getY() > highestY) {
-                    highestY = whereToFlow.getY();
-                    if (TyphonBlueMapUtils.getBlueMapAvailable()) {
-                        TyphonBlueMapUtils.updateVolcanoVentMarkerHeight(this.vent);
-                    }
-                }
-            }
-
-
-            if (flowedBlocks > 0) {
-                TyphonSounds.LAVA_ERUPTION.play(
-                        ventBlocks.get(0).getLocation(),
-                        SoundCategory.BLOCKS,
-                        2f,
-                        1f
-                );
+                });
             }
         } else if (this.vent.erupt.getStyle() == VolcanoEruptStyle.LAVA_DOME) {
             int count = whereToFlows.size();
@@ -1724,13 +1733,17 @@ public class VolcanoLavaFlow implements Listener {
                 }
             }
         }
-        
-        if (flowAmount - flowedBlocks > 0) {
-            int leftOvers = flowAmount - flowedBlocks;
-            leftOvers = Math.min(10, leftOvers);
+
+        prevQueuedLavaInflux = queuedLavaInflux;
+        queuedLavaInflux = 0;
+    }
+
+    public void handleLeftoverLava(double amount) {
+        if (amount > 0) {
+            amount = Math.min(10, amount);
 
             // all of them into extension
-            for (int i = 0; i < leftOvers; i++) {
+            for (int i = 0; i < amount; i++) {
                 if (Math.random() < 0.1) {
                     if (this.vent.surtseyan.isSurtseyan()) {
                         this.handleSurtseyan();
@@ -1754,9 +1767,6 @@ public class VolcanoLavaFlow implements Listener {
                 }
             }
         }
-
-        prevQueuedLavaInflux = queuedLavaInflux;
-        queuedLavaInflux = 0;
     }
 
     public boolean consumeLavaInflux(double amount) {

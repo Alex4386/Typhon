@@ -165,7 +165,13 @@ public class VolcanoSuccession {
         double z = Math.cos(angle) * random;
 
         Block block = coreBlock.getRelative((int) x, 0, (int) z);
-        runSuccession(block);
+        dispatchSuccession(block);
+    }
+
+    public void dispatchSuccession(Block block) {
+        TyphonScheduler.runOnce(block, () -> {
+            runSuccession(block);
+        });
     }
 
     public boolean shouldCheckHeat(Block block) {

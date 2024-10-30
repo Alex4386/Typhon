@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.intrusions;
 
+import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
@@ -32,6 +33,13 @@ public class VolcanoMetamorphism {
     }
 
     public void metamorphoseBlock(VolcanoVent vent, Block block, boolean isBomb) {
+        // wrapper
+        TyphonScheduler.runOnce(block, () -> {
+            runMetamorphoseBlock(vent, block, isBomb);
+        });
+    }
+
+    public void runMetamorphoseBlock(VolcanoVent vent, Block block, boolean isBomb) {
         Material material = block.getType();
         String blockTypeName = TyphonUtils.toLowerCaseDumbEdition(material.name());
 

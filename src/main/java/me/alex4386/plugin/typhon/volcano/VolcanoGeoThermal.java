@@ -68,10 +68,16 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runCraterGeothermal(VolcanoVent vent) {
-    this.runCraterGeothermal(vent, this.getBlockToRunCraterCycle(vent));
+    this.dispatchCraterGeothermal(vent, this.getBlockToRunCraterCycle(vent));
   }
   public void runOuterCraterGeothermal(VolcanoVent vent) {
-    this.runCraterGeothermal(vent, this.getBlockToRunOuterCraterCycle(vent));
+    this.dispatchCraterGeothermal(vent, this.getBlockToRunOuterCraterCycle(vent));
+  }
+
+  public void dispatchCraterGeothermal(VolcanoVent vent, Block block) {
+    TyphonScheduler.runOnce(block, () -> {
+      this.runCraterGeothermal(vent, TyphonUtils.getHighestRocklikes(block));
+    });
   }
 
   public void runCraterGeothermal(VolcanoVent vent, Block block) {
@@ -206,21 +212,21 @@ public class VolcanoGeoThermal implements Listener {
       List<Block> targets = vent.lavaFlow.getRandomLavaBlocks(lavaFlowCount);
       for (Block target: targets) {
         Block actualTarget = TyphonUtils.getRandomBlockInRange(target, 1, Math.max(2, (int) (2 + (4 * vent.getHeatValue(target.getLocation())))));
-        this.runVolcanoGeoThermal(vent, actualTarget, false);
+        this.dispatchVolcanoGeoThermal(vent, actualTarget, false);
       }
 
       for (int i = 0; i < lavaFlowCount; i++) {
-        this.runVolcanoGeoThermal(vent, this.getVolcanoGeoThermalBlock(vent));
+        this.dispatchVolcanoGeoThermal(vent, this.getVolcanoGeoThermalBlock(vent));
       }
     } else if (vent.isCaldera()) {
       for (int i = 0; i < cycleCount; i++) {
-        this.runVolcanoGeoThermal(vent, this.getCalderaGeoThermalBlock(vent));
+        this.dispatchVolcanoGeoThermal(vent, this.getCalderaGeoThermalBlock(vent));
       }
     }
 
     int extraCount = (int) (cycleCount * Math.pow(vent.getStatus().getScaleFactor(), 1.5));
     for (int i = 0; i < extraCount; i++) {
-      this.runVolcanoGeoThermal(vent, this.getVolcanoGeoThermalBlock(vent));
+      this.dispatchVolcanoGeoThermal(vent, this.getVolcanoGeoThermalBlock(vent));
     }
   }
 
@@ -231,15 +237,13 @@ public class VolcanoGeoThermal implements Listener {
     int craterRadius = vent.getRadius();
     double offset = VolcanoMath.getZeroFocusedRandom() * range;
 
-    block = TyphonUtils
-            .getHighestRocklikes(
-                    TyphonUtils
-                            .getRandomBlockInRange(
-                                    vent.getCoreBlock(),
-                                    0,
-                                    (int) (craterRadius + offset)
-                            )
-            );
+    block =
+        TyphonUtils
+                .getRandomBlockInRange(
+                        vent.getCoreBlock(),
+                        0,
+                        (int) (craterRadius + offset)
+                );
     return block;
   }
 
@@ -254,15 +258,13 @@ public class VolcanoGeoThermal implements Listener {
     double range = geoThermalRadius - craterRadius;
     double offset = VolcanoMath.getZeroFocusedRandom() * range;
 
-    block = TyphonUtils
-      .getHighestRocklikes(
+    block =
           TyphonUtils
               .getRandomBlockInRange(
                   vent.getCoreBlock(),
                   0,
                   (int) (craterRadius + offset)
-              )
-      );
+              );
     return block;
   }
 
@@ -315,8 +317,14 @@ public class VolcanoGeoThermal implements Listener {
     return block;
   }
 
-  public void runVolcanoGeoThermal(VolcanoVent vent, Block block) {
-    this.runVolcanoGeoThermal(vent, block, true);
+  public void dispatchVolcanoGeoThermal(VolcanoVent vent, Block block) {
+    this.dispatchVolcanoGeoThermal(vent, block, true);
+  }
+
+  public void dispatchVolcanoGeoThermal(VolcanoVent vent, Block block, boolean allowSteam) {
+    TyphonScheduler.runOnce(block, () -> {
+      this.runVolcanoGeoThermal(vent, block, allowSteam);
+    });
   }
 
   public void runVolcanoGeoThermal(VolcanoVent vent, Block block, boolean allowSteam) {
@@ -388,6 +396,12 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void createTuffRing(Block block) {
+    TyphonScheduler.runOnce(block, () -> {
+      this.runTuffRing(block);
+    });
+  }
+
+  private void runTuffRing(Block block) {
     int radius = 2 + (int) (Math.random() * 3);
 
     int deep = Math.random() < 2 ? 1 : 2;

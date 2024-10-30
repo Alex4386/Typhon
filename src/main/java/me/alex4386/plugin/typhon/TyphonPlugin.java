@@ -213,8 +213,12 @@ public final class TyphonPlugin extends JavaPlugin {
             }
         }
 
-        vbl.shutdown();
-        events.shutdown();
+        if (vbl != null)
+            vbl.shutdown();
+
+        if (events != null)
+            events.shutdown();
+
         isShuttingdown = false;
     }
 

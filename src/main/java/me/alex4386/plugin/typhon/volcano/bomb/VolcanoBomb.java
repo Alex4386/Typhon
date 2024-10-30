@@ -229,6 +229,10 @@ public class VolcanoBomb {
     }
 
     public void land() {
+        TyphonScheduler.runOnce(this.block.getChunk(), this::landHandler);
+    }
+
+    public void landHandler() {
         Volcano volcano = this.vent.getVolcano();
         if (this.targetLocation != null && this.landingLocation == null) this.landingLocation = this.targetLocation;
 
