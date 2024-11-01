@@ -636,6 +636,13 @@ public class VolcanoLavaFlow implements Listener {
                 queueBlockUpdate(underUnderToBlock, Material.LAVA);
             }
 
+            // affect nearby blocks run metamorphism
+            BlockFace[] nearByFaces = { BlockFace.UP, BlockFace.WEST, BlockFace.EAST, BlockFace.NORTH, BlockFace.SOUTH};
+            for (BlockFace nearByFace : nearByFaces) {
+                Block targetBlock = toBlock.getRelative(nearByFace);
+                this.getVolcano().metamorphism.metamorphoseBlock(vent, targetBlock, data.isBomb);
+            }
+
             int extensionCount = data.runExtensionCount;
 
             if (data.fromBlock != null) {

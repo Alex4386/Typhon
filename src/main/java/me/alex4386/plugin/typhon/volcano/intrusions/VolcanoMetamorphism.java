@@ -33,6 +33,8 @@ public class VolcanoMetamorphism {
 
     public void metamorphoseBlock(VolcanoVent vent, Block block, boolean isBomb) {
         Material material = block.getType();
+        if (material.isAir()) return;
+
         String blockTypeName = TyphonUtils.toLowerCaseDumbEdition(material.name());
 
         if (blockTypeName.contains("log") || blockTypeName.contains("leaves")) {
@@ -47,15 +49,11 @@ public class VolcanoMetamorphism {
                 || blockTypeName.contains("grass_block"))
                 || blockTypeName.contains("farmland");
 
-            boolean isPassable = block.isPassable();
-
             if (block.isLiquid()) {
                 return;
             }
             
-            if (isPassable) {
-                material = VolcanoComposition.getExtrusiveRock(silicateLevel);
-            } else if (typeOfDirt) {
+            if (typeOfDirt) {
                 material = Material.COARSE_DIRT;
             } else if (blockTypeName.contains("cobblestone") || blockTypeName.contains("gravel") || blockTypeName.contains("infested")) {
                 if (blockTypeName.contains("infested")) {

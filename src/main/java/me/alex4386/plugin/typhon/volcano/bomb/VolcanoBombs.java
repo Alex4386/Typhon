@@ -45,6 +45,66 @@ public class VolcanoBombs {
 
     boolean isBaseYConfigured = true;
 
+
+    /* == SETUP GLOW == */
+    static Team bombGlowRed = null, bombGlowGold = null, bombGlowYellow = null;
+    public static void registerBombGlowTeams() {
+        if (bombGlowRed == null) {
+            bombGlowRed = getColoredTeam("bombGlowRed", NamedTextColor.RED, ChatColor.RED);
+        }
+
+        if (bombGlowGold == null) {
+            bombGlowGold = getColoredTeam("bombGlowGold", NamedTextColor.GOLD, ChatColor.GOLD);
+        }
+
+        if (bombGlowYellow == null) {
+            bombGlowYellow = getColoredTeam("bombGlowYellow", NamedTextColor.YELLOW, ChatColor.YELLOW);
+        }
+    }
+
+    public static void unregisterBombGlowTeams() {
+        if (bombGlowRed != null) {
+            bombGlowRed.unregister();
+            bombGlowRed = null;
+        }
+
+        if (bombGlowGold != null) {
+            bombGlowGold.unregister();
+            bombGlowGold = null;
+        }
+
+        if (bombGlowYellow != null) {
+            bombGlowYellow.unregister();
+            bombGlowYellow = null;
+        }
+    }
+
+    public static Team getColoredTeam(String name, NamedTextColor color, ChatColor fallbackColor) {
+        ScoreboardManager scoreboardManager = Bukkit.getScoreboardManager();
+        Scoreboard scoreboard = scoreboardManager.getMainScoreboard();
+
+        Team team;
+        if (scoreboard.getTeam(name) != null) {
+            team = scoreboard.getTeam(name);
+        } else {
+            team = scoreboard.registerNewTeam(name);
+        }
+
+        team.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.NEVER);
+        team.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
+        team.setCanSeeFriendlyInvisibles(true);
+        team.setAllowFriendlyFire(true);
+
+        try {
+            team.color(color);
+        } catch(Exception e) {
+            // fallback to spigot mode
+            team.setColor(fallbackColor);
+        }
+
+        return team;
+    }
+
     public int getBaseY() {
         if (baseY == Integer.MIN_VALUE) {
             baseY = (int) vent.averageVentHeight();
@@ -73,6 +133,7 @@ public class VolcanoBombs {
     }
 
     public void initialize() {
+        VolcanoBombs.registerBombGlowTeams();
         this.registerTask();
     }
 
@@ -363,6 +424,7 @@ public class VolcanoBombs {
                     block.getLocation().getChunk().load();
                 }
                 block.setTicksLived(1);
+                bomb.updateTeam();
     
                 if (bomb.isLanded) {
 //                    System.out.println("[BombTrack] hasLanded.");

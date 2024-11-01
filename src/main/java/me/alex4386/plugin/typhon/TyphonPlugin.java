@@ -7,6 +7,7 @@ import java.util.*;
 import me.alex4386.plugin.typhon.gaia.TyphonGaia;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombListener;
+import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombs;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogger;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoConstructionStatus;
@@ -215,6 +216,7 @@ public final class TyphonPlugin extends JavaPlugin {
 
         vbl.shutdown();
         events.shutdown();
+        VolcanoBombs.unregisterBombGlowTeams();
         isShuttingdown = false;
     }
 

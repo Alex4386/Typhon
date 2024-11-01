@@ -69,31 +69,6 @@ public class VolcanoBomb {
     }
 
 
-    /* == SETUP GLOW == */
-    static Team bombGlowTeam = null;
-    public static Team getBombGlowTeam() {
-        if (bombGlowTeam != null) return bombGlowTeam;
-
-        ScoreboardManager scoreboardManager = Bukkit.getScoreboardManager();
-        Scoreboard scoreboard = scoreboardManager.getMainScoreboard();
-
-        Team team = scoreboard.registerNewTeam("__Typhon_BombGlow");
-
-        team.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.NEVER);
-        team.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
-        team.setCanSeeFriendlyInvisibles(true);
-        team.setAllowFriendlyFire(true);
-
-        try {
-            bombGlowTeam.color(NamedTextColor.RED);
-        } catch(Exception e) {
-            // fallback to spigot mode
-            bombGlowTeam.setColor(ChatColor.RED);
-        }
-
-        return bombGlowTeam;
-    }
-
     public double getDistanceRatio() {
         return this.getDistanceRatio(this.landingLocation);
     }
@@ -102,6 +77,46 @@ public class VolcanoBomb {
         if (this.vent == null) return 1;
         return this.vent.lavaFlow.getDistanceRatio(location);
     }
+
+    public Team getAdequateTeam() {
+        if (this.heatTimer > 0) {
+            return VolcanoBombs.bombGlowYellow;
+        } else if (this.lifeTime < 20) {
+            return VolcanoBombs.bombGlowGold;
+        }
+
+        return VolcanoBombs.bombGlowRed;
+    }
+
+    public void removeFromOthers() {
+        if (this.block == null) return;
+
+        if (VolcanoBombs.bombGlowYellow != null) {
+            VolcanoBombs.bombGlowYellow.removeEntity(this.block);
+        }
+
+        if (VolcanoBombs.bombGlowGold != null) {
+            VolcanoBombs.bombGlowGold.removeEntity(this.block);
+        }
+
+        if (VolcanoBombs.bombGlowRed != null) {
+            VolcanoBombs.bombGlowRed.removeEntity(this.block);
+        }
+    }
+
+    public void updateTeam() {
+        if (this.block == null) return;
+
+        try {
+            // remove from other teams
+            this.removeFromOthers();
+
+            this.getAdequateTeam().addEntity(block);
+        } catch(Exception e) {
+            e.printStackTrace();
+        }
+    }
+
 
     public void launch() {
         int maxY = vent.getSummitBlock().getY();
@@ -131,14 +146,10 @@ public class VolcanoBomb {
 
                         block.setBlockState(state);
                         block.setFireTicks(1000);
-
-                        try {
-                            getBombGlowTeam().addEntity(block);
-                        } catch(Exception e) {
-                            e.printStackTrace();
-                        }
                     }
                 );
+
+           this.updateTeam();
         } catch (Exception e) {
             if (this.block != null) this.block.remove();
 
