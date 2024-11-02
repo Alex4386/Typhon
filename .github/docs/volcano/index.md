@@ -29,8 +29,23 @@ The following is implemented at the moment:
 * [Caldera](caldera.md)
 * [Lateral Blast](lateral_blast.md)
 * [Primary/Secondary Succession](succession.md)
+* [Automatic Builder](builder.md)
 
 ## Quickstart Tips
 * [Create and Erupt a Volcano](./tips/volcano-quickstart.md)
 * [Create a Volcano with Multiple Vents](./tips/multiple-vents.md)
 * [Build a Stratovolcano](./tips/build_stratovolcano.md)
+
+## Docs
+- [Volcanic Ash](ash.md)
+- [Volcanic Bombs](bombs.md)
+- [Builder](builder.md)
+- [Caldera](caldera.md)
+- [Config Nodes](config_nodes.md)
+- [Eruption](eruption.md)
+- [Geothermal Activities](geothermal.md)
+- [Lateral Blast](lateral_blast.md)
+- [Lava](lava.md)
+- [Succession](succession.md)
+- [Vent Status](status.md)
+- [vents](vents.md)
