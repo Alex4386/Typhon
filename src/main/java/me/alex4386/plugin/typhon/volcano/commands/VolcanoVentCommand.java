@@ -106,10 +106,19 @@ public class VolcanoVentCommand {
                         if (args.length == baseOffset + 2) {
                             String searchQuery = args[baseOffset + 1];
                             List<String> searchResults = new ArrayList<>();
+
+                            List<String> options = new ArrayList<>();
+                            options.add("crater");
+                            options.add("fissure");
+
                             for (VolcanoEruptStyle style : VolcanoEruptStyle.values()) {
                                 String name = TyphonUtils.toLowerCaseDumbEdition(style.name());
-                                if (name.startsWith(searchQuery)) {
-                                    searchResults.add(name);
+                                options.add(name);
+                            }
+
+                            for (String option : options) {
+                                if (option.startsWith(searchQuery)) {
+                                    searchResults.add(option);
                                 }
                             }
                             return searchResults;
