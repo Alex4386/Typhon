@@ -1,97 +1,63 @@
-[< Return to Volcano Page](index.md)
+[<  Return to Typhon Docs](/DOCS.md)  
+[<< Return to Volcano Docs](./index.md)  
 
 # Typhon Vent Config Nodes
+<p align="right">Last Updated: <b>v0.9.0-rc</b></p>
 
-<p align="right">Last Updated: <b>v0.7.0-rc2</b></p>
+> [!NOTE]  
+> For simplicity of the documentation, the following commands will use commands for `mainvent`. For subvent, Please refer to the [Eruption Vents](./vents.md#commands) documentation.
+
+> [!NOTE]
+> You can get and set the config nodes by running the following command:
+> - **READ** : `/volcano <name> mainvent config <node>` to get current node value.
+> - **WRITE**: `/volcano <name> mainvent config <node> <value>` to write the value.
 
 ## Lavaflow
+| **Parameter**             | **Description**                      |
+|---------------------------|--------------------------------------------|
+| **lavaflow:delay**        | Sets the delay between lava flow iterations in ticks. A higher delay will cause the lava to flow slower, while a lower delay will cause the lava to flow faster. |
+| **lavaflow:flowed**       | Sets the amount of time that the lava has been flowing. |
+| **lavaflow:silicateLevel**| Refer to [Silica Content](lava.md#silica-content) |
+| **lavaflow:gasContent**   | Refer to [Gas Content](lava.md#gas-content). |
 
-### lavaflow:delay
-Sets the delay between lava flow iterations in ticks.    
-A higher delay will cause the lava to flow slower, while a lower delay will cause the lava to flow faster.  
-
-### lavaflow:flowed
-Sets the amount of time that the lava has been flowing.
-
-### lavaflow:silicateLevel
-Sets the amount of silicate in the lava flow. This determines how quickly the lava will flow and how far it will travel.  
-The value is float and considers 1 as 100%.  
-  
-This value will impact on following:  
-* **Viscosity of Lava:**
-  The viscosity of lava plays an important role in determining its behavior during an eruption. Viscosity is the measure of a fluid's resistance to flow. The viscosity of lava is determined by the amount of silicate minerals present in the lava. Lava with a high viscosity flows more slowly and tends to form lava domes or lava flows with steep sides.  
-  On the other hand, lava with a low viscosity flows more quickly and tends to form flat lava flows that travel farther.
-* **Composition of the Volcanic Rocks:**
-  The amount of silicate minerals present in the lava has a significant impact on the composition of the resulting extrusive volcanic rocks.  
-  Lava with a lower silicate content (such as basaltic lava) will result in the formation of extrusive volcanic rocks that are basaltic.  
-  Lava with a higher silicate content (such as rhyolitic lava) will result in the formation of extrusive volcanic rocks that are lighter in color, have a coarser texture, and are more viscous.
-* **Eruption Styles:**  
-  Lava with a lower silicate content (such as basaltic lava) is less viscous and flows more easily, which can result in effusive eruptions (or explosive eruptions such as the Strombolian eruption).  
-  Lava with a higher silicate content (such as rhyolitic lava) is more viscous and flows more slowly, which can result in explosive eruptions. 
-
-### lavaflow:gasContent
-Sets the amount of gas in the lava flow. This determines the likelihood of explosions occurring during the eruption, and decide likelyhood of explosiveness of the eruption.
 
 ## Bombs
-
-### bombs:explosionPower:min
-Sets the minimum explosion power of volcanic bombs.
-
-### bombs:explosionPower:max
-Sets the maximum explosion power of volcanic bombs.
-
-### bombs:radius:min
-Sets the minimum radius of volcanic bombs.
-
-### bombs:radius:max
-Sets the maximum radius of volcanic bombs.
-
-### bombs:delay
-Sets the delay between bomb explosions after landing in ticks.
+| **Parameter**                | **Description**                                               |
+|------------------------------|---------------------------------------------------------------|
+| **bombs:baseY**              | Sets the Y coordinate of the base of the vent. Refer to [baseY](eruption.md#baseY-of-the-vent) for more information. |
+| **bombs:delay**              | Sets the delay between bomb explosions after landing in ticks. |
+| **bombs:explosionPower:min** | Sets the minimum explosion power of volcanic bombs.           |
+| **bombs:explosionPower:max** | Sets the maximum explosion power of volcanic bombs.           |
+| **bombs:radius:min**         | Sets the minimum radius of volcanic bombs.                     |
+| **bombs:radius:max**         | Sets the maximum radius of volcanic bombs.                     |
 
 ## Erupt
 
-### erupt:style
-Sets the eruption style of the volcano.
-- **Hawaiian:** This is a relatively calm, effusive style of eruption, characterized by the steady flow of lava. Hawaiian eruptions are associated with shield volcanoes and typically produce flat, gently sloping lava flows.
-- **Strombolian:** This eruption style is characterized by periodic explosive bursts of lava and ash. Strombolian eruptions are typically associated with basaltic lava and are characterized by the formation of cinder cones.
-- **Pelean:** This is a highly explosive eruption style, characterized by the rapid release of gas and ash. Pelean eruptions are associated with stratovolcanoes and are characterized by pyroclastic flows, which are fast-moving currents of hot gas and volcanic debris.
-- **Vulcanian:** This eruption style is characterized by short, violent explosions of gas and ash. Vulcanian eruptions are associated with stratovolcanoes and can produce dense ash clouds that can pose a hazard to aviation.
-
-### erupt:autoconfig
-Automatically configures the volcano based on its current eruption style.  
-use `/volcano <name> mainvent|subvent <subvent_name> config erupt:autoconfig confirm` to apply automatic configuration for the `erupt:style` you have configured.  
+| **Parameter**        | **Description**                                                                                                   |
+|----------------------|-------------------------------------------------------------------------------------------------------------------|
+| **erupt:autoconfig** | Automatically configures the volcano based on its current eruption style. Refer to [Eruption Style](eruption.md#eruption-style) for more information. |
+| **erupt:style**      | Sets the eruption style of the volcano. Refer to [Eruption Style](eruption.md#eruption-style) for more information. |
 
 ## Explosion
 
-### explosion:bombs:min
-Sets the minimum number of explosion power of bombs.
+| **Parameter**                       | **Description**                                                                                              |
+|-------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| **explosion:bombs:min**             | Sets the minimum number of explosion power of Volcanic bombs.                                              |
+| **explosion:bombs:max**             | Sets the maximum number of explosion power of Volcanic bombs.                                              |
+| **explosion:scheduler:size**        | Sets the size of volcanic bomb launch queue.                                                                 |
+| **explosion:scheduler:damagingSize**| Sets the size of the damaging explosion size launched from summit via scheduler.                             |
 
-### explosion:bombs:max
-Sets the maximum number of explosion power of bombs.
+## Succession
+| **Parameter**         | **Description**                                                                                                   |
+|-----------------------|-------------------------------------------------------------------------------------------------------------------|
+| **succession:enable** | Enables the succession of this vent.                                                                            |
 
-### explosion:scheduler:size
-Sets the size of volcanic bomb launch queue
-
-### explosion:scheduler:damagingSize
-Sets the size of the damaging explosion size launched from summit via scheduler.
 
 ## Vent
-### vent:craterRadius
-Sets the radius of the volcano's crater.
+| **Parameter**         | **Description**                                                                                                   |
+|-----------------------|-------------------------------------------------------------------------------------------------------------------|
+| **vent:craterRadius** | Sets the radius of the volcano's crater.                                                                          |
+| **vent:fissureAngle** | Sets the angle of the volcano's fissure. (in radians)                                                             |
+| **vent:fissureLength**| Sets the length of the volcano's fissure.                                                                         |
+| **vent:type**         | Sets the vent type of the volcano. See [Vent Type](vents.md#vent-type) for more information.                   |
 
-### vent:fissureAngle
-Sets the angle of the volcano's fissure. (in radians)
-
-### vent:fissureLength
-Sets the length of the volcano's fissure.
-
-### vent:type
-Sets the type of the volcano.
-
-- **CRATER**: builds up volcano from central vent, spewing out lava from central location, creating conical shape.
-- **FISSURE**: open up entire fissure from central vent, builds up lava flow range from central fissure
-
-
-### vent:silicateLevel
-Sets the amount of silicate in the volcano's lava.

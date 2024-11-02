@@ -10,25 +10,17 @@ Typhon Plugin aims to implement real-life volcanoes and its behavior in the rest
 See plugin in action: <a href="https://www.youtube.com/watch?v=DDnQDAdq1Ok">YouTube</a> - <a href="#public-test-server">Public Test Server</a>
 </p>
 
-
 ## Public Test Server
 
 > [!NOTE]  
 > **See Typhon Plugin in Action!**
 >
 > <h1 align="center"><code>typhon-demo.alex4386.me</code></h1>
-> <p align="center"><a href="https://typhon-demo.alex4386.me/">Map</a> - Minecraft 1.21, Running PaperMC</p>  
-
-## System Requirements
-* **PaperMC** for Minecraft® 1.21.
-* **Java 21** or higher
-* A Really beefy (multithreading capable) computer/server
-* Bandwidth to cover up extreme usage of FallingBlock and Particles  
-  (Can use up to `72Mbps` per player)
-* **A lot of RAM** (4GiB or more recommended)
+> <p align="center"><a href="https://typhon-demo.alex4386.me/">Map</a> - Minecraft 1.21.1, Running PaperMC</p>  
 
 ## Docs
-Please refer to [DOCS.md](./DOCS.md)
+- [Installation](/.github/docs/installation.md)
+- [Docs](/DOCS.md)
 
 ## Downloads
 Nightly builds *(GitHub Login Required)*: [GitHub Actions](https://github.com/Alex4386/Typhon-Plugin/actions/workflows/maven.yml)  
