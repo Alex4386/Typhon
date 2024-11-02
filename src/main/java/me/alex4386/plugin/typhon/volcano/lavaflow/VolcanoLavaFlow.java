@@ -610,7 +610,7 @@ public class VolcanoLavaFlow implements Listener {
             boolean underIsAir = underToBlock.getType().isAir();
 
             if (!underIsAir && underToBlock.getType() != Material.LAVA) {
-                getVolcano().metamorphism.metamorphoseBlock(underToBlock);
+                getVolcano().metamorphism.metamorphoseBlock(underToBlock, true);
             }
 
             boolean fillUnderUnder = true;

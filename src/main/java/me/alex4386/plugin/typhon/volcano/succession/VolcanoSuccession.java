@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.succession;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -185,112 +186,172 @@ public class VolcanoSuccession {
         boolean isDebug = false;
 
         Block targetBlock = TyphonUtils.getHighestRocklikes(block);
-        double heatValue = Math.sqrt(this.volcano.manager.getHeatValue(block.getLocation()));
+        double rawHeatValue = this.volcano.manager.getHeatValue(block.getLocation());
+        double heatValue = Math.sqrt(rawHeatValue);
 
         double heatValueThreshold = 0.7;
         if (targetBlock.getY() < block.getWorld().getSeaLevel() - 1) {
             return;
         }
 
-        if (heatValue < heatValueThreshold && !this.volcano.manager.isInAnyVent(block)) {
-            double probability = 1.0;
-            
-            if (heatValue > 0.4) {
-                // since volcano is hot. probability scales down.
-                probability = (probability - 0.4) / (heatValueThreshold - 0.4);
-                probability = Math.pow(0.5, Math.max(probability * 10, 1));
-            }
+        if (!this.volcano.manager.isInAnyVent(block)) {
+            if (rawHeatValue < 0.5) {
+                double probability = 1.0;
 
-            // succession usually takes minimum "years"
-            probability *= 0.1;
-            if (Math.random() < probability) {
-                return;
-            }
+                if (heatValue > 0.4) {
+                    // since volcano is hot. probability scales down.
+                    probability = (probability - 0.4) / (heatValueThreshold - 0.4);
+                    probability = Math.pow(0.5, Math.max(probability * 10, 1));
+                }
 
-            // stage 3. is grass?
-            boolean isGrass = targetBlock.getType() == Material.GRASS_BLOCK || targetBlock.getType() == Material.DIRT || targetBlock.getType() == Material.FARMLAND || targetBlock.getType() == Material.PODZOL || targetBlock.getType() == Material.DIRT_PATH || targetBlock.getType() == Material.COARSE_DIRT;
-            if (isGrass) {
-                // let me run some randoms.
-                double growProbability = 0.2;
-                if (!block.getWorld().isClearWeather()) growProbability += 0.3;
+                // succession usually takes minimum "years"
+                probability *= 0.1;
+                if (Math.random() < probability) {
+                    return;
+                }
 
-                if (Math.random() < growProbability) {
-                    boolean treeGenerated = createTree(targetBlock);
-                    if (isDebug) this.volcano.logger.log(
-                        VolcanoLogClass.SUCCESSION,
-                        "Creating Tree on block "+TyphonUtils.blockLocationTostring(block)+" / result: "+treeGenerated);
+                // stage 3. is grass?
+                boolean isGrass = targetBlock.getType() == Material.GRASS_BLOCK || targetBlock.getType() == Material.PODZOL || targetBlock.getType() == Material.COARSE_DIRT;
+                if (isGrass) {
+                    // let me run some randoms.
+                    double growProbability = 0.2;
+                    if (!block.getWorld().isClearWeather()) growProbability += 0.3;
 
-                    if (treeGenerated) {
-                        return;
-                    }
+                    if (Math.random() < growProbability) {
+                        boolean treeGenerated = createTree(targetBlock);
+                        if (isDebug) this.volcano.logger.log(
+                                VolcanoLogClass.SUCCESSION,
+                                "Creating Tree on block "+TyphonUtils.blockLocationTostring(block)+" / result: "+treeGenerated);
 
-                    // tree can not grow if heatValue is high enough,
-                    // in that case, grass should be generated instead.
-                    if (shouldCheckHeat(block)) {
-                        if (heatValue > 0.6) {
-                            targetBlock.applyBoneMeal(BlockFace.UP);
-                            spreadSoil(targetBlock);
+                        if (treeGenerated) {
                             return;
                         }
-                    }
-                } 
 
-                if (Math.random() < 0.6) {
-                    spreadSoil(targetBlock);
+                        // tree can not grow if heatValue is high enough,
+                        // in that case, grass should be generated instead.
+                        if (shouldCheckHeat(block)) {
+                            if (heatValue > 0.6) {
+                                targetBlock.applyBoneMeal(BlockFace.UP);
+                                spreadSoil(targetBlock);
+                                return;
+                            }
+                        }
+                    }
+
+                    if (Math.random() < 0.6) {
+                        spreadSoil(targetBlock);
+                    }
+
+                    return;
                 }
 
-                return;
-            }
+                // Stage 2. check is cobbled.
+                boolean isEroded = isConsideredErodedRockType(targetBlock.getType());
+                if (isEroded) {
+                    double random = Math.random();
 
-            // Stage 2. check is cobbled.
-            boolean isEroded = isConsideredErodedRockType(targetBlock.getType());
-            if (isEroded) {
-                double random = Math.random();
-                
-                double soilGenerationProb = 0.3;
-                if (!block.getWorld().isClearWeather()) soilGenerationProb += 0.3;
+                    double soilGenerationProb = 0.3;
+                    if (!block.getWorld().isClearWeather()) soilGenerationProb += 0.3;
 
-                if (random < soilGenerationProb) {
+                    if (random < soilGenerationProb) {
+                        if (isDebug) this.volcano.logger.log(
+                                VolcanoLogClass.SUCCESSION,
+                                "Creating Soil on block "+TyphonUtils.blockLocationTostring(block));
+
+                        runSoilGeneration(targetBlock);
+                        spreadSoil(targetBlock);
+                    }
+                    return;
+                }
+
+
+                double erodeProb = 0.05;
+                if (!block.getWorld().isClearWeather()) erodeProb += 0.1;
+
+                // Stage 1. just randomly change into cobblestone
+                if (Math.random() < erodeProb) {
+                    erodeBlock(targetBlock);
+
                     if (isDebug) this.volcano.logger.log(
                             VolcanoLogClass.SUCCESSION,
-                            "Creating Soil on block "+TyphonUtils.blockLocationTostring(block));
-
-                    runSoilGeneration(targetBlock);
-                    spreadSoil(targetBlock);
+                            "Eroding rock on block "+TyphonUtils.blockLocationTostring(block));
                 }
-                return;
-            }
+            } else {
+                VolcanoVent vent = this.volcano.manager.getNearestVent(targetBlock);
+                if (!vent.isStarted()) {
+                    if (rawHeatValue < 0.65) {
+                        double amount = 1 - Math.min(1, Math.max(0, (rawHeatValue - 0.5) / 0.15));
 
-                            
-            double erodeProb = 0.05;
-            if (!block.getWorld().isClearWeather()) erodeProb += 0.1;
+                        if (Math.random() < Math.pow(amount, 2)) {
+                            targetBlock.applyBoneMeal(BlockFace.UP);
+                        }
+                        spreadSoil(targetBlock, (int)(amount * 5), false);
+                        return;
+                    } else if (rawHeatValue < 0.8) {
+                        double percentage = (rawHeatValue - 0.65) / 0.15;
+                        percentage = Math.min(1, Math.max(0, percentage));
+                        percentage = 1 - percentage;
 
-            // Stage 1. just randomly change into cobblestone
-            if (Math.random() < erodeProb) {
-                if (targetBlock.getType() == Material.DEEPSLATE || targetBlock.getType() == Material.BLACKSTONE) {
-                    this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.COBBLED_DEEPSLATE);
-                } else if (VolcanoComposition.isVolcanicRock(targetBlock.getType())) {
-                    this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.COBBLESTONE);
-                } else { return; }
+                        // scan nearby blocks
+                        List<Block> nearbyBlocks = VolcanoMath.getCircle(targetBlock, 3);
 
-                if (isDebug) this.volcano.logger.log(
-                    VolcanoLogClass.SUCCESSION,
-                    "Eroding rock on block "+TyphonUtils.blockLocationTostring(block));
-            }
-        } else {
-            VolcanoVent vent = this.volcano.manager.getNearestVent(targetBlock);
-            if (isTypeOfVolcanicOre(targetBlock.getType())) {
-                vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
-            } else if (targetBlock.getType() == Material.BLACKSTONE) {
-                if (Math.random() < 0.01) {
-                    vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.NETHERRACK);
+                        // check how many of them are dirt
+                        int dirtCount = 0;
+                        int totalCount = nearbyBlocks.size();
+
+                        for (Block nearbyBlock: nearbyBlocks) {
+                            Block highestBlock = TyphonUtils.getHighestRocklikes(nearbyBlock);
+                            String type = TyphonUtils.toLowerCaseDumbEdition(highestBlock.getType().name());
+                            if (type.contains("dirt") || type.contains("grass")) {
+                                dirtCount++;
+                            }
+                        }
+
+                        double currentDirt = (double) dirtCount / totalCount;
+                        if (currentDirt < percentage) {
+                            int neededDirtBlocks = (int) (percentage * totalCount) - dirtCount;
+
+                            // get random blocks from nearby blocks
+                            Collections.shuffle(nearbyBlocks);
+                            for (Block nearbyBlock: nearbyBlocks) {
+                                Block highestBlock = TyphonUtils.getHighestRocklikes(nearbyBlock);
+                                if (!isConsideredErodedRockType(highestBlock.getType())) {
+                                    vent.lavaFlow.queueBlockUpdate(highestBlock, Material.DIRT);
+                                    neededDirtBlocks--;
+                                }
+
+                                if (neededDirtBlocks <= 0) {
+                                    break;
+                                }
+                            }
+                        }
+
+
+                    }
                 }
-            } else if (targetBlock.getType() == Material.NETHERRACK) {
-                if (Math.random() < 0.01 * 0.01) {
-                    vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.TUFF);
+
+                if (isTypeOfVolcanicOre(targetBlock.getType())) {
+                    vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
+                } else if (targetBlock.getType() == Material.BLACKSTONE) {
+                    if (Math.random() < 0.01) {
+                        vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.NETHERRACK);
+                    }
+                } else if (targetBlock.getType() == Material.NETHERRACK) {
+                    if (Math.random() < 0.01 * 0.01) {
+                        vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.TUFF);
+                    }
                 }
             }
         }
+
+    }
+
+    public void erodeBlock(Block targetBlock) {
+        if (targetBlock.getType() == Material.DEEPSLATE || targetBlock.getType() == Material.BLACKSTONE) {
+            this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.COBBLED_DEEPSLATE);
+        } else if (VolcanoComposition.isVolcanicRock(targetBlock.getType())) {
+            this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.COBBLESTONE);
+        } else { return; }
     }
 
     public boolean isNaturalized(Material material) {
@@ -502,7 +563,6 @@ public class VolcanoSuccession {
             }
         }
 
-        this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(scanBaseBlock, Material.AIR);
 
         // get adequate tree type for current biome
         Biome biome = scanBaseBlock.getBiome();
@@ -517,7 +577,7 @@ public class VolcanoSuccession {
             type = TreeType.CHERRY;
         }
 
-        boolean isCreated = block.getWorld().generateTree(rockBlock.getLocation(), type);
+        boolean isCreated = block.getWorld().generateTree(scanBaseBlock.getLocation(), type);
         if (!isCreated) {
             if (isDebug) this.volcano.logger.log(
                 VolcanoLogClass.SUCCESSION,

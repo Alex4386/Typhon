@@ -23,29 +23,28 @@ public class VolcanoMetamorphism {
         this.volcano = volcano;
     }
 
-    public void metamorphoseBlock(Block block) {
+    public void metamorphoseBlock(Block block, boolean isLavaContact) {
         VolcanoVent vent = volcano.manager.getNearestVent(block);
         if (vent == null) return;
 
-        this.metamorphoseBlock(vent, block);
+        this.metamorphoseBlock(vent, block, isLavaContact);
     }
 
-    public void metamorphoseBlock(VolcanoVent vent, Block block) {
-        this.metamorphoseBlock(vent, block, false);
-    }
-
-    public void metamorphoseBlock(VolcanoVent vent, Block block, boolean isBomb) {
+    public void metamorphoseBlock(VolcanoVent vent, Block block, boolean isLavaContact) {
         Material material = block.getType();
         if (material.isAir()) return;
 
         String blockTypeName = TyphonUtils.toLowerCaseDumbEdition(material.name());
 
         if (blockTypeName.contains("log") || blockTypeName.contains("leaves")) {
-            removeTree(block);    
+            if (!isLavaContact) {
+                this.killTree(block);
+            } else {
+                this.removeTree(block);
+            }
         } else if (block.getType().isBurnable()) {
             this.setBlock(block, Material.AIR);
         } else {
-            double silicateLevel = vent.lavaFlow.settings.silicateLevel;
 
             boolean typeOfDirt = (blockTypeName.contains("dirt")
                 || blockTypeName.contains("podzol")
