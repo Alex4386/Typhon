@@ -65,7 +65,8 @@ public class VolcanoBomb {
         this.launchLocation = loc;
         this.targetLocation = targetLocation;
 
-        this.heatTimer = (int) (Math.pow(this.bombRadius, 1.25) * 10);
+        double heatTimerMultiplier = Math.random() * 0.5;
+        this.heatTimer = (int) (Math.pow(this.bombRadius, 1.25 + heatTimerMultiplier) * 10);
     }
 
 

@@ -43,6 +43,7 @@ public class VolcanoAsh {
     List<VolcanoAshCloudData> ashBlockDisplays = new ArrayList<>();
 
     private int queuedAshClouds = 0;
+    private boolean shuttingDown = false;
 
     public void registerTask() {
         if (ashCloudScheduleId < 0) {
@@ -65,6 +66,7 @@ public class VolcanoAsh {
     public VolcanoAsh(VolcanoVent vent) { this.vent = vent; }
 
     public void initialize() {
+        shuttingDown = false;
         this.vent.volcano.logger.log(
                 VolcanoLogClass.ASH, "Initializing VolcanoAsh for vent " + vent.getName());
         this.registerTask();
@@ -80,6 +82,7 @@ public class VolcanoAsh {
     }
 
     public void shutdownPyroclasticFlows() {
+        shuttingDown = true;
         for (VolcanoPyroclasticFlow pyroclasticFlow : this.pyroclasticFlows) {
             pyroclasticFlow.shutdown(false);
         }
@@ -275,6 +278,8 @@ public class VolcanoAsh {
     }
 
     public VolcanoPyroclasticFlow triggerPyroclasticFlow(Block srcblock) {
+        if (shuttingDown) return null;
+
         Location target = srcblock.getLocation();
         target.setY(srcblock.getWorld().getMaxHeight());
         Block block = TyphonUtils.getHighestRocklikes(target);

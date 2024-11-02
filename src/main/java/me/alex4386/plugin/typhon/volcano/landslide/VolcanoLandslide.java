@@ -267,6 +267,7 @@ public class VolcanoLandslide {
     public void runPyroclasticFlow() {
         Block source = this.getPyroclasticFlowSource();
         VolcanoPyroclasticFlow flow = this.vent.ash.triggerPyroclasticFlow(source);
+        if (flow == null) return;
 
         Vector direction = new Vector(1,0,0);
 

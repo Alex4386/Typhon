@@ -3,6 +3,7 @@ package me.alex4386.plugin.typhon.volcano.succession;
 import java.util.List;
 import java.util.Map;
 
+import com.sun.source.tree.Tree;
 import me.alex4386.plugin.typhon.TyphonScheduler;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -506,8 +507,17 @@ public class VolcanoSuccession {
         // get adequate tree type for current biome
         Biome biome = scanBaseBlock.getBiome();
 
-        TreeType type = randomTreeType();
-        boolean isCreated = block.getWorld().generateTree(scanBaseBlock.getLocation(), type);
+        // get adequate tree type for current biome
+        TreeType type = TyphonUtils.getAdequateTreeTypeForBiome(biome);
+        if (type == null) {
+            type = randomTreeType();
+        }
+
+        if (Math.random() < 0.05) {
+            type = TreeType.CHERRY;
+        }
+
+        boolean isCreated = block.getWorld().generateTree(rockBlock.getLocation(), type);
         if (!isCreated) {
             if (isDebug) this.volcano.logger.log(
                 VolcanoLogClass.SUCCESSION,

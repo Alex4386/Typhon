@@ -106,7 +106,7 @@ public class VolcanoPyroclasticFlow {
     }
 
     public void initialize() {
-        this.ash.vent.getVolcano().logger.log(VolcanoLogClass.ASH, "Initializing pyroclastic flow @ "+ TyphonUtils.blockLocationTostring(this.location.getBlock()));
+        this.ash.vent.getVolcano().logger.debug(VolcanoLogClass.ASH, "Initializing pyroclastic flow @ "+ TyphonUtils.blockLocationTostring(this.location.getBlock()));
         this.registerTask();
     }
 
@@ -115,7 +115,7 @@ public class VolcanoPyroclasticFlow {
     }
 
     public void shutdown(boolean removeMe) {
-        this.ash.vent.getVolcano().logger.log(VolcanoLogClass.ASH, "Shutting down pyroclastic flow @ "+TyphonUtils.blockLocationTostring(this.location.getBlock()));
+        this.ash.vent.getVolcano().logger.debug(VolcanoLogClass.ASH, "Shutting down pyroclastic flow @ "+TyphonUtils.blockLocationTostring(this.location.getBlock()));
         this.unregisterTask();
         this.removeAllPyroclasticClouds();
 

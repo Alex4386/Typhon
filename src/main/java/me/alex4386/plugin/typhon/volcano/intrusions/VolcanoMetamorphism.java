@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.intrusions;
 
+import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
@@ -10,7 +11,9 @@ import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 
+import java.util.HashSet;
 import java.util.Random;
+import java.util.Set;
 
 public class VolcanoMetamorphism {
     Volcano volcano;
@@ -40,7 +43,7 @@ public class VolcanoMetamorphism {
         if (blockTypeName.contains("log") || blockTypeName.contains("leaves")) {
             removeTree(block);    
         } else if (block.getType().isBurnable()) {
-            block.setType(Material.AIR);
+            this.setBlock(block, Material.AIR);
         } else {
             double silicateLevel = vent.lavaFlow.settings.silicateLevel;
 
@@ -50,6 +53,7 @@ public class VolcanoMetamorphism {
                 || blockTypeName.contains("farmland");
 
             if (block.isLiquid()) {
+                // if it is lava, cool it down if it is not registered
                 return;
             }
             
@@ -72,8 +76,16 @@ public class VolcanoMetamorphism {
             }
         }
 
-        block.setType(material);
+        vent.lavaFlow.queueBlockUpdate(block, material);
         return;
+    }
+
+    public void setBlock(Block block, Material material) {
+        if (this.volcano != null && this.volcano.mainVent != null && this.volcano.mainVent.lavaFlow != null && !TyphonPlugin.isShuttingdown) {
+            this.volcano.mainVent.lavaFlow.queueBlockUpdate(block, material);
+        } else {
+            block.setType(material);
+        }
     }
 
     public void evaporateWater(Block block) {
@@ -81,7 +93,7 @@ public class VolcanoMetamorphism {
 
         if (block.getType() == Material.WATER) {
             if (block.getY() < block.getWorld().getSeaLevel() - 1) {
-                block.setType(Material.AIR);
+                this.setBlock(block, Material.AIR);
                 return;
             }
 
@@ -90,26 +102,36 @@ public class VolcanoMetamorphism {
                     for (int z = -radius; z <= radius; z++) {
                         if (x == 0 && y == 0 && z == 0) continue;
                         Block nearby = block.getRelative(x, y, z);
-                        if (nearby.getType() == Material.WATER) nearby.setType(Material.AIR);
+                        if (nearby.getType() == Material.WATER) this.setBlock(nearby, Material.AIR);
                     }
                 }
             }
         }
     }
 
-    public void removeTree(Block baseBlock) {
-        removeTree(baseBlock, 25);
+    public void killTree(Block baseBlock) {
+        removeTree(baseBlock, 25, true);
     }
 
-    public void removeTree(Block baseBlock, int maxRecursion) {
-        if (maxRecursion < 0 || !TyphonUtils.isMaterialTree(baseBlock.getType())) return;
+    public void removeTree(Block baseBlock) {
+        removeTree(baseBlock, 25, false);
+    }
 
+    public void removeTree(Block baseBlock, int maxRecursion, boolean leavesOnly) {
+        removeTree(baseBlock, maxRecursion, leavesOnly, new HashSet<>());
+    }
+
+    private void removeTree(Block baseBlock, int maxRecursion, boolean leavesOnly, Set<Block> visitedBlocks) {
+        if (maxRecursion < 0 || !TyphonUtils.isMaterialTree(baseBlock.getType())) return;
+        if (visitedBlocks.contains(baseBlock)) return;
+
+        visitedBlocks.add(baseBlock);
         BlockFace[] facesToSearch = {BlockFace.UP, BlockFace.DOWN, BlockFace.WEST, BlockFace.DOWN, BlockFace.EAST, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.DOWN};
 
         for (BlockFace face : facesToSearch) {
             Block block = baseBlock.getRelative(face);
             if (TyphonUtils.isMaterialTree(block.getType())) {
-                removeTree(block, maxRecursion - 1);
+                removeTree(block, maxRecursion - 1, leavesOnly, visitedBlocks);
             }
         }
 
@@ -120,7 +142,7 @@ public class VolcanoMetamorphism {
             for (BlockFace face : facesToSearch) {
                 Block block = upBlock.getRelative(face);
                 if (TyphonUtils.isMaterialTree(block.getType())) {
-                    removeTree(block, maxRecursion - 1);
+                    removeTree(block, maxRecursion - 1, leavesOnly, visitedBlocks);
                 }
             }
         }
@@ -128,9 +150,11 @@ public class VolcanoMetamorphism {
         String name = TyphonUtils.toLowerCaseDumbEdition(baseBlock.getType().name());
 
         if (name.contains("log")) {
-            baseBlock.setType(Material.COAL_BLOCK);
+            if (!leavesOnly) {
+                this.setBlock(baseBlock, Material.COAL_BLOCK);
+            }
         } else {
-            baseBlock.setType(Material.AIR);
+            this.setBlock(baseBlock, Material.AIR);
         }
     }
 
@@ -184,11 +208,13 @@ public class VolcanoMetamorphism {
         VolcanoVent vent = volcano.manager.getNearestVent(block);
         double silicateLevel = vent == null ? 0.45 : vent.lavaFlow.settings.silicateLevel;
 
+        Material target = null;
+
         if (material.isBurnable()) {
             for (BlockFace face : BlockFace.values()) {
                 Block relativeBlock = block.getRelative(face);
                 if (relativeBlock.getType().isAir()) {
-                    relativeBlock.setType(Material.FIRE);
+                    target = Material.FIRE;
                 }
             }
         }
@@ -196,39 +222,43 @@ public class VolcanoMetamorphism {
         if (material == Material.WATER) {
             evaporateWater(block);
         } else if ((blockTypeName.contains("snow"))) {
-            block.setType(Material.AIR);
+            target = Material.AIR;
         } else if (blockTypeName.contains("coral")) {
-            block.setType(Material.SAND);
+            target = Material.SAND;
         } else if (material == Material.SHORT_GRASS || material == Material.PINK_PETALS) {
-            block.setType(Material.AIR);
+            target = Material.AIR;
         } else if (material == Material.GRASS_BLOCK || material == Material.ROOTED_DIRT || material == Material.MUDDY_MANGROVE_ROOTS) {
-            block.setType(Material.DIRT);
+            target = Material.DIRT;
         } else if (material == Material.TALL_GRASS || material == Material.LARGE_FERN || material == Material.BAMBOO) {
             // check under block is not the same type
             Block underBlock = block.getRelative(BlockFace.DOWN);
             if (underBlock.getType() == material) {
-                block.setType(Material.AIR);
+                target = Material.AIR;
             } else {
-                block.setType(Material.DEAD_BUSH);
+                target = Material.DEAD_BUSH;
             }
         } else if (blockTypeName.contains("sapling") || material == Material.MANGROVE_PROPAGULE) {
-            block.setType(Material.DEAD_BUSH);
+            target = Material.DEAD_BUSH;
         } else if (isFlower(material)) {
-            block.setType(Material.DEAD_BUSH);
+            target = Material.DEAD_BUSH;
         } else if (isPlantlike(material)) {
-            block.setType(Material.AIR);
+            target = Material.AIR;
         } else if (isPlaceableAnimalEgg(material)) {
-            block.setType(Material.AIR);
+            target = Material.AIR;
         } else if (material == Material.SEAGRASS || material == Material.TALL_SEAGRASS) {
-            block.setType(Material.AIR);
+            target = Material.AIR;
         } else if (material == Material.WATER_CAULDRON) {
-            block.setType(Material.CAULDRON);
+            target = Material.CAULDRON;
         } else if (material == Material.MOSS_BLOCK) {
-            block.setType(Material.DIRT);
+            target = Material.DIRT;
         } else if (blockTypeName.contains("infested")) {
-            block.setType(VolcanoComposition.getExtrusiveRock(silicateLevel));
+            target = VolcanoComposition.getExtrusiveRock(silicateLevel);
         } else if (material == Material.SEA_PICKLE) {
-            block.setType(Material.AIR);
+            target = Material.AIR;
+        }
+
+        if (target != null) {
+            this.setBlock(block, target);
         }
     }
 }

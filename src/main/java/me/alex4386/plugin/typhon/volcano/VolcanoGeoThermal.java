@@ -380,7 +380,7 @@ public class VolcanoGeoThermal implements Listener {
           if (!VolcanoComposition.isVolcanicRock(block.getType())) {
             vent.volcano.metamorphism.metamorphoseBlock(block);
           } else if (TyphonUtils.isMaterialTree(upperBlock.getType())) {
-            vent.volcano.metamorphism.removeTree(upperBlock);
+            vent.volcano.metamorphism.killTree(upperBlock);
           }
         }
       }

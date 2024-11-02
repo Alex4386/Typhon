@@ -264,6 +264,32 @@ public class TyphonUtils {
         return new org.bukkit.Location(org.bukkit.Bukkit.getWorld(world), x, y, z);
     }
 
+    public static org.bukkit.TreeType getAdequateTreeTypeForBiome(org.bukkit.block.Biome biome) {
+        switch (biome) {
+            case FOREST:
+            case FLOWER_FOREST:
+                return org.bukkit.TreeType.TREE;
+            case BIRCH_FOREST:
+            case STONY_PEAKS:
+                return org.bukkit.TreeType.BIRCH;
+            case DARK_FOREST:
+                return org.bukkit.TreeType.DARK_OAK;
+            case JUNGLE:
+                return org.bukkit.TreeType.JUNGLE;
+            case SWAMP:
+                return org.bukkit.TreeType.SWAMP;
+            case SAVANNA:
+            case SAVANNA_PLATEAU:
+                return org.bukkit.TreeType.ACACIA;
+            case TAIGA:
+                return org.bukkit.TreeType.REDWOOD;
+
+
+        }
+
+        return null;
+    }
+
     public static void writeJSON(java.io.File file, org.json.simple.JSONObject jsonObject)
             throws java.io.IOException {
         writeString(file, jsonObject.toJSONString());
@@ -408,6 +434,11 @@ public class TyphonUtils {
                 || materialType.contains("plank")
                 || materialType.contains("wood")
                 || materialType.contains("sapling")) || isMaterialNameContainsTreeName(materialType);
+    }
+
+    public static boolean isMaterialTreeLeaves(org.bukkit.Material material) {
+        String materialType = TyphonUtils.toLowerCaseDumbEdition(material.name());
+        return (materialType.contains("leaves") || materialType.contains("sapling"));
     }
 
     private static boolean isMaterialNameContainsTreeName(String materialType) {
