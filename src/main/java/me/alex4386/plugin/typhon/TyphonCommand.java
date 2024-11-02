@@ -108,6 +108,8 @@ public class TyphonCommand {
                     TyphonPlugin.listVolcanoes.put(volcanoName, volcano);
                     TyphonMessage.info(sender, "Volcano " + volcanoName + " was generated!");
 
+                    TyphonBlueMapUtils.addVolcanoOnMap(volcano);
+
                 } catch (IOException e) {
                     TyphonMessage.error(
                             sender,
