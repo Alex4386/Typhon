@@ -64,9 +64,9 @@ public class TyphonScheduler {
             );
 
             if (targetId > taskId) taskId = targetId;
+            tasks.put(taskId, task);
         }
 
-        tasks.put(taskId, task);
         return taskId;
     }
 
