@@ -109,11 +109,11 @@ public class VolcanoMetamorphism {
     }
 
     public void killTree(Block baseBlock) {
-        removeTree(baseBlock, 25, true);
+        removeTree(baseBlock, 25, false);
     }
 
     public void removeTree(Block baseBlock) {
-        removeTree(baseBlock, 25, false);
+        removeTree(baseBlock, 25, true);
     }
 
     public void removeTree(Block baseBlock, int maxRecursion, boolean leavesOnly) {
