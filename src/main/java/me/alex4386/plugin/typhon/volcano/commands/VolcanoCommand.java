@@ -67,11 +67,11 @@ public class VolcanoCommand {
                         }
                     } else if (action.equals(VolcanoCommandAction.CREATE)) {
                         if (args.length == 3) {
-                            String[] types = { "vent", "fissure", "flank", "autovent" };
+                            String[] types = { "crater", "fissure", "flank", "autovent" };
                             return Arrays.asList(types.clone());
                         } else if (args.length > 3) {
                             String option = args[2];
-                            if (option.toLowerCase().equals("vent")) {
+                            if (option.toLowerCase().equals("crater")) {
                                 String[] result = { "<name>" };
                                 return Arrays.asList(result);
                             } else if (option.toLowerCase().equals("flank")) {
