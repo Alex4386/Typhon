@@ -27,12 +27,22 @@ public class TyphonUtils {
         };
 
         for (BlockFace face : flowableFaces) {
-            if (block.getRelative(face).getType().isAir()) {
+            Block target = block.getRelative(face);
+            Material targetMaterial = target.getType();
+
+            // due to implementation, the lava can flow into water.
+            if (targetMaterial.isAir() || targetMaterial == Material.WATER) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    public static boolean isGrass(Material material) {
+        String name = TyphonUtils.toLowerCaseDumbEdition(material.name());
+
+        return name.contains("grass") || name.contains("dirt");
     }
 
     public static List<Chunk> getChunksInRadius(Chunk src, double radius) {
@@ -427,13 +437,15 @@ public class TyphonUtils {
     }
 
     public static boolean isMaterialTree(org.bukkit.Material material) {
+        if (material == Material.BEEHIVE) return true;
         String materialType = TyphonUtils.toLowerCaseDumbEdition(material.name());
         
         return (materialType.contains("leaves")
                 || materialType.contains("log")
                 || materialType.contains("plank")
                 || materialType.contains("wood")
-                || materialType.contains("sapling")) || isMaterialNameContainsTreeName(materialType);
+                || materialType.contains("sapling"))
+                || materialType.contains("vine") || isMaterialNameContainsTreeName(materialType);
     }
 
     public static boolean isMaterialTreeLeaves(org.bukkit.Material material) {
