@@ -19,7 +19,7 @@ public class VolcanoComposition {
 
         if (silicateLevel < 0.57) {
             double redScoriaRatio =
-                    1 - ((silicateLevel - 0.45) / (0.57 - 0.45));
+                    ((silicateLevel - 0.45) / (0.57 - 0.45));
             double redScoriaPercentage = Math.max(0, Math.min(Math.pow(redScoriaRatio, 2), 1));
 
             double threshold = 0.6;
