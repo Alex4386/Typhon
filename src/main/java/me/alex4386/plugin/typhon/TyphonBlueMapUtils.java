@@ -237,6 +237,7 @@ public class TyphonBlueMapUtils {
   }
 
   public static void removeVolcanoFromMap(Volcano volcano) {
+    if (!TyphonBlueMapUtils.getBlueMapAvailable()) return;
     runOnMap(volcano, map -> {
       TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Removing volcano "+volcano.name+" on map.");
       map.getMarkerSets().remove(getVolcanoMarkerSetID(volcano));

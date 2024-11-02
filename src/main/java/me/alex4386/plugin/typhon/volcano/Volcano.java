@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano;
 
+import me.alex4386.plugin.typhon.TyphonBlueMapUtils;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
@@ -289,6 +290,7 @@ public class Volcano implements Listener {
         this.shutdown();
         this.deleteFileSystem();
         TyphonPlugin.listVolcanoes.remove(this.name);
+        TyphonBlueMapUtils.removeVolcanoFromMap(this);
 
         logger.log(VolcanoLogClass.CORE, "Delete Complete!");
     }
