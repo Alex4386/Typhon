@@ -364,6 +364,8 @@ public class VolcanoSuccession {
     }
 
     public boolean isNaturalized(Material material) {
+        if (material == Material.GRASS_BLOCK) return true;
+
         String materialName = material.name().toLowerCase();
 
         if (
@@ -466,7 +468,7 @@ public class VolcanoSuccession {
 
         if (surfaceBlock.getY() - block.getY() > 3) return true;
 
-        if (rockBlock.getType() != Material.GRASS_BLOCK && rockBlock.getType() != Material.DIRT) {
+        if (!isFertilizedSoil(rockBlock.getType())) {
             if (surfaceBlock.getY() == block.getY()) {
                 volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(rockBlock, Material.GRASS_BLOCK);
             } else {
@@ -478,6 +480,16 @@ public class VolcanoSuccession {
             return true;
         }
         return true;
+    }
+
+    public boolean isFertilizedSoil(Material material) {
+        if (material == Material.GRASS_BLOCK) return true;
+        if (material == Material.COARSE_DIRT) return false;
+
+        String materialName = TyphonUtils.toLowerCaseDumbEdition(material.name());
+        if (materialName.contains("dirt")) return true;
+
+        return !(isConsideredErodedRockType(material) || isTypeOfVolcanicOre(material) || VolcanoComposition.isVolcanicRock(material));
     }
 
     public boolean isObstructedByTree(Block block) {

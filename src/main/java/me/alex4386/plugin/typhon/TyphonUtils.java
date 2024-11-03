@@ -39,12 +39,6 @@ public class TyphonUtils {
         return false;
     }
 
-    public static boolean isGrass(Material material) {
-        String name = TyphonUtils.toLowerCaseDumbEdition(material.name());
-
-        return name.contains("grass") || name.contains("dirt");
-    }
-
     public static List<Chunk> getChunksInRadius(Chunk src, double radius) {
         List<Chunk> chunks = new ArrayList<>();
         int chunkRadius = (int) Math.ceil(radius / 16);
