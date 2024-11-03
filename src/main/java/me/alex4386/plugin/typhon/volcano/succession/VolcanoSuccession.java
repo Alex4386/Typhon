@@ -191,6 +191,11 @@ public class VolcanoSuccession {
 
         double heatValueThreshold = 0.7;
         if (targetBlock.getY() < block.getWorld().getSeaLevel() - 1) {
+            if (isDebug) this.volcano.logger.log(
+                    VolcanoLogClass.SUCCESSION,
+                    "Succession on block "+TyphonUtils.blockLocationTostring(block)+" / skipped due to sea level."
+                );
+
             return;
         }
 
@@ -281,6 +286,10 @@ public class VolcanoSuccession {
                 if (!vent.isStarted()) {
                     if (rawHeatValue < 0.65) {
                         double amount = 1 - Math.min(1, Math.max(0, (rawHeatValue - 0.5) / 0.15));
+
+                        if (isDebug) this.volcano.logger.log(
+                                VolcanoLogClass.SUCCESSION,
+                                "Succession on block "+TyphonUtils.blockLocationTostring(block)+" / amount: "+amount);
 
                         if (Math.random() < Math.pow(amount, 2)) {
                             targetBlock.applyBoneMeal(BlockFace.UP);

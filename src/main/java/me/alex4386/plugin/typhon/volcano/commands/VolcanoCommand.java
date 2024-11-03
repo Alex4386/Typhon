@@ -196,6 +196,12 @@ public class VolcanoCommand {
                                     break;
                                 } else {
                                     boolean state = Boolean.parseBoolean(args[2]);
+                                    if (args[2].equalsIgnoreCase("enable")) {
+                                        state = true;
+                                    } else if (args[2].equalsIgnoreCase("disable")) {
+                                        state = false;
+                                    }
+
                                     this.volcano.succession.setEnabled(state);
 
                                     if (state) {
@@ -204,6 +210,7 @@ public class VolcanoCommand {
                                         msg.info("Primary Succession has been disabled!");
                                     }
                                 }
+                                this.volcano.trySave(true);
                             } else {
                                 msg.info(
                                         "Primary Succession: "
