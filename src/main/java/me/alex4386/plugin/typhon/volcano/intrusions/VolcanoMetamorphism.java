@@ -108,12 +108,21 @@ public class VolcanoMetamorphism {
         }
     }
 
+    private int getRecursionAmount(Block baseBlock) {
+        String name = TyphonUtils.toLowerCaseDumbEdition(baseBlock.getType().name());
+        if (name.contains("cherry")) {
+            return 45;
+        } else {
+            return 30;
+        }
+    }
+
     public void killTree(Block baseBlock) {
-        removeTree(baseBlock, 25, false);
+        removeTree(baseBlock, this.getRecursionAmount(baseBlock), true);
     }
 
     public void removeTree(Block baseBlock) {
-        removeTree(baseBlock, 25, true);
+        removeTree(baseBlock, this.getRecursionAmount(baseBlock), false);
     }
 
     public void removeTree(Block baseBlock, int maxRecursion, boolean leavesOnly) {
@@ -135,7 +144,7 @@ public class VolcanoMetamorphism {
         }
 
         // improvise cherry log detection algorithm
-        if (baseBlock.getType() == Material.CHERRY_LOG) {
+        if (baseBlock.getType() == Material.CHERRY_LOG || baseBlock.getType() == Material.ACACIA_LOG) {
             // extra search
             Block upBlock = baseBlock.getRelative(BlockFace.UP);
             for (BlockFace face : facesToSearch) {
@@ -155,6 +164,31 @@ public class VolcanoMetamorphism {
         } else {
             this.setBlock(baseBlock, Material.AIR);
         }
+    }
+
+    public void removePlant(Block baseBlock) {
+        removePlant(baseBlock, 25);
+    }
+
+    public void removePlant(Block baseBlock, int maxRecursion) {
+        removePlant(baseBlock, maxRecursion, new HashSet<>());
+    }
+
+    private void removePlant(Block baseBlock, int maxRecursion, Set<Block> visitedBlocks) {
+        if (maxRecursion < 0 || !TyphonUtils.isMaterialPlant(baseBlock.getType())) return;
+        if (visitedBlocks.contains(baseBlock)) return;
+
+        visitedBlocks.add(baseBlock);
+        BlockFace[] facesToSearch = {BlockFace.UP};
+
+        for (BlockFace face : facesToSearch) {
+            Block block = baseBlock.getRelative(face);
+            if (TyphonUtils.isMaterialPlant(block.getType())) {
+                removePlant(block, maxRecursion - 1, visitedBlocks);
+            }
+        }
+
+        this.setBlock(baseBlock, Material.AIR);
     }
 
     public boolean isFlower(Material material) {

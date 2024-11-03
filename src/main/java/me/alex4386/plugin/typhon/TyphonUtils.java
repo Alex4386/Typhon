@@ -16,6 +16,37 @@ import org.bukkit.util.Vector;
 import org.json.simple.JSONObject;
 
 public class TyphonUtils {
+    public static boolean isMaterialPlant(Material material) {
+
+        String materialType = TyphonUtils.toLowerCaseDumbEdition(material.name());
+        return (materialType.contains("flower")
+                || materialType.contains("sapling")
+                || materialType.contains("_grass")
+                || material == Material.SUGAR_CANE
+                || material == Material.BAMBOO
+                || material == Material.KELP
+                || materialType.contains("_leaves")
+                || materialType.contains("mangrove")
+                || materialType.contains("azalea")
+                || materialType.contains("_mushroom")
+                || materialType.contains("_tulip")
+                || material == Material.POPPY
+                || material == Material.DANDELION
+                || material == Material.LILAC
+                || material == Material.ROSE_BUSH
+                || material == Material.PEONY
+                || material == Material.SUNFLOWER
+                || material == Material.LILY_OF_THE_VALLEY
+                || material == Material.WITHER_ROSE
+                || material == Material.PINK_PETALS
+                || material == Material.SPORE_BLOSSOM
+                || materialType.contains("vine")
+                || materialType.contains("pitcher_")
+                || materialType.contains("_dripleaf")
+                || materialType.contains("fern")
+                || materialType.contains("_berries")
+        );
+    }
 
     public static boolean isBlockFlowable(Block block) {
         BlockFace[] flowableFaces = new BlockFace[] {

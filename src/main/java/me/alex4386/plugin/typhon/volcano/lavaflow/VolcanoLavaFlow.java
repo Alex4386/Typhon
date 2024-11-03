@@ -1674,6 +1674,10 @@ public class VolcanoLavaFlow implements Listener {
                             // cooldown underBlock.
                             VolcanoLavaCoolData coolData = getLavaCoolData(underBlock);
                             if (coolData != null) {
+                                if (!coolData.tickPassed()) {
+                                    this.extendLava();
+                                    continue;
+                                }
                                 coolData.coolDown();
                             }
                         }

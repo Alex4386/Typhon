@@ -140,11 +140,22 @@ public class VolcanoGeoThermal implements Listener {
       }
 
       if (TyphonUtils.isMaterialTree(upperBlock.getType())) {
-        vent.volcano.metamorphism.removeTree(upperBlock);
+        if (vent.isInVent(upperBlock.getLocation())) {
+          vent.volcano.metamorphism.removeTree(upperBlock);
+        } else {
+          vent.volcano.metamorphism.killTree(upperBlock);
+        }
+      } else if (TyphonUtils.isMaterialPlant(upperBlock.getType())) {
+        vent.volcano.metamorphism.removePlant(upperBlock);
       }
 
+
       if (TyphonUtils.isMaterialTree(treeBlock.getType())) {
-        vent.volcano.metamorphism.removeTree(treeBlock);
+        if (vent.isInVent(treeBlock.getLocation())) {
+          vent.volcano.metamorphism.removeTree(treeBlock);
+        } else {
+          vent.volcano.metamorphism.killTree(treeBlock);
+        }
       }
     }
   }
@@ -203,7 +214,7 @@ public class VolcanoGeoThermal implements Listener {
 
     volcanoRange -= (Math.PI * Math.pow(vent.craterRadius, 2));
     double craterRange = (Math.PI * Math.pow(radius, 2));
-    double volcanoMultiplier = Math.max(Math.min(100, volcanoRange / craterRange), 1);
+    double volcanoMultiplier = Math.max(Math.min(1000, volcanoRange / craterRange), 1);
 
     double maxCount = this.getCraterCycleCount(vent) * volcanoMultiplier;
     double thermalScale = Math.pow(vent.getStatus().getScaleFactor(), 1.5);
@@ -229,7 +240,7 @@ public class VolcanoGeoThermal implements Listener {
       }
     }
 
-    int extraCount = (int) (cycleCount * Math.pow(vent.getStatus().getScaleFactor(), 1.5));
+    int extraCount = (int) (cycleCount * thermalScale);
     for (int i = 0; i < extraCount; i++) {
       this.runVolcanoGeoThermal(vent, this.getVolcanoGeoThermalBlock(vent));
     }
@@ -396,14 +407,16 @@ public class VolcanoGeoThermal implements Listener {
 
           if (!VolcanoComposition.isVolcanicRock(block.getType())) {
             vent.volcano.metamorphism.metamorphoseBlock(block, false);
+
+            if (TyphonUtils.isMaterialTree(upperBlock.getType())) {
+              vent.volcano.metamorphism.killTree(upperBlock);
+            } else if (TyphonUtils.isMaterialPlant(upperBlock.getType())) {
+              vent.volcano.metamorphism.removePlant(upperBlock);
+            }
           }
 
           double killTree = Math.pow(vent.getStatus().getScaleFactor(), 2);
           if (Math.random() < killTree) {
-            if (TyphonUtils.isMaterialTree(upperBlock.getType())) {
-              vent.volcano.metamorphism.killTree(upperBlock);
-            }
-
             if (TyphonUtils.isMaterialTree(treeBlock.getType())) {
               vent.volcano.metamorphism.killTree(treeBlock);
             }
