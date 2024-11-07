@@ -206,7 +206,7 @@ public class VolcanoBombs {
             int theY = Math.max(vent.getSummitBlock().getY(), vent.location.getBlockY());
 
             // check if theY is too low
-            theY = Math.max(theY, TyphonUtils.getHighestRocklikes(vent.location.getBlock()).getY());
+            theY = Math.max(theY, TyphonUtils.getHighestRocklikes(vent.location.getBlock()).getY() + 2);
 
             hostLocation = new Location(
                     vent.location.getWorld(),

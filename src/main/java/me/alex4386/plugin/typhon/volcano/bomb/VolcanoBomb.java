@@ -47,6 +47,8 @@ public class VolcanoBomb {
     public int lifeTime = 0;
     public static Material defaultBombMaterial = Material.MAGMA_BLOCK;
 
+    private int lifeTimeRed = 20;
+
     Material targetMaterial = null;
 
     public boolean isLanded = false;
@@ -66,8 +68,15 @@ public class VolcanoBomb {
         this.targetLocation = targetLocation;
 
         double heatTimerMultiplier = Math.random() * 0.5;
+        double randomMultiplier = (this.heatTimer * (1.0 + (Math.random() * 0.25)));
+
         this.heatTimer = (int) (Math.pow(this.bombRadius, 1.25 + heatTimerMultiplier) * 10);
+        this.lifeTimeRed = (int) (Math.pow(this.bombRadius, 1.25 + heatTimerMultiplier) * 10);
+
+        this.heatTimer = (int)(this.heatTimer * randomMultiplier);
+        this.lifeTimeRed = (int)(this.lifeTimeRed * randomMultiplier);
     }
+
 
 
     public double getDistanceRatio() {
@@ -122,7 +131,9 @@ public class VolcanoBomb {
     public void launch() {
         int maxY = vent.getSummitBlock().getY();
         int yToLaunch = maxY - this.launchLocation.getWorld().getHighestBlockYAt(launchLocation);
-        if (yToLaunch < 0) yToLaunch = 0;
+
+        // not launching up? it doesn't make sense.
+        if (yToLaunch < 2) yToLaunch = 2;
 
         Vector launchVector = TyphonUtils.calculateVelocity(
                 new Vector(0, 0, 0),
