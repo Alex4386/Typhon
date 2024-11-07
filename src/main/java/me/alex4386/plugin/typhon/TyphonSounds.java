@@ -10,19 +10,37 @@ import org.bukkit.SoundCategory;
 
 public enum TyphonSounds {
     // basalt_deltas/basalt_ground1
-    DISTANT_EXPLOSION(Sound.AMBIENT_BASALT_DELTAS_ADDITIONS, 8427267301185073000L),
+    DISTANT_EXPLOSION(Sound.AMBIENT_BASALT_DELTAS_ADDITIONS, -8189996362953806000L),
 
-    // add when basalt_deltas/basaltground4's seed is available
-    @Deprecated
-    LAVA_ERUPTION(Sound.AMBIENT_BASALT_DELTAS_ADDITIONS, 0L),
+    // nether_wastes/mood4
+    EARTH_CRUMBLING(Sound.AMBIENT_BASALT_DELTAS_MOOD, 5824310034203387000L),
+
+    // nether_wastes/ground3
+    LAVA_THROAT_PLUMBING(Sound.AMBIENT_NETHER_WASTES_ADDITIONS, -6092451252487690000L),
+
+    // nether_wastes/ground4
+    LAVA_THROAT_PLUMBING_2(Sound.AMBIENT_NETHER_WASTES_ADDITIONS, 8017002997411952000L),
 
     // basalt_deltas/debris1
-    LAVA_FLOW_FRAGMENTING(Sound.AMBIENT_BASALT_DELTAS_ADDITIONS, -56266925801278970L),
+    LAVA_FLOW_FRAGMENTING(Sound.AMBIENT_BASALT_DELTAS_ADDITIONS, -4954164536332790000L),
+
+    // nether_wastes/ground1
+    LAVA_FLOW_FRAGMENTING_BIG(Sound.AMBIENT_NETHER_WASTES_ADDITIONS, -8315353685128669000L),
+
+    // nether_wastes/addition4
+    LAVA_DEGASSING(Sound.AMBIENT_NETHER_WASTES_ADDITIONS, -8058227235025528000L),
 
     // basalt_deltas/plode1
-    BOMB_LANDING(Sound.AMBIENT_BASALT_DELTAS_ADDITIONS, 957415143359721600L),
+    STROMBOLIAN_ERUPTION(Sound.AMBIENT_BASALT_DELTAS_ADDITIONS, 3671146418610134500L),
 
-    EARTH_CRACKING(Sound.AMBIENT_UNDERWATER_LOOP_ADDITIONS_RARE, 6037455361874583000L)
+    // nether_wastes/mood1
+    VULCANIAN_ERUPTION(Sound.AMBIENT_BASALT_DELTAS_MOOD, -2906677560844330500L),
+
+    // underwater/additions/earth_crack
+    EARTH_CRACKING(Sound.AMBIENT_UNDERWATER_LOOP_ADDITIONS_RARE, -1149439178961691000L),
+
+    // nether_wastes/mood5
+    ASH_PLUME(Sound.AMBIENT_NETHER_WASTES_MOOD, -2893570119582769000L),
     ;
 
     Sound sound;
@@ -34,20 +52,6 @@ public enum TyphonSounds {
     }
 
     public void play(Location location, SoundCategory category, float volume, float pitch) {
-        if (this == LAVA_ERUPTION) {
-            // until it is implemented, do the fallback.
-            location.getWorld().playSound(
-                    location,
-                    Sound.ENTITY_BREEZE_WIND_BURST,
-                    SoundCategory.BLOCKS,
-                    volume,
-                    0f
-            );
-
-            TyphonSounds.DISTANT_EXPLOSION.play(location, category, volume, 1f);
-            return;
-        }
-
         try {
             location.getWorld().playSound(location, this.sound, category, volume, pitch, this.seed);
         } catch (Exception e) {

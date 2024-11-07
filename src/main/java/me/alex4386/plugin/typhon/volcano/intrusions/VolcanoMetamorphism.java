@@ -6,6 +6,7 @@ import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
@@ -159,6 +160,10 @@ public class VolcanoMetamorphism {
 
         if (name.contains("log")) {
             if (!leavesOnly) {
+                // if it is a log, turn it into a dead log, and timber it on the ground
+                // set facing direction to facing outward of the vent
+
+                Location loc = baseBlock.getLocation();
                 this.setBlock(baseBlock, Material.COAL_BLOCK);
             }
         } else {

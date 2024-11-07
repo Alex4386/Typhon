@@ -1711,7 +1711,11 @@ public class VolcanoLavaFlow implements Listener {
 
 
             if (flowedBlocks > 0) {
-                TyphonSounds.LAVA_ERUPTION.play(
+                TyphonSounds sound = Math.random() < 0.5 ?
+                        TyphonSounds.LAVA_THROAT_PLUMBING :
+                        TyphonSounds.LAVA_THROAT_PLUMBING_2;
+
+                sound.play(
                         ventBlocks.get(0).getLocation(),
                         SoundCategory.BLOCKS,
                         2f,

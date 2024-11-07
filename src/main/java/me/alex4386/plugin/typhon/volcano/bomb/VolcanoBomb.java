@@ -435,11 +435,6 @@ public class VolcanoBomb {
             return;
         }
 
-        // actual landing process
-        if (Math.random() < 0.25) {
-            TyphonSounds.BOMB_LANDING.play(loc, SoundCategory.BLOCKS, 10f, (float) (0f + Math.random() * 0.5f));
-        }
-
         if (this.landingLocation.getBlock().getChunk().getInhabitedTime() > 0) {
             this.buildBomb();
             this.explodeTimer = TyphonPlugin.minecraftTicksPerSeconds * this.bombDelay;
