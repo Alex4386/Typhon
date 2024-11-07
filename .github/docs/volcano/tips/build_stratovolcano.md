@@ -48,4 +48,4 @@ To disable the builder, you need to run the following command:
 ```
 
 # Other Tips
-- [Building a Stratovolcano that reaches the sky](./tips/build_stratovolcano_sky.md)
+- [Building a Stratovolcano that reaches the sky](./build_stratovolcano_sky.md)
