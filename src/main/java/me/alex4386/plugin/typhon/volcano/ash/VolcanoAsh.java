@@ -1,16 +1,10 @@
 package me.alex4386.plugin.typhon.volcano.ash;
 
-import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
-import me.alex4386.plugin.typhon.volcano.Volcano;
-import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
-import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
-import me.alex4386.plugin.typhon.volcano.utils.VolcanoCircleOffsetXZ;
-import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
@@ -26,7 +20,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.util.Transformation;
 import org.bukkit.util.Vector;
-import org.checkerframework.checker.units.qual.A;
 import org.joml.AxisAngle4f;
 import org.joml.Vector3f;
 
@@ -126,18 +119,18 @@ public class VolcanoAsh {
         }
     }
 
-    public void createAshCloud(Location loc, double ashMultiplier) {
-        createAshCloud(loc, ashMultiplier, 5);
+    public VolcanoAshCloudData createAshCloud(Location loc, double ashMultiplier) {
+        return createAshCloud(loc, ashMultiplier, 5);
     }
-    public void createPumiceCloud(Location loc, double ashMultiplier) {
-        this.createAshCloudBlockDisplay(loc, ashMultiplier, 5, Material.NETHERRACK);
-    }
-
-    public void createAshCloud(Location loc, double ashMultiplier, float size) {
-        this.createAshCloudBlockDisplay(loc, ashMultiplier, size, Material.TUFF);
+    public VolcanoAshCloudData createPumiceCloud(Location loc, double ashMultiplier) {
+        return this.createAshCloudBlockDisplay(loc, ashMultiplier, 5, Material.NETHERRACK);
     }
 
-    public void createAshCloudBlockDisplay(Location loc, double ashMultiplier, float size, Material material) {
+    public VolcanoAshCloudData createAshCloud(Location loc, double ashMultiplier, float size) {
+        return this.createAshCloudBlockDisplay(loc, ashMultiplier, size, Material.TUFF);
+    }
+
+    public VolcanoAshCloudData createAshCloudBlockDisplay(Location loc, double ashMultiplier, float size, Material material) {
         this.vent.getVolcano().logger.debug(VolcanoLogClass.ASH, "Created Ash Cloud @ "+TyphonUtils.blockLocationTostring(loc.getBlock()));
         float sizeHalf = size / 2;
 
@@ -146,7 +139,10 @@ public class VolcanoAsh {
             bd.setTransformation(new Transformation(new Vector3f(-sizeHalf, -sizeHalf, -sizeHalf), new AxisAngle4f(), new Vector3f(size, size, size), new AxisAngle4f()));
             bd.setInvulnerable(true);
         });
-        ashBlockDisplays.add(new VolcanoAshCloudData(this, result, 1));
+        VolcanoAshCloudData data = new VolcanoAshCloudData(this, result, 1);
+        ashBlockDisplays.add(data);
+
+        return data;
     }
 
     public static float ashCloudStep = 0.3f;
@@ -200,11 +196,6 @@ public class VolcanoAsh {
                 scale,
                 transformation.getRightRotation()
         ));
-
-        if (Math.random() < 0.002) {
-            // do lightning!
-            data.lightning();
-        }
 
         processAshCloudHeat(bd);
     }
@@ -262,7 +253,7 @@ public class VolcanoAsh {
 
         this.createAshCloud(loc, ashMultiplier, size);
 
-        TyphonSounds.DISTANT_EXPLOSION.play(loc, SoundCategory.BLOCKS, 10, 0.01f);
+        TyphonSounds.ASH_PLUME.play(loc, SoundCategory.BLOCKS, 10, 0.01f);
         Location tmp = loc.clone();
         float tmpSize = size;
         for (int i = 0; i < length; i++) {
@@ -286,6 +277,7 @@ public class VolcanoAsh {
 
         this.vent.getVolcano().logger.log(VolcanoLogClass.ASH, "Triggering Pyroclastic Flows @ "+TyphonUtils.blockLocationTostring(block));
         VolcanoPyroclasticFlow flow = new VolcanoPyroclasticFlow(TyphonUtils.getHighestRocklikes(block).getLocation().add(0, 1, 0), this);
+
         this.pyroclasticFlows.add(flow);
         flow.initialize();
 
@@ -334,51 +326,3 @@ public class VolcanoAsh {
         }
     }
 }
-
-class VolcanoAshCloudData {
-    VolcanoAsh ash;
-    public BlockDisplay bd;
-    public double multiplier = 0.2;
-
-    public int maxHeight;
-
-    HashMap<Block, Boolean> hasAshFell = new HashMap<>();
-
-    public VolcanoAshCloudData(VolcanoAsh ash, BlockDisplay bd, double multiplier) {
-        this(ash, bd, multiplier, ash.vent.location.getWorld().getMaxHeight() + 100);
-    }
-
-    public VolcanoAshCloudData(VolcanoAsh ash, BlockDisplay bd, double multiplier, int maxHeight) {
-        this.ash = ash;
-        this.bd = bd;
-        this.multiplier = multiplier;
-        this.maxHeight = maxHeight;
-    }
-
-    public Block getAshFallTarget() {
-        double range = Math.random() * 5 * this.multiplier;
-        double angle = Math.random() * 2 * Math.PI;
-        return TyphonUtils.getHighestRocklikes(bd.getLocation().add(
-                Math.sin(angle) * range,
-                0,
-                Math.cos(angle) * range
-        ));
-    }
-
-    public void fallAsh() {
-
-        if (!ash.vent.caldera.isForming()) {
-            Block ashTarget = this.getAshFallTarget();
-            if (hasAshFell.get(ashTarget) != null) return;
-
-            if (ashTarget.getY() <= ash.getTargetY(ashTarget.getLocation())) {
-                this.ash.vent.lavaFlow.queueBlockUpdate(ashTarget, Material.TUFF);
-            }
-        }
-    }
-
-    public void lightning() {
-        bd.getWorld().strikeLightning(getAshFallTarget().getLocation());
-    }
-}
-

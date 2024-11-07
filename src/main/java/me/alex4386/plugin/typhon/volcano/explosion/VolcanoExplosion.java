@@ -134,8 +134,6 @@ public class VolcanoExplosion {
 
         Location targetVent = this.selectEruptionVent();
 
-        TyphonSounds.DISTANT_EXPLOSION.play(targetVent, SoundCategory.BLOCKS, 10f, 0f);
-
         vent.location
                 .getWorld()
                 .createExplosion(
@@ -168,6 +166,17 @@ public class VolcanoExplosion {
                     }
                 }
             }
+        }
+
+        Location targetLocation = this.vent.bombs.getLaunchLocation();
+
+        float volume = 2f;
+        TyphonSounds.STROMBOLIAN_ERUPTION.play(
+                targetLocation, SoundCategory.BLOCKS, volume, 0f);
+
+        if (this.vent.erupt.getStyle().bombMultiplier >= VolcanoEruptStyle.VULCANIAN.bombMultiplier) {
+            TyphonSounds.VULCANIAN_ERUPTION.play(
+                    targetLocation, SoundCategory.BLOCKS, volume, 0f);
         }
 
         if (queueComplete) {

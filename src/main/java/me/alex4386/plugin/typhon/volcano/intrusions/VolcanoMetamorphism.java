@@ -4,6 +4,7 @@ import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
+import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 
 import org.bukkit.Location;
@@ -11,10 +12,15 @@ import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Directional;
+import org.bukkit.util.Vector;
 
 import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 
 public class VolcanoMetamorphism {
     Volcano volcano;
@@ -81,10 +87,15 @@ public class VolcanoMetamorphism {
     }
 
     public void setBlock(Block block, Material material) {
+        this.setBlock(block, material, null);
+    }
+
+    public void setBlock(Block block, Material material, Consumer<Block> e) {
         if (this.volcano != null && this.volcano.mainVent != null && this.volcano.mainVent.lavaFlow != null && !TyphonPlugin.isShuttingdown) {
-            this.volcano.mainVent.lavaFlow.queueBlockUpdate(block, material);
+            this.volcano.mainVent.lavaFlow.queueBlockUpdate(block, material, e);
         } else {
             block.setType(material);
+            e.accept(block);
         }
     }
 
@@ -127,20 +138,80 @@ public class VolcanoMetamorphism {
     }
 
     public void removeTree(Block baseBlock, int maxRecursion, boolean leavesOnly) {
-        removeTree(baseBlock, maxRecursion, leavesOnly, new HashSet<>());
+        HashSet<Block> visitedBlocks = new HashSet<>();
+        HashSet<Block> treeBlocks = new HashSet<>();
+        HashSet<Block> logBlocks = new HashSet<>();
+        removeTree(baseBlock, maxRecursion, leavesOnly, visitedBlocks, treeBlocks, logBlocks);
+
+        double percentage = leavesOnly ? 0.5 : 1;
+        if (Math.random() < percentage) {
+            timberTree(logBlocks);
+        }
     }
 
-    private void removeTree(Block baseBlock, int maxRecursion, boolean leavesOnly, Set<Block> visitedBlocks) {
-        if (maxRecursion < 0 || !TyphonUtils.isMaterialTree(baseBlock.getType())) return;
-        if (visitedBlocks.contains(baseBlock)) return;
+    public void timberTree(Set<Block> logBlocks) {
+        if (logBlocks.isEmpty()) return;
 
+        Block rootBlock = logBlocks.iterator().next();
+        for (Block block : logBlocks) {
+            if (block.getY() < rootBlock.getY()) {
+                rootBlock = block;
+            }
+        }
+
+        VolcanoVent vent = volcano.manager.getNearestVent(rootBlock);
+
+        Block ventBlock = vent.location.getBlock();
+        Location ventLocation = ventBlock.getRelative(0, -ventBlock.getY(), 0).getLocation();
+        Location rootBlockLoc = rootBlock.getRelative(0, -rootBlock.getY(), 0).getLocation();
+
+        Vector newY = rootBlockLoc.subtract(ventLocation).toVector().normalize();
+
+
+
+        // For each block in the set, calculate its new location in the transposed coordinate system
+        for (Block block : logBlocks) {
+            if (block.isEmpty()) continue;
+
+            // Get the relative position of the block to the rootBlock
+            Vector relativePosition = block.getLocation().toVector().subtract(rootBlock.getLocation().toVector());
+            Vector rotatedVector = VolcanoMath.rotateVectorToYAxis(newY, relativePosition);
+
+            // Create the new location based on the transformed coordinates
+            Location newLocation = rootBlock.getLocation().clone().add(rotatedVector.getX(), rotatedVector.getY(), rotatedVector.getZ());
+
+            Block targetBlock = TyphonUtils.getHighestRocklikes(newLocation.getBlock());
+            targetBlock = targetBlock.getRelative(BlockFace.UP);
+
+            // rotate the blockface to the new direction
+            BlockFace newFace = TyphonUtils.getAdequateBlockFace(newY);
+
+            Consumer<Block> callback = (b) -> {
+                BlockData data = b.getBlockData();
+                if (data instanceof Directional newDirectional) {
+                    newDirectional.setFacing(newFace);
+                    b.setBlockData(newDirectional);
+                }
+            };
+
+            this.setBlock(targetBlock, block.getType(), callback);
+            this.setBlock(block, Material.AIR);
+        }
+    }
+
+    private void removeTree(Block baseBlock, int maxRecursion, boolean leavesOnly, Set<Block> visitedBlocks, Set<Block> treeBlocks, Set<Block> logBlocks) {
+        if (visitedBlocks.contains(baseBlock)) return;
         visitedBlocks.add(baseBlock);
+
+        if (maxRecursion < 0 || !TyphonUtils.isMaterialTree(baseBlock.getType())) return;
+        treeBlocks.add(baseBlock);
+
         BlockFace[] facesToSearch = {BlockFace.UP, BlockFace.DOWN, BlockFace.WEST, BlockFace.DOWN, BlockFace.EAST, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.DOWN};
 
         for (BlockFace face : facesToSearch) {
             Block block = baseBlock.getRelative(face);
             if (TyphonUtils.isMaterialTree(block.getType())) {
-                removeTree(block, maxRecursion - 1, leavesOnly, visitedBlocks);
+                removeTree(block, maxRecursion - 1, leavesOnly, visitedBlocks, treeBlocks, logBlocks);
             }
         }
 
@@ -151,7 +222,7 @@ public class VolcanoMetamorphism {
             for (BlockFace face : facesToSearch) {
                 Block block = upBlock.getRelative(face);
                 if (TyphonUtils.isMaterialTree(block.getType())) {
-                    removeTree(block, maxRecursion - 1, leavesOnly, visitedBlocks);
+                    removeTree(block, maxRecursion - 1, leavesOnly, visitedBlocks, treeBlocks, logBlocks);
                 }
             }
         }
@@ -166,9 +237,13 @@ public class VolcanoMetamorphism {
                 Location loc = baseBlock.getLocation();
                 this.setBlock(baseBlock, Material.COAL_BLOCK);
             }
+
+            logBlocks.add(baseBlock);
         } else {
             this.setBlock(baseBlock, Material.AIR);
         }
+
+        treeBlocks.add(baseBlock);
     }
 
     public void removePlant(Block baseBlock) {

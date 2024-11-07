@@ -145,7 +145,7 @@ public class VolcanoLavaDome {
         ).getRelative(BlockFace.UP));
 
         if (Math.random() < 0.0001) {
-            TyphonSounds.LAVA_FLOW_FRAGMENTING.play(this.baseLocation.getBlock().getLocation(), SoundCategory.BLOCKS, 0.1f, 1);
+            TyphonSounds.getRandomLavaFragmenting().play(this.baseLocation.getBlock().getLocation(), SoundCategory.BLOCKS, 0.1f, 1);
         }
     }
 
@@ -157,7 +157,7 @@ public class VolcanoLavaDome {
             this.vent.bombs.generateRandomBomb(targetLocation);
         }
 
-        TyphonSounds.DISTANT_EXPLOSION.play(targetLocation, SoundCategory.BLOCKS, 2f, 0f);
+        TyphonSounds.STROMBOLIAN_ERUPTION.play(targetLocation, SoundCategory.BLOCKS, 2f, 0f);
     }
 
     public JSONObject importConfig(JSONObject json) {

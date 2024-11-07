@@ -4,6 +4,7 @@ import com.flowpowered.math.vector.Vector3d;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -374,4 +375,53 @@ public class VolcanoMath {
 
         return noiseArray;
     }
+
+    public static Vector getOrthogonal(Vector v) {
+        if (Math.abs(v.getX()) < 1e-6 && Math.abs(v.getY()) < 1e-6) {
+            return new Vector(0, 1, 0);
+        } else {
+            return new Vector(-v.getY(), v.getX(), 0).normalize();
+        }
+    }
+
+    public static Vector rotateVectorToYAxis(Vector vectorToAlign, Vector vectorToRotate) {
+        Vector U = vectorToAlign.clone().normalize(); // 정렬할 벡터의 단위 벡터
+        Vector YAxis = new Vector(0, 1, 0); // Y축 벡터
+
+        // 회전 축 계산 (axis = U x YAxis)
+        Vector axis = U.clone().crossProduct(YAxis);
+
+        double axisLengthSquared = axis.lengthSquared();
+        double angle;
+
+        if (axisLengthSquared < 1e-8) {
+            double dot = U.dot(YAxis);
+            if (dot > 0) {
+                return vectorToRotate.clone();
+            } else {
+                axis = getOrthogonal(U);
+                angle = Math.PI;
+            }
+        } else {
+            axis.normalize();
+            angle = Math.acos(U.dot(YAxis));
+        }
+
+        return rotateAroundAxis(vectorToRotate, axis, angle);
+    }
+
+
+    public static Vector rotateAroundAxis(Vector v, Vector axis, double angle) {
+        double cosTheta = Math.cos(angle);
+        double sinTheta = Math.sin(angle);
+
+        // Rodringues' formula
+        Vector term1 = v.clone().multiply(cosTheta);
+        Vector term2 = axis.clone().crossProduct(v).multiply(sinTheta);
+        Vector term3 = axis.clone().multiply(axis.clone().dot(v) * (1 - cosTheta));
+
+        return term1.add(term2).add(term3);
+    }
+
+
 }

@@ -9,6 +9,10 @@ import org.bukkit.SoundCategory;
 // for the sound seeds
 
 public enum TyphonSounds {
+
+    // https://minecraft.wiki/w/Ambience#Basalt_Deltas_ambience
+    // https://minecraft.wiki/w/Ambience#Nether_Wastes_ambience
+
     // basalt_deltas/basalt_ground1
     DISTANT_EXPLOSION(Sound.AMBIENT_BASALT_DELTAS_ADDITIONS, -8189996362953806000L),
 
@@ -57,6 +61,22 @@ public enum TyphonSounds {
         } catch (Exception e) {
             // pre 1.21 sound system
             location.getWorld().playSound(location, this.sound, category, volume, pitch);
+        }
+    }
+
+    public static TyphonSounds getRandomLavaThroat() {
+        if (Math.random() < 0.5) {
+            return LAVA_THROAT_PLUMBING;
+        } else {
+            return LAVA_THROAT_PLUMBING_2;
+        }
+    }
+
+    public static TyphonSounds getRandomLavaFragmenting() {
+        if (Math.random() < 0.7) {
+            return LAVA_FLOW_FRAGMENTING;
+        } else {
+            return LAVA_FLOW_FRAGMENTING_BIG;
         }
     }
 }

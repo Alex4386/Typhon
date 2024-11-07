@@ -273,8 +273,8 @@ public class VolcanoLandslide {
 
         double angle = this.landslideAngle;
 
-        // add -20~20 degrees
-        angle += ((Math.random() * 2) - 1) * Math.toRadians(20);
+        // add -5~5 degrees
+        angle += ((Math.random() * 2) - 1) * Math.toRadians(5);
 
         // rotate to landslideAngle
         double cos = Math.cos(angle);

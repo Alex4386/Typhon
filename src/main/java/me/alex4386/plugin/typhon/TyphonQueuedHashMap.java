@@ -14,6 +14,8 @@ public class TyphonQueuedHashMap<K,V> {
     private Function<K, K> keyPreprocessor;
     private Function<Map.Entry<K, TyphonCache<V>>, Object> onRemove;
 
+    private boolean useCache = true;
+
     public TyphonQueuedHashMap(int maxSize) {
         this(maxSize, null);
     }
@@ -23,16 +25,29 @@ public class TyphonQueuedHashMap<K,V> {
     }
 
     public TyphonQueuedHashMap(int maxSize, Function<K, K> keyPreprocessor, Function<Map.Entry<K, TyphonCache<V>>, Object> onRemove) {
+        this(maxSize, keyPreprocessor, onRemove, true);
+    }
+
+    public TyphonQueuedHashMap(int maxSize, Function<K, K> keyPreprocessor, Function<Map.Entry<K, TyphonCache<V>>, Object> onRemove, boolean useCache) {
         this.maxSize = maxSize;
         this.map = new HashMap<>();
         this.queue = new LinkedList<>();
 
         this.keyPreprocessor = keyPreprocessor;
         this.onRemove = onRemove;
+        this.useCache = useCache;
     }
 
     public static Block getTwoDimensionalBlock(Block block) {
         return block.getRelative(0, -block.getY(), 0);
+    }
+
+    public boolean isUsingCache() {
+        return this.useCache;
+    }
+
+    public void setUseCache(boolean useCache) {
+        this.useCache = useCache;
     }
 
     private void removeQueueUntil(K key) {
@@ -68,20 +83,6 @@ public class TyphonQueuedHashMap<K,V> {
         return map.size();
     }
 
-    public boolean containsKey(K key) {
-        K realKey = this.getRealKey(key);
-        return map.containsKey(realKey);
-    }
-
-    public boolean containsValue(V value) {
-        return map.containsValue(value);
-    }
-
-    public void putAll(Map<? extends K, ? extends V> m) {
-        for (Map.Entry<? extends K, ? extends V> entry : m.entrySet()) {
-            this.put(entry.getKey(), entry.getValue());
-        }
-    }
 
     public void clear() {
         map.clear();
@@ -124,7 +125,7 @@ public class TyphonQueuedHashMap<K,V> {
             return null;
         }
 
-        if (cache.isExpired()) {
+        if (this.useCache && cache.isExpired()) {
             this.removeQueueUntil(key);
             return null;
         }

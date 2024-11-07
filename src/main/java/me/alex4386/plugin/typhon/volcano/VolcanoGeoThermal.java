@@ -160,12 +160,6 @@ public class VolcanoGeoThermal implements Listener {
     }
   }
 
-  public void volcanicGasDegassing(Block block) {
-    // Oops~ 
-    if (Math.random() < 0.3) {
-    }
-  }
-
   public void runGeoThermalCycle(VolcanoVent vent) {
     if (vent.enabled) {
       this.runCraterGeoThermalCycle(vent);
