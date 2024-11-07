@@ -91,7 +91,7 @@ public class VolcanoBomb {
     public Team getAdequateTeam() {
         if (this.heatTimer > 0) {
             return VolcanoBombs.bombGlowYellow;
-        } else if (this.lifeTime < 20) {
+        } else if (this.lifeTime < this.lifeTimeRed) {
             return VolcanoBombs.bombGlowGold;
         }
 
