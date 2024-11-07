@@ -1,8 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.ash;
 
-import me.alex4386.plugin.typhon.TyphonPlugin;
-import me.alex4386.plugin.typhon.TyphonScheduler;
-import me.alex4386.plugin.typhon.TyphonUtils;
+import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
@@ -41,12 +39,11 @@ public class VolcanoPyroclasticFlow {
 
     HashMap<Block, Boolean> hasAshFell = new HashMap<>();
     List<BlockDisplay> pyroclasticClouds = new ArrayList<>();
-    Map<Block, Block> initialBase = new HashMap<>();
+    TyphonQueuedHashMap<Block, Block> initialBase = new TyphonQueuedHashMap<>(Integer.MAX_VALUE, TyphonQueuedHashMap::getTwoDimensionalBlock);
 
     private Block getBase(Block block) {
-        Block referenceBlock = block.getRelative(0, -block.getY(), 0);
-        if (initialBase.containsKey(referenceBlock)) {
-            return initialBase.get(referenceBlock);
+        if (initialBase.containsKey(block)) {
+            return initialBase.get(block);
         }
 
         Block lowestBlock = TyphonUtils.getHighestRocklikes(block);

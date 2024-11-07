@@ -143,7 +143,7 @@ public class TyphonUtils {
         return face;
     }
 
-    private static Map<Block, TyphonCache<org.bukkit.block.Block>> highestRocklikesBlockCacheMap = new HashMap<>();
+    private static TyphonQueuedHashMap<Block, Block> highestRocklikesBlockCacheMap = new TyphonQueuedHashMap<>(Integer.MAX_VALUE, TyphonQueuedHashMap::getTwoDimensionalBlock);
 
     public static int getMinimumY(org.bukkit.World world) {
         return world.getMinHeight();
@@ -370,7 +370,7 @@ public class TyphonUtils {
     public static org.bukkit.block.Block getRandomBlockInRange(
             org.bukkit.block.Block block, int minRange, int maxRange) {
         Random random = new Random();
-        
+
         // mitigation
         int range = maxRange - minRange;
 
@@ -392,7 +392,7 @@ public class TyphonUtils {
     public static org.bukkit.block.Block getFairRandomBlockInRange(
         org.bukkit.block.Block block, int minRange, int maxRange) {
         Random random = new Random();
-        
+
         // mitigation
         int range = maxRange - minRange;
 
@@ -464,7 +464,7 @@ public class TyphonUtils {
     public static boolean isMaterialTree(org.bukkit.Material material) {
         if (material == Material.BEEHIVE) return true;
         String materialType = TyphonUtils.toLowerCaseDumbEdition(material.name());
-        
+
         return (materialType.contains("leaves")
                 || materialType.contains("log")
                 || materialType.contains("plank")
@@ -508,9 +508,9 @@ public class TyphonUtils {
         org.bukkit.block.Block block = loc.getBlock();
 
         if (useCache) {
-            TyphonCache<org.bukkit.block.Block> t = highestRocklikesBlockCacheMap.get(block);
+            Block t = highestRocklikesBlockCacheMap.get(block);
             if (t != null) {
-                if (!t.isExpired()) return t.getTarget();
+                return t;
             }
         }
 
@@ -524,7 +524,7 @@ public class TyphonUtils {
             }
         }
 
-        highestRocklikesBlockCacheMap.put(block, new TyphonCache<>(highestBlock));
+        highestRocklikesBlockCacheMap.put(block, highestBlock);
         return highestBlock;
     }
 
@@ -697,11 +697,11 @@ public class TyphonUtils {
 
     public static void createRisingSteam(Location location, int radius, int count, boolean mute) {
         Particle type = Particle.CLOUD;
-        
+
         if (location.getBlock().getType() == Material.WATER || location.getBlock().getRelative(BlockFace.UP).getType() == Material.WATER) {
             type = Particle.BUBBLE_COLUMN_UP;
             Location waterLevel = location.getWorld().getHighestBlockAt(location).getLocation().add(0,1,0);
-            
+
             if (waterLevel.getY() - location.getY() < 10) {
                 createRisingSteam(waterLevel, radius, count, mute);
             }
