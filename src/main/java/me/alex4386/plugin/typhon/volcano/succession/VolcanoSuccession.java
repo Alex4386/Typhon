@@ -299,7 +299,9 @@ public class VolcanoSuccession {
                     } else if (rawHeatValue < 0.8) {
                         double percentage = (rawHeatValue - 0.65) / 0.15;
                         percentage = Math.min(1, Math.max(0, percentage));
-                        percentage = 1 - percentage;
+
+                        // prevent soil generation nearby the 0.8 have more grass
+                        percentage = Math.pow(1 - percentage, 2);
 
                         // scan nearby blocks
                         List<Block> nearbyBlocks = VolcanoMath.getCircle(targetBlock, 3);
