@@ -1301,6 +1301,12 @@ public class VolcanoLavaFlow implements Listener {
         }
 
         if (height >= 6 && this.vent.isMainVent()) {
+            // check if it is too nearby existing vent
+
+            if (Math.random() < 0.6) return;
+            VolcanoVent nearestVent = this.getVolcano().manager.getNearestVent(location);
+            if (nearestVent != null && nearestVent.getTwoDimensionalDistance(location) < 50) return;
+
             // small percentage of generating a vent
             String name = "rootless_";
             int i = 1;
