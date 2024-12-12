@@ -1300,7 +1300,7 @@ public class VolcanoLavaFlow implements Listener {
             this.vent.bombs.launchSpecifiedBomb(bomb);
         }
 
-        if (height >= 6) {
+        if (height >= 6 && this.vent.isMainVent()) {
             // small percentage of generating a vent
             String name = "rootless_";
             int i = 1;
@@ -1316,7 +1316,8 @@ public class VolcanoLavaFlow implements Listener {
             this.getVolcano().subVents.put(vent.getName(), vent);
 
             vent.enableKillSwitch = true;
-            vent.killAt = System.currentTimeMillis() + 1000 * 60 * 15;
+            vent.killAt = System.currentTimeMillis() + (long) (1000 * 60 * (2 + (Math.random() * 3)));
+            vent.lavaFlow.settings.silicateLevel = this.settings.silicateLevel;
             vent.erupt.setStyle(Math.random() > 0.3 ? VolcanoEruptStyle.STROMBOLIAN : VolcanoEruptStyle.HAWAIIAN);
             vent.setRadius(height);
             vent.start();

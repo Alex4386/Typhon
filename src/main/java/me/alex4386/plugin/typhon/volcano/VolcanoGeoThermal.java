@@ -557,7 +557,7 @@ public class VolcanoGeoThermal implements Listener {
     
     for (Entity entity : entities) {
       double distance = entity.getLocation().distance(location);
-      double fireTicks = Math.max(30, (300 * volcano.manager.getHeatValue(location)) * (distance / range));
+      double fireTicks = Math.max(60, (600 * volcano.manager.getHeatValue(location)) * (distance / range));
       
       if (distance < range && entity.getMaxFireTicks() != 0 ) {
         entity.setFireTicks((int) fireTicks);
@@ -608,7 +608,7 @@ public class VolcanoGeoThermal implements Listener {
 
       double intensity = distance / (double) range;
       double heatValue = volcano.manager.getHeatValue(location);
-      double multiplier = Math.random() < vent.getStatus().getScaleFactor() ? 5 : 1 + (Math.random() * 2);
+      double multiplier = Math.random() < vent.getStatus().getScaleFactor() ? 5 : 1 + (Math.random() * 4);
 
       if (entity instanceof LivingEntity && distance <= range) {
         LivingEntity livingEntity = (LivingEntity) entity;
@@ -654,7 +654,7 @@ public class VolcanoGeoThermal implements Listener {
           poisonousLevel = (int) total;
         } else if (vent.getStatus() != VolcanoVentStatus.DORMANT) {
           if (vent.isInVent(location)) {
-            poisonousLevel = Math.random() > 0.3 ? 1 : 0;
+            poisonousLevel = Math.random() > 0.15 ? 1 : 0;
           }
         }
 
