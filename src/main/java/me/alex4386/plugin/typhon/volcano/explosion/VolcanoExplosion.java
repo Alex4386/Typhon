@@ -121,6 +121,13 @@ public class VolcanoExplosion {
     }
 
     public void explode(int bombCount) {
+        if (this.vent != null) {
+            if (this.vent.isKillSwitchActive()) {
+                this.vent.kill();
+                return;
+            }
+        }
+
         queuedBombs += bombCount;
     }
 

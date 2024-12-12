@@ -76,11 +76,12 @@ public class VolcanoVent {
     public VolcanoVentSurtseyan surtseyan = new VolcanoVentSurtseyan(this);
     public VolcanoVentBuilder builder = new VolcanoVentBuilder(this);
 
-
     // get update via VolcanoAutoStart?
     public boolean autoStyleUpdate = false;
-
     public boolean enableSuccession = true;
+
+    public boolean enableKillSwitch = false;
+    public long killAt = 0;
 
     public VolcanoVent(Volcano volcano) {
         this.volcano = volcano;
@@ -156,9 +157,19 @@ public class VolcanoVent {
         this.getVolcano().trySave(true);
     }
 
-    public void initialize() {
-        volcano.logger.log(VolcanoLogClass.VENT, "Starting up vent " + name);
+    public void kill() {
+        volcano.logger.log(VolcanoLogClass.VENT, "Killing vent " + name+" due to kill switch.");
+        this.shutdown();
+        this.delete();
+    }
 
+    public void initialize() {
+        if (this.isKillSwitchActive()) {
+            this.kill();
+            return;
+        }
+
+        volcano.logger.log(VolcanoLogClass.VENT, "Starting up vent " + name);
         this.getVentBlocks();
 
         // bombs don't need initialization
@@ -211,6 +222,13 @@ public class VolcanoVent {
             } else {
                 volcano.subVents.remove(name);
                 volcano.dataLoader.deleteSubVentConfig(this.getName());
+
+                // transfer eruption ejecta data to main vent
+                if (volcano.mainVent != null) {
+                    volcano.mainVent.record.ejectaVolumeList.addAll(this.record.ejectaVolumeList);
+                }
+
+                TyphonBlueMapUtils.removeVolcanoVentMarker(this);
             }
         }
     }
@@ -629,13 +647,10 @@ public class VolcanoVent {
         }
 
         for (int i = 0; i < count; i++) {
-            int idx = random.nextInt(ventBlocks.size());
-            Block block = ventBlocks.get(idx);
-
-            if (!selectedBlocks.contains(block)) {
+            Block block = ventBlocks.get(random.nextInt(ventBlocks.size()));
+            if (!selectedBlocks.contains(block) && this.lavaFlow.isLavaOKForFlow(block)) {
                 Block blockTop = TyphonUtils.getHighestRocklikes(block);
                 selectedBlocks.add(blockTop);
-                if (selectedBlocks.size() == count) return selectedBlocks;
             }
         }
 
@@ -643,7 +658,18 @@ public class VolcanoVent {
     }
 
     public Block selectFlowVentBlock(boolean evenFlow) {
-        return this.selectFlowVentBlocks(evenFlow, 1).get(0);
+        List<Block> targetBlocks = this.selectFlowVentBlocks(evenFlow, 1);
+        if (targetBlocks.isEmpty()) {
+            List<Block> ventBlocks = this.getVentBlocks();
+            if (ventBlocks.isEmpty()) {
+                return TyphonUtils.getHighestRocklikes(this.location.getBlock());
+            }
+
+            int randomIdx = (int) (Math.random() * ventBlocks.size());
+            return TyphonUtils.getHighestRocklikes(ventBlocks.get(randomIdx));
+        }
+
+        return targetBlocks.get(0);
     }
 
     public Block requestFlow() {
@@ -867,6 +893,10 @@ public class VolcanoVent {
         return this.name + ".json";
     }
 
+    public boolean isKillSwitchActive() {
+        return this.enableKillSwitch && this.killAt > 0 && this.killAt < System.currentTimeMillis();
+    }
+
     public void importConfig(JSONObject configData) {
         this.enabled = (boolean) configData.get("enabled");
         this.type = VolcanoVentType.fromString((String) configData.get("type"));
@@ -889,6 +919,10 @@ public class VolcanoVent {
         this.calderaRadius = (double) configData.getOrDefault("calderaRadius" , -1.0);
         this.autoStyleUpdate = (boolean) configData.getOrDefault("autoStyleUpdate", true);
         this.enableSuccession = (boolean) configData.getOrDefault("enableSuccession", true);
+
+        JSONObject killSwitchConfig = (JSONObject) configData.getOrDefault("killSwitch", new JSONObject());
+        this.enableKillSwitch = (boolean) killSwitchConfig.getOrDefault("enable", false);
+        this.killAt = (long) killSwitchConfig.getOrDefault("killAt", 0);
 
         this.postProcessImport();
     }
@@ -940,6 +974,11 @@ public class VolcanoVent {
         configData.put("record", recordConfig);
 
         configData.put("calderaRadius", calderaRadius);
+
+        JSONObject killSwitchConfig = new JSONObject();
+        killSwitchConfig.put("enable", this.enableKillSwitch);
+        killSwitchConfig.put("killAt", this.killAt);
+        configData.put("killSwitch", killSwitchConfig);
 
         return configData;
     }

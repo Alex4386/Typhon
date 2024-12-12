@@ -315,6 +315,18 @@ public class TyphonBlueMapUtils {
     });
   }
 
+  public static void removeVolcanoVentMarker(VolcanoVent vent) {
+    runOnVolcanoVentMarker(vent, marker -> {
+      runOnMap(vent, map -> {
+        String markerSetID = getVolcanoMarkerSetID(vent.volcano);
+        MarkerSet set = map.getMarkerSets().get(markerSetID);
+        if (set != null) {
+          set.getMarkers().remove(getVolcanoVentMarkerID(vent));
+        }
+      });
+    });
+  }
+
   public static Vector2i getIconSize() {
     return new Vector2i(18, 18);
   }

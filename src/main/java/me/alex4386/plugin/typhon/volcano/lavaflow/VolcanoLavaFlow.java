@@ -75,8 +75,19 @@ public class VolcanoLavaFlow implements Listener {
     private long rerenderInterval = 1000 * 60 * 5;
     private Set<Chunk> rerenderTargets = new HashSet<>();
 
-    private Set<Block> lavaHaventSpreadEnoughYet = new HashSet<>();
-    private double spreadEnoughThreshold = 10;
+    private Map<Block, Long> lavaHaventSpreadEnoughYet = new HashMap<>();
+    private long spreadEnoughCacheLifeTime = 1000 * 10;
+
+    private double getSpreadEnoughThreshold() {
+        double runniness = 1 - Math.min(1, Math.max(this.getLavaStickiness(), 0));
+        double multiplier = 1 + runniness;
+
+        if (this.vent.longestFlowLength < 100) {
+            return Math.max(5, Math.sqrt(this.vent.longestFlowLength / 100) * 10) * multiplier;
+        }
+
+        return Math.min(Math.max(10, this.vent.longestFlowLength / 10), 20) * multiplier;
+    }
 
     // core methods
     public VolcanoLavaFlow(VolcanoVent vent) {
@@ -91,7 +102,9 @@ public class VolcanoLavaFlow implements Listener {
                 lavaFlowableBlocks = (int) (Math.PI * Math.pow(Math.min(5, Math.max(2, this.vent.craterRadius)), 2));
             }
 
-            int influxRate =  Math.max(1, Math.min((int) (lavaFlowableBlocks * Math.random()), 100));
+            double absoluteMax = Math.min(100, Math.pow(vent.craterRadius, 2) * Math.PI);
+
+            int influxRate = (int) Math.max(1, Math.min((int) (lavaFlowableBlocks * (0.5 + Math.random())), absoluteMax));
             return influxRate;
         }
 
@@ -721,7 +734,16 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public boolean hasLavaSpreadEnough(Block block) {
-        return !this.lavaHaventSpreadEnoughYet.contains(block);
+        Long result = this.lavaHaventSpreadEnoughYet.get(block);
+        if (result == null) return true;
+
+        // check if the cache has been expired
+        if (System.currentTimeMillis() - result > spreadEnoughCacheLifeTime) {
+            this.lavaHaventSpreadEnoughYet.remove(block);
+            return true;
+        }
+
+        return false;
     }
 
     public boolean isLavaRegistered(Block block) {
@@ -993,12 +1015,12 @@ public class VolcanoLavaFlow implements Listener {
 
         // this is an initial lava block
         if (source == block && fromBlock == block) {
-            this.lavaHaventSpreadEnoughYet.add(block);
-        } else if (this.lavaHaventSpreadEnoughYet.contains(source)) {
+            this.lavaHaventSpreadEnoughYet.put(block, System.currentTimeMillis());
+        } else if (this.lavaHaventSpreadEnoughYet.get(source) != null) {
             // check the distance from the source
             double distanceFromSource = TyphonUtils.getTwoDimensionalDistance(source.getLocation(), block.getLocation());
-            if (distanceFromSource > this.spreadEnoughThreshold) {
-                this.lavaHaventSpreadEnoughYet.remove(block);
+            if (distanceFromSource > this.getSpreadEnoughThreshold()) {
+                this.lavaHaventSpreadEnoughYet.remove(source);
             }
         }
 
@@ -1196,9 +1218,12 @@ public class VolcanoLavaFlow implements Listener {
         Location targetLocation = location.clone().add(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
 
         Block block = TyphonUtils.getHighestRocklikes(targetLocation);
-        if (VolcanoComposition.isVolcanicRock(block.getType())) {
-            this.addRootlessCone(targetLocation);
-            return true;
+
+        if (block.getY() < (this.vent.getSummitBlock().getY() - ((radius - this.vent.getRadius()) / 2.3))) {
+            if (VolcanoComposition.isVolcanicRock(block.getType())) {
+                this.addRootlessCone(targetLocation);
+                return true;
+            }
         }
 
         return false;
@@ -1216,7 +1241,7 @@ public class VolcanoLavaFlow implements Listener {
     public void addRootlessCone(Location location) {
         Block baseBlock = TyphonUtils.getHighestRocklikes(location);
 
-        int height = 3 + (int) (Math.pow(Math.random(), 2) * 2);
+        int height = 3 + (int) (Math.pow(Math.random(), 2) * 4);
 
         double baseRaw = getRootlessConeRadius(height);
         int baseInt = (int) Math.ceil(baseRaw);
@@ -1233,14 +1258,28 @@ public class VolcanoLavaFlow implements Listener {
                     if (distance < height) limit = (int) Math.round(baseBlock.getY() + distance);
 
                     if (targetBlock.getY() > limit) {
+                        // flow lava on top of this block
+                        if (targetHeight == height) {
+                            if (targetBlock.getType().isAir() || targetBlock.getType() == Material.WATER) {
+                                if (Math.random() < 0.2) this.flowLava(targetBlock);
+                            }
+                        }
+
                         break;
                     }
+
                     if (targetBlock.getType().isAir() || targetBlock.getType() == Material.WATER) {
                         Material material = Math.random() < 0.5 ? VolcanoComposition.getBombRock(this.settings.silicateLevel,
                                     this.getDistanceRatio(targetBlock.getLocation())
                                 ) : VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel);
 
                         queueBlockUpdate(targetBlock, material, TyphonUtils.getBlockFaceUpdater(new Vector(x, 0, z)));
+                        if (y == height) {
+                            Block topBlock = targetBlock.getRelative(BlockFace.UP);
+                            if (topBlock.getType().isAir() || topBlock.getType() == Material.WATER) {
+                                if (Math.random() < 0.2) this.flowLava(topBlock);
+                            }
+                        }
                     }
                 }
             }
@@ -1259,6 +1298,28 @@ public class VolcanoLavaFlow implements Listener {
             VolcanoBomb bomb = this.vent.bombs.generateBomb(targetLocation);
             bomb.launchLocation = launchLocation;
             this.vent.bombs.launchSpecifiedBomb(bomb);
+        }
+
+        if (height >= 6) {
+            // small percentage of generating a vent
+            String name = "rootless_";
+            int i = 1;
+            while (this.getVolcano().subVents.containsKey(String.format(name + "%03d", i))) {
+                i++;
+            }
+
+            VolcanoVent vent = new VolcanoVent(
+                    this.getVolcano(),
+                    location,
+                    String.format(name + "%03d", i)
+            );
+            this.getVolcano().subVents.put(vent.getName(), vent);
+
+            vent.enableKillSwitch = true;
+            vent.killAt = System.currentTimeMillis() + 1000 * 60 * 15;
+            vent.erupt.setStyle(Math.random() > 0.3 ? VolcanoEruptStyle.STROMBOLIAN : VolcanoEruptStyle.HAWAIIAN);
+            vent.setRadius(height);
+            vent.start();
         }
     }
 
@@ -1627,6 +1688,13 @@ public class VolcanoLavaFlow implements Listener {
     private long prevFlowTime = -1;
 
     private void plumbLava() {
+        if (this.vent != null) {
+            if (this.vent.isKillSwitchActive()) {
+                this.vent.kill();
+                return;
+            }
+        }
+
         if (prevFlowTime < 0) {
             prevFlowTime = System.currentTimeMillis();
             return;
@@ -1781,8 +1849,10 @@ public class VolcanoLavaFlow implements Listener {
                             i += 30;
                             continue;
                         }
+                    } else {
+                        this.extendLava();
                     }
-
+                } else {
                     this.extendLava();
                 }
             }

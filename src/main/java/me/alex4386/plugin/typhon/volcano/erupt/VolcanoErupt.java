@@ -24,6 +24,9 @@ public class VolcanoErupt {
     }
 
     public void start() {
+        if (this.vent != null && this.vent.isKillSwitchActive())
+            return;
+
         if (this.erupting)
             return;
 
@@ -257,6 +260,9 @@ public class VolcanoErupt {
     }
 
     public void startFlowingLava() {
+        if (this.vent != null && this.vent.isKillSwitchActive())
+            return;
+
         this.vent.initialize();
         this.vent.setStatus(VolcanoVentStatus.ERUPTING);
         this.vent.lavaFlow.resetThisFlow();
@@ -264,6 +270,9 @@ public class VolcanoErupt {
     }
 
     public void stopFlowingLava() {
+        if (this.vent != null && this.vent.isKillSwitchActive())
+            return;
+
         vent.lavaFlow.settings.flowing = false;
         this.vent.setStatus((!this.vent.isExploding()) ? VolcanoVentStatus.MAJOR_ACTIVITY : this.vent.getStatus());
         this.vent.cool();
