@@ -596,7 +596,7 @@ public class VolcanoVent {
                     ventBlocks.sort((Block block1, Block block2) -> block1.getY() - block2.getY());
 
                     for (Block block : ventBlocks) {
-                        if (!this.lavaFlow.isLavaRegistered(block)) {
+                        if (this.lavaFlow.isLavaOKForFlow(block)) {
                             if (!selectedBlocks.contains(block)) {
                                 Block blockTop = TyphonUtils.getHighestRocklikes(block);
                                 selectedBlocks.add(blockTop);
@@ -617,7 +617,7 @@ public class VolcanoVent {
             for (Block block : ventBlocks) {
                 int y = block.getY();
 
-                if (y < minimumTolerantHeight && !this.lavaFlow.isLavaRegistered(block)) {
+                if (y < minimumTolerantHeight && !this.lavaFlow.isLavaOKForFlow(block)) {
                     if (Math.random() < 0.2f) continue;
                     if (!selectedBlocks.contains(block)) {
                         Block blockTop = TyphonUtils.getHighestRocklikes(block);

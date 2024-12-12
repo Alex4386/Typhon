@@ -75,6 +75,9 @@ public class VolcanoLavaFlow implements Listener {
     private long rerenderInterval = 1000 * 60 * 5;
     private Set<Chunk> rerenderTargets = new HashSet<>();
 
+    private Set<Block> lavaHaventSpreadEnoughYet = new HashSet<>();
+    private double spreadEnoughThreshold = 10;
+
     // core methods
     public VolcanoLavaFlow(VolcanoVent vent) {
         this.vent = vent;
@@ -713,6 +716,14 @@ public class VolcanoLavaFlow implements Listener {
         return this.getPillowLavaCoolData(block) != null;
     }
 
+    public boolean isLavaOKForFlow(Block block) {
+        return !this.isLavaRegistered(block) && this.hasLavaSpreadEnough(block);
+    }
+
+    public boolean hasLavaSpreadEnough(Block block) {
+        return !this.lavaHaventSpreadEnoughYet.contains(block);
+    }
+
     public boolean isLavaRegistered(Block block) {
         return this.isNormalLavaRegistered(block) || this.isPillowLavaRegistered(block);
     }
@@ -978,6 +989,17 @@ public class VolcanoLavaFlow implements Listener {
         if (ore != null) {
             Material oreified = this.oreifyMaterial(targetMaterial, ore);
             if (oreified != null) targetMaterial = oreified;
+        }
+
+        // this is an initial lava block
+        if (source == block && fromBlock == block) {
+            this.lavaHaventSpreadEnoughYet.add(block);
+        } else if (this.lavaHaventSpreadEnoughYet.contains(source)) {
+            // check the distance from the source
+            double distanceFromSource = TyphonUtils.getTwoDimensionalDistance(source.getLocation(), block.getLocation());
+            if (distanceFromSource > this.spreadEnoughThreshold) {
+                this.lavaHaventSpreadEnoughYet.remove(block);
+            }
         }
 
         if (!isUnderWater) {
