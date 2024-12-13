@@ -78,6 +78,8 @@ public class VolcanoLavaFlow implements Listener {
     private Map<Block, Long> lavaHaventSpreadEnoughYet = new HashMap<>();
     private long spreadEnoughCacheLifeTime = 1000 * 10;
 
+    private boolean isShuttingDown = false;
+
     private double getSpreadEnoughThreshold() {
         double runniness = 1 - Math.min(1, Math.max(this.getLavaStickiness(), 0));
         double multiplier = 1 + runniness;
@@ -373,6 +375,7 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void initialize() {
+        this.isShuttingDown = false;
         this.vent.volcano.logger.log(
                 VolcanoLogClass.LAVA_FLOW,
                 "Intializing VolcanoLavaFlow for vent " + vent.getName());
@@ -382,6 +385,8 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void shutdown() {
+        this.isShuttingDown = true;
+
         this.vent.volcano.logger.log(
                 VolcanoLogClass.LAVA_FLOW,
                 "Shutting down VolcanoLavaFlow for vent " + vent.getName());
@@ -1246,6 +1251,8 @@ public class VolcanoLavaFlow implements Listener {
         double baseRaw = getRootlessConeRadius(height);
         int baseInt = (int) Math.ceil(baseRaw);
 
+        boolean allowLavaFlow = !this.isShuttingDown;
+
         for (int x = -baseInt; x <= baseInt; x++) {
             for (int z = -baseInt; z <= baseInt; z++) {
                 double distance = Math.sqrt(x * x + z * z);
@@ -1261,7 +1268,7 @@ public class VolcanoLavaFlow implements Listener {
                         // flow lava on top of this block
                         if (targetHeight == height) {
                             if (targetBlock.getType().isAir() || targetBlock.getType() == Material.WATER) {
-                                if (Math.random() < 0.2) this.flowLava(targetBlock);
+                                if (allowLavaFlow && Math.random() < 0.2) this.flowLava(targetBlock);
                             }
                         }
 
@@ -1277,7 +1284,7 @@ public class VolcanoLavaFlow implements Listener {
                         if (y == height) {
                             Block topBlock = targetBlock.getRelative(BlockFace.UP);
                             if (topBlock.getType().isAir() || topBlock.getType() == Material.WATER) {
-                                if (Math.random() < 0.2) this.flowLava(topBlock);
+                                if (allowLavaFlow && Math.random() < 0.2) this.flowLava(topBlock);
                             }
                         }
                     }
