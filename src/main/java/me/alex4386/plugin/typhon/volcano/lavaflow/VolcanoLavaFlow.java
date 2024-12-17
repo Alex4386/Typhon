@@ -80,6 +80,8 @@ public class VolcanoLavaFlow implements Listener {
     private Map<Block, Long> lavaHaventSpreadEnoughYet = new HashMap<>();
     private long spreadEnoughCacheLifeTime = 1000 * 10;
 
+    private boolean isShuttingDown = false;
+
     private double getSpreadEnoughThreshold() {
         double runniness = 1 - Math.min(1, Math.max(this.getLavaStickiness(), 0));
         double multiplier = 1 + runniness;
@@ -375,6 +377,7 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void initialize() {
+        this.isShuttingDown = false;
         this.vent.volcano.logger.log(
                 VolcanoLogClass.LAVA_FLOW,
                 "Intializing VolcanoLavaFlow for vent " + vent.getName());
@@ -384,6 +387,8 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void shutdown() {
+        this.isShuttingDown = true;
+
         this.vent.volcano.logger.log(
                 VolcanoLogClass.LAVA_FLOW,
                 "Shutting down VolcanoLavaFlow for vent " + vent.getName());
@@ -1259,10 +1264,12 @@ public class VolcanoLavaFlow implements Listener {
     public void addRootlessCone(Location location) {
         Block baseBlock = TyphonUtils.getHighestRocklikes(location);
 
-        int height = 3 + (int) (Math.pow(Math.random(), 2) * 4);
+        int height = 3 + (int) (Math.pow(Math.random(), 2) * (4 + (Math.random()) * 5));
 
         double baseRaw = getRootlessConeRadius(height);
         int baseInt = (int) Math.ceil(baseRaw);
+
+        boolean allowLavaFlow = !this.isShuttingDown;
 
         for (int x = -baseInt; x <= baseInt; x++) {
             for (int z = -baseInt; z <= baseInt; z++) {
@@ -1279,7 +1286,7 @@ public class VolcanoLavaFlow implements Listener {
                         // flow lava on top of this block
                         if (targetHeight == height) {
                             if (targetBlock.getType().isAir() || targetBlock.getType() == Material.WATER) {
-                                if (Math.random() < 0.2) this.flowLava(targetBlock);
+                                if (allowLavaFlow && Math.random() < 0.2) this.flowLava(targetBlock);
                             }
                         }
 
@@ -1295,7 +1302,7 @@ public class VolcanoLavaFlow implements Listener {
                         if (y == height) {
                             Block topBlock = targetBlock.getRelative(BlockFace.UP);
                             if (topBlock.getType().isAir() || topBlock.getType() == Material.WATER) {
-                                if (Math.random() < 0.2) this.flowLava(topBlock);
+                                if (allowLavaFlow && Math.random() < 0.2) this.flowLava(topBlock);
                             }
                         }
                     }
@@ -1318,34 +1325,50 @@ public class VolcanoLavaFlow implements Listener {
             this.vent.bombs.launchSpecifiedBomb(bomb);
         }
 
-        if (height >= 6 && this.vent.isMainVent()) {
+        if (height >= 10 && this.vent.isMainVent()) {
             // check if it is too nearby existing vent
 
-            if (Math.random() < 0.6) return;
+            if (Math.random() < Math.pow(Math.min(12, height) - 10.0 / 2, 2)) {
+                return;
+            }
+
+            if (Math.random() < 0.9) return;
             VolcanoVent nearestVent = this.getVolcano().manager.getNearestVent(location);
             if (nearestVent != null && nearestVent.getTwoDimensionalDistance(location) < 50) return;
 
-            // small percentage of generating a vent
-            String name = "rootless_";
-            int i = 1;
-            while (this.getVolcano().subVents.containsKey(String.format(name + "%03d", i))) {
-                i++;
-            }
-
-            VolcanoVent vent = new VolcanoVent(
-                    this.getVolcano(),
-                    location,
-                    String.format(name + "%03d", i)
-            );
-            this.getVolcano().subVents.put(vent.getName(), vent);
-
-            vent.enableKillSwitch = true;
-            vent.killAt = System.currentTimeMillis() + (long) (1000 * 60 * (2 + (Math.random() * 3)));
-            vent.lavaFlow.settings.silicateLevel = this.settings.silicateLevel;
-            vent.erupt.setStyle(Math.random() > 0.3 ? VolcanoEruptStyle.STROMBOLIAN : VolcanoEruptStyle.HAWAIIAN);
-            vent.setRadius(height);
-            vent.start();
+            this.generateParasiticVent(baseBlock.getLocation(), "rootless", vent -> {
+                vent.setRadius(height);
+            });
         }
+    }
+
+    public VolcanoVent generateParasiticVent(Location location, String prefix, Consumer<VolcanoVent> setup) {
+        // small percentage of generating a vent
+        String name = prefix.isEmpty() ? "parasitic_" : prefix + "_";
+
+        int i = 1;
+        while (this.getVolcano().subVents.containsKey(String.format(name + "%03d", i))) {
+            i++;
+        }
+
+        VolcanoVent vent = new VolcanoVent(
+                this.getVolcano(),
+                location,
+                String.format(name + "%03d", i)
+        );
+        this.getVolcano().subVents.put(vent.getName(), vent);
+
+        vent.enableKillSwitch = true;
+        vent.killAt = System.currentTimeMillis() + (long) (1000 * 60 * (2 + (Math.random() * 3)));
+        vent.lavaFlow.settings.silicateLevel = this.settings.silicateLevel;
+        vent.erupt.setStyle(Math.random() > 0.3 ? VolcanoEruptStyle.STROMBOLIAN : VolcanoEruptStyle.HAWAIIAN);
+
+        if (setup != null) {
+            setup.accept(vent);
+        }
+
+        vent.start();
+        return vent;
     }
 
     public double getDistanceRatio(Location dest) {

@@ -165,7 +165,13 @@ public class VolcanoVent {
     public void kill() {
         volcano.logger.log(VolcanoLogClass.VENT, "Killing vent " + name+" due to kill switch.");
         this.shutdown();
+        this.quickCool();
         this.delete();
+    }
+
+    public void quickCool() {
+        this.bombs.shutdown();
+        this.lavaFlow.cooldownAll();
     }
 
     public void initialize() {

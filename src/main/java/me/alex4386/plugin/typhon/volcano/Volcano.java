@@ -218,8 +218,7 @@ public class Volcano implements Listener {
         List<VolcanoVent> vents = manager.getVents();
 
         for (VolcanoVent vent : vents) {
-            vent.lavaFlow.cooldownAll();
-            vent.bombs.shutdown();
+            vent.quickCool();
         }
     }
 
