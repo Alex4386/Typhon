@@ -661,14 +661,22 @@ public class VolcanoGeoThermal implements Listener {
           poisonousLevel = Math.max((int) (poisonousLevel * intensity), 1);
           livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.POISON, timespan, poisonousLevel));
 
-          EntityEquipment equipment = livingEntity.getEquipment();
-          this.doSOxDamage(equipment.getHelmet(), poisonousLevel);
-          this.doSOxDamage(equipment.getChestplate(), poisonousLevel);
-          this.doSOxDamage(equipment.getLeggings(), poisonousLevel);
-          this.doSOxDamage(equipment.getBoots(), poisonousLevel);
+          // the entity is not affected by poison, then we should damage the entity.
+          if (!livingEntity.hasPotionEffect(PotionEffectType.POISON) && !livingEntity.isInvulnerable()) {
+            int calculateDamageWithTimespan = (int) (poisonousLevel * 0.5 * (timespan / 20.0));
+            livingEntity.damage(calculateDamageWithTimespan);
+          }
 
-          this.doSOxDamage(equipment.getItemInMainHand(), poisonousLevel);
-          this.doSOxDamage(equipment.getItemInOffHand(), poisonousLevel);
+          EntityEquipment equipment = livingEntity.getEquipment();
+          if (equipment != null) {
+            this.doSOxDamage(equipment.getHelmet(), poisonousLevel);
+            this.doSOxDamage(equipment.getChestplate(), poisonousLevel);
+            this.doSOxDamage(equipment.getLeggings(), poisonousLevel);
+            this.doSOxDamage(equipment.getBoots(), poisonousLevel);
+
+            this.doSOxDamage(equipment.getItemInMainHand(), poisonousLevel);
+            this.doSOxDamage(equipment.getItemInOffHand(), poisonousLevel);
+          }
 
           if (poisonousLevel > 3) {
             if (Math.random() < ((double) (poisonousLevel - 3) / 2)) {
