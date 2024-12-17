@@ -280,7 +280,7 @@ public class VolcanoCommand {
                                                     volcano, player.getLocation(), name);
                                             vent.setType(VolcanoVentType.CRATER);
 
-                                            this.volcano.subVents.put(name, vent);
+                                            this.volcano.addVolcanoVent(vent);
                                             vent.initialize();
                                             msg.info("Vent " + vent.name + " has been created!");
                                         } else {
@@ -319,7 +319,8 @@ public class VolcanoCommand {
                                                 if (vent != null) {
                                                     vent.shutdown();
                                                     this.volcano.subVents.remove(vent.name);
-                                                    this.volcano.subVents.put(name, vent);
+
+                                                    this.volcano.addVolcanoVent(vent);
                                                     vent.initialize();
                                                     msg.info("Vent " + vent.name + " has been created!");
                                                 } else {

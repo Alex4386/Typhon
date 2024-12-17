@@ -255,6 +255,20 @@ public class TyphonBlueMapUtils {
     return volcanoMarkerSet;
   }
 
+  public static void addVolcanoVentOnMap(VolcanoVent vent) {
+    if (!TyphonBlueMapUtils.getBlueMapAvailable()) return;
+    runOnMap(vent, map -> {
+      TyphonPlugin.logger.log(VolcanoLogClass.BLUE_MAP, "Adding vent "+vent.getName()+" of "+vent.volcano.name+" on map.");
+
+      // get vent set
+      String markerSetID = getVolcanoMarkerSetID(vent.volcano);
+      MarkerSet set = map.getMarkerSets().get(markerSetID);
+      if (set != null) {
+        set.getMarkers().put(getVolcanoVentMarkerID(vent), getVolcanoVentMarker(vent));
+      }
+    });
+  }
+
 
   public static String getIconURLByStatus(VolcanoVent vent) {
     return getIconURLByStatus(vent.location.getWorld(), vent.getStatus());

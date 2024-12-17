@@ -198,8 +198,7 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runVolcanoGeoThermalCycle(VolcanoVent vent) {
-    double longestFlow = Math.max(vent.longestNormalLavaFlowLength, vent.getSummitBlock().getY() - vent.location.getWorld().getSeaLevel() * Math.sqrt(3));
-    double volcanoRange = (Math.PI * Math.pow(longestFlow, 2));
+    double volcanoRange = (Math.PI * Math.pow(vent.getBasinLength(), 2));
 
     double radius = 10;
     if (vent.getType() == VolcanoVentType.CRATER) {
@@ -326,7 +325,7 @@ public class VolcanoGeoThermal implements Listener {
                   radius,
                   (int) Math
                       .floor(
-                        vent.longestNormalLavaFlowLength));
+                        vent.getBasinLength()));
 
     return block;
   }

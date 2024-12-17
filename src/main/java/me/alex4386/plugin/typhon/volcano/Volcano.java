@@ -245,6 +245,14 @@ public class Volcano implements Listener {
         }
     }
 
+    public void addVolcanoVent(VolcanoVent vent) {
+        this.subVents.put(vent.name, vent);
+        this.trySave(true);
+
+        // make sure that this vent is now displayed on bluemap
+        TyphonBlueMapUtils.addVolcanoVentOnMap(vent);
+    }
+
     public boolean trySave() {
         return this.trySave(false);
     }

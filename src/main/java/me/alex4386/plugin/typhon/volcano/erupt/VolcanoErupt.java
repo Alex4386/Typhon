@@ -204,9 +204,10 @@ public class VolcanoErupt {
             }
 
             newVent.setType(type);
-            volcano.subVents.put(name, newVent);
+            newVent.name = name;
 
-            volcano.trySave(true);
+            volcano.addVolcanoVent(newVent);
+
             return newVent;
         } else {
             return null;

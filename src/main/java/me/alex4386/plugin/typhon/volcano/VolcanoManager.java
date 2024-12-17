@@ -352,7 +352,7 @@ public class VolcanoManager {
             vent.fissureAngle = Math.random() * 2 * Math.PI;
         }
 
-        volcano.subVents.put(vent.name, vent);
+        volcano.addVolcanoVent(vent);
         return vent;
     }
 

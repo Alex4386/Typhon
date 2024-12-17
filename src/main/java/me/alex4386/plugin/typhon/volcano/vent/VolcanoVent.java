@@ -121,6 +121,11 @@ public class VolcanoVent {
         return lowestCoreBlock;
     }
 
+    public double getBasinLength() {
+        double longestFlow = Math.max(this.longestNormalLavaFlowLength, (this.getSummitBlock().getY() - this.location.getWorld().getSeaLevel()) * Math.sqrt(3));
+        return Math.max(longestFlow, this.craterRadius);
+    }
+
     public void resetCurrentMetrics() {
         this.currentFlowLength = 0;
         this.currentNormalLavaFlowLength = 0;

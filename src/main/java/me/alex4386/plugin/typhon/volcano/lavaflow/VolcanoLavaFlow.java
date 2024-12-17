@@ -61,6 +61,8 @@ public class VolcanoLavaFlow implements Listener {
 
     public long lastQueueUpdates = 0;
 
+    private double rootlessConeProbability = (1.0 / 1000.0);
+
     private static Map<Chunk, Queue<Map.Entry<Block, Material>>> immediateBlockUpdateQueues = new HashMap<>();
 
     // temporary queue to store Block and Material to update
@@ -543,6 +545,10 @@ public class VolcanoLavaFlow implements Listener {
                     event.setCancelled(true);
                     return;
                 }
+            }
+
+            if (Math.random() < rootlessConeProbability) {
+                this.tryRootlessCone();
             }
 
             if (this.vent != null && !data.isBomb && data.source != null) {
@@ -1220,10 +1226,22 @@ public class VolcanoLavaFlow implements Listener {
         Block block = TyphonUtils.getHighestRocklikes(targetLocation);
 
         if (block.getY() < (this.vent.getSummitBlock().getY() - ((radius - this.vent.getRadius()) / 2.3))) {
-            if (VolcanoComposition.isVolcanicRock(block.getType())) {
-                this.addRootlessCone(targetLocation);
-                return true;
+            if (this.vent.erupt.isErupting()) {
+                if (VolcanoComposition.isVolcanicRock(block.getType())) {
+                    this.addRootlessCone(targetLocation);
+                    return true;
+                }
+            } else if (this.vent.lavaFlow.hasAnyLavaFlowing()){
+                // this is during the post-eruption lava flow,
+                // which is cooling of already erupted lava
+
+                Block topOfIt = block.getRelative(BlockFace.UP);
+                if (topOfIt.getType() == Material.LAVA && this.getLavaCoolData(topOfIt) != null) {
+                    this.addRootlessCone(targetLocation);
+                    return true;
+                }
             }
+
         }
 
         return false;
@@ -1851,9 +1869,9 @@ public class VolcanoLavaFlow implements Listener {
                         }
                     }
 
-                    if (Math.random() < 0.2) {
+                    if (Math.random() < rootlessConeProbability) {
                         if (tryRootlessCone()) {
-                            i += 30;
+                            i += 100;
                             continue;
                         }
                     } else {
