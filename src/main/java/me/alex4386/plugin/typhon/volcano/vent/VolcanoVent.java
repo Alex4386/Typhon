@@ -444,25 +444,26 @@ public class VolcanoVent {
     public double getHeatValue(Location loc) {
         double distance = this.getTwoDimensionalDistance(loc);
         double killZone = this.getRadius();
-        double pillowRatio = 0.5;
+        double pillowRatio = 0.2;
 
-        if (distance < killZone) {
+        if (distance <= killZone) {
             return 1;
         }
 
-        double deltaFromNormalLava = (this.longestFlowLength - this.longestNormalLavaFlowLength);
+        double basinLength = this.getBasinLength();
+        double deltaFromNormalLava = (this.longestFlowLength - basinLength);
 
-        double correctedLavaLength = this.longestNormalLavaFlowLength + (deltaFromNormalLava * pillowRatio);
+        double correctedLavaLength = basinLength + (deltaFromNormalLava * pillowRatio);
         double correctedDistance = distance;
 
-        if (correctedDistance > this.longestNormalLavaFlowLength) {
-            double delta = correctedDistance - this.longestNormalLavaFlowLength;
-            correctedDistance = this.longestNormalLavaFlowLength + (pillowRatio * delta);
+        if (correctedDistance > basinLength) {
+            double delta = correctedDistance - basinLength;
+            correctedDistance = basinLength + (pillowRatio * delta);
         }
 
         double converted = (correctedDistance - killZone) / (correctedLavaLength - killZone);
+
         if (converted >= 1) return 0;
-        
         double reversed = Math.max(1 - converted, 0); 
         
         return Math.pow(reversed, 1.5);

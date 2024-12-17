@@ -707,6 +707,8 @@ public class TyphonUtils {
             case DROWNED:
             case PHANTOM:
             case SKELETON_HORSE:
+            case SPIDER:
+            case CAVE_SPIDER:
                 return true;
         }
 

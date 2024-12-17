@@ -663,7 +663,7 @@ public class VolcanoGeoThermal implements Listener {
 
           // the entity is not affected by poison, then we should damage the entity.
           if (TyphonUtils.isNotAffectedByPoisonEffect(entity.getType())) {
-            int calculateDamageWithTimespan = (int) (poisonousLevel * (timespan / 5.0));
+            int calculateDamageWithTimespan = (int) (poisonousLevel * (timespan / 20.0));
             livingEntity.damage(calculateDamageWithTimespan);
           }
 
