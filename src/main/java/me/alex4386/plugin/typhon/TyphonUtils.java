@@ -12,6 +12,7 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Directional;
 import org.bukkit.block.data.Orientable;
 import org.bukkit.block.data.Waterlogged;
+import org.bukkit.entity.EntityType;
 import org.bukkit.util.Vector;
 import org.json.simple.JSONObject;
 
@@ -689,6 +690,27 @@ public class TyphonUtils {
                 }
             }
         }
+    }
+
+    public static boolean isNotAffectedByPoisonEffect(EntityType entityType) {
+        switch (entityType) {
+            case ZOMBIE:
+            case ZOMBIE_HORSE:
+            case ZOMBIE_VILLAGER:
+            case CREEPER:
+            case SKELETON:
+            case WITHER:
+            case WITHER_SKELETON:
+            case ZOMBIFIED_PIGLIN:
+            case HUSK:
+            case STRAY:
+            case DROWNED:
+            case PHANTOM:
+            case SKELETON_HORSE:
+                return true;
+        }
+
+        return false;
     }
 
     public static void createRisingSteam(Location location, int radius, int count) {

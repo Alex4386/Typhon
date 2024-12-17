@@ -361,7 +361,7 @@ public class VolcanoGeoThermal implements Listener {
 
     if (scaleFactor >= 0.1) {
       letOffSteam = true;
-      runPoison = Math.random() < scaleFactor;
+      runPoison = Math.random() < Math.max(scaleFactor, Math.sqrt(scaleFactor) * Math.pow(Math.min(1, heatValue / 0.85), 2));
     } else if (scaleFactor >= 0.04) {
       letOffSteam = (Math.random() < 0.5);
       runPoison = (Math.random() < scaleFactor);
@@ -662,8 +662,8 @@ public class VolcanoGeoThermal implements Listener {
           livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.POISON, timespan, poisonousLevel));
 
           // the entity is not affected by poison, then we should damage the entity.
-          if (!livingEntity.hasPotionEffect(PotionEffectType.POISON) && !livingEntity.isInvulnerable()) {
-            int calculateDamageWithTimespan = (int) (poisonousLevel * 0.5 * (timespan / 20.0));
+          if (TyphonUtils.isNotAffectedByPoisonEffect(entity.getType())) {
+            int calculateDamageWithTimespan = (int) (poisonousLevel * (timespan / 5.0));
             livingEntity.damage(calculateDamageWithTimespan);
           }
 

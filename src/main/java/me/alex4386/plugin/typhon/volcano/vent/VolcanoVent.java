@@ -444,18 +444,12 @@ public class VolcanoVent {
     public double getHeatValue(Location loc) {
         double distance = this.getTwoDimensionalDistance(loc);
         double killZone = this.getRadius();
-
-        boolean isInSea = distance <= this.longestNormalLavaFlowLength;
-        double pillowRatio = 0.2;
-
-        if (!isInSea) {
-            isInSea = loc.getWorld().getHighestBlockAt(loc).getY() <= loc.getWorld().getSeaLevel() && loc.getBlock().getType() == Material.WATER;
-        }
+        double pillowRatio = 0.5;
 
         if (distance < killZone) {
-            return (isInSea ? pillowRatio : 1);
+            return 1;
         }
-        
+
         double deltaFromNormalLava = (this.longestFlowLength - this.longestNormalLavaFlowLength);
 
         double correctedLavaLength = this.longestNormalLavaFlowLength + (deltaFromNormalLava * pillowRatio);
