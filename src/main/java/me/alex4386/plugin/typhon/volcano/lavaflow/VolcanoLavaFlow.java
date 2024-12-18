@@ -608,12 +608,14 @@ public class VolcanoLavaFlow implements Listener {
                     if (!this.vent.isInVent(toBlock.getLocation())) {
                         if (data.flowLimit >= 0) {
                             if (TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation()) > data.flowLimit) {
-//                                vent.volcano.logger.log(
+                                if (vent != null && !vent.isInVent(toBlock.getLocation())) {
+//                                  vent.volcano.logger.log(
 //                                        VolcanoLogClass.LAVA_FLOW,
 //                                        "flowLimit match! flowLimit: "+data.flowLimit
-//                                );
-                                event.setCancelled(true);
-                                return;
+//                                  );
+                                    event.setCancelled(true);
+                                    return;
+                                }
                             }
                         }
                     }
