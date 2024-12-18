@@ -557,7 +557,6 @@ public class VolcanoLavaFlow implements Listener {
                 this.tryRootlessCone();
             }
 
-            toBlock.getWorld().setBiome(event.getToBlock().getLocation(), Biome.BASALT_DELTAS);
             if (this.vent != null && !data.isBomb && data.source != null) {
                 double distance;
                 distance =
@@ -1220,7 +1219,7 @@ public class VolcanoLavaFlow implements Listener {
         if (this.vent.erupt.getStyle() != VolcanoEruptStyle.HAWAIIAN)
             return false;
 
-        double radius = 100 + (Math.random() * (this.vent.longestNormalLavaFlowLength - 100));
+        double radius = 70 + (Math.random() * (this.vent.longestNormalLavaFlowLength - 70));
         double angle = Math.random() * Math.PI * 2;
 
         if (this.vent.isCaldera()) {
@@ -1268,7 +1267,12 @@ public class VolcanoLavaFlow implements Listener {
     public void addRootlessCone(Location location) {
         Block baseBlock = TyphonUtils.getHighestRocklikes(location);
 
-        int height = 3 + (int) (Math.pow(Math.random(), 2) * (4 + (Math.random()) * 5));
+        int height = 3 + (int) (Math.pow(Math.random(), 1.5) * (1 + (Math.random()) * 4));
+        boolean tryParasiticVent = height >= 6 && this.vent.isMainVent() && Math.random() < 0.5;
+
+        if (tryParasiticVent) {
+            height = 10;
+        }
 
         double baseRaw = getRootlessConeRadius(height);
         int baseInt = (int) Math.ceil(baseRaw);
@@ -1286,15 +1290,17 @@ public class VolcanoLavaFlow implements Listener {
                     int limit = baseBlock.getY() + height;
                     if (distance < height) limit = (int) Math.round(baseBlock.getY() + distance);
 
-                    if (targetBlock.getY() > limit) {
-                        // flow lava on top of this block
-                        if (targetHeight == height) {
-                            if (targetBlock.getType().isAir() || targetBlock.getType() == Material.WATER) {
-                                if (allowLavaFlow && Math.random() < 0.2) this.flowLava(targetBlock);
+                    if (!tryParasiticVent) {
+                        if (targetBlock.getY() > limit) {
+                            // flow lava on top of this block
+                            if (targetHeight == height) {
+                                if (targetBlock.getType().isAir() || targetBlock.getType() == Material.WATER) {
+                                    if (allowLavaFlow && Math.random() < 0.2) this.flowLava(targetBlock);
+                                }
                             }
-                        }
 
-                        break;
+                            break;
+                        }
                     }
 
                     if (targetBlock.getType().isAir() || targetBlock.getType() == Material.WATER) {
@@ -1329,19 +1335,16 @@ public class VolcanoLavaFlow implements Listener {
             this.vent.bombs.launchSpecifiedBomb(bomb);
         }
 
-        if (height >= 10 && this.vent.isMainVent()) {
+        if (tryParasiticVent) {
             // check if it is too nearby existing vent
-
-            if (Math.random() < Math.pow(Math.min(12, height) - 10.0 / 2, 2)) {
-                return;
-            }
 
             if (Math.random() < 0.9) return;
             VolcanoVent nearestVent = this.getVolcano().manager.getNearestVent(location);
             if (nearestVent != null && nearestVent.getTwoDimensionalDistance(location) < 50) return;
 
+            int finalHeight = height;
             this.generateParasiticVent(baseBlock.getLocation(), "rootless", vent -> {
-                vent.setRadius(height);
+                vent.setRadius(finalHeight);
             });
         }
     }

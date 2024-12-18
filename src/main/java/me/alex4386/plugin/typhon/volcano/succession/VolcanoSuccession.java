@@ -185,14 +185,16 @@ public class VolcanoSuccession {
     }
 
     public void returnToNormalBiome(Block block) {
+//        if (block.getY() > snowYAxis) {
+//            block.getWorld().setBiome(block.getLocation(), Biome.GROVE);
+//        } else if (block.getY() > peakThreshold) {
+//            block.getWorld().setBiome(block.getLocation(), Biome.JAGGED_PEAKS);
+//        } else {
+//            block.getWorld().setBiome(block.getLocation(), Biome.MEADOW);
+//        }
+//
+//        block.getWorld().refreshChunk(block.getChunk().getX(), block.getChunk().getZ());
 
-        if (block.getY() > snowYAxis) {
-            block.getWorld().setBiome(block.getLocation(), Biome.GROVE);
-        } else if (block.getY() > peakThreshold) {
-            block.getWorld().setBiome(block.getLocation(), Biome.JAGGED_PEAKS);
-        } else {
-            block.getWorld().setBiome(block.getLocation(), Biome.MEADOW);
-        }
     }
 
     public void runSuccession(Block block) {
@@ -432,7 +434,6 @@ public class VolcanoSuccession {
         returnToNormalBiome(block);
 
         VolcanoVent vent = this.volcano.manager.getNearestVent(block);
-
         for (Block rockRange : treeRange) {
             double distance = TyphonUtils.getTwoDimensionalDistance(
                 rockRange.getLocation(),
