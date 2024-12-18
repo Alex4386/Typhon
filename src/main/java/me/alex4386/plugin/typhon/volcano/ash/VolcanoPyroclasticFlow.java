@@ -246,6 +246,12 @@ public class VolcanoPyroclasticFlow {
 
         this.ash.vent.getVolcano().logger.debug(VolcanoLogClass.ASH, "ash trail @ "+TyphonUtils.blockLocationTostring(prevLoc.getBlock())+" -> "+TyphonUtils.blockLocationTostring(this.location.getBlock()));
 
+        if (this.getPercentage() > 0.95) {
+            if (Math.random() < 0.1) {
+                this.radius--;
+            }
+        }
+
         isFinished = this.finishConditionCheck();
         if (isFinished) {
             TyphonScheduler.runDelayed(this.location.getChunk(), () -> {
@@ -254,13 +260,23 @@ public class VolcanoPyroclasticFlow {
         }
     }
 
+    public double getMaxDistance() {
+        return Math.max(this.ash.vent.getBasinLength() + 20, this.ash.maxTravelDistance());
+    }
+
+    public double getPercentage() {
+        double distance = this.ash.vent.getTwoDimensionalDistance(this.location);
+        double maxDistance = this.getMaxDistance();
+
+        return distance / maxDistance;
+    }
 
     public boolean finishConditionCheck() {
         if (isFinished) return true;
         if (life < 0) return true;
 
         double distance = this.ash.vent.getTwoDimensionalDistance(this.location);
-        double maxDistance = Math.max(this.ash.vent.longestNormalLavaFlowLength + 20, this.ash.maxTravelDistance());
+        double maxDistance = this.getMaxDistance();
 
         int delta = (int) (Math.pow(Math.random(), 2) * 50);
 
