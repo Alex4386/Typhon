@@ -176,12 +176,12 @@ public class VolcanoGeoThermal implements Listener {
     }
 
     double cyclesPerTick = (double) 20.0 / geoThermalUpdateRate;
-    double maxCount = Math.min(Math.max(1, circumference / 50), 100 / cyclesPerTick);
+    double maxCount = Math.min(Math.max(1, circumference / 5), 1000 / cyclesPerTick);
     return maxCount;
   }
 
   public void runCraterGeoThermalCycle(VolcanoVent vent) {
-    double thermalScale = Math.pow(vent.getStatus().getScaleFactor(), 1.5);
+    double thermalScale = Math.pow(vent.getStatus().getScaleFactor(), 1.1);
     double maxCount = this.getCraterCycleCount(vent);
 
     double cycleCount = thermalScale * maxCount * Math.random();
@@ -659,7 +659,18 @@ public class VolcanoGeoThermal implements Listener {
 
         if (poisonousLevel > 0) {
           poisonousLevel = Math.max((int) (poisonousLevel * intensity), 1);
-          livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.POISON, timespan, poisonousLevel));
+
+          // check if there is existing poison effect
+          if (livingEntity.hasPotionEffect(PotionEffectType.POISON)) {
+              PotionEffect poisonEffect = livingEntity.getPotionEffect(PotionEffectType.POISON);
+              if (poisonEffect != null) {
+                int newPoisonLevel = Math.max(poisonEffect.getAmplifier(), poisonousLevel);
+                int newTimespan = poisonEffect.getDuration() + timespan;
+                livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.POISON, newTimespan, newPoisonLevel));
+              }
+          } else {
+              livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.POISON, timespan, poisonousLevel));
+          }
 
           // the entity is not affected by poison, then we should damage the entity.
           if (TyphonUtils.isNotAffectedByPoisonEffect(entity.getType())) {
