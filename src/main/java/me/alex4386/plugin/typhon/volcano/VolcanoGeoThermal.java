@@ -11,6 +11,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 import org.bukkit.*;
+import org.bukkit.block.Biome;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.enchantments.Enchantment;
@@ -101,13 +102,15 @@ public class VolcanoGeoThermal implements Listener {
         }
 
         letOffSteam = true;
-        runPoison = Math.random() < scaleFactor;
+        runPoison = Math.random() < Math.sqrt(scaleFactor);
       }
     } else if (scaleFactor >= 0.04) {
       this.burnNearbyEntities(targetLoc, 1);
     
-      letOffSteam = (Math.random() < 0.5);
-      runPoison = (Math.random() < scaleFactor);
+      letOffSteam = (Math.random() < (scaleFactor * 10));
+      if (letOffSteam) {
+        runPoison = Math.random() < Math.pow(scaleFactor, 0.8);
+      }
     } else if (vent.getStatus() == VolcanoVentStatus.EXTINCT) {
       return;
     }
@@ -181,7 +184,7 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runCraterGeoThermalCycle(VolcanoVent vent) {
-    double thermalScale = Math.pow(vent.getStatus().getScaleFactor(), 1.1);
+    double thermalScale = Math.pow(vent.getStatus().getScaleFactor(), 2);
     double maxCount = this.getCraterCycleCount(vent);
 
     double cycleCount = thermalScale * maxCount * Math.random();
@@ -359,12 +362,17 @@ public class VolcanoGeoThermal implements Listener {
     boolean letOffSteam = false;
     boolean runPoison = false;
 
+    boolean backToNormalBiome = false;
+
     if (scaleFactor >= 0.1) {
       letOffSteam = true;
       runPoison = Math.random() < Math.max(scaleFactor, Math.sqrt(scaleFactor) * Math.pow(Math.min(1, heatValue / 0.85), 2));
     } else if (scaleFactor >= 0.04) {
       letOffSteam = (Math.random() < 0.5);
       runPoison = (Math.random() < scaleFactor);
+      backToNormalBiome = true;
+    } else {
+      backToNormalBiome = true;
     }
 
     if (Math.random() < heatValue) {
@@ -415,6 +423,12 @@ public class VolcanoGeoThermal implements Listener {
             }
           }
         }
+      }
+    }
+
+    if (backToNormalBiome) {
+      if (isTop) {
+        this.volcano.succession.returnToNormalBiome(block);
       }
     }
   }

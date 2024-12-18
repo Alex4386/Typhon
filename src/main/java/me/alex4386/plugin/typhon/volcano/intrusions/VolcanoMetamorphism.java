@@ -64,7 +64,11 @@ public class VolcanoMetamorphism {
             }
             
             if (typeOfDirt) {
-                material = Material.COARSE_DIRT;
+                if (block.getType() == Material.COARSE_DIRT) {
+                    material = Material.STONE;
+                } else {
+                    material = Material.COARSE_DIRT;
+                }
             } else if (blockTypeName.contains("cobblestone") || blockTypeName.contains("gravel") || blockTypeName.contains("infested")) {
                 if (blockTypeName.contains("infested")) {
                     block.getWorld().playSound(block.getLocation(), Sound.ENTITY_SILVERFISH_DEATH, 1f, 0f);
@@ -80,6 +84,10 @@ public class VolcanoMetamorphism {
             } else {
                 return;
             }
+        }
+
+        if (material == Material.STONE) {
+            material = VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel);
         }
 
         vent.lavaFlow.queueBlockUpdate(block, material);

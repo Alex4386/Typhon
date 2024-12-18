@@ -30,7 +30,9 @@ public class VolcanoSuccession {
     boolean isEnabled = true;
 
     double cyclesPerTick = 1;
-    
+    public int snowYAxis = 170;
+    public int peakThreshold = 220;
+
     public VolcanoSuccession(Volcano volcano) {
         this.volcano = volcano;
     }
@@ -182,6 +184,17 @@ public class VolcanoSuccession {
         return shouldCheckHeat;
     }
 
+    public void returnToNormalBiome(Block block) {
+
+        if (block.getY() > snowYAxis) {
+            block.getWorld().setBiome(block.getLocation(), Biome.GROVE);
+        } else if (block.getY() > peakThreshold) {
+            block.getWorld().setBiome(block.getLocation(), Biome.JAGGED_PEAKS);
+        } else {
+            block.getWorld().setBiome(block.getLocation(), Biome.MEADOW);
+        }
+    }
+
     public void runSuccession(Block block) {
         boolean isDebug = false;
 
@@ -223,22 +236,26 @@ public class VolcanoSuccession {
                     if (!block.getWorld().isClearWeather()) growProbability += 0.3;
 
                     if (Math.random() < growProbability) {
-                        boolean treeGenerated = createTree(targetBlock);
-                        if (isDebug) this.volcano.logger.log(
-                                VolcanoLogClass.SUCCESSION,
-                                "Creating Tree on block "+TyphonUtils.blockLocationTostring(block)+" / result: "+treeGenerated);
+                        int yAxis = targetBlock.getY();
+                        if (yAxis < snowYAxis) {
+                            boolean treeGenerated = createTree(targetBlock);
+                            if (isDebug) this.volcano.logger.log(
+                                    VolcanoLogClass.SUCCESSION,
+                                    "Creating Tree on block "+TyphonUtils.blockLocationTostring(block)+" / result: "+treeGenerated);
 
-                        if (treeGenerated) {
-                            return;
-                        }
-
-                        // tree can not grow if heatValue is high enough,
-                        // in that case, grass should be generated instead.
-                        if (shouldCheckHeat(block)) {
-                            if (heatValue > 0.6) {
-                                targetBlock.applyBoneMeal(BlockFace.UP);
-                                spreadSoil(targetBlock);
+                            if (treeGenerated) {
                                 return;
+                            }
+                        } else if (yAxis < peakThreshold) {
+
+                            // tree can not grow if heatValue is high enough,
+                            // in that case, grass should be generated instead.
+                            if (shouldCheckHeat(block)) {
+                                if (heatValue > 0.6) {
+                                    targetBlock.applyBoneMeal(BlockFace.UP);
+                                    spreadSoil(targetBlock);
+                                    return;
+                                }
                             }
                         }
                     }
@@ -392,7 +409,6 @@ public class VolcanoSuccession {
             case COBBLESTONE_STAIRS:
             case COBBLESTONE_WALL:
             case NETHERRACK:
-            case TUFF:
             case BLACKSTONE:
                 return true;
         }
@@ -413,6 +429,9 @@ public class VolcanoSuccession {
     public void spreadSoil(Block block, int spreadRange, boolean withExtension) {
         int extension = (withExtension ? spreadRange / 3 : 0);
         List<Block> treeRange = VolcanoMath.getCircle(block, spreadRange + extension);
+        returnToNormalBiome(block);
+
+        VolcanoVent vent = this.volcano.manager.getNearestVent(block);
 
         for (Block rockRange : treeRange) {
             double distance = TyphonUtils.getTwoDimensionalDistance(
@@ -426,6 +445,10 @@ public class VolcanoSuccession {
             }
 
             if (probability == 1.0 || Math.random() < probability) {
+                if (vent.isInVent(rockRange.getLocation())) {
+                    continue;
+                }
+
                 runSoilGeneration(rockRange);
             }
         }

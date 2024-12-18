@@ -446,8 +446,9 @@ public class VolcanoVent {
         double killZone = this.getRadius();
         double pillowRatio = 0.2;
 
+        double multiplier = this.status.getScaleFactor() <= VolcanoVentStatus.DORMANT.getScaleFactor() ? Math.sqrt(this.status.getScaleFactor()) : 1;
         if (distance <= killZone) {
-            return 1;
+            return multiplier;
         }
 
         double basinLength = this.getBasinLength();
@@ -466,7 +467,7 @@ public class VolcanoVent {
         if (converted >= 1) return 0;
         double reversed = Math.max(1 - converted, 0); 
         
-        return Math.pow(reversed, 1.5);
+        return Math.pow(reversed, 1.5) * multiplier;
     }
 
     public int getRadius() {

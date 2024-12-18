@@ -10,6 +10,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
 import org.bukkit.*;
+import org.bukkit.block.Biome;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
@@ -556,6 +557,7 @@ public class VolcanoLavaFlow implements Listener {
                 this.tryRootlessCone();
             }
 
+            toBlock.getWorld().setBiome(event.getToBlock().getLocation(), Biome.BASALT_DELTAS);
             if (this.vent != null && !data.isBomb && data.source != null) {
                 double distance;
                 distance =
