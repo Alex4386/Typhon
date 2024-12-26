@@ -1218,6 +1218,8 @@ public class VolcanoLavaFlow implements Listener {
 
         int threshold = Math.max(70, this.vent.getRadius() + 30);
         double max = this.vent.getBasinLength() + 10;
+
+        max *= (0.2 * Math.random()) + 0.8;
         if (max < threshold) return false;
 
         double distanceRatio = Math.pow(1.0 - Math.random(), 2);
@@ -1306,7 +1308,7 @@ public class VolcanoLavaFlow implements Listener {
                     }
 
                     if (targetBlock.getType().isAir() || targetBlock.getType() == Material.WATER) {
-                        Material material = Math.random() < 0.5 ? VolcanoComposition.getBombRock(this.settings.silicateLevel,
+                        Material material = Math.random() < 0.8 ? VolcanoComposition.getBombRock(this.settings.silicateLevel,
                                     this.getDistanceRatio(targetBlock.getLocation())
                                 ) : VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel);
 
@@ -1314,7 +1316,7 @@ public class VolcanoLavaFlow implements Listener {
                         if (y == height) {
                             Block topBlock = targetBlock.getRelative(BlockFace.UP);
                             if (topBlock.getType().isAir() || topBlock.getType() == Material.WATER) {
-                                if (allowLavaFlow && Math.random() < 0.2) this.flowLava(topBlock);
+                                if (allowLavaFlow && Math.random() < 0.2) this.flowLavaFromBomb(topBlock, height + 5);
                             }
                         }
                     }
@@ -1370,7 +1372,7 @@ public class VolcanoLavaFlow implements Listener {
         vent.enableKillSwitch = true;
         vent.killAt = System.currentTimeMillis() + (long) (1000 * 60 * (2 + (Math.random() * 3)));
         vent.lavaFlow.settings.silicateLevel = this.settings.silicateLevel;
-        vent.erupt.setStyle(Math.random() > 0.3 ? VolcanoEruptStyle.STROMBOLIAN : VolcanoEruptStyle.HAWAIIAN);
+        vent.erupt.setStyle(VolcanoEruptStyle.STROMBOLIAN);
 
         if (setup != null) {
             setup.accept(vent);
