@@ -1222,7 +1222,7 @@ public class VolcanoLavaFlow implements Listener {
         max *= (0.2 * Math.random()) + 0.8;
         if (max < threshold) return false;
 
-        double distanceRatio = Math.pow(1.0 - Math.random(), 2);
+        double distanceRatio = 1.0 - Math.pow(Math.random(), 2);
         double radius = threshold + (distanceRatio * (max - threshold));
         double angle = Math.random() * Math.PI * 2;
 
