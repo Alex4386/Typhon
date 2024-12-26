@@ -144,7 +144,7 @@ public class VolcanoSuccession {
 
     public void runSuccession(VolcanoVent vent) {
         Block coreBlock = vent.getCoreBlock();
-        double longestFlow = Math.max(vent.longestNormalLavaFlowLength, vent.getSummitBlock().getY() - vent.location.getWorld().getSeaLevel() * Math.sqrt(3));
+        double longestFlow = vent.getBasinLength();
 
         if (Math.random() < 0.2) {
             longestFlow = Math.max(vent.longestNormalLavaFlowLength, vent.longestFlowLength);

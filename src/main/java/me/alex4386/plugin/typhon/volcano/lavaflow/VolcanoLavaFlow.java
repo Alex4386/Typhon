@@ -1210,16 +1210,18 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public boolean tryRootlessCone() {
-        // check the volcano has grown big enough (normalLavaLength >= 100)
-        if (this.vent.longestNormalLavaFlowLength < 100) return false;
-
         // check if the lava sillicalevel isn't too high
         if (this.settings.silicateLevel > 0.53) return false;
 
         if (this.vent.erupt.getStyle() != VolcanoEruptStyle.HAWAIIAN)
             return false;
 
-        double radius = 70 + (Math.random() * (this.vent.longestNormalLavaFlowLength - 70));
+        int threshold = Math.max(70, this.vent.getRadius() + 30);
+        double max = this.vent.getBasinLength() + 10;
+        if (max < threshold) return false;
+
+        double distanceRatio = Math.pow(1.0 - Math.random(), 2);
+        double radius = threshold + (distanceRatio * (max - threshold));
         double angle = Math.random() * Math.PI * 2;
 
         if (this.vent.isCaldera()) {
