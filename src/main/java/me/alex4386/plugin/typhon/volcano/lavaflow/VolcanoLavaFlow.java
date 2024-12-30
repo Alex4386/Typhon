@@ -1289,12 +1289,17 @@ public class VolcanoLavaFlow implements Listener {
         int baseInt = (int) Math.ceil(baseRaw);
 
         boolean allowLavaFlow = !this.isShuttingDown;
+        int summitThreshold = this.vent.getSummitBlock().getY() - 10;
 
         // get circle around the base block
         List<Block> craterBlock = VolcanoMath.getCircle(baseBlock, height);
         double heightSum = 0;
         for (Block block : craterBlock) {
             Block highestBlock = TyphonUtils.getHighestRocklikes(block);
+            if (highestBlock.getY() + height > summitThreshold) {
+                return;
+            }
+
             heightSum += highestBlock.getY();
         }
 
