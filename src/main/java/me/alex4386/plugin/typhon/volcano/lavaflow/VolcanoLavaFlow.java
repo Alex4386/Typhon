@@ -1304,11 +1304,16 @@ public class VolcanoLavaFlow implements Listener {
         }
 
         double averageHeight = heightSum / craterBlock.size();
+        int realHeight = (int) Math.round(averageHeight - baseBlock.getY());
 
+        if (realHeight < 2) {
+
+            return;
+        }
         for (int x = -baseInt; x <= baseInt; x++) {
             for (int z = -baseInt; z <= baseInt; z++) {
                 double distance = Math.sqrt(x * x + z * z);
-                int targetHeight = rootlessConeHeight(height, distance);
+                int targetHeight = rootlessConeHeight(realHeight, distance);
                 Block baseBlockAt = TyphonUtils.getHighestRocklikes(baseBlock.getRelative(x, 0, z));
 
                 for (int y = 1; y <= targetHeight; y++) {
