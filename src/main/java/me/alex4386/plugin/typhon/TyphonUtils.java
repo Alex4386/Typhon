@@ -722,7 +722,13 @@ public class TyphonUtils {
     public static void createRisingSteam(Location location, int radius, int count, boolean mute) {
         Particle type = Particle.CLOUD;
 
-        if (location.getBlock().getType() == Material.WATER || location.getBlock().getRelative(BlockFace.UP).getType() == Material.WATER) {
+        Block upBlock = location.getBlock().getRelative(BlockFace.UP);
+        Block upperUpBlock = upBlock.getRelative(BlockFace.UP);
+        if (
+                location.getBlock().getType() == Material.WATER || location.getBlock().getType() == Material.BUBBLE_COLUMN ||
+                upBlock.getType() == Material.WATER || upBlock.getType() == Material.BUBBLE_COLUMN ||
+                upperUpBlock.getType() == Material.WATER || upperUpBlock.getType() == Material.BUBBLE_COLUMN
+        ) {
             type = Particle.BUBBLE_COLUMN_UP;
             Location waterLevel = location.getWorld().getHighestBlockAt(location).getLocation().add(0,1,0);
 

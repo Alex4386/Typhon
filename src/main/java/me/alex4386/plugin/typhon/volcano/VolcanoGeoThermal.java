@@ -707,7 +707,6 @@ public class VolcanoGeoThermal implements Listener {
             if (Math.random() < ((double) (poisonousLevel - 3) / 2)) {
               livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA, timespan, 1));
             }
-
           }
         }
       } else if (entity instanceof Item) {

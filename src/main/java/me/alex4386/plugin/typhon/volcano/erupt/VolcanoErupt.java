@@ -60,7 +60,7 @@ public class VolcanoErupt {
 
     public void autoConfig(boolean updateSilicate) {
         if (this.style == VolcanoEruptStyle.HAWAIIAN) {
-            this.vent.lavaFlow.settings.silicateLevel = 0.45 + (Math.random() * (0.52 - 0.45));
+            this.vent.lavaFlow.settings.silicateLevel = 0.45 + (Math.random() * (0.49 - 0.45));
             this.vent.lavaFlow.settings.flowed = 10;
             this.vent.lavaFlow.settings.delayFlowed = 14;
 
