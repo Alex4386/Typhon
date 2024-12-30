@@ -22,6 +22,7 @@ import org.bukkit.util.Vector;
 import org.json.simple.JSONObject;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 public class VolcanoBombs {
     public VolcanoVent vent;
@@ -414,6 +415,14 @@ public class VolcanoBombs {
             bombMap.put(bomb.block, bomb);
         }
     }
+
+    public void customLaunchSpecifiedBomb(VolcanoBomb bomb, Consumer<VolcanoBomb> launcher) {
+        launcher.accept(bomb);
+        if (bomb.block != null) {
+            bombMap.put(bomb.block, bomb);
+        }
+    }
+
     public void trackAll() {
 //        System.out.println("[BombTrack] trackingAll.");
         Iterator<Map.Entry<FallingBlock, VolcanoBomb>> iterator = bombMap.entrySet().iterator();

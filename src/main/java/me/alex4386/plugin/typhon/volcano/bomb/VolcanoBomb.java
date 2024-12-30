@@ -123,21 +123,9 @@ public class VolcanoBomb {
         }
     }
 
-
-    public void launch() {
-        int maxY = vent.getSummitBlock().getY();
-        int yToLaunch = maxY - this.launchLocation.getWorld().getHighestBlockYAt(launchLocation);
-
-        // not launching up? it doesn't make sense.
-        if (yToLaunch < 2) yToLaunch = 2;
-
-        Vector launchVector = TyphonUtils.calculateVelocity(
-                new Vector(0, 0, 0),
-                targetLocation.toVector().subtract(launchLocation.toVector()),
-                yToLaunch + 3 + (int) (Math.random() * 9));
-
+    public void customLaunch(Vector launchVector) {
         try {
-           this.block = this.launchLocation.getWorld().spawn(
+            this.block = this.launchLocation.getWorld().spawn(
                     this.launchLocation,
                     FallingBlock.class,
                     entity -> {
@@ -155,9 +143,9 @@ public class VolcanoBomb {
                         block.setBlockState(state);
                         block.setFireTicks(1000);
                     }
-                );
+            );
 
-           this.updateTeam();
+            this.updateTeam();
         } catch (Exception e) {
             if (this.block != null) this.block.remove();
 
@@ -172,6 +160,26 @@ public class VolcanoBomb {
                         "Volcanic Bomb Just launched from: "
                                 + TyphonUtils.blockLocationTostring(launchLocation.getBlock()));
 
+    }
+
+    public void launch() {
+        int maxY = vent.getSummitBlock().getY();
+        int yToLaunch = maxY - this.launchLocation.getWorld().getHighestBlockYAt(launchLocation);
+        double explosionScale = Math.pow(this.vent.erupt.getStyle().bombMultiplier / 5.0, 0.8);
+
+        // not launching up? it doesn't make sense.
+        if (yToLaunch < 2) yToLaunch = 2;
+
+        this.launchWithCustomHeight(yToLaunch + 3 + (int) ((0.5 + Math.random()) * 9 * explosionScale));
+    }
+
+    public void launchWithCustomHeight(int launchHeight) {
+        Vector launchVector = TyphonUtils.calculateVelocity(
+                new Vector(0, 0, 0),
+                targetLocation.toVector().subtract(launchLocation.toVector()),
+                launchHeight);
+
+        this.customLaunch(launchVector);
     }
 
     public double getLifetimeSeconds() {

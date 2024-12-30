@@ -6,11 +6,11 @@ import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBomb;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
+import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
 import org.bukkit.*;
-import org.bukkit.block.Biome;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
@@ -1269,19 +1269,36 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void addRootlessCone(Location location) {
-        Block baseBlock = TyphonUtils.getHighestRocklikes(location);
+        this.addRootlessCone(location, 3 + (int) (Math.pow(Math.random(), 1.5) * (1 + (Math.random()) * 4)));
+    }
 
-        int height = 3 + (int) (Math.pow(Math.random(), 1.5) * (1 + (Math.random()) * 4));
+    public void addRootlessCone(Location location, int height) {
         boolean tryParasiticVent = height >= 6 && this.vent.isMainVent() && Math.random() < 0.5;
 
         if (tryParasiticVent) {
             height = 10;
         }
 
+        this.addRootlessCone(location, height, tryParasiticVent);
+    }
+
+    public void addRootlessCone(Location location, int height, boolean openVent) {
+        Block baseBlock = TyphonUtils.getHighestRocklikes(location);
+
         double baseRaw = getRootlessConeRadius(height);
         int baseInt = (int) Math.ceil(baseRaw);
 
         boolean allowLavaFlow = !this.isShuttingDown;
+
+        // get circle around the base block
+        List<Block> craterBlock = VolcanoMath.getCircle(baseBlock, height);
+        double heightSum = 0;
+        for (Block block : craterBlock) {
+            Block highestBlock = TyphonUtils.getHighestRocklikes(block);
+            heightSum += highestBlock.getY();
+        }
+
+        double averageHeight = heightSum / craterBlock.size();
 
         for (int x = -baseInt; x <= baseInt; x++) {
             for (int z = -baseInt; z <= baseInt; z++) {
@@ -1291,10 +1308,10 @@ public class VolcanoLavaFlow implements Listener {
 
                 for (int y = 1; y <= targetHeight; y++) {
                     Block targetBlock = baseBlockAt.getRelative(0, y, 0);
-                    int limit = baseBlock.getY() + height;
+                    double limit = Math.min(baseBlock.getY() + height, averageHeight + height);
                     if (distance < height) limit = (int) Math.round(baseBlock.getY() + distance);
 
-                    if (!tryParasiticVent) {
+                    if (!openVent) {
                         if (targetBlock.getY() > limit) {
                             // flow lava on top of this block
                             if (targetHeight == height) {
@@ -1336,24 +1353,25 @@ public class VolcanoLavaFlow implements Listener {
 
             VolcanoBomb bomb = this.vent.bombs.generateBomb(targetLocation);
             bomb.launchLocation = launchLocation;
-            this.vent.bombs.launchSpecifiedBomb(bomb);
+            this.vent.bombs.customLaunchSpecifiedBomb(bomb, (b) -> {
+                b.launchWithCustomHeight(2 + (int) Math.round(Math.random() * 2));
+            });
         }
 
-        if (tryParasiticVent) {
+        if (openVent) {
             // check if it is too nearby existing vent
 
             if (Math.random() < 0.9) return;
             VolcanoVent nearestVent = this.getVolcano().manager.getNearestVent(location);
             if (nearestVent != null && nearestVent.getTwoDimensionalDistance(location) < 50) return;
 
-            int finalHeight = height;
-            this.generateParasiticVent(baseBlock.getLocation(), "rootless", vent -> {
-                vent.setRadius(finalHeight);
+            this.generateFlankVent(baseBlock.getLocation(), "rootless", vent -> {
+                vent.setRadius(height);
             });
         }
     }
 
-    public VolcanoVent generateParasiticVent(Location location, String prefix, Consumer<VolcanoVent> setup) {
+    public VolcanoVent generateFlankVent(Location location, String prefix, Consumer<VolcanoVent> setup) {
         // small percentage of generating a vent
         String name = prefix.isEmpty() ? "parasitic_" : prefix + "_";
 
