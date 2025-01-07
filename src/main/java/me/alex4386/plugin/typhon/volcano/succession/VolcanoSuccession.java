@@ -216,6 +216,11 @@ public class VolcanoSuccession {
 
         if (!this.volcano.manager.isInAnyVent(block)) {
             if (rawHeatValue < 0.5) {
+                if (Math.random() < 0.1) {
+                    this.removeOre(targetBlock);
+                    return;
+                }
+
                 double probability = 1.0;
 
                 if (heatValue > 0.4) {
@@ -224,9 +229,9 @@ public class VolcanoSuccession {
                     probability = Math.pow(0.5, Math.max(probability * 10, 1));
                 }
 
-                // succession usually takes minimum "years"
-                probability *= 0.1;
+                // check for probability
                 if (Math.random() < probability) {
+                    this.removeOre(targetBlock);
                     return;
                 }
 
@@ -300,22 +305,36 @@ public class VolcanoSuccession {
                             VolcanoLogClass.SUCCESSION,
                             "Eroding rock on block "+TyphonUtils.blockLocationTostring(block));
                 }
+            } else if (rawHeatValue < 0.65) {
+                if (Math.random() < 0.1) {
+                    this.removeOre(targetBlock);
+                    return;
+                }
+
+                double amount = 1 - Math.min(1, Math.max(0, (rawHeatValue - 0.5) / 0.15));
+
+                if (isDebug) this.volcano.logger.log(
+                        VolcanoLogClass.SUCCESSION,
+                        "Succession on block "+TyphonUtils.blockLocationTostring(block)+" / amount: "+amount);
+
+                if (Math.random() < Math.pow(amount, 2)) {
+                    targetBlock.applyBoneMeal(BlockFace.UP);
+                }
+                spreadSoil(targetBlock, (int)(amount * 5), false);
+                return;
             } else {
                 VolcanoVent vent = this.volcano.manager.getNearestVent(targetBlock);
-                if (!vent.isStarted()) {
-                    if (rawHeatValue < 0.65) {
-                        double amount = 1 - Math.min(1, Math.max(0, (rawHeatValue - 0.5) / 0.15));
+                double distance = vent.getTwoDimensionalDistance(block.getLocation());
+                boolean isInRange = distance < vent.getRadius() * 2;
 
-                        if (isDebug) this.volcano.logger.log(
-                                VolcanoLogClass.SUCCESSION,
-                                "Succession on block "+TyphonUtils.blockLocationTostring(block)+" / amount: "+amount);
-
-                        if (Math.random() < Math.pow(amount, 2)) {
-                            targetBlock.applyBoneMeal(BlockFace.UP);
-                        }
-                        spreadSoil(targetBlock, (int)(amount * 5), false);
+                // add random for matching the probability on t
+                if (!vent.isStarted() && !isInRange) {
+                    if (Math.random() < 0.1) {
+                        this.removeOre(vent, targetBlock);
                         return;
-                    } else if (rawHeatValue < 0.8) {
+                    }
+
+                    if (rawHeatValue < 0.8) {
                         double percentage = (rawHeatValue - 0.65) / 0.15;
                         percentage = Math.min(1, Math.max(0, percentage));
 
@@ -355,25 +374,31 @@ public class VolcanoSuccession {
                                 }
                             }
                         }
-
-
                     }
                 }
-
-                if (isTypeOfVolcanicOre(targetBlock.getType())) {
-                    vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
-                } else if (targetBlock.getType() == Material.BLACKSTONE) {
-                    if (Math.random() < 0.01) {
-                        vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.NETHERRACK);
-                    }
-                } else if (targetBlock.getType() == Material.NETHERRACK) {
-                    if (Math.random() < 0.01 * 0.01) {
-                        vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.TUFF);
-                    }
-                }
+                
+                this.removeOre(vent, targetBlock);
             }
         }
+    }
 
+    private void removeOre(Block targetBlock) {
+        VolcanoVent vent = this.volcano.manager.getNearestVent(targetBlock);
+        removeOre(vent, targetBlock);
+    }
+
+    public void removeOre(VolcanoVent vent, Block targetBlock) {    
+        if (isTypeOfVolcanicOre(targetBlock.getType())) {
+            vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
+        } else if (targetBlock.getType() == Material.BLACKSTONE) {
+            if (Math.random() < 0.01) {
+                vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.NETHERRACK);
+            }
+        } else if (targetBlock.getType() == Material.NETHERRACK) {
+            if (Math.random() < 0.01 * 0.01) {
+                vent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.TUFF);
+            }
+        }
     }
 
     public void erodeBlock(Block targetBlock) {

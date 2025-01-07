@@ -136,30 +136,42 @@ public class VolcanoGeoThermal implements Listener {
       }
 
       // check if there are trees nearby
-      Block treeBlock = TyphonUtils.getHighestLocation(block.getLocation()).getBlock();
+      Block treeBlock = TyphonUtils.getHighestLocation(block.getLocation()).getBlock();      
+      double probability = Math.pow(vent.getHeatValue(block.getLocation()), 2);
+      boolean isInLavaRange = vent.currentNormalLavaFlowLength >= vent.getTwoDimensionalDistance(targetLoc);
 
-      if (!VolcanoComposition.isVolcanicRock(block.getType())) {
-        vent.volcano.metamorphism.metamorphoseBlock(block, false);
+      if (vent.isStarted() && isInLavaRange) {
+        probability = 1;
       }
 
-      if (TyphonUtils.isMaterialTree(upperBlock.getType())) {
-        if (vent.isInVent(upperBlock.getLocation())) {
-          vent.volcano.metamorphism.removeTree(upperBlock);
-        } else {
-          vent.volcano.metamorphism.killTree(upperBlock);
+      if (Math.random() < probability) {
+        if (!VolcanoComposition.isVolcanicRock(block.getType())) {
+          if (vent.isStarted()) {
+            vent.volcano.metamorphism.metamorphoseBlock(block, isInLavaRange);
+          } else {
+            // use proper counterparts.
+          }
         }
-      } else if (TyphonUtils.isMaterialPlant(upperBlock.getType())) {
-        vent.volcano.metamorphism.removePlant(upperBlock);
-      }
 
-
-      if (TyphonUtils.isMaterialTree(treeBlock.getType())) {
-        if (vent.isInVent(treeBlock.getLocation())) {
-          vent.volcano.metamorphism.removeTree(treeBlock);
-        } else {
-          vent.volcano.metamorphism.killTree(treeBlock);
+        if (TyphonUtils.isMaterialTree(upperBlock.getType())) {
+          if (vent.isInVent(upperBlock.getLocation())) {
+            vent.volcano.metamorphism.removeTree(upperBlock);
+          } else {
+            vent.volcano.metamorphism.killTree(upperBlock);
+          }
+        } else if (TyphonUtils.isMaterialPlant(upperBlock.getType())) {
+          vent.volcano.metamorphism.removePlant(upperBlock);
         }
-      }
+
+
+        if (TyphonUtils.isMaterialTree(treeBlock.getType())) {
+          if (vent.isInVent(treeBlock.getLocation())) {
+            vent.volcano.metamorphism.removeTree(treeBlock);
+          } else {
+            vent.volcano.metamorphism.killTree(treeBlock);
+          }
+        }
+      }        
     }
   }
 
