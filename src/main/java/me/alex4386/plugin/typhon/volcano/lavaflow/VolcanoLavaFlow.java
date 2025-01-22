@@ -1259,10 +1259,21 @@ public class VolcanoLavaFlow implements Listener {
         // is near any vent
         VolcanoVent nearVent = this.getVolcano().manager.getNearestVent(block.getLocation());
         if (nearVent != null) {
-            double volcanoZone = Math.max(70, Math.min(150, nearVent.longestFlowLength)) + nearVent.getRadius();
+            double volcanoZone = Math.max(70, Math.min(100, nearVent.longestNormalLavaFlowLength)) + nearVent.getRadius();
+            double volcanoZoneGrace = volcanoZone + 100;
 
-            if (nearVent.getTwoDimensionalDistance(block.getLocation()) < volcanoZone + nearVent.getRadius()) {
+            if (volcanoZoneGrace > nearVent.longestNormalLavaFlowLength) {
+                volcanoZoneGrace = nearVent.longestNormalLavaFlowLength + nearVent.getRadius();
+            }
+
+            double distance = nearVent.getTwoDimensionalDistance(block.getLocation());
+            if (distance < volcanoZone) {
                 return false;
+            } else if (distance < volcanoZoneGrace) {
+                double probability = (distance - volcanoZone) / (volcanoZoneGrace - volcanoZone);
+                if (Math.random() < Math.pow(probability, 2)) {
+                    return false;
+                }
             }
         }
 
@@ -1404,20 +1415,32 @@ public class VolcanoLavaFlow implements Listener {
             Block targetBlock = craterBlock.get(randomIndex);
 
             Block targetRandomBlock = TyphonUtils.getHighestRocklikes(targetBlock).getRelative(BlockFace.UP);
-            if (targetRandomBlock.getType().isAir()) {
-                this.flowVentLavaFromBomb(targetRandomBlock);
-            } else if (targetRandomBlock.getY() < averageY) {
-                // cooldown lower blocks
-                VolcanoLavaCoolData data = this.vent.lavaFlow.getLavaCoolData(targetRandomBlock);
-                if (data != null) {
-                    data.coolDown();
-                }
+            if (Math.random() < 0.8) {
+                if (targetRandomBlock.getType().isAir()) {
+                    this.flowVentLavaFromBomb(targetRandomBlock);
+                } else if (targetRandomBlock.getY() < averageY + 3) {
+                    // cooldown lower blocks
+                    VolcanoLavaCoolData data = this.vent.lavaFlow.getLavaCoolData(targetRandomBlock);
+                    if (data != null) {
+                        data.coolDown();
+                    }
 
-                this.flowLavaFromBomb(targetRandomBlock.getRelative(BlockFace.UP));
+                    this.flowLavaFromBomb(targetRandomBlock.getRelative(BlockFace.UP));
+                }
+            } else {
+                // ooze out from the bottom
+                Location diff = targetBlock.getLocation().subtract(baseBlock.getLocation());
+                diff.setY(0);
+                org.bukkit.util.Vector direction = diff.toVector().normalize().multiply((1.2 + (Math.random() * 0.8)) * radius);
+
+                Block oozeOutTarget = TyphonUtils.getHighestRocklikes(targetBlock.getRelative(direction.getBlockX(), 0, direction.getBlockZ())).getRelative(BlockFace.UP);
+                if (oozeOutTarget.getType().isAir()) {
+                    this.flowLava(targetRandomBlock, oozeOutTarget);
+                }
             }
         }
 
-        double distance = 20 + (Math.random() * 15);
+        double distance = radius + (Math.random() * 15);
         double angle = Math.random() * Math.PI * 2;
         bomb.targetLocation = bomb.launchLocation.add(Math.cos(angle) * distance, 0, Math.sin(angle) * distance);
 
