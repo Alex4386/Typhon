@@ -1435,7 +1435,7 @@ public class VolcanoLavaFlow implements Listener {
 
                 Block oozeOutTarget = TyphonUtils.getHighestRocklikes(targetBlock.getRelative(direction.getBlockX(), 0, direction.getBlockZ())).getRelative(BlockFace.UP);
                 if (oozeOutTarget.getType().isAir()) {
-                    this.flowVentLavaFromBomb(oozeOutTarget);
+                    this.flowLava(targetRandomBlock, oozeOutTarget);
                 }
             }
         }
