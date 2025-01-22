@@ -1256,6 +1256,16 @@ public class VolcanoLavaFlow implements Listener {
 
         Block block = TyphonUtils.getHighestRocklikes(targetLocation);
 
+        // is near any vent
+        VolcanoVent nearVent = this.getVolcano().manager.getNearestVent(block.getLocation());
+        if (nearVent != null) {
+            double volcanoZone = Math.max(70, Math.min(150, nearVent.longestFlowLength)) + nearVent.getRadius();
+
+            if (nearVent.getTwoDimensionalDistance(block.getLocation()) < volcanoZone + nearVent.getRadius()) {
+                return false;
+            }
+        }
+
         if (this.vent.erupt.isErupting()) {
             if (VolcanoComposition.isVolcanicRock(block.getType())) {
                 this.addRootlessCone(targetLocation);
@@ -1346,7 +1356,7 @@ public class VolcanoLavaFlow implements Listener {
         boolean allowLavaFlow = !this.isShuttingDown;
         if (!allowLavaFlow) return;
 
-        int radius = (int) Math.max(10, this.vent.getRadius() / 1.5);
+        int radius = (int) Math.min(20, Math.max(10, this.vent.getRadius() / 2));
 
         // even flow
         List<Block> craterBlock = VolcanoMath.getCircle(baseBlock, radius, radius-1);
