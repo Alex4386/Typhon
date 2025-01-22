@@ -1295,7 +1295,7 @@ public class VolcanoLavaFlow implements Listener {
         boolean allowLavaFlow = !this.isShuttingDown;
         int summitThreshold = this.vent.getSummitBlock().getY() - 10;
 
-        double rootlessConeRange = 30;
+        double rootlessConeRange = 70;
 
         if (!allowLavaFlow) return;
         if (rootlessCones != null && !rootlessCones.isEmpty()) {
@@ -1346,8 +1346,9 @@ public class VolcanoLavaFlow implements Listener {
         boolean allowLavaFlow = !this.isShuttingDown;
         if (!allowLavaFlow) return;
 
-        // even flow
+        int radius = 15;
 
+        // even flow
         List<Block> craterBlock = VolcanoMath.getCircle(baseBlock, 10, 9);
         double averageY = 0;
 
