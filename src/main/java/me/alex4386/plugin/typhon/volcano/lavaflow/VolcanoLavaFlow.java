@@ -23,10 +23,10 @@ import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.plugin.PluginManager;
-import org.bukkit.util.Vector;
 import org.json.simple.JSONObject;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -1241,7 +1241,7 @@ public class VolcanoLavaFlow implements Listener {
         max *= (0.2 * Math.random()) + 0.8;
         if (max < threshold) return false;
 
-        double distanceRatio = 1.0 - Math.pow(Math.random(), 3);
+        double distanceRatio = 1.0 - Math.pow(Math.random(), 2);
         double radius = threshold + (distanceRatio * (max - threshold));
         double angle = Math.random() * Math.PI * 2;
 
@@ -1289,18 +1289,22 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void addRootlessCone(Location location, int height) {
-        boolean openVent = Math.random() < 0.01;
-        this.addRootlessCone(location, openVent ? 10 : height, openVent);
-    }
-
-    public void addRootlessCone(Location location, int height, boolean openVent) {
         Block baseBlock = TyphonUtils.getHighestRocklikes(location);
-
         double baseRaw = getRootlessConeRadius(height);
-        int baseInt = (int) Math.ceil(baseRaw);
 
         boolean allowLavaFlow = !this.isShuttingDown;
         int summitThreshold = this.vent.getSummitBlock().getY() - 10;
+
+        double rootlessConeRange = 30;
+
+        if (!allowLavaFlow) return;
+        if (rootlessCones != null && !rootlessCones.isEmpty()) {
+            for (TyphonCache<Block> cache : rootlessCones) {
+                if (TyphonUtils.getTwoDimensionalDistance(location, cache.getTarget().getLocation()) < rootlessConeRange) {
+                    return;
+                }
+            }
+        }
 
         // get circle around the base block
         List<Block> craterBlock = VolcanoMath.getCircle(baseBlock, height, height-1);
@@ -1322,87 +1326,14 @@ public class VolcanoLavaFlow implements Listener {
             min = Math.min(min, highestBlock.getY());
         }
 
-        double averageHeight = heightSum / Math.max(craterBlock.size(), 1) + height;
-        int realHeight = (int) Math.round(averageHeight - baseBlock.getY());
+        TyphonCache<Block> cache = new TyphonCache<Block>(baseBlock);
+        cache.cacheValidity = (long) (1000 * 60 * (1 + (Math.random() * 3)));
 
-        for (int x = -baseInt; x <= baseInt; x++) {
-            for (int z = -baseInt; z <= baseInt; z++) {
-                double distance = Math.sqrt(x * x + z * z);
-                int targetHeight = rootlessConeHeight(realHeight, distance);
-                Block baseBlockAt = TyphonUtils.getHighestRocklikes(baseBlock.getRelative(x, 0, z));
-
-                for (int y = 1; y <= targetHeight; y++) {
-                    Block targetBlock = baseBlockAt.getRelative(0, y, 0);
-                    double limit = Math.min(baseBlock.getY() + targetHeight, averageHeight + targetHeight);
-                    if (distance < height) limit = (int) Math.round(baseBlock.getY() + distance);
-
-                    if (!openVent) {
-                        if (targetBlock.getY() > limit) {
-                            // flow lava on top of this block
-                            if (targetHeight == height) {
-                                if (targetBlock.getType().isAir() || targetBlock.getType() == Material.WATER) {
-                                    if (allowLavaFlow && Math.random() < 0.2) this.flowLava(targetBlock);
-                                }
-                            }
-
-                            break;
-                        }
-                    }
-
-                    if (targetBlock.getType().isAir() || targetBlock.getType() == Material.WATER) {
-                        Material material = Math.random() < 0.8 ? VolcanoComposition.getBombRock(this.settings.silicateLevel,
-                                    this.getDistanceRatio(targetBlock.getLocation())
-                                ) : VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel);
-
-                        queueBlockUpdate(targetBlock, material, TyphonUtils.getBlockFaceUpdater(new Vector(x, 0, z)));
-                        if (y == height) {
-                            Block topBlock = targetBlock.getRelative(BlockFace.UP);
-                            if (topBlock.getType().isAir() || topBlock.getType() == Material.WATER) {
-                                if (allowLavaFlow && Math.random() < 0.2) this.flowLavaFromBomb(topBlock, height + 5);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // launch bombs
-        Location launchLocation = baseBlock.getRelative(0, Math.max(1, height - 1), 0).getLocation();
-        int targetRadius = (int) (baseRaw * 3);
-        int launchCount = (int) (Math.random() * 7) + 3;
-
-        for (int i = 0; i < launchCount; i++) {
-            double randomAngle = Math.PI * 2 * Math.random();
-            double targetLength = (Math.random() * (targetRadius - height)) + height;
-            Location targetLocation = launchLocation.clone().add(Math.cos(randomAngle) * targetLength, 0, Math.sin(randomAngle) * targetLength);
-
-            VolcanoBomb bomb = this.vent.bombs.generateBomb(targetLocation);
-            bomb.launchLocation = launchLocation;
-            this.vent.bombs.customLaunchSpecifiedBomb(bomb, (b) -> {
-                b.launchWithCustomHeight(2 + (int) Math.round(Math.random() * 2));
-            });
-        }
-
-        if (openVent) {
-            // check if it is too nearby existing vent
-
-            if (Math.random() < 0.9) return;
-            VolcanoVent nearestVent = this.getVolcano().manager.getNearestVent(location);
-            if (nearestVent != null && nearestVent.getTwoDimensionalDistance(location) < 50) return;
-
-            this.generateFlankVent(baseBlock.getLocation(), "rootless", vent -> {
-                vent.setRadius(height);
-            });
-        } else {
-            TyphonCache<Block> cache = new TyphonCache<Block>(baseBlock);
-            cache.cacheValidity = (long) (1000 * 60 * (1 + (Math.random() * 3)));
-
-            this.getVolcano().logger.log(
-                VolcanoLogClass.LAVA_FLOW,
-                "Rootless cone created at " + TyphonUtils.blockLocationTostring(baseBlock)
-            );
-            rootlessCones.add(cache);
-        }
+        this.getVolcano().logger.log(
+            VolcanoLogClass.LAVA_FLOW,
+            "Rootless cone created at " + TyphonUtils.blockLocationTostring(baseBlock)
+        );
+        rootlessCones.add(cache);
     }
 
     private void doPlumbingToRootlessCone(Block baseBlock) {
@@ -1411,14 +1342,79 @@ public class VolcanoLavaFlow implements Listener {
         VolcanoBomb bomb = this.vent.bombs.generateBomb(target);
         bomb.launchLocation = target.add(0, 5, 0);
 
-        double distance = 5 + (Math.random() * 10);
+        double distance = 15 + ((1.0 - Math.pow(Math.random(), 2)) * 15);
         double angle = Math.random() * Math.PI * 2;
         bomb.targetLocation = bomb.launchLocation.add(Math.cos(angle) * distance, 0, Math.sin(angle) * distance);
 
         for (int i = 0; i < (Math.random() * 10); i++) {
             this.vent.bombs.customLaunchSpecifiedBomb(bomb, (b) -> {
                 b.launchWithCustomHeight(2 + (int) Math.round(Math.random() * 2));
+                b.bombRadius = Math.random() < 0.7 ? 0 : 1;
             });
+        }
+
+        // effuse lava
+        boolean allowLavaFlow = !this.isShuttingDown;
+        if (!allowLavaFlow) return;
+
+        // even flow
+
+        List<Block> craterBlock = VolcanoMath.getCircle(baseBlock, 10, 9);
+        double averageY = 0;
+
+        for (Block block : craterBlock) {
+            Block highestBlock = TyphonUtils.getHighestRocklikes(block);
+            averageY += highestBlock.getY();
+        }
+
+        averageY /= craterBlock.size();
+        int blocks = (int) (Math.random() * 5);
+
+        // get nearest vent
+        VolcanoVent nearestVent = this.getVolcano().manager.getNearestVent(baseBlock.getLocation());
+
+        int deduction = (int) Math.max(10, Math.max(0, nearestVent.getTwoDimensionalDistance(baseBlock.getLocation()) - nearestVent.getRadius()) / 2);
+        int summitY = this.vent.getSummitBlock().getY();
+        int limitY = summitY - deduction + 5;
+
+        craterBlock.removeIf((block) -> {
+            int y = TyphonUtils.getHighestRocklikes(block).getY();
+            return y > limitY;
+        });
+        if (craterBlock.isEmpty()) return;
+
+        boolean doEvenFlow = Math.random() < 0.8;
+        if (doEvenFlow) {
+            double finalAverageY = averageY;
+
+
+            craterBlock.removeIf((block) -> {
+                int y = TyphonUtils.getHighestRocklikes(block).getY();
+                return y > finalAverageY - 3;
+            });
+        }
+
+        // the flows are even. we can flow lava on everything.
+        if (craterBlock.isEmpty()) {
+            craterBlock = VolcanoMath.getCircle(baseBlock, 10, 9);
+        }
+
+        for (int i = 0; i < blocks; i++) {
+            int randomIndex = (int) (Math.random() * craterBlock.size());
+            Block targetBlock = craterBlock.get(randomIndex);
+
+            Block targetRandomBlock = TyphonUtils.getHighestRocklikes(targetBlock).getRelative(BlockFace.UP);
+            if (targetRandomBlock.getType().isAir()) {
+                this.flowVentLavaFromBomb(targetRandomBlock);
+            } else if (targetRandomBlock.getY() < averageY) {
+                // cooldown lower blocks
+                VolcanoLavaCoolData data = this.vent.lavaFlow.getLavaCoolData(targetRandomBlock);
+                if (data != null) {
+                    data.coolDown();
+                }
+
+                this.flowLavaFromBomb(targetRandomBlock.getRelative(BlockFace.UP));
+            }
         }
     }
 
