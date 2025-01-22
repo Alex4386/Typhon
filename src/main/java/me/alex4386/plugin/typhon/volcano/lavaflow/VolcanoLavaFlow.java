@@ -1220,8 +1220,7 @@ public class VolcanoLavaFlow implements Listener {
         }
 
         Block targetBlock = randomRootlessCone.getTarget();
-        doPlumbingToRootlessCone(targetBlock);
-        return true;
+        return doPlumbingToRootlessCone(targetBlock);
     }
 
     public boolean tryRootlessCone() {
@@ -1322,7 +1321,7 @@ public class VolcanoLavaFlow implements Listener {
         }
 
         // get circle around the base block
-        List<Block> craterBlock = VolcanoMath.getCircle(baseBlock, height, height-1);
+        List<Block> craterBlock = VolcanoMath.getHollowCircle(baseBlock, height);
         double heightSum = 0;
         int max = Integer.MIN_VALUE, min = Integer.MAX_VALUE;
         for (Block block : craterBlock) {
@@ -1355,7 +1354,7 @@ public class VolcanoLavaFlow implements Listener {
         return (int) Math.min(20, Math.max(10, this.vent.getRadius() / 2));
     }
 
-    private void doPlumbingToRootlessCone(Block baseBlock) {
+    private boolean doPlumbingToRootlessCone(Block baseBlock) {
         Location target = TyphonUtils.getHighestRocklikes(baseBlock).getLocation().add(0, 1, 0);
 
         VolcanoBomb bomb = this.vent.bombs.generateBomb(target);
@@ -1363,17 +1362,19 @@ public class VolcanoLavaFlow implements Listener {
 
         // effuse lava
         boolean allowLavaFlow = !this.isShuttingDown;
-        if (!allowLavaFlow) return;
+        if (!allowLavaFlow) return true;
 
         int radius = this.getRootlessConeRadius();
 
         // even flow
-        List<Block> craterBlock = VolcanoMath.getCircle(baseBlock, radius, radius-1);
+        List<Block> craterBlock = VolcanoMath.getHollowCircle(baseBlock, radius);
         double averageY = 0;
+        int lowestY = Integer.MAX_VALUE;
 
         for (Block block : craterBlock) {
             Block highestBlock = TyphonUtils.getHighestRocklikes(block);
             averageY += highestBlock.getY();
+            lowestY = Math.min(lowestY, highestBlock.getY());
         }
 
         averageY /= craterBlock.size();
@@ -1390,9 +1391,9 @@ public class VolcanoLavaFlow implements Listener {
             int y = TyphonUtils.getHighestRocklikes(block).getY();
             return y > limitY - 2;
         });
-        if (craterBlock.isEmpty()) return;
+        if (craterBlock.isEmpty()) return false;
 
-        boolean doEvenFlow = Math.random() < 0.8;
+        boolean doEvenFlow = Math.random() < 0.5 && lowestY < averageY - 5;
         if (doEvenFlow) {
             double finalAverageY = averageY;
 
@@ -1405,37 +1406,39 @@ public class VolcanoLavaFlow implements Listener {
 
         // the flows are even. we can flow lava on everything.
         if (craterBlock.isEmpty()) {
-            craterBlock = VolcanoMath.getCircle(baseBlock, radius, radius-1);
+            craterBlock = VolcanoMath.getHollowCircle(baseBlock, radius);
         }
 
-        for (int i = 0; i < blocks; i++) {
-            int randomIndex = (int) (Math.random() * craterBlock.size());
-            Block targetBlock = craterBlock.get(randomIndex);
+        int randomIndex = (int) (Math.random() * craterBlock.size());
+        Block targetBlock = craterBlock.get(randomIndex);
 
-            Block targetRandomBlock = TyphonUtils.getHighestRocklikes(targetBlock).getRelative(BlockFace.UP);
-            if (Math.random() < 0.8) {
-                if (targetRandomBlock.getType().isAir()) {
-                    this.flowVentLavaFromBomb(targetRandomBlock);
-                    VolcanoLavaCoolData data = this.vent.lavaFlow.getLavaCoolData(targetRandomBlock);
+        Block targetRandomBlock = TyphonUtils.getHighestRocklikes(targetBlock).getRelative(BlockFace.UP);
+        if (Math.random() < 0.8) {
+            if (targetRandomBlock.getType().isAir()) {
+                this.flowVentLavaFromBomb(targetRandomBlock);
+                VolcanoLavaCoolData data = this.vent.lavaFlow.getLavaCoolData(targetRandomBlock);
 
-                } else if (targetRandomBlock.getY() < averageY) {
-                    // cooldown lower blocks
-                    VolcanoLavaCoolData data = this.vent.lavaFlow.getLavaCoolData(targetRandomBlock);
-                    if (data != null) {
-                        data.coolDown();
-                    }
-
-                    this.flowVentLavaFromBomb(targetRandomBlock.getRelative(BlockFace.UP));
+            } else if (targetRandomBlock.getY() < averageY - 3) {
+                // cooldown lower blocks
+                VolcanoLavaCoolData data = this.vent.lavaFlow.getLavaCoolData(targetRandomBlock);
+                if (data != null) {
+                    data.coolDown();
                 }
-            } else {
-                // ooze out from the bottom
-                Location diff = targetBlock.getLocation().subtract(baseBlock.getLocation());
-                diff.setY(0);
-                org.bukkit.util.Vector direction = diff.toVector().normalize().multiply((1.2 + (Math.random() * 0.8)) * radius);
 
-                Block oozeOutTarget = TyphonUtils.getHighestRocklikes(targetBlock.getRelative(direction.getBlockX(), 0, direction.getBlockZ())).getRelative(BlockFace.UP);
-                if (oozeOutTarget.getType().isAir()) {
+                this.flowVentLavaFromBomb(targetRandomBlock.getRelative(BlockFace.UP));
+            }
+        } else {
+            // ooze out from the bottom
+            Location diff = targetBlock.getLocation().subtract(baseBlock.getLocation());
+            diff.setY(0);
+            org.bukkit.util.Vector direction = diff.toVector().normalize().multiply((0.2 + Math.random() * 0.8) * radius);
+
+            Block oozeOutTarget = TyphonUtils.getHighestRocklikes(targetBlock.getRelative(direction.getBlockX(), 0, direction.getBlockZ())).getRelative(BlockFace.UP);
+            if (oozeOutTarget.getType().isAir()) {
+                if (Math.random() < 0.1) {
                     this.flowLava(targetRandomBlock, oozeOutTarget);
+                } else {
+                    this.flowVentLavaFromBomb(oozeOutTarget);
                 }
             }
         }
@@ -1448,6 +1451,8 @@ public class VolcanoLavaFlow implements Listener {
 //            b.launchWithCustomHeight(2 + (int) Math.round(Math.random() * 2));
 //            b.bombRadius = 0;
 //        });
+
+        return true;
     }
 
     public VolcanoVent generateFlankVent(Location location, String prefix, Consumer<VolcanoVent> setup) {
@@ -2002,7 +2007,6 @@ public class VolcanoLavaFlow implements Listener {
 
                     if (Math.random() < rootlessConeProbability) {
                         if (doPlumbingToRootlessCone()) {
-                            i += 100;
                             continue;
                         }
                     } else {

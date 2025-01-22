@@ -276,7 +276,7 @@ public class VolcanoVent {
 
         if (type == VolcanoVentType.CRATER) {
             scaffoldBlocks =
-                    VolcanoMath.getCircle(this.location.getBlock(), craterRadius, craterRadius - 1);
+                    VolcanoMath.getHollowCircle(this.location.getBlock(), craterRadius);
         } else if (type == VolcanoVentType.FISSURE) {
             /*
             double rightAngledAngle = (Math.PI / 2) + this.fissureAngle;
@@ -304,7 +304,7 @@ public class VolcanoVent {
         } else {
             // fallback to crater
             scaffoldBlocks =
-                    VolcanoMath.getCircle(this.location.getBlock(), craterRadius, craterRadius - 1);
+                    VolcanoMath.getHollowCircle(this.location.getBlock(), craterRadius);
         }
 
         return scaffoldBlocks;

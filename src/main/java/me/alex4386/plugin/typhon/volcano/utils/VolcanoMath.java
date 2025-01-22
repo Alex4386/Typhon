@@ -144,14 +144,18 @@ public class VolcanoMath {
         return getCircle(centerBlock, radius, -1);
     }
 
-    public static List<Block> getCircle(Block centerBlock, int radius, int hollowRadius) {
+    public static List<Block> getHollowCircle(Block centerBlock, int radius) {
+        return getCircle(centerBlock, radius, radius - 0.5);
+    }
+
+    public static List<Block> getCircle(Block centerBlock, double radius, double hollowRadius) {
         List<Block> circleBlocks = new ArrayList<>();
 
         double radiusSquared = Math.pow(radius, 2);
         double hollowRadiusSquared = hollowRadius > 0 ? Math.pow(hollowRadius, 2) : -1;
 
-        for (int x = -radius; x <= radius; x++) {
-            for (int z = -radius; z <= radius; z++) {
+        for (int x = (int) Math.floor(-radius); x <= Math.ceil(radius); x++) {
+            for (int z = (int) Math.floor(-radius); z <= Math.ceil(radius); z++) {
                 double distanceSquared = Math.pow(x, 2) + Math.pow(z, 2);
 
                 if (distanceSquared <= radiusSquared && distanceSquared > hollowRadiusSquared) {

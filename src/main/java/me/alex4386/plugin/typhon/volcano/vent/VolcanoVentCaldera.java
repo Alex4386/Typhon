@@ -353,7 +353,7 @@ public class VolcanoVentCaldera {
         long total = 0;
         Block lowestY;
 
-        List<Block> listBlocks = VolcanoMath.getCircle(this.baseBlock, this.currentRadius + 5, this.currentRadius + 4);
+        List<Block> listBlocks = VolcanoMath.getHollowCircle(this.baseBlock, this.currentRadius + 5);
         lowestY = TyphonUtils.getHighestRocklikes(listBlocks.get(0));
         for (Block baseBlock : listBlocks) {
             Block block = TyphonUtils.getHighestRocklikes(baseBlock);

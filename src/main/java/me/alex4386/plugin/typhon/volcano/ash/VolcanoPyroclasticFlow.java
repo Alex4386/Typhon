@@ -290,7 +290,7 @@ public class VolcanoPyroclasticFlow {
     public void calculateDirection() {
         double prevDistance = this.ash.vent.getTwoDimensionalDistance(this.location);
 
-        List<Block> blocks = VolcanoMath.getCircle(this.location.getBlock(), radius, radius - 1);
+        List<Block> blocks = VolcanoMath.getHollowCircle(this.location.getBlock(), radius);
         Block lowestBlock = blocks.get(0);
 
         for (Block block : blocks) {
