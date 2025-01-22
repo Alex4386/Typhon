@@ -1346,10 +1346,10 @@ public class VolcanoLavaFlow implements Listener {
         boolean allowLavaFlow = !this.isShuttingDown;
         if (!allowLavaFlow) return;
 
-        int radius = 15;
+        int radius = (int) Math.max(10, this.vent.getRadius() / 1.5);
 
         // even flow
-        List<Block> craterBlock = VolcanoMath.getCircle(baseBlock, 10, 9);
+        List<Block> craterBlock = VolcanoMath.getCircle(baseBlock, radius, radius-1);
         double averageY = 0;
 
         for (Block block : craterBlock) {
@@ -1386,7 +1386,7 @@ public class VolcanoLavaFlow implements Listener {
 
         // the flows are even. we can flow lava on everything.
         if (craterBlock.isEmpty()) {
-            craterBlock = VolcanoMath.getCircle(baseBlock, 10, 9);
+            craterBlock = VolcanoMath.getCircle(baseBlock, radius, radius-1);
         }
 
         for (int i = 0; i < blocks; i++) {
@@ -1413,7 +1413,7 @@ public class VolcanoLavaFlow implements Listener {
 
         this.vent.bombs.customLaunchSpecifiedBomb(bomb, (b) -> {
             b.launchWithCustomHeight(2 + (int) Math.round(Math.random() * 2));
-            b.bombRadius = Math.random() < 0.7 ? 0 : 1;
+            b.bombRadius = 0;
         });
     }
 
