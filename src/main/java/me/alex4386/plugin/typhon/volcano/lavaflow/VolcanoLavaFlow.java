@@ -1440,14 +1440,14 @@ public class VolcanoLavaFlow implements Listener {
             }
         }
 
-        double distance = radius + (Math.random() * 15);
-        double angle = Math.random() * Math.PI * 2;
-        bomb.targetLocation = bomb.launchLocation.add(Math.cos(angle) * distance, 0, Math.sin(angle) * distance);
-
-        this.vent.bombs.customLaunchSpecifiedBomb(bomb, (b) -> {
-            b.launchWithCustomHeight(2 + (int) Math.round(Math.random() * 2));
-            b.bombRadius = 0;
-        });
+//        double distance = radius + (Math.random() * 15);
+//        double angle = Math.random() * Math.PI * 2;
+//        bomb.targetLocation = bomb.launchLocation.add(Math.cos(angle) * distance, 0, Math.sin(angle) * distance);
+//
+//        this.vent.bombs.customLaunchSpecifiedBomb(bomb, (b) -> {
+//            b.launchWithCustomHeight(2 + (int) Math.round(Math.random() * 2));
+//            b.bombRadius = 0;
+//        });
     }
 
     public VolcanoVent generateFlankVent(Location location, String prefix, Consumer<VolcanoVent> setup) {
