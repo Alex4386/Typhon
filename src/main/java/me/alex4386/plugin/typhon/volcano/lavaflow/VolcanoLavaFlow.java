@@ -1342,17 +1342,6 @@ public class VolcanoLavaFlow implements Listener {
         VolcanoBomb bomb = this.vent.bombs.generateBomb(target);
         bomb.launchLocation = target.add(0, 5, 0);
 
-        double distance = 15 + ((1.0 - Math.pow(Math.random(), 2)) * 15);
-        double angle = Math.random() * Math.PI * 2;
-        bomb.targetLocation = bomb.launchLocation.add(Math.cos(angle) * distance, 0, Math.sin(angle) * distance);
-
-        for (int i = 0; i < (Math.random() * 10); i++) {
-            this.vent.bombs.customLaunchSpecifiedBomb(bomb, (b) -> {
-                b.launchWithCustomHeight(2 + (int) Math.round(Math.random() * 2));
-                b.bombRadius = Math.random() < 0.7 ? 0 : 1;
-            });
-        }
-
         // effuse lava
         boolean allowLavaFlow = !this.isShuttingDown;
         if (!allowLavaFlow) return;
@@ -1373,13 +1362,13 @@ public class VolcanoLavaFlow implements Listener {
         // get nearest vent
         VolcanoVent nearestVent = this.getVolcano().manager.getNearestVent(baseBlock.getLocation());
 
-        int deduction = (int) Math.max(10, Math.max(0, nearestVent.getTwoDimensionalDistance(baseBlock.getLocation()) - nearestVent.getRadius()) / 2);
+        int deduction = (int) Math.max(10, Math.max(0, nearestVent.getTwoDimensionalDistance(baseBlock.getLocation()) - nearestVent.getRadius()) / 6);
         int summitY = this.vent.getSummitBlock().getY();
         int limitY = summitY - deduction + 5;
 
         craterBlock.removeIf((block) -> {
             int y = TyphonUtils.getHighestRocklikes(block).getY();
-            return y > limitY;
+            return y > limitY - 2;
         });
         if (craterBlock.isEmpty()) return;
 
@@ -1416,6 +1405,15 @@ public class VolcanoLavaFlow implements Listener {
                 this.flowLavaFromBomb(targetRandomBlock.getRelative(BlockFace.UP));
             }
         }
+
+        double distance = 20 + (Math.random() * 15);
+        double angle = Math.random() * Math.PI * 2;
+        bomb.targetLocation = bomb.launchLocation.add(Math.cos(angle) * distance, 0, Math.sin(angle) * distance);
+
+        this.vent.bombs.customLaunchSpecifiedBomb(bomb, (b) -> {
+            b.launchWithCustomHeight(2 + (int) Math.round(Math.random() * 2));
+            b.bombRadius = Math.random() < 0.7 ? 0 : 1;
+        });
     }
 
     public VolcanoVent generateFlankVent(Location location, String prefix, Consumer<VolcanoVent> setup) {
