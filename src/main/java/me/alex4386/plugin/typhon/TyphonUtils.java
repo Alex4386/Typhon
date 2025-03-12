@@ -12,9 +12,12 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Directional;
 import org.bukkit.block.data.Orientable;
 import org.bukkit.block.data.Waterlogged;
+import org.bukkit.block.Biome;
 import org.bukkit.entity.EntityType;
 import org.bukkit.util.Vector;
 import org.json.simple.JSONObject;
+
+import static org.bukkit.block.Biome.*;
 
 public class TyphonUtils {
     public static boolean isMaterialPlant(Material material) {
@@ -301,26 +304,22 @@ public class TyphonUtils {
     }
 
     public static org.bukkit.TreeType getAdequateTreeTypeForBiome(org.bukkit.block.Biome biome) {
-        switch (biome) {
-            case FOREST:
-            case FLOWER_FOREST:
-                return org.bukkit.TreeType.TREE;
-            case BIRCH_FOREST:
-            case STONY_PEAKS:
-                return org.bukkit.TreeType.BIRCH;
-            case DARK_FOREST:
-                return org.bukkit.TreeType.DARK_OAK;
-            case JUNGLE:
-                return org.bukkit.TreeType.JUNGLE;
-            case SWAMP:
-                return org.bukkit.TreeType.SWAMP;
-            case SAVANNA:
-            case SAVANNA_PLATEAU:
-                return org.bukkit.TreeType.ACACIA;
-            case TAIGA:
-                return org.bukkit.TreeType.REDWOOD;
-
-
+        if (biome.equals(Biome.FOREST) || biome.equals(FLOWER_FOREST) || biome.equals(PLAINS) ) {
+            return TreeType.TREE;
+        } else if (biome.equals(Biome.BIRCH_FOREST) || biome.equals(Biome.STONY_PEAKS)) {
+            return TreeType.BIRCH;
+        } else if (biome.equals(DARK_FOREST)) {
+            return TreeType.DARK_OAK;
+        } else if (biome.equals(JUNGLE)) {
+            return TreeType.JUNGLE;
+        } else if (biome.equals(SWAMP)) {
+            return TreeType.SWAMP;
+        } else if (biome.equals(SAVANNA) || biome.equals(SAVANNA_PLATEAU)) {
+            return TreeType.ACACIA;
+        } else if (biome.equals(TAIGA) || biome.equals(SNOWY_TAIGA)) {
+            return TreeType.REDWOOD;
+        } else if (biome.equals(PALE_GARDEN)) {
+            return TreeType.PALE_OAK;
         }
 
         return null;
@@ -463,7 +462,7 @@ public class TyphonUtils {
     }
 
     public static boolean isMaterialTree(org.bukkit.Material material) {
-        if (material == Material.BEEHIVE) return true;
+        if (material == Material.BEEHIVE || material == Material.SCAFFOLDING || material == Material.CREAKING_HEART) return true;
         String materialType = TyphonUtils.toLowerCaseDumbEdition(material.name());
 
         return (materialType.contains("leaves")
@@ -471,6 +470,12 @@ public class TyphonUtils {
                 || materialType.contains("plank")
                 || materialType.contains("wood")
                 || materialType.contains("sapling"))
+                || materialType.contains("moss")
+                || materialType.contains("eyeblossom")
+                || materialType.contains("resin")
+                || materialType.contains("bush")
+                || materialType.contains("cactus")
+                || materialType.contains("leaf")
                 || materialType.contains("vine") || isMaterialNameContainsTreeName(materialType);
     }
 
@@ -490,6 +495,7 @@ public class TyphonUtils {
                 || materialType.contains("warped")
                 || materialType.contains("mangrove")
                 || materialType.contains("cherry")
+                || materialType.equals("creaking_heart")
                 || materialType.contains("bamboo"));
     }
 

@@ -62,7 +62,8 @@ public class VolcanoLavaFlow implements Listener {
 
     public long lastQueueUpdates = 0;
 
-    private double rootlessConeProbability = (1.0 / 10.0);
+    // Disable rootless cone for now.
+    private double rootlessConeProbability = (0.0 / 10.0);
 
     private static Map<Chunk, Queue<Map.Entry<Block, Material>>> immediateBlockUpdateQueues = new HashMap<>();
 
