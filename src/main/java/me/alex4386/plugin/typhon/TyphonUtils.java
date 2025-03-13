@@ -13,7 +13,13 @@ import org.bukkit.block.data.Directional;
 import org.bukkit.block.data.Orientable;
 import org.bukkit.block.data.Waterlogged;
 import org.bukkit.block.Biome;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.EntityCategory;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.inventory.EntityEquipment;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.Vector;
 import org.json.simple.JSONObject;
 
@@ -696,6 +702,20 @@ public class TyphonUtils {
                 }
             }
         }
+    }
+
+    public static boolean hasFireProtection(LivingEntity entity) {
+        if (entity.hasPotionEffect(PotionEffectType.FIRE_RESISTANCE)) {
+            return true;
+        }
+
+        for (ItemStack stack : entity.getEquipment().getArmorContents()) {
+            if (stack.containsEnchantment(Enchantment.FIRE_PROTECTION)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static boolean isNotAffectedByPoisonEffect(EntityType entityType) {

@@ -14,6 +14,8 @@ import org.bukkit.*;
 import org.bukkit.block.Biome;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.damage.DamageSource;
+import org.bukkit.damage.DamageType;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
@@ -584,8 +586,14 @@ public class VolcanoGeoThermal implements Listener {
       double distance = entity.getLocation().distance(location);
       double fireTicks = Math.max(60, (600 * volcano.manager.getHeatValue(location)) * (distance / range));
       
-      if (distance < range && entity.getMaxFireTicks() != 0 ) {
-        entity.setFireTicks((int) fireTicks);
+      if (distance < range && entity.getMaxFireTicks() != 0) {
+        if (location.getWorld().isClearWeather()) {
+          entity.setFireTicks((int) fireTicks);
+        } else if (entity instanceof LivingEntity livingEntity) {
+          if (!TyphonUtils.hasFireProtection(livingEntity) && fireTicks >= 1) {
+            livingEntity.damage(0.5, DamageSource.builder(DamageType.ON_FIRE).build());
+          }
+        }
       }
     }
   }
@@ -685,22 +693,24 @@ public class VolcanoGeoThermal implements Listener {
 
         if (poisonousLevel > 0) {
           poisonousLevel = Math.max((int) (poisonousLevel * intensity), 1);
+          PotionEffectType targetType = PotionEffectType.POISON;
 
           // check if there is existing poison effect
-          if (livingEntity.hasPotionEffect(PotionEffectType.POISON)) {
-              PotionEffect poisonEffect = livingEntity.getPotionEffect(PotionEffectType.POISON);
+          if (livingEntity.hasPotionEffect(targetType)) {
+              PotionEffect poisonEffect = livingEntity.getPotionEffect(targetType);
               if (poisonEffect != null) {
                 int newPoisonLevel = Math.max(poisonEffect.getAmplifier(), poisonousLevel);
                 int newTimespan = poisonEffect.getDuration() + timespan;
-                livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.POISON, newTimespan, newPoisonLevel));
+                livingEntity.addPotionEffect(new PotionEffect(targetType, newTimespan, newPoisonLevel));
               }
           } else {
-              livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.POISON, timespan, poisonousLevel));
+              livingEntity.addPotionEffect(new PotionEffect(targetType, timespan, poisonousLevel));
           }
 
           // the entity is not affected by poison, then we should damage the entity.
+
           if (TyphonUtils.isNotAffectedByPoisonEffect(entity.getType())) {
-            int calculateDamageWithTimespan = (int) (poisonousLevel * (timespan / 20.0));
+            double calculateDamageWithTimespan = (poisonousLevel * (timespan / 20.0));
             livingEntity.damage(calculateDamageWithTimespan);
           }
 
