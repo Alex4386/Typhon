@@ -573,6 +573,43 @@ public class TyphonUtils {
         return containsLiquidWater(block) || containsIce(block) || containsSnow(block);
     }
 
+    /**
+     * Smooth out block heights by checking neighbors within a specified radius
+     * @param blocks The blocks to smooth
+     * @param radius The radius to check for neighboring blocks
+     * @return A list of blocks that should be removed to achieve smoothing
+     */
+    public static List<Block> smoothBlockHeights(Collection<Block> blocks, int radius) {
+        List<Block> blocksToRemove = new ArrayList<>();
+        for (Block block : blocks) {
+            List<Block> neighbors = new ArrayList<>();
+            for (int x = -radius; x <= radius; x++) {
+                for (int z = -radius; z <= radius; z++) {
+                    if (x == 0 && z == 0) continue;
+                    if (x*x + z*z > radius*radius) continue; // Skip blocks outside circle
+                    Block neighbor = block.getRelative(x, 0, z);
+                    if (!neighbor.getType().isAir()) {
+                        neighbors.add(neighbor);
+                    }
+                }
+            }
+            
+            if (!neighbors.isEmpty()) {
+                int totalHeight = 0;
+                for (Block n : neighbors) {
+                    totalHeight += getHighestRocklikes(n).getY();
+                }
+                int averageHeight = totalHeight / neighbors.size();
+                
+                Block current = getHighestRocklikes(block);
+                if (current.getY() > averageHeight + 1) {
+                    blocksToRemove.add(current.getRelative(0, 1, 0));
+                }
+            }
+        }
+        return blocksToRemove;
+    }
+
     public static boolean containsIce(Block block) {
         switch (block.getType()) {
             case ICE:

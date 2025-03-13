@@ -422,6 +422,14 @@ public class VolcanoPyroclasticFlow {
                 }
             }
         }
+
+        // Smooth out any peaks that have formed after all ash is placed
+        List<Block> blocksToRemove = TyphonUtils.smoothBlockHeights(ashBlocks, Math.max(1, radius / 2));
+        for (Block block : blocksToRemove) {
+            if (block.getType() == Material.TUFF) {
+                this.ash.vent.lavaFlow.queueBlockUpdate(block, Material.AIR);
+            }
+        }
     }
 
     public void playAshTrail() {
