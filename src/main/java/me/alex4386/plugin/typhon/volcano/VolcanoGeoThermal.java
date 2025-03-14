@@ -87,27 +87,17 @@ public class VolcanoGeoThermal implements Listener {
     boolean letOffSteam = false;
     boolean runPoison = false;
 
-    if (vent.getStatus().hasElevatedActivity()) {
-      if (Math.random() < scaleFactor) {
+    if (vent.getStatus().isActive()) {
+      if (vent.getStatus().hasElevatedActivity()) {
         this.burnNearbyEntities(targetLoc, 3);
-        if (scaleFactor > 0.12) {
-          if (Math.random() < ((scaleFactor - 0.12) / (1 - 0.12))) {
-            this.playLavaGasReleasing(targetLoc);
-          }
-        }
-
         letOffSteam = true;
-        runPoison = Math.random() < Math.sqrt(scaleFactor);
+      } else {
+        this.burnNearbyEntities(targetLoc, 1);
+        letOffSteam = Math.random() < 0.3;
+        if (letOffSteam) {
+          runPoison = Math.random() < 0.5;
+        }
       }
-    } else if (vent.getStatus().isActive()) {
-      this.burnNearbyEntities(targetLoc, 1);
-    
-      letOffSteam = (Math.random() < (scaleFactor * 10));
-      if (letOffSteam) {
-        runPoison = Math.random() < Math.pow(scaleFactor, 0.8);
-      }
-    } else if (vent.getStatus() == VolcanoVentStatus.EXTINCT) {
-      return;
     }
 
     if (letOffSteam) {
@@ -118,7 +108,7 @@ public class VolcanoGeoThermal implements Listener {
       }
     }
 
-    if (Math.random() < scaleFactor) {
+    if (vent.getStatus().hasElevatedActivity()) {
       Block upperBlock = block.getRelative(BlockFace.UP);
 
       if (letOffSteam) {
@@ -130,43 +120,19 @@ public class VolcanoGeoThermal implements Listener {
         }
       }
 
-      // check if there are trees nearby
-      Block treeBlock = TyphonUtils.getHighestLocation(block.getLocation()).getBlock();      
-      double probability = Math.pow(vent.getHeatValue(block.getLocation()), 2);
-      boolean isInLavaRange = vent.currentNormalLavaFlowLength >= vent.getTwoDimensionalDistance(targetLoc);
-
-      if (vent.isStarted() && isInLavaRange) {
-        probability = 1;
+      if (!VolcanoComposition.isVolcanicRock(block.getType())) {
+        vent.volcano.metamorphism.metamorphoseBlock(block, true);
       }
 
-      if (Math.random() < probability) {
-        if (!VolcanoComposition.isVolcanicRock(block.getType())) {
-          if (vent.isStarted()) {
-            vent.volcano.metamorphism.metamorphoseBlock(block, isInLavaRange);
-          } else {
-            // use proper counterparts.
-          }
+      if (TyphonUtils.isMaterialTree(upperBlock.getType())) {
+        if (vent.isInVent(upperBlock.getLocation())) {
+          vent.volcano.metamorphism.removeTree(upperBlock);
+        } else {
+          vent.volcano.metamorphism.killTree(upperBlock);
         }
-
-        if (TyphonUtils.isMaterialTree(upperBlock.getType())) {
-          if (vent.isInVent(upperBlock.getLocation())) {
-            vent.volcano.metamorphism.removeTree(upperBlock);
-          } else {
-            vent.volcano.metamorphism.killTree(upperBlock);
-          }
-        } else if (TyphonUtils.isMaterialPlant(upperBlock.getType())) {
-          vent.volcano.metamorphism.removePlant(upperBlock);
-        }
-
-
-        if (TyphonUtils.isMaterialTree(treeBlock.getType())) {
-          if (vent.isInVent(treeBlock.getLocation())) {
-            vent.volcano.metamorphism.removeTree(treeBlock);
-          } else {
-            vent.volcano.metamorphism.killTree(treeBlock);
-          }
-        }
-      }        
+      } else if (TyphonUtils.isMaterialPlant(upperBlock.getType())) {
+        vent.volcano.metamorphism.removePlant(upperBlock);
+      }
     }
   }
 
@@ -490,7 +456,7 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runUndergroundVolcanoGeothermalActivity(VolcanoVent vent, Block block) {
-    this.runCraterGeothermal(vent, block, false);
+    this.runVolcanoGeoThermal(vent, block, false);
 
     int diggingInY = TyphonUtils.getHighestRocklikes(block).getY() - block.getY();
     if (block.getRelative(BlockFace.UP).getType().isAir()) {
