@@ -187,7 +187,7 @@ public class VolcanoCommand {
 
                                 if (args[2].equals("trigger")) {
                                     if (sender instanceof Player player) {
-                                        this.volcano.succession.runSuccession(player.getLocation().getBlock());
+                                        this.volcano.succession.runSuccession(player.getLocation().getBlock(), true);
                                         msg.info("Primary Succession has been triggered at your location");
 
                                     } else {

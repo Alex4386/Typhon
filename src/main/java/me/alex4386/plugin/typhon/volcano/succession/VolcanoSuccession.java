@@ -168,8 +168,6 @@ public class VolcanoSuccession {
 
         double random = ((longestFlow - skipZone) * (1 - VolcanoMath.getZeroFocusedRandom())) + skipZone;
         for (int i = 0; i < 1000; i++) {
-            vent.getVolcano().logger.debug(VolcanoLogClass.SUCCESSION, "Running succession on "+coreBlock.getLocation().toString()+" with random "+random);
-
             double angle = Math.random() * Math.PI * 2;
             double x = Math.sin(angle) * random;
             double z = Math.cos(angle) * random;
@@ -223,16 +221,17 @@ public class VolcanoSuccession {
         return true;
     }
 
-
-
     public void runSuccession(Block block) {
-        boolean isDebug = true;
+        runSuccession(block, false);
+    }
+
+    public void runSuccession(Block block, boolean force) {
+        boolean isDebug = false;
 
         Block targetBlock = TyphonUtils.getHighestRocklikes(block);
         double rawHeatValue = this.volcano.manager.getHeatValue(block.getLocation());
         double heatValue = Math.sqrt(rawHeatValue);
 
-        double heatValueThreshold = 0.7;
         if (targetBlock.getY() < block.getWorld().getSeaLevel() - 1) {
             if (isDebug) this.volcano.logger.log(
                     VolcanoLogClass.SUCCESSION,
@@ -242,33 +241,24 @@ public class VolcanoSuccession {
             return;
         }
 
+        if (isDebug) this.volcano.logger.log(
+                VolcanoLogClass.SUCCESSION,
+                "Succession on block "+TyphonUtils.blockLocationTostring(targetBlock)+" ACTIVE! / heatValue: "+heatValue+" / rawHeatValue: "+rawHeatValue);
+
+
+        // first do the ore removal
+        this.removeOre(targetBlock);
+
         if (!this.volcano.manager.isInAnyVent(block)) {
             if (rawHeatValue < 0.5) {
-                if (Math.random() < 0.1) {
-                    this.removeOre(targetBlock);
-                    return;
-                }
-
-                double probability = 1.0;
-
-                if (heatValue > 0.4) {
-                    // since volcano is hot. probability scales down.
-                    probability = (probability - 0.4) / (heatValueThreshold - 0.4);
-                    probability = Math.pow(0.5, Math.max(probability * 10, 1));
-                }
-
-                // check for probability
-                if (Math.random() < probability) {
-                    this.removeOre(targetBlock);
-                    return;
-                }
-
                 // stage 3. is grass?
                 boolean isGrass = targetBlock.getType() == Material.GRASS_BLOCK || targetBlock.getType() == Material.PODZOL || targetBlock.getType() == Material.COARSE_DIRT;
                 if (isGrass) {
                     // let me run some randoms.
                     double growProbability = 0.2;
                     if (!block.getWorld().isClearWeather()) growProbability += 0.3;
+
+                    if (force) growProbability = 1.0;
 
                     if (Math.random() < growProbability) {
                         int yAxis = targetBlock.getY();
@@ -286,7 +276,7 @@ public class VolcanoSuccession {
                             // tree can not grow if heatValue is high enough,
                             // in that case, grass should be generated instead.
                             if (shouldCheckHeat(block)) {
-                                if (heatValue > 0.6) {
+                                if (heatValue > 0.6 || force) {
                                     targetBlock.applyBoneMeal(BlockFace.UP);
                                     spreadSoil(targetBlock);
                                     return;
@@ -302,13 +292,20 @@ public class VolcanoSuccession {
                     return;
                 }
 
+                if (isDebug) this.volcano.logger.log(
+                        VolcanoLogClass.SUCCESSION,
+                        "Succession on block "+TyphonUtils.blockLocationTostring(block)+" / is not grass."
+                    );
+
                 // Stage 2. check is cobbled.
                 boolean isEroded = isConsideredErodedRockType(targetBlock.getType());
                 if (isEroded) {
                     double random = Math.random();
 
-                    double soilGenerationProb = 0.3;
-                    if (!block.getWorld().isClearWeather()) soilGenerationProb += 0.3;
+                    double soilGenerationProb = 0.15;
+                    if (!block.getWorld().isClearWeather()) soilGenerationProb += 0.1;
+
+                    if (force) soilGenerationProb = 1.0;
 
                     if (random < soilGenerationProb) {
                         if (isDebug) this.volcano.logger.log(
@@ -320,10 +317,16 @@ public class VolcanoSuccession {
                     }
                     return;
                 }
+                if (isDebug) this.volcano.logger.log(
+                        VolcanoLogClass.SUCCESSION,
+                        "Succession on block "+TyphonUtils.blockLocationTostring(block)+" / is not eroded"
+                );
 
 
-                double erodeProb = 0.05;
+                double erodeProb = 0.15;
                 if (!block.getWorld().isClearWeather()) erodeProb += 0.1;
+
+                if (force) erodeProb = 1.0;
 
                 // Stage 1. just randomly change into cobblestone
                 if (Math.random() < erodeProb) {
@@ -332,13 +335,15 @@ public class VolcanoSuccession {
                     if (isDebug) this.volcano.logger.log(
                             VolcanoLogClass.SUCCESSION,
                             "Eroding rock on block "+TyphonUtils.blockLocationTostring(targetBlock));
-                }
-            } else if (rawHeatValue < 0.65) {
-                if (Math.random() < 0.1) {
-                    this.removeOre(targetBlock);
                     return;
                 }
 
+
+                if (isDebug) this.volcano.logger.log(
+                        VolcanoLogClass.SUCCESSION,
+                        "Succession on block "+TyphonUtils.blockLocationTostring(block)+" / try erosion failed"
+                );
+            } else if (rawHeatValue < 0.65) {
                 double amount = 1 - Math.min(1, Math.max(0, (rawHeatValue - 0.5) / 0.15));
 
                 if (isDebug) this.volcano.logger.log(
@@ -430,7 +435,7 @@ public class VolcanoSuccession {
     }
 
     public void erodeBlock(Block targetBlock) {
-        if (targetBlock.getType() == Material.DEEPSLATE || targetBlock.getType() == Material.BLACKSTONE) {
+        if (targetBlock.getType() == Material.DEEPSLATE || targetBlock.getType() == Material.BLACKSTONE || TyphonUtils.toLowerCaseDumbEdition(targetBlock.getType().name()).contains("basalt")) {
             this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.COBBLED_DEEPSLATE);
         } else if (VolcanoComposition.isVolcanicRock(targetBlock.getType())) {
             this.volcano.mainVent.lavaFlow.queueImmediateBlockUpdate(targetBlock, Material.COBBLESTONE);

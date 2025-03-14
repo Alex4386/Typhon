@@ -35,7 +35,7 @@ public class TyphonToolEvents implements Listener {
                 if (targetBlock != null) {
                     Volcano vol = VolcanoManager.getNearestVolcano(targetBlock.getLocation());
                     if (vol != null) {
-                        vol.succession.runSuccession(targetBlock);
+                        vol.succession.runSuccession(targetBlock, true);
                         player.sendMessage("Succession has been run on the block you clicked.");
                         event.setCancelled(true);
                     }
