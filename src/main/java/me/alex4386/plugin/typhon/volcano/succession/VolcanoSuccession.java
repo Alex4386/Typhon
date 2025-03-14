@@ -276,7 +276,7 @@ public class VolcanoSuccession {
                             boolean treeGenerated = createTree(targetBlock);
                             if (isDebug) this.volcano.logger.log(
                                     VolcanoLogClass.SUCCESSION,
-                                    "Creating Tree on block "+TyphonUtils.blockLocationTostring(block)+" / result: "+treeGenerated);
+                                    "Creating Tree on block "+TyphonUtils.blockLocationTostring(targetBlock)+" / result: "+treeGenerated);
 
                             if (treeGenerated) {
                                 return;
@@ -313,7 +313,7 @@ public class VolcanoSuccession {
                     if (random < soilGenerationProb) {
                         if (isDebug) this.volcano.logger.log(
                                 VolcanoLogClass.SUCCESSION,
-                                "Creating Soil on block "+TyphonUtils.blockLocationTostring(block));
+                                "Creating Soil on block "+TyphonUtils.blockLocationTostring(targetBlock));
 
                         runSoilGeneration(targetBlock);
                         spreadSoil(targetBlock);
