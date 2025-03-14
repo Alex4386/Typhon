@@ -147,9 +147,7 @@ public class VolcanoManager {
         boolean isErupting = volcano.manager.currentlyStartedVents().size() > 0;
         return (isErupting
                 ? ChatColor.RED
-                : (volcano.manager.getHighestStatusVent().getStatus().getScaleFactor() < 0.1
-                        ? ChatColor.GREEN
-                        : ChatColor.GOLD));
+                : getVentChatColor(volcano.manager.getHighestStatusVent()));
     }
 
     public ChatColor getVentChatColor(VolcanoVent vent) {

@@ -1,10 +1,12 @@
 package me.alex4386.plugin.typhon.volcano.succession;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import com.sun.source.tree.Tree;
+import me.alex4386.plugin.typhon.TyphonCache;
 import me.alex4386.plugin.typhon.TyphonScheduler;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -95,10 +97,12 @@ public class VolcanoSuccession {
             double circumference = vent.longestNormalLavaFlowLength * Math.PI * 2;
             double successionScale = Math.pow((1.0 - vent.getStatus().getScaleFactor()), 2);
 
-            double maxCount = Math.min(Math.max(0, circumference / 20), 200 / cyclesPerTick);
+            double maxCount = Math.min(Math.max(0, circumference / 20), 2000 / cyclesPerTick);
 
             double cycleCount = successionScale * maxCount;
             successionCount = (int) cycleCount;
+
+//            vent.getVolcano().logger.debug(VolcanoLogClass.SUCCESSION, "Running succession for "+successionCount+" times on "+vent.getCoreBlock().getLocation().toString());
         }
 
         for (int i = 0; i < successionCount; i++) {
@@ -142,34 +146,46 @@ public class VolcanoSuccession {
         }
     }
 
+    private final Map<Integer, TyphonCache<Integer>> rangeCache = new HashMap<>();
+
     public void runSuccession(VolcanoVent vent) {
         Block coreBlock = vent.getCoreBlock();
-        double longestFlow = vent.getBasinLength();
-
+        double longestFlow = Math.max(vent.getBasinLength(), vent.longestNormalLavaFlowLength);
         if (Math.random() < 0.2) {
-            longestFlow = Math.max(vent.longestNormalLavaFlowLength, vent.longestFlowLength);
-            if (Math.random() < 0.2) {
-                longestFlow = Math.max(vent.longestNormalLavaFlowLength, vent.bombs.maxDistance);
-            }
+            longestFlow = Math.max(longestFlow, vent.bombs.maxDistance);
+        } else if (Math.random() < 0.1) {
+            longestFlow = Math.max(longestFlow, vent.longestFlowLength);
         }
 
         double skipZone = (vent.getType() == VolcanoVentType.CRATER ? vent.craterRadius : 0);
         if (skipZone > 0) {
-            if (vent.getStatus().getScaleFactor() < 0.1) {
+            if (!vent.getStatus().hasElevatedActivity()) {
                 if (Math.random() < 0.5) {
                     skipZone = 0;
                 }
             }
         }
-        
+
         double random = ((longestFlow - skipZone) * (1 - VolcanoMath.getZeroFocusedRandom())) + skipZone;
+        for (int i = 0; i < 1000; i++) {
+            vent.getVolcano().logger.debug(VolcanoLogClass.SUCCESSION, "Running succession on "+coreBlock.getLocation().toString()+" with random "+random);
 
-        double angle = Math.random() * Math.PI * 2;
-        double x = Math.sin(angle) * random;
-        double z = Math.cos(angle) * random;
+            double angle = Math.random() * Math.PI * 2;
+            double x = Math.sin(angle) * random;
+            double z = Math.cos(angle) * random;
 
-        Block block = coreBlock.getRelative((int) x, 0, (int) z);
-        runSuccession(block);
+            Block block = coreBlock.getRelative((int) x, 0, (int) z);
+
+            if (!isValidSuccessionBlock(block)) {
+                // reduce the random!
+                random -= 1;
+
+                // we need to store the random value for this angle.
+                continue;
+            }
+            runSuccession(block);
+            break;
+        }
     }
 
     public boolean shouldCheckHeat(Block block) {
@@ -197,8 +213,20 @@ public class VolcanoSuccession {
 
     }
 
+    public boolean isValidSuccessionBlock(Block block) {
+        Block targetBlock = TyphonUtils.getHighestRocklikes(block);
+
+        if (targetBlock.getY() < block.getWorld().getSeaLevel() - 1) {
+            return false;
+        }
+
+        return true;
+    }
+
+
+
     public void runSuccession(Block block) {
-        boolean isDebug = false;
+        boolean isDebug = true;
 
         Block targetBlock = TyphonUtils.getHighestRocklikes(block);
         double rawHeatValue = this.volcano.manager.getHeatValue(block.getLocation());
@@ -208,7 +236,7 @@ public class VolcanoSuccession {
         if (targetBlock.getY() < block.getWorld().getSeaLevel() - 1) {
             if (isDebug) this.volcano.logger.log(
                     VolcanoLogClass.SUCCESSION,
-                    "Succession on block "+TyphonUtils.blockLocationTostring(block)+" / skipped due to sea level."
+                    "Succession on block "+TyphonUtils.blockLocationTostring(targetBlock)+" / skipped due to sea level."
                 );
 
             return;
@@ -303,7 +331,7 @@ public class VolcanoSuccession {
 
                     if (isDebug) this.volcano.logger.log(
                             VolcanoLogClass.SUCCESSION,
-                            "Eroding rock on block "+TyphonUtils.blockLocationTostring(block));
+                            "Eroding rock on block "+TyphonUtils.blockLocationTostring(targetBlock));
                 }
             } else if (rawHeatValue < 0.65) {
                 if (Math.random() < 0.1) {
@@ -458,6 +486,7 @@ public class VolcanoSuccession {
         List<Block> treeRange = VolcanoMath.getCircle(block, spreadRange + extension);
         returnToNormalBiome(block);
 
+        TyphonUtils.smoothBlockHeights(block, spreadRange + extension, Material.DIRT);
         VolcanoVent vent = this.volcano.manager.getNearestVent(block);
         for (Block rockRange : treeRange) {
             double distance = TyphonUtils.getTwoDimensionalDistance(
@@ -472,7 +501,13 @@ public class VolcanoSuccession {
 
             if (probability == 1.0 || Math.random() < probability) {
                 if (vent.isInVent(rockRange.getLocation())) {
-                    continue;
+                    if (vent.getStatus().hasElevatedActivity()) {
+                        continue;
+                    } else if (vent.getStatus().isActive()) {
+                        if (Math.random() < 0.001) {
+                            continue;
+                        }
+                    }
                 }
 
                 runSoilGeneration(rockRange);
@@ -500,20 +535,20 @@ public class VolcanoSuccession {
                 }
                 return false;
             }
-        } else if (scaleFactor >= 0.1) {
-            if (heatValue > 0.97) {
-                if (isTypeOfVolcanicOre(rockBlock.getType())) {
-                    if (vent != null) vent.lavaFlow.queueBlockUpdate(rockBlock, VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
-                }
-                return false;
-            }
         }
-        
-        if (vent != null) {
-            if (vent.getStatus().getScaleFactor() < 0.1) {
-                if (Math.random() < vent.getStatus().getScaleFactor() * 10) {
-                    return false;
-                }
+
+        // remove ores first
+        if (heatValue > 0.97) {
+            if (isTypeOfVolcanicOre(rockBlock.getType())) {
+                if (vent != null) vent.lavaFlow.queueBlockUpdate(rockBlock, VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel));
+            }
+            return false;
+        }
+
+        // if volcano is active, prevent soil generation
+        if (vent.getStatus().hasElevatedActivity()) {
+            if (Math.random() < scaleFactor) {
+                return false;
             }
         }
 
@@ -598,15 +633,19 @@ public class VolcanoSuccession {
         int radius = 6;
         if (shouldCheckHeat(block)) {
             double heatValue = this.volcano.manager.getHeatValue(block.getLocation());
-            double scaleFactor = this.volcano.manager.getNearestVent(block).getStatus().getScaleFactor();
+            VolcanoVentStatus status = this.volcano.manager.getNearestVent(block).getStatus();
             
-            if (scaleFactor >= 0.8) {
+            if (status.getScaleFactor() >= 0.8) {
                 if (heatValue > 0.6) {
                     return false;
                 }
-            } else if (scaleFactor >= 0.1) {
+            } else if (status.hasElevatedActivity()) {
                 if (heatValue > 0.8) {
                     return false;
+                }
+            } else if (status.isActive()) {
+                if (heatValue > 0.9) {
+                    return Math.random() < 0.001;
                 }
             }
 

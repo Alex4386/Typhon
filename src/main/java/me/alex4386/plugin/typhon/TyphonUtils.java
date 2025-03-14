@@ -573,41 +573,55 @@ public class TyphonUtils {
         return containsLiquidWater(block) || containsIce(block) || containsSnow(block);
     }
 
-    /**
-     * Smooth out block heights by checking neighbors within a specified radius
-     * @param blocks The blocks to smooth
-     * @param radius The radius to check for neighboring blocks
-     * @return A list of blocks that should be removed to achieve smoothing
-     */
-    public static List<Block> smoothBlockHeights(Collection<Block> blocks, int radius) {
-        List<Block> blocksToRemove = new ArrayList<>();
-        for (Block block : blocks) {
-            List<Block> neighbors = new ArrayList<>();
-            for (int x = -radius; x <= radius; x++) {
-                for (int z = -radius; z <= radius; z++) {
-                    if (x == 0 && z == 0) continue;
-                    if (x*x + z*z > radius*radius) continue; // Skip blocks outside circle
-                    Block neighbor = block.getRelative(x, 0, z);
-                    if (!neighbor.getType().isAir()) {
+    public static void smoothBlockHeights(Block centerBlock, int radius, Material smoothMaterial) {
+        // Iterate through blocks in a circle around the center
+       for (int x = -radius; x <= radius; x++) {
+            for (int z = -radius; z <= radius; z++) {
+                // Skip blocks outside the circle
+                if (x*x + z*z > radius*radius) continue;
+                
+                Block targetBlock = centerBlock.getRelative(x, 0, z);
+                List<Block> neighbors = new ArrayList<>();
+                
+                // Get neighboring blocks
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        if (dx == 0 && dz == 0) continue;
+                        Block neighbor = targetBlock.getRelative(dx, 0, dz);
                         neighbors.add(neighbor);
                     }
                 }
-            }
-            
-            if (!neighbors.isEmpty()) {
-                int totalHeight = 0;
-                for (Block n : neighbors) {
-                    totalHeight += getHighestRocklikes(n).getY();
-                }
-                int averageHeight = totalHeight / neighbors.size();
+
+                // Calculate average height of neighbors
+                if (!neighbors.isEmpty()) {
+                    int totalHeight = 0;
+                    for (Block n : neighbors) {
+                        totalHeight += getHighestRocklikes(n).getY();
+                   }
+                    int averageHeight = totalHeight / neighbors.size();
                 
-                Block current = getHighestRocklikes(block);
-                if (current.getY() > averageHeight + 1) {
-                    blocksToRemove.add(current.getRelative(0, 1, 0));
+    
+                    Block current = getHighestRocklikes(targetBlock);
+                   int currentHeight = current.getY();
+                    
+                    // Smooth out terrain that's too high
+                    if (currentHeight > averageHeight + 1) {
+                        for (int y = currentHeight; y > averageHeight; y--) {
+                            Block b = targetBlock.getWorld().getBlockAt(targetBlock.getX(), y, targetBlock.getZ());
+                            b.setType(Material.AIR);
+                        }
+                    }
+                    
+                    // Fill in terrain that's too low if smoothMaterial is provided
+                    if (smoothMaterial != null && currentHeight < averageHeight - 1) {
+                        for (int y = currentHeight + 1; y <= averageHeight; y++) {
+                            Block b = targetBlock.getWorld().getBlockAt(targetBlock.getX(), y, targetBlock.getZ());
+                            b.setType(smoothMaterial);
+                        }
+                    }
                 }
             }
         }
-        return blocksToRemove;
     }
 
     public static boolean containsIce(Block block) {
@@ -747,6 +761,7 @@ public class TyphonUtils {
         }
 
         for (ItemStack stack : entity.getEquipment().getArmorContents()) {
+            if (stack == null) continue;
             if (stack.containsEnchantment(Enchantment.FIRE_PROTECTION)) {
                 return true;
             }

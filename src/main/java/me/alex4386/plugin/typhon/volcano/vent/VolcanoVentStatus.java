@@ -1,19 +1,25 @@
 package me.alex4386.plugin.typhon.volcano.vent;
 
 public enum VolcanoVentStatus {
-    EXTINCT("EXTINCT", 0.0),
-    DORMANT("DORMANT", 0.04),
-    MINOR_ACTIVITY("MINOR_ACTIVITY", 0.1),
-    MAJOR_ACTIVITY("MAJOR_ACTIVITY", 0.4),
-    ERUPTION_IMMINENT("ERUPTION_IMMINENT", 0.9),
-    ERUPTING("ERUPTING", 1);
+    EXTINCT("EXTINCT", 0.0, false),
+    DORMANT("DORMANT", 0.09, false),
+    MINOR_ACTIVITY("MINOR_ACTIVITY", 0.3, true),
+    MAJOR_ACTIVITY("MAJOR_ACTIVITY", 0.7, true),
+    ERUPTION_IMMINENT("ERUPTION_IMMINENT", 0.9, true),
+    ERUPTING("ERUPTING", 1, true);
 
     String string;
     double scaleFactor;
+    boolean elevated;
 
-    VolcanoVentStatus(String string, double scaleFactor) {
+    VolcanoVentStatus(String string, double scaleFactor, boolean elevated) {
         this.string = string;
         this.scaleFactor = scaleFactor;
+        this.elevated = elevated;
+    }
+
+    public boolean hasElevatedActivity() {
+        return this.elevated;
     }
 
     public String toString() {
@@ -22,6 +28,10 @@ public enum VolcanoVentStatus {
 
     public double getScaleFactor() {
         return this.scaleFactor;
+    }
+
+    public double getThermalScaleFactor() {
+        return Math.pow(this.scaleFactor, 1.5);
     }
 
     public static boolean isValidStatus(String string) {

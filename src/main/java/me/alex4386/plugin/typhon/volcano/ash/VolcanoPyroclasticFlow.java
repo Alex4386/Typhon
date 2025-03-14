@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.ash;
 
 import me.alex4386.plugin.typhon.*;
+import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
@@ -16,6 +17,7 @@ import org.joml.Vector3f;
 import java.util.*;
 
 public class VolcanoPyroclasticFlow {
+    Location initLocation;
     Location location;
     Vector direction;
     VolcanoAsh ash;
@@ -26,7 +28,7 @@ public class VolcanoPyroclasticFlow {
     static int maxRadius = 10;
 
     int life = 5;
-    static int maxLife = 30;
+    int maxDistance = -1;
 
     boolean isStarting = true;
 
@@ -34,6 +36,7 @@ public class VolcanoPyroclasticFlow {
     int scheduleID = -1;
 
     double maxPileup = 5;
+    double awayCount = 0;
 
     Map<Block, Integer> initialY = new HashMap<>();
 
@@ -52,8 +55,18 @@ public class VolcanoPyroclasticFlow {
         return lowestBlock;
     }
 
-    public static int getMaxLife(VolcanoVent vent) {
-        return getMaxLife(vent, maxLife);
+    public static int getMaxDistance(VolcanoVent vent) {
+        if (vent.erupt.getStyle() == VolcanoEruptStyle.PLINIAN) {
+            return -1;
+        }
+        double basinCalc = vent.longestNormalLavaFlowLength * 0.5;
+        double base = Math.min(vent.bombs.getBaseY() * Math.sqrt(3), basinCalc);
+        base = Math.max(200, base);
+
+        double range = base * 0.2 * ((Math.pow(Math.random(), 4) * 6) + 1);
+        double fullRange = base * 0.2 + range;
+
+        return (int) ((base * 0.8) + (fullRange * Math.random()));
     }
 
     public static int getMaxLife(VolcanoVent vent, int radius) {
@@ -73,14 +86,20 @@ public class VolcanoPyroclasticFlow {
     }
 
     public VolcanoPyroclasticFlow(Location location, VolcanoAsh ash, Vector direction, int radius, int life) {
+        this(location, ash, direction, radius, life, getMaxDistance(ash.vent));
+    }
+
+    public VolcanoPyroclasticFlow(Location location, VolcanoAsh ash, Vector direction, int radius, int life, int maxDistance) {
         this.minY = location.getBlockY();
 
+        this.initLocation = location;
         this.location = location;
         this.direction = direction;
         this.ash = ash;
         this.radius = radius;
         this.life = life;
         this.maxPileup = (double) radius / (1 + Math.random());
+        this.maxDistance = maxDistance;
     }
 
     public void setDirection(Vector direction) {
@@ -132,7 +151,13 @@ public class VolcanoPyroclasticFlow {
         Block srcZeroBlock = srcBlock.getRelative(0, -srcBlock.getY(), 0);
         Vector direction = srcZeroBlock.getLocation().toVector().subtract(tmpCoreLoc.toVector());
 
-        return direction.normalize().multiply(1.5 + Math.random());
+        Vector baseDirection = direction.normalize();
+        double randomizer = Math.random() * 2 - 1;
+
+        Vector rightAngleDirection = new Vector(baseDirection.getZ(), 0, -baseDirection.getX()).normalize().multiply(randomizer * 0.1);
+        Vector targetDirection = baseDirection.add(rightAngleDirection).normalize();
+
+        return targetDirection.multiply(1.5 + Math.random());
     }
 
 
@@ -155,8 +180,21 @@ public class VolcanoPyroclasticFlow {
 
         this.runAsh();
 
-        if (Math.random() < 0.2) {
-            if (radius < maxRadius) radius++;
+        double distance = TyphonUtils.getTwoDimensionalDistance(initLocation, this.location);
+        if (distance - awayCount > 50) {
+            if (Math.random() < 0.2) {
+                if (radius < maxRadius) {
+                    radius++;
+                    if (maxPileup > 1) {
+                        maxPileup -= 1;
+                    }
+                    awayCount = distance;
+                }
+            }
+        }
+
+        if (maxDistance >= 0 && distance > maxDistance) {
+            life = 0;
         }
 
         if (Math.random() < 0.01) {
@@ -195,7 +233,7 @@ public class VolcanoPyroclasticFlow {
         this.location = this.location.add(copiedDirection);
         this.location = this.getBase(this.location.getBlock()).getLocation();
 
-        int climbupLimit = Math.max(1, this.radius / 2);
+        int climbupLimit = Math.max(1, (int) (this.radius * 1.5));
 
         if (this.location.getY() > tmpLocation.getY() + climbupLimit) {
             this.location = tmpLocation;
@@ -344,7 +382,7 @@ public class VolcanoPyroclasticFlow {
 
         double slopeDistance = TyphonUtils.getTwoDimensionalDistance(minYBlock.getLocation(), maxYBlock.getLocation());
         double slope = Math.abs(maxYBlock.getY() - minYBlock.getY()) / slopeDistance;
-        double maxPileup = this.maxPileup;
+        double maxPileup = Math.min(this.maxPileup, (double) this.radius / 2);
 
         /*
         this.ash.vent.getVolcano().logger.log(VolcanoLogClass.ASH,
@@ -372,14 +410,13 @@ public class VolcanoPyroclasticFlow {
 
         Set<Block> ashBlocks = new HashSet<>();
 
-        double deductMultiplier = 0.3;
+        double deductMultiplier = 0.5;
         double baseRadius = radius * deductMultiplier;
-        double halfRadius = radius / 2;
 
         Vector srcDirectionNormalized = new Vector().copy(srcDirection).normalize();
 
-        for (double x = -halfRadius; x <= halfRadius; x += 0.25) {
-            for (double z = -halfRadius; z <= halfRadius; z += 0.25) {
+        for (double x = -radius; x <= radius; x += 0.25) {
+            for (double z = -radius; z <= radius; z += 0.25) {
                 // rotate in the direction to srcDirection
                 double rotatedX = x * srcDirectionNormalized.getX() - z * srcDirectionNormalized.getZ();
                 double rotatedZ = x * srcDirectionNormalized.getZ() + z * srcDirectionNormalized.getX();
@@ -398,7 +435,7 @@ public class VolcanoPyroclasticFlow {
                 double summitDeduct = vent.getSummitBlock().getY() - (distance * vent.bombs.distanceHeightRatio());
 
                 if (accumulateBase.getY() > summitDeduct) {
-                    if (Math.random() < Math.pow(0.9, Math.abs(halfRadius))) {
+                    if (Math.random() < Math.pow(0.9, Math.abs(radius))) {
                         this.ash.vent.lavaFlow.queueBlockUpdate(accumulateBase, Material.TUFF);
                     }
                 }
@@ -424,12 +461,7 @@ public class VolcanoPyroclasticFlow {
         }
 
         // Smooth out any peaks that have formed after all ash is placed
-        List<Block> blocksToRemove = TyphonUtils.smoothBlockHeights(ashBlocks, Math.max(1, radius / 2));
-        for (Block block : blocksToRemove) {
-            if (block.getType() == Material.TUFF) {
-                this.ash.vent.lavaFlow.queueBlockUpdate(block, Material.AIR);
-            }
-        }
+        TyphonUtils.smoothBlockHeights(baseBlock, Math.max(1, radius) + 5, Material.TUFF);
     }
 
     public void playAshTrail() {

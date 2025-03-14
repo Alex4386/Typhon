@@ -644,15 +644,17 @@ public class VolcanoLavaFlow implements Listener {
 
             boolean fillUnderUnder = true;
             if (data.isBomb) {
-                fillUnderUnder = Math.random() < 0.1;
+                if (data.flowLimit >= 0) {
+                    fillUnderUnder = Math.random() < 0.1;
+                }
             }
 
-            if (data.flowedFromVent != null) {
+            if (data.flowedFromVent != null && fillUnderUnder) {
                 double silicateLevel = data.flowedFromVent.lavaFlow.settings.silicateLevel;
                 if (silicateLevel > 0.50) {
                     double silicaRatio = Math.min(0.57, silicateLevel) - 0.50 / 0.07;
                     if (silicaRatio > 1 - Math.pow(silicaRatio, 2)) {
-                        fillUnderUnder = false;
+                        fillUnderUnder = Math.random() > 0.5;
                     }
                 }
             }
@@ -1177,6 +1179,10 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void flowLavaFromBomb(Block bomb) {
+        if (this.vent.getTwoDimensionalDistance(bomb.getLocation()) <= 10) {
+            flowVentLavaFromBomb(bomb);
+            return;
+        }
         this.flowLavaFromBomb(bomb, 0);
     }
 

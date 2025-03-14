@@ -1,9 +1,6 @@
 package me.alex4386.plugin.typhon.volcano;
 
-import me.alex4386.plugin.typhon.TyphonPlugin;
-import me.alex4386.plugin.typhon.TyphonScheduler;
-import me.alex4386.plugin.typhon.TyphonSounds;
-import me.alex4386.plugin.typhon.TyphonUtils;
+import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
@@ -11,17 +8,14 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentStatus;
 
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 import org.bukkit.*;
-import org.bukkit.block.Biome;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.damage.DamageSource;
 import org.bukkit.damage.DamageType;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFormEvent;
-import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
@@ -32,10 +26,7 @@ import org.bukkit.plugin.PluginManager;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 import java.util.function.Consumer;
 
 public class VolcanoGeoThermal implements Listener {
@@ -45,6 +36,8 @@ public class VolcanoGeoThermal implements Listener {
   public int geoThermalUpdateRate = 10;
 
   public boolean registeredEvent = false;
+  public TyphonQueuedHashMap<Block, TyphonCache<Set<Block>>> undergroundBlockCache = new TyphonQueuedHashMap<>(500_000);
+  public static long undergroundBlockCacheValidity = 1000;
 
   public VolcanoGeoThermal(Volcano volcano) {
     this.volcano = volcano;
@@ -94,7 +87,7 @@ public class VolcanoGeoThermal implements Listener {
     boolean letOffSteam = false;
     boolean runPoison = false;
 
-    if (scaleFactor >= 0.1) {
+    if (vent.getStatus().hasElevatedActivity()) {
       if (Math.random() < scaleFactor) {
         this.burnNearbyEntities(targetLoc, 3);
         if (scaleFactor > 0.12) {
@@ -106,7 +99,7 @@ public class VolcanoGeoThermal implements Listener {
         letOffSteam = true;
         runPoison = Math.random() < Math.sqrt(scaleFactor);
       }
-    } else if (scaleFactor >= 0.04) {
+    } else if (vent.getStatus().isActive()) {
       this.burnNearbyEntities(targetLoc, 1);
     
       letOffSteam = (Math.random() < (scaleFactor * 10));
@@ -198,7 +191,7 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runCraterGeoThermalCycle(VolcanoVent vent) {
-    double thermalScale = Math.pow(vent.getStatus().getScaleFactor(), 2);
+    double thermalScale = vent.getStatus().getThermalScaleFactor();
     double maxCount = this.getCraterCycleCount(vent);
 
     double cycleCount = thermalScale * maxCount * Math.random();
@@ -208,7 +201,7 @@ public class VolcanoGeoThermal implements Listener {
       this.runCraterGeothermal(vent);
     }
 
-    int extraCount = (int) (cycleCount * Math.pow(vent.getStatus().getScaleFactor(), 1.5));
+    int extraCount = (int) (cycleCount * vent.getStatus().getThermalScaleFactor());
     for (int i = 0; i < extraCount; i++) {
       this.runOuterCraterGeothermal(vent);
     }
@@ -227,8 +220,9 @@ public class VolcanoGeoThermal implements Listener {
     double volcanoMultiplier = Math.max(Math.min(1000, volcanoRange / craterRange), 1);
 
     double maxCount = this.getCraterCycleCount(vent) * volcanoMultiplier;
-    double thermalScale = Math.pow(vent.getStatus().getScaleFactor(), 1.5);
-    double cycleCount = thermalScale * maxCount * Math.random();
+    double thermalScale = vent.getStatus().getThermalScaleFactor();
+    double cycleCountPerSecond = thermalScale * maxCount * Math.random();
+    double cycleCount = (cycleCountPerSecond / 20) * (20 / geoThermalUpdateRate);
 
     cycleCount = (int) cycleCount;
     volcano.logger.debug(VolcanoLogClass.GEOTHERMAL, "Triggering "+cycleCount+" cycles on volcano");
@@ -259,7 +253,7 @@ public class VolcanoGeoThermal implements Listener {
   public Block getBlockToRunOuterCraterCycle(VolcanoVent vent) {
     Block block;
 
-    double range = 50 * Math.pow(vent.getStatus().getScaleFactor(), 1.5);
+    double range = 50 * vent.getStatus().getThermalScaleFactor();
     int craterRadius = vent.getRadius();
     double offset = VolcanoMath.getZeroFocusedRandom() * range;
 
@@ -362,12 +356,6 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void runGeothermalActivity(VolcanoVent vent, Block block, boolean allowSteam, boolean isTop) {
-    Chunk chunk = block.getChunk();
-    if (chunk.getInhabitedTime() == 0) {
-      // skip geothermal process since it is not loaded yet.
-      volcano.logger.debug(VolcanoLogClass.GEOTHERMAL, "Skip geothermal due to chunk was not loaded. chunk @ ("+chunk.getX()+", "+chunk.getZ()+")");
-    }
-
     double scaleFactor = vent.getStatus().getScaleFactor();
     double heatValue = volcano.manager.getHeatValue(block.getLocation());
 
@@ -378,10 +366,10 @@ public class VolcanoGeoThermal implements Listener {
 
     boolean backToNormalBiome = false;
 
-    if (scaleFactor >= 0.1) {
+    if (vent.getStatus().hasElevatedActivity()) {
       letOffSteam = true;
       runPoison = Math.random() < Math.max(scaleFactor, Math.sqrt(scaleFactor) * Math.pow(Math.min(1, heatValue / 0.85), 2));
-    } else if (scaleFactor >= 0.04) {
+    } else if (vent.getStatus().isActive()) {
       letOffSteam = (Math.random() < 0.5);
       runPoison = (Math.random() < scaleFactor);
       backToNormalBiome = true;
@@ -394,13 +382,6 @@ public class VolcanoGeoThermal implements Listener {
         double burnRange = (int) (Math.sqrt(vent.getStatus().getScaleFactor()) * 6) * heatValue;
 
         if (isTop) this.triggerUndergroundsVolcanoGeothermal(vent, block);
-        if (isTop) {
-          if (Math.random() < 0.0002 && vent.getStatus().getScaleFactor() > 0.3) {
-            // generate tuff ring
-            this.createTuffRing(block);
-          }
-        }
-
         this.playLavaGasReleasing(targetLoc);
         if (burnRange > 0) {
           this.burnNearbyEntities(targetLoc, 3);
@@ -430,7 +411,7 @@ public class VolcanoGeoThermal implements Listener {
             }
           }
 
-          double killTree = Math.pow(vent.getStatus().getScaleFactor(), 2);
+          double killTree = vent.getStatus().getThermalScaleFactor();
           if (Math.random() < killTree) {
             if (TyphonUtils.isMaterialTree(treeBlock.getType())) {
               vent.volcano.metamorphism.killTree(treeBlock);
@@ -481,29 +462,31 @@ public class VolcanoGeoThermal implements Listener {
   }
 
   public void triggerUndergrounds(Block block, Consumer<Block> blockConsumer) {
-    int radius = 16;
-    int scanRadius = (block.getY() - block.getWorld().getMinHeight()) / 2;
-    Collection<Entity> entities = block.getWorld().getNearbyEntities(block.getLocation().subtract(0, scanRadius, 0), radius, scanRadius, radius);
-    entities.removeIf(e -> e.getLocation().getBlockY() >= TyphonUtils.getHighestRocklikes(e.getLocation()).getY() - 3);
+    Block baseBlock = block.getRelative(0, -block.getY(), 0);
+    TyphonCache<Set<Block>> undergroundBlockCache = this.undergroundBlockCache.get(baseBlock);
+    Set<Block> topEmptyBlocks = new HashSet<>();
 
-    if (entities.size() > 0) {
-      Block scanBaseBlock = block.getRelative(0, 3, 0);
-      List<Block> underGroundActivityBlocks = new ArrayList<>();
+    if (undergroundBlockCache == null || undergroundBlockCache.isExpired()) {
+      Block topBlock = TyphonUtils.getHighestRocklikes(block).getRelative(BlockFace.DOWN);
 
-      for (Block scanBlock = scanBaseBlock; scanBlock.getY() >= scanBlock.getWorld().getMinHeight(); scanBlock = scanBlock.getRelative(BlockFace.DOWN)) {
-        if (scanBlock.getType().isAir()) continue;
+      for (Block scanBlock = topBlock; scanBlock.getY() >= baseBlock.getY(); scanBlock = scanBlock.getRelative(BlockFace.DOWN)) {
+        Material type = scanBlock.getType();
+        if (type == Material.AIR) continue;
 
         if (TyphonUtils.isMaterialRocklikes(scanBlock.getType())) {
           if (scanBlock.getRelative(BlockFace.UP).getType().isAir()) {
-            underGroundActivityBlocks.add(scanBlock);
+            topEmptyBlocks.add(scanBlock);
           }
         }
       }
 
-      for (Block activityBlock : underGroundActivityBlocks) {
-        blockConsumer.accept(activityBlock);
-      }
+      undergroundBlockCache = new TyphonCache<>(topEmptyBlocks, undergroundBlockCacheValidity);
+      this.undergroundBlockCache.put(baseBlock, undergroundBlockCache);
+    } else {
+      topEmptyBlocks = undergroundBlockCache.getTarget();
     }
+
+    topEmptyBlocks.forEach(blockConsumer);
   }
 
   public void runUndergroundVolcanoGeothermalActivity(VolcanoVent vent, Block block) {
@@ -681,11 +664,11 @@ public class VolcanoGeoThermal implements Listener {
         int timespan = (int) (25 * scaleValue * Math.sqrt(1 - intensity));
         int poisonousLevel = 0;
 
-        if (vent.getStatus().getScaleFactor() >= 0.1) {
+        if (vent.getStatus().hasElevatedActivity()) {
           double total = Math.min(Math.max(heatValue * multiplier, 1), 5);
 
           poisonousLevel = (int) total;
-        } else if (vent.getStatus() != VolcanoVentStatus.DORMANT) {
+        } else if (vent.getStatus().isActive()) {
           if (vent.isInVent(location)) {
             poisonousLevel = Math.random() > 0.15 ? 1 : 0;
           }
