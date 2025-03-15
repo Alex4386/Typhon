@@ -264,8 +264,8 @@ public class VolcanoAsh {
 
     }
 
-    public void triggerPyroclasticFlow() {
-        this.triggerPyroclasticFlow(this.vent.selectFlowVentBlock(Math.random() < 0.1));
+    public VolcanoPyroclasticFlow triggerPyroclasticFlow() {
+        return this.triggerPyroclasticFlow(this.vent.selectFlowVentBlock(Math.random() < 0.5));
     }
 
     public VolcanoPyroclasticFlow triggerPyroclasticFlow(Block srcblock) {

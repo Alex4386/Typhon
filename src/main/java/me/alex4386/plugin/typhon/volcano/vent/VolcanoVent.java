@@ -79,9 +79,14 @@ public class VolcanoVent {
     // get update via VolcanoAutoStart?
     public boolean autoStyleUpdate = false;
     public boolean enableSuccession = true;
+    public double successionProbability = 0.05;
+    public double successionTreeProbability = 0.05;
+    public double fullPyroclasticFlowProbability = 0.0001;
 
     public boolean enableKillSwitch = false;
     public long killAt = 0;
+
+    long lastVentShuffle = 0;
 
     public VolcanoVent(Volcano volcano) {
         this.volcano = volcano;
@@ -438,6 +443,9 @@ public class VolcanoVent {
         this.cachedVentBlocks = newCachedVentBlocks;
         this.cachedSummitBlockLastSync = System.currentTimeMillis();
 
+        // Everyday I'm shuffl'in
+        Collections.shuffle(this.cachedVentBlocks);
+
         return this.cachedVentBlocks;
     }
 
@@ -605,6 +613,7 @@ public class VolcanoVent {
         List<Block> selectedBlocks = new ArrayList<>();
 
         List<Block> ventBlocks = this.getVentBlocks();
+        Collections.shuffle(ventBlocks);
 
         if (evenFlow) {
             boolean useLowest = false;
@@ -618,7 +627,7 @@ public class VolcanoVent {
             if (useLowest) {
                 Block lowestVent = this.lowestVentBlock();
                 if (Math.round(lowestVent.getY()) < averageVentHeight) {
-                    ventBlocks.sort((Block block1, Block block2) -> block1.getY() - block2.getY());
+                    ventBlocks.sort(Comparator.comparingInt(Block::getY));
 
                     for (Block block : ventBlocks) {
                         if (this.lavaFlow.isLavaOKForFlow(block)) {
@@ -632,7 +641,7 @@ public class VolcanoVent {
                 }
             }
 
-            Collections.shuffle(ventBlocks, random);
+            Collections.shuffle(ventBlocks);
 
             int minimumTolerantHeight;
             if (this.type == VolcanoVentType.FISSURE)
@@ -676,7 +685,7 @@ public class VolcanoVent {
             return TyphonUtils.getHighestRocklikes(ventBlocks.get(randomIdx));
         }
 
-        return targetBlocks.get(0);
+        return targetBlocks.get((int) (Math.random() * targetBlocks.size()));
     }
 
     public Block requestFlow() {
@@ -926,6 +935,9 @@ public class VolcanoVent {
         this.calderaRadius = (double) configData.getOrDefault("calderaRadius" , -1.0);
         this.autoStyleUpdate = (boolean) configData.getOrDefault("autoStyleUpdate", true);
         this.enableSuccession = (boolean) configData.getOrDefault("enableSuccession", true);
+        this.successionProbability = (double) configData.getOrDefault("successionProbability", 0.05);
+        this.successionTreeProbability = (double) configData.getOrDefault("successionTreeProbability", 0.05);
+        this.fullPyroclasticFlowProbability = (double) configData.getOrDefault("fullPyroclasticFlowProbability", 0.0001);
 
         JSONObject killSwitchConfig = (JSONObject) configData.getOrDefault("killSwitch", new JSONObject());
         this.enableKillSwitch = (boolean) killSwitchConfig.getOrDefault("enable", false);
@@ -959,6 +971,9 @@ public class VolcanoVent {
 
         configData.put("autoStyleUpdate", this.autoStyleUpdate);
         configData.put("enableSuccession", this.enableSuccession);
+        configData.put("successionProbability", this.successionProbability);
+        configData.put("successionTreeProbability", this.successionTreeProbability);
+        configData.put("fullPyroclasticFlowProbability", this.fullPyroclasticFlowProbability);
 
         configData.put("genesis", this.genesis.getName());
 

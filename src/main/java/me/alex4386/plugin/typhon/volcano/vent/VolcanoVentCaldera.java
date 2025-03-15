@@ -4,6 +4,7 @@ import me.alex4386.plugin.typhon.TyphonBlueMapUtils;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonUtils;
+import me.alex4386.plugin.typhon.volcano.ash.VolcanoPyroclasticFlow;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBomb;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
@@ -346,10 +347,14 @@ public class VolcanoVentCaldera {
         }
     }
 
-    public void doEruptionPyroclasticFlows() {
+    public void tryEruptionPyroclasticFlows() {
         // +5 to circumvent the caldera formation detection override
         if (this.vent.ash.activePyroclasticFlows() > 200) return;
 
+        this.doEruptionPyroclasticFlows();
+    }
+
+    public VolcanoPyroclasticFlow doEruptionPyroclasticFlows() {
         long total = 0;
         Block lowestY;
 
@@ -370,7 +375,7 @@ public class VolcanoVentCaldera {
             targetBlock = lowestY;
         }
 
-        this.vent.ash.triggerPyroclasticFlow(TyphonUtils.getHighestRocklikes(targetBlock));
+        return this.vent.ash.triggerPyroclasticFlow(TyphonUtils.getHighestRocklikes(targetBlock));
     }
 
     public void runEruptTick() {
@@ -413,7 +418,7 @@ public class VolcanoVentCaldera {
                     }
 
                     if (Math.random() < 0.2) {
-                        this.doEruptionPyroclasticFlows();
+                        this.tryEruptionPyroclasticFlows();
                         this.notProcessedEjecta -= 1000;
                     }
                 }

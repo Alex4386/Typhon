@@ -2,6 +2,7 @@ package me.alex4386.plugin.typhon.volcano.commands;
 
 import me.alex4386.plugin.typhon.TyphonCommand;
 import me.alex4386.plugin.typhon.TyphonUtils;
+import me.alex4386.plugin.typhon.volcano.ash.VolcanoPyroclasticFlow;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.vent.*;
@@ -45,6 +46,9 @@ public class VolcanoVentCommand {
             "vent:fissureLength",
             "vent:fissureAngle",
             "succession:enable",
+            "succession:probability",
+            "succession:treeProbability",
+            "ash:fullPyroclasticFlowProbability",
     };
 
     public VolcanoVentCommand(VolcanoVent vent) {
@@ -102,6 +106,25 @@ public class VolcanoVentCommand {
                             }
                             return searchResults;
                         }
+                    } else if (action == VolcanoVentCommandAction.PYROCLAST) {
+                        List<String> options = new ArrayList<>();
+                        if (args.length >= baseOffset + 2) {
+                            String option = args[baseOffset + 1];
+                            if (args.length == baseOffset + 2) {
+                                if ("full".startsWith(option)) {
+                                    options.add("full");
+                                }
+                                if (option.matches("-?\\d+(\\.\\d+)?") || option.isEmpty()) {
+                                    options.add("<? count>");
+                                }
+                            } else if (args.length == baseOffset + 3) {
+                                String value = args[baseOffset + 2];
+                                if (value.matches("-?\\d+(\\.\\d+)?") || value.isEmpty()) {
+                                    options.add("<? count>");
+                                }
+                            }
+                            return options;
+                        }
                     } else if (action == VolcanoVentCommandAction.STYLE) {
                         if (args.length == baseOffset + 2) {
                             String searchQuery = args[baseOffset + 1];
@@ -150,9 +173,9 @@ public class VolcanoVentCommand {
                             return results;
                         }
                     } else if (action == VolcanoVentCommandAction.CALDERA) {
+                        List<String> results = new ArrayList<>();
                         if (args.length == baseOffset + 2) {
                             String searchQuery = args[baseOffset + 1];
-                            List<String> results = new ArrayList<>();
 
                             if ("start".startsWith(searchQuery))
                                 results.add("start");
@@ -160,8 +183,22 @@ public class VolcanoVentCommand {
                                 results.add("skip");
                             if ("clear".startsWith(searchQuery))
                                 results.add("clear");
+                            if (searchQuery.matches("-?\\d+(\\.\\d+)?") || searchQuery.isEmpty()) {
+                                results.add("<? radius>");
+                            }
 
                             return results;
+                        } else {
+                            String radius = args[baseOffset + 1];
+                            if (radius.matches("-?\\d+(\\.\\d+)?") || radius.isEmpty()) {
+                                if (args.length == baseOffset + 3) {
+                                    results.add("<? deep>");
+                                } else if (args.length == baseOffset + 4) {
+                                    results.add("<? oceanY>");
+                                }
+
+                                return results;
+                            }
                         }
                     } else if (action == VolcanoVentCommandAction.GENESIS) {
                         if (args.length == baseOffset + 2) {
@@ -799,7 +836,27 @@ public class VolcanoVentCommand {
                         }
                         msg.info("succession:enable - " + vent.enableSuccession);
                     }
-
+                } else if (newArgs[1].equalsIgnoreCase("succession:probability")) {
+                    if (newArgs.length >= 2) {
+                        if (newArgs.length == 3) {
+                            vent.successionProbability = Double.parseDouble(newArgs[2]);
+                        }
+                        msg.info("succession:probability - " + vent.successionProbability);
+                    }
+                } else if (newArgs[1].equalsIgnoreCase("succession:treeProbability")) {
+                    if (newArgs.length >= 2) {
+                        if (newArgs.length == 3) {
+                            vent.successionTreeProbability = Double.parseDouble(newArgs[2]);
+                        }
+                        msg.info("succession:treeProbability - " + vent.successionTreeProbability);
+                    }
+                } else if (newArgs[1].equalsIgnoreCase("ash:fullPyroclasticFlowProbability")) {
+                    if (newArgs.length >= 2) {
+                        if (newArgs.length == 3) {
+                            vent.fullPyroclasticFlowProbability = Double.parseDouble(newArgs[2]);
+                        }
+                        msg.info("ash:fullPyroclasticFlowProbability - " + vent.fullPyroclasticFlowProbability);
+                    }
                 } else if (newArgs[1].equalsIgnoreCase("vent:fissureLength")) {
                     if (newArgs.length >= 2) {
                         if (newArgs.length == 3) {
@@ -866,18 +923,49 @@ public class VolcanoVentCommand {
                 }
                 break;
             case PYROCLAST:
-                if (sender instanceof Player) {
-                    Player player = (Player) sender;
-                    Location loc = player.getLocation();
-                    if (vent.getTwoDimensionalDistance(loc) < vent.craterRadius * 2) {
-                        sender.sendMessage(ChatColor.RED+"Pyrocalstic flow just have spawned at your coords!");
-                        vent.ash.triggerPyroclasticFlow(loc.getBlock());
-                        break;
+                int count = 1;
+                boolean isFull = false;
+                VolcanoPyroclasticFlow flow = null;
+
+                if (newArgs.length >= 2) {
+                    String next = newArgs[1];
+                    if (next.equalsIgnoreCase("full")) {
+                        isFull = true;
+                        if (newArgs.length >= 3) {
+                            String num = newArgs[2];
+                            count = Integer.parseInt(num);
+                        }
                     }
                 }
 
-                sender.sendMessage(ChatColor.RED+"Pyrocalstic flow just have spawned at the vent "+vent.getName()+"!");
-                vent.ash.triggerPyroclasticFlow();
+                if (sender instanceof Player) {
+                    Player player = (Player) sender;
+                    Location loc = player.getLocation();
+                    if (vent.getTwoDimensionalDistance(loc) < vent.craterRadius * 2 && count == 1) {
+                        sender.sendMessage(ChatColor.RED+"Pyrocalstic flow just have spawned at your coords!");
+                        flow = vent.ash.triggerPyroclasticFlow(loc.getBlock());
+                    }
+                }
+
+                if (flow == null) {
+                    sender.sendMessage(ChatColor.RED+"Pyrocalstic flow just have spawned at the vent "+vent.getName()+"!");
+
+                    for (int i = 0; i < count; i++) {
+                        if (vent.caldera.isForming()) {
+                            flow = vent.caldera.doEruptionPyroclasticFlows();
+                        } else {
+                            flow = vent.ash.triggerPyroclasticFlow();
+                        }
+
+                        if (isFull) flow.setFull(true);
+                    }
+                } else {
+                    if (isFull) {
+                        flow.setFull(true);
+                    }
+                }
+
+
                 break;
 
             case INFO:

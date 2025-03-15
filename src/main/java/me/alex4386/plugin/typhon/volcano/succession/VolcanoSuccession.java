@@ -181,7 +181,7 @@ public class VolcanoSuccession {
                 // we need to store the random value for this angle.
                 continue;
             }
-            runSuccession(block);
+            runSuccession(vent, block);
             break;
         }
     }
@@ -220,12 +220,16 @@ public class VolcanoSuccession {
 
         return true;
     }
-
-    public void runSuccession(Block block) {
-        runSuccession(block, false);
+    public void runSuccession(Block block, boolean force) {
+        VolcanoVent vent = this.volcano.manager.getNearestVent(block);
+        runSuccession(vent, block, force);
     }
 
-    public void runSuccession(Block block, boolean force) {
+    public void runSuccession(VolcanoVent vent, Block block) {
+        runSuccession(vent, block, false);
+    }
+
+    public void runSuccession(VolcanoVent vent, Block block, boolean force) {
         boolean isDebug = false;
 
         Block targetBlock = TyphonUtils.getHighestRocklikes(block);
@@ -254,9 +258,15 @@ public class VolcanoSuccession {
                 // stage 3. is grass?
                 boolean isGrass = targetBlock.getType() == Material.GRASS_BLOCK || targetBlock.getType() == Material.PODZOL || targetBlock.getType() == Material.COARSE_DIRT;
                 if (isGrass) {
+                    if (vent.getStatus().hasElevatedActivity()) {
+                        if (heatValue > 0.4) {
+                            return;
+                        }
+                    }
+
                     // let me run some randoms.
-                    double growProbability = 0.2;
-                    if (!block.getWorld().isClearWeather()) growProbability += 0.3;
+                    double growProbability = vent.successionTreeProbability;
+                    if (!block.getWorld().isClearWeather()) growProbability *= 1.5;
 
                     if (force) growProbability = 1.0;
 
@@ -302,12 +312,12 @@ public class VolcanoSuccession {
                 if (isEroded) {
                     double random = Math.random();
 
-                    double soilGenerationProb = 0.15;
-                    if (!block.getWorld().isClearWeather()) soilGenerationProb += 0.1;
+                    double erodeProb = vent.successionProbability;
+                    if (!block.getWorld().isClearWeather()) erodeProb *= 1.5;
 
-                    if (force) soilGenerationProb = 1.0;
+                    if (force) erodeProb = 1.0;
 
-                    if (random < soilGenerationProb) {
+                    if (random < erodeProb) {
                         if (isDebug) this.volcano.logger.log(
                                 VolcanoLogClass.SUCCESSION,
                                 "Creating Soil on block "+TyphonUtils.blockLocationTostring(targetBlock));
@@ -323,8 +333,8 @@ public class VolcanoSuccession {
                 );
 
 
-                double erodeProb = 0.15;
-                if (!block.getWorld().isClearWeather()) erodeProb += 0.1;
+                double erodeProb = vent.successionProbability;
+                if (!block.getWorld().isClearWeather()) erodeProb *= 1.5;
 
                 if (force) erodeProb = 1.0;
 
@@ -360,8 +370,6 @@ public class VolcanoSuccession {
                 if (rawHeatValue < 0.65) {
                     spreadSoil(targetBlock, (int)(amount * 5), false);
                 } else {
-                    VolcanoVent vent = this.volcano.manager.getNearestVent(targetBlock);
-
                     double percentage = (rawHeatValue - 0.65) / 0.15;
                     percentage = Math.min(1, Math.max(0, percentage));
 
