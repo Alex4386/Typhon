@@ -87,7 +87,7 @@ public class VolcanoAsh {
         Block coreBlock = vent.getNearestCoreBlock(location);
         int baseY = Math.max(coreBlock.getY(), vent.location.getWorld().getSeaLevel());
         int summitY = vent.getSummitBlock().getY();
-        if (vent.caldera.isForming()) {
+        if (vent.caldera.isSettedUp()) {
             summitY = Math.max(summitY, TyphonUtils.getHighestRocklikes(coreBlock.getRelative(0, vent.caldera.radius, 0)).getY());
         }
 
