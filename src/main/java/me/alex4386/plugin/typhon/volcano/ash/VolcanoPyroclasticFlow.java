@@ -474,12 +474,6 @@ public class VolcanoPyroclasticFlow {
                 double summitDeduct = Math.max(this.ash.getTargetY(location), Math.max(vent.location.getY(), vent.location.getWorld().getSeaLevel()));
                 summitDeduct = Math.max(summitY - (safeDistance * 0.5), summitDeduct);
 
-                // limit the maxPileup with distance from initLocation for preventing piling up ash in linearly in nearby area
-                double safeZone = Math.max(this.maxPileup * 2, this.radius * 2);
-                if (safeDistance < safeZone) {
-                    summitDeduct = summitY - safeZone + (safeDistance * 0.5);
-                }
-
                 if (summitY - accumulateBase.getY() < 50) {
                     if (accumulateBase.getY() > summitDeduct) {
                         if (Math.random() < Math.pow(0.9, Math.abs(radius))) {
