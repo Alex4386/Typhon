@@ -482,7 +482,7 @@ public class VolcanoPyroclasticFlow {
 
                 if (accumulateBase.getY() > summitDeduct) {
                     if (62 <= accumulateBase.getY() && accumulateBase.getY() <= 66) {
-                        this.ash.vent.volcano.logger.log(VolcanoLogClass.ASH, "accumulateBase.getY() > summitDeduct: "+summitDeduct+" accumulateBase.getY(): "+accumulateBase.getY());
+//                        this.ash.vent.volcano.logger.log(VolcanoLogClass.ASH, "accumulateBase.getY() > summitDeduct: "+summitDeduct+" accumulateBase.getY(): "+accumulateBase.getY());
                     }
 
                     if (Math.random() < Math.pow(0.9, Math.abs(radius))) {
