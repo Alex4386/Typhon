@@ -458,7 +458,7 @@ public class VolcanoPyroclasticFlow {
                 ashBlocks.add(block);
 
                 double deduct = (maxPileup / baseRadius) * Math.abs(z);
-                int height = (int) Math.round(maxPileup - deduct);
+                int height = (int) Math.max(1, Math.round(maxPileup - deduct));
 
                 Block accumulateBase = this.getBase(block);
                 VolcanoVent vent = this.ash.vent;
@@ -473,12 +473,12 @@ public class VolcanoPyroclasticFlow {
 
                 double summitDeduct = Math.max(this.ash.getTargetY(location), summitY - (safeDistance * 0.5));
 
-                if (summitY - accumulateBase.getY() < 50) {
-                    if (accumulateBase.getY() > summitDeduct) {
-                        if (Math.random() < Math.pow(0.9, Math.abs(radius))) {
-                            this.ash.vent.lavaFlow.queueBlockUpdate(accumulateBase, Material.TUFF);
-                        }
+                if (accumulateBase.getY() > summitDeduct) {
+                    if (Math.random() < Math.pow(0.9, Math.abs(radius))) {
+                        this.ash.vent.lavaFlow.queueBlockUpdate(accumulateBase, Material.TUFF);
+                    }
 
+                    if (accumulateBase.getY() > accumulateBase.getWorld().getSeaLevel() + 20) {
                         continue;
                     }
                 }
