@@ -471,8 +471,7 @@ public class VolcanoPyroclasticFlow {
                 // so starting from radius doesn't generate pyroclastic ash mound
                 summitY -= initRadius * 0.5;
 
-                double summitDeduct = Math.max(this.ash.getTargetY(location), Math.max(vent.location.getY(), vent.location.getWorld().getSeaLevel()));
-                summitDeduct = Math.max(summitY - (safeDistance * 0.5), summitDeduct);
+                double summitDeduct = Math.max(this.ash.getTargetY(location), summitY - (safeDistance * 0.5));
 
                 if (summitY - accumulateBase.getY() < 50) {
                     if (accumulateBase.getY() > summitDeduct) {
