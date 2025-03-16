@@ -25,6 +25,7 @@ public class VolcanoPyroclasticFlow {
     int minY = Integer.MAX_VALUE;
 
     int radius;
+    int initRadius;
     static int maxRadius = 10;
 
     int life = 5;
@@ -110,6 +111,7 @@ public class VolcanoPyroclasticFlow {
         this.direction = direction;
         this.ash = ash;
         this.radius = radius;
+        this.initRadius = radius;
         this.life = life;
         this.maxDistance = maxDistance;
     }
@@ -393,7 +395,7 @@ public class VolcanoPyroclasticFlow {
 
     public void putAsh() {
         // if it is near the summit, just do not put ash.
-        if (this.ash.vent.getTwoDimensionalDistance(this.location) < 5 + this.ash.vent.getRadius()) {
+        if (this.ash.vent.getTwoDimensionalDistance(this.location) < this.ash.vent.getRadius()) {
             return;
         }
 
@@ -416,19 +418,19 @@ public class VolcanoPyroclasticFlow {
                 "Current maxY:"+maxYBlock.getY()+", minY:"+minYBlock.getY()+", distance:"+slopeDistance+" maxPileup: "+maxPileup+", slope: "+slope+", radius: "+radius+", location: "+TyphonUtils.blockLocationTostring(this.location.getBlock()));
         */
 
-        double ashCoatStart = 0.25;
-        boolean noLimit = false;
-
-        if (slope >= ashCoatStart) {
-            // too steep, only cover with ash
-            maxPileup = 1;
-        } else {
-            // not steep. pileup ash
-            noLimit = true;
-            if (maxPileup < 1) {
-                maxPileup = 1;
-            }
-        }
+//        double ashCoatStart = 0.25;
+//        boolean noLimit = false;
+//
+//        if (slope >= ashCoatStart) {
+//            // too steep, only cover with ash
+//            maxPileup = 1;
+//        } else {
+//            // not steep. pileup ash
+//            noLimit = true;
+//            if (maxPileup < 1) {
+//                maxPileup = 1;
+//            }
+//        }
 
         Block baseBlock = this.getBase(this.location.getBlock());
         double averageVentY = this.ash.vent.averageVentHeight();
@@ -461,15 +463,37 @@ public class VolcanoPyroclasticFlow {
                 Block accumulateBase = this.getBase(block);
                 VolcanoVent vent = this.ash.vent;
 
-                double distance = TyphonUtils.getTwoDimensionalDistance(accumulateBase.getLocation(), vent.location) - vent.getRadius();
-                double summitDeduct = Math.max(Math.floor(Math.max(initLocation.getY(), vent.getSummitBlock().getY()) - (distance * 0.5)), Math.max(vent.location.getY(), vent.location.getWorld().getSeaLevel()) + this.radius);
+                double safeDistance = TyphonUtils.getTwoDimensionalDistance(initLocation, this.location);
+
+                double summitY = Math.max(initLocation.getY(), vent.getSummitBlock().getY());
+
+                // deducting summitY as main cone should be still paramount.
+                // so starting from radius doesn't generate pyroclastic ash mound
+                summitY -= initRadius * 0.5;
+
+                double summitDeduct = Math.max(this.ash.getTargetY(location), Math.max(vent.location.getY(), vent.location.getWorld().getSeaLevel()));
+                summitDeduct = Math.max(summitY - (safeDistance * 0.5), summitDeduct);
+
+                // limit the maxPileup with distance from initLocation for preventing piling up ash in linearly in nearby area
+                double safeZone = Math.max(this.maxPileup * 2, this.radius * 2);
+                if (safeDistance < safeZone) {
+                    summitDeduct = summitY - safeZone + (safeDistance * 0.5);
+                }
 
                 if (accumulateBase.getY() > summitDeduct) {
-//                    this.ash.vent.volcano.logger.log(VolcanoLogClass.ASH, "accumulateBase.getY() > summitDeduct: "+summitDeduct+" accumulateBase.getY(): "+accumulateBase.getY());
+                    this.ash.vent.volcano.logger.log(VolcanoLogClass.ASH, "accumulateBase.getY() > summitDeduct: "+summitDeduct+" accumulateBase.getY(): "+accumulateBase.getY());
                     if (Math.random() < Math.pow(0.9, Math.abs(radius))) {
                         this.ash.vent.lavaFlow.queueBlockUpdate(accumulateBase, Material.TUFF);
                     }
-                    return;
+
+                    if (safeDistance > 100) {
+                        // It is safe to give it more chance.
+                        if (summitDeduct - accumulateBase.getY() < 5) {
+                            summitDeduct = accumulateBase.getY() + 2;
+                        }
+                    } else {
+                        continue;
+                    }
                 }
 
                 for (int y = 1; y <= height; y++) {
@@ -479,8 +503,7 @@ public class VolcanoPyroclasticFlow {
                         break;
                     }
 
-                    boolean ashFallCheckRequired = !noLimit && distance < 20;
-                    if (!noLimit && ashFallCheckRequired && targetBlock.getY() > summitDeduct) {
+                    if (targetBlock.getY() > summitDeduct) {
                         break;
                     }
 

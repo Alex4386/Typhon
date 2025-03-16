@@ -6,9 +6,7 @@ import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.util.Vector;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 
 public class VolcanoMath {
     public static double volcanoPdfVariance = 0.1;
@@ -138,6 +136,23 @@ public class VolcanoMath {
 
     public static double stratoConePdfHeight(double steepness, double x) {
         return stratoConePdf(steepness, x) / stratoConePdf(steepness, 0);
+    }
+
+    public static List<Block> getAccurateHollowCircle(Block centerBlock, double radius) {
+        Set<Block> blocks = new HashSet<>();
+
+        double circumference = radius * 2 * Math.PI;
+        double step = (2 * Math.PI) / circumference;
+
+        for (int i = 0; i < Math.ceil(circumference); i++) {
+            double x = Math.sin(step * i) * radius;
+            double z = Math.cos(step * i) * radius;
+
+            Block block = centerBlock.getRelative((int) x, 0, (int) z);
+            blocks.add(block);
+        }
+
+        return new ArrayList<>(blocks);
     }
 
     public static List<Block> getCircle(Block centerBlock, int radius) {

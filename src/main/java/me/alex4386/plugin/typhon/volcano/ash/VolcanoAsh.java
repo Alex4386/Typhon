@@ -1,10 +1,12 @@
 package me.alex4386.plugin.typhon.volcano.ash;
 
+import me.alex4386.plugin.typhon.TyphonCache;
 import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
+import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
@@ -82,14 +84,19 @@ public class VolcanoAsh {
     }
 
     public int getTargetY(Location location) {
-        int baseY = Math.max(vent.location.getBlockY(), vent.location.getWorld().getSeaLevel());
-        int heightY = Math.max(vent.getSummitBlock().getY() - baseY, 0);
+        Block coreBlock = vent.getNearestCoreBlock(location);
+        int baseY = Math.max(coreBlock.getY(), vent.location.getWorld().getSeaLevel());
+        int summitY = vent.getSummitBlock().getY();
+        if (vent.caldera.isForming()) {
+            summitY = Math.max(summitY, TyphonUtils.getHighestRocklikes(coreBlock.getRelative(0, vent.caldera.radius, 0)).getY());
+        }
 
+        int heightY = Math.max(summitY - baseY, 0);
         if (heightY == 0) return baseY;
 
         int tmpSummit = heightY / 2;
-        double distance = TyphonUtils.getTwoDimensionalDistance(vent.getNearestCoreBlock(location).getLocation(), location);
-        double deductAmount = -(distance / 10);
+        double distance = TyphonUtils.getTwoDimensionalDistance(coreBlock.getLocation(), location);
+        double deductAmount = -(distance / 8);
 
         return (int) (baseY + tmpSummit + deductAmount);
     }
@@ -205,13 +212,80 @@ public class VolcanoAsh {
 
         for (VolcanoAshCloudData bd : this.ashBlockDisplays) {
             this.processAshCloud(bd);
+        }
 
-            if (Math.random() < 0.1 * bd.multiplier) {
-                bd.fallAsh();
+        if (this.ashBlockDisplays.size() > 0) {
+            int count = 2 + (int) (Math.random() * 3);
+            for (int i = 0; i < count * Math.floor(this.vent.erupt.getStyle().ashMultiplier); i++) {
+                this.fallAsh();
             }
         }
 
         this.clearOrphanedAshClouds(false);
+    }
+
+
+    public Block getAshFallTarget() {
+        double deadZone = this.vent.getRadius() + ((this.vent.getBasinLength() / 2) - this.vent.getRadius());
+        if (vent.caldera.isForming()) {
+            deadZone = this.vent.caldera.radius + 7;
+        }
+
+        double max = Math.max(this.vent.getBasinLength(), this.vent.longestNormalLavaFlowLength + 20);
+        max = Math.max(max, this.vent.bombs.maxDistance);
+
+        if (Math.random() < 0.3) {
+            max = Math.max(max, this.vent.longestFlowLength);
+        }
+
+        double angle = Math.random() * 2 * Math.PI;
+        double distance = (1 - VolcanoMath.getZeroFocusedRandom()) * (max - deadZone) + deadZone;
+        double x = Math.cos(angle) * distance;
+        double z = Math.sin(angle) * distance;
+
+        return TyphonUtils.getHighestRocklikes(this.vent.getCoreBlock().getLocation().add(x, 0, z));
+    }
+
+    public void fallAsh() {
+        Block target = this.getAshFallTarget();
+        this.vent.volcano.logger.debug(VolcanoLogClass.ASH, "Falling Ash @ "+TyphonUtils.blockLocationTostring(target));
+
+        int height = (int) Math.round(1 + (Math.random() * 2));
+        int radius = height * (2 + (int) (Math.random() * 2));
+        List<Block> circleBlock = VolcanoMath.getCircle(target, radius);
+
+        if (target.getY() > this.getTargetY(target.getLocation())) {
+            return;
+        }
+
+        TyphonUtils.smoothBlockHeights(target, radius, Material.TUFF);
+
+        for (Block circle : circleBlock) {
+            Block circleTarget = TyphonUtils.getHighestRocklikes(circle);
+            Block highest = TyphonUtils.getHighestLocation(circleTarget.getLocation()).getBlock();
+            if (highest.getY() > circleTarget.getY()) {
+                for (Block block = highest; block.getY() > circleTarget.getY(); block = block.getRelative(0, -1 ,0)) {
+                    if (!TyphonUtils.isMaterialRocklikes(block.getType())) {
+                        if (!block.isEmpty() && !block.isLiquid()) {
+                            this.vent.lavaFlow.queueBlockUpdate(block, Material.AIR);
+                        }
+                    }
+                }
+            }
+
+            if (circleTarget.getY() + 1 > this.getTargetY(circleTarget.getLocation())) {
+                continue;
+            }
+
+            double distance = TyphonUtils.getTwoDimensionalDistance(circle.getLocation(), target.getLocation());
+            int thisHeight = (int) Math.round((1 - (distance / radius)) * height);
+
+            for (int i = 0; i < thisHeight; i++) {
+                Block pileUp = circleTarget.getRelative(0, i, 0);
+                this.vent.lavaFlow.queueBlockUpdate(pileUp, Material.TUFF);
+                this.vent.record.addEjectaVolume(1);
+            }
+        }
     }
 
 
@@ -261,11 +335,66 @@ public class VolcanoAsh {
             tmpSize /= (float) Math.sqrt(scalePerY);
             this.createAshCloud(tmp.clone(), ashMultiplier, tmpSize);
         }
+    }
 
+    Map<Block, TyphonCache<Block>> lowestCaches = new HashMap<>();
+
+    public Block getPyroclasticFlowTargetBlock(boolean evenFlow) {
+        Block coreBlock = this.vent.getCoreBlock();
+        Block target = null;
+
+        double sum = 0;
+        int count = 0;
+
+        if (evenFlow) {
+            TyphonCache<Block> lowestCache = lowestCaches.get(coreBlock);
+            if (lowestCache != null && !lowestCache.isExpired()) {
+                target = lowestCache.getTarget();
+            } else {
+                List<Block> blocks = VolcanoMath.getAccurateHollowCircle(coreBlock, this.vent.getRadius());
+                for (Block block : blocks) {
+                    Block highest = TyphonUtils.getHighestRocklikes(block);
+
+                    Location direction = block.getLocation().subtract(coreBlock.getLocation()).multiply(1.0 / this.vent.getRadius());
+                    Block extended = TyphonUtils.getHighestRocklikes(coreBlock.getLocation().add(direction.clone().multiply(this.vent.getRadius() * 1.5)));
+                    Block extendedHighest = TyphonUtils.getHighestRocklikes(extended);
+
+                    double y = Math.max(highest.getY(), extendedHighest.getY());
+
+                    if (target == null || target.getY() > y) {
+                        target = highest;
+                    }
+
+                    sum += y;
+                    count++;
+                }
+
+                if (target != null) {
+                    double average = sum / count;
+                    if (target.getY() < average - 5) {
+                        target = null;
+                    }
+
+                    if (target != null) {
+                        lowestCaches.put(coreBlock, new TyphonCache<>(target, 20));
+                    }
+                }
+            }
+        }
+
+        if (target == null) {
+            double angle = Math.random() * Math.PI * 2;
+            double x = this.vent.getRadius() * Math.cos(angle);
+            double z = this.vent.getRadius() * Math.sin(angle);
+
+            target = TyphonUtils.getHighestRocklikes(coreBlock.getRelative((int) x, 0, (int) z));
+        }
+
+        return target;
     }
 
     public VolcanoPyroclasticFlow triggerPyroclasticFlow() {
-        return this.triggerPyroclasticFlow(this.vent.selectFlowVentBlock(Math.random() < 0.5));
+        return this.triggerPyroclasticFlow(this.getPyroclasticFlowTargetBlock(Math.random() < 0.3));
     }
 
     public VolcanoPyroclasticFlow triggerPyroclasticFlow(Block srcblock) {
