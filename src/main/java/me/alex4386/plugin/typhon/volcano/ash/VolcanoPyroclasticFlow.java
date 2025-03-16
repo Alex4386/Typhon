@@ -480,21 +480,12 @@ public class VolcanoPyroclasticFlow {
                     summitDeduct = summitY - safeZone + (safeDistance * 0.5);
                 }
 
-                if (accumulateBase.getY() > summitDeduct) {
-                    if (62 <= accumulateBase.getY() && accumulateBase.getY() <= 66) {
-//                        this.ash.vent.volcano.logger.log(VolcanoLogClass.ASH, "accumulateBase.getY() > summitDeduct: "+summitDeduct+" accumulateBase.getY(): "+accumulateBase.getY());
-                    }
-
-                    if (Math.random() < Math.pow(0.9, Math.abs(radius))) {
-                        this.ash.vent.lavaFlow.queueBlockUpdate(accumulateBase, Material.TUFF);
-                    }
-
-                    if (safeDistance > 100) {
-                        // It is safe to give it more chance.
-                        if (accumulateBase.getY() - summitDeduct < 5) {
-                            summitDeduct = accumulateBase.getY() + 2;
+                if (summitY - accumulateBase.getY() < 50) {
+                    if (accumulateBase.getY() > summitDeduct) {
+                        if (Math.random() < Math.pow(0.9, Math.abs(radius))) {
+                            this.ash.vent.lavaFlow.queueBlockUpdate(accumulateBase, Material.TUFF);
                         }
-                    } else {
+
                         continue;
                     }
                 }
