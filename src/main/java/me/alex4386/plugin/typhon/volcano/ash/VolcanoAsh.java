@@ -394,7 +394,7 @@ public class VolcanoAsh {
     }
 
     public VolcanoPyroclasticFlow triggerPyroclasticFlow() {
-        return this.triggerPyroclasticFlow(this.getPyroclasticFlowTargetBlock(Math.random() < 0.3));
+        return this.triggerPyroclasticFlow(this.getPyroclasticFlowTargetBlock(Math.random() < 0.1));
     }
 
     public VolcanoPyroclasticFlow triggerPyroclasticFlow(Block srcblock) {
