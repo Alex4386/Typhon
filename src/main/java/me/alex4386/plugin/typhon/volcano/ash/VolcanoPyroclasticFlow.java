@@ -399,105 +399,57 @@ public class VolcanoPyroclasticFlow {
             return;
         }
 
-        List<Block> blocks = VolcanoMath.getCircle(this.location.getBlock(), radius);
-        Vector srcDirection = new Vector().copy(this.direction);
+        Block baseBlock = this.getBase(this.location.getBlock());
+        double safeDistance = TyphonUtils.getTwoDimensionalDistance(initLocation, this.location);
+
+        // Calculate the maximum height based on summit and slope
+        double summitY = Math.max(initLocation.getY(), this.ash.vent.getSummitBlock().getY());
+        double baseY = Math.max(this.ash.vent.location.getY(), this.ash.vent.location.getWorld().getSeaLevel());
+
+        double basin = Math.max(this.ash.vent.getBasinLength(), this.ash.vent.longestNormalLavaFlowLength);
+        double scale = (summitY - baseY) / basin;
+
+        summitY -= initRadius * scale;  // Scale down based on initial radius
+        double maxHeight = summitY - (safeDistance * scale);
+
+        // Get normalized direction vector
+        Vector srcDirection = new Vector().copy(this.direction).normalize();
         srcDirection.setY(0);
 
-        Vector radiusVector = new Vector().copy(srcDirection).normalize().multiply(radius);
-        Vector radiusVectorBack = new Vector().copy(radiusVector).multiply(-1);
+        // Create a set to avoid duplicate block updates
+        Set<Block> processedBlocks = new HashSet<>();
 
-        Block maxYBlock = this.getBase(this.location.add(radiusVectorBack).getBlock());
-        Block minYBlock = this.getBase(this.location.add(radiusVector).getBlock());
+        // Step through blocks in the radius
+        for (double x = -this.radius; x <= this.radius; x++) {
+            for (double z = -this.radius; z <= this.radius; z++) {
+                // Rotate coordinates to align with flow direction
+                double rotatedX = x * srcDirection.getX() + z * srcDirection.getZ();
+                double rotatedZ = x * srcDirection.getZ() - z * srcDirection.getX();
 
-        double slopeDistance = TyphonUtils.getTwoDimensionalDistance(minYBlock.getLocation(), maxYBlock.getLocation());
-        double slope = Math.abs(maxYBlock.getY() - minYBlock.getY()) / slopeDistance;
-        double maxPileup = Math.min(this.maxPileup, (double) this.radius / 2);
+                Block targetBase = baseBlock.getRelative((int)rotatedX, 0, (int)rotatedZ);
+                if (processedBlocks.contains(targetBase)) continue;
+                processedBlocks.add(targetBase);
 
-        /*
-        this.ash.vent.getVolcano().logger.log(VolcanoLogClass.ASH,
-                "Current maxY:"+maxYBlock.getY()+", minY:"+minYBlock.getY()+", distance:"+slopeDistance+" maxPileup: "+maxPileup+", slope: "+slope+", radius: "+radius+", location: "+TyphonUtils.blockLocationTostring(this.location.getBlock()));
-        */
+                // Calculate ash height based on distance from center line
+                double distanceFromCenterLine = Math.abs(x);
+                double heightFactor = 1.0 - (distanceFromCenterLine / this.radius);
+                heightFactor = Math.max(0, heightFactor);
+                int ashHeight = (int)(this.initRadius / 2.0 * heightFactor);
 
-//        double ashCoatStart = 0.25;
-//        boolean noLimit = false;
-//
-//        if (slope >= ashCoatStart) {
-//            // too steep, only cover with ash
-//            maxPileup = 1;
-//        } else {
-//            // not steep. pileup ash
-//            noLimit = true;
-//            if (maxPileup < 1) {
-//                maxPileup = 1;
-//            }
-//        }
-
-        Block baseBlock = this.getBase(this.location.getBlock());
-        double averageVentY = this.ash.vent.averageVentHeight();
-        if (this.ash.vent.getSummitBlock().getY() < initLocation.getY()) {
-            averageVentY = initLocation.getY() - 4;
-        }
-
-        Set<Block> ashBlocks = new HashSet<>();
-
-        double baseRadius = radius;
-
-        Vector srcDirectionNormalized = new Vector().copy(srcDirection).normalize();
-
-        // do smoothing out first
-        TyphonUtils.smoothBlockHeights(baseBlock, Math.max(1, radius) + 5, Material.TUFF);
-
-        for (double x = -radius; x <= radius; x += 0.25) {
-            for (double z = -radius; z <= radius; z += 0.25) {
-                // rotate in the direction to srcDirection
-                double rotatedX = x * srcDirectionNormalized.getX() - z * srcDirectionNormalized.getZ();
-                double rotatedZ = x * srcDirectionNormalized.getZ() + z * srcDirectionNormalized.getX();
-
-                Block block = baseBlock.getRelative((int) rotatedX, 0, (int) rotatedZ);
-                if (ashBlocks.contains(block)) continue;
-                ashBlocks.add(block);
-
-                double deduct = (maxPileup / baseRadius) * Math.abs(z);
-                int height = (int) Math.max(1, Math.round(maxPileup - deduct));
-
-                Block accumulateBase = this.getBase(block);
-                VolcanoVent vent = this.ash.vent;
-
-                double safeDistance = TyphonUtils.getTwoDimensionalDistance(initLocation, this.location);
-
-                double summitY = Math.max(initLocation.getY(), vent.getSummitBlock().getY());
-
-                // deducting summitY as main cone should be still paramount.
-                // so starting from radius doesn't generate pyroclastic ash mound
-                summitY -= initRadius * 0.5;
-
-                double summitDeduct = Math.max(this.ash.getTargetY(location), summitY - (safeDistance * 0.5));
-
-                if (accumulateBase.getY() > summitDeduct) {
-                    if (Math.random() < Math.pow(0.9, Math.abs(radius))) {
-                        this.ash.vent.lavaFlow.queueBlockUpdate(accumulateBase, Material.TUFF);
-                    }
-
-                    if (accumulateBase.getY() > accumulateBase.getWorld().getSeaLevel() + 20) {
-                        continue;
-                    }
+                // Check if this would exceed the slope max height
+                Block baseBlockHere = this.getBase(targetBase);
+                if (baseBlockHere.getY() > maxHeight) {
+                    continue;
                 }
 
-                for (int y = 1; y <= height; y++) {
-                    Block targetBlock = accumulateBase.getRelative(0, y, 0);
-
-                    if (targetBlock.getY() > averageVentY + 2) {
-                        break;
+                // Place ash blocks vertically
+                for (int y = 1; y <= ashHeight; y++) {
+                    Block targetBlock = baseBlockHere.getRelative(0, y, 0);
+                    if (targetBlock.getY() > Math.min(baseBlock.getY() + ashHeight, maxHeight)) {
+                        continue;
                     }
-
-                    if (targetBlock.getY() > summitDeduct) {
-                        break;
-                    }
-
-                    if (targetBlock.getType().isAir() || TyphonUtils.containsWater(targetBlock)) {
-                        this.ash.vent.lavaFlow.queueBlockUpdate(targetBlock, Material.TUFF);
-                        this.ash.vent.record.addEjectaVolume(1);
-                    }
+                    this.ash.vent.lavaFlow.queueBlockUpdate(targetBlock, Material.TUFF);
+                    this.ash.vent.record.addEjectaVolume(1);
                 }
             }
         }
@@ -531,4 +483,3 @@ public class VolcanoPyroclasticFlow {
         return block.getRelative(0, y - block.getY(), 0);
     }
 }
-
