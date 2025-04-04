@@ -423,15 +423,18 @@ public class VolcanoPyroclasticFlow {
         for (double x = -this.radius; x <= this.radius; x++) {
             for (double z = -this.radius; z <= this.radius; z++) {
                 // Rotate coordinates to align with flow direction
-                double rotatedX = x * srcDirection.getX() + z * srcDirection.getZ();
-                double rotatedZ = x * srcDirection.getZ() - z * srcDirection.getX();
+                double rotatedX = x * srcDirection.getX() - z * srcDirection.getZ();
+                double rotatedZ = x * srcDirection.getZ() + z * srcDirection.getX();
 
                 Block targetBase = baseBlock.getRelative((int)rotatedX, 0, (int)rotatedZ);
                 if (processedBlocks.contains(targetBase)) continue;
                 processedBlocks.add(targetBase);
 
                 // Calculate ash height based on distance from center line
-                double distanceFromCenterLine = Math.abs(x);
+
+                // Due to X axis being West-East, it should be defined via Z,
+                // since it should be rotated via linear transform
+                double distanceFromCenterLine = Math.abs(z);
                 double heightFactor = 1.0 - (distanceFromCenterLine / this.radius);
                 heightFactor = Math.max(0, heightFactor);
                 int ashHeight = (int)(this.initRadius / 2.0 * heightFactor);

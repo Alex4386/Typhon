@@ -34,34 +34,35 @@ public class TyphonNavigation {
     }
 
     public static TyphonNavigation getNavigation(Location from, Location to) {
-        if (from.getWorld().getUID() != to.getWorld().getUID()) {
+        // World detection
+        if (!from.getWorld().getUID().equals(to.getWorld().getUID())) {
             return null;
         }
 
-        float userYawN = from.getYaw() - 180;
-        userYawN = (userYawN < 0) ? userYawN + 360 : userYawN;
+        // Vector based distance calculation
+        double dx = to.getX() - from.getX();
+        double dz = to.getZ() - from.getZ();
+        double distance = Math.sqrt(dx * dx + dz * dz);
 
-        double distanceN = from.getBlockZ() - to.getBlockZ();
-        double distanceE = to.getBlockX() - from.getBlockX();
-        double distanceDirect = Math.sqrt(Math.pow(distanceN, 2) + Math.pow(distanceE, 2));
+        // Target Yaw
+        double targetYaw = Math.toDegrees(Math.atan2(-dx, dz));
+        targetYaw = (targetYaw + 360) % 360;
 
-        double theta;
-        theta = Math.toDegrees(Math.acos(distanceN / distanceDirect));
+        // Player Yaw
+        float playerYawRaw = from.getYaw();
+        double playerYaw = (playerYawRaw + 360) % 360;
 
+        // Calculate diff
+        double deltaYaw = ((targetYaw - playerYaw + 540) % 360) - 180;
+
+        // Debug logging
         TyphonPlugin.logger.debug(
                 VolcanoLogClass.MATH,
-                "Caclulated Navigation / target theta: " + theta + ", userYawN: " + userYawN);
+                "Calculated Navigation / targetYaw: " + targetYaw +
+                        ", playerYaw: " + playerYaw +
+                        ", deltaYaw: " + deltaYaw
+        );
 
-        double destinationYaw = theta - userYawN;
-        destinationYaw =
-                destinationYaw > 180
-                        ? -(360 - destinationYaw)
-                        : destinationYaw < -180 ? (360 + destinationYaw) : destinationYaw;
-
-        if (Double.isNaN(destinationYaw)) {
-            destinationYaw = 0;
-        }
-
-        return new TyphonNavigation(destinationYaw, distanceDirect);
+        return new TyphonNavigation(deltaYaw, distance);
     }
 }

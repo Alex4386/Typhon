@@ -353,12 +353,12 @@ public class VolcanoSuccession {
                         VolcanoLogClass.SUCCESSION,
                         "Succession on block "+TyphonUtils.blockLocationTostring(block)+" / try erosion failed"
                 );
-            } else if (rawHeatValue < 0.8) {
+            } else if (rawHeatValue < 0.7) {
                 // for matching with probability of ~0.5
                 if (Math.random() < Math.pow(0.1, 2) * 0.5) return;
 
-                double firstHeat = Math.min(0.65, rawHeatValue);
-                double amount = 1 - Math.min(1, Math.max(0, (firstHeat - 0.5) / 0.15));
+                double firstHeat = Math.min(0.7, rawHeatValue);
+                double amount = 1 - Math.min(1, Math.max(0, (firstHeat - 0.5) / 0.2));
 
                 if (isDebug) this.volcano.logger.log(
                         VolcanoLogClass.SUCCESSION,
@@ -367,51 +367,8 @@ public class VolcanoSuccession {
                 if (Math.random() < Math.pow(amount, 2)) {
                     targetBlock.applyBoneMeal(BlockFace.UP);
                 }
-                if (rawHeatValue < 0.65) {
-                    spreadSoil(targetBlock, (int)(amount * 5), false);
-                } else {
-                    double percentage = (rawHeatValue - 0.65) / 0.15;
-                    percentage = Math.min(1, Math.max(0, percentage));
 
-                    // prevent soil generation nearby the 0.8 have more grass
-                    percentage = Math.pow(1 - percentage, 2);
-
-                    // scan nearby blocks
-                    List<Block> nearbyBlocks = VolcanoMath.getCircle(targetBlock, 3);
-
-                    // check how many of them are dirt
-                    int dirtCount = 0;
-                    int totalCount = nearbyBlocks.size();
-
-                    for (Block nearbyBlock: nearbyBlocks) {
-                        Block highestBlock = TyphonUtils.getHighestRocklikes(nearbyBlock);
-                        String type = TyphonUtils.toLowerCaseDumbEdition(highestBlock.getType().name());
-                        if (type.contains("dirt") || type.contains("grass")) {
-                            dirtCount++;
-                        }
-                    }
-
-                    double currentDirt = (double) dirtCount / totalCount;
-                    if (currentDirt < percentage) {
-                        int neededDirtBlocks = (int) (percentage * totalCount) - dirtCount;
-
-                        // get random blocks from nearby blocks
-                        Collections.shuffle(nearbyBlocks);
-                        for (Block nearbyBlock: nearbyBlocks) {
-                            Block highestBlock = TyphonUtils.getHighestRocklikes(nearbyBlock);
-                            if (!isConsideredErodedRockType(highestBlock.getType())) {
-                                vent.lavaFlow.queueBlockUpdate(highestBlock, Material.DIRT);
-                                neededDirtBlocks--;
-                            }
-
-                            if (neededDirtBlocks <= 0) {
-                                break;
-                            }
-                        }
-                    }
-
-                }
-
+                spreadSoil(targetBlock, (int)(amount * 5), false);
                 return;
             }
         }

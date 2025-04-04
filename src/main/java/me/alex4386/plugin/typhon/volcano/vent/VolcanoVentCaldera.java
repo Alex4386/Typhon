@@ -76,17 +76,25 @@ public class VolcanoVentCaldera {
 
     // calculate the target Y for the caldera
     public int getTargetY(Block coreBlock, int radius) {
-        int sampleSize = 5 + (int) (Math.random() * 5);
+        double circumference = radius * 2 * Math.PI;
+        int sampleSize = (int) Math.min(circumference / 4, 50);
+
+        Set<Block> usedBlocks = new HashSet<>();
 
         int totalY = 0;
         for (int i = 0; i < sampleSize; i++) {
             Block block = TyphonUtils.getRandomBlockInRange(coreBlock, radius, radius);
+            if (usedBlocks.contains(block)) {
+                continue;
+            }
+
+            usedBlocks.add(block);
             block = TyphonUtils.getHighestRocklikes(block);
 
             totalY += block.getY();
         }
 
-        int targetY = totalY / sampleSize;
+        int targetY = totalY / usedBlocks.size();
         return targetY;
     }
 
