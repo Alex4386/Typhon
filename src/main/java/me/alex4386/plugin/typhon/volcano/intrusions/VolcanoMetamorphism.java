@@ -37,6 +37,21 @@ public class VolcanoMetamorphism {
         this.metamorphoseBlock(vent, block, isLavaContact);
     }
 
+    public static boolean isDirt(Material material) {
+        String blockTypeName = TyphonUtils.toLowerCaseDumbEdition(material.name());
+
+        boolean typeOfDirt = (blockTypeName.contains("dirt")
+                || blockTypeName.contains("podzol")
+                || blockTypeName.contains("grass_block"))
+                || blockTypeName.contains("farmland");
+
+        return typeOfDirt;
+    }
+
+    public static boolean isNaturalSoil(Material material) {
+        return VolcanoMetamorphism.isDirt(material);
+    }
+
     public void metamorphoseBlock(VolcanoVent vent, Block block, boolean isLavaContact) {
         Material material = block.getType();
         if (material.isAir()) return;
@@ -53,10 +68,7 @@ public class VolcanoMetamorphism {
             this.setBlock(block, Material.AIR);
         } else {
 
-            boolean typeOfDirt = (blockTypeName.contains("dirt")
-                || blockTypeName.contains("podzol")
-                || blockTypeName.contains("grass_block"))
-                || blockTypeName.contains("farmland");
+            boolean typeOfDirt = VolcanoMetamorphism.isDirt(material);
 
             if (block.isLiquid()) {
                 // if it is lava, cool it down if it is not registered

@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.ash;
 
 import me.alex4386.plugin.typhon.*;
+import me.alex4386.plugin.typhon.volcano.VolcanoGeoThermal;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.intrusions.VolcanoMetamorphism;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
@@ -391,6 +392,22 @@ public class VolcanoPyroclasticFlow {
                 this.ash.vent.lavaFlow.queueImmediateBlockUpdate(block, Material.AIR);
             }
         }
+
+        int y = baseBlock.getY();
+        int minY = (int) (y - (this.radius / 1.5));
+
+        Vector direction = this.direction.clone().setY(0).normalize();
+        Vector perpendicularDirection = new Vector(-direction.getZ(), 0, direction.getX());
+        if (Math.random() < 0.5) {
+            perpendicularDirection.multiply(-1);
+        }
+
+        Block awayBlock = baseBlock.getLocation().add(perpendicularDirection.multiply(this.radius)).getBlock();
+        int targetY = TyphonUtils.getHighestRocklikes(awayBlock).getY();
+        if (targetY < minY) {
+            TyphonUtils.smoothBlockHeights(baseBlock, (int) (this.radius * 1.5), Material.TUFF);
+        }
+
     }
 
     public void putAsh() {
@@ -446,16 +463,28 @@ public class VolcanoPyroclasticFlow {
                 }
 
                 // Place ash blocks vertically
-                for (int y = 1; y <= ashHeight; y++) {
-                    Block targetBlock = baseBlockHere.getRelative(0, y, 0);
-                    if (targetBlock.getY() > Math.min(baseBlock.getY() + ashHeight, maxHeight)) {
-                        continue;
+                if (ashHeight > 0) {
+                    for (int y = 1; y <= ashHeight; y++) {
+                        Block targetBlock = baseBlockHere.getRelative(0, y, 0);
+                        if (targetBlock.getY() > Math.min(baseBlock.getY() + ashHeight, maxHeight)) {
+                            continue;
+                        }
+                        this.ash.vent.lavaFlow.queueBlockUpdate(targetBlock, Material.TUFF);
+                        this.ash.vent.record.addEjectaVolume(1);
                     }
-                    this.ash.vent.lavaFlow.queueBlockUpdate(targetBlock, Material.TUFF);
-                    this.ash.vent.record.addEjectaVolume(1);
+                } else {
+                    // just change the surface block into TUFF
+                    if (Math.random() < 0.2) {
+                        Block target = TyphonUtils.getHighestRocklikes(baseBlockHere);
+                        if (VolcanoMetamorphism.isNaturalSoil(target.getType())) {
+                            this.ash.vent.lavaFlow.queueBlockUpdate(target, Material.TUFF);
+                        }
+                    }
                 }
             }
         }
+
+
     }
 
     public void playAshTrail() {
