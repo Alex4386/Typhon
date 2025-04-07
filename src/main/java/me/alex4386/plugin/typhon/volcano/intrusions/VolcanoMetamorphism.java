@@ -358,11 +358,31 @@ public class VolcanoMetamorphism {
             target = Material.AIR;
         } else if (blockTypeName.contains("coral")) {
             target = Material.SAND;
-        } else if (material == Material.SHORT_GRASS || material == Material.PINK_PETALS) {
+        } else if (material == Material.SHORT_GRASS) {
+            target = Material.SHORT_DRY_GRASS;
+        } else if (material == Material.TALL_GRASS) {
+            target = Material.TALL_DRY_GRASS;
+        } else if (material == Material.SHORT_DRY_GRASS || material == Material.TALL_DRY_GRASS) {
+            if (Math.random() < 0.2) {
+                target = Material.AIR;
+            }
+        } else if (material == Material.PINK_PETALS || material == Material.BUSH || blockTypeName.endsWith("_bush") || material == Material.LEAF_LITTER) {
             target = Material.AIR;
         } else if (material == Material.GRASS_BLOCK || material == Material.ROOTED_DIRT || material == Material.MUDDY_MANGROVE_ROOTS) {
             target = Material.DIRT;
-        } else if (material == Material.TALL_GRASS || material == Material.LARGE_FERN || material == Material.BAMBOO) {
+        } else if (material == Material.CACTUS_FLOWER) {
+            target = Material.AIR;
+            Block underBlock = block.getRelative(BlockFace.DOWN);
+            if (underBlock.getType() == Material.CACTUS) {
+                evaporateBlock(underBlock);
+            }
+        } else if (material == Material.CACTUS) {
+            target = Material.AIR;
+            Block underBlock = block.getRelative(BlockFace.DOWN);
+            if (underBlock.getType() == Material.CACTUS) {
+                evaporateBlock(underBlock);
+            }
+        } else if (material == Material.LARGE_FERN || material == Material.BAMBOO) {
             // check under block is not the same type
             Block underBlock = block.getRelative(BlockFace.DOWN);
             if (underBlock.getType() == material) {

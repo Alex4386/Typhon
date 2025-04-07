@@ -32,6 +32,11 @@ public class TyphonUtils {
         return (materialType.contains("flower")
                 || materialType.contains("sapling")
                 || materialType.contains("_grass")
+                || material == Material.BUSH
+                || materialType.contains("_bush")
+                || materialType.contains("mushroom")
+                || material == Material.CACTUS
+                || material == Material.LEAF_LITTER
                 || material == Material.SUGAR_CANE
                 || material == Material.BAMBOO
                 || material == Material.KELP

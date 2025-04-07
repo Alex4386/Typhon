@@ -17,3 +17,10 @@ autoStart:
 
 blueMap:
   enable: true
+
+worldGuard:
+  enable: true
+  # If true, volcano actions will respect WorldGuard region protection
+  respectRegions: true
+  # Permission to bypass WorldGuard protection for volcano actions
+  bypassPermission: "typhon.worldguard.bypass"

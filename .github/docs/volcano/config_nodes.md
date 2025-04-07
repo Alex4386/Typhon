@@ -12,6 +12,11 @@
 > - **READ** : `/volcano <name> mainvent config <node>` to get current node value.
 > - **WRITE**: `/volcano <name> mainvent config <node> <value>` to write the value.
 
+## Volcanic Ash
+| **Parameter**         | **Description**                                                                                                   |
+|-----------------------|-------------------------------------------------------------------------------------------------------------------|
+| **ash:fullPyroclasticFlowProbability** | Sets the probability for the pyroclastic flow to extend far away from the vent. |
+
 ## Lavaflow
 | **Parameter**             | **Description**                      |
 |---------------------------|--------------------------------------------|
@@ -51,6 +56,8 @@
 | **Parameter**         | **Description**                                                                                                   |
 |-----------------------|-------------------------------------------------------------------------------------------------------------------|
 | **succession:enable** | Enables the succession of this vent.                                                                            |
+| **succession:probability** | Sets the probability of each succession cycle. (0-100)                                                              |
+| **succession:treeProbability** | Sets the probability of succession cycle can generate tree. (0-100)                                                        |
 
 
 ## Vent
