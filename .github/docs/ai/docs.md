@@ -2,6 +2,9 @@
 
 This document is designed to help language models understand the Typhon Plugin's structure, features, and command usage patterns to provide accurate assistance to users.
 
+The current documentation exists at:  
+`https://raw.githubusercontent.com/Alex4386/Typhon/refs/heads/main/.github/docs/ai/docs.md`
+
 ## Overview
 
 Typhon is a Minecraft plugin that implements realistic volcano behavior within vanilla Minecraft, requiring no mods or texture packs. The plugin simulates various volcanic phenomena and offers extensive customization options.
