@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.lavaflow;
 
+import me.alex4386.plugin.typhon.TyphonBlocks;
 import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
@@ -312,7 +313,7 @@ public class VolcanoLavaCoolData {
                     block.getLocation().subtract(fromBlock.getLocation()).toVector()
             ));
         } else {
-            block.setType(material);
+            TyphonBlocks.setBlockType(block, material);
         }
     }
 
@@ -321,7 +322,7 @@ public class VolcanoLavaCoolData {
 
         if (this.flowedFromVent != null) {
             if (this.flowedFromVent.volcano.manager.isInAnyFormingCaldera(block.getLocation())) {
-                block.setType(Material.AIR);
+                TyphonBlocks.setBlockType(block, Material.AIR);
                 this.ticks = 0;
                 return;
             }
@@ -335,6 +336,6 @@ public class VolcanoLavaCoolData {
 
         this.ticks = 0;
 
-        block.setType(material);
+        TyphonBlocks.setBlockType(block, material);
     }
 }

@@ -5,7 +5,7 @@ import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 
-public class TyphonBlockUtils {
+public class TyphonBlocks {
     /**
      * Sets the type of a block with WorldGuard region protection check
      * 
@@ -14,12 +14,8 @@ public class TyphonBlockUtils {
      * @return true if the block was modified, false if blocked by WorldGuard
      */
     public static boolean setBlockType(Block block, Material material) {
-        if (TyphonPlugin.worldGuard != null) {
-            if (!TyphonPlugin.worldGuard.isAllowedAt(block.getLocation())) {
-                return false;
-            }
-        }
-        block.setType(material);
+        return TyphonBlocks.setBlockType(block, material, null);
+
         return true;
     }
 
@@ -33,11 +29,28 @@ public class TyphonBlockUtils {
      */
     public static boolean setBlockType(Block block, Material material, Player player) {
         if (TyphonPlugin.worldGuard != null) {
-            if (!TyphonPlugin.worldGuard.isAllowedAt(player, block.getLocation())) {
-                return false;
+            if (player == null) {
+                if (!TyphonPlugin.worldGuard.isAllowedAt(block.getLocation())) {
+                    return false;
+                }
+            } else {
+                if (!TyphonPlugin.worldGuard.isAllowedAt(player, block.getLocation())) {
+                    return false;
+                }
             }
         }
         block.setType(material);
+        if (TyphonPlugin.coreProtect != null) {
+            TyphonCoreProtectUtils coreProtect = TyphonPlugin.coreProtect;
+            if (coreProtect.isCoreProtectEnabled()) {
+                if (material.isAir()) {
+                    coreProtect.logTyphonBlockBreak(block);
+                } else {
+                    coreProtect.logTyphonBlockPlace(block);
+                }
+            }
+        }
+
         return true;
     }
 

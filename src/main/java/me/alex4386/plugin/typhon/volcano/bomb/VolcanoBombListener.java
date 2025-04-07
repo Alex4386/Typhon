@@ -132,7 +132,7 @@ public class VolcanoBombListener implements Listener {
                 }
 
                 if (isBomb) {
-                    block.setType(Material.MAGMA_BLOCK);
+                    TyphonBlocks.setBlockType(block, Material.MAGMA_BLOCK);
                 }
 
                 fallingBlock = block.getWorld()

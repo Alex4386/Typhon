@@ -243,8 +243,8 @@ public class VolcanoBomb {
             this.coolDownFallingBlock();
             this.block.remove();
             this.isLanded = true;
-    
-            this.block.getLocation().getBlock().setType(Material.AIR);
+
+            TyphonBlocks.setBlockType(this.block.getLocation().getBlock(), Material.AIR);
         }
     }
 
@@ -314,7 +314,7 @@ public class VolcanoBomb {
                 flow = this.vent.lavaFlow;
                 flow.queueImmediateBlockUpdate(block, Material.AIR);
             } else {
-                block.setType(Material.AIR);
+                TyphonBlocks.setBlockType(block, Material.AIR);
             }
             block = block.getRelative(BlockFace.DOWN);
         }
@@ -485,7 +485,7 @@ public class VolcanoBomb {
                     if (this.targetMaterial != null) material = this.targetMaterial;
 
                     if (vent == null)
-                        bombBlock.setType(material);
+                        TyphonBlocks.setBlockType(bombBlock, material);
                     else
                         vent.lavaFlow.queueBlockUpdate(bombBlock, material);
                 }
@@ -515,7 +515,7 @@ public class VolcanoBomb {
 
                 if (material != null) {
                     if (vent == null)
-                        bombBlock.setType(material);
+                        TyphonBlocks.setBlockType(bombBlock, material);
                     else
                         vent.lavaFlow.queueBlockUpdate(bombBlock, material);
                 }

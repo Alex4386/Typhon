@@ -9,6 +9,19 @@
   - Added support for `1.21.4`'s `creaking_heart` also affected by `geothermal` heat.
 - Typhon now targets BluemapAPI `2.7.4`
 
+### New Integrations
+- Typhon now supports `WorldGuard` for region protection and management. __(beta)__
+- Typhon now supports `CoreProtect` for region protection and management. __(beta)__
+
+> [!NOTE]
+> **The integration with `WorldGuard` and `CoreProtect` is still in beta and may not work as expected.**  
+> Please note that the "bugs" occur and your home region can be devastated by the volcano.  
+
+> [!TIP]  
+> The `WorldGuard` integration doesn't prevent the volcano from erupting, but this will only prevent blocks from the volcanic eruption from being placed in the protected region.  
+> The `CoreProtect` integration will only make sure that the blocks are properly logged.  
+
+
 ### Fixes
 - Fixed BlueMap integration was failing in:
   - New subsidary vent formation

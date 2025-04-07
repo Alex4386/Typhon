@@ -269,7 +269,7 @@ public class VolcanoVent {
                 Block highest = TyphonUtils.getHighestRocklikes(block);
                 Block underHighest = highest.getRelative(BlockFace.DOWN);
                 if (underHighest.getType().isAir()) {
-                    highest.setType(Material.AIR);
+                    TyphonBlocks.setBlockType(highest, Material.AIR);
                     averageY = this.averageVentHeight();
                 }
             }
@@ -766,11 +766,14 @@ public class VolcanoVent {
             Block block = iterator.next();
 
             if (this.erupt.getStyle().lavaMultiplier < 1) {
-                block.setType(
+                TyphonBlocks.setBlockType(
+                        block,
                         VolcanoComposition.getBombRock(this.lavaFlow.settings.silicateLevel, 0));
             } else {
-                block.setType(
-                        VolcanoComposition.getExtrusiveRock(this.lavaFlow.settings.silicateLevel));
+                TyphonBlocks.setBlockType(
+                        block,
+                        VolcanoComposition.getExtrusiveRock(this.lavaFlow.settings.silicateLevel)
+                );
             }
         }
     }

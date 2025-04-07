@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.utils;
 
+import me.alex4386.plugin.typhon.TyphonBlocks;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonUtils;
@@ -88,9 +89,9 @@ public class VolcanoConstruction {
             }
 
             BlockData blockData = sourceBlock.getBlockData();
-            destinationBlock.setType(sourceBlock.getType());
+            TyphonBlocks.setBlockType(destinationBlock, sourceBlock.getType());
             destinationBlock.setBlockData(blockData, true);
-            sourceBlock.setType(replacementMaterial);
+            TyphonBlocks.setBlockType(sourceBlock, replacementMaterial);
         }
 
         entrySet = new ArrayList<>(constructionMaterialData.keySet());
@@ -104,7 +105,7 @@ public class VolcanoConstruction {
                             && destinationBlock.getX() % 16 == 0
                             && destinationBlock.getZ() % 16 == 0;
 
-            destinationBlock.setType(material);
+            TyphonBlocks.setBlockType(destinationBlock, material);
         }
 
         // raise data handler
@@ -256,12 +257,12 @@ public class VolcanoConstruction {
         long blockUpdateStartTime = System.nanoTime();
         ;
 
-        baseLocation.getBlock().setType(Material.LAVA);
+        TyphonBlocks.setBlockType(baseLocation.getBlock(), Material.LAVA);
 
         long blockUpdateEndTime = System.nanoTime();
         long elapsedNanoSecondPerBlockUpdate = blockUpdateEndTime - blockUpdateStartTime;
 
-        block.setType(material);
+        TyphonBlocks.setBlockType(block, material);
 
         long blockUpdatesPerMilliSecond = 1000000 / elapsedNanoSecondPerBlockUpdate;
         long blockUpdatesPerSecond = blockUpdatesPerMilliSecond * 1000;

@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.bomb;
 
+import me.alex4386.plugin.typhon.TyphonBlocks;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonUtils;
@@ -476,7 +477,9 @@ public class VolcanoBombs {
                     bomb.stopTrail();
 
                     if (bomb.block != null) {
-                        bomb.block.getLocation().getBlock().setType(Material.AIR);
+                        TyphonBlocks.setBlockType(
+                                bomb.block.getLocation().getBlock(),
+                                Material.AIR);
                         bomb.emergencyLand();
                     } else {
                         bomb.land();

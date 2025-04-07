@@ -40,6 +40,7 @@ public final class TyphonPlugin extends JavaPlugin {
     public static BlueMapAPI blueMap = null;
     public static boolean enableBlueMap = true;
     public static TyphonWorldGuardUtils worldGuard = null;
+    public static TyphonCoreProtectUtils coreProtect = null;
 
     public static boolean isShuttingdown = false;
 
@@ -85,6 +86,9 @@ public final class TyphonPlugin extends JavaPlugin {
 
         logger.debug(VolcanoLogClass.INIT, "Initializing WorldGuard support...");
         worldGuard = TyphonWorldGuardUtils.getInstance(this);
+
+        logger.debug(VolcanoLogClass.INIT, "Initializing CoreProtect support...");
+        coreProtect = TyphonCoreProtectUtils.getInstance(this);
 
         logger.debug(VolcanoLogClass.INIT, "Loading Volcanoes...");
 
@@ -204,6 +208,12 @@ public final class TyphonPlugin extends JavaPlugin {
         FileConfiguration config = plugin.getConfig();
         if (!config.contains("worldGuard.enable")) {
             config.set("worldGuard.enable", true);
+            plugin.saveConfig();
+        }
+
+        // Add CoreProtect config defaults if they don't exist
+        if (!config.contains("coreProtect.enable")) {
+            config.set("coreProtect.enable", true);
             plugin.saveConfig();
         }
     }

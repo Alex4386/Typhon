@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.dome;
 
+import me.alex4386.plugin.typhon.TyphonBlocks;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -92,12 +93,12 @@ public class VolcanoLavaDomeLavaFlow {
     public void coolDown() {
         int y = this.block.getY();
         if (y <= this.dome.getTargetYAt(this.block.getLocation())) {
-            this.block.setType(VolcanoComposition.getExtrusiveRock(
+            TyphonBlocks.setBlockType(this.block, VolcanoComposition.getExtrusiveRock(
                     this.dome.vent.lavaFlow.settings.silicateLevel
             ));
         } else {
             if (this.block.getType() == Material.MAGMA_BLOCK)
-                this.block.setType(Material.AIR);
+                TyphonBlocks.setBlockType(this.block, Material.AIR);
         }
     }
 

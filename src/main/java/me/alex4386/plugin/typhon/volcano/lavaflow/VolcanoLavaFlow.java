@@ -300,7 +300,7 @@ public class VolcanoLavaFlow implements Listener {
             if (entry != null) {
                 Block block = entry.getKey();
                 Material material = entry.getValue();
-                block.setType(material);
+                TyphonBlocks.setBlockType(block, material);
             } else {
                 break;
             }
@@ -321,7 +321,7 @@ public class VolcanoLavaFlow implements Listener {
             if (entry != null) {
                 Block block = entry.getKey();
                 Material material = entry.getValue();
-                block.setType(material);
+                TyphonBlocks.setBlockType(block, material);
 
                 if (postUpdater.containsKey(block)) {
                     Consumer<Block> callback = postUpdater.get(block);
@@ -1041,7 +1041,7 @@ public class VolcanoLavaFlow implements Listener {
 
         if (!isUnderWater) {
             if (!skipLava) {
-                block.setType(Material.LAVA);
+                TyphonBlocks.setBlockType(block, Material.LAVA);
             }
 
             int ticks = 30;
@@ -1912,7 +1912,10 @@ public class VolcanoLavaFlow implements Listener {
                 }
 
                 if (!TyphonUtils.isBlockFlowable(whereToFlow)) {
-                    whereToFlow.setType(VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel));
+                    TyphonBlocks.setBlockType(
+                            whereToFlow,
+                            VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel)
+                    );
 
                     // check if underBlock is registered lava
                     if (isPillowLavaRegistered(underBlock)) {
@@ -2121,7 +2124,10 @@ public class VolcanoLavaFlow implements Listener {
                 Block block = entry.getKey();
                 VolcanoLavaCoolData coolData = entry.getValue();
 
-                block.setType(coolData.material);
+                TyphonBlocks.setBlockType(
+                        block,
+                        coolData.material
+                );
             }
             coolEntry.getValue().clear();
         }
@@ -2132,7 +2138,10 @@ public class VolcanoLavaFlow implements Listener {
                 Block block = entry.getKey();
                 VolcanoLavaCoolData coolData = entry.getValue();
 
-                block.setType(coolData.material);
+                TyphonBlocks.setBlockType(
+                        block,
+                        coolData.material
+                );
             }
             coolEntry.getValue().clear();
         }
@@ -2140,13 +2149,19 @@ public class VolcanoLavaFlow implements Listener {
 
         for (Map.Entry<Block, VolcanoPillowLavaData> entry : pillowLavaMap.entrySet()) {
             Block block = entry.getKey();
-            block.setType(VolcanoComposition.getExtrusiveRock(settings.silicateLevel));
+            TyphonBlocks.setBlockType(
+                    block,
+                    VolcanoComposition.getExtrusiveRock(settings.silicateLevel)
+            );
         }
         pillowLavaMap.clear();
 
         for (Map.Entry<Block, VolcanoPillowLavaData> entry : cachedPillowLavaMap.entrySet()) {
             Block block = entry.getKey();
-            block.setType(VolcanoComposition.getExtrusiveRock(settings.silicateLevel));
+            TyphonBlocks.setBlockType(
+                    block,
+                    VolcanoComposition.getExtrusiveRock(settings.silicateLevel)
+            );
         }
         cachedPillowLavaMap.clear();
     }

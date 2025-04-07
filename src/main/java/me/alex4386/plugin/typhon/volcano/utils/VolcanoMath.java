@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.utils;
 
 import com.flowpowered.math.vector.Vector3d;
+import me.alex4386.plugin.typhon.TyphonBlocks;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -65,12 +66,12 @@ public class VolcanoMath {
             if (highestBlock.getY() < block.getY()) {
                 for (int y = highestBlock.getY(); y <= block.getY(); y++) {
                     Block currentBlock = block.getWorld().getBlockAt(block.getX(), y, block.getZ());
-                    currentBlock.setType(fillMaterial);
+                    TyphonBlocks.setBlockType(currentBlock, fillMaterial);
                 }
             } else if (highestBlock.getY() > block.getY()) {
                 for (int y = block.getY(); y > highestBlock.getY(); y--) {
                     Block currentBlock = block.getWorld().getBlockAt(block.getX(), y, block.getZ());
-                    currentBlock.setType(Material.AIR);
+                    TyphonBlocks.setBlockType(currentBlock, Material.AIR);
                 }
             }
         }

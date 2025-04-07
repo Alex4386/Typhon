@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.intrusions;
 
+import me.alex4386.plugin.typhon.TyphonBlocks;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.Volcano;
@@ -114,7 +115,7 @@ public class VolcanoMetamorphism {
         if (this.volcano != null && this.volcano.mainVent != null && this.volcano.mainVent.lavaFlow != null && !TyphonPlugin.isShuttingdown) {
             this.volcano.mainVent.lavaFlow.queueBlockUpdate(block, material, e);
         } else {
-            block.setType(material);
+            TyphonBlocks.setBlockType(block, material);
             e.accept(block);
         }
     }
