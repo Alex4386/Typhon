@@ -15,8 +15,6 @@ public class TyphonBlocks {
      */
     public static boolean setBlockType(Block block, Material material) {
         return TyphonBlocks.setBlockType(block, material, null);
-
-        return true;
     }
 
     /**

@@ -582,7 +582,12 @@ public class VolcanoVentCommand {
                 break;
             case LAVA_DOME:
                 if (newArgs.length <= 1) {
-                    msg.error("Invalid usage");
+                    // show lava dome status
+                    msg.info("Lava Dome configuration");
+                    msg.info(" - baseY: " + vent.lavadome.baseY);
+                    msg.info(" - plumbedLava: " + vent.lavadome.plumbedLava);
+                    msg.info(" - baseLocation: " + TyphonUtils.blockLocationToString(vent.lavadome.baseLocation));
+
                     return true;
                 }
 
