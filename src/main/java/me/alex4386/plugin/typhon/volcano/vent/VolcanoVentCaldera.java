@@ -183,9 +183,12 @@ public class VolcanoVentCaldera {
 
     public int getCurrentTargetY(Block block) {
         double rawDistance = Math.min(TyphonUtils.getTwoDimensionalDistance(this.baseBlock.getLocation(), block.getLocation()), this.radius);
-        double heightDeduct = Math.max(0, Math.min(deep, radius - rawDistance));
+        // Scale the height deduction based on distance from center, but keep it proportional to specified depth
+        double distanceRatio = 1.0 - (rawDistance / radius);
+        double heightDeduct = Math.max(0, deep * distanceRatio);
 
-        int targetYFromHeightDeduct = (int) (this.targetY - heightDeduct);
+        // Ensure the deduction never goes beyond the specified deep value
+        int targetYFromHeightDeduct = (int) Math.max(this.targetY - deep, this.targetY - heightDeduct);
         int baseBlockStairY = this.currentBase.getY() + (int) rawDistance;
 
         int targetY = Math.max(targetYFromHeightDeduct, baseBlockStairY);
