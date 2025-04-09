@@ -584,9 +584,16 @@ public class VolcanoVentCommand {
                 if (newArgs.length <= 1) {
                     // show lava dome status
                     msg.info("Lava Dome configuration");
+                    Location location = vent.lavadome.getBaseLocation();
+
                     msg.info(" - baseY: " + vent.lavadome.baseY);
-                    msg.info(" - plumbedLava: " + vent.lavadome.plumbedLava);
-                    msg.info(" - baseLocation: " + TyphonUtils.blockLocationToString(vent.lavadome.baseLocation));
+                    msg.info(" - plumbedLava: " + vent.lavadome.getPlumbedLava());
+                    if (location == null) {
+                        msg.info("Lava Dome eruption was not configured");
+                    } else {
+                        msg.info(" - baseLocation: " + TyphonUtils.blockLocationTostring(location.getBlock()));
+                    }
+                    msg.info(" - ActiveFlows : "+vent.lavadome.domeFlowCounts());
 
                     return true;
                 }
@@ -602,6 +609,7 @@ public class VolcanoVentCommand {
                 } else if (domeAction.equalsIgnoreCase("reset")) {
                     msg.info("Resetting lavadome build args...");
                     vent.lavadome.postConeBuildHandler();
+                    vent.lavadome.resetBaseY();
                     msg.info("Lavadome build args have been reset.");
                 } else if (domeAction.equalsIgnoreCase("explode")) {
                     msg.warn("NOT IMPLEMENTED");

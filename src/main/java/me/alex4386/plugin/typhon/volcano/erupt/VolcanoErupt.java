@@ -41,6 +41,8 @@ public class VolcanoErupt {
         if (this.style == VolcanoEruptStyle.HAWAIIAN) {
             // this kind of eruption generates bigger base, therefore we should reset baseY.
             this.vent.bombs.resetBaseY();
+        } else if (this.style == VolcanoEruptStyle.LAVA_DOME) {
+            this.vent.lavadome.configure();
         }
 
         this.vent.resetCurrentMetrics();

@@ -12,6 +12,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.SoundCategory;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -24,12 +25,14 @@ import java.util.List;
 public class VolcanoLavaDome {
     VolcanoVent vent;
 
-    Location baseLocation = null;
-
-    long plumbedLava = 0;
 
     public static int domeScheduleId = -1;
     public int baseY = Integer.MIN_VALUE;
+
+    Location baseLocation = null;
+    long plumbedLava = 0;
+
+    static double slope = -0.05;
 
     List<VolcanoLavaDomeLavaFlow> domeFlows = new ArrayList<>();
 
@@ -38,18 +41,38 @@ public class VolcanoLavaDome {
         this.baseLocation = null;
     }
 
+    public Location getBaseLocation() {
+        return baseLocation;
+    }
+
+    public long getPlumbedLava() {
+        return plumbedLava;
+    }
+
     public int getTargetDomeHeight() {
         return (int) Math.ceil(Math.pow((3.0 * this.plumbedLava) / (2 * Math.PI), 1.0/3.0));
     }
 
     public double getTargetHeightByDistance(double x) {
-        double targetHeight = -0.01 * (Math.pow(x, 2)) + this.getTargetDomeHeight();
+        double targetHeight = slope * (Math.pow(x, 2)) + this.getTargetDomeHeight();
         return Math.max(0, targetHeight);
     }
 
     public double getTargetYAt(Location loc) {
         double distance = TyphonUtils.getTwoDimensionalDistance(this.baseLocation, loc);
         return this.getTargetHeightByDistance(distance) + this.getBaseY();
+    }
+
+    public boolean isConfigured() {
+        return this.baseLocation != null && this.baseY != Integer.MIN_VALUE;
+    }
+
+    public void configure() {
+        if (!this.isConfigured()) {
+            this.postConeBuildHandler();
+            this.baseLocation = this.vent.getCoreBlock().getLocation();
+            this.getBaseY();
+        }
     }
 
     public int getInitialBaseY() {
@@ -93,7 +116,7 @@ public class VolcanoLavaDome {
     }
 
     public void postConeBuildHandler() {
-        this.resetBaseY();
+        // this.resetBaseY();
         this.plumbedLava = 0;
     }
 
@@ -116,9 +139,23 @@ public class VolcanoLavaDome {
         return TyphonUtils.getHighestRocklikes(this.baseLocation).getRelative(BlockFace.UP);
     }
 
+    public void preStartArgumentValidityCheck() {
+        Block highestBlock = TyphonUtils.getHighestRocklikes(this.baseLocation);
+        if (highestBlock.getY() < this.baseY) {
+            this.baseY = highestBlock.getY();
+        }
+
+
+    }
+
+    public int domeFlowCounts() {
+        return domeFlows.size();
+    }
+
     public void flowLava() {
-        int randomRange = this.getTargetDomeHeight() * 2;
-        double distance = Math.pow(1 - Math.random(), 2) * randomRange;
+        double targetBasin = Math.sqrt(-(1 / slope) * this.getTargetDomeHeight());
+        int randomRange = (int) Math.ceil(Math.max(10, targetBasin));
+        double distance = (1 - Math.pow(Math.random(), 2)) * randomRange;
 
         double angle = Math.random() * 2 * Math.PI;
         double offsetX = distance * Math.cos(angle);
@@ -126,6 +163,7 @@ public class VolcanoLavaDome {
 
         Location targetLocation = this.baseLocation.clone().add(offsetX, 0, offsetZ);
         Block targetBlock = TyphonUtils.getHighestRocklikes(targetLocation).getRelative(BlockFace.UP);
+        if (targetBlock.getType() == Material.MAGMA_BLOCK) return;
 
         this.domeFlows.add(new VolcanoLavaDomeLavaFlow(this, this.getSourceBlock(), targetBlock));
         this.plumbedLava++;
@@ -138,15 +176,18 @@ public class VolcanoLavaDome {
     public void ooze() {
         // if the dome is large enough, flow "real" lava from the side of the dome.
         double randomRange = Math.pow(this.plumbedLava, 1/3.0);
-        double distance = Math.pow(1 - Math.random(), 2) * randomRange;
+        double distance = (Math.pow(1 - Math.random(), 2) * 0.5 + 0.5) * randomRange;
 
+        Block target = TyphonUtils.getFairRandomBlockInRange(this.baseLocation.getBlock(), (int) distance, (int) distance);
         this.vent.lavaFlow.flowLava(TyphonUtils.getHighestRocklikes(
-                TyphonUtils.getRandomBlockInRange(this.baseLocation.getBlock(), (int) distance)
+                target
         ).getRelative(BlockFace.UP));
 
         if (Math.random() < 0.0001) {
             TyphonSounds.getRandomLavaFragmenting().play(this.baseLocation.getBlock().getLocation(), SoundCategory.BLOCKS, 0.1f, 1);
+            TyphonUtils.smoothBlockHeights(target, 5, Material.TUFF);
         }
+
     }
 
     public void explode() {

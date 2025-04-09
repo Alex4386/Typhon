@@ -77,10 +77,28 @@ public class VolcanoLavaDomeLavaFlow {
             this.finished = true;
             this.coolDown();
         } else {
-            this.dome.vent.lavaFlow.queueBlockUpdate(
-                    this.block,
-                    Material.AIR
-            );
+            if (nextBlock.getType() == Material.MAGMA_BLOCK) {
+                // STOP!!!!
+                this.dome.vent.lavaFlow.queueBlockUpdate(
+                        this.block,
+                        Material.AIR
+                );
+                this.finished = true;
+                return;
+            }
+
+            int y = this.block.getY();
+            if (y > this.dome.getTargetYAt(this.block.getLocation())) {
+                this.dome.vent.lavaFlow.queueBlockUpdate(
+                        this.block,
+                        Material.AIR
+                );
+            } else {
+                this.dome.vent.lavaFlow.queueBlockUpdate(
+                        this.block, VolcanoComposition.getExtrusiveRock(
+                                this.dome.vent.lavaFlow.settings.silicateLevel
+                        ));
+            }
             this.block = nextBlock;
             this.dome.vent.lavaFlow.queueBlockUpdate(
                     this.block,

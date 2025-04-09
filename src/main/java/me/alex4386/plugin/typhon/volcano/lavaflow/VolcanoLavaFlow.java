@@ -1891,9 +1891,25 @@ public class VolcanoLavaFlow implements Listener {
         int flowRequests = (int) Math.min(flowAmount, ventBlocks.size());
 
         List<Block> whereToFlows = vent.requestFlows(flowRequests);
-
         int flowedBlocks = 0;
-        if (this.vent.erupt.getStyle().lavaMultiplier > 0) {
+
+        if (this.vent.erupt.getStyle() == VolcanoEruptStyle.LAVA_DOME) {
+            int count = whereToFlows.size();
+            for (int i = 0; i < count; i++) {
+                this.vent.lavadome.flowLava();
+                flowedBlocks++;
+            }
+
+            if (this.vent.lavadome.isDomeLargeEnough()) {
+                if (Math.random() < 0.1) {
+                    // the lava dome is large enough to explode.
+                    this.vent.lavadome.explode();
+                } else if (Math.random() < 0.3) {
+                    // the lava dome can ooze out lava.
+                    this.vent.lavadome.ooze();
+                }
+            }
+        } else if (this.vent.erupt.getStyle().lavaMultiplier > 0) {
             int flowableCounts = 0;
             for (Block whereToFlow : whereToFlows) {
                 if (TyphonUtils.isBlockFlowable(whereToFlow)) {
@@ -1978,22 +1994,6 @@ public class VolcanoLavaFlow implements Listener {
                         2f,
                         1f
                 );
-            }
-        } else if (this.vent.erupt.getStyle() == VolcanoEruptStyle.LAVA_DOME) {
-            int count = whereToFlows.size();
-            for (int i = 0; i < count; i++) {
-                this.vent.lavadome.flowLava();
-                flowedBlocks++;
-            }
-
-            if (this.vent.lavadome.isDomeLargeEnough()) {
-                if (Math.random() < 0.1) {
-                    // the lava dome is large enough to explode.
-                    this.vent.lavadome.explode();
-                } else if (Math.random() < 0.3) {
-                    // the lava dome can ooze out lava.
-                    this.vent.lavadome.ooze();
-                }
             }
         }
         
