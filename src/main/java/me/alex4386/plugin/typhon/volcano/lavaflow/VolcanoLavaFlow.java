@@ -1904,7 +1904,7 @@ public class VolcanoLavaFlow implements Listener {
                 if (Math.random() < 0.1) {
                     // the lava dome is large enough to explode.
                     this.vent.lavadome.explode();
-                } else if (Math.random() < 0.3) {
+                } else if (Math.random() < 0.01) {
                     // the lava dome can ooze out lava.
                     this.vent.lavadome.ooze();
                 }

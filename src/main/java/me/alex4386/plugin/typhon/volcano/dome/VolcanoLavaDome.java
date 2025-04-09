@@ -152,8 +152,13 @@ public class VolcanoLavaDome {
         return domeFlows.size();
     }
 
-    public void flowLava() {
+    public double getTargetBasin() {
         double targetBasin = Math.sqrt(-(1 / slope) * this.getTargetDomeHeight());
+        return targetBasin;
+    }
+
+    public void flowLava() {
+        double targetBasin = this.getTargetBasin();
         int randomRange = (int) Math.ceil(Math.max(10, targetBasin));
         double distance = (1 - Math.pow(Math.random(), 2)) * randomRange;
 
@@ -170,13 +175,13 @@ public class VolcanoLavaDome {
     }
 
     public boolean isDomeLargeEnough() {
-        return this.plumbedLava >= 2000;
+        return this.getTargetBasin() > 10;
     }
 
     public void ooze() {
         // if the dome is large enough, flow "real" lava from the side of the dome.
-        double randomRange = Math.pow(this.plumbedLava, 1/3.0);
-        double distance = (Math.pow(1 - Math.random(), 2) * 0.5 + 0.5) * randomRange;
+        double targetBasin = this.getTargetBasin();
+        double distance = (Math.pow(1 - Math.random(), 2) * 0.5 + 0.5) * targetBasin;
 
         Block target = TyphonUtils.getFairRandomBlockInRange(this.baseLocation.getBlock(), (int) distance, (int) distance);
         this.vent.lavaFlow.flowLava(TyphonUtils.getHighestRocklikes(
