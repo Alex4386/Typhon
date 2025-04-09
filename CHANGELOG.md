@@ -33,6 +33,9 @@
 #### Plugin Architecture
 - Added `TyphonQueuedHashMap` for better performance on Typhon's internal caches
 
+#### Lava Dome Eruption
+- Implemented Lava Dome Eruption Style
+
 #### Volcanic Bombs
 - Implemented blackbody radiation (via glowing FallingBlock) for each Volcanic bomb
   Now the bombs will glow in the dark with proper color based on the temperature of the bomb
