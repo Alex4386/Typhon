@@ -58,7 +58,7 @@ In volcanology, eruptions are classified into different styles based on their ex
 Just as in nature, certain environmental conditions trigger special eruption styles in Typhon:
 
 | Surtseyan | Pilinian |
-|:--------:|:-----------:|:---------:|
+|:--------:|:-----------:|
 | ![Surtseyan](/.github/docs/volcano/assets/surtseyan.png) | ![Pilinian](/.github/docs/volcano/assets/pilinian.png) |
 
 
