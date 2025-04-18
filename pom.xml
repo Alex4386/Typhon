@@ -93,6 +93,13 @@
     </repositories>
 
     <dependencies>
+        <!-- JSON -->
+        <dependency>
+            <groupId>com.googlecode.json-simple</groupId>
+            <artifactId>json-simple</artifactId>
+            <version>1.1</version>
+        </dependency>
+
         <!-- TARGET PAPER -->
         <dependency>
             <groupId>io.papermc.paper</groupId>
@@ -100,24 +107,32 @@
             <version>1.21.5-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
+
+        <!-- Jetbrains -->
         <dependency>
             <groupId>org.jetbrains</groupId>
             <artifactId>annotations</artifactId>
             <version>21.0.1</version>
             <scope>compile</scope>
         </dependency>
+
+        <!-- Bluemap API -->
         <dependency>
             <groupId>de.bluecolored</groupId>
             <artifactId>bluemap-api</artifactId>
             <version>2.7.4</version>
             <scope>provided</scope>
         </dependency>
+
+        <!-- WorldGuard -->
         <dependency>
             <groupId>com.sk89q.worldguard</groupId>
             <artifactId>worldguard-bukkit</artifactId>
             <version>7.0.13</version>
             <scope>provided</scope>
         </dependency>
+
+        <!-- CoreProtect -->
         <dependency>
             <groupId>net.coreprotect</groupId>
             <artifactId>coreprotect</artifactId>
