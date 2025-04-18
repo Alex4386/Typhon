@@ -1,89 +1,112 @@
 [<  Return to Typhon Docs](/DOCS.md)  
 [<< Return to Volcano Docs](./index.md)  
 
-# Lava
-Lava is the most important part of the volcano. The lava will be ejected from the volcano's main vent. The lava will flow down the volcano and will create the volcano's shape.
+# Lava: The Molten Heart of Volcanoes
 
-## Pillow Lava
-Pillow lava is a type of lava that forms underwater. When the lava is ejected from the volcano's main vent and the lava flows into the water, the lava will form pillow lava.  
+Lava is the lifeblood of a volcano, defining its shape, behavior, and hazards. From the fast-flowing rivers of Hawaii's Kilauea to the thick, slow-moving domes of Mount St. Helens, lava comes in many forms in nature.
 
-The pillow lava is implemented as a `MAGMA_BLOCK` block that is placed in the water. The pillow lava will have a chance to form when the lava flows into the water, or when the lava is ejected from underwater vents.
+In Typhon, lava isn't just a simple flowing block - it's a dynamic system that mimics real volcanic processes.
 
-![Pillow Lava](/.github/docs/volcano/assets/pillow_lava.png)
+## Pillow Lava: The Underwater Art of Volcanoes
 
-## Silica Content
-Just like real-life volcanoes, the lava's silica content will affect the palette of blocks that will be ejected from the volcano.  
+In nature, when hot lava meets cold ocean water, something magical happens. The sudden cooling creates bulbous, pillow-shaped formations as the outer surface hardens while the inside remains molten. These "pillows" stack upon each other, creating distinctive underwater volcanic landscapes seen at hotspots like Hawaii and Iceland.
 
-### Types of Lava
-Typhon plugin internally uses the following types of lava: (_italic_ means the block is for `Volcanic Bomb`)
-- `ultramafic`: Very Low silica content lava. (`<41%`)
-  - Cools to: `DEEPSLATE`,_`COBBLED_DEEPSLATE`_,_`NETHERRACK`_
-- `mafic`: Low silica content lava. (`41% < x < 45%`)
-  - Cools to: `BASALT`,`POLISHED_BASALT`,`DEEPSLATE`,_`COBBLED_DEEPSLATE`_,_`NETHERRACK`_
-- `basaltic`: Low silica content lava. (`45% < x < 52%`)
-  - Cools to: `BASALT`,`POLISHED_BASALT`,_`COBBLED_DEEPSLATE`_,_`NETHERRACK`_
-- `basaltic-andesitic`: Medium silica content lava. (`52% < x < 57%`)
-  - Cools to: `ANDESITE`,`TUFF`,`BASALT`,`POLISHED_BASALT`,_`COBBLED_DEEPSLATE`_,_`NETHERRACK`_
-- `andesitic`: High silica content lava. (`57% < x < 63%`)
-  - Cools to: `ANDESITE`, `TUFF`, _`TUFF`_
-- `andesitic-dacitic`: High silica content lava. (`63% < x < 68%`)
-  - Cools to: `ANDESITE`, `TUFF`, `QUARTZ_BLOCK`, `OBSIDIAN`, `CRYING_OBSIDIAN`, `GRANITE`, `COBBLESTONE`, `STONE`, _`TUFF`_
-- `dacitic`: Very High silica content lava. (`68% < x < 72%`)
-  - Cools to: `STONE`, `OBSIDIAN`, `QUARTZ_BLOCK`, `AMETHYST_BLOCK`, `GRANITE`
-- `rhyolitic`: Extremely High silica content lava. (`72% < x`)
-  - Cools to: `STONE`, `OBSIDIAN`, `QUARTZ_BLOCK`, `AMETHYST_BLOCK`, `GRANITE`
+| In Nature | In Typhon |
+|:---------:|:--------:|
+| ![Image](https://github.com/user-attachments/assets/5926e99c-3b70-4d60-9dee-22c086c96e7b) | ![Pillow Lava in Typhon](/.github/docs/volcano/assets/pillow_lava.png) |
+
+Typhon recreates this natural wonder with remarkable accuracy:
+- Magma blocks appear when lava flows underwater, simulating the characteristic pillow shapes
+- The "pillows" branch in multiple directions as they would in nature
+- Each pillow leaves a trail of cooled volcanic rock, just as real pillow lava solidifies into distinctive formations
+
+## Silica Content: The Chemistry Behind the Show
+
+In the real world, a volcano's drama depends largely on its silica content. Low-silica lava flows like water (think Hawaii), while high-silica lava barely moves at all (think Mount St. Helens' lava dome).
+
+### Types of Lava in Nature and Typhon
+
+| Lava Type | Silica % | Real World Example | In-Game Behavior | Cooling Products |
+|-----------|----------|-------------------|------------------|------------------|
+| **Ultramafic** | <41% | Komatiite lava (ancient) | Extremely fluid | DEEPSLATE, COBBLED_DEEPSLATE, NETHERRACK |
+| **Mafic** | 41-45% | Hawaiian volcanoes | Very fluid | BASALT, POLISHED_BASALT, DEEPSLATE |
+| **Basaltic** | 45-52% | Iceland's lava fields | Fluid, extensive flows | BASALT, POLISHED_BASALT |
+| **Basaltic-Andesitic** | 52-57% | Galapagos volcanoes | Moderately fluid | ANDESITE, TUFF, BASALT, POLISHED_BASALT |
+| **Andesitic** | 57-63% | Cascade Range volcanoes | Thick, moderate flows | ANDESITE, TUFF |
+| **Andesitic-Dacitic** | 63-68% | Mt. Unzen (Japan) | Thick, limited flows | ANDESITE, TUFF, QUARTZ_BLOCK, OBSIDIAN, GRANITE |
+| **Dacitic** | 68-72% | Mt. St. Helens | Very thick, short flows | STONE, OBSIDIAN, QUARTZ_BLOCK, AMETHYST_BLOCK, GRANITE |
+| **Rhyolitic** | >72% | Yellowstone | Extremely viscous | STONE, OBSIDIAN, QUARTZ_BLOCK, AMETHYST_BLOCK, GRANITE |
 
 > [!TIP]  
-> If you want to know more about the configuration, Chec the [VolcanoComposition.java](/src/main/java/me/alex4386/plugin/typhon/volcano/VolcanoComposition.java) source code for more information.
+> Curious about the technical implementation? Check the [VolcanoComposition.java](/src/main/java/me/alex4386/plugin/typhon/volcano/VolcanoComposition.java) source code for details.
 
-> [!NOTE]  
-> <a name="ore_formation"></a>
-> For realistic lava, The erupting lava has small chance to create `ore` variant of erupting block. For example, `netherrack` has a chance to create `nether_gold_ore` when the lava is erupted.  
-> This is to mimic the real-life behavior of the lava that can create ore deposits when the lava is cooled.
-> 
-> In order to prevent abuse by just roaming around and collecting ores, the [`Primary Succession` routine](./succession.md) will remove surface ores after a certain period of time, For more information about Succession, please refer to the [Succession](./succession.md) documentation.
+### Viscosity: How Lava Flows
 
-### Viscosity of the Lava
-Higher silica content will result in more viscous lava, which will result in more explosive eruptions.  
+In nature, silica is like glue - the more a lava has, the stickier and slower it becomes:
 
-> [!NOTE]  
-> Due to Minecraft's static implementation of fluid logic that can not implement "extended range", Typhon Plugin will "generate" new lava source blocks when the lava stops flowing. This is to mimic the real-life behavior of runny lava such as `basaltic` lava.
+- **Low-Silica Lava (Basaltic)**: Forms rivers of lava that can travel for miles, creating vast lava fields
+- **Medium-Silica Lava (Andesitic)**: Creates shorter, thicker flows that build steeper volcanoes
+- **High-Silica Lava (Rhyolitic)**: Barely flows at all, often forming lava domes that grow upward instead of outward
 
-### Configuring Silica Content
+Typhon faithfully recreates these behaviors:
+- Low-silica lava flows farther and faster, generating new source blocks as it travels to simulate the runny nature
+- High-silica lava moves slower and shorter distances, creating steeper volcanic structures
 
-> [!NOTE]  
-> For simplicity of the documentation, the following commands will use commands for `mainvent`. For subvent, Please refer to the [Eruption Vents](./vents.md) documentation.
+### Mineral Deposits: Volcanic Treasure
 
-For changing the silica content:  
-`/volcano <volcano_name> mainvent config lavaflow:silicaLevel <silica_content>`  
+In the real world, volcanic activity is responsible for many valuable mineral deposits. As magma cools, various minerals crystallize and concentrate.
 
-The `<silica_content>` is a floating point number between `0` and `1`, representing a percentage of silica content. `0.53 = 53%`
+Typhon simulates this natural process:
+- Lava flows have a chance to form ore blocks when cooling
+- Different lava compositions create different types of ores
+- To maintain realism and prevent "farming" of these resources, the [Primary Succession](./succession.md) system gradually removes surface ores over time
 
-## Gas Content
-Just like real-life volcanoes, the lava will contain volcanic gases. The volcanic gases will be ejected from the volcano's main vent.
+## Gas Content: The Explosive Factor
 
-For changing the gas content:  
+The explosive power of real volcanoes largely depends on their gas content. Gas-rich magma that can't easily release pressure tends to create violent eruptions, while gas-poor magma typically produces gentler eruptions.
+
+In Typhon, higher gas content means:
+- More explosive eruptions
+- Larger ash clouds
+- More volcanic bombs
+- Greater pyroclastic flow potential
+
+## Managing Your Volcano's Lava
+
+### Setting Silica Content
+
+To adjust how fluid your volcano's lava is:
+`/volcano <volcano_name> mainvent config lavaflow:silicaLevel <silica_content>`
+
+The `<silica_content>` value (between 0 and 1) represents the percentage of silica:
+- Lower values (0.40-0.50): Hawaiian-style fluid lava
+- Medium values (0.55-0.65): Moderate flows
+- Higher values (0.70+): Thick, barely-flowing lava
+
+### Setting Gas Content
+
+To adjust your volcano's explosive potential:
 `/volcano <volcano_name> mainvent config level:gasContent <gas_content>`
 
-The `<gas_content>` is a floating point number between `0` and `1`, representing a percentage of gas content. `0.53 = 53%`
+The `<gas_content>` value (between 0 and 1) controls how explosive your eruptions will be:
+- Lower values: More gentle, effusive eruptions
+- Higher values: More violent, explosive eruptions
 
-## Commands
-### Quickcool
-Quickcool is a command that will cool the lava instantly. This command is useful when you want to stop the lava flow immediately.  
+### Emergency Lava Control: Quickcool
 
-> [!NOTE]
-> This command will cause errors with the lava flow. Such as:
-> - The lava will not flow down the volcano.
-> - The lava will not form pillow lava when the lava flows into the water.
-> - The lava will not form ore deposits when the lava is cooled.
-> - The lava will not generate new lava source blocks when the lava stops flowing on `"runny lava"`.
->   
-> Interrupting the lava flow will cause volcano's shape to be incomplete and unrealistic.
-
-For quickcooling the lava on all vents of the volcano:  
+For server administrators or in emergency situations, you can instantly solidify all lava from a volcano:
 `/volcano <volcano_name> quickcool`
 
-For quickcooling the lava on the mainvent:  
+For just the main vent:
 `/volcano <volcano_name> mainvent quickcool`
+
+> [!WARNING]
+> Using quickcool interrupts natural lava behavior and can result in:
+> - Incomplete or unrealistic volcanic formations
+> - Missing pillow lava structures in underwater areas
+> - Disrupted ore formation processes
+> - Irregular volcano shapes
+>
+> It's best reserved for emergency server management rather than normal gameplay.
 
 

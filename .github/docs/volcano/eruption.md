@@ -1,58 +1,107 @@
 [<  Return to Typhon Docs](/DOCS.md)  
 [<< Return to Volcano Docs](./index.md)  
 
-# Eruption
-You can erupt the volcanoes you created with Typhon Plugin.
+# Volcanic Eruptions: Nature's Most Spectacular Display
 
-## Start/Stop Eruption
+A volcanic eruption is Earth's most dramatic geologic event - the moment when molten rock, gas, and ash escape from the magma chamber to the surface. From the gentle lava lakes of Hawaii's Kilauea to the catastrophic explosion of Mount St. Helens in 1980, eruptions shape our planet's surface and have influenced human civilization throughout history.
+
+Typhon brings these natural spectacles to Minecraft with unprecedented realism.
+
+## Controlling Your Volcano's Fury
+
 > [!NOTE]  
-> For simplicity of the documentation, the following commands will use commands for `mainvent`. For subvent, Please refer to the [Eruption Vents](./vents.md#commands) documentation.
+> These commands refer to the main vent. For controlling subsidiary vents, see the [Eruption Vents](./vents.md#commands) documentation.
 
-You can start and stop the eruption of the volcano by running the following command:  
+To start or stop a volcanic eruption:  
 `/volcano <volcano_name> mainvent <start|stop>`
 
-## Eruption Style
-Typhon Plugin currently implements the following with predefined typhon eruption style presets:  
+## Eruption Styles: The Spectrum of Volcanic Behavior
 
-Basically here are the volcanoes you can create:
+In volcanology, eruptions are classified into different styles based on their explosivity, lava composition, and eruptive character. Typhon recreates the most important styles with remarkable accuracy:
+
 | Hawaiian | Strombolian | Vulcanian |
 |:--------:|:-----------:|:---------:|
 | ![Hawaiian](/.github/docs/volcano/assets/hawaiian.png) | ![Strombolian](/.github/docs/volcano/assets/strombolian.png) | ![Vulcanian](/.github/docs/volcano/assets/vulcanian.png) |
 
-For changing eruption style: 
+### Hawaiian Eruptions: The Gentle Giants
+
+**In Nature**: Named after the Hawaiian Islands' shield volcanoes, these eruptions feature fluid, low-viscosity basaltic lava with minimal explosivity. Kilauea's eruptions often create spectacular lava fountains that build broad, gently sloping shield volcanoes over time.
+
+**In Typhon**: Hawaiian-style eruptions produce:
+- Fluid lava flows that travel great distances
+- Gentle lava fountains from the main vent
+- Shield-shaped volcanoes with broad, gently sloping sides
+- "Rootless cones" that form when lava flows over wet ground, just as seen in Iceland
+
+### Strombolian Eruptions: Nature's Fireworks
+
+**In Nature**: Named after Stromboli volcano in Italy, this style features regular, moderate explosions every few minutes. These eruptions send incandescent cinder, bombs, and spatter hundreds of meters into the air - the "lighthouse of the Mediterranean" has been erupting almost continuously for over 2,000 years.
+
+**In Typhon**: Strombolian eruptions create:
+- Moderate lava fountains
+- Spectacular nighttime displays of glowing [volcanic bombs](bombs.md)
+- Cone-building eruptions that gradually construct steeper stratovolcanoes
+- Cinder and spatter that builds up around the vent
+
+### Vulcanian Eruptions: The Explosive Force
+
+**In Nature**: Named after Vulcano in Italy's Aeolian Islands, these powerful eruptions feature thick, viscous magma that leads to significant explosions. Mount Vesuvius has produced vulcanian eruptions, blasting volcanic bombs, ash, and pumice high into the atmosphere.
+
+**In Typhon**: Vulcanian eruptions generate:
+- Powerful explosions that shoot material high above the volcano
+- Significant [ash clouds](ash.md#ash-plumes) and [pyroclastic flows](ash.md#pyroclastic-flows)
+- Large [volcanic bombs](bombs.md) that can damage structures
+- Steep-sided volcanic cones
+
+### Special Eruption Styles
+
+Just as in nature, certain environmental conditions trigger special eruption styles in Typhon:
+
+| Surtseyan | Pilinian |
+|:--------:|:-----------:|:---------:|
+| ![Surtseyan](/.github/docs/volcano/assets/surtseyan.png) | ![Pilinian](/.github/docs/volcano/assets/pilinian.png) |
+
+
+#### Surtseyan Eruptions: The Sea-Born Volcano
+
+**In Nature**: Named after Surtsey, which emerged from the ocean near Iceland in 1963, these eruptions occur when magma erupts through water. The water-magma interaction creates distinctive "rooster tail" jets of steam, ash, and volcanic fragments.
+
+**In Typhon**: Triggered automatically when:
+- The volcano's summit is below sea level
+- The crater is filled with water
+
+These eruptions feature steam-driven explosions, wet ash deposition, and unique landforms that gradually build up to the water surface.
+
+#### Plinian Eruptions: History's Most Catastrophic Volcanic Events
+
+**In Nature**: Named after Pliny the Younger, who described the 79 CE eruption of Mount Vesuvius, these cataclysmic eruptions feature enormous columns of ash that can reach the stratosphere. The 1980 Mount St. Helens eruption and the 1991 Mount Pinatubo eruption were plinian events that affected global climate.
+
+**In Typhon**: Triggered automatically during:
+- [Caldera formation](./caldera.md) events
+- [Lateral blast](./lateral_blast.md) scenarios
+
+These represent the most powerful and destructive eruptions possible, featuring massive ash columns, widespread pyroclastic flows, and significant landscape alteration.
+
+## Setting Your Eruption Style
+
+To change your volcano's eruption style:
 `/volcano <volcano_name> mainvent style <style>`  
-`<style>` can be one of the following: `hawaiian`, `strombolian`, `vulcanian`
+
+Where `<style>` is one of: `hawaiian`, `strombolian`, or `vulcanian`
 
 > [!TIP]  
-> By default, when you configure the eruption style, the plugin will automatically set [silica content](./lava.md#silica-content) and [config_nodes](./config_nodes.md) based on the eruption style you selected.  
-> This is equivalent of running `/volcano <volcano_name> mainvent config erupt:autoconfig confirm` command. See [config_nodes](./config_nodes.md) for more information.
+> When you set an eruption style, Typhon automatically configures the appropriate [silica content](./lava.md#silica-content) and other [technical parameters](./config_nodes.md) to create realistic behavior for that eruption type. This is equivalent to running `/volcano <volcano_name> mainvent config erupt:autoconfig confirm`.
 
-### Extra behaviors
-Some eruption styles have extra behaviors:
-- **hawaiian**: Hawaiian eruption will trigger `rootless cone` when the shield cone itself has grown to a certain height.
-- **strombolian**: Strombolian eruption will shoot up [volcanic bombs](bombs.md).
-- **vulcanian**: Vulcanian eruption will shoot up [volcanic bombs](bombs.md) and trigger [pyroclastic flows and ash clouds](ash.md).
+## The Volcano's Base: Foundation of Fire
 
-> [!TIP]  
-> Some of the behaviors not described here might be due to lava's silica content. You can check the [silica content](./lava.md#silica-content) for more information.
+In real volcanoes, the "base level" refers to the foundation from which the volcanic edifice grows. In Typhon, the `baseY` parameter serves a similar function:
 
-### Unconfigurable Eruption Style
-The volcano will automatically switch to specific eruption styles when the conditions are met:
-- `surtseyan`: Surtseyan eruption is a volcanic eruption that shoots up [volcanic bombs](bombs.md) that usually occurs underwater, or when the volcano's eruption is affected by the water.  
-  This will be triggered when any of the following is met:
-  - The volcano's summit is under the sea level.
-  - The crater is filled with water.
-- `plinian`: Plinian eruption is a powerful eruption that shoots up [volcanic bombs](bombs.md) and trigger [pyroclastic flows and ash clouds](ash.md).  
-  This will be triggered when any of the following is met:
-  - The volcano is currently undergoing [caldera formation](./caldera.md).
-  - The volcano is currently undergoing [lateral blast](./lateral_blast.md).
-
-## `baseY` of the Vent
-The `baseY` variable is a Y coordinate of the base of the vent.  
-This is used to calculate the height of the vent when the volcano is erupting on top of the existing cone.  
+- It defines the reference point for the volcano's vertical growth
+- It helps calculate proper trajectories for volcanic bombs
+- It ensures realistic behavior as the volcanic cone grows higher
 
 > [!NOTE]  
-> If you have changed the eruption style to `strombolian` or `vulcanian`, the `baseY` will be automatically configured based on current height of the cone.  
+> When changing to `strombolian` or `vulcanian` eruption styles, the `baseY` is automatically adjusted based on the current cone height to ensure realistic eruptive behavior.
 
-For Manually setting the `baseY`:  
-`/volcano <volcano_name> mainvent config bombs:resetBaseY`  
+To manually reset the base height:  
+`/volcano <volcano_name> mainvent config bombs:resetBaseY`
