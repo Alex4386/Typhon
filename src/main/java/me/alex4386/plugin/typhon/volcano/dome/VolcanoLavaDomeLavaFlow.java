@@ -89,16 +89,18 @@ public class VolcanoLavaDomeLavaFlow {
             this.finished = true;
             this.coolDown();
         } else {
-            if (nextBlock.getType() == Material.MAGMA_BLOCK) {
-                // STOP!!!! - we should divert!!!
-                this.dome.vent.lavaFlow.queueBlockUpdate(
-                        this.block,
-                        Material.AIR
-                );
-                this.finished = true;
-                return;
+            // it might be flowing at there, but if it is nearby the effusion, don't stop the lava flow
+            if (TyphonUtils.getTwoDimensionalDistance(this.dome.baseLocation, this.currentLocation) > 10) {
+                if (nextBlock.getType() == Material.MAGMA_BLOCK) {
+                    // STOP!!!! - we should divert!!!
+                    this.dome.vent.lavaFlow.queueBlockUpdate(
+                            this.block,
+                            Material.AIR
+                    );
+                    this.finished = true;
+                    return;
+                }
             }
-
             int y = this.block.getY();
             if (y > this.dome.getTargetYAt(this.block.getLocation())) {
                 this.dome.vent.lavaFlow.queueBlockUpdate(
