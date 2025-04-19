@@ -1,6 +1,7 @@
 package me.alex4386.plugin.typhon.volcano.dome;
 
 import me.alex4386.plugin.typhon.TyphonBlocks;
+import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -90,7 +91,7 @@ public class VolcanoLavaDomeLavaFlow {
             this.coolDown();
         } else {
             // it might be flowing at there, but if it is nearby the effusion, don't stop the lava flow
-            if (TyphonUtils.getTwoDimensionalDistance(this.dome.baseLocation, this.currentLocation) > 10) {
+            if (this.dome.baseLocation != null && TyphonUtils.getTwoDimensionalDistance(this.dome.baseLocation, this.currentLocation) > 10) {
                 if (nextBlock.getType() == Material.MAGMA_BLOCK) {
                     // STOP!!!! - we should divert!!!
                     this.dome.vent.lavaFlow.queueBlockUpdate(
