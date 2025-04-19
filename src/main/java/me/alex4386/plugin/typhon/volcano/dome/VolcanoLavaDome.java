@@ -168,7 +168,7 @@ public class VolcanoLavaDome {
     }
 
     public Block getSourceBlock(double angle) {
-        Location locWithSourceRange = this.baseLocation;
+        Location locWithSourceRange = this.baseLocation.clone();
         double radius = sourceRange * (1.0 - Math.pow(Math.random(), 2));
         locWithSourceRange.add(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
 
