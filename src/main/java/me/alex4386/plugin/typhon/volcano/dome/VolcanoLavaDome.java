@@ -166,7 +166,7 @@ public class VolcanoLavaDome {
         Location locWithSourceRange = this.baseLocation;
         double radius = sourceRange * (1.0 - Math.pow(Math.random(), 2));
         double angle = Math.random() * 2 * Math.PI;
-        locWithSourceRange.add(Math.sin(angle) * radius, 0, Math.cos(angle) * radius)
+        locWithSourceRange.add(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
 
         return TyphonUtils.getHighestRocklikes(locWithSourceRange).getRelative(BlockFace.UP);
     }
