@@ -49,7 +49,7 @@ public class VolcanoLavaDomeLavaFlow {
             direction.add(targetDir.multiply(0.01));
             direction.setY(0);
         }
-        Location targetDirection = this.currentLocation.add(this.direction.clone().multiply(0.5));
+        Location targetDirection = this.currentLocation.add(this.direction.clone().multiply(1.1));
 
         int xDiff = this.targetBlock.getX() - block.getX();
         int zDiff = this.targetBlock.getZ() - block.getZ();
