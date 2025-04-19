@@ -201,7 +201,7 @@ public class VolcanoLavaDome {
         double offsetX = distance * Math.cos(angle);
         double offsetZ = distance * Math.sin(angle);
 
-        Location targetLocation = this.baseLocation.clone().add(offsetX, 0, offsetZ);
+        Location targetLocation = this.baseLocation.getBlock().getLocation().add(offsetX, 0, offsetZ);
         Block targetBlock = this.getSourceBlock(angle);
         if (targetBlock.getType() == Material.MAGMA_BLOCK) return;
         if (targetBlock.getRelative(0, -1 ,0).getType() == Material.MAGMA_BLOCK) return;
