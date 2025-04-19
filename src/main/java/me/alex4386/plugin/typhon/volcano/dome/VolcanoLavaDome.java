@@ -161,8 +161,14 @@ public class VolcanoLavaDome {
         }
     }
 
+    static double sourceRange = 3.0;
     public Block getSourceBlock() {
-        return TyphonUtils.getHighestRocklikes(this.baseLocation).getRelative(BlockFace.UP);
+        Location locWithSourceRange = this.baseLocation;
+        double radius = sourceRange * (1.0 - Math.pow(Math.random(), 2));
+        double angle = Math.random() * 2 * Math.PI;
+        locWithSourceRange.add(Math.sin(angle) * radius, 0, Math.cos(angle) * radius)
+
+        return TyphonUtils.getHighestRocklikes(locWithSourceRange).getRelative(BlockFace.UP);
     }
 
     public void preStartArgumentValidityCheck() {
@@ -192,8 +198,9 @@ public class VolcanoLavaDome {
         double offsetZ = distance * Math.sin(angle);
 
         Location targetLocation = this.baseLocation.clone().add(offsetX, 0, offsetZ);
-        Block targetBlock = TyphonUtils.getHighestRocklikes(targetLocation).getRelative(BlockFace.UP);
+        Block targetBlock = this.getSourceBlock();
         if (targetBlock.getType() == Material.MAGMA_BLOCK) return;
+        if (targetBlock.getRelative(0, -1 ,0).getType() == Material.MAGMA_BLOCK) return;
 
         this.domeFlows.add(new VolcanoLavaDomeLavaFlow(this, this.getSourceBlock(), targetBlock));
         this.plumbedLava++;
