@@ -5,7 +5,9 @@ import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.TyphonSounds;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
+import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBomb;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombListener;
+import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
@@ -32,7 +34,8 @@ public class VolcanoLavaDome {
     Location baseLocation = null;
     long plumbedLava = 0;
 
-    static double slope = -0.05;
+    static double shapeExponent = 0.7;
+
 
     List<VolcanoLavaDomeLavaFlow> domeFlows = new ArrayList<>();
 
@@ -53,8 +56,15 @@ public class VolcanoLavaDome {
         return (int) Math.ceil(Math.pow((3.0 * this.plumbedLava) / (2 * Math.PI), 1.0/3.0));
     }
 
-    public double getTargetHeightByDistance(double x) {
-        double targetHeight = slope * (Math.pow(x, 2)) + this.getTargetDomeHeight();
+    public double getTargetHeightByDistance(double r) {
+        double height = this.getTargetDomeHeight(); // current dome height
+        double radius = this.getTargetBasin(); // R from growth model
+        double exponent = shapeExponent;
+
+        if (r > radius) return 0; // outside the dome footprint
+
+        double normalized = r / radius;
+        double targetHeight = height * (1 - Math.pow(normalized, exponent));
         return Math.max(0, targetHeight);
     }
 
@@ -91,8 +101,9 @@ public class VolcanoLavaDome {
         return this.baseY;
     }
 
-    public void resetBaseY() {
+    public void resetAll() {
         this.baseY = Integer.MIN_VALUE;
+        this.plumbedLava = 0;
     }
 
     public void registerTask() {
@@ -116,8 +127,14 @@ public class VolcanoLavaDome {
     }
 
     public void postConeBuildHandler() {
-        // this.resetBaseY();
-        this.plumbedLava = 0;
+        // check if current eruption is lavadome eruption
+        if (this.vent.erupt.getStyle() == VolcanoEruptStyle.LAVA_DOME) {
+            // if then, the values should be retained.
+            // skip reset
+            return;
+        }
+
+        this.resetAll();
     }
 
     public void unregisterTask() {
@@ -132,7 +149,16 @@ public class VolcanoLavaDome {
     }
 
     public void shutdown() {
+        this.coolDownAll();
         this.unregisterTask();
+    }
+
+    public void coolDownAll() {
+        Iterator<VolcanoLavaDomeLavaFlow> iterator = this.domeFlows.iterator();
+        while (iterator.hasNext()) {
+            VolcanoLavaDomeLavaFlow flow = iterator.next();
+            flow.forceCoolDown();
+        }
     }
 
     public Block getSourceBlock() {
@@ -153,8 +179,7 @@ public class VolcanoLavaDome {
     }
 
     public double getTargetBasin() {
-        double targetBasin = Math.sqrt(-(1 / slope) * this.getTargetDomeHeight());
-        return targetBasin;
+        return Math.pow(this.getTargetDomeHeight(), 1.0 / shapeExponent);
     }
 
     public void flowLava() {
@@ -178,12 +203,16 @@ public class VolcanoLavaDome {
         return this.getTargetBasin() > 10;
     }
 
-    public void ooze() {
+    public Block getFractureTarget() {
         // if the dome is large enough, flow "real" lava from the side of the dome.
         double targetBasin = this.getTargetBasin();
         double distance = (Math.pow(1 - Math.random(), 2) * 0.5 + 0.5) * targetBasin;
 
-        Block target = TyphonUtils.getFairRandomBlockInRange(this.baseLocation.getBlock(), (int) distance, (int) distance);
+        return TyphonUtils.getFairRandomBlockInRange(this.baseLocation.getBlock(), (int) distance, (int) distance);
+    }
+
+    public void ooze() {
+        Block target = this.getFractureTarget();
         this.vent.lavaFlow.flowLava(TyphonUtils.getHighestRocklikes(
                 target
         ).getRelative(BlockFace.UP));
@@ -196,14 +225,12 @@ public class VolcanoLavaDome {
     }
 
     public void explode() {
-        // if the dome is large enough, explode the dome.
-        Location targetLocation = TyphonUtils.getHighestRocklikes(this.baseLocation).getRelative(BlockFace.UP).getLocation();
-        this.vent.ash.createAshPlume(targetLocation, 5);
-        for (int i = 0; i < 5; i++) {
-            this.vent.bombs.generateRandomBomb(targetLocation);
-        }
+        // if the dome is large enough, explode the side profile of the dome.
+        TyphonSounds.EARTH_CRACKING.play(this.baseLocation.getBlock().getLocation(), SoundCategory.BLOCKS, 2f, 0f);
 
-        TyphonSounds.STROMBOLIAN_ERUPTION.play(targetLocation, SoundCategory.BLOCKS, 2f, 0f);
+        Block target = this.getFractureTarget();
+        target = TyphonUtils.getHighestRocklikes(target);
+        this.vent.ash.triggerPyroclasticFlow(target);
     }
 
     public JSONObject importConfig(JSONObject json) {

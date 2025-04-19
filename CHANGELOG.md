@@ -1,4 +1,4 @@
-![image](https://github.com/user-attachments/assets/8d9acc34-f98f-4dea-8667-4ccd25bd901e)
+``![image](https://github.com/user-attachments/assets/8d9acc34-f98f-4dea-8667-4ccd25bd901e)
 
 ## What's new?
 ### Updating to latest versions
@@ -10,10 +10,10 @@
 - Typhon now targets BluemapAPI `2.7.4`
 
 ### New Integrations
-- Typhon now supports `WorldGuard` for region protection and management. __(beta)__
-- Typhon now supports `CoreProtect` for region protection and management. __(beta)__
+- Typhon now supports `WorldGuard` for region protection and management. _(Experimental)_
+- Typhon now supports `CoreProtect` for region protection and management. _(Experimental)_
 
-> [!NOTE]
+> [!NOTE]  
 > **The integration with `WorldGuard` and `CoreProtect` is still in beta and may not work as expected.**  
 > Please note that the "bugs" occur and your home region can be devastated by the volcano.  
 
@@ -32,9 +32,12 @@
 ### New Features
 #### Plugin Architecture
 - Added `TyphonQueuedHashMap` for better performance on Typhon's internal caches
+- The response of volcano commands are more streamlined
+- `TyphonNavigation` no longer just posts `wall-of-text`.
 
 #### Lava Dome Eruption
 - Implemented Lava Dome Eruption Style
+- The lavadome will ooze
 
 #### Volcanic Bombs
 - Implemented blackbody radiation (via glowing FallingBlock) for each Volcanic bomb
@@ -44,6 +47,9 @@
 
 #### Lava flows
 - The cooled lava will now reflect the flowing direction of the lava flow.
+
+#### Navigation
+- Newly revamped navigation interface:
 
 #### Geothermal
 - The geothermal system has been revamped
@@ -56,6 +62,7 @@
 - When the volcano is in elevated state, Now the volcanic gas can trigger `"NAUSEA"` effect on players and entities.
 - Improved tree detection logic for "killing trees" via geothermal heat and gas release
 - Pyroclastic flows will "timber" the trees when it meets on trees. The trees will fall down and burn out, replaced with coal block and covered with ash.
+- Fixed timber'd Tree-falls' aren't having correct directions.
 
 #### Pyroclastic Flows
 - Fixed pyroclastic flows were not properly directing and doing drifts, causing doing U-turns and other weird behaviors.  
@@ -74,4 +81,3 @@
 - Default Volcanic Succession rate has been drastically decreased for more realistic primary succession.
 - The Succession rate and probability of each succession cycle can be configured via command via `"succession:probability"` and `"succession:treeProbability"` config nodes.
 - The succession can be disabled per vent via `"succession:enabled"` in the vent config node.
-

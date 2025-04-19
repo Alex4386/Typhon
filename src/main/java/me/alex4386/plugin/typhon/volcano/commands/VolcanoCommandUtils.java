@@ -4,6 +4,7 @@ import me.alex4386.plugin.typhon.TyphonNavigation;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 
+import org.bukkit.ChatColor;
 import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -22,22 +23,17 @@ public class VolcanoCommandUtils {
 
             if (player.getWorld().equals(summitBlock.getWorld())) {
                 TyphonNavigation navigation = TyphonNavigation.getNavigation(player.getLocation(), summitBlock.getLocation());
-                directions = navigation.getNavigation();
+                navigation.sendToSender(sender);
             } else {
-                directions = "Different world!";
+                sender.sendMessage(ChatColor.RED + "You are not in same world!");
             }
 
-            int toClimb = summitBlock.getY() - player.getLocation().getBlockY();
-
-            sender.sendMessage("Directions: " + directions);
-            sender.sendMessage("climb: " + toClimb + " blocks");
         }
 
+        sender.sendMessage("");
         sender.sendMessage(
                 "Located @ "
-                        + TyphonUtils.blockLocationTostring(summitBlock)
-                        + " on vent "
-                        + vent.getName());
+                        + TyphonUtils.blockLocationTostring(summitBlock));
     }
 
     public static String getSubmenuName(String submenuString, String[] args) {

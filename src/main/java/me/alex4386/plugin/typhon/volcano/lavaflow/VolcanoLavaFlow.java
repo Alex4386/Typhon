@@ -1666,16 +1666,8 @@ public class VolcanoLavaFlow implements Listener {
                     this.queueBlockUpdate(block, material, TyphonUtils.getBlockFaceUpdater(fromBlock, block));
                     vent.flushSummitCacheByLocation(block);
 
-                    BlockData bd = block.getBlockData();
                     BlockFace f = block.getFace(lavaData.fromBlock);
-            
-                    if (bd instanceof Directional) {
-                        Directional d = (Directional) bd;
-                        if (f != null && f.isCartesian()) {
-                            d.setFacing(f);
-                        }
-                        block.setBlockData(d);
-                    }
+                    TyphonUtils.getBlockFaceUpdater(f).accept(block);
                 }
 
 
@@ -1901,9 +1893,14 @@ public class VolcanoLavaFlow implements Listener {
             }
 
             if (this.vent.lavadome.isDomeLargeEnough()) {
-                if (Math.random() < 0.1) {
-                    // the lava dome is large enough to explode.
-                    this.vent.lavadome.explode();
+                if (Math.random() < 0.0001) {
+                    // check if queued influx is larger than it can handle
+                    int queuedAmount = (flowAmount - flowedBlocks) + (int) prevQueuedLavaInflux;
+                    if (queuedAmount > 100) {
+                        // the plumbing amount is not clearing out enough
+                        // and the lava dome is large enough to explode.
+                        this.vent.lavadome.explode();
+                    }
                 } else if (Math.random() < 0.01) {
                     // the lava dome can ooze out lava.
                     this.vent.lavadome.ooze();
