@@ -69,6 +69,15 @@ public class VolcanoLavaDomeLavaFlow {
         Location next = this.getNext();
         if (next == null) return null;
 
+        Block targetBlock = next.getBlock();
+        if (!targetBlock.getType().isAir()) {
+            // check if it is not MAGMA_BLOCK
+            if (targetBlock.getType() != Material.MAGMA_BLOCK) {
+                // we can't flow to here! stop!
+                return null;
+            }
+        }
+
         return next.getBlock();
     }
 
@@ -104,6 +113,12 @@ public class VolcanoLavaDomeLavaFlow {
             }
             int y = this.block.getY();
             if (y > this.dome.getTargetYAt(this.block.getLocation())) {
+                double distance = TyphonUtils.getTwoDimensionalDistance(this.dome.baseLocation, this.currentLocation);
+                if (distance > this.dome.getTargetBasin() + Math.min(100, this.dome.getTargetBasin())) {
+                    this.finished = true;
+                    return;
+                }
+
                 this.dome.vent.lavaFlow.queueBlockUpdate(
                         this.block,
                         Material.AIR

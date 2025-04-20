@@ -180,8 +180,6 @@ public class VolcanoLavaDome {
         if (highestBlock.getY() < this.baseY) {
             this.baseY = highestBlock.getY();
         }
-
-
     }
 
     public int domeFlowCounts() {
