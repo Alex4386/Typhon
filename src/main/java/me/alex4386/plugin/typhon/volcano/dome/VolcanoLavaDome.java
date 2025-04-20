@@ -194,19 +194,19 @@ public class VolcanoLavaDome {
 
     public void flowLava() {
         double targetBasin = this.getTargetBasin();
-        int randomRange = (int) Math.ceil(Math.max(10, targetBasin));
-        double distance = (1 - Math.pow(Math.random(), 2)) * randomRange;
+        int randomRange = (int) Math.max(0.0, Math.ceil(Math.max(10, targetBasin)) - sourceRange);
+        double distance = (1 - Math.pow(Math.random(), 2)) * (randomRange + sourceRange);
 
         double angle = Math.random() * 2 * Math.PI;
-        double offsetX = distance * Math.cos(angle);
-        double offsetZ = distance * Math.sin(angle);
+        Block srcBlock = this.getSourceBlock(angle);
+        Block targetBlock = this.baseLocation.clone().add(Math.sin(angle) * distance, 0, Math.cos(angle) * angle).getBlock();
 
-        Location targetLocation = this.baseLocation.getBlock().getLocation().add(offsetX, 0, offsetZ);
-        Block targetBlock = this.getSourceBlock(angle);
-        if (targetBlock.getType() == Material.MAGMA_BLOCK) return;
-        if (targetBlock.getRelative(0, -1 ,0).getType() == Material.MAGMA_BLOCK) return;
+        if (srcBlock.getRelative(0, -1 ,0).getType() == Material.MAGMA_BLOCK) {
+            // the underlying block haven't fully flowed yet. use this as srcBlock.
+            srcBlock = srcBlock.getRelative(0, -1, 0);
+        }
 
-        this.domeFlows.add(new VolcanoLavaDomeLavaFlow(this, this.getSourceBlock(), targetBlock));
+        this.domeFlows.add(new VolcanoLavaDomeLavaFlow(this, srcBlock, targetBlock));
         this.plumbedLava++;
     }
 
