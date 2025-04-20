@@ -590,8 +590,8 @@ public class VolcanoVentCommand {
                     if (location == null) {
                         msg.info("Lava Dome eruption was not configured");
                     } else {
-                        int targetHeight = vent.lavadome.getTargetDomeHeight();
-                        msg.info(" - TargetHeight: " + targetHeight + " (y: "+ (vent.lavadome.baseY + targetHeight) + ")");
+                        double targetHeight = vent.lavadome.getTargetDomeHeight();
+                        msg.info(" - TargetHeight: " + String.format("%.2f", targetHeight) + " (y: "+ String.format("%.2f", (double) vent.lavadome.baseY + targetHeight) + ")");
                         msg.info(" - Basin Width : " + String.format("%.2f", vent.lavadome.getTargetBasin()));
                         msg.info(" - baseLocation: " + TyphonUtils.blockLocationTostring(location.getBlock()));
                     }

@@ -21,6 +21,8 @@ public class VolcanoLavaDomeLavaFlow {
     public Location currentLocation;
     public int flowTimer = 8;
 
+    public int flatFlowLife = 8;
+
     public void resetFlowTimer() {
         this.flowTimer = 8;
     }
@@ -35,11 +37,16 @@ public class VolcanoLavaDomeLavaFlow {
         this.direction = this.targetBlock.getLocation().toVector().subtract(this.currentLocation.toVector()).setY(0).normalize();
     }
 
+    private void resetFlatFlowLife() {
+        this.flatFlowLife = 8;
+    }
+
     public Location getNext() {
         Block block = this.currentLocation.getBlock();
 
         // check if current block is floating.
         if (block.getRelative(0, -1, 0).getType().isAir()) {
+            this.resetFlatFlowLife();
             return this.currentLocation.add(0, -1 ,0);
         }
 
@@ -62,6 +69,7 @@ public class VolcanoLavaDomeLavaFlow {
             return null;
         }
 
+        this.flatFlowLife--;
         return targetDirection;
     }
 
@@ -82,6 +90,11 @@ public class VolcanoLavaDomeLavaFlow {
     }
 
     public void runTick() {
+        if (this.flatFlowLife <= 0) {
+            this.finished = true;
+            this.coolDown();
+        }
+
         if (this.finished) return;
 
         if (this.flowTimer <= 0) {
@@ -116,6 +129,7 @@ public class VolcanoLavaDomeLavaFlow {
                 double distance = TyphonUtils.getTwoDimensionalDistance(this.dome.baseLocation, this.currentLocation);
                 if (distance > this.dome.getTargetBasin() + Math.min(100, this.dome.getTargetBasin())) {
                     this.finished = true;
+                    this.coolDown();
                     return;
                 }
 
@@ -124,6 +138,7 @@ public class VolcanoLavaDomeLavaFlow {
                         Material.AIR
                 );
             } else {
+                this.dome.plumbedLava++;
                 this.dome.vent.lavaFlow.queueBlockUpdate(
                         this.block, VolcanoComposition.getExtrusiveRock(
                                 this.dome.vent.lavaFlow.settings.silicateLevel
@@ -140,13 +155,27 @@ public class VolcanoLavaDomeLavaFlow {
 
     public void coolDown() {
         int y = this.block.getY();
-        if (y <= this.dome.getTargetYAt(this.block.getLocation())) {
-            TyphonBlocks.setBlockType(this.block, VolcanoComposition.getExtrusiveRock(
+        double targetY = this.dome.getTargetYAt(this.block.getLocation());
+
+        Material material = null;
+
+        if (y <= targetY) {
+            if (this.block.getType() == Material.MAGMA_BLOCK) {
+                this.dome.plumbedLava++;
+            }
+
+            material = VolcanoComposition.getExtrusiveRock(
                     this.dome.vent.lavaFlow.settings.silicateLevel
-            ));
+            );
         } else {
-            if (this.block.getType() == Material.MAGMA_BLOCK)
-                TyphonBlocks.setBlockType(this.block, Material.AIR);
+            if (this.block.getType() == Material.MAGMA_BLOCK) {
+                material = Material.AIR;
+            }
+        }
+
+        if (material != null) {
+            TyphonBlocks.setBlockType(this.block, material);
+            this.dome.vent.lavaFlow.queueBlockUpdate(this.block, material);
         }
     }
 

@@ -38,7 +38,7 @@ public enum VolcanoEruptStyle {
 
     // **SPECIAL**
     // This is a special type of eruption for lava dome eruptions.
-    LAVA_DOME("lava_dome", new String[] { "dome" }, VolcanoEruptCauseType.MAGMATIC, 1, 0, 0),
+    LAVA_DOME("lava_dome", new String[] { "dome" }, VolcanoEruptCauseType.MAGMATIC, 0.2, 0, 0),
     ;
 
     String rawType;

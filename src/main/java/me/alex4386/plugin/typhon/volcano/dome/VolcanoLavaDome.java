@@ -10,6 +10,7 @@ import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombListener;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentBuilderType;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
 import org.bukkit.Bukkit;
@@ -34,7 +35,7 @@ public class VolcanoLavaDome {
     Location baseLocation = null;
     long plumbedLava = 0;
 
-    static double shapeExponent = 0.7;
+    static double shapeExponent = 0.8;
 
 
     List<VolcanoLavaDomeLavaFlow> domeFlows = new ArrayList<>();
@@ -52,20 +53,27 @@ public class VolcanoLavaDome {
         return plumbedLava;
     }
 
-    public int getTargetDomeHeight() {
-        return (int) Math.ceil(Math.pow((3.0 * this.plumbedLava) / (2 * Math.PI), 1.0/3.0));
+    public double getTargetDomeHeight() {
+        double radius = this.getTargetBasin(); // depends only on volume
+        return Math.pow(radius, shapeExponent);
     }
 
     public double getTargetHeightByDistance(double r) {
-        double height = this.getTargetDomeHeight(); // current dome height
-        double radius = this.getTargetBasin(); // R from growth model
-        double exponent = shapeExponent;
+        double volume = this.plumbedLava;           // V
+        double radius = this.getTargetBasin();      // R
+        double exponent = shapeExponent;            // e
 
-        if (r > radius) return 0; // outside the dome footprint
+        if (r > radius) return 0;                   // outside the dome footprint
 
+        // Compute height from volume and shape exponent
+        double denom = 2 * Math.PI * radius * radius * (0.5 - 1.0 / (exponent + 2.0));
+        if (denom <= 0) return 0; // safeguard for invalid exponent
+        double height = volume / denom;             // H₀
+
+        // Compute normalized radial coordinate and profile
         double normalized = r / radius;
         double targetHeight = height * (1 - Math.pow(normalized, exponent));
-        return Math.max(0, targetHeight);
+        return Math.max(0, targetHeight);           // ensure non-negative
     }
 
     public double getTargetYAt(Location loc) {
@@ -187,7 +195,13 @@ public class VolcanoLavaDome {
     }
 
     public double getTargetBasin() {
-        return Math.pow(this.getTargetDomeHeight(), 1.0 / shapeExponent);
+        double volume = this.plumbedLava;
+        double exponent = shapeExponent;
+
+        double shapeFactor = 2 * Math.PI * (0.5 - 1.0 / (exponent + 2.0));
+        if (shapeFactor <= 0) return 0;
+
+        return Math.pow(volume / shapeFactor, 1.0 / (exponent + 2.0));
     }
 
     public void flowLava() {
@@ -197,11 +211,24 @@ public class VolcanoLavaDome {
 
         double angle = Math.random() * 2 * Math.PI;
         Block srcBlock = this.getSourceBlock(angle);
-        Block targetBlock = this.baseLocation.clone().add(Math.sin(angle) * distance, 0, Math.cos(angle) * angle).getBlock();
+        Block targetBlock = this.baseLocation.clone().add(Math.sin(angle) * distance, 0, Math.cos(angle) * distance).getBlock();
 
         if (srcBlock.getRelative(0, -1 ,0).getType() == Material.MAGMA_BLOCK) {
             // the underlying block haven't fully flowed yet. use this as srcBlock.
             srcBlock = srcBlock.getRelative(0, -1, 0);
+        }
+
+        if (this.vent.builder.isRunning()) {
+            if (this.vent.builder.getType() == VolcanoVentBuilderType.Y_THRESHOLD) {
+                String res = this.vent.builder.getArgumentMap().get("y_threshold");
+                if (res != null) {
+                    double value = Double.parseDouble(res);
+                    if (srcBlock.getY() >= value) {
+                        this.vent.builder.forcePredicateMatch();
+                        return;
+                    }
+                }
+            }
         }
 
         this.domeFlows.add(new VolcanoLavaDomeLavaFlow(this, srcBlock, targetBlock));
