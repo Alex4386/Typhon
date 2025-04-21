@@ -16,7 +16,7 @@ See plugin in action: <a href="https://www.youtube.com/watch?v=DDnQDAdq1Ok">YouT
 > **See Typhon Plugin in Action!**
 >
 > <h1 align="center"><code>typhon-demo.alex4386.me</code></h1>
-> <p align="center"><a href="https://typhon-demo.alex4386.me/">Map</a> - Minecraft 1.21.4, Running PaperMC</p>  
+> <p align="center"><a href="https://typhon-demo.alex4386.me/">Map</a> - Minecraft 1.21.5, Running PaperMC</p>  
 
 ## Docs
 - [Installation](/.github/docs/installation.md)
