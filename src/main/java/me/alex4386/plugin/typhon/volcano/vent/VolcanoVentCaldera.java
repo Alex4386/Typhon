@@ -409,7 +409,7 @@ public class VolcanoVentCaldera {
                                         TyphonUtils.getFairRandomBlockInRange(this.baseBlock, this.currentRadius, (int) Math.max(this.radius + 100, this.vent.longestFlowLength))
                                 ).getLocation(), 1);
                     } else {
-                        bomb = this.vent.bombs.generateConeBuildingBomb();
+                        bomb = this.vent.bombs.tryConeBuildingBomb();
                     }
 
                     if (bomb != null) {

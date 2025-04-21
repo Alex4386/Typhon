@@ -226,9 +226,8 @@ public class VolcanoBombs {
 
     public VolcanoBomb generateBomb(Location hostLocation) {
         if (Math.random() < 0.95) {
-            VolcanoBomb bomb = this.generateConeBuildingBomb();
+            VolcanoBomb bomb = this.tryConeBuildingBomb();
             if (bomb == null) {
-                this.vent.getVolcano().logger.debug(VolcanoLogClass.BOMB, "Failed to generate cone building bomb!");
                 bomb = this.generateRandomBomb(hostLocation);
             }
             return bomb;
@@ -303,6 +302,20 @@ public class VolcanoBombs {
 
     public double getAdequateHeightFromDistance(double distance) {
         return this.getEffectiveConeY() - (distance / this.distanceHeightRatio());
+    }
+
+    public VolcanoBomb tryConeBuildingBomb() {
+        int maxCount = 100;
+        VolcanoBomb bomb;
+        for (int i = 0; i < maxCount; i++) {
+            bomb = this.generateConeBuildingBomb();
+            if (bomb != null) {
+                return bomb;
+            }
+        }
+
+        this.vent.getVolcano().logger.debug(VolcanoLogClass.BOMB, "Failed to generate cone building bomb!");
+        return null;
     }
 
     public VolcanoBomb generateConeBuildingBomb() {

@@ -2010,7 +2010,7 @@ public class VolcanoLavaFlow implements Listener {
                         this.handleSurtseyan();
                     } else if (this.vent.erupt.getStyle().bombMultiplier > 0) {
                         if (Math.random() > 1.0/this.vent.erupt.getStyle().bombMultiplier) {
-                            VolcanoBomb bomb = this.vent.bombs.generateConeBuildingBomb();
+                            VolcanoBomb bomb = this.vent.bombs.tryConeBuildingBomb();
                             if (bomb != null) {
                                 bomb.land();
                             }
