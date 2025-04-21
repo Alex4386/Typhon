@@ -227,7 +227,10 @@ public class VolcanoBombs {
     public VolcanoBomb generateBomb(Location hostLocation) {
         if (Math.random() < 0.95) {
             VolcanoBomb bomb = this.generateConeBuildingBomb();
-            if (bomb == null) bomb = this.generateRandomBomb(hostLocation);
+            if (bomb == null) {
+                this.vent.getVolcano().logger.debug(VolcanoLogClass.BOMB, "Failed to generate cone building bomb!");
+                bomb = this.generateRandomBomb(hostLocation);
+            }
             return bomb;
         } else {
             return this.generateRandomBomb(hostLocation);

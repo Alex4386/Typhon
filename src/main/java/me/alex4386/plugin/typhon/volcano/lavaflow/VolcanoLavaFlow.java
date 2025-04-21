@@ -662,8 +662,13 @@ public class VolcanoLavaFlow implements Listener {
             if (underIsAir && underUnderToBlock.getType().isAir() && fillUnderUnder) {
                 queueImmediateBlockUpdate(underToBlock, data.material);
 
-                // bifurcate lava
-                registerLavaCoolData(data.source, underToBlock, underUnderToBlock, data.isBomb, -1, false, true);
+                // bifurcate lava -
+                if (!data.isBomb) {
+                    registerLavaCoolData(data.source, underToBlock, underUnderToBlock, data.isBomb, -1, false, true);
+                } else {
+                    this.flowLavaFromBomb(underUnderToBlock);
+                }
+
                 queueBlockUpdate(underUnderToBlock, Material.LAVA);
             }
 
