@@ -28,6 +28,7 @@
   - Deleting a volcano
 - Fixed `TyphonNavigation` for better navigations (This will fix the issue with summit navigation)
 - Added missing Tab completion for `/vol <name> mainvent caldera` command
+- Fixed ConeBuilding Volcanic Bombs are not working as intended
 
 ### New Features
 #### Plugin Architecture
