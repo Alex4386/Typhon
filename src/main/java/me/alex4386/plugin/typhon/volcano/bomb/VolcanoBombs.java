@@ -347,14 +347,15 @@ public class VolcanoBombs {
         double diff = adequateHeight - randomBlock.getY();
 
         if (diff > 0) {
-            int maxBombRadius = 1;
-            if (distanceFromCore < this.vent.craterRadius * 1) maxBombRadius = 1;
-            else maxBombRadius = (int) Math.min(4, (distanceFromCore / this.vent.craterRadius));
+            int maxCraterRadius = Math.min(25, this.vent.craterRadius);
+            int maxBombRadius = 2;
+            if (distanceFromCore < maxCraterRadius) maxBombRadius = 2;
+            else maxBombRadius = (int) Math.min(5, (distanceFromCore / maxCraterRadius) + 1);
 
             // if diff is too big
             if (distanceFromCore < diff) {
-                if (distanceFromCore < this.vent.craterRadius * 5) {
-                    double targetMax = Math.pow((Math.max(0, distanceFromCore - this.vent.craterRadius) / this.vent.craterRadius * 4), 2);
+                if (distanceFromCore < maxCraterRadius * 5) {
+                    double targetMax = Math.pow((Math.max(0, distanceFromCore - maxCraterRadius) / maxCraterRadius * 4), 2);
                     maxBombRadius = (int) Math.max(Math.min(8 * targetMax, diff / 2), maxBombRadius);
                 }
             }
