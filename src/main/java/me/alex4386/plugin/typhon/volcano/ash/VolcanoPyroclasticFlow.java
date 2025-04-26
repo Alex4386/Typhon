@@ -37,6 +37,8 @@ public class VolcanoPyroclasticFlow {
     boolean isFinished = false;
     int scheduleID = -1;
 
+    boolean underTheWater = false;
+
     double maxPileup = 5;
     double awayCount = 0;
 
@@ -463,6 +465,7 @@ public class VolcanoPyroclasticFlow {
                 }
 
                 // Place ash blocks vertically
+                boolean hasUnderTheWater = false;
                 if (ashHeight > 0) {
                     for (int y = 1; y <= ashHeight; y++) {
                         Block targetBlock = baseBlockHere.getRelative(0, y, 0);
@@ -471,6 +474,14 @@ public class VolcanoPyroclasticFlow {
                         }
                         this.ash.vent.lavaFlow.queueBlockUpdate(targetBlock, Material.TUFF);
                         this.ash.vent.record.addEjectaVolume(1);
+                    }
+
+                    if (!this.underTheWater) {
+                        if (baseBlockHere.getY() + ashHeight > baseBlockHere.getWorld().getSeaLevel()) {
+                            this.updateLongestFlow(baseBlockHere.getLocation());
+                        } else {
+                            hasUnderTheWater = true;
+                        }
                     }
                 } else {
                     // just change the surface block into TUFF
@@ -481,10 +492,24 @@ public class VolcanoPyroclasticFlow {
                         }
                     }
                 }
+
+                if (hasUnderTheWater) {
+                    this.underTheWater = true;
+                }
             }
         }
+    }
 
+    private void updateLongestFlow(Location location) {
+        double distance = this.ash.vent.getTwoDimensionalDistance(location);
 
+        if (distance > this.ash.vent.currentNormalLavaFlowLength) {
+            this.ash.vent.currentNormalLavaFlowLength = distance;
+        }
+
+        if (distance > this.ash.vent.longestNormalLavaFlowLength) {
+            this.ash.vent.longestNormalLavaFlowLength = distance;
+        }
     }
 
     public void playAshTrail() {
