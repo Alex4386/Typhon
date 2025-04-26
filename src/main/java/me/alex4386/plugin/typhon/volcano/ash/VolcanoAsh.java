@@ -231,7 +231,8 @@ public class VolcanoAsh {
             deadZone = this.vent.caldera.radius + 7;
         }
 
-        double max = Math.max(this.vent.getBasinLength(), this.vent.longestNormalLavaFlowLength + 20);
+        double flowLength = this.vent.getVolcanicRadius();
+        double max = Math.max(this.vent.getBasinLength(), flowLength + 20);
         max = Math.max(max, this.vent.bombs.maxDistance);
 
         if (Math.random() < 0.3) {

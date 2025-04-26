@@ -94,7 +94,7 @@ public class VolcanoSuccession {
         if (vent.getStatus() == VolcanoVentStatus.ERUPTING || vent.getStatus() == VolcanoVentStatus.ERUPTION_IMMINENT || vent.lavaFlow.hasAnyLavaFlowing()) {
             successionCount = (int) (Math.random() * 2);
         } else if (Math.random() > vent.getStatus().getScaleFactor()) {
-            double circumference = vent.longestNormalLavaFlowLength * Math.PI * 2;
+            double circumference = vent.getVolcanicRadius() * Math.PI * 2;
             double successionScale = Math.pow((1.0 - vent.getStatus().getScaleFactor()), 2);
 
             double maxCount = Math.min(Math.max(0, circumference / 20), 2000 / cyclesPerTick);
@@ -150,7 +150,7 @@ public class VolcanoSuccession {
 
     public void runSuccession(VolcanoVent vent) {
         Block coreBlock = vent.getCoreBlock();
-        double longestFlow = Math.max(vent.getBasinLength(), vent.longestNormalLavaFlowLength);
+        double longestFlow = Math.max(vent.getBasinLength(), vent.getVolcanicRadius());
         if (Math.random() < 0.2) {
             longestFlow = Math.max(longestFlow, vent.bombs.maxDistance);
         } else if (Math.random() < 0.1) {

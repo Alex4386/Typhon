@@ -1010,7 +1010,7 @@ public class VolcanoVentCommand {
                 msg.info(
                         "    Normal: "
                                 + String.format("%.2f", vent.longestNormalLavaFlowLength) + "m (now: "
-                                + String.format("%.2f", vent.currentNormalLavaFlowLength) + "m"
+                                + String.format("%.2f", vent.currentNormalLavaFlowLength) + "m)"
                         );
 
                 msg.info(
@@ -1019,6 +1019,12 @@ public class VolcanoVentCommand {
                                 + " @ "
                                 + String.format("%.2f", vent.bombs.maxDistance)
                                 + "m");
+                msg.info(
+                        " - Ash : "
+                                + String.format("%.2f", vent.longestAshNormalFlowLength)
+                                + "m (now: "
+                                + String.format("%.2f", vent.currentAshNormalFlowLength) + "m)"
+                );
                 msg.info("Radius  : " + vent.getRadius());
                 msg.info(
                         "Status  : "

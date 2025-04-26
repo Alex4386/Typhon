@@ -67,6 +67,10 @@ public class VolcanoPyroclasticFlow {
         return lowestBlock;
     }
 
+    private static double getFlowLength(VolcanoVent vent) {
+        return vent.getVolcanicRadius();
+    }
+
     public static int getMaxDistance(VolcanoVent vent) {
         if (vent.erupt.getStyle() == VolcanoEruptStyle.PLINIAN) {
             return -1;
@@ -76,7 +80,7 @@ public class VolcanoPyroclasticFlow {
             return -1;
         }
 
-        double basinCalc = vent.longestNormalLavaFlowLength * 0.5;
+        double basinCalc = VolcanoPyroclasticFlow.getFlowLength(vent) * 0.5;
         double base = Math.min(vent.bombs.getBaseY() * Math.sqrt(3), basinCalc);
         base = Math.max(200, base);
 
@@ -87,7 +91,7 @@ public class VolcanoPyroclasticFlow {
     }
 
     public static int getMaxLife(VolcanoVent vent, int radius) {
-        return (int) (vent.longestNormalLavaFlowLength / (radius));
+        return (int) (VolcanoPyroclasticFlow.getFlowLength(vent) / (radius));
     }
 
     public VolcanoPyroclasticFlow(Location location, VolcanoAsh ash) {
@@ -425,7 +429,7 @@ public class VolcanoPyroclasticFlow {
         double summitY = Math.max(initLocation.getY(), this.ash.vent.getSummitBlock().getY());
         double baseY = Math.max(this.ash.vent.location.getY(), this.ash.vent.location.getWorld().getSeaLevel());
 
-        double basin = Math.max(this.ash.vent.getBasinLength(), this.ash.vent.longestNormalLavaFlowLength);
+        double basin = Math.max(this.ash.vent.getBasinLength(), VolcanoPyroclasticFlow.getFlowLength(this.ash.vent));
         double scale = (summitY - baseY) / basin;
 
         summitY -= initRadius * scale;  // Scale down based on initial radius
@@ -503,12 +507,12 @@ public class VolcanoPyroclasticFlow {
     private void updateLongestFlow(Location location) {
         double distance = this.ash.vent.getTwoDimensionalDistance(location);
 
-        if (distance > this.ash.vent.currentNormalLavaFlowLength) {
-            this.ash.vent.currentNormalLavaFlowLength = distance;
+        if (distance > this.ash.vent.currentAshNormalFlowLength) {
+            this.ash.vent.currentAshNormalFlowLength = distance;
         }
 
-        if (distance > this.ash.vent.longestNormalLavaFlowLength) {
-            this.ash.vent.longestNormalLavaFlowLength = distance;
+        if (distance > this.ash.vent.longestAshNormalFlowLength) {
+            this.ash.vent.longestAshNormalFlowLength = distance;
         }
     }
 

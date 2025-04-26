@@ -113,7 +113,7 @@ public class VolcanoErupt {
 
             return location;
         } else if (volcano.isVolcanicField()) {
-            Location location = TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), 40, (int) Math.max(80, this.vent.longestNormalLavaFlowLength)).getLocation();
+            Location location = TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), 40, (int) Math.max(80, this.vent.getVolcanicRadius())).getLocation();
 
             if (TyphonUtils.getTwoDimensionalDistance(location, this.vent.location) > volcano.fieldRange) {
                 return null;
@@ -121,8 +121,9 @@ public class VolcanoErupt {
 
             return location;
         } else {
-            int minDistance = (int) Math.max(this.vent.craterRadius + 50, this.vent.longestNormalLavaFlowLength / 2);
-            int maxDistance = (int) Math.max(this.vent.longestFlowLength, Math.max(minDistance, this.vent.longestNormalLavaFlowLength + 60));
+            double coneSize = this.vent.getVolcanicRadius();
+            int minDistance = (int) Math.max(this.vent.craterRadius + 50, coneSize / 2);
+            int maxDistance = (int) Math.max(this.vent.longestFlowLength, Math.max(minDistance, coneSize + 60));
             Location location = TyphonUtils.getRandomBlockInRange(this.vent.getCoreBlock(), minDistance, maxDistance).getLocation();
 
             if (volcano.manager.getNearestVent(location).isInVent(location)) {
@@ -225,7 +226,7 @@ public class VolcanoErupt {
             if (this.vent.getType() == VolcanoVentType.FISSURE) {
                 int prevFissureLength = this.vent.fissureLength;
                 int targetLength = (int) Math.max(
-                    this.vent.longestNormalLavaFlowLength * 2,
+                    this.vent.getVolcanicRadius() * 2,
                     this.vent.fissureLength);
 
                 if (this.vent.fissureLength >= 0) {
