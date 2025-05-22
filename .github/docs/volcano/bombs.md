@@ -14,7 +14,7 @@ Typhon faithfully recreates this volcanic spectacle using Minecraft's FallingBlo
 - Each bomb can damage structures and create impact craters upon landing
 - Like their natural counterparts, they can start fires and release residual lava
 
-![Image](https://github.com/user-attachments/assets/fb7f6bda-fa68-49a5-9e07-984d376dcb7f)
+<img src="https://github.com/user-attachments/assets/fb7f6bda-fa68-49a5-9e07-984d376dcb7f" width="300" />
 
 ## Size Variation: From Lapilli to Blocks
 
