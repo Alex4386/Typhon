@@ -7,7 +7,7 @@ In nature, volcanic eruptions don't always occur from a single, neat crater at t
 
 Typhon faithfully recreates these diverse volcanic vent systems, allowing you to build volcanic landscapes as complex and dynamic as their real-world counterparts.
 
-![Volcano system with multiple vents, with some of them erupting](/.github/docs/volcano/assets/multi-vents.png)
+<img src="/.github/docs/volcano/assets/multi-vents.png" align="center" width="400" />
 
 ## Types of Volcanic Vents
 
