@@ -5,9 +5,9 @@
 
 In nature, volcanoes are not just about dramatic eruptions - they continuously breathe and release energy through geothermal activity. From the steaming fumaroles of Yellowstone to the deadly gas emissions at Lake Nyos, these phenomena shape the volcanic landscape even during periods of dormancy.
 
-![Image](https://github.com/user-attachments/assets/9c033765-aac8-463b-bbee-3d03d5ff254c)
+<img src="https://github.com/user-attachments/assets/9c033765-aac8-463b-bbee-3d03d5ff254c" width="400" />
 
-## Geothermal Heat: The Hidden Energy
+## Geothermal Heat
 
 Beneath every volcano lies a massive heat reservoir. In real volcanoes, this heat gradually dissipates through the ground, creating unique environments.
 
@@ -58,7 +58,7 @@ Fumaroles aren't just visual - they impact their surroundings:
   - Concentrated volcanic gases that can damage nearby vegetation
   - Multiple Steam plumes visible
 
-## Volcanic Gases: The Invisible Danger
+## Volcanic Gases
 
 In the real world, volcanic gases are silent killers. The 1986 Lake Nyos disaster in Cameroon showed how deadly CO₂ emissions can be, while acidic gases like sulfur dioxide at volcanoes like Kilauea continuously reshape their environments.
 

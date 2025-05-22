@@ -1,13 +1,13 @@
 [<  Return to Typhon Docs](/DOCS.md)  
 [<< Return to Volcano Docs](./index.md)  
 
-# Volcanic Ash: The Sky-Darkening Phenomenon
+# Volcanic Ash
 
 In nature, volcanic ash isn't just "smoke" - it's pulverized rock, minerals, and volcanic glass violently ejected during explosive eruptions. From the buried Roman city of Pompeii to the 2010 Eyjafjallajökull eruption that grounded European air travel, volcanic ash represents one of nature's most awe-inspiring and dangerous volcanic phenomena.
 
 Typhon recreates these dramatic features of explosive volcanism with remarkable realism, by utilizing Minecraft's new `BlockDisplay` entities to simulate ash clouds and their effects on the environment.
 
-![Image](https://github.com/user-attachments/assets/bed69bbf-0d8b-4830-858a-33b94d8e9af1)
+<img alt="pyroclastic flows" src="https://github.com/user-attachments/assets/bed69bbf-0d8b-4830-858a-33b94d8e9af1" width="400" />
 
 ## Pyroclastic Flows: Nature's Unstoppable Force
 
@@ -31,5 +31,3 @@ Typhon's ash plumes capture this epic scale:
 - **Thermal Properties**: The superheated ash burns entities caught within the column
 - **Realistic Dispersal**: Ash spreads outward at high altitudes, simulating the mushroom cloud appearance of major eruptions
 - **Gradual Settling**: Fine ash particles slowly descend from the sky after major eruptions
-
-Experience the full spectrum of volcanic ash phenomena in Typhon and gain a deeper appreciation for one of nature's most awesome and terrifying displays of power!

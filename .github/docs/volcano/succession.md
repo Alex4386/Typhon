@@ -7,7 +7,7 @@ In nature, the rebirth of landscapes after volcanic devastation is one of Earth'
 
 Typhon faithfully recreates this natural recovery process, allowing you to witness years of ecological change in a fraction of the time.
 
-![Succession in progress](/.github/docs/volcano/assets/succession.png)
+<img src="/.github/docs/volcano/assets/succession.png" width="400" />
 
 ## Nature's Recovery Blueprint
 
@@ -93,6 +93,3 @@ You can manually apply succession to specific areas, mimicking the transformativ
    ```
    /typhon succession disable
    ```
-
-By incorporating ecological succession, Typhon doesn't just simulate the destructive power of volcanoes - it also recreates nature's remarkable ability to heal and transform even the most devastated landscapes.
-

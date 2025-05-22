@@ -1,6 +1,6 @@
 [< Return to Typhon Docs](/DOCS.md)  
 
-# Volcano: Nature's Fury in Minecraft
+# Volcano
 Typhon brings the awe-inspiring power and beauty of real-world volcanoes into your Minecraft world, faithfully recreating geological processes that shape our planet.
 
 ## Living Volcanoes

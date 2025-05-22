@@ -53,7 +53,7 @@ In volcanology, eruptions are classified into different styles based on their ex
 - Large [volcanic bombs](bombs.md) that can damage structures
 - Steep-sided volcanic cones
 
-### Special Eruption Styles
+## Special Eruption Styles
 
 Just as in nature, certain environmental conditions trigger special eruption styles in Typhon:
 
@@ -62,7 +62,7 @@ Just as in nature, certain environmental conditions trigger special eruption sty
 | ![Surtseyan](/.github/docs/volcano/assets/surtseyan.png) | ![Pilinian](/.github/docs/volcano/assets/pilinian.png) |
 
 
-#### Surtseyan Eruptions: The Sea-Born Volcano
+### Surtseyan Eruptions: The Sea-Born Volcano
 
 **In Nature**: Named after Surtsey, which emerged from the ocean near Iceland in 1963, these eruptions occur when magma erupts through water. The water-magma interaction creates distinctive "rooster tail" jets of steam, ash, and volcanic fragments.
 
@@ -72,7 +72,7 @@ Just as in nature, certain environmental conditions trigger special eruption sty
 
 These eruptions feature steam-driven explosions, wet ash deposition, and unique landforms that gradually build up to the water surface.
 
-#### Plinian Eruptions: History's Most Catastrophic Volcanic Events
+### Plinian Eruptions: History's Most Catastrophic Volcanic Events
 
 **In Nature**: Named after Pliny the Younger, who described the 79 CE eruption of Mount Vesuvius, these cataclysmic eruptions feature enormous columns of ash that can reach the stratosphere. The 1980 Mount St. Helens eruption and the 1991 Mount Pinatubo eruption were plinian events that affected global climate.
 

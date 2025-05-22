@@ -73,5 +73,3 @@ After formation, your caldera will permanently transform your volcano:
 - If a water level was specified (or randomly selected), a beautiful caldera lake will form
 - The volcano's eruption behavior may change, as happens in nature after such events
 - The landscape surrounding the volcano will bear the scars of the cataclysmic eruption
-
-The resulting formation creates a dramatic focal point for your Minecraft world, mimicking the breathtaking features created by real caldera-forming eruptions throughout Earth's history.

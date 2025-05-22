@@ -1,13 +1,14 @@
 [<  Return to Typhon Docs](/DOCS.md)  
 [<< Return to Volcano Docs](./index.md)  
 
-# Volcanic Vents: The Earth's Fiery Gateways
+# Volcanic Vents
 
 In nature, volcanic eruptions don't always occur from a single, neat crater at the summit. From Iceland's dramatic fissure eruptions that create curtains of fire to complex stratovolcanoes like Mount Etna with multiple active vents, volcanic systems often feature various "gateways" where magma reaches the surface.
 
 Typhon faithfully recreates these diverse volcanic vent systems, allowing you to build volcanic landscapes as complex and dynamic as their real-world counterparts.
 
 <img src="/.github/docs/volcano/assets/multi-vents.png" align="center" width="400" />
+Just as the image shows, Typhon can implement multiple vents with "own" type (fissure, crater). each erupting on its own.
 
 ## Types of Volcanic Vents
 

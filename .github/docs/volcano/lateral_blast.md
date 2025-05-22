@@ -7,7 +7,7 @@ The most dramatic volcanic event of the 20th century occurred on May 18, 1980, w
 
 Typhon brings this rare but spectacular volcanic phenomenon to Minecraft.
 
-![Image](https://github.com/user-attachments/assets/d8e8e172-92c4-462f-bca7-e6e87274724a)
+<img src="https://github.com/user-attachments/assets/d8e8e172-92c4-462f-bca7-e6e87274724a" width="400" />
 
 ## The Science Behind Lateral Blasts
 
@@ -42,7 +42,7 @@ Typhon allows you to recreate this extraordinary geological event, transforming 
 3. Trigger the cataclysmic event:  
    `/volcano <volcano_name> mainvent landslide start`
 
-### Witnessing Nature's Fury
+### How it occurs
 
 Once triggered, the lateral blast creates a spectacular sequence of events:
 

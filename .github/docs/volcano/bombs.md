@@ -40,5 +40,3 @@ When real volcanic bombs land, they're often still partially molten inside. Typh
 - Upon impact, residual lava may ooze out from the bomb's interior
 - This lava then cools into volcanic rock types according to the volcano's [lava composition](lava.md#silica-content)
 - The resulting formations create realistic impact sites similar to those found at active volcanic areas
-
-Experience the awe-inspiring spectacle of volcanic bombs in Typhon - but remember to keep a safe distance, just as you would from a real erupting volcano!

@@ -1,9 +1,9 @@
 [<  Return to Typhon Docs](/DOCS.md)  
 [<< Return to Volcano Docs](./index.md)  
 
-# Lava: The Molten Heart of Volcanoes
+# Lava
 
-Lava is the lifeblood of a volcano, defining its shape, behavior, and hazards. From the fast-flowing rivers of Hawaii's Kilauea to the thick, slow-moving domes of Mount St. Helens, lava comes in many forms in nature.
+Lava is the core eruption mechanic of a volcano, defining its shape, behavior, and hazards. From the fast-flowing rivers of Hawaii's Kilauea to the thick, slow-moving domes of Mount St. Helens, lava comes in many forms in nature.
 
 In Typhon, lava isn't just a simple flowing block - it's a dynamic system that mimics real volcanic processes.
 
@@ -40,7 +40,7 @@ In the real world, a volcano's drama depends largely on its silica content. Low-
 > [!TIP]  
 > Curious about the technical implementation? Check the [VolcanoComposition.java](/src/main/java/me/alex4386/plugin/typhon/volcano/VolcanoComposition.java) source code for details.
 
-### Viscosity: How Lava Flows
+### Viscosity
 
 In nature, silica is like glue - the more a lava has, the stickier and slower it becomes:
 
@@ -52,7 +52,7 @@ Typhon faithfully recreates these behaviors:
 - Low-silica lava flows farther and faster, generating new source blocks as it travels to simulate the runny nature
 - High-silica lava moves slower and shorter distances, creating steeper volcanic structures
 
-### Mineral Deposits: Volcanic Treasure
+### Mineral Deposits
 
 In the real world, volcanic activity is responsible for many valuable mineral deposits. As magma cools, various minerals crystallize and concentrate.
 
@@ -61,7 +61,7 @@ Typhon simulates this natural process:
 - Different lava compositions create different types of ores
 - To maintain realism and prevent "farming" of these resources, the [Primary Succession](./succession.md) system gradually removes surface ores over time
 
-## Gas Content: The Explosive Factor
+## Gas Content
 
 The explosive power of real volcanoes largely depends on their gas content. Gas-rich magma that can't easily release pressure tends to create violent eruptions, while gas-poor magma typically produces gentler eruptions.
 
