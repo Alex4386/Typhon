@@ -4,7 +4,7 @@
 Typhon brings the awe-inspiring power and beauty of real-world volcanoes into your Minecraft world, faithfully recreating geological processes that shape our planet.
 
 ## Living Volcanoes
-Unlike other volcanic plugins, Typhon's volcanoes are living, dynamic entities that evolve over time - just like their real-world counterparts. They don't simply erupt on command but experience a full lifecycle of volcanic activity.
+Unlike other volcanic plugins, Typhon's tries to mimick nature IRL volcanoes as much as possible. Implementing based on approximation of real-world volcanoes.
 
 ## Volcanic Features in Nature and Typhon
 
