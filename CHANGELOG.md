@@ -2,8 +2,8 @@
 
 ## What's new?
 ### Updating to latest versions
-- Typhon now targets for Minecraft `1.21.5`
-  - SoundSeeds aren't updated yet for `1.21.5` so It will be using `1.21.1` version of SoundSeeds
+- Typhon now targets for Minecraft `1.21.6`
+  - SoundSeeds aren't updated yet for `1.21.6` so It will be using `1.21.1` version of SoundSeeds
   - Added support for geothermally affected blocks and newly utilize `dry` variant of `grass` when affected by `geothermal` heat.
   - Added support for `1.21.4` tree variants to be affected by `geothermal` heat.
   - Added support for `1.21.4`'s `creaking_heart` also affected by `geothermal` heat.
