@@ -18,13 +18,14 @@
 | **ash:fullPyroclasticFlowProbability** | Sets the probability for the pyroclastic flow to extend far away from the vent. |
 
 ## Lavaflow
-| **Parameter**             | **Description**                      |
-|---------------------------|--------------------------------------------|
+| **Parameter**             | **Description**                                                                                                                                                  |
+|---------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **lavaflow:delay**        | Sets the delay between lava flow iterations in ticks. A higher delay will cause the lava to flow slower, while a lower delay will cause the lava to flow faster. |
-| **lavaflow:flowed**       | Sets the amount of time that the lava has been flowing. |
-| **lavaflow:silicateLevel**| Refer to [Silica Content](lava.md#silica-content) |
-| **lavaflow:gasContent**   | Refer to [Gas Content](lava.md#gas-content). |
-
+| **lavaflow:flowed**       | Sets the amount of time that the lava has been flowing.                                                                                                          |
+| **lavaflow:silicateLevel**| Refer to [Silica Content](lava.md#silica-content)                                                                                                                |
+| **lavaflow:gasContent**   | Refer to [Gas Content](lava.md#gas-content).                                                                                                                     |
+| **lavaflow:usePouredLava** | Whether the player's lava poured from the lava bucket should be considered as volcanic lava (default: `true`)                                                    |
+| **lavaflow:allowPickUp** | Allow players to pickup the volcanic lava (default: `false`) |                                                                                                    |                                                                                                                      
 
 ## Bombs
 | **Parameter**                | **Description**                                               |

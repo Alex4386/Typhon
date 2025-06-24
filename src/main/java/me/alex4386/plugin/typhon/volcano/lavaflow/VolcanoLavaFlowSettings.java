@@ -11,6 +11,9 @@ public class VolcanoLavaFlowSettings {
     public double silicateLevel = 0.63;
     public double gasContent = 0.4;
 
+    public boolean allowPickUp = false;
+    public boolean usePouredLava = true;
+
     public void importConfig(JSONObject configData) {
         this.flowing = (boolean) configData.get("flowing");
 
@@ -19,6 +22,9 @@ public class VolcanoLavaFlowSettings {
 
         this.silicateLevel = (double) configData.get("silicateLevel");
         this.gasContent = (double) configData.getOrDefault("gasContent", 0.4);
+
+        this.allowPickUp = (boolean) configData.getOrDefault("allowPickUp", false);
+        this.usePouredLava = (boolean) configData.getOrDefault("usePouredLava", true);
     }
 
     public JSONObject exportConfig() {
@@ -31,6 +37,9 @@ public class VolcanoLavaFlowSettings {
 
         configData.put("silicateLevel", this.silicateLevel);
         configData.put("gasContent", this.gasContent);
+
+        configData.put("allowPickUp", this.allowPickUp);
+        configData.put("usePouredLava", this.usePouredLava);
 
         return configData;
     }

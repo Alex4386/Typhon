@@ -412,8 +412,23 @@ public class VolcanoLavaFlow implements Listener {
         Location loc = targetBlock.getLocation();
 
         if (targetBlock.getType() == Material.LAVA) {
-            if (this.getLavaCoolData(targetBlock) != null
-                    || this.getVolcano().manager.isInAnyLavaFlowArea(loc)) {
+            Volcano volcano = this.getVolcano();
+            VolcanoLavaCoolData data = this.getLavaCoolData(targetBlock);
+            if (data != null
+                    || volcano.manager.isInAnyLavaFlowArea(loc)) {
+
+                // check if this volcano has pickup prevention
+                if (data != null) {
+                    VolcanoVent targetVent = data.flowedFromVent;
+                    if (targetVent != null) {
+                        boolean allowPickUp = targetVent.lavaFlow.settings.allowPickUp;
+                        if (allowPickUp) {
+                            data.isProcessed = true;
+                            data.ticks = 0;
+                            return;
+                        }
+                    }
+                }
 
                 // this is from lava flow
                 TyphonUtils.createRisingSteam(loc, 1, 5);

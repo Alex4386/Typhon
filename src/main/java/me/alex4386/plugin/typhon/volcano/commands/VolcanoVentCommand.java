@@ -29,6 +29,8 @@ public class VolcanoVentCommand {
             "lavaflow:flowed",
             "lavaflow:silicateLevel",
             "lavaflow:gasContent",
+            "lavaflow:usePouredLava",
+            "lavaflow:allowPickUp",
             "bombs:explosionPower:min",
             "bombs:explosionPower:max",
             "bombs:radius:min",
@@ -718,6 +720,18 @@ public class VolcanoVentCommand {
                         if (newArgs.length == 3)
                             vent.lavaFlow.settings.flowed = Integer.parseInt(newArgs[2]);
                         msg.info("lavaflow:flowed - " + vent.lavaFlow.settings.flowed + " ticks");
+                    }
+                } else if (newArgs[1].equalsIgnoreCase("lavaflow:usePouredLava")) {
+                    if (newArgs.length >= 2) {
+                        if (newArgs.length == 3)
+                            vent.lavaFlow.settings.usePouredLava = Boolean.parseBoolean(newArgs[2]);
+                        msg.info("lavaflow:usePouredLava - " + vent.lavaFlow.settings.usePouredLava);
+                    }
+                } else if (newArgs[1].equalsIgnoreCase("lavaflow:allowPickUp")) {
+                    if (newArgs.length >= 2) {
+                        if (newArgs.length == 3)
+                            vent.lavaFlow.settings.allowPickUp = Boolean.parseBoolean(newArgs[2]);
+                        msg.info("lavaflow:allowPickUp - " + vent.lavaFlow.settings.allowPickUp);
                     }
                 } else if (newArgs[1].equalsIgnoreCase("bombs:explosionPower:min")) {
                     if (newArgs.length >= 2) {

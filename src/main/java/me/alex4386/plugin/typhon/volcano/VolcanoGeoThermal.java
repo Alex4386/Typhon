@@ -804,7 +804,9 @@ public class VolcanoGeoThermal implements Listener {
     if (bucket == Material.LAVA_BUCKET) {
       VolcanoVent vent = volcano.manager.getNearestVent(targetBlock);
       if (vent != null) {
-        vent.lavaFlow.flowLava(targetBlock);
+        if (vent.lavaFlow.settings.usePouredLava) {
+          vent.lavaFlow.flowLava(targetBlock);
+        }
       }
     }
   }
