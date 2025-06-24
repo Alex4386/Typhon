@@ -353,6 +353,8 @@ public class Volcano implements Listener {
         this.succession.importConfig((JSONObject) configData.get("succession"));
         this.maxEruptions = (int) (long) configData.get("maxEruptions");
         this.fieldRange = (int) (long) configData.get("fieldRange");
+
+        this.geoThermal.importConfig((JSONObject) configData.getOrDefault("geoThermal", new JSONObject()));
     }
 
     public JSONObject exportConfig() {
@@ -365,6 +367,8 @@ public class Volcano implements Listener {
         configData.put("succession", this.succession.exportConfig());
         configData.put("maxEruptions", this.maxEruptions);
         configData.put("fieldRange", this.fieldRange);
+
+        configData.put("geoThermal", this.geoThermal.exportConfig());
 
         return configData;
     }

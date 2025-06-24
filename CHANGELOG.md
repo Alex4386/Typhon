@@ -31,6 +31,15 @@
 - Fixed ConeBuilding Volcanic Bombs are not working as intended
 
 ### New Features
+#### More control on Volcanic Lava
+* You can now configure vent to decide whether player's lava bucket should be considered as `volcanicLava`. Use `lavaflow:usePouredLava` to configure.
+* You can now configure vent to decide whether player can pickup the volcanic lava or not.
+
+* By directly updating `core.json`. You can now change volcano geothermal to be:
+  - `doFireTicks`: Whether to burn nearby entity via heatValue (default: `true`)
+  - `doEvaporation`: Whether to evaporate water when high heatValue (default: `true`)
+  - `deterMobSpawn`: Whether to prevent spawn of Monsters and Animals (default: `true`)
+
 #### Plugin Architecture
 - Added `TyphonQueuedHashMap` for better performance on Typhon's internal caches
 - The response of volcano commands are more streamlined
