@@ -37,6 +37,8 @@ public class VolcanoPyroclasticFlow {
     boolean isFinished = false;
     int scheduleID = -1;
 
+    boolean underTheWater = false;
+
     double maxPileup = 5;
     double awayCount = 0;
 
@@ -65,6 +67,10 @@ public class VolcanoPyroclasticFlow {
         return lowestBlock;
     }
 
+    private static double getFlowLength(VolcanoVent vent) {
+        return vent.getVolcanicRadius();
+    }
+
     public static int getMaxDistance(VolcanoVent vent) {
         if (vent.erupt.getStyle() == VolcanoEruptStyle.PLINIAN) {
             return -1;
@@ -74,7 +80,7 @@ public class VolcanoPyroclasticFlow {
             return -1;
         }
 
-        double basinCalc = vent.longestNormalLavaFlowLength * 0.5;
+        double basinCalc = VolcanoPyroclasticFlow.getFlowLength(vent) * 0.5;
         double base = Math.min(vent.bombs.getBaseY() * Math.sqrt(3), basinCalc);
         base = Math.max(200, base);
 
@@ -85,7 +91,7 @@ public class VolcanoPyroclasticFlow {
     }
 
     public static int getMaxLife(VolcanoVent vent, int radius) {
-        return (int) (vent.longestNormalLavaFlowLength / (radius));
+        return (int) (VolcanoPyroclasticFlow.getFlowLength(vent) / (radius));
     }
 
     public VolcanoPyroclasticFlow(Location location, VolcanoAsh ash) {
@@ -423,7 +429,7 @@ public class VolcanoPyroclasticFlow {
         double summitY = Math.max(initLocation.getY(), this.ash.vent.getSummitBlock().getY());
         double baseY = Math.max(this.ash.vent.location.getY(), this.ash.vent.location.getWorld().getSeaLevel());
 
-        double basin = Math.max(this.ash.vent.getBasinLength(), this.ash.vent.longestNormalLavaFlowLength);
+        double basin = Math.max(this.ash.vent.getBasinLength(), VolcanoPyroclasticFlow.getFlowLength(this.ash.vent));
         double scale = (summitY - baseY) / basin;
 
         summitY -= initRadius * scale;  // Scale down based on initial radius
@@ -463,6 +469,7 @@ public class VolcanoPyroclasticFlow {
                 }
 
                 // Place ash blocks vertically
+                boolean hasUnderTheWater = false;
                 if (ashHeight > 0) {
                     for (int y = 1; y <= ashHeight; y++) {
                         Block targetBlock = baseBlockHere.getRelative(0, y, 0);
@@ -471,6 +478,14 @@ public class VolcanoPyroclasticFlow {
                         }
                         this.ash.vent.lavaFlow.queueBlockUpdate(targetBlock, Material.TUFF);
                         this.ash.vent.record.addEjectaVolume(1);
+                    }
+
+                    if (!this.underTheWater) {
+                        if (baseBlockHere.getY() + ashHeight > baseBlockHere.getWorld().getSeaLevel()) {
+                            this.updateLongestFlow(baseBlockHere.getLocation());
+                        } else {
+                            hasUnderTheWater = true;
+                        }
                     }
                 } else {
                     // just change the surface block into TUFF
@@ -481,10 +496,24 @@ public class VolcanoPyroclasticFlow {
                         }
                     }
                 }
+
+                if (hasUnderTheWater) {
+                    this.underTheWater = true;
+                }
             }
         }
+    }
 
+    private void updateLongestFlow(Location location) {
+        double distance = this.ash.vent.getTwoDimensionalDistance(location);
 
+        if (distance > this.ash.vent.currentAshNormalFlowLength) {
+            this.ash.vent.currentAshNormalFlowLength = distance;
+        }
+
+        if (distance > this.ash.vent.longestAshNormalFlowLength) {
+            this.ash.vent.longestAshNormalFlowLength = distance;
+        }
     }
 
     public void playAshTrail() {

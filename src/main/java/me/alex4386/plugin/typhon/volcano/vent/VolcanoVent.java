@@ -49,8 +49,12 @@ public class VolcanoVent {
 
     public double longestFlowLength = 0.0;
     public double longestNormalLavaFlowLength = 0.0;
+
     public double currentFlowLength = 0.0;
     public double currentNormalLavaFlowLength = 0.0;
+
+    public double longestAshNormalFlowLength = 0.0;
+    public double currentAshNormalFlowLength = 0.0;
 
     public double calderaRadius = 0.0;
     private Block cachedSummitBlock = null;
@@ -127,13 +131,14 @@ public class VolcanoVent {
     }
 
     public double getBasinLength() {
-        double longestFlow = Math.max(this.longestNormalLavaFlowLength, (this.getSummitBlock().getY() - this.location.getWorld().getSeaLevel()) * Math.sqrt(3));
+        double longestFlow = Math.max(this.getVolcanicRadius(), (this.getSummitBlock().getY() - this.location.getWorld().getSeaLevel()) * Math.sqrt(3));
         return Math.max(longestFlow, this.craterRadius);
     }
 
     public void resetCurrentMetrics() {
         this.currentFlowLength = 0;
         this.currentNormalLavaFlowLength = 0;
+        this.currentAshNormalFlowLength = 0;
     }
 
     public void setStatus(VolcanoVentStatus status) {
@@ -274,6 +279,10 @@ public class VolcanoVent {
                 }
             }
         }
+    }
+
+    public double getVolcanicRadius() {
+        return Math.max(this.longestNormalLavaFlowLength, this.longestAshNormalFlowLength);
     }
 
     public List<Block> getVentBlocksScaffold() {
@@ -934,6 +943,7 @@ public class VolcanoVent {
         this.lavadome.importConfig((JSONObject) configData.get("lavaDome"));
         this.longestFlowLength = (double) configData.get("longestFlowLength");
         this.longestNormalLavaFlowLength = (double) configData.get("longestNormalLavaFlowLength");
+        this.longestAshNormalFlowLength = (double) configData.getOrDefault("longestAshNormalFlowLength", 0.0);
         this.genesis = VolcanoVentGenesis.getGenesisType((String) configData.get("genesis"));
         this.calderaRadius = (double) configData.getOrDefault("calderaRadius" , -1.0);
         this.autoStyleUpdate = (boolean) configData.getOrDefault("autoStyleUpdate", true);
@@ -965,6 +975,7 @@ public class VolcanoVent {
         configData.put("status", this.status.toString());
         configData.put("longestFlowLength", this.longestFlowLength);
         configData.put("longestNormalLavaFlowLength", this.longestNormalLavaFlowLength);
+        configData.put("longestAshNormalFlowLength", this.longestAshNormalFlowLength);
 
         configData.put("craterRadius", this.craterRadius);
 

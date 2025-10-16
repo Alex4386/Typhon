@@ -226,8 +226,10 @@ public class VolcanoBombs {
 
     public VolcanoBomb generateBomb(Location hostLocation) {
         if (Math.random() < 0.95) {
-            VolcanoBomb bomb = this.generateConeBuildingBomb();
-            if (bomb == null) bomb = this.generateRandomBomb(hostLocation);
+            VolcanoBomb bomb = this.tryConeBuildingBomb();
+            if (bomb == null) {
+                bomb = this.generateRandomBomb(hostLocation);
+            }
             return bomb;
         } else {
             return this.generateRandomBomb(hostLocation);
@@ -302,6 +304,20 @@ public class VolcanoBombs {
         return this.getEffectiveConeY() - (distance / this.distanceHeightRatio());
     }
 
+    public VolcanoBomb tryConeBuildingBomb() {
+        int maxCount = 100;
+        VolcanoBomb bomb;
+        for (int i = 0; i < maxCount; i++) {
+            bomb = this.generateConeBuildingBomb();
+            if (bomb != null) {
+                return bomb;
+            }
+        }
+
+        this.vent.getVolcano().logger.debug(VolcanoLogClass.BOMB, "Failed to generate cone building bomb!");
+        return null;
+    }
+
     public VolcanoBomb generateConeBuildingBomb() {
         int minRadius = 3;
 
@@ -312,7 +328,7 @@ public class VolcanoBombs {
 
         boolean outsideCinderCone = false;
         if (Math.random() < 0.001) {
-            maxRadius = (int) Math.max(this.vent.longestNormalLavaFlowLength, maxRadius);
+            maxRadius = (int) Math.max(this.vent.getVolcanicRadius(), maxRadius);
             outsideCinderCone = true;
         }
 
@@ -331,14 +347,15 @@ public class VolcanoBombs {
         double diff = adequateHeight - randomBlock.getY();
 
         if (diff > 0) {
-            int maxBombRadius = 1;
-            if (distanceFromCore < this.vent.craterRadius * 1) maxBombRadius = 1;
-            else maxBombRadius = (int) Math.min(4, (distanceFromCore / this.vent.craterRadius));
+            int maxCraterRadius = Math.min(25, this.vent.craterRadius);
+            int maxBombRadius = 2;
+            if (distanceFromCore < maxCraterRadius) maxBombRadius = 2;
+            else maxBombRadius = (int) Math.min(5, (distanceFromCore / maxCraterRadius) + 1);
 
             // if diff is too big
             if (distanceFromCore < diff) {
-                if (distanceFromCore < this.vent.craterRadius * 5) {
-                    double targetMax = Math.pow((Math.max(0, distanceFromCore - this.vent.craterRadius) / this.vent.craterRadius * 4), 2);
+                if (distanceFromCore < maxCraterRadius * 5) {
+                    double targetMax = Math.pow((Math.max(0, distanceFromCore - maxCraterRadius) / maxCraterRadius * 4), 2);
                     maxBombRadius = (int) Math.max(Math.min(8 * targetMax, diff / 2), maxBombRadius);
                 }
             }

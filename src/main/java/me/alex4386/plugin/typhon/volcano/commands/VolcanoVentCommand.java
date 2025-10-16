@@ -29,6 +29,8 @@ public class VolcanoVentCommand {
             "lavaflow:flowed",
             "lavaflow:silicateLevel",
             "lavaflow:gasContent",
+            "lavaflow:usePouredLava",
+            "lavaflow:allowPickUp",
             "bombs:explosionPower:min",
             "bombs:explosionPower:max",
             "bombs:radius:min",
@@ -276,26 +278,26 @@ public class VolcanoVentCommand {
         switch (action) {
             case START:
                 vent.start();
-                msg.info("Vent " + vent.getName() + " is now started!");
+                msg.ok("Vent " + vent.getName() + " is now started!");
                 break;
             case STOP:
                 vent.stop();
-                msg.info("Vent " + vent.getName() + " is now stopped!");
+                msg.ok("Vent " + vent.getName() + " is now stopped!");
                 break;
             case TREMOR:
                 if (newArgs.length == 1) {
-                    msg.info("Creating tremor at " + vent.name);
+                    msg.ok("Creating tremor at " + vent.name);
                     vent.tremor.runTremorCycle();
                 } else if (newArgs.length == 2) {
                     double power = Double.parseDouble(newArgs[1]);
                     vent.tremor.showTremorActivity(
                             TyphonUtils.getHighestRocklikes(vent.location.getBlock()), power);
-                    msg.info("Creating tremor at " + vent.name + " with power: " + power);
+                    msg.ok("Creating tremor at " + vent.name + " with power: " + power);
                 }
                 break;
             case RESET:
                 vent.reset();
-                msg.info("Vent " + vent.getName() + " has been reset!");
+                msg.ok("Vent " + vent.getName() + " has been reset!");
                 break;
             case BUILDER:
                 if (newArgs.length >= 1) {
@@ -327,11 +329,11 @@ public class VolcanoVentCommand {
                             }
 
                             vent.builder.setEnabled(true);
-                            msg.info("Builder has been enabled");
+                            msg.ok("Builder has been enabled");
                             return true;
                         } else if (typeString.equalsIgnoreCase("disable")) {
                             vent.builder.setEnabled(false);
-                            msg.info("Builder has been disabled");
+                            msg.ok("Builder has been disabled");
                             return true;
                         }
 
@@ -346,8 +348,7 @@ public class VolcanoVentCommand {
                         if (newArgs.length >= 3) {
                             String[] builderArgs = Arrays.copyOfRange(newArgs, 2, newArgs.length);
                             if (vent.builder.setArguments(builderArgs)) {
-                                msg.info("Builder type has been set to "+type.getName());
-                                msg.info("The builder has been enabled!");
+                                msg.ok("Builder type has been set to "+type.getName()+" and has been enabled");
                                 vent.builder.setEnabled(true);
                             } else {
                                 msg.error("Failed to set arguments for builder type "+type.getName());
@@ -430,19 +431,19 @@ public class VolcanoVentCommand {
                                     "The caldera creation settings are not configured.");
                         } else {
                             vent.caldera.startErupt();
-                            msg.info("Plinian eruption has started.");
+                            msg.ok("Plinian eruption has started.");
                         }
                     } else if (newArgs[1].equalsIgnoreCase("skip")) {
                         if (!vent.caldera.isSettedUp()) {
                             msg.error(
                                     "The caldera creation settings are not configured.");
                         } else {
-                            msg.info("Plinian eruption has skipped.");
+                            msg.ok("Plinian eruption has skipped.");
                         }
                     } else if (clearActions.contains(newArgs[1].toLowerCase())) {
                         vent.calderaRadius = -1;
                         vent.getVolcano().trySave();
-                        msg.info("current caldera data has been cleared");
+                        msg.ok("current caldera data has been cleared");
                     } else {
                         try {
                             int radius, deep, oceanY;
@@ -479,13 +480,13 @@ public class VolcanoVentCommand {
                                     + " instead of deleting this.");
                 } else {
                     vent.delete();
-                    msg.info("Vent " + vent.name + " has been deleted!");
+                    msg.ok("Vent " + vent.name + " has been deleted!");
                 }
                 break;
             case QUICK_COOL:
                 vent.lavaFlow.cooldownAll();
                 vent.bombs.shutdown();
-                msg.info("Cooled down all lava from vent " + vent.getName());
+                msg.ok("Cooled down all lava from vent " + vent.getName());
                 break;
             case STATUS:
                 if (newArgs.length == 2) {
@@ -546,7 +547,7 @@ public class VolcanoVentCommand {
                             msg.error("Landslide is not configured yet!");
                             return true;
                         }
-                        msg.info("Starting landslide...");
+                        msg.ok("Starting landslide...");
                         vent.landslide.start();
                     } else if (landslideAction.equalsIgnoreCase("setAngle")) {
                         if (newArgs.length >= 3) {
@@ -569,13 +570,13 @@ public class VolcanoVentCommand {
                                 return true;
                             }
                         }
-                        msg.info("Landslide angle: " + vent.landslide.landslideAngle);
+                        msg.ok("Landslide angle has been set: " + vent.landslide.landslideAngle);
                     } else if (landslideAction.equalsIgnoreCase("config")) {
                         vent.landslide.configure();
-                        msg.info("Landslide data has been configured.");
+                        msg.ok("Landslide data has been configured.");
                     } else if (landslideAction.equalsIgnoreCase("clear")) {
                         vent.landslide.clear();
-                        msg.info("Landslide data has been cleared.");
+                        msg.ok("Landslide data has been cleared.");
                     }
 
                 }
@@ -584,27 +585,37 @@ public class VolcanoVentCommand {
                 if (newArgs.length <= 1) {
                     // show lava dome status
                     msg.info("Lava Dome configuration");
+                    Location location = vent.lavadome.getBaseLocation();
+
                     msg.info(" - baseY: " + vent.lavadome.baseY);
-                    msg.info(" - plumbedLava: " + vent.lavadome.plumbedLava);
-                    msg.info(" - baseLocation: " + TyphonUtils.blockLocationToString(vent.lavadome.baseLocation));
+                    msg.info(" - plumbedLava: " + vent.lavadome.getPlumbedLava());
+                    if (location == null) {
+                        msg.info("Lava Dome eruption was not configured");
+                    } else {
+                        double targetHeight = vent.lavadome.getTargetDomeHeight();
+                        msg.info(" - TargetHeight: " + String.format("%.2f", targetHeight) + " (y: "+ String.format("%.2f", (double) vent.lavadome.baseY + targetHeight) + ")");
+                        msg.info(" - Basin Width : " + String.format("%.2f", vent.lavadome.getTargetBasin()));
+                        msg.info(" - baseLocation: " + TyphonUtils.blockLocationTostring(location.getBlock()));
+                    }
+                    msg.info(" - ActiveFlows : "+vent.lavadome.domeFlowCounts());
 
                     return true;
                 }
 
                 String domeAction = newArgs[1];
                 if (domeAction.equalsIgnoreCase("start")) {
-                    msg.info("The lavadome eruption has started.");
+                    msg.ok("The lavadome eruption has started.");
                     vent.erupt.setStyle(VolcanoEruptStyle.LAVA_DOME);
                     vent.start();
                 } else if (domeAction.equalsIgnoreCase("stop")) {
-                    msg.info("The lavadome eruption has stopped.");
+                    msg.ok("The lavadome eruption has stopped.");
                     vent.stop();
                 } else if (domeAction.equalsIgnoreCase("reset")) {
-                    msg.info("Resetting lavadome build args...");
-                    vent.lavadome.postConeBuildHandler();
-                    msg.info("Lavadome build args have been reset.");
+                    vent.lavadome.resetAll();
+                    msg.ok("Lavadome build args have been reset.");
                 } else if (domeAction.equalsIgnoreCase("explode")) {
-                    msg.warn("NOT IMPLEMENTED");
+                    vent.lavadome.explode();
+                    msg.ok("Lavadome just have fractured and released pyrocalstic flows");
                 }
                 break;
             case SWITCH: {
@@ -640,7 +651,7 @@ public class VolcanoVentCommand {
                     VolcanoEruptStyle style = VolcanoEruptStyle.getVolcanoEruptStyle(type);
                     if (style != null) {
                         vent.erupt.setStyle(style);
-                        msg.info(
+                        msg.ok(
                                 "Eruption Style of Vent "
                                         + vent.getName()
                                         + " was updated to: "
@@ -653,7 +664,7 @@ public class VolcanoVentCommand {
                     VolcanoVentType ventType = VolcanoVentType.fromString(type);
                     if (ventType != null) {
                         vent.setType(ventType);
-                        msg.info(
+                        msg.ok(
                                 "Type of Vent "
                                         + vent.getName()
                                         + " was updated to: "
@@ -709,6 +720,18 @@ public class VolcanoVentCommand {
                         if (newArgs.length == 3)
                             vent.lavaFlow.settings.flowed = Integer.parseInt(newArgs[2]);
                         msg.info("lavaflow:flowed - " + vent.lavaFlow.settings.flowed + " ticks");
+                    }
+                } else if (newArgs[1].equalsIgnoreCase("lavaflow:usePouredLava")) {
+                    if (newArgs.length >= 2) {
+                        if (newArgs.length == 3)
+                            vent.lavaFlow.settings.usePouredLava = Boolean.parseBoolean(newArgs[2]);
+                        msg.info("lavaflow:usePouredLava - " + vent.lavaFlow.settings.usePouredLava);
+                    }
+                } else if (newArgs[1].equalsIgnoreCase("lavaflow:allowPickUp")) {
+                    if (newArgs.length >= 2) {
+                        if (newArgs.length == 3)
+                            vent.lavaFlow.settings.allowPickUp = Boolean.parseBoolean(newArgs[2]);
+                        msg.info("lavaflow:allowPickUp - " + vent.lavaFlow.settings.allowPickUp);
                     }
                 } else if (newArgs[1].equalsIgnoreCase("bombs:explosionPower:min")) {
                     if (newArgs.length >= 2) {
@@ -907,7 +930,7 @@ public class VolcanoVentCommand {
                     Player player = Bukkit.getPlayer(newArgs[1]);
                     if (player == null) {
                         vent.teleport((Entity) player);
-                        msg.info(
+                        msg.ok(
                                 "Player "+player.getName()+" have been teleported to vent "
                                         + vent.getName()
                                         + " of Volcano "
@@ -917,7 +940,7 @@ public class VolcanoVentCommand {
                     if (sender instanceof Entity) {
                         Entity senderEntity = (Entity) sender;
                         vent.teleport(senderEntity);
-                        msg.info(
+                        msg.ok(
                                 "You have been teleported to vent "
                                         + vent.getName()
                                         + " of Volcano "
@@ -947,13 +970,13 @@ public class VolcanoVentCommand {
                     Player player = (Player) sender;
                     Location loc = player.getLocation();
                     if (vent.getTwoDimensionalDistance(loc) < vent.craterRadius * 2 && count == 1) {
-                        sender.sendMessage(ChatColor.RED+"Pyrocalstic flow just have spawned at your coords!");
+                        msg.ok(ChatColor.RED+"Pyrocalstic flow just have spawned at your coords!");
                         flow = vent.ash.triggerPyroclasticFlow(loc.getBlock());
                     }
                 }
 
                 if (flow == null) {
-                    sender.sendMessage(ChatColor.RED+"Pyrocalstic flow just have spawned at the vent "+vent.getName()+"!");
+                    msg.ok(ChatColor.RED+"Pyrocalstic flow just have spawned at the vent "+vent.getName()+"!");
 
                     for (int i = 0; i < count; i++) {
                         if (vent.caldera.isForming()) {
@@ -1001,7 +1024,7 @@ public class VolcanoVentCommand {
                 msg.info(
                         "    Normal: "
                                 + String.format("%.2f", vent.longestNormalLavaFlowLength) + "m (now: "
-                                + String.format("%.2f", vent.currentNormalLavaFlowLength) + "m"
+                                + String.format("%.2f", vent.currentNormalLavaFlowLength) + "m)"
                         );
 
                 msg.info(
@@ -1010,6 +1033,12 @@ public class VolcanoVentCommand {
                                 + " @ "
                                 + String.format("%.2f", vent.bombs.maxDistance)
                                 + "m");
+                msg.info(
+                        " - Ash : "
+                                + String.format("%.2f", vent.longestAshNormalFlowLength)
+                                + "m (now: "
+                                + String.format("%.2f", vent.currentAshNormalFlowLength) + "m)"
+                );
                 msg.info("Radius  : " + vent.getRadius());
                 msg.info(
                         "Status  : "

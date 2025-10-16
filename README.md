@@ -10,13 +10,16 @@ Typhon Plugin aims to implement real-life volcanoes and its behavior in the rest
 See plugin in action: <a href="https://www.youtube.com/watch?v=DDnQDAdq1Ok">YouTube</a> - <a href="#public-test-server">Public Test Server</a>
 </p>
 
-## Public Test Server
-
-> [!NOTE]  
-> **See Typhon Plugin in Action!**
->
-> <h1 align="center"><code>typhon-demo.alex4386.me</code></h1>
-> <p align="center"><a href="https://typhon-demo.alex4386.me/">Map</a> - Minecraft 1.21.4, Running PaperMC</p>  
+<!-- Removing this for now, since there was no legal action going about this coming up later on -->
+<!--
+> [!WARNING]  
+> **This plugin will not be maintained anymore!**  
+> Due to [possible legal restrictions in South Korea against mods and plugins against the Minecraft private servers](https://www.youtube.com/watch?v=b3OI7TxT-Bw),  
+> requiring all mods and plugins are potentially required to get a "license" for development.  
+>  
+> This plugin will NOT be maintained anymore to avoid legal issues arising from this plugin.  
+> This plugin will be archived from now. if you need so and you have enough legal ground, fork it. Thanks.    
+-->
 
 ## Docs
 - [Installation](/.github/docs/installation.md)

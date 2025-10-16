@@ -47,6 +47,10 @@
       <url>https://jitpack.io</url>
     </repository>
     <repository>
+      <id>sk89q-repo</id>
+      <url>https://maven.enginehub.org/repo/</url>
+    </repository>
+    <repository>
       <id>papermc</id>
       <url>https://repo.papermc.io/repository/maven-public/</url>
     </repository>
@@ -63,10 +67,6 @@
       <url>https://repo.bluecolored.de/releases</url>
     </repository>
     <repository>
-      <id>sk89q-repo</id>
-      <url>https://maven.enginehub.org/repo/</url>
-    </repository>
-    <repository>
       <id>playpro</id>
       <url>https://maven.playpro.com</url>
     </repository>
@@ -81,7 +81,7 @@
     <dependency>
       <groupId>io.papermc.paper</groupId>
       <artifactId>paper-api</artifactId>
-      <version>1.21.5-R0.1-SNAPSHOT</version>
+      <version>1.21.6-R0.1-SNAPSHOT</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -93,7 +93,7 @@
     <dependency>
       <groupId>com.sk89q.worldguard</groupId>
       <artifactId>worldguard-bukkit</artifactId>
-      <version>7.0.9</version>
+      <version>7.0.13</version>
       <scope>provided</scope>
     </dependency>
     <dependency>

@@ -84,11 +84,19 @@ public final class TyphonPlugin extends JavaPlugin {
         logger.debug(VolcanoLogClass.INIT, "Loading Volcano default config...");
         loadConfig();
 
-        logger.debug(VolcanoLogClass.INIT, "Initializing WorldGuard support...");
-        worldGuard = TyphonWorldGuardUtils.getInstance(this);
+        try {
+            logger.debug(VolcanoLogClass.INIT, "Initializing WorldGuard support...");
+            worldGuard = TyphonWorldGuardUtils.getInstance(this);
+        } catch(NoClassDefFoundError e) {
+            logger.debug(VolcanoLogClass.INIT, "WorldGuard could not be found. Skipping...");
+        }
 
-        logger.debug(VolcanoLogClass.INIT, "Initializing CoreProtect support...");
-        coreProtect = TyphonCoreProtectUtils.getInstance(this);
+        try {
+            logger.debug(VolcanoLogClass.INIT, "Initializing CoreProtect support...");
+            coreProtect = TyphonCoreProtectUtils.getInstance(this);
+        } catch(NoClassDefFoundError e) {
+            logger.debug(VolcanoLogClass.INIT, "CoreProtect could not be found. Skipping...");
+        }
 
         logger.debug(VolcanoLogClass.INIT, "Loading Volcanoes...");
 

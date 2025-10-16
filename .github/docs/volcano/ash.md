@@ -2,25 +2,32 @@
 [<< Return to Volcano Docs](./index.md)  
 
 # Volcanic Ash
-Volcanic Ash is the ash that is ejected to the sky from the volcano during the eruption such as `"vulcanian"`, `"plinian"`, `"surtseyan"` etc.
 
-In Typhon Plugin, you can trigger the volcanic ash to be ejected from the volcano is implemented via `BlockDisplay` entities.
+In nature, volcanic ash isn't just "smoke" - it's pulverized rock, minerals, and volcanic glass violently ejected during explosive eruptions. From the buried Roman city of Pompeii to the 2010 Eyjafjallajökull eruption that grounded European air travel, volcanic ash represents one of nature's most awe-inspiring and dangerous volcanic phenomena.
 
-The following is implemented:
-- `Pyroclastic Flows`
-- `Ash Plumes`
+Typhon recreates these dramatic features of explosive volcanism with remarkable realism, by utilizing Minecraft's new `BlockDisplay` entities to simulate ash clouds and their effects on the environment.
 
-## Pyroclastic Flows
-Pyroclastic Flows are the fast-moving current of hot gas and volcanic matter that flows down the side of the volcano during the eruption.
+<img alt="pyroclastic flows" src="https://github.com/user-attachments/assets/bed69bbf-0d8b-4830-858a-33b94d8e9af1" width="400" />
 
-In Typhon Plugin, The `Pyroclastic Flows` will race down the side of the volcano and destroy everything in its path and do the following:
-- `Pile up Ash`: The pyroclastic flows will pile up the `TUFF` blocks on the ground.
-- `Burn the Blocks`: The pyroclastic flows will burn the blocks that are flammable such as wood, leaves, etc.
-- `Burn the Trees`: The pyroclastic flows will burn the trees and turn them into `coal_block` as if contacted with lava.  
-- `Burn the Players`: The pyroclastic flows will burn the players to death if they are inside of it.
+## Pyroclastic Flows: Nature's Unstoppable Force
 
-## Ash Plumes
-Ash Plumes are the plumes of ash that is ejected to the sky from the volcano during the eruption.
+In the natural world, pyroclastic flows are among the deadliest volcanic hazards. During the 1902 eruption of Mount Pelée, a pyroclastic flow obliterated the city of Saint-Pierre in minutes, killing nearly 30,000 people. These scalding avalanches of gas, ash, and rock can travel at speeds of up to 450 mph (700 km/h) and reach temperatures of 1,000°C.
 
-In Typhon Plugin, The `Ash Plumes` will rise to the sky and do the following:
-- `Burn the entities`: The ash plumes will burn the entities that are inside of it.
+Typhon brings this terrifying phenomenon to your Minecraft world:
+- **Devastating Movement**: Just as in nature, pyroclastic flows race down the volcano's flanks, following valleys and topography
+- **Heat Damage**: As in real eruptions, the superheated clouds ignite anything flammable in their path
+- **Ash Deposition**: Mimicking real volcanic events, the flows leave behind layers of tuff (volcanic ash deposits)
+- **Carbonization**: Trees caught in the flow are converted to coal blocks, simulating the carbonization process seen at sites like Mount Vesuvius
+- **Lethal to Players**: Just as real pyroclastic flows are unsurvivable, players caught in these flows face serious danger
+
+
+## Ash Plumes: Reaching for the Stratosphere
+
+The 1991 Mount Pinatubo eruption sent ash over 22 miles (35 km) into the atmosphere, causing global temperatures to drop by about 0.5°C for the next two years. Ash plumes are not just visually spectacular - they impact weather, aviation, and can collapse under their weight to form pyroclastic flows.
+
+Typhon's ash plumes capture this epic scale:
+
+- **Towering Columns**: The plumes rise dramatically above the volcano, visible from great distances
+- **Thermal Properties**: The superheated ash burns entities caught within the column
+- **Realistic Dispersal**: Ash spreads outward at high altitudes, simulating the mushroom cloud appearance of major eruptions
+- **Gradual Settling**: Fine ash particles slowly descend from the sky after major eruptions

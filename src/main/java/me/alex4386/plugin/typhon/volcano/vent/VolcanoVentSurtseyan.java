@@ -64,7 +64,7 @@ public class VolcanoVentSurtseyan {
 
     public void eruptSurtseyan(int count) {
         for (int i = 0; i < count; i++) {
-            VolcanoBomb bomb = this.vent.bombs.generateConeBuildingBomb();
+            VolcanoBomb bomb = this.vent.bombs.tryConeBuildingBomb();
             if (bomb == null) bomb = this.vent.bombs.generateRandomBomb(this.vent.bombs.getLaunchLocation());
 
             this.vent.bombs.launchSpecifiedBomb(bomb);

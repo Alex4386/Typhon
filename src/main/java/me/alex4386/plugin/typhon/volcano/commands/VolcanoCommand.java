@@ -114,7 +114,7 @@ public class VolcanoCommand {
                                             + this.volcano.name
                                             + " mainVent start");
                             this.volcano.start();
-                            msg.info(sender, "Volcano " + this.volcano.name + " has started!");
+                            msg.ok(sender, "Volcano " + this.volcano.name + " has started!");
                             break;
                         case STOP:
                             msg.warn(
@@ -124,7 +124,7 @@ public class VolcanoCommand {
                                     sender,
                                     "Please, Use /volcano " + this.volcano.name + " mainVent stop");
                             this.volcano.stop();
-                            msg.info(sender, "Volcano " + this.volcano.name + " has stopped!");
+                            msg.ok(sender, "Volcano " + this.volcano.name + " has stopped!");
                             break;
                         case RENAME:
                         {
@@ -142,7 +142,7 @@ public class VolcanoCommand {
                         case DELETE:
                             try {
                                 this.volcano.delete();
-                                msg.info(
+                                msg.ok(
                                         sender,
                                         "Volcano " + this.volcano.name + " has been deleted!");
                             } catch (IOException e) {
@@ -154,13 +154,13 @@ public class VolcanoCommand {
                             break;
                         case SHUTDOWN:
                             volcano.shutdown();
-                            msg.info(
+                            msg.ok(
                                     sender,
                                     "Volcano " + this.volcano.name + " has been shut down!");
                             break;
                         case QUICK_COOL:
                             volcano.quickCool();
-                            msg.info(
+                            msg.ok(
                                     sender,
                                     "Volcano "
                                             + this.volcano.name
@@ -175,10 +175,10 @@ public class VolcanoCommand {
                                 String value = args[2];
                                 if (value.equalsIgnoreCase("enable")) {
                                     this.volcano.autoStart.canAutoStart = true;
-                                    msg.info("AutoStart has been enabled!");
+                                    msg.ok("AutoStart has been enabled!");
                                 } else if (value.equalsIgnoreCase("disable")) {
                                     this.volcano.autoStart.canAutoStart = false;
-                                    msg.info("AutoStart has been disabled!");
+                                    msg.ok("AutoStart has been disabled!");
                                 }
                             }
                         }
@@ -188,7 +188,7 @@ public class VolcanoCommand {
                                 if (args[2].equals("trigger")) {
                                     if (sender instanceof Player player) {
                                         this.volcano.succession.runSuccession(player.getLocation().getBlock(), true);
-                                        msg.info("Primary Succession has been triggered at your location");
+                                        msg.ok("Primary Succession has been triggered at your location");
 
                                     } else {
                                         msg.error("This command can not be used by console.");
@@ -205,9 +205,9 @@ public class VolcanoCommand {
                                     this.volcano.succession.setEnabled(state);
 
                                     if (state) {
-                                        msg.info("Primary Succession has been enabled!");
+                                        msg.ok("Primary Succession has been enabled!");
                                     } else {
-                                        msg.info("Primary Succession has been disabled!");
+                                        msg.ok("Primary Succession has been disabled!");
                                     }
                                 }
                                 this.volcano.trySave(true);
@@ -222,7 +222,7 @@ public class VolcanoCommand {
                             if (sender instanceof Entity) {
                                 Entity senderEntity = (Entity) sender;
                                 volcano.mainVent.teleport(senderEntity);
-                                msg.info(
+                                msg.ok(
                                         "You have been teleported to mainVent of Volcano "
                                                 + volcano.name);
                             } else {
@@ -282,7 +282,7 @@ public class VolcanoCommand {
 
                                             this.volcano.addVolcanoVent(vent);
                                             vent.initialize();
-                                            msg.info("Vent " + vent.name + " has been created!");
+                                            msg.ok("Vent " + vent.name + " has been created!");
                                         } else {
                                             msg.error(
                                                     sender,
@@ -302,7 +302,7 @@ public class VolcanoCommand {
                                             this.volcano.subVents.put(name, vent);
 
                                             vent.initialize();
-                                            msg.info("Vent " + vent.name + " has been created!");
+                                            msg.ok("Vent " + vent.name + " has been created!");
                                         } else {
                                             msg.error(
                                                     sender,
@@ -322,7 +322,7 @@ public class VolcanoCommand {
 
                                                     this.volcano.addVolcanoVent(vent);
                                                     vent.initialize();
-                                                    msg.info("Vent " + vent.name + " has been created!");
+                                                    msg.ok("Vent " + vent.name + " has been created!");
                                                 } else {
                                                     msg.error(
                                                             sender,
@@ -502,37 +502,16 @@ public class VolcanoCommand {
                             if (args.length == 3) {
                                 this.volcano.isDebug = Boolean.parseBoolean(args[2]);
                             }
-                            msg.info("isDebug - " + this.volcano.isDebug);
+                            msg.info("isDebug: " + this.volcano.isDebug);
 
                             break;
                         case SAVE:
                             try {
-                                sender.sendMessage(
-                                        ChatColor.RED
-                                                + ""
-                                                + ChatColor.BOLD
-                                                + "[Typhon Plugin] "
-                                                + ChatColor.GOLD
-                                                + "Saving Volcano: "
-                                                + this.volcano.name);
+                                msg.info("Saving Volcano...");
                                 volcano.save(true);
-                                sender.sendMessage(
-                                        ChatColor.RED
-                                                + ""
-                                                + ChatColor.BOLD
-                                                + "[Typhon Plugin] "
-                                                + ChatColor.GOLD
-                                                + "Saved Volcano: "
-                                                + this.volcano.name);
+                                msg.ok("Saved Successfully.");
                             } catch (IOException e) {
-                                sender.sendMessage(
-                                        ChatColor.RED
-                                                + ""
-                                                + ChatColor.BOLD
-                                                + "[Typhon Plugin] "
-                                                + ChatColor.GOLD
-                                                + "Error while saving volcano: "
-                                                + this.volcano.name);
+                                msg.error("Error while saving volcano");
                             }
 
                             break;

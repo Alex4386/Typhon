@@ -412,8 +412,23 @@ public class VolcanoLavaFlow implements Listener {
         Location loc = targetBlock.getLocation();
 
         if (targetBlock.getType() == Material.LAVA) {
-            if (this.getLavaCoolData(targetBlock) != null
-                    || this.getVolcano().manager.isInAnyLavaFlowArea(loc)) {
+            Volcano volcano = this.getVolcano();
+            VolcanoLavaCoolData data = this.getLavaCoolData(targetBlock);
+            if (data != null
+                    || volcano.manager.isInAnyLavaFlowArea(loc)) {
+
+                // check if this volcano has pickup prevention
+                if (data != null) {
+                    VolcanoVent targetVent = data.flowedFromVent;
+                    if (targetVent != null) {
+                        boolean allowPickUp = targetVent.lavaFlow.settings.allowPickUp;
+                        if (allowPickUp) {
+                            data.isProcessed = true;
+                            data.ticks = 0;
+                            return;
+                        }
+                    }
+                }
 
                 // this is from lava flow
                 TyphonUtils.createRisingSteam(loc, 1, 5);
@@ -662,8 +677,13 @@ public class VolcanoLavaFlow implements Listener {
             if (underIsAir && underUnderToBlock.getType().isAir() && fillUnderUnder) {
                 queueImmediateBlockUpdate(underToBlock, data.material);
 
-                // bifurcate lava
-                registerLavaCoolData(data.source, underToBlock, underUnderToBlock, data.isBomb, -1, false, true);
+                // bifurcate lava -
+                if (!data.isBomb) {
+                    registerLavaCoolData(data.source, underToBlock, underUnderToBlock, data.isBomb, -1, false, true);
+                } else {
+                    this.flowLavaFromBomb(underUnderToBlock);
+                }
+
                 queueBlockUpdate(underUnderToBlock, Material.LAVA);
             }
 
@@ -1666,16 +1686,8 @@ public class VolcanoLavaFlow implements Listener {
                     this.queueBlockUpdate(block, material, TyphonUtils.getBlockFaceUpdater(fromBlock, block));
                     vent.flushSummitCacheByLocation(block);
 
-                    BlockData bd = block.getBlockData();
                     BlockFace f = block.getFace(lavaData.fromBlock);
-            
-                    if (bd instanceof Directional) {
-                        Directional d = (Directional) bd;
-                        if (f != null && f.isCartesian()) {
-                            d.setFacing(f);
-                        }
-                        block.setBlockData(d);
-                    }
+                    TyphonUtils.getBlockFaceUpdater(f).accept(block);
                 }
 
 
@@ -1891,9 +1903,30 @@ public class VolcanoLavaFlow implements Listener {
         int flowRequests = (int) Math.min(flowAmount, ventBlocks.size());
 
         List<Block> whereToFlows = vent.requestFlows(flowRequests);
-
         int flowedBlocks = 0;
-        if (this.vent.erupt.getStyle().lavaMultiplier > 0) {
+
+        if (this.vent.erupt.getStyle() == VolcanoEruptStyle.LAVA_DOME) {
+            int count = whereToFlows.size();
+            for (int i = 0; i < count; i++) {
+                this.vent.lavadome.flowLava();
+                flowedBlocks++;
+            }
+
+            if (this.vent.lavadome.isDomeLargeEnough()) {
+                if (Math.random() < 0.0001) {
+                    // check if queued influx is larger than it can handle
+                    int queuedAmount = (flowAmount - flowedBlocks) + (int) prevQueuedLavaInflux;
+                    if (queuedAmount > 100) {
+                        // the plumbing amount is not clearing out enough
+                        // and the lava dome is large enough to explode.
+                        this.vent.lavadome.explode();
+                    }
+                } else if (Math.random() < 0.01) {
+                    // the lava dome can ooze out lava.
+                    this.vent.lavadome.ooze();
+                }
+            }
+        } else if (this.vent.erupt.getStyle().lavaMultiplier > 0) {
             int flowableCounts = 0;
             for (Block whereToFlow : whereToFlows) {
                 if (TyphonUtils.isBlockFlowable(whereToFlow)) {
@@ -1979,22 +2012,6 @@ public class VolcanoLavaFlow implements Listener {
                         1f
                 );
             }
-        } else if (this.vent.erupt.getStyle() == VolcanoEruptStyle.LAVA_DOME) {
-            int count = whereToFlows.size();
-            for (int i = 0; i < count; i++) {
-                this.vent.lavadome.flowLava();
-                flowedBlocks++;
-            }
-
-            if (this.vent.lavadome.isDomeLargeEnough()) {
-                if (Math.random() < 0.1) {
-                    // the lava dome is large enough to explode.
-                    this.vent.lavadome.explode();
-                } else if (Math.random() < 0.3) {
-                    // the lava dome can ooze out lava.
-                    this.vent.lavadome.ooze();
-                }
-            }
         }
         
         if (flowAmount - flowedBlocks > 0) {
@@ -2008,7 +2025,7 @@ public class VolcanoLavaFlow implements Listener {
                         this.handleSurtseyan();
                     } else if (this.vent.erupt.getStyle().bombMultiplier > 0) {
                         if (Math.random() > 1.0/this.vent.erupt.getStyle().bombMultiplier) {
-                            VolcanoBomb bomb = this.vent.bombs.generateConeBuildingBomb();
+                            VolcanoBomb bomb = this.vent.bombs.tryConeBuildingBomb();
                             if (bomb != null) {
                                 bomb.land();
                             }

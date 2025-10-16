@@ -25,6 +25,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.json.simple.JSONObject;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -38,6 +39,10 @@ public class VolcanoGeoThermal implements Listener {
   public boolean registeredEvent = false;
   public TyphonQueuedHashMap<Block, TyphonCache<Set<Block>>> undergroundBlockCache = new TyphonQueuedHashMap<>(500_000);
   public static long undergroundBlockCacheValidity = 1000;
+
+  public boolean deterMobSpawn = true;
+  public boolean doEvaporation = true;
+  public boolean doFireTicks = true;
 
   public VolcanoGeoThermal(Volcano volcano) {
     this.volcano = volcano;
@@ -89,10 +94,10 @@ public class VolcanoGeoThermal implements Listener {
 
     if (vent.getStatus().isActive()) {
       if (vent.getStatus().hasElevatedActivity()) {
-        this.burnNearbyEntities(targetLoc, 3);
+        if (doFireTicks) this.burnNearbyEntities(targetLoc, 3);
         letOffSteam = true;
       } else {
-        this.burnNearbyEntities(targetLoc, 1);
+        if (doFireTicks) this.burnNearbyEntities(targetLoc, 1);
         letOffSteam = Math.random() < 0.3;
         if (letOffSteam) {
           runPoison = Math.random() < 0.5;
@@ -115,8 +120,10 @@ public class VolcanoGeoThermal implements Listener {
         if (onTop) this.triggerUndergroundsCraterGeothermal(vent, block);
 
         if (runPoison || Math.random() < scaleFactor) {
-          vent.volcano.metamorphism.evaporateBlock(block);
-          vent.volcano.metamorphism.evaporateBlock(upperBlock);
+          if (doEvaporation) {
+            vent.volcano.metamorphism.evaporateBlock(block);
+            vent.volcano.metamorphism.evaporateBlock(upperBlock);
+          }
         }
       }
 
@@ -350,7 +357,7 @@ public class VolcanoGeoThermal implements Listener {
         if (isTop) this.triggerUndergroundsVolcanoGeothermal(vent, block);
         this.playLavaGasReleasing(targetLoc);
         if (burnRange > 0) {
-          this.burnNearbyEntities(targetLoc, 3);
+          if (doFireTicks) this.burnNearbyEntities(targetLoc, 3);
         }
 
         if (runPoison) {
@@ -359,10 +366,13 @@ public class VolcanoGeoThermal implements Listener {
 
         if (burnRange > 1) {
           Block upperBlock = block.getRelative(BlockFace.UP);
-          vent.volcano.metamorphism.evaporateBlock(block);
 
-          if (vent.isStarted())
-            vent.volcano.metamorphism.evaporateBlock(upperBlock);
+          if (doEvaporation) {
+            vent.volcano.metamorphism.evaporateBlock(block);
+
+            if (vent.isStarted())
+              vent.volcano.metamorphism.evaporateBlock(upperBlock);
+          }
 
           // check if there are trees nearby
           Block treeBlock = TyphonUtils.getHighestLocation(block.getLocation()).getBlock();
@@ -800,6 +810,8 @@ public class VolcanoGeoThermal implements Listener {
           || bucket == Material.WATER
           || bucket == Material.POWDER_SNOW_BUCKET
           || bucket == Material.POWDER_SNOW) {
+        if (!doEvaporation) return;
+
         // THIS IS WATER vaporizing, not volcanic gas escaping from ground.
         // therefore use only createRisingSteam
         TyphonUtils.createRisingSteam(loc, 1, 5);
@@ -819,9 +831,29 @@ public class VolcanoGeoThermal implements Listener {
     if (bucket == Material.LAVA_BUCKET) {
       VolcanoVent vent = volcano.manager.getNearestVent(targetBlock);
       if (vent != null) {
-        vent.lavaFlow.flowLava(targetBlock);
+        if (vent.lavaFlow.settings.usePouredLava) {
+          vent.lavaFlow.flowLava(targetBlock);
+        }
       }
     }
+  }
+
+
+  public void importConfig(JSONObject configData) {
+    // this.status = VolcanoStatus.getStatus((String) configData.get("status"));
+    this.doEvaporation = (boolean) configData.getOrDefault("doEvaporation", true);
+    this.doFireTicks = (boolean) configData.getOrDefault("doFireTicks", true);
+    this.deterMobSpawn = (boolean) configData.getOrDefault("deterMobSpawn", true);
+  }
+
+  public JSONObject exportConfig() {
+    JSONObject configData = new JSONObject();
+
+    configData.put("doEvaporation", doEvaporation);
+    configData.put("doFireTicks", doFireTicks);
+    configData.put("deterMobSpawn", deterMobSpawn);
+
+    return configData;
   }
 
   @EventHandler
@@ -831,8 +863,10 @@ public class VolcanoGeoThermal implements Listener {
     // if the entity is mob or other friendly creatures, then we should check if it should be spawned.
     if (e.getEntity() instanceof Monster || e.getEntity() instanceof Animals) {
       for (VolcanoVent vent : vents) {
-        if (shouldDoIt(vent, e.getLocation())) {
-          e.setCancelled(true);
+        if (deterMobSpawn) {
+          if (shouldDoIt(vent, e.getLocation())) {
+            e.setCancelled(true);
+          }
         }
       }
     }

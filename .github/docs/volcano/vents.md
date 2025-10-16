@@ -1,114 +1,123 @@
 [<  Return to Typhon Docs](/DOCS.md)  
 [<< Return to Volcano Docs](./index.md)  
 
-# Eruption Vents
-The volcano in Typhon Plugin can have multiple vents. Each vent can have different eruption style and vent type.
+# Volcanic Vents
 
-## Vent Type
-Typhon Plugin currently supports the following vent types:
-- `crater`: Most common vent type. It is the vent type that is located at the center of the volcano.
-- `fissure`: A vent type that simulates as a crack on the ground in fissure eruption. the lava will flow from the virtual line of the fissure.
+In nature, volcanic eruptions don't always occur from a single, neat crater at the summit. From Iceland's dramatic fissure eruptions that create curtains of fire to complex stratovolcanoes like Mount Etna with multiple active vents, volcanic systems often feature various "gateways" where magma reaches the surface.
+
+Typhon faithfully recreates these diverse volcanic vent systems, allowing you to build volcanic landscapes as complex and dynamic as their real-world counterparts.
+
+<img src="/.github/docs/volcano/assets/multi-vents.png" align="center" width="400" />
+Just as the image shows, Typhon can implement multiple vents with "own" type (fissure, crater). each erupting on its own.
+
+## Types of Volcanic Vents
+
+Just as in nature, Typhon supports multiple vent types that produce different eruption patterns:
+
+### Crater Vents: The Classic Volcano
+
+**In Nature**: The classic volcanic crater is the most familiar vent type - a roughly circular opening at the summit of a volcanic cone. Mount Fuji, Mount Vesuvius, and Kilauea's Halema'uma'u crater exemplify this common vent type.
+
+**In Typhon**:
+- Crater vents erupt from a central point
+- Lava fountains and flows radiate from the central vent
+- The volcano builds a symmetric cone with repeated eruptions
+- The crater's size influences eruption characteristics
+
+To set a vent to crater type:  
+`/volcano <volcano_name> mainvent style crater`  
+
+Configure crater size:  
+`/volcano <volcano_name> mainvent config vent:craterRadius <radius>`
+
+### Fissure Vents: The Curtain of Fire
+
+**In Nature**: Fissure eruptions occur along linear cracks in the earth, often producing spectacular "curtains of fire" as lava erupts along a line. Iceland's Laki fissure (1783) and the ongoing Holuhraun eruption demonstrate this dramatic eruption type.
+
+**In Typhon**:
+- Lava emerges along a linear crack rather than from a point
+- Multiple lava fountains line up along the fissure
+- The resulting landforms tend to be elongated rather than conical
+- Ideal for creating features like lava fields and shield volcanoes
+
+To set a vent to fissure type:  
+`/volcano <volcano_name> mainvent style fissure`  
+
+Configure fissure orientation:  
+`/volcano <volcano_name> mainvent config vent:fissureAngle auto`  
+(This sets the fissure angle based on the direction you're facing)
+
+Configure fissure length:  
+`/volcano <volcano_name> mainvent config vent:fissureLength <length>`
+
+## Multi-Vent Volcanic Systems
+
+Real volcanic complexes often feature multiple active vents. Italy's Mount Etna has several summit craters and numerous flank vents. The Canary Islands' Cumbre Vieja eruption in 2021 developed multiple vents along a fissure system.
+
+Typhon allows you to recreate these complex volcanic systems:
+
+### Main Vent: The Primary Hub
+
+When you create a volcano, a main vent is automatically established. This represents the primary eruption center, typically at the summit of the volcanic edifice.
+
+### Creating Subsidiary Vents
+
+Just as Mount Etna develops new vents during eruption sequences, you can create additional vents for your volcano:
+
+Create a crater-type subsidiary vent:  
+`/volcano <volcano_name> create crater <subvent_name>`
+
+Create a fissure-type subsidiary vent:  
+`/volcano <volcano_name> create fissure <subvent_name>`
+
+Create a subsidiary vent near a player:  
+`/volcano <volcano_name> create autovent <subvent_name> <player_name>`
+
+### Monogenetic vs. Polygenetic Vents
+
+In volcanology, vents are classified based on their eruption frequency:
+
+**Monogenetic Vents**: In nature, these erupt only once and become extinct. The cinder cones of Mexico's Michoacán-Guanajuato volcanic field are monogenetic, each representing a single eruptive event.
+
+**Polygenetic Vents**: These erupt repeatedly over time. Mount Vesuvius and Mount Fuji are classic polygenetic volcanoes, with the same vent system active for thousands of years.
+
+Typhon allows you to specify either behavior:
+
+Check a vent's current genesis mode:  
+`/volcano <volcano_name> mainvent genesis`
+
+Set a vent's genesis mode:  
+`/volcano <volcano_name> mainvent genesis <mode>`  
+Where `<mode>` is either `monogenetic` or `polygenetic`
+
+## Managing Your Volcanic Vent System
+
+### Vent Control Commands
 
 > [!NOTE]  
-> For simplicity of the documentation, the following commands will use commands for `mainvent`. For subvent, Please refer to the [Eruption Vents](./vents.md#commands) documentation.
+> The following examples use `mainvent`. For subsidiary vents, replace `mainvent` with `subvent <subvent_name>`:  
+> `/volcano <volcano_name> subvent <subvent_name> <command> <args>`
 
-For changing vent type:  
-`/volcano <volcano_name> mainvent style <vent_type>`  
-`<vent_type>` can be one of the following: `crater`, `fissure`
+Start or stop an eruption:  
+`/volcano <volcano_name> mainvent <start|stop>`
 
-### Fissure
-The fissure is the vent type that simulates as a crack on the ground in fissure eruption. the lava will flow from the virtual line of the fissure.
+Find the highest point of a vent:  
+`/volcano <volcano_name> mainvent summit`
 
-**Configuring Fissure:**
-- `fissureAngle`: Sets the angle of the volcano's fissure. (in radians)
-  In order to set the angle by looking at the player's direction, you can use the following command:
-  ```
-  /volcano <volcano_name> mainvent config vent:fissureAngle auto
-  ```
-- `fissureLength`: Sets the length of the volcano's fissure.
+Configure vent parameters:  
+`/volcano <volcano_name> mainvent config <parameter> <value>`  
+See [Config Nodes](./config_nodes.md) for detailed configuration options.
 
-### Crater
-The crater is a circular vent type that is located at the center of the volcano.  
-The lava will spew out from the center of the crater, and the lava will flow down the volcano., creating the volcano's shape.  
+### Vent Management Commands
 
-**Configuring Crater:**
-- `craterRadius`: Sets the radius of the volcano's crater.
+Switch the main vent with a subsidiary vent:  
+`/volcano <volcano_name> subvent <subvent_name> switch`
 
-## The Multiple Vents
-### The `Main Vent`
-By default, when you create the volcano, the plugin will automatically create the main vent.  
+Delete a subsidiary vent:  
+`/volcano <volcano_name> subvent <subvent_name> delete`
 
-The main vent is the vent that is located at the center of the volcano. The main vent is the vent that will be used to erupt the volcano.
+Access builder options for a vent:  
+`/volcano <volcano_name> mainvent builder <options>`  
+See [Builder](./builder.md) for more information on volcano construction.
 
-### Creating Subvent
-You can create subvent by running the following command:
-- `/volcano <volcano_name> create crater <subvent_name>`
-- `/volcano <volcano_name> create fissure <subvent_name>`
-
-### Creating Subvent near someone
-You can create subvent near someone by running the following command:
-- `/volcano <volcano_name> create autovent <subvent_name> <player_name>`
-
-### Monogenetic vent
-By default the vent is set to `polygenetic` mode, which means the vent will erupt multiple times.  
-If you want to make your vent to erupt only once, you can set the vent to `monogenetic` mode.
-
-See [Get/Set Monogensis mode](#getset-monogensis-mode) for how to set the vent to monogenesis mode, and vice versa.
-
-## Commands
-> [!NOTE]  
-> For simplicity of the documentation, the following commands will using commands for `mainvent` like following:  
-> `/volcano <volcano_name> mainvent <subcommand> <...args>`  
->   
-> If you want to use the command for `subvent`, change the command like following:
-> `/volcano <volcano_name> subvent <subvent_name> <subcommand> <...args>`
->
-> For example, if you want to change the eruption style of the subvent, you can use the following command:
-> `/volcano <volcano_name> subvent <subvent_name> style <style>`
-
-### Start/Stop Eruption
-You can start and stop the eruption of the volcano by running the following command:
-- `/volcano <volcano_name> mainvent <start|stop>`
-
-### Switching Vent
-> [!NOTE]  
-> This command is only available for the subvents.
-
-You can change subvent into the mainvent by running the following command:
-- `/volcano <volcano_name> subvent <subvent_name> switch`
-
-The main vent will be changed to subvent with the same name, and the subvent will be changed to the main vent.
-
-### Configuring Vent
-You can configure the main vent by running the following command:  
-- `/volcano <volcano_name> mainvent config <args>`
-
-For more information about configuring the vent, please refer to the [Config Nodes](./config_nodes.md) documentation.
-
-### Finding Summit
-You can find the summit of the vent by running the following command:
-- `/volcano <volcano_name> mainvent summit`
-
-### Get/Set Monogensis mode
-You can get and set the vent to monogenesis mode by running the following command:
-
-- Get the monogenesis mode:  
-  `/volcano <volcano_name> mainvent genesis`
-- Set the monogenesis mode:  
-  `/volcano <volcano_name> mainvent genesis <mode>`
-  `<mode>` can be one of the following: `monogenetic`, `polygenetic`
-
-### Delete Vent
-> [!NOTE]  
-> This command is only available for the subvents.
-
-You can delete the vent by running the following command:
-- `/volcano <volcano_name> subvent <subvent_name> delete`
-
-### Builder
-> [!TIP]
-> For more information about the builder, please refer to the [Builder](./builder.md) documentation.
-
-You can get information of the builder for the vent by running the following command:
-- `/volcano <volcano_name> mainvent builder <...>`
 

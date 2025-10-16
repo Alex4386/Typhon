@@ -94,7 +94,7 @@ public class VolcanoSuccession {
         if (vent.getStatus() == VolcanoVentStatus.ERUPTING || vent.getStatus() == VolcanoVentStatus.ERUPTION_IMMINENT || vent.lavaFlow.hasAnyLavaFlowing()) {
             successionCount = (int) (Math.random() * 2);
         } else if (Math.random() > vent.getStatus().getScaleFactor()) {
-            double circumference = vent.longestNormalLavaFlowLength * Math.PI * 2;
+            double circumference = vent.getVolcanicRadius() * Math.PI * 2;
             double successionScale = Math.pow((1.0 - vent.getStatus().getScaleFactor()), 2);
 
             double maxCount = Math.min(Math.max(0, circumference / 20), 2000 / cyclesPerTick);
@@ -150,7 +150,7 @@ public class VolcanoSuccession {
 
     public void runSuccession(VolcanoVent vent) {
         Block coreBlock = vent.getCoreBlock();
-        double longestFlow = Math.max(vent.getBasinLength(), vent.longestNormalLavaFlowLength);
+        double longestFlow = Math.max(vent.getBasinLength(), vent.getVolcanicRadius());
         if (Math.random() < 0.2) {
             longestFlow = Math.max(longestFlow, vent.bombs.maxDistance);
         } else if (Math.random() < 0.1) {
@@ -255,12 +255,18 @@ public class VolcanoSuccession {
 
         if (!this.volcano.manager.isInAnyVent(block)) {
             if (rawHeatValue < 0.5) {
+                // rawHeatValue 0.50 => heatValue 0.7
+                // rawHeatValue 0.33 => heatValue 0.5
+
                 // stage 3. is grass?
                 boolean isGrass = targetBlock.getType() == Material.GRASS_BLOCK || targetBlock.getType() == Material.PODZOL || targetBlock.getType() == Material.COARSE_DIRT;
                 if (isGrass) {
+                    boolean isHot = false;
                     if (vent.getStatus().hasElevatedActivity()) {
                         if (heatValue > 0.4) {
-                            return;
+                            double scaled = 1.0 - Math.min(1.0, (heatValue - 0.4) / 0.2);
+                            double result = Math.pow(scaled, 2);
+                            isHot = Math.random() < result;
                         }
                     }
 
@@ -268,6 +274,9 @@ public class VolcanoSuccession {
                     double growProbability = vent.successionTreeProbability;
                     if (!block.getWorld().isClearWeather()) growProbability *= 1.5;
 
+                    if (isHot) growProbability = 0.0;
+
+                    // force will override
                     if (force) growProbability = 1.0;
 
                     if (Math.random() < growProbability) {
@@ -355,7 +364,7 @@ public class VolcanoSuccession {
                 );
             } else if (rawHeatValue < 0.7) {
                 // for matching with probability of ~0.5
-                if (Math.random() < Math.pow(0.1, 2) * 0.5) return;
+                if (Math.random() < Math.pow(0.1, 3) * 0.5) return;
 
                 double firstHeat = Math.min(0.7, rawHeatValue);
                 double amount = 1 - Math.min(1, Math.max(0, (firstHeat - 0.5) / 0.2));

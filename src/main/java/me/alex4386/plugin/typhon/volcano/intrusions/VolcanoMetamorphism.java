@@ -16,6 +16,7 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Directional;
+import org.bukkit.block.data.Orientable;
 import org.bukkit.util.Vector;
 
 import java.util.HashSet;
@@ -231,9 +232,7 @@ public class VolcanoMetamorphism {
         Location ventLocation = ventBlock.getRelative(0, -ventBlock.getY(), 0).getLocation();
         Location rootBlockLoc = rootBlock.getRelative(0, -rootBlock.getY(), 0).getLocation();
 
-        Vector newY = rootBlockLoc.subtract(ventLocation).toVector().normalize();
-
-
+        Vector newY = rootBlockLoc.subtract(ventLocation).toVector().setY(0).normalize();
 
         // For each block in the set, calculate its new location in the transposed coordinate system
         for (Block block : logBlocks) {
@@ -251,14 +250,7 @@ public class VolcanoMetamorphism {
 
             // rotate the blockface to the new direction
             BlockFace newFace = TyphonUtils.getAdequateBlockFace(newY);
-
-            Consumer<Block> callback = (b) -> {
-                BlockData data = b.getBlockData();
-                if (data instanceof Directional newDirectional) {
-                    newDirectional.setFacing(newFace);
-                    b.setBlockData(newDirectional);
-                }
-            };
+            Consumer<Block> callback = TyphonUtils.getBlockFaceUpdater(newFace);
 
             this.setBlock(targetBlock, block.getType(), callback);
             this.setBlock(block, Material.AIR);

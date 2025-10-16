@@ -108,23 +108,21 @@ public class TyphonUtils {
 
     public static Consumer<Block> getBlockFaceUpdater(Vector vector) {
         return block -> {
-            BlockData blockData = block.getBlockData();
             BlockFace face = TyphonUtils.getAdequateBlockFace(vector);
+            TyphonUtils.getBlockFaceUpdater(face).accept(block);
+        };
+    }
+
+    public static Consumer<Block> getBlockFaceUpdater(BlockFace face) {
+        return block -> {
+            BlockData blockData = block.getBlockData();
 
             if (blockData instanceof Directional directional) {
                 directional.setFacing(face);
                 block.setBlockData(directional);
             }
-
             if (blockData instanceof Orientable orientable) {
-                if (face == BlockFace.UP || face == BlockFace.DOWN) {
-                    orientable.setAxis(Axis.Y);
-                } else if (face == BlockFace.NORTH || face == BlockFace.SOUTH) {
-                    orientable.setAxis(Axis.Z);
-                } else {
-                    orientable.setAxis(Axis.X);
-                }
-
+                orientable.setAxis(TyphonUtils.getAdequateAxis(face));
                 block.setBlockData(orientable);
             }
         };
@@ -133,6 +131,16 @@ public class TyphonUtils {
     public static BlockFace getAdequateBlockFace(Block fromBlock, Block toBlock) {
         Vector diff = toBlock.getLocation().toVector().subtract(fromBlock.getLocation().toVector());
         return getAdequateBlockFace(diff);
+    }
+
+    public static Axis getAdequateAxis(BlockFace face) {
+        if (Math.abs(face.getModX()) > 0) {
+            return Axis.X;
+        } else if (Math.abs(face.getModZ()) > 0) {
+            return Axis.Z;
+        }
+
+        return Axis.Y;
     }
 
     public static BlockFace getAdequateBlockFace(Vector vector) {

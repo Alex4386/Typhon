@@ -70,6 +70,10 @@ public class VolcanoVentBuilder {
         return this.type.isPredicateMatch(this);
     }
 
+    public void forcePredicateMatch() {
+        this.onPredicateMatch();
+    }
+
     private void onPredicateMatch() {
         this.type = null;
         this.isEnabled = false;
