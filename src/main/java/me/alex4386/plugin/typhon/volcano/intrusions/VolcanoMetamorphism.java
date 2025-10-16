@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.volcano.intrusions;
 
+import io.papermc.paper.world.WeatheringCopperState;
 import me.alex4386.plugin.typhon.TyphonBlocks;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonUtils;
@@ -38,6 +39,43 @@ public class VolcanoMetamorphism {
         this.metamorphoseBlock(vent, block, isLavaContact);
     }
 
+    public Material oxidizeCopperBlock(Block block) {
+        Material material = block.getType();
+        String blockTypeName = TyphonUtils.toLowerCaseDumbEdition(material.name());
+        Material target = null;
+
+        if (blockTypeName.contains("copper")) {
+            String rawName = material.name();
+
+            // this is copper
+            WeatheringCopperState next = WeatheringCopperState.EXPOSED;
+            if (blockTypeName.startsWith("exposed_")) {
+                next = WeatheringCopperState.WEATHERED;
+                rawName = rawName.replace("EXPOSED_", "");
+            } else if (blockTypeName.startsWith("weathered_")) {
+                next = WeatheringCopperState.OXIDIZED;
+                rawName = rawName.replace("WEATHERED_", "");
+            } else if (blockTypeName.startsWith("oxidized_")) {
+                next = null;
+                rawName = rawName.replace("OXIDIZED_", "");
+            }
+
+            if (next != null) {
+                String targetName = next.name()+"_"+rawName;
+                Material targetMaterial = Material.getMaterial(targetName);
+                if (targetMaterial != null) {
+                    target = targetMaterial;
+                }
+            }
+        }
+
+        if (target != null) {
+            return target;
+        }
+
+        return null;
+    }
+
     public static boolean isDirt(Material material) {
         String blockTypeName = TyphonUtils.toLowerCaseDumbEdition(material.name());
 
@@ -58,6 +96,7 @@ public class VolcanoMetamorphism {
         if (material.isAir()) return;
 
         String blockTypeName = TyphonUtils.toLowerCaseDumbEdition(material.name());
+        Material target = null;
 
         if (blockTypeName.contains("log") || blockTypeName.contains("leaves")) {
             if (!isLavaContact) {
@@ -65,8 +104,10 @@ public class VolcanoMetamorphism {
             } else {
                 this.removeTree(block);
             }
+            return;
         } else if (block.getType().isBurnable()) {
             this.setBlock(block, Material.AIR);
+            return;
         } else {
 
             boolean typeOfDirt = VolcanoMetamorphism.isDirt(material);
@@ -78,32 +119,36 @@ public class VolcanoMetamorphism {
             
             if (typeOfDirt) {
                 if (block.getType() == Material.COARSE_DIRT) {
-                    material = Material.STONE;
+                    target = Material.STONE;
                 } else {
-                    material = Material.COARSE_DIRT;
+                    target = Material.COARSE_DIRT;
                 }
             } else if (blockTypeName.contains("cobblestone") || blockTypeName.contains("gravel") || blockTypeName.contains("infested")) {
                 if (blockTypeName.contains("infested")) {
                     block.getWorld().playSound(block.getLocation(), Sound.ENTITY_SILVERFISH_DEATH, 1f, 0f);
                 }
 
-                material = Material.STONE;
+                target = Material.STONE;
             } else if (material == Material.SAND) {
-                material = Material.SANDSTONE;
+                target = Material.SANDSTONE;
             } else if (material == Material.RED_SAND) {
-                material = Material.RED_SANDSTONE;
+                target = Material.RED_SANDSTONE;
             } else if (material == Material.CLAY) {
-                material = Material.TERRACOTTA;
+                target = Material.TERRACOTTA;
             } else {
                 return;
             }
         }
 
         if (material == Material.STONE) {
-            material = VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel);
+            target = VolcanoComposition.getExtrusiveRock(vent.lavaFlow.settings.silicateLevel);
+        } else if (blockTypeName.contains("copper")) {
+            target = oxidizeCopperBlock(block);
         }
 
-        vent.lavaFlow.queueBlockUpdate(block, material);
+        if (target != null) {
+            vent.lavaFlow.queueBlockUpdate(block, target);
+        }
         return;
     }
 
@@ -332,6 +377,9 @@ public class VolcanoMetamorphism {
         return material == Material.DRAGON_EGG ||
                 material == Material.TURTLE_EGG ||
                 material == Material.SNIFFER_EGG ||
+                material == Material.DRIED_GHAST ||
+                material == Material.BLUE_EGG ||
+                material == Material.BROWN_EGG ||
                 material == Material.FROGSPAWN;
     }
 

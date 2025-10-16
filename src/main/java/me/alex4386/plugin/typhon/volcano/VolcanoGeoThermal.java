@@ -663,6 +663,18 @@ public class VolcanoGeoThermal implements Listener {
             livingEntity.damage(calculateDamageWithTimespan);
           }
 
+          // check if it is copper golem
+          if (entity instanceof CopperGolem golem) {
+            CopperGolem.Oxidizing oxidizing = golem.getOxidizing();
+            if (!oxidizing.equals(CopperGolem.Oxidizing.waxed())) {
+              if (oxidizing instanceof CopperGolem.Oxidizing.AtTime atTime) {
+                long targetTime = atTime.time();
+                oxidizing = CopperGolem.Oxidizing.atTime(targetTime - 5);
+                golem.setOxidizing(oxidizing);
+              }
+            }
+          }
+
           EntityEquipment equipment = livingEntity.getEquipment();
           if (equipment != null) {
             this.doSOxDamage(equipment.getHelmet(), poisonousLevel);
@@ -691,6 +703,8 @@ public class VolcanoGeoThermal implements Listener {
         }
       }
     }
+
+
   }
 
   public void doSOxDamage(ItemStack stack, int level) {
@@ -710,6 +724,7 @@ public class VolcanoGeoThermal implements Listener {
     String name = TyphonUtils.toLowerCaseDumbEdition(material.name());
 
     if (name.startsWith("wood")) { return 1; }
+    if (name.startsWith("copper")) { return 1.25; }
     if (name.startsWith("iron")) { return 1.5; }
 
     return 0;

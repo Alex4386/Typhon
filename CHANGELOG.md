@@ -2,11 +2,12 @@
 
 ## What's new?
 ### Updating to latest versions
-- Typhon now targets for Minecraft `1.21.5`
+- Typhon now targets for Minecraft `1.21.9`
   - SoundSeeds aren't updated yet for `1.21.5` so It will be using `1.21.1` version of SoundSeeds
   - Added support for geothermally affected blocks and newly utilize `dry` variant of `grass` when affected by `geothermal` heat.
   - Added support for `1.21.4` tree variants to be affected by `geothermal` heat.
   - Added support for `1.21.4`'s `creaking_heart` also affected by `geothermal` heat.
+  - Added support for `1.21.9`'s `CopperGolem`'s oxidation affected by `geothermal` activity.
 - Typhon now targets BluemapAPI `2.7.4`
 
 ### New Integrations
@@ -53,6 +54,7 @@
 - When the volcano is in elevated state, Now the volcanic gas can trigger `"NAUSEA"` effect on players and entities.
 - Improved tree detection logic for "killing trees" via geothermal heat and gas release
 - Pyroclastic flows will "timber" the trees when it meets on trees. The trees will fall down and burn out, replaced with coal block and covered with ash.
+- Volcanic Gases now oxidizes copper
 
 #### Pyroclastic Flows
 - Fixed pyroclastic flows were not properly directing and doing drifts, causing doing U-turns and other weird behaviors.  

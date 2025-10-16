@@ -34,6 +34,7 @@ public class TyphonUtils {
                 || materialType.contains("_grass")
                 || material == Material.BUSH
                 || materialType.contains("_bush")
+                || materialType.endsWith("_litter")
                 || materialType.contains("mushroom")
                 || material == Material.CACTUS
                 || material == Material.LEAF_LITTER
