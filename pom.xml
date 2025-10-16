@@ -87,10 +87,6 @@
             <url>https://repo.bluecolored.de/releases</url>
         </repository>
         <repository>
-            <id>sk89q-repo</id>
-            <url>https://maven.enginehub.org/repo/</url>
-        </repository>
-        <repository>
             <id>playpro</id>
             <url>https://maven.playpro.com</url>
         </repository>
