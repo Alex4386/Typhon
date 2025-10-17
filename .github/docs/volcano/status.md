@@ -1,15 +1,15 @@
 [<  Return to Typhon Docs](/DOCS.md)  
 [<< Return to Volcano Docs](./index.md)  
 
-# Volcanic Status: The Pulse of the Earth
+# Volcanic Status
 
-Just as medical doctors monitor a patient's vital signs, volcanologists closely watch volcanic "vital signs" to assess activity levels. From the dormant slumber of Washington's Mount Baker to the near-constant eruptions of Italy's Stromboli, volcanoes exist in a spectrum of states that indicate their internal pressure and potential for eruption.
+Volcanoes exist in a spectrum of activity states that indicate their internal pressure and potential for eruption.
 
-Typhon faithfully recreates this spectrum of volcanic activity, allowing you to experience the full lifecycle of volcanoes.
+Typhon simulates this spectrum of volcanic activity.
 
-## The Volcanic Activity Spectrum
+## Volcanic Activity States
 
-Each vent in Typhon can exist in one of five distinct states, mirroring the monitoring systems used by real volcano observatories worldwide:
+Each vent can exist in one of five distinct states:
 
 | Extinct | Dormant |  Minor Activity  |  Major Activity  | Erupting |
 |:-------:|:-------:|:----------------:|:----------------:|:--------:|
@@ -17,81 +17,79 @@ Each vent in Typhon can exist in one of five distinct states, mirroring the moni
 
 ### Extinct
 <img src="/.github/docs/volcano/assets/status/extinct.png" alt="Extinct volcano Image" width="300" height="200"/>
-**In Nature**: Extinct volcanoes haven't erupted in over 10,000 years and have no magmatic system capable of future eruptions.
 
-**In Typhon**:
+Volcanoes with no magmatic system capable of future eruptions.
+
+**Characteristics**:
 - No heat signatures or geothermal activity
-- Complete ecological [succession](./succession.md) occurs throughout the volcano
-- Automatic eruption triggers will not affect the volcano
-- Plants and trees grow freely, even within the crater
+- Complete ecological [succession](./succession.md) throughout
+- Automatic eruption triggers have no effect
+- Plants and trees grow freely, even within crater
 
 ### Dormant
 <img src="/.github/docs/volcano/assets/status/dormant.png" alt="Dormant volcano Image" width="300" height="200"/>
-**In Nature**: Dormant volcanoes haven't erupted in historical time but maintain the potential to awaken., such as Volcanoes still having active Magma Chambers to support future eruptions.
 
-**In Typhon**:
-- Occasional mild heat signatures appear in the crater
-- Minor geothermal features manifest intermittently
-- [Ecological succession](./succession.md) progresses everywhere except within the crater
-- Faint wisps of steam might occasionally rise from the crater
+Volcanoes that maintain the potential to erupt, with active magma chambers but no current activity.
+
+**Characteristics**:
+- Occasional mild heat signatures in crater
+- Minor geothermal features intermittently
+- [Ecological succession](./succession.md) progresses except within crater
+- Faint steam wisps occasionally from crater
 
 ### Minor Activity
 <img src="/.github/docs/volcano/assets/status/minor-activity.png" alt="Minor Activity volcano Image" width="300" height="200"/>
 
-**In Nature**: Volcanoes showing minor activity have consistent, low-level signs of unrest.  
-The volcano not only have active magma chambers, but also show elevated activities like gas emissions, fumaroles, and minor seismic activity.
+Consistent, low-level signs of volcanic unrest with elevated activity.
 
-**In Typhon**:
-- Sustained [geothermal activity](./geothermal.md) in and near the crater
-- Occasional emission of [volcanic gases](./geothermal.md#volcanic-gases)
-- Minor heat signatures detectable on the upper flanks
-- Ecological succession slowed but not halted by volcanic influence
-- Steam vents become more numerous and consistent
-- Entities too close to vents may experience heat damage
-- Vegetations near the upper flanks may show signs of stress from heat and gases
+**Characteristics**:
+- Sustained [geothermal activity](./geothermal.md) in and near crater
+- Occasional [volcanic gases](./geothermal.md#volcanic-gases) emission
+- Minor heat signatures on upper flanks
+- Ecological succession slowed but not halted
+- More numerous and consistent steam vents
+- Heat damage near vents
+- Upper flank vegetation shows stress signs
 
 ### Major Activity
 <img src="/.github/docs/volcano/assets/status/major-activity.png" alt="Major Activity volcano Image" width="300" height="200"/>
 
-**In Nature**: Volcanoes in major activity show even more intense signs of unrest.
-They may have increased seismic activity, ground deformation, and gas emissions, but even more intense, indicating a potential eruption might be near.
+Intense signs of unrest indicating potential eruption is near.
 
-**In Typhon**:
-- Intense [geothermal activity](./geothermal.md) throughout the volcanic edifice
-- Water in the crater rapidly evaporates
-- Plants and trees near the volcano begin to die from volcanic gases in upper flanks
-- Vegetations in the lower flanks may show signs of stress from heat and gases
-- Sustained fumarole activity emits significant volumes of gas, steam, and heat.
-- Amount of fumarole activity increases significantly
-- Hotspots capable of burning entities appear widely around the volcano
-- [Ecological succession](./succession.md) halted by volcanic conditions
+**Characteristics**:
+- Intense [geothermal activity](./geothermal.md) throughout edifice
+- Rapid water evaporation in crater
+- Upper flank vegetation dies from volcanic gases
+- Lower flank vegetation shows stress signs
+- Sustained fumarole activity with significant gas, steam, heat
+- Significantly increased fumarole activity
+- Widespread burning hotspots
+- [Ecological succession](./succession.md) halted
 
 ### Eruption Imminent
 <img src="/.github/docs/volcano/assets/status/eruption-imminent.png" alt="Eruption Imminent volcano Image" width="300" height="200"/>
 
-**In Nature**: The volcano is on the verge of erupting, with Magma rising to just waiting for breaching the surface.
-The volcanic activity is at its peak, with intense seismic activity, ground deformation, and gas emissions.
+Volcano on the verge of erupting with magma about to breach the surface. (In Typhon, this is internal state as having eruption's state without lava/bombs/ash actually emerging yet.)
 
-**In Typhon**:
-- All of the effects of `Major Activity` are present
-- Maximal [geothermal activity](./geothermal.md) throughout the volcano
-- Crater filled with intense heat and activity, and volcanic gas
-- Heat damage to entities throughout the volcanic area
+**Characteristics**:
+- All `Major Activity` effects present
+- Maximal [geothermal activity](./geothermal.md) throughout
+- Crater filled with intense heat, activity, and volcanic gas
+- Heat damage throughout volcanic area
 - Complete cessation of ecological processes
-- Amount of fumarole activity increases even more
-- Incadescent glow may visible in the crater
+- Even more fumarole activity
+- Incandescent glow may be visible in crater
 
 ### Erupting
 <img src="/.github/docs/volcano/assets/status/erupting.png" alt="Eruption Imminent volcano Image" width="300" height="200"/>
 
-**In Nature**: Erupting volcanoes are in the throes of an eruption, with lava flows, ash clouds, and pyroclastic flows.
-The volcano is actively discharging magma, gas, and ash into the atmosphere.
+Active eruption with magma, gas, and ash discharge.
 
-**In Typhon**:
-- All of the effects of `Eruption Imminent` are present
-- The eruption is now in progress
-- Depending on eruption style: [lava](./lava.md), [volcanic bombs](./bombs.md), and [ash](./ash.md) emerge from the vent
-- Intense geothermal activity and heat signatures throughout the volcano
+**Characteristics**:
+- All `Eruption Imminent` effects present
+- Eruption in progress
+- [Lava](./lava.md), [volcanic bombs](./bombs.md), and [ash](./ash.md) emerge from vent (depending on style)
+- Intense geothermal activity and heat signatures throughout
 
 
 ## Monitoring Your Volcano

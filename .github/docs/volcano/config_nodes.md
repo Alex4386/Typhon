@@ -2,7 +2,7 @@
 [<< Return to Volcano Docs](./index.md)  
 
 # Typhon Vent Config Nodes
-<p align="right">Last Updated: <b>v0.9.0-rc</b></p>
+<p align="right">Last Updated: <b>v0.9.0</b></p>
 
 > [!NOTE]  
 > For simplicity of the documentation, the following commands will use commands for `mainvent`. For subvent, Please refer to the [Eruption Vents](./vents.md#commands) documentation.

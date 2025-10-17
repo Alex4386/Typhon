@@ -1,40 +1,38 @@
 [<  Return to Typhon Docs](/DOCS.md)  
 [<< Return to Volcano Docs](./index.md)  
 
-# Geothermal Activity: The Volcano's Breath
+# Geothermal Activity
 
-In nature, volcanoes are not just about dramatic eruptions - they continuously breathe and release energy through geothermal activity. From the steaming fumaroles of Yellowstone to the deadly gas emissions at Lake Nyos, these phenomena shape the volcanic landscape even during periods of dormancy.
+Even when it is not erupting, a volcano remains a source of intense geothermal energy in real life. Typhon implements this continuous geothermal activity to enhance realism.
 
 <img src="https://github.com/user-attachments/assets/9c033765-aac8-463b-bbee-3d03d5ff254c" width="400" />
 
 ## Geothermal Heat
 
-Beneath every volcano lies a massive heat reservoir. In real volcanoes, this heat gradually dissipates through the ground, creating unique environments.
+Volcanic heat gradually dissipates through the ground, creating heated zones around vents.
 
-In Typhon, this heat spreads realistically throughout your volcano:
-- The intensity varies based on the [volcanic status](./status.md)
-- Heat diminishes gradually as you move away from vents
-- Subsidiary vents create their own heat zones, just as in nature
+**Heat Distribution**:
+- Intensity varies based on the [volcanic status](./status.md)
+- Heat diminishes gradually with distance from vents
+- Subsidiary vents create their own heat zones
 
-The heat value used in Typhon can be checked via running `/vol <name> heat` command, having range between `0` to `1`.
+The heat value can be checked with `/vol <name> heat` command (range: 0-1).
 
-### Cooking with Earth's Energy
+### Cooking with Geothermal Heat
 
-In geothermal areas like Iceland, people have cooked food using the planet's natural heat for centuries.
+Geothermal heat can cook food items:
+- **Dormant Volcanoes**: Occasional cooking inside crater only
+- **Minor Activity**: Unreliable cooking inside crater
+- **Major Activity**: Reliable cooking in crater, occasional on flanks
+- **Eruption Imminent/Erupting**: Entire volcano hot enough to cook food
 
-Experience this in Typhon:
-- **Dormant Volcanoes**: Only inside the crater will you find enough heat to occasionally cook food
-- **Minor Activity**: Cooking is possible but unreliable inside the crater
-- **Major Activity**: Reliable cooking inside the crater, with occasional success on the flanks
-- **Eruption Imminent/Erupting**: The entire volcano becomes hot enough to cook dropped food items
+**Usage**: Drop raw food items in areas with sufficient geothermal heat.
 
-**How to use it**: Simply drop raw food items (use your drop key) in areas with sufficient geothermal heat!
+## Fumaroles
 
-## Fumaroles: The Volcano's Vents
+Fumaroles are openings in the earth's crust where volcanic gases and steam escape, creating landscapes of steam and mineral deposits.
 
-Fumaroles are nature's pressure-release valves - openings in the earth's crust where volcanic gases and steam escape. At places like Valley of Geysers in Russia, these create otherworldly landscapes of steam and mineral deposits.
-
-In Typhon, fumaroles visually signal a volcano's activity level:
+Fumaroles visually signal a volcano's activity level:
 
 ### Fumarole Activity by Volcanic Status
 
@@ -63,22 +61,20 @@ These effects (burning, less mob spawns and evaporates) can be disabled by setti
 
 ## Volcanic Gases
 
-In the real world, volcanic gases are silent killers. The 1986 Lake Nyos disaster in Cameroon showed how deadly CO₂ emissions can be, while acidic gases like sulfur dioxide at volcanoes like Kilauea continuously reshape their environments.
-
-Typhon recreates these dangerous natural phenomena:
+Volcanic gases are deadly emissions that can harm living creatures and reshape environments.
 
 ### Environmental Impact
 
-- **Plant Life**: Just as at Mount Merapi, gases gradually kill trees and plants with repeated exposure
+- **Plant Life**: Gases gradually kill trees and plants with repeated exposure
   - Trees lose their leaves
   - Plants wither and die
-  
-- **Player and Mob Effects**: As at real volcanic sites, gases affect living creatures
-  - **Chemical Burns**: Damage from acidic gases (if you have fire-resistance, less damage is dealt)
+
+- **Player and Mob Effects**: Gases affect living creatures
+  - **Chemical Burns**: Damage from acidic gases (reduced with fire-resistance)
   - **Nausea**: Disorientation from toxic gas exposure
   - **Poison**: Systemic effects of volcanic gas inhalation
-  - **Copper Golem Oxidization**: The copper golem oxidizes faster when affected by volcanic gas
+  - **Copper Golem Oxidation**: Copper golems oxidize faster in volcanic gas
 
-- **Equipment Damage**: Volcanic gases are corrosive in reality and in Typhon
+- **Equipment Damage**: Corrosive gases damage tools
   - Wooden tools break down faster in gas-rich environments
   - Iron and copper tools corrode when exposed to volcanic gases

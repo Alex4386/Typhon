@@ -3,66 +3,63 @@
 
 # Volcanic Vents
 
-In nature, volcanic eruptions don't always occur from a single, neat crater at the summit. From Iceland's dramatic fissure eruptions that create curtains of fire to complex stratovolcanoes like Mount Etna with multiple active vents, volcanic systems often feature various "gateways" where magma reaches the surface.
+Volcanic eruptions don't always occur from a single crater at the summit. Volcanic systems often feature various "gateways" where magma reaches the surface, including fissures and multiple active vents.
 
-Typhon faithfully recreates these diverse volcanic vent systems, allowing you to build volcanic landscapes as complex and dynamic as their real-world counterparts.
+Typhon simulates these diverse volcanic vent systems.
 
 <img src="/.github/docs/volcano/assets/multi-vents.png" align="center" width="400" />
 Just as the image shows, Typhon can implement multiple vents with "own" type (fissure, crater). each erupting on its own.
 
 ## Types of Volcanic Vents
 
-Just as in nature, Typhon supports multiple vent types that produce different eruption patterns:
+Typhon supports multiple vent types that produce different eruption patterns:
 
-### Crater Vents: The Classic Volcano
+### Crater Vents
 
-**In Nature**: The classic volcanic crater is the most familiar vent type - a roughly circular opening at the summit of a volcanic cone. Mount Fuji, Mount Vesuvius, and Kilauea's Halema'uma'u crater exemplify this common vent type.
+Circular openings at the summit of a volcanic cone.
 
-**In Typhon**:
+**Features**:
 - Crater vents erupt from a central point
 - Lava fountains and flows radiate from the central vent
-- The volcano builds a symmetric cone with repeated eruptions
-- The crater's size influences eruption characteristics
+- Builds symmetric cone with repeated eruptions
+- Crater size influences eruption characteristics
 
-To set a vent to crater type:  
-`/volcano <volcano_name> mainvent style crater`  
+**Configuration**:
+```
+/volcano <volcano_name> mainvent style crater
+/volcano <volcano_name> mainvent config vent:craterRadius <radius>
+```
 
-Configure crater size:  
-`/volcano <volcano_name> mainvent config vent:craterRadius <radius>`
+### Fissure Vents
 
-### Fissure Vents: The Curtain of Fire
+Linear cracks that produce "curtains of fire" as lava erupts along a line.
 
-**In Nature**: Fissure eruptions occur along linear cracks in the earth, often producing spectacular "curtains of fire" as lava erupts along a line. Iceland's Laki fissure (1783) and the ongoing Holuhraun eruption demonstrate this dramatic eruption type.
-
-**In Typhon**:
+**Features**:
 - Lava emerges along a linear crack rather than from a point
 - Multiple lava fountains line up along the fissure
-- The resulting landforms tend to be elongated rather than conical
-- Ideal for creating features like lava fields and shield volcanoes
+- Resulting landforms are elongated rather than conical
+- Ideal for creating lava fields and shield volcanoes
 
-To set a vent to fissure type:  
-`/volcano <volcano_name> mainvent style fissure`  
-
-Configure fissure orientation:  
-`/volcano <volcano_name> mainvent config vent:fissureAngle auto`  
-(This sets the fissure angle based on the direction you're facing)
-
-Configure fissure length:  
-`/volcano <volcano_name> mainvent config vent:fissureLength <length>`
+**Configuration**:
+```
+/volcano <volcano_name> mainvent style fissure
+/volcano <volcano_name> mainvent config vent:fissureAngle auto
+/volcano <volcano_name> mainvent config vent:fissureLength <length>
+```
 
 ## Multi-Vent Volcanic Systems
 
-Real volcanic complexes often feature multiple active vents. Italy's Mount Etna has several summit craters and numerous flank vents. The Canary Islands' Cumbre Vieja eruption in 2021 developed multiple vents along a fissure system.
+Volcanic complexes often feature multiple active vents, including summit craters and flank vents along fissure systems.
 
-Typhon allows you to recreate these complex volcanic systems:
+Typhon supports complex multi-vent volcanic systems:
 
-### Main Vent: The Primary Hub
+### Main Vent
 
-When you create a volcano, a main vent is automatically established. This represents the primary eruption center, typically at the summit of the volcanic edifice.
+When you create a volcano, a main vent is automatically established as the primary eruption center, typically at the summit.
 
 ### Creating Subsidiary Vents
 
-Just as Mount Etna develops new vents during eruption sequences, you can create additional vents for your volcano:
+Create additional vents for your volcano:
 
 Create a crater-type subsidiary vent:  
 `/volcano <volcano_name> create crater <subvent_name>`
@@ -75,13 +72,13 @@ Create a subsidiary vent near a player:
 
 ### Monogenetic vs. Polygenetic Vents
 
-In volcanology, vents are classified based on their eruption frequency:
+Vents are classified based on their eruption frequency:
 
-**Monogenetic Vents**: In nature, these erupt only once and become extinct. The cinder cones of Mexico's Michoacán-Guanajuato volcanic field are monogenetic, each representing a single eruptive event.
+**Monogenetic Vents**: Erupt only once and become extinct, representing a single eruptive event.
 
-**Polygenetic Vents**: These erupt repeatedly over time. Mount Vesuvius and Mount Fuji are classic polygenetic volcanoes, with the same vent system active for thousands of years.
+**Polygenetic Vents**: Erupt repeatedly over time, with the same vent system remaining active for extended periods.
 
-Typhon allows you to specify either behavior:
+Configure vent behavior:
 
 Check a vent's current genesis mode:  
 `/volcano <volcano_name> mainvent genesis`

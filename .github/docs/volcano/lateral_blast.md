@@ -1,28 +1,28 @@
 [<  Return to Typhon Docs](/DOCS.md)  
 [<< Return to Volcano Docs](./index.md)  
 
-# Lateral Blast: When Mountains Explode Sideways
+# Lateral Blast
 
-The most dramatic volcanic event of the 20th century occurred on May 18, 1980, when Mount St. Helens in Washington State didn't just erupt upward - it exploded sideways. This lateral blast devastated 230 square miles of forest in minutes, traveling at speeds up to 300 mph (480 km/h). Similar events have occurred at Mount Bezymianny (1956) and Mount Bandai (1888), creating some of Earth's most distinctive volcanic landscapes.
+Lateral blasts are rare volcanic events where eruptions explode sideways rather than upward, devastating large areas and creating distinctive horseshoe-shaped craters.
 
-Typhon brings this rare but spectacular volcanic phenomenon to Minecraft.
+Typhon simulates this dramatic volcanic phenomenon.
 
 <img src="https://github.com/user-attachments/assets/d8e8e172-92c4-462f-bca7-e6e87274724a" width="400" />
 
-## The Science Behind Lateral Blasts
+## Formation Process
 
-In nature, lateral blasts typically occur when:
+Lateral blasts typically occur when:
 1. Magma intrudes into a volcano's flank, creating a bulge
 2. This destabilizes the volcano's structure
-3. The weight of the bulging section causes a massive landslide
-4. The sudden removal of this material "uncorks" the pressurized magma system
+3. The bulging section causes a massive landslide
+4. The sudden removal "uncorks" the pressurized magma system
 5. The eruption explodes horizontally through the collapsed section
 
-The result is a devastating directional blast that can travel for miles, flatten forests, and create a distinctive horseshoe-shaped crater - as seen dramatically at Mount St. Helens, which lost 1,300 feet (400 meters) of elevation in seconds.
+The result is a devastating directional blast that creates a distinctive horseshoe-shaped crater and significantly reduces volcano elevation.
 
-## Creating a Lateral Blast in Typhon
+## Creating a Lateral Blast
 
-Typhon allows you to recreate this extraordinary geological event, transforming your volcano's appearance permanently.
+Configure and trigger a lateral blast to permanently transform your volcano.
 
 > [!NOTE]  
 > These commands refer to the main vent. For subsidiary vents, please refer to the [Eruption Vents](./vents.md#commands) documentation.
@@ -42,28 +42,24 @@ Typhon allows you to recreate this extraordinary geological event, transforming 
 3. Trigger the cataclysmic event:  
    `/volcano <volcano_name> mainvent landslide start`
 
-### How it occurs
+### Sequence of Events
 
-Once triggered, the lateral blast creates a spectacular sequence of events:
+Once triggered, the lateral blast creates:
 
-- The volcano automatically switches to a [`plinian` eruption](./eruption.md#plinian-eruptions-historys-most-catastrophic-volcanic-events), simulating the tremendous energy release
-- Massive volcanic bombs are ejected in the direction of the blast
-- The side of the volcano collapses dramatically, similar to the Mount St. Helens landslide
-- A horseshoe-shaped crater forms, opening in the direction of the blast
-- The landscape in the blast zone is devastated
+- Automatic switch to [`plinian` eruption](./eruption.md#plinian-eruptions), simulating tremendous energy release
+- Massive volcanic bombs ejected in the blast direction
+- Extensive pyroclastic flows racing down to the blast direction
+- Formation of horseshoe-shaped crater opening in the blast direction
 
 ## Geological Aftermath
 
-The lateral blast permanently transforms your volcano:
+The lateral blast permanently transforms the volcano:
 
-- The once symmetrical cone becomes asymmetrical with a distinctive open side
-- The height of the volcano is significantly reduced
-- A horseshoe-shaped crater remains as evidence of the catastrophic event
-- The blast zone extends outward in the direction of the explosion
-
-This recreates the distinctive morphology seen at real-world volcanoes that have experienced lateral blasts.
-
-Typhon's lateral blast feature allows you to witness and recreate this extraordinary type of volcanic event in your Minecraft world, providing both spectacle and education about one of nature's most dramatic geological processes.
+- Symmetrical cone becomes asymmetrical with distinctive open side
+- Significant reduction in volcano height
+- Geothermal activity intensifies on the blasted range
+- Horseshoe-shaped crater remains as evidence
+- Blast zone extends outward in explosion direction
 
 
 

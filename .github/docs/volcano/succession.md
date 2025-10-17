@@ -1,63 +1,53 @@
 [<  Return to Typhon Docs](/DOCS.md)  
 [<< Return to Volcano Docs](./index.md)  
 
-# Ecological Succession: Life Returns to Volcanic Landscapes
+# Ecological Succession
 
-In nature, the rebirth of landscapes after volcanic devastation is one of Earth's most remarkable recovery stories. From Mount St. Helens' returning forest to Hawaii's lava fields gradually transforming into lush terrain, the process of life reclaiming volcanic wastelands follows predictable patterns studied by ecologists worldwide.
+Ecological succession is the process of landscapes recovering after volcanic devastation, where life gradually reclaims volcanic wastelands through predictable patterns.
 
-Typhon faithfully recreates this natural recovery process, allowing you to witness years of ecological change in a fraction of the time.
+Typhon simulates this natural recovery process.
 
 <img src="/.github/docs/volcano/assets/succession.png" width="400" />
 
-## Nature's Recovery Blueprint
+## Recovery Stages
 
-When a barren volcanic landscape begins its journey back to a thriving ecosystem, it follows a pattern called ecological succession:
+Volcanic landscapes recover through ecological succession stages:
 
-### Weathering and Erosion: Breaking Down the Rock
+### Primary Succession
 
-In nature, the first step in recovery involves physical and chemical weathering:
-- Wind, rain, and temperature fluctuations crack volcanic rocks
-- Storms accelerate the erosion process
-- Chemical reactions alter volcanic minerals
+Pioneer species colonize barren volcanic rock:
+- Lichens and mosses create initial soil
+- Hardy plants with wind-dispersed seeds follow
+- Each plant generation contributes to soil building
 
-In Typhon, this process is simulated through:
-- Gradual softening of volcanic landforms
-- Accelerated erosion during rainfall and storms
-- Formation of soil-like surfaces that can support life
+Typhon simulates this gradual recovery by some of the volcanic rocks are turning into cobbled variants. and then into grass blocks over time.
 
-### Primary Succession: Pioneers on the Frontier
+**Implementation**:
+- Grass blocks gradually appearing on weathered materials
+- Initial vegetation in natural succession patterns
+- Soil formation building upon previous generations
 
-In the real world, primary succession begins when "pioneer species" colonize barren volcanic rock:
-- Lichens and mosses are often first, creating initial soil
-- Small, hardy plants with wind-dispersed seeds follow
-- Each generation of plants dies and contributes to building soil
+### Secondary Succession
 
-Typhon recreates this through:
-- Grass blocks gradually appearing on weathered volcanic materials
-- Initial vegetation appearing in patterns similar to natural primary succession
-- Soil formation that builds upon previous generations of plants
+More complex communities develop as soil improves:
+- Shrubs and small trees replace initial colonizers
+- Larger tree species establish
+- Animal life returns as habitat develops
 
-### Secondary Succession: The Return of Complexity
+**Implementation**:
+- Transition from grass to diverse vegetation
+- Tree growth in progressed succession areas
+- Return to natural-looking landscape over time
 
-As soil depth and quality improve in nature, more complex communities develop:
-- Shrubs and small trees replace the initial colonizers
-- Larger tree species eventually establish
-- Animal life returns as habitat becomes available
+## Volcanic Activity Impact
 
-In Typhon, this manifests as:
-- Transition from grass to more diverse vegetation
-- Tree growth beginning in areas where succession has progressed further
-- Return to a more natural-looking landscape over time
+Succession processes are influenced by volcanic activity:
 
-## The Volcano's Heartbeat Controls Recovery
+- **Active Zones Resist Recovery**: Areas with high [heat values](./status.md) and intense [geothermal activity](./geothermal.md) resist succession
 
-Just as in the natural world, Typhon's succession processes are influenced by volcanic activity:
+- **Activity Pauses Recovery**: Succession halts during `major activity` or `eruption imminent/erupting` states
 
-- **Active Volcanoes Resist Recovery**: The areas near Kilauea's active vents remain barren despite being surrounded by rainforest. Similarly, in Typhon, areas with high [heat values](./status.md) and intense [geothermal activity](./geothermal.md) resist succession.
-
-- **Recovery Pause During Activity**: When real volcanoes enter periods of heightened activity, recovery processes are interrupted. Typhon simulates this by halting succession during `major activity` or `eruption imminent/erupting` states.
-
-- **Zoned Recovery**: In nature, recovery progresses from the edges inward, with areas farthest from vents recovering first. Typhon recreates this pattern, with succession advancing faster at greater distances from the volcano's heat sources.
+- **Zoned Recovery**: Succession advances faster at greater distances from heat sources, progressing from edges inward
 
 ## Managing Succession in Your World
 
@@ -78,16 +68,16 @@ Control succession around specific vents:
 /volcano <volcano_name> mainvent config succession:enable <true|false>
 ```
 
-### Manual Succession: Terraforming with Nature's Patterns
+### Manual Succession
 
-You can manually apply succession to specific areas, mimicking the transformative work of ecologists helping to recover Mount St. Helens and other volcanic sites:
+Manually apply succession to specific areas:
 
 1. Activate the succession tool:
    ```
    /typhon succession enable
    ```
 
-2. Use the provided `WOODEN_SHOVEL` by right-clicking on volcanic terrain to trigger the succession process at that location.
+2. Use the provided `WOODEN_SHOVEL` by right-clicking on volcanic terrain to trigger succession at that location.
 
 3. When finished, deactivate the tool:
    ```

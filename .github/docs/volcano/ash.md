@@ -3,31 +3,33 @@
 
 # Volcanic Ash
 
-In nature, volcanic ash isn't just "smoke" - it's pulverized rock, minerals, and volcanic glass violently ejected during explosive eruptions. From the buried Roman city of Pompeii to the 2010 Eyjafjallajökull eruption that grounded European air travel, volcanic ash represents one of nature's most awe-inspiring and dangerous volcanic phenomena.
+Volcanic ash is pulverized rock, minerals, and volcanic glass violently ejected during explosive eruptions. It represents one of the most dangerous volcanic phenomena.
 
-Typhon recreates these dramatic features of explosive volcanism with remarkable realism, by utilizing Minecraft's new `BlockDisplay` entities to simulate ash clouds and their effects on the environment.
+Typhon simulates ash clouds using Minecraft's `BlockDisplay` entities to create realistic visual and environmental effects.
 
 <img alt="pyroclastic flows" src="https://github.com/user-attachments/assets/bed69bbf-0d8b-4830-858a-33b94d8e9af1" width="400" />
 
-## Pyroclastic Flows: Nature's Unstoppable Force
+## Pyroclastic Flows
 
-In the natural world, pyroclastic flows are among the deadliest volcanic hazards. During the 1902 eruption of Mount Pelée, a pyroclastic flow obliterated the city of Saint-Pierre in minutes, killing nearly 30,000 people. These scalding avalanches of gas, ash, and rock can travel at speeds of up to 450 mph (700 km/h) and reach temperatures of 1,000°C.
+Pyroclastic flows are among the deadliest volcanic hazards - scalding avalanches of gas, ash, and rock that can travel at extreme speeds and reach temperatures of 1,000°C.
 
-Typhon brings this terrifying phenomenon to your Minecraft world:
-- **Devastating Movement**: Just as in nature, pyroclastic flows race down the volcano's flanks, following valleys and topography
-- **Heat Damage**: As in real eruptions, the superheated clouds ignite anything flammable in their path
-- **Ash Deposition**: Mimicking real volcanic events, the flows leave behind layers of tuff (volcanic ash deposits)
-- **Carbonization**: Trees caught in the flow are converted to coal blocks, simulating the carbonization process seen at sites like Mount Vesuvius
-- **Lethal to Players**: Just as real pyroclastic flows are unsurvivable, players caught in these flows face serious danger
+In Typhon, pyroclastic flows are simulated as fast-moving clouds of ash (shown as large `BlockDisplay` entities) cascading down the volcano's slopes during major explosive eruptions., in this cloud the following occurs:
+
+**Features**:
+- **Devastating Movement**: Flows race down the volcano's flanks, following valleys and topography
+- **Heat Damage**: Superheated clouds ignite anything flammable in their path
+- **Ash Deposition**: Flows leave behind layers of tuff (volcanic ash deposits)
+- **Carbonization**: Trees caught in the flow are converted to coal blocks
+- **Lethal to Players**: Players caught in these flows instantly perish due to extreme heat
 
 
-## Ash Plumes: Reaching for the Stratosphere
+## Ash Plumes
 
-The 1991 Mount Pinatubo eruption sent ash over 22 miles (35 km) into the atmosphere, causing global temperatures to drop by about 0.5°C for the next two years. Ash plumes are not just visually spectacular - they impact weather, aviation, and can collapse under their weight to form pyroclastic flows.
+Ash plumes can rise miles into the atmosphere during major eruptions. These columns are not just visually spectacular - they impact weather and can collapse to form pyroclastic flows.
 
-Typhon's ash plumes capture this epic scale:
-
-- **Towering Columns**: The plumes rise dramatically above the volcano, visible from great distances
-- **Thermal Properties**: The superheated ash burns entities caught within the column
-- **Realistic Dispersal**: Ash spreads outward at high altitudes, simulating the mushroom cloud appearance of major eruptions
+**Features**:
+- **Towering Columns**: Plumes rise dramatically above the volcano, visible from great distances
+- **Thermal Properties**: Superheated ash burns entities caught within the column
+- **Realistic Dispersal**: Ash spreads outward at high altitudes, creating mushroom cloud appearance
 - **Gradual Settling**: Fine ash particles slowly descend from the sky after major eruptions
+- **Lethal to Players**: Going in to the ash plume results in instant death due to extreme heat

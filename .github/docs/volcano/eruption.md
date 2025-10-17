@@ -1,11 +1,9 @@
 [<  Return to Typhon Docs](/DOCS.md)  
 [<< Return to Volcano Docs](./index.md)  
 
-# Volcanic Eruptions: Nature's Most Spectacular Display
+# Volcanic Eruptions
 
-A volcanic eruption is Earth's most dramatic geologic event - the moment when molten rock, gas, and ash escape from the magma chamber to the surface. From the gentle lava lakes of Hawaii's Kilauea to the catastrophic explosion of Mount St. Helens in 1980, eruptions shape our planet's surface and have influenced human civilization throughout history.
-
-Typhon brings these natural spectacles to Minecraft with unprecedented realism.
+Volcanic eruptions occur when molten rock, gas, and ash escape from the magma chamber to the surface. Typhon simulates realistic volcanic behavior based on real-life volcanoes.
 
 ## Controlling Your Volcano's Fury
 
@@ -15,39 +13,39 @@ Typhon brings these natural spectacles to Minecraft with unprecedented realism.
 To start or stop a volcanic eruption:  
 `/volcano <volcano_name> mainvent <start|stop>`
 
-## Eruption Styles: The Spectrum of Volcanic Behavior
+## Eruption Styles
 
-In volcanology, eruptions are classified into different styles based on their explosivity, lava composition, and eruptive character. Typhon recreates the most important styles with remarkable accuracy:
+Eruptions are classified into different styles based on their explosivity, lava composition, and eruptive character. Typhon simulates these styles to create realistic volcanic behavior:
 
 | Hawaiian | Strombolian | Vulcanian |
 |:--------:|:-----------:|:---------:|
 | ![Hawaiian](/.github/docs/volcano/assets/hawaiian.png) | ![Strombolian](/.github/docs/volcano/assets/strombolian.png) | ![Vulcanian](/.github/docs/volcano/assets/vulcanian.png) |
 
-### Hawaiian Eruptions: The Gentle Giants
+### Hawaiian Eruptions
 
-**In Nature**: Named after the Hawaiian Islands' shield volcanoes, these eruptions feature fluid, low-viscosity basaltic lava with minimal explosivity. Kilauea's eruptions often create spectacular lava fountains that build broad, gently sloping shield volcanoes over time.
+Characterized by fluid, low-viscosity basaltic lava with minimal explosivity. These eruptions create broad, gently sloping shield volcanoes.
 
-**In Typhon**: Hawaiian-style eruptions produce:
+**Features**:
 - Fluid lava flows that travel great distances
 - Gentle lava fountains from the main vent
 - Shield-shaped volcanoes with broad, gently sloping sides
-- "Rootless cones" that form when lava flows over wet ground, just as seen in Iceland
+- "Rootless cones" can form in the slopes
 
-### Strombolian Eruptions: Nature's Fireworks
+### Strombolian Eruptions
 
-**In Nature**: Named after Stromboli volcano in Italy, this style features regular, moderate explosions every few minutes. These eruptions send incandescent cinder, bombs, and spatter hundreds of meters into the air - the "lighthouse of the Mediterranean" has been erupting almost continuously for over 2,000 years.
+Characterized by regular, moderate explosions that send incandescent cinder, bombs, and spatter into the air. These eruptions gradually build steep cinder cones.
 
-**In Typhon**: Strombolian eruptions create:
+**Features**:
 - Moderate lava fountains
-- Spectacular nighttime displays of glowing [volcanic bombs](bombs.md)
-- Cone-building eruptions that gradually construct steeper stratovolcanoes
-- Cinder and spatter that builds up around the vent
+- Nighttime displays of glowing [volcanic bombs](bombs.md)
+- Cone-building eruptions that construct steeper stratovolcanoes
+- Cinder and spatter accumulation around the vent
 
-### Vulcanian Eruptions: The Explosive Force
+### Vulcanian Eruptions
 
-**In Nature**: Named after Vulcano in Italy's Aeolian Islands, these powerful eruptions feature thick, viscous magma that leads to significant explosions. Mount Vesuvius has produced vulcanian eruptions, blasting volcanic bombs, ash, and pumice high into the atmosphere.
+Characterized by thick, viscous magma that produces powerful explosions. Blasting volcanic bombs, ash, and pumice. 
 
-**In Typhon**: Vulcanian eruptions generate:
+**Features**:
 - Powerful explosions that shoot material high above the volcano
 - Significant [ash clouds](ash.md#ash-plumes) and [pyroclastic flows](ash.md#pyroclastic-flows)
 - Large [volcanic bombs](bombs.md) that can damage structures
@@ -55,36 +53,42 @@ In volcanology, eruptions are classified into different styles based on their ex
 
 ## Special Eruption Styles
 
-Just as in nature, certain environmental conditions trigger special eruption styles in Typhon:
+Certain environmental conditions automatically trigger special eruption styles:
 
 | Surtseyan | Pilinian |
 |:--------:|:-----------:|
 | ![Surtseyan](/.github/docs/volcano/assets/surtseyan.png) | ![Pilinian](/.github/docs/volcano/assets/pilinian.png) |
 
 
-### Surtseyan Eruptions: The Sea-Born Volcano
+### Surtseyan Eruptions
 
-**In Nature**: Named after Surtsey, which emerged from the ocean near Iceland in 1963, these eruptions occur when magma erupts through water. The water-magma interaction creates distinctive "rooster tail" jets of steam, ash, and volcanic fragments.
+Occur when magma erupts through water, creating distinctive jets of steam, ash, and volcanic fragments through water-magma interaction.
 
-**In Typhon**: Triggered automatically when:
+**Triggered automatically when**:
 - The volcano's summit is below sea level
 - The crater is filled with water
 
-These eruptions feature steam-driven explosions, wet ash deposition, and unique landforms that gradually build up to the water surface.
+**Features**:
+- Steam-driven explosions
+- Wet ash deposition via ash cloud formation
+- Gradual landform building primarily with ash and lava, building to water surface
 
-### Plinian Eruptions: History's Most Catastrophic Volcanic Events
+### Plinian Eruptions
 
-**In Nature**: Named after Pliny the Younger, who described the 79 CE eruption of Mount Vesuvius, these cataclysmic eruptions feature enormous columns of ash that can reach the stratosphere. The 1980 Mount St. Helens eruption and the 1991 Mount Pinatubo eruption were plinian events that affected global climate.
+The most powerful and destructive eruptions, featuring enormous ash plumes that reaches the sky and widespread pyroclastic flows.
 
-**In Typhon**: Triggered automatically during:
+**Triggered automatically during**:
 - [Caldera formation](./caldera.md) events
 - [Lateral blast](./lateral_blast.md) scenarios
 
-These represent the most powerful and destructive eruptions possible, featuring massive ash columns, widespread pyroclastic flows, and significant landscape alteration.
+**Features**:
+- Massive ash plumes
+- Even more widespread pyroclastic flows
+- Covering extensive areas with ash trails several blocks deep
 
 ### Lava Dome Eruptions
 
-Just like real-life, from the vent, the volcano can ooze out lava domes, which oozes out the lava from the side of the dome and grows. when certain threshold is met, dome can explode and pyroclastic flows occur.
+Viscous lava oozes from the vent to form a dome structure that grows over time. When the dome reaches a critical size, it can collapse or explode, triggering pyroclastic flows.
 
 
 ## Setting Your Eruption Style
@@ -97,16 +101,16 @@ Where `<style>` is one of: `hawaiian`, `strombolian`, or `vulcanian`
 > [!TIP]  
 > When you set an eruption style, Typhon automatically configures the appropriate [silica content](./lava.md#silica-content) and other [technical parameters](./config_nodes.md) to create realistic behavior for that eruption type. This is equivalent to running `/volcano <volcano_name> mainvent config erupt:autoconfig confirm`.
 
-## The Volcano's Base: Foundation of Fire
+## The Volcano's Base
 
-In real volcanoes, the "base level" refers to the foundation from which the volcanic edifice grows. In Typhon, the `baseY` parameter serves a similar function:
+The `baseY` parameter defines the volcano's foundation level:
 
-- It defines the reference point for the volcano's vertical growth
-- It helps calculate proper trajectories for volcanic bombs
-- It ensures realistic behavior as the volcanic cone grows higher
+- Reference point for vertical growth calculations for cone building (i.e. strombolian/vulcanian eruptions)
+- Used for volcanic bomb trajectory calculations
+- Ensures realistic behavior as the cone grows
 
-> [!NOTE]  
-> When changing to `strombolian` or `vulcanian` eruption styles, the `baseY` is automatically adjusted based on the current cone height to ensure realistic eruptive behavior.
+> [!NOTE]
+> When changing to `strombolian` or `vulcanian` eruption styles, `baseY` is automatically adjusted based on current cone height.
 
-To manually reset the base height:  
+To manually reset the base height:
 `/volcano <volcano_name> mainvent config bombs:resetBaseY`

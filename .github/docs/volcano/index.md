@@ -1,43 +1,41 @@
-[< Return to Typhon Docs](/DOCS.md)  
+[< Return to Typhon Docs](/DOCS.md)
 
 # Volcano
-Typhon brings the awe-inspiring power and beauty of real-world volcanoes into your Minecraft world, faithfully recreating geological processes that shape our planet.
 
-## Living Volcanoes
-Unlike other volcanic plugins, Typhon's tries to mimick nature IRL volcanoes as much as possible. Implementing based on approximation of real-world volcanoes.
+Typhon simulates volcanic activity based on real geological processes, trying to mimic realistic volcano behavior while creating dynamic volcanoes that evolve over time.
 
-## Volcanic Features in Nature and Typhon
+## Features
 
 ### Eruption Features
-* **[Eruption Vents](vents.md)**: In nature, magma finds the path of least resistance to the surface
-  - **[Fissure Eruptions](vents.md#vent-type)**: Linear cracks that emit lava in real volcanoes like Iceland's Laki fissure
-  - **[Crater Eruptions](vents.md#vent-type)**: The classic circular vents found at the summit of most volcanoes
-* **[Multiple Vent Systems](vents.md)**: Real volcanoes rarely have just one vent
-  - **[Summit and Flank Vents](vents.md)**: Just as Mt. Etna has multiple eruption points, Typhon volcanoes can develop new vents
-  - **[Parasitic Cones](vents.md)**: Small secondary cones that form on the flanks of the main volcano
+* **[Eruption Vents](vents.md)**: Magma eruption points
+  - **[Fissure Eruptions](vents.md#vent-type)**: Linear volcanic vents
+  - **[Crater Eruptions](vents.md#vent-type)**: Circular summit vents
+* **[Multiple Vent Systems](vents.md)**: Volcanoes with multiple eruption points
+  - **[Summit and Flank Vents](vents.md)**: Primary and secondary vents
+  - **[Parasitic Cones](vents.md)**: Secondary cones on volcano flanks
 
 ### Eruption Styles
-* **[Effusive Eruptions](eruption.md#eruption-style)**: Gentle lava flows with minimal explosivity
-  - **[Pillow Lava](lava.md#pillow-lava)**: When lava meets water, it forms distinctive pillow-shaped structures
-* **[Explosive Eruptions](eruption.md#eruption-style)**: Violent eruptions that eject material high into the air
-  - **[Volcanic Bombs](bombs.md)**: Large chunks of lava that cool as they fly through the air
-  - **[Pyroclastic Flows](ash.md#pyroclastic-flows)**: Deadly currents of hot gas and volcanic matter that race down slopes
-  - **[Ash Plumes](ash.md#ash-plumes)**: Towering columns of ash that can reach the stratosphere
+* **[Effusive Eruptions](eruption.md#eruption-style)**: Low-explosivity lava flows
+  - **[Pillow Lava](lava.md#pillow-lava)**: Underwater lava formations
+* **[Explosive Eruptions](eruption.md#eruption-style)**: High-explosivity eruptions
+  - **[Volcanic Bombs](bombs.md)**: Ejected molten rock projectiles
+  - **[Pyroclastic Flows](ash.md#pyroclastic-flows)**: Fast-moving hot gas and volcanic matter
+  - **[Ash Plumes](ash.md#ash-plumes)**: Vertical ash columns
 
 ### Magma Characteristics
-* **[Lava Composition](lava.md)**: Not all lava is created equal
-  - **[Silica Content](lava.md#silica-content)**: Determines how runny or sticky the lava is
-  - **[Gas Content](lava.md#gas-content)**: Higher gas content means more explosive eruptions
-  - **[Ore Formations](lava.md#ore-formations)**: Volcanic processes concentrate valuable minerals
+* **[Lava Composition](lava.md)**: Configurable lava properties
+  - **[Silica Content](lava.md#silica-content)**: Controls lava viscosity and flow distance
+  - **[Gas Content](lava.md#gas-content)**: Controls eruption explosivity
+  - **[Ore Formations](lava.md#ore-formations)**: Mineral deposits from cooling lava
 
 ### Volcanic Environment
-* **[Geothermal Activities](geothermal.md)**: The heat beneath your feet
-  - **[Fumaroles](geothermal.md#fumaroles)**: Vents that release steam and volcanic gases
-  - **[Volcanic Gas](geothermal.md#volcanic-gases)**: Dangerous emissions that affect plants, animals, and equipment
-* **[Caldera Formation](caldera.md)**: When a volcano collapses into its empty magma chamber
-* **[Lateral Blasts](lateral_blast.md)**: Sideways explosions like the 1980 Mt. St. Helens eruption
-* **[Ecological Succession](succession.md)**: How life returns to volcanic landscapes
-* **[Volcano Building](builder.md)**: The gradual construction of a volcanic mountain
+* **[Geothermal Activities](geothermal.md)**: Heat and gas effects
+  - **[Fumaroles](geothermal.md#fumaroles)**: Steam and gas vents
+  - **[Volcanic Gas](geothermal.md#volcanic-gases)**: Hazardous gas emissions
+* **[Caldera Formation](caldera.md)**: Large volcanic crater formation
+* **[Lateral Blasts](lateral_blast.md)**: Directed explosive eruptions
+* **[Ecological Succession](succession.md)**: Vegetation recovery on volcanic terrain
+* **[Volcano Building](builder.md)**: Automated volcano construction
 
 ## Quickstart Guides
 * [Create and Erupt Your First Volcano](./tips/volcano-quickstart.md)
