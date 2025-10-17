@@ -26,6 +26,7 @@
 | **lavaflow:gasContent**   | Refer to [Gas Content](lava.md#gas-content).                                                                                                                     |
 | **lavaflow:usePouredLava** | Whether the player's lava poured from the lava bucket should be considered as volcanic lava (default: `true`)                                                    |
 | **lavaflow:allowPickUp** | Allow players to pickup the volcanic lava (default: `false`) |                                                                                                    |                                                                                                                      
+| **lavaflow:usePouredLava** | Whether the lava from player's bucket should be considered as volcanic lava which should be cooled (default: `true`) |
 
 ## Bombs
 | **Parameter**                | **Description**                                               |
@@ -68,4 +69,11 @@
 | **vent:fissureAngle** | Sets the angle of the volcano's fissure. (in radians)                                                             |
 | **vent:fissureLength**| Sets the length of the volcano's fissure.                                                                         |
 | **vent:type**         | Sets the vent type of the volcano. See [Vent Type](vents.md#vent-type) for more information.                   |
+
+## Geothermal
+| **Parameter** | **Description** |
+|---------------|-----------------|
+| **geothermal:doFireTicks** | Whether volcanic gas can do chemical/fire burns on players and entities |
+| **geothermal:doEvaporation** | Whether high eruptive state can cause water to boil off and blocks to change to "evaporated" equivalents |
+| **geothermal:deterMobSpawn** | Whether high eruptive state can prevent mob spawn depending on heat emitted by the volcano (based on "heat" value) |
 

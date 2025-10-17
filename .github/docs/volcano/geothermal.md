@@ -57,6 +57,9 @@ Fumaroles aren't just visual - they impact their surroundings:
 - **Major Activity**: 
   - Concentrated volcanic gases that can damage nearby vegetation
   - Multiple Steam plumes visible
+  - Mob spawns are deterred
+
+These effects (burning, less mob spawns and evaporates) can be disabled by setting the [`config_nodes`](./config_nodes.md)
 
 ## Volcanic Gases
 
@@ -71,10 +74,11 @@ Typhon recreates these dangerous natural phenomena:
   - Plants wither and die
   
 - **Player and Mob Effects**: As at real volcanic sites, gases affect living creatures
-  - **Chemical Burns**: Damage from acidic gases
+  - **Chemical Burns**: Damage from acidic gases (if you have fire-resistance, less damage is dealt)
   - **Nausea**: Disorientation from toxic gas exposure
   - **Poison**: Systemic effects of volcanic gas inhalation
+  - **Copper Golem Oxidization**: The copper golem oxidizes faster when affected by volcanic gas
 
 - **Equipment Damage**: Volcanic gases are corrosive in reality and in Typhon
   - Wooden tools break down faster in gas-rich environments
-  - Iron tools corrode when exposed to volcanic gases
+  - Iron and copper tools corrode when exposed to volcanic gases

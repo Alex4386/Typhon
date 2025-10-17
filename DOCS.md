@@ -1,5 +1,5 @@
 # Typhon - a Volcano Simulator for Minecraft
-<p align="right">Last Updated: <b>2025-04-19</b> for v0.9.0</p>
+<p align="right">Last Updated: <b>2025-10-18</b> for v0.9.0</p>
 
 ## Welcome to the Typhon Plugin!
 Typhon brings realistic volcanic activity to your Minecraft world, faithfully reproducing natural volcanic phenomena within vanilla Minecraft - no mods or texture packs required.

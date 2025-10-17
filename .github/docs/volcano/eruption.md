@@ -82,6 +82,11 @@ These eruptions feature steam-driven explosions, wet ash deposition, and unique 
 
 These represent the most powerful and destructive eruptions possible, featuring massive ash columns, widespread pyroclastic flows, and significant landscape alteration.
 
+### Lava Dome Eruptions
+
+Just like real-life, from the vent, the volcano can ooze out lava domes, which oozes out the lava from the side of the dome and grows. when certain threshold is met, dome can explode and pyroclastic flows occur.
+
+
 ## Setting Your Eruption Style
 
 To change your volcano's eruption style:
