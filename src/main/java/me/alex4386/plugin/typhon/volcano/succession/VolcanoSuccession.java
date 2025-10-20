@@ -167,7 +167,7 @@ public class VolcanoSuccession {
         }
 
         double random = ((longestFlow - skipZone) * (1 - VolcanoMath.getZeroFocusedRandom())) + skipZone;
-        this.volcano.logger.debug(VolcanoLogClass.SUCCESSION, "random: "+random+", longestFlow: "+longestFlow+". getBasinLength(): "+vent.getBasinLength()+", volcanicRadius: "+vent.getVolcanicRadius());
+        // this.volcano.logger.debug(VolcanoLogClass.SUCCESSION, "random: "+random+", longestFlow: "+longestFlow+". getBasinLength(): "+vent.getBasinLength()+", volcanicRadius: "+vent.getVolcanicRadius());
         for (int i = 0; i < 1000; i++) {
             double angle = Math.random() * Math.PI * 2;
             double x = Math.sin(angle) * random;
@@ -178,6 +178,11 @@ public class VolcanoSuccession {
             if (!isValidSuccessionBlock(block)) {
                 // reduce the random!
                 random -= 1;
+
+                if (random <= skipZone) { 
+                    // we have reached the skip zone
+                    break;
+                }
 
                 // we need to store the random value for this angle.
                 continue;
