@@ -1687,7 +1687,9 @@ public class VolcanoLavaFlow implements Listener {
                     vent.flushSummitCacheByLocation(block);
 
                     BlockFace f = block.getFace(lavaData.fromBlock);
-                    TyphonUtils.getBlockFaceUpdater(f).accept(block);
+                    if (f != null) {
+                        TyphonUtils.getBlockFaceUpdater(f).accept(block);
+                    }
                 }
 
 
