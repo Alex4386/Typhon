@@ -16,6 +16,7 @@ import org.bukkit.block.Biome;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.EntityCategory;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Fish;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.ItemStack;
@@ -770,6 +771,10 @@ public class TyphonUtils {
     }
 
     public static boolean hasFireProtection(LivingEntity entity) {
+        if (entity instanceof Fish) {
+            return true;
+        }
+        
         if (entity.hasPotionEffect(PotionEffectType.FIRE_RESISTANCE)) {
             return true;
         }
