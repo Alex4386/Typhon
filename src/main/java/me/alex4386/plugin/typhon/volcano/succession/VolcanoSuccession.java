@@ -167,6 +167,7 @@ public class VolcanoSuccession {
         }
 
         double random = ((longestFlow - skipZone) * (1 - VolcanoMath.getZeroFocusedRandom())) + skipZone;
+        this.volcano.logger.debug(VolcanoLogClass.SUCCESSION, "random: "+random+", longestFlow: "+longestFlow+". getBasinLength(): "+vent.getBasinLength()+", volcanicRadius: "+vent.getVolcanicRadius());
         for (int i = 0; i < 1000; i++) {
             double angle = Math.random() * Math.PI * 2;
             double x = Math.sin(angle) * random;
