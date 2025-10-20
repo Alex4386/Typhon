@@ -1565,7 +1565,12 @@ public class VolcanoLavaFlow implements Listener {
 
             if (stickiness < 1) {
                 targetBlock = TyphonUtils.getFairRandomBlockInRange(coreBlock, (int) calculatedMinimum, (int) calculatedRangeMax);
-                highestBlock = TyphonUtils.getHighestRocklikes(targetBlock.getLocation()).getRelative(BlockFace.UP);
+                highestBlock = TyphonUtils.getHighestRocklikes(targetBlock.getLocation());
+                if (highestBlock.getType() == Material.LAVA) {
+                    return false;
+                }
+
+                highestBlock = highestBlock.getRelative(BlockFace.UP);
     
                 // slope check
                 double distance = TyphonUtils.getTwoDimensionalDistance(coreBlock.getLocation(), targetBlock.getLocation());
@@ -1581,18 +1586,16 @@ public class VolcanoLavaFlow implements Listener {
                     this.extendLava(highestBlock);
                 }
             } else {
-                if (Math.random() < 0.7) {
-                    if (this.vent.longestNormalLavaFlowLength > 50) {
-                        targetBlock = TyphonUtils.getFairRandomBlockInRange(coreBlock, (int) calculatedMinimum, (int) this.vent.longestFlowLength);
-                        highestBlock = TyphonUtils.getHighestRocklikes(targetBlock.getLocation()).getRelative(BlockFace.UP);
-                        this.extendLava(highestBlock);
-                    } 
-                } else {
-                    if (this.vent.longestFlowLength > 50) {
-                        targetBlock = TyphonUtils.getFairRandomBlockInRange(coreBlock, (int) calculatedMinimum, (int) this.vent.longestFlowLength);
-                        highestBlock = TyphonUtils.getHighestRocklikes(targetBlock.getLocation()).getRelative(BlockFace.UP);
-                        this.extendLava(highestBlock);    
-                    } 
+                boolean normalOnly = Math.random() < 0.7;
+                if ((normalOnly ? this.vent.longestNormalLavaFlowLength : this.vent.longestFlowLength) > 50) {
+                    targetBlock = TyphonUtils.getFairRandomBlockInRange(coreBlock, (int) calculatedMinimum, (int) this.vent.longestFlowLength);
+                    highestBlock = TyphonUtils.getHighestRocklikes(targetBlock.getLocation());
+                    if (highestBlock.getType() == Material.LAVA) {
+                        return false;
+                    }
+
+                    highestBlock = highestBlock.getRelative(BlockFace.UP);
+                    this.extendLava(highestBlock);
                 }
             }
 
@@ -1988,6 +1991,7 @@ public class VolcanoLavaFlow implements Listener {
                         continue;
                     }
 
+                    // whereToFlow is blocked. use upper one
                     whereToFlow = whereToFlow.getRelative(BlockFace.UP);
                 }
 
