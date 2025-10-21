@@ -172,9 +172,11 @@ public class VolcanoMetamorphism {
 
     public void evaporateWater(Block block, int radius) {
         if (block.getType() == Material.WATER) {
-            if (block.getY() < block.getWorld().getSeaLevel() - 1) {
-                this.setBlock(block, Material.AIR);
-                return;
+            if (!this.volcano.manager.isInAnyVent(block)) {
+                if (block.getY() < block.getWorld().getSeaLevel()) {
+                    this.setBlock(block, Material.AIR);
+                    return;
+                }
             }
 
             for (int x = -radius; x <= radius; x++) {
