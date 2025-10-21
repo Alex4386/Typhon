@@ -544,13 +544,16 @@ public class VolcanoGeoThermal implements Listener {
     for (Entity entity : entities) {
       double distance = entity.getLocation().distance(location);
       double fireTicks = Math.max(60, (600 * volcano.manager.getHeatValue(location)) * (distance / range));
-      
-      if (distance < range && entity.getMaxFireTicks() != 0) {
-        if (location.getWorld().isClearWeather()) {
-          entity.setFireTicks((int) fireTicks);
-        } else if (entity instanceof LivingEntity livingEntity) {
-          if (!TyphonUtils.hasFireProtection(livingEntity) && fireTicks >= 1) {
-            livingEntity.damage(0.5, DamageSource.builder(DamageType.ON_FIRE).build());
+
+      if (distance < range) {
+        if (entity instanceof LivingEntity livingEntity) {
+          boolean dealDamageByOwn = !TyphonUtils.hasFireProtection(livingEntity) || TyphonUtils.fireTicksDontDealDamageOn(livingEntity);
+          if (dealDamageByOwn && !location.getWorld().isClearWeather()) {
+            if (fireTicks >= 1) {
+              livingEntity.damage(0.5, DamageSource.builder(DamageType.ON_FIRE).build());
+            }
+          } else {
+            entity.setFireTicks((int) fireTicks);
           }
         }
       }

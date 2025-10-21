@@ -767,17 +767,19 @@ public class TyphonUtils {
         }
     }
 
-    public static boolean hasFireProtection(LivingEntity entity) {
+    public static boolean fireTicksDontDealDamageOn(LivingEntity entity) {
         // WaterMobs' fireticks doesn't deal damage.
-        // so it should be handled as fireprotection subroutine
+        // so it should be handled as fire-protection subroutine
         if (entity instanceof WaterMob) {
             return true;
         } else if (entity instanceof Drowned) {
-            if (entity.isSwimming()) {
-                return true;
-            }
+            return true;
         }
-        
+
+        return false;
+    }
+
+    public static boolean hasFireProtection(LivingEntity entity) {
         if (entity.hasPotionEffect(PotionEffectType.FIRE_RESISTANCE)) {
             return true;
         }

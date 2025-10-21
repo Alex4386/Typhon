@@ -189,8 +189,6 @@ public class VolcanoMetamorphism {
                     }
                 }
             }
-
-            if (Math)
         }
     }
 
