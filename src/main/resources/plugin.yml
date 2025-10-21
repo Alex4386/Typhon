@@ -3,7 +3,7 @@ version: ${project.version}
 main: me.alex4386.plugin.typhon.TyphonPlugin
 prefix: Typhon
 authors: [Alex4386]
-description: Minecraft world is SO BORING, Typhon is saying NO to you.
+description: A Minecraft Plugin aims to implement real-life volcanoes and its behavior in server-side plugin
 website: https://github.com/Alex4386/Typhon
 api-version: 1.21
 commands:
