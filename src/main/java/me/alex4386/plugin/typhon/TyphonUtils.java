@@ -14,10 +14,7 @@ import org.bukkit.block.data.Orientable;
 import org.bukkit.block.data.Waterlogged;
 import org.bukkit.block.Biome;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.entity.EntityCategory;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Fish;
-import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.*;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffectType;
@@ -771,8 +768,14 @@ public class TyphonUtils {
     }
 
     public static boolean hasFireProtection(LivingEntity entity) {
-        if (entity instanceof Fish) {
+        // WaterMobs' fireticks doesn't deal damage.
+        // so it should be handled as fireprotection subroutine
+        if (entity instanceof WaterMob) {
             return true;
+        } else if (entity instanceof Drowned) {
+            if (entity.isSwimming()) {
+                return true;
+            }
         }
         
         if (entity.hasPotionEffect(PotionEffectType.FIRE_RESISTANCE)) {
