@@ -783,8 +783,6 @@ public class TyphonUtils {
         } else {
             return "rhyolitic";
         }
-
-        return "unknown";
     }
 
     public static boolean fireTicksDontDealDamageOn(LivingEntity entity) {

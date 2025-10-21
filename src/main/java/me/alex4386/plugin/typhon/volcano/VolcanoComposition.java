@@ -81,7 +81,7 @@ public class VolcanoComposition {
 
                 double s = random.nextDouble();
             if (s > ratio) {
-                return this.getExtrusiveRock(0.41);
+                return VolcanoComposition.getExtrusiveRock(0.41);
             } else {
                 if (random.nextBoolean()) return Material.POLISHED_BASALT;
                 return Material.BASALT;
