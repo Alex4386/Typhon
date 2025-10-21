@@ -1677,6 +1677,9 @@ public class VolcanoLavaFlow implements Listener {
                 Block sourceBlock = lavaData.sourceBlock;
 
                 double distance = TyphonUtils.getTwoDimensionalDistance(sourceBlock.getLocation(), block.getLocation());
+                if (distance > this.vent.longestFlowLength) {
+                    this.vent.longestFlowLength = distance;
+                }
 
                 if (fromBlock != null) {
                     Material material = 
