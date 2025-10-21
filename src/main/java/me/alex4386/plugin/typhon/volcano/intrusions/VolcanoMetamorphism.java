@@ -177,6 +177,15 @@ public class VolcanoMetamorphism {
                     this.setBlock(block, Material.AIR);
                     return;
                 }
+            } else {
+                // this is inside the vent. but we need to check some.
+                // unless the submerged lava constantly changes into normal lava
+                // and breaks the pillow lava formation
+
+                if (block.getY() < block.getWorld().getSeaLevel() - 5) {
+                    this.setBlock(block, Material.AIR);
+                    return;
+                }
             }
 
             for (int x = -radius; x <= radius; x++) {
