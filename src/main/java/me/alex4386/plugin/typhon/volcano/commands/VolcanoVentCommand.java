@@ -914,7 +914,7 @@ public class VolcanoVentCommand {
                     if (newArgs.length >= 2) {
                         if (newArgs.length == 3)
                             vent.lavaFlow.settings.silicateLevel = Double.parseDouble(newArgs[2]);
-                        msg.info("vent:silicateLevel - " + vent.lavaFlow.settings.silicateLevel);
+                        msg.info("vent:silicateLevel - " + vent.lavaFlow.settings.silicateLevel + " (" + TyphonUtils.getLavaTypeBySilicateLevel(vent.lavaFlow.settings.silicateLevel) + ")");
                     }
                 } else {
                     msg.error("Invalid config node!");

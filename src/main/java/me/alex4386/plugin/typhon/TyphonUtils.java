@@ -767,6 +767,26 @@ public class TyphonUtils {
         }
     }
 
+    public static String getLavaTypeBySilicateLevel(double silicateLevel) {
+        if (silicateLevel < 0.41) {
+            return "ultramafic";
+        } else if (silicateLevel < 0.45) {
+            return "mafic";
+        } else if (silicateLevel < 0.52) {
+            return "basaltic";
+        } else if (silicateLevel < 0.57) {
+            return "basaltic andesite";
+        } else if (silicateLevel < 0.63) {
+            return "andesitic";
+        } else if (silicateLevel < 0.69) {
+            return "dacitic";
+        } else {
+            return "rhyolitic";
+        }
+
+        return "unknown";
+    }
+
     public static boolean fireTicksDontDealDamageOn(LivingEntity entity) {
         // WaterMobs' fireticks doesn't deal damage.
         // so it should be handled as fire-protection subroutine
