@@ -707,7 +707,13 @@ public class VolcanoVent {
         List<Block> lavaFlowBlocks = new ArrayList<>();
 
         for (Block ventBlock : ventBlocks) {
-            lavaFlowBlocks.add(ventBlock.getRelative(BlockFace.UP));
+            Block flowTarget = ventBlock.getRelative(BlockFace.UP);
+            if (this.lavaFlow.isLavaRegistered(flowTarget)) {
+                // this means it is currently flowing lava. Skip it.
+                continue;
+            }
+
+            lavaFlowBlocks.add(flowTarget);
         }
         return lavaFlowBlocks;
     }
