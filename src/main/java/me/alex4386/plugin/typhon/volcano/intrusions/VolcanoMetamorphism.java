@@ -167,8 +167,10 @@ public class VolcanoMetamorphism {
     }
 
     public void evaporateWater(Block block) {
-        int radius = 1;
+        this.evaporateWater(block, 1);
+    }
 
+    public void evaporateWater(Block block, int radius) {
         if (block.getType() == Material.WATER) {
             if (block.getY() < block.getWorld().getSeaLevel() - 1) {
                 this.setBlock(block, Material.AIR);
@@ -178,7 +180,8 @@ public class VolcanoMetamorphism {
             for (int x = -radius; x <= radius; x++) {
                 for (int y = -radius; y <= radius; y++) {
                     for (int z = -radius; z <= radius; z++) {
-                        if (x == 0 && y == 0 && z == 0) continue;
+                        // why the heck did you put it in here? v
+                        // if (x == 0 && y == 0 && z == 0) continue;
                         Block nearby = block.getRelative(x, y, z);
                         if (nearby.getType() == Material.WATER) this.setBlock(nearby, Material.AIR);
                     }
