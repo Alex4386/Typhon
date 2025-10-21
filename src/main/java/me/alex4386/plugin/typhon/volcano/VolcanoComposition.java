@@ -74,13 +74,14 @@ public class VolcanoComposition {
         Random random = new Random();
 
         if (silicateLevel < 0.41) {
-            return Material.DEEPSLATE;
+            if (Math.random() < 0.3) return Material.DEEPSLATE;
+            return Material.BLACKSTONE;
         } else if (silicateLevel < 0.45) {
                 double ratio = (silicateLevel - 0.45) / (0.45 - 0.41);
 
                 double s = random.nextDouble();
             if (s > ratio) {
-                return Material.DEEPSLATE;
+                return this.getExtrusiveRock(0.41);
             } else {
                 if (random.nextBoolean()) return Material.POLISHED_BASALT;
                 return Material.BASALT;
