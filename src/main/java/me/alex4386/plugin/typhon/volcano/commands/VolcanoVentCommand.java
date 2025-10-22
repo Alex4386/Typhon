@@ -700,8 +700,9 @@ public class VolcanoVentCommand {
                                     + vent.lavaFlow.settings.silicateLevel
                                     + " ("
                                     + String.format("%.2f", vent.lavaFlow.settings.silicateLevel * 100)
-                                    + "%)"
+                                    + "%, " + TyphonUtils.getLavaTypeBySilicateLevel(vent.lavaFlow.settings.silicateLevel) + ")"
                         );
+
                     }
                 } else if (newArgs[1].equalsIgnoreCase("lavaflow:gasContent")) {
                     if (newArgs.length >= 2) {
@@ -909,12 +910,6 @@ public class VolcanoVentCommand {
                             vent.flushCache();
                         }
                         msg.info("vent:type - " + vent.getType().toString());
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("vent:silicateLevel")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.lavaFlow.settings.silicateLevel = Double.parseDouble(newArgs[2]);
-                        msg.info("vent:silicateLevel - " + vent.lavaFlow.settings.silicateLevel + " (" + TyphonUtils.getLavaTypeBySilicateLevel(vent.lavaFlow.settings.silicateLevel) + ")");
                     }
                 } else {
                     msg.error("Invalid config node!");
