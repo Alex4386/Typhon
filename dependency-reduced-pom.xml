@@ -4,7 +4,7 @@
   <groupId>me.alex4386.plugin</groupId>
   <artifactId>typhon</artifactId>
   <name>Typhon</name>
-  <version>0.9.0-SNAPSHOT</version>
+  <version>0.9.4-SNAPSHOT</version>
   <description>Minecraft world is SO BORING, Bring the Typhon's power into minecraft world!</description>
   <url>https://github.com/Alex4386/Typhon</url>
   <build>
@@ -81,13 +81,13 @@
     <dependency>
       <groupId>io.papermc.paper</groupId>
       <artifactId>paper-api</artifactId>
-      <version>1.21.6-R0.1-SNAPSHOT</version>
+      <version>1.21.9-R0.1-SNAPSHOT</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>de.bluecolored</groupId>
       <artifactId>bluemap-api</artifactId>
-      <version>2.7.4</version>
+      <version>2.7.6</version>
       <scope>provided</scope>
     </dependency>
     <dependency>

@@ -9,6 +9,7 @@ import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import org.bukkit.*;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.BlockDisplay;
 import org.bukkit.util.Transformation;
 import org.bukkit.util.Vector;
@@ -27,7 +28,7 @@ public class VolcanoPyroclasticFlow {
 
     int radius;
     int initRadius;
-    static int maxRadius = 10;
+    static int maxRadius = 15;
 
     int life = 5;
     int maxDistance = -1;
@@ -44,7 +45,7 @@ public class VolcanoPyroclasticFlow {
 
     Map<Block, Integer> initialY = new HashMap<>();
 
-    HashMap<Block, Boolean> hasAshFell = new HashMap<>();
+    Set<Block> ashFellBlocks = new HashSet<>();
     List<BlockDisplay> pyroclasticClouds = new ArrayList<>();
     TyphonQueuedHashMap<Block, Block> initialBase = new TyphonQueuedHashMap<>(Integer.MAX_VALUE, TyphonQueuedHashMap::getTwoDimensionalBlock, null, false);
 
@@ -204,7 +205,8 @@ public class VolcanoPyroclasticFlow {
         double distance = TyphonUtils.getTwoDimensionalDistance(initLocation, this.location);
         if (distance - awayCount > 50) {
             if (Math.random() < 0.2) {
-                if (radius < maxRadius) {
+                double actualMaxRadius = Math.min(maxRadius, initRadius + (distance / 100));
+                if (radius < actualMaxRadius) {
                     radius++;
 
                     if (maxDistance > 0) {
@@ -423,24 +425,61 @@ public class VolcanoPyroclasticFlow {
         }
 
         Block baseBlock = this.getBase(this.location.getBlock());
-        double safeDistance = TyphonUtils.getTwoDimensionalDistance(initLocation, this.location);
+        // double safeDistance = TyphonUtils.getTwoDimensionalDistance(initLocation, this.location);
+        double safeDistance = Math.pow(0, this.ash.vent.getTwoDimensionalDistance(this.location) - this.ash.vent.getRadius());
 
         // Calculate the maximum height based on summit and slope
         double summitY = Math.max(initLocation.getY(), this.ash.vent.getSummitBlock().getY());
         double baseY = Math.max(this.ash.vent.location.getY(), this.ash.vent.location.getWorld().getSeaLevel());
 
-        double basin = Math.max(this.ash.vent.getBasinLength(), VolcanoPyroclasticFlow.getFlowLength(this.ash.vent));
-        double scale = (summitY - baseY) / basin;
+        /*
+         * v\
+         * | \
+         * |  \
+         * -----
+         *   ^ basin
+         */
+        double basin = Math.max(0, this.ash.vent.getBasinLength());
 
+
+        /*  A
+         * v|\
+         *  | \
+         *  |  \
+         *  ----
+         *   ^ coneBasin
+         */
+        double coneHeight = summitY - baseY;
+        double coneBasin = basin - this.ash.vent.getRadius();
+
+        /*
+         * scale = tan (slope avg)
+         */
+        double scale = (
+                coneBasin == 0 ?
+                        // fallback to cinder cone (30deg)
+                        (1 / Math.sqrt(3)) :
+                        coneHeight / coneBasin
+        );
+
+        // need to offset the summitY due to initialRadius
         summitY -= initRadius * scale;  // Scale down based on initial radius
+
+        // maximum height at current location.
         double maxHeight = summitY - (safeDistance * scale);
+
+        // if the location is too close from the vent's summit, interpolate the height
+        int safeMargin = 20;
+        if (safeDistance < safeMargin) {
+            double ratio = safeDistance / (double) safeMargin;
+            double targetHeight = Math.min(maxHeight, summitY - (safeMargin * scale));
+
+            maxHeight = (maxHeight * ratio) + (targetHeight * (1.0 - ratio));
+        }
 
         // Get normalized direction vector
         Vector srcDirection = new Vector().copy(this.direction).normalize();
         srcDirection.setY(0);
-
-        // Create a set to avoid duplicate block updates
-        Set<Block> processedBlocks = new HashSet<>();
 
         // Step through blocks in the radius
         for (double x = -this.radius; x <= this.radius; x++) {
@@ -450,8 +489,8 @@ public class VolcanoPyroclasticFlow {
                 double rotatedZ = x * srcDirection.getZ() + z * srcDirection.getX();
 
                 Block targetBase = baseBlock.getRelative((int)rotatedX, 0, (int)rotatedZ);
-                if (processedBlocks.contains(targetBase)) continue;
-                processedBlocks.add(targetBase);
+                if (ashFellBlocks.contains(targetBase)) continue;
+                ashFellBlocks.add(targetBase);
 
                 // Calculate ash height based on distance from center line
 
@@ -488,12 +527,30 @@ public class VolcanoPyroclasticFlow {
                         }
                     }
                 } else {
-                    // just change the surface block into TUFF
-                    if (Math.random() < 0.2) {
-                        Block target = TyphonUtils.getHighestRocklikes(baseBlockHere);
-                        if (VolcanoMetamorphism.isNaturalSoil(target.getType())) {
+                    Block target = TyphonUtils.getHighestRocklikes(baseBlockHere);
+                    boolean shouldPile = Math.pow(Math.random(), 2) > (distanceFromCenterLine / this.radius);
+                    boolean isSoil = VolcanoMetamorphism.isNaturalSoil(target.getType());
+
+                    if (target.getY() < baseBlockHere.getWorld().getSeaLevel()) {
+                        boolean shouldUpdateUnderTheWater = true;
+
+                        // since we are now under the water, we can now pile up.
+                        if (shouldPile) {
+                            Block pileUpBlock = target.getRelative(BlockFace.UP);
+                            this.ash.vent.lavaFlow.queueBlockUpdate(pileUpBlock, Material.TUFF);
+
+                            if (pileUpBlock.getY() >= baseBlockHere.getWorld().getSeaLevel()) {
+                                shouldUpdateUnderTheWater = false;
+                            }
+                        }
+
+                        if (isSoil) {
                             this.ash.vent.lavaFlow.queueBlockUpdate(target, Material.TUFF);
                         }
+
+                        if (shouldUpdateUnderTheWater) hasUnderTheWater = true;
+                    } else if (shouldPile) {
+                        this.ash.vent.lavaFlow.queueBlockUpdate(target, Material.TUFF);
                     }
                 }
 

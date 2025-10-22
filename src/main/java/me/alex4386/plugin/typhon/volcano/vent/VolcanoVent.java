@@ -132,7 +132,7 @@ public class VolcanoVent {
 
     public double getBasinLength() {
         double longestFlow = Math.max(this.getVolcanicRadius(), (this.getSummitBlock().getY() - this.location.getWorld().getSeaLevel()) * Math.sqrt(3));
-        return Math.max(longestFlow, this.craterRadius);
+        return Math.max(longestFlow, this.getRadius());
     }
 
     public void resetCurrentMetrics() {
