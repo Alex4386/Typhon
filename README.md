@@ -26,7 +26,7 @@ Want to try out?
 
 <h1 align="center"><code>typhon-demo.alex4386.me</code></h1>
 <p align="center"><a href="https://typhon-map.alex4386.me/">Map</a> - Minecraft 1.21.10, Running PaperMC</p>  
-<p align="center"><sup>(1.21.x supported via `ViaBackwards`, `GeyserMC` available for Bedrock clients)</sup></p>
+<p align="center"><sup>(1.21.x supported via <code>ViaBackwards</code>, <code>GeyserMC</code> available for Bedrock clients on same IP)</sup></p>
 
 ## Docs
 - [Installation](/.github/docs/installation.md)
