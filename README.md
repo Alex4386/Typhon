@@ -21,7 +21,7 @@ See plugin in action: <a href="https://www.youtube.com/watch?v=DDnQDAdq1Ok">YouT
 > This plugin will be archived from now. if you need so and you have enough legal ground, fork it. Thanks.    
 -->
 
-# Public Test Server
+## Public Test Server
 Want to try out?
 
 <h1 align="center"><code>typhon-demo.alex4386.me</code></h1>
