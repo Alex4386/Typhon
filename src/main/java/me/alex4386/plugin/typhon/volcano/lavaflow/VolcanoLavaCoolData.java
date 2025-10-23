@@ -31,6 +31,7 @@ public class VolcanoLavaCoolData {
     public VolcanoVent flowedFromVent = null;
     boolean isBomb = false;
     public boolean isProcessed = false;
+    private boolean quickCoolKillSwitch = false;
 
     public int runExtensionCount = 0;
     public boolean skipNormalLavaFlowLengthCheck = false;
@@ -95,6 +96,10 @@ public class VolcanoLavaCoolData {
         this.runExtensionCount = runExtensionCount;
     }
 
+    public void setQuickCoolKillSwitch() {
+        this.quickCoolKillSwitch = true;
+    }
+
     public static int calculateExtensionCount(double silicateLevel, double distance, double height) {
         // 0.48 is lower end. minimum travel distance should be 10km. 
         // but this is Minecraft. 10000 blocks is way too much. scaling down
@@ -141,7 +146,7 @@ public class VolcanoLavaCoolData {
 
     public boolean extensionCapable() {
         if (this.flowedFromVent != null) {
-            return this.flowedFromVent.lavaFlow.extensionCapable(this.block.getLocation());
+            return this.flowedFromVent.lavaFlow.extensionCapable(this.block.getLocation()) && this.runExtensionCount > 0;
         }
         return true;
     }
@@ -259,6 +264,10 @@ public class VolcanoLavaCoolData {
     }
 
     public void coolDown() {
+        this.coolDown(false);
+    }
+
+    public void coolDown(boolean isQuickCool) {
         if (Math.random() < 0.001) {
             TyphonSounds.getRandomLavaFragmenting().play(
                     block.getLocation(),
@@ -282,31 +291,11 @@ public class VolcanoLavaCoolData {
             this.flowedFromVent.flushSummitCacheByLocation(block);
         }
 
-        if (this.extensionCapable()) {
-            boolean isExtension = this.runExtensionCount > 0;
-
-            if (!isExtension) {
-                if (!isBomb) {
-                    // check if there is plumbed lava
-                    if (this.flowedFromVent != null) {
-                        // check if lava's silica level is low enough to flow even more
-                        double stickiness = ((this.flowedFromVent.lavaFlow.settings.silicateLevel - 0.45) / (0.53 - 0.45));
-
-                        if (Math.random() > stickiness) {
-                            if (this.flowedFromVent.lavaFlow.consumeLavaInflux(1)) {
-                                this.runExtensionCount = 1;
-                                isExtension = true;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (isExtension) {
+        if (this.extensionCapable() && !isQuickCool) {
+            if (!this.quickCoolKillSwitch) {
                 this.handleExtension();
             }
         }
-
 
         if (this.flowedFromVent != null) {
             this.flowedFromVent.lavaFlow.queueBlockUpdate(block, material, TyphonUtils.getBlockFaceUpdater(

@@ -43,6 +43,8 @@ public class VolcanoLavaFlow implements Listener {
     public Map<Block, VolcanoPillowLavaData> pillowLavaMap = new HashMap<>();
     public Map<Block, VolcanoPillowLavaData> cachedPillowLavaMap = new HashMap<>();
 
+    public Set<Block> terminalBlocks = new HashSet<>();
+
     private int lavaFlowScheduleId = -1;
     private int lavaCoolScheduleId = -1;
     private int lavaInfluxScheduleId = -1;
@@ -54,7 +56,6 @@ public class VolcanoLavaFlow implements Listener {
     private int highestY = Integer.MIN_VALUE;
 
     private double hawaiianBaseY = Double.NEGATIVE_INFINITY;
-    private double thisMaxFlowLength = 0;
 
 
     public long lastQueueUpdatesPerSecond = 0;
@@ -188,15 +189,16 @@ public class VolcanoLavaFlow implements Listener {
 
     public void resetThisFlow() {
         double baseY = this.vent.averageVentHeight();
-        double flowLength = 0;
+//        double flowLength = 0;
         if (this.shouldFlowOverLeeve()) {
             double leeveY = this.vent.averageLeeveHeight();
             baseY = Math.round((leeveY + baseY) / 2);
-            flowLength = this.vent.craterRadius * 2;
+//            flowLength = this.vent.craterRadius * 2;
         }
 
         this.hawaiianBaseY = baseY;
-        this.thisMaxFlowLength = flowLength;
+
+        this.vent.currentNormalLavaFlowLength = 0;
         this.prevFlowTime = -1;
     }
 
@@ -480,9 +482,32 @@ public class VolcanoLavaFlow implements Listener {
                         queueImmediateBlockUpdate(block, VolcanoComposition.getExtrusiveRock(data.flowedFromVent.lavaFlow.settings.silicateLevel));
                         break;
                     }
-                } 
+                }
             }
         }
+    }
+
+    public Block getRandomTerminalBlock() {
+        if (this.terminalBlocks.isEmpty()) return null;
+
+        List<Block> filteredBlocks = this.terminalBlocks.stream()
+                .filter(b -> {
+                    VolcanoLavaCoolData data = this.getLavaCoolData(b);
+                    if (data != null) {
+                        return data.runExtensionCount
+                    }
+                    return false;
+                })
+                .toList();
+
+        if (filteredBlocks.isEmpty()) return null;
+
+        int index = (int) (Math.random() * filteredBlocks.size());
+        return filteredBlocks.get(index);
+    }
+
+    public Block getRandomTerminalBlock() {
+        return this.getRandomTerminalBlock(-1);
     }
 
     @EventHandler
@@ -504,6 +529,8 @@ public class VolcanoLavaFlow implements Listener {
 
         VolcanoLavaCoolData data = this.getLavaCoolData(block);
 
+        // remove from terminalBlocks
+        this.terminalBlocks.remove(block);
 
         int level = -1;
         BlockData bd = block.getBlockData();
@@ -586,10 +613,6 @@ public class VolcanoLavaFlow implements Listener {
                 if (distance > vent.currentFlowLength) {
                     vent.currentFlowLength = distance;
                     trySave = true;
-                }
-
-                if (distance > this.thisMaxFlowLength) {
-                    this.thisMaxFlowLength = distance;
                 }
 
                 if (!data.skipNormalLavaFlowLengthCheck) {
@@ -679,7 +702,9 @@ public class VolcanoLavaFlow implements Listener {
 
                 // bifurcate lava -
                 if (!data.isBomb) {
+                    // register underUnderToBlock as terminalBlocks
                     registerLavaCoolData(data.source, underToBlock, underUnderToBlock, data.isBomb, -1, false, true);
+                    this.terminalBlocks.add(underUnderToBlock);
                 } else {
                     this.flowLavaFromBomb(underUnderToBlock);
                 }
@@ -710,6 +735,9 @@ public class VolcanoLavaFlow implements Listener {
 
             Object obj = this.registerLavaCoolData(data.source, block, toBlock, data.isBomb, extensionCount);
             if (obj instanceof VolcanoLavaCoolData coolData) {
+                // register on terminalBlocks
+                this.terminalBlocks.add(toBlock);
+
                 if (data.skipNormalLavaFlowLengthCheck) {
                     coolData.skipNormalLavaFlowLengthCheck = true;
                 }
@@ -795,15 +823,15 @@ public class VolcanoLavaFlow implements Listener {
 
     public Object registerLavaCoolData(
             Block source, Block fromBlock, Block block, boolean isBomb, int extension) {
-        
+
         boolean isUnderWater = block.getType() == Material.WATER;
-        
+
         if (!isUnderWater) {
             boolean isSurroundedByWater = false;
             BlockFace[] flowableFaces = {
                 BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.NORTH, BlockFace.UP
             };
-    
+
             for (BlockFace face: flowableFaces) {
                 Block flowBlock = block.getRelative(face);
                 if (flowBlock.getType() == Material.WATER) {
@@ -828,7 +856,7 @@ public class VolcanoLavaFlow implements Listener {
 
         double iron = getProbabilityOfIron() * 3;
         double copper = iron * 1.4;
-        
+
         // gold / iron = 0.55555~~ * 1/4 (iron: 8, gold: 2)
         double gold = getProbabilityOfSeperation(0.1 * 0.11) * 3;
         double emerald = getProbabilityOfEmerald() * (1 + (3 * ratio));
@@ -853,17 +881,17 @@ public class VolcanoLavaFlow implements Listener {
             return Material.DIAMOND_ORE;
         }
         base += diamond;
-        
+
         if (random < base + gold) {
             return Material.GOLD_ORE;
         }
         base += gold;
-        
+
         if (random < base + emerald) {
             return Material.EMERALD_ORE;
         }
         base += emerald;
-        
+
         if (random < base + ancientDebris) {
             return Material.ANCIENT_DEBRIS;
         }
@@ -879,7 +907,7 @@ public class VolcanoLavaFlow implements Listener {
 
         double iron = getProbabilityOfIron();
         double copper = iron * 1.4;
-        
+
         // gold / iron = 0.55555~~ * 1/4 (iron: 8, gold: 2)
         double gold = getProbabilityOfSeperation(0.1 * 0.11);
 
@@ -905,17 +933,17 @@ public class VolcanoLavaFlow implements Listener {
             return Material.DIAMOND_ORE;
         }
         base += diamond;
-        
+
         if (random < base + gold) {
             return Material.GOLD_ORE;
         }
         base += gold;
-        
+
         if (random < base + emerald) {
             return Material.EMERALD_ORE;
         }
         base += emerald;
-        
+
         if (random < base + ancientDebris) {
             return Material.ANCIENT_DEBRIS;
         }
@@ -942,7 +970,7 @@ public class VolcanoLavaFlow implements Listener {
     private double getProbabilityOfIron() {
         return getProbabilityOfSeperation(getIronContentOfLava());
     }
-    
+
 
     private double getProbabilityOfSeperation(double base) {
         // part of separated.
@@ -957,7 +985,7 @@ public class VolcanoLavaFlow implements Listener {
         if (source == Material.ANCIENT_DEBRIS) {
             return Material.ANCIENT_DEBRIS;
         }
-        
+
         if (source == Material.GOLD_ORE && material == Material.NETHERRACK) {
             return Material.NETHER_GOLD_ORE;
         } else if (source == Material.GOLD_ORE && (material == Material.DEEPSLATE || material == Material.BLACKSTONE)) {
@@ -1039,7 +1067,7 @@ public class VolcanoLavaFlow implements Listener {
                 isBomb && !isUnderWater
                         ? VolcanoComposition.getBombRock(this.settings.silicateLevel, this.getDistanceRatio(block.getLocation()))
                         : VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel);
-        
+
         double distance = TyphonUtils.getTwoDimensionalDistance(source.getLocation(), block.getLocation());
 
         Material ore = this.getOre(distance);
@@ -1149,10 +1177,10 @@ public class VolcanoLavaFlow implements Listener {
             if (pillowBlocks.size() > 0) {
                 block = pillowBlocks.get(0);
             }
-            
+
             if (Math.random() < 0.7 || block == null) {
                 if (lavaBlocks.size() > 0)
-                    block = lavaBlocks.get(0);                
+                    block = lavaBlocks.get(0);
             }
 
             if (block != null) {
@@ -1449,7 +1477,7 @@ public class VolcanoLavaFlow implements Listener {
                 // cooldown lower blocks
                 VolcanoLavaCoolData data = this.vent.lavaFlow.getLavaCoolData(targetRandomBlock);
                 if (data != null) {
-                    data.coolDown();
+                    data.coolDown(true);
                 }
 
                 this.flowVentLavaFromBomb(targetRandomBlock.getRelative(BlockFace.UP));
@@ -1532,77 +1560,9 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public boolean extendLava() {
-        double stickiness = ((this.settings.silicateLevel - 0.45) / (0.53 - 0.45));
-        double safeRange = Math.max(this.thisMaxFlowLength * 0.8, (this.vent.longestFlowLength * 7 / 10.0));
+        // get the terminal blocks (at the end of the
+        Block targetBlock = this.getRandomTerminalBlock(0);
 
-        if (this.vent.calderaRadius >= 0) {
-            if (Math.random() < (this.vent.calderaRadius / safeRange)) {
-                safeRange = this.vent.calderaRadius * 7 / 10.0;
-            } else {
-                return false;
-            }
-        }
-        double minimumSafeRange = this.vent.getType() == VolcanoVentType.CRATER ? this.vent.craterRadius : 0;
-        double minimumSafeOffset = 20;
-
-        if (this.vent.getType() == VolcanoVentType.CRATER && this.vent.erupt.getStyle() == VolcanoEruptStyle.STROMBOLIAN) {
-            // In this case, lava should ooze out from side, cause this is cinder cone.
-            if (Math.random() > this.settings.gasContent && this.hawaiianBaseY >= this.vent.location.getWorld().getMinHeight()) {
-                double ratio = this.vent.bombs.distanceHeightRatio();
-                double distance = ratio * (this.vent.getSummitBlock().getY() - this.hawaiianBaseY) - minimumSafeOffset;
-
-                minimumSafeRange = (int) (Math.max(distance, 0) + this.vent.getRadius());
-                safeRange = minimumSafeOffset + minimumSafeRange + this.vent.getRadius();
-            }
-        }
-
-        double calculatedMinimum = minimumSafeRange + minimumSafeOffset;
-        double calculatedRangeMax = calculatedMinimum + safeRange;
-
-        if (safeRange > 0) {
-            Block coreBlock = this.vent.getCoreBlock();
-            Block targetBlock, highestBlock = null;
-
-            if (stickiness < 1) {
-                targetBlock = TyphonUtils.getFairRandomBlockInRange(coreBlock, (int) calculatedMinimum, (int) calculatedRangeMax);
-                highestBlock = TyphonUtils.getHighestRocklikes(targetBlock.getLocation());
-                if (highestBlock.getType() == Material.LAVA) {
-                    return false;
-                }
-
-                highestBlock = highestBlock.getRelative(BlockFace.UP);
-    
-                // slope check
-                double distance = TyphonUtils.getTwoDimensionalDistance(coreBlock.getLocation(), targetBlock.getLocation());
-    
-                int coreY = TyphonUtils.getHighestRocklikes(coreBlock).getY();
-                double stepLength = (1 - stickiness) * 20;
-
-                double targetYOffset = (distance / stepLength);
-                double targetY = coreY - targetYOffset;
-
-                int roundedTargetY = (int) Math.round(targetY);
-                if (highestBlock.getY() <= roundedTargetY) {
-                    this.extendLava(highestBlock);
-                }
-            } else {
-                boolean normalOnly = Math.random() < 0.7;
-                if ((normalOnly ? this.vent.longestNormalLavaFlowLength : this.vent.longestFlowLength) > 50) {
-                    targetBlock = TyphonUtils.getFairRandomBlockInRange(coreBlock, (int) calculatedMinimum, (int) this.vent.longestFlowLength);
-                    highestBlock = TyphonUtils.getHighestRocklikes(targetBlock.getLocation());
-                    if (highestBlock.getType() == Material.LAVA) {
-                        return false;
-                    }
-
-                    highestBlock = highestBlock.getRelative(BlockFace.UP);
-                    this.extendLava(highestBlock);
-                }
-            }
-
-            if (highestBlock != null) {
-                return true;
-            }
-        }
 
         return false;
     }
@@ -1682,9 +1642,9 @@ public class VolcanoLavaFlow implements Listener {
                 }
 
                 if (fromBlock != null) {
-                    Material material = 
+                    Material material =
                         this.getOre(distance);
-                        
+
                     material = material == null ?
                         VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel) :
                         material;
@@ -1701,9 +1661,9 @@ public class VolcanoLavaFlow implements Listener {
 
                 Block underBlock = block.getRelative(BlockFace.DOWN);
                 distance = TyphonUtils.getTwoDimensionalDistance(sourceBlock.getLocation(), underBlock.getLocation());
-                Material material = 
+                Material material =
                     this.getOre(distance);
-                    
+
                 material = material == null ?
                     VolcanoComposition.getExtrusiveRock(this.settings.silicateLevel) :
                     material;
@@ -1760,7 +1720,7 @@ public class VolcanoLavaFlow implements Listener {
                     if (this.vent.isFlowingLava()) {
                         deductionCount += (int) (Math.random() * 2);
                     }
-                    
+
                     extension -= deductionCount;
 
                     if (extension < 0)  {
@@ -1980,7 +1940,7 @@ public class VolcanoLavaFlow implements Listener {
                                     this.extendLava();
                                     continue;
                                 }
-                                coolData.coolDown();
+                                coolData.coolDown(true);
                             }
                         }
 
@@ -2022,7 +1982,7 @@ public class VolcanoLavaFlow implements Listener {
                 );
             }
         }
-        
+
         if (flowAmount - flowedBlocks > 0) {
             int leftOvers = flowAmount - flowedBlocks;
             leftOvers = Math.min(10, leftOvers);
@@ -2058,18 +2018,6 @@ public class VolcanoLavaFlow implements Listener {
         queuedLavaInflux = 0;
     }
 
-    public boolean consumeLavaInflux(double amount) {
-        double realQueuedLavaInflux = Math.max(queuedLavaInflux, prevQueuedLavaInflux);
-
-        if (realQueuedLavaInflux < amount) {
-            return false;
-        }
-
-        realQueuedLavaInflux -= amount;
-        prevQueuedLavaInflux = realQueuedLavaInflux;
-        return true;
-    }
-
     public void handleSurtseyan() {
         this.handleSurtseyan(Math.min(this.vent.craterRadius / 2, 10));
     }
@@ -2088,7 +2036,7 @@ public class VolcanoLavaFlow implements Listener {
             VolcanoLavaCoolData coolData = entry.getValue();
 
             if (coolData.tickPassed()) {
-                coolData.coolDown();
+                coolData.ucoolDown();
                 removeTargets.add(block);
                 continue;
             }
@@ -2149,6 +2097,7 @@ public class VolcanoLavaFlow implements Listener {
             for (Map.Entry<Block, VolcanoLavaCoolData> entry : coolEntry.getValue().entrySet()) {
                 Block block = entry.getKey();
                 VolcanoLavaCoolData coolData = entry.getValue();
+                coolData.setQuickCoolKillSwitch();
 
                 TyphonBlocks.setBlockType(
                         block,
@@ -2163,6 +2112,7 @@ public class VolcanoLavaFlow implements Listener {
             for (Map.Entry<Block, VolcanoLavaCoolData> entry : coolEntry.getValue().entrySet()) {
                 Block block = entry.getKey();
                 VolcanoLavaCoolData coolData = entry.getValue();
+                coolData.setQuickCoolKillSwitch();
 
                 TyphonBlocks.setBlockType(
                         block,
