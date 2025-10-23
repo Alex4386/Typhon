@@ -494,7 +494,9 @@ public class VolcanoLavaFlow implements Listener {
                 .filter(b -> {
                     VolcanoLavaCoolData data = this.getLavaCoolData(b);
                     if (data != null) {
-                        return data.runExtensionCount
+                        if (b.getBlockData() instanceof Levelled levelled) {
+                            return data.runExtensionCount == 0 && levelled.getLevel() == levelled.getMinimumLevel();
+                        }
                     }
                     return false;
                 })
@@ -504,10 +506,6 @@ public class VolcanoLavaFlow implements Listener {
 
         int index = (int) (Math.random() * filteredBlocks.size());
         return filteredBlocks.get(index);
-    }
-
-    public Block getRandomTerminalBlock() {
-        return this.getRandomTerminalBlock(-1);
     }
 
     @EventHandler
