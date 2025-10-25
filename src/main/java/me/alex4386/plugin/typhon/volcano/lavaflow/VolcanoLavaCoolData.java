@@ -151,6 +151,37 @@ public class VolcanoLavaCoolData {
         return true;
     }
 
+    public BlockFace getExtensionTargetBlockFace() {
+        BlockFace[] flowableFaces = {
+                BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.NORTH,
+        };
+
+        Location flowVector = block.getLocation().subtract(fromBlock.getLocation());
+
+        Location sourceLocation = source.getLocation();
+        Location ventFlowVector = block.getLocation().subtract(sourceLocation);
+
+        // heck, It's Linear Algebra time. AGAIN NOOOOOOOOOO
+        Vector flowUnit = new Vector(flowVector.getX(), flowVector.getY(), flowVector.getZ()).normalize();
+        Vector ventFlowUnit = new Vector(ventFlowVector.getX(), ventFlowVector.getY(), ventFlowVector.getZ());
+
+        double pushingMultiplier = Math.min(0.5, Math.max(0.1, ventFlowVector.length() / 400));
+        Vector lavaPushingDirection = flowUnit.add(ventFlowUnit.multiply(pushingMultiplier)).normalize();
+
+        BlockFace targetFlowFace = null;
+
+        for (BlockFace bf : flowableFaces) {
+            Block flowDirectionBlock = block.getRelative(bf);
+            if (flowDirectionBlock.getType().isAir()) {
+                if (lavaPushingDirection.angle(new Vector(bf.getModX(), bf.getModY(), bf.getModZ())) <= Math.PI / 4) {
+                    targetFlowFace = bf;
+                }
+            }
+        }
+
+        return targetFlowFace;
+    }
+
     public void handleExtension() {
         BlockData bd = block.getBlockData();
         Location flowVector = block.getLocation().subtract(fromBlock.getLocation());
@@ -158,8 +189,6 @@ public class VolcanoLavaCoolData {
         // Just do it in flow vectors. lava is stiff
         Location sourceLocation = source.getLocation();
         sourceLocation.setY(block.getLocation().getY());
-
-        Location ventFlowVector = block.getLocation().subtract(sourceLocation);
         int level = -1;
 
         if (bd instanceof Levelled) {
@@ -202,23 +231,7 @@ public class VolcanoLavaCoolData {
                         }
                     }
                 } else {
-                    // heck, It's Linear Algebra time. AGAIN NOOOOOOOOOO
-                    Vector flowUnit = new Vector(flowVector.getX(), flowVector.getY(), flowVector.getZ()).normalize();
-                    Vector ventFlowUnit = new Vector(ventFlowVector.getX(), ventFlowVector.getY(), ventFlowVector.getZ());
-
-                    double pushingMultiplier = Math.min(0.5, Math.max(0.1, ventFlowVector.length() / 400));
-                    Vector lavaPushingDirection = flowUnit.add(ventFlowUnit.multiply(pushingMultiplier)).normalize();
-
-                    BlockFace targetFlowFace = null;
-
-                    for (BlockFace bf : flowableFaces) {
-                        Block flowDirectionBlock = block.getRelative(bf);
-                        if (flowDirectionBlock.getType().isAir()) {
-                            if (lavaPushingDirection.angle(new Vector(bf.getModX(), bf.getModY(), bf.getModZ())) <= Math.PI / 4) {
-                                targetFlowFace = bf;
-                            }
-                        }
-                    }
+                    BlockFace targetFlowFace = this.getExtensionTargetBlockFace();
 
                     if (targetFlowFace != null) {
                         Block flowDirectionBlock = block.getRelative(targetFlowFace);

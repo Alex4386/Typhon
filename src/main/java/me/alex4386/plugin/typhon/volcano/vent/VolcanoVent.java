@@ -4,7 +4,6 @@ import me.alex4386.plugin.typhon.*;
 import me.alex4386.plugin.typhon.volcano.Volcano;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.ash.VolcanoAsh;
-import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBomb;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBombs;
 import me.alex4386.plugin.typhon.volcano.dome.VolcanoLavaDome;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoErupt;
@@ -22,8 +21,6 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.json.simple.JSONObject;
-
-import de.bluecolored.bluemap.api.markers.POIMarker;
 
 import java.io.IOException;
 import java.util.*;
@@ -639,7 +636,7 @@ public class VolcanoVent {
                     ventBlocks.sort(Comparator.comparingInt(Block::getY));
 
                     for (Block block : ventBlocks) {
-                        if (this.lavaFlow.isLavaOKForFlow(block)) {
+                        if (this.lavaFlow.isLavaOKForFlowOnTop(block)) {
                             if (!selectedBlocks.contains(block)) {
                                 Block blockTop = TyphonUtils.getHighestRocklikes(block);
                                 selectedBlocks.add(blockTop);
@@ -660,7 +657,7 @@ public class VolcanoVent {
             for (Block block : ventBlocks) {
                 int y = block.getY();
 
-                if (y < minimumTolerantHeight && !this.lavaFlow.isLavaOKForFlow(block)) {
+                if (y < minimumTolerantHeight && !this.lavaFlow.isLavaOKForFlowOnTop(block)) {
                     if (Math.random() < 0.2f) continue;
                     if (!selectedBlocks.contains(block)) {
                         Block blockTop = TyphonUtils.getHighestRocklikes(block);
@@ -673,7 +670,7 @@ public class VolcanoVent {
 
         for (int i = 0; i < count; i++) {
             Block block = ventBlocks.get(random.nextInt(ventBlocks.size()));
-            if (!selectedBlocks.contains(block) && this.lavaFlow.isLavaOKForFlow(block)) {
+            if (!selectedBlocks.contains(block) && this.lavaFlow.isLavaOKForFlowOnTop(block)) {
                 Block blockTop = TyphonUtils.getHighestRocklikes(block);
                 selectedBlocks.add(blockTop);
             }

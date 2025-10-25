@@ -14,7 +14,6 @@ import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
-import org.bukkit.block.data.Directional;
 import org.bukkit.block.data.Levelled;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -26,7 +25,6 @@ import org.bukkit.plugin.PluginManager;
 import org.json.simple.JSONObject;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -585,7 +583,7 @@ public class VolcanoLavaFlow implements Listener {
 
             if (Math.random() < this.getLavaStickiness()) {
                 if (Math.random() > levelProbability) {
-                    vent.volcano.logger.log(VolcanoLogClass.LAVA_FLOW, "Lava stickiness match! levelProbability: "+levelProbability);
+                    vent.volcano.logger.debug(VolcanoLogClass.LAVA_FLOW, "Lava stickiness match! levelProbability: "+levelProbability);
 
                     event.setCancelled(true);
                     return;
@@ -790,7 +788,7 @@ public class VolcanoLavaFlow implements Listener {
         return this.getPillowLavaCoolData(block) != null;
     }
 
-    public boolean isLavaOKForFlow(Block block) {
+    public boolean isLavaOKForFlowOnTop(Block block) {
         return !this.isLavaRegistered(block) && this.hasLavaSpreadEnough(block);
     }
 
@@ -826,11 +824,11 @@ public class VolcanoLavaFlow implements Listener {
 
         if (!isUnderWater) {
             boolean isSurroundedByWater = false;
-            BlockFace[] flowableFaces = {
+            BlockFace[] waterFlowableFromFaces = {
                 BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.NORTH, BlockFace.UP
             };
 
-            for (BlockFace face: flowableFaces) {
+            for (BlockFace face: waterFlowableFromFaces) {
                 Block flowBlock = block.getRelative(face);
                 if (flowBlock.getType() == Material.WATER) {
                     isSurroundedByWater = true;
@@ -1559,8 +1557,33 @@ public class VolcanoLavaFlow implements Listener {
 
     public boolean extendLava() {
         // get the terminal blocks (at the end of the
-        Block targetBlock = this.getRandomTerminalBlock(0);
+        Block targetBlock = this.getRandomTerminalBlock();
+        VolcanoLavaCoolData data = this.getLavaCoolData(targetBlock);
+        if (data == null) {
+            return false;
+        }
 
+        BlockFace target = data.getExtensionTargetBlockFace();
+        List<BlockFace> flowableFaces = new ArrayList<>();
+        BlockFace[] flowableFacesArray = {
+                BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.NORTH, BlockFace.DOWN
+        };
+
+        for (BlockFace flowableFace : flowableFacesArray) {
+            if (flowableFace.equals(target)) continue;
+            flowableFaces.add(flowableFace);
+        }
+
+        for (BlockFace face: flowableFaces) {
+            Block flowBlock = targetBlock.getRelative(face);
+            Block flowUnderBlock = flowBlock.getRelative(BlockFace.DOWN);
+
+            boolean flowableConditionCheck = flowBlock.isEmpty() || TyphonUtils.containsLiquidWater(flowUnderBlock);
+            if (flowableConditionCheck && this.isLavaOKForFlowOnTop(flowUnderBlock)) {
+                this.extendLava(flowBlock);
+                return true;
+            }
+        }
 
         return false;
     }
@@ -2034,7 +2057,7 @@ public class VolcanoLavaFlow implements Listener {
             VolcanoLavaCoolData coolData = entry.getValue();
 
             if (coolData.tickPassed()) {
-                coolData.ucoolDown();
+                coolData.coolDown();
                 removeTargets.add(block);
                 continue;
             }
