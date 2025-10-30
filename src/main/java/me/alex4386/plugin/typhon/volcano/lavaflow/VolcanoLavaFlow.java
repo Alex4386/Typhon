@@ -749,6 +749,8 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     private VolcanoLavaCoolData getLavaCoolData(Block block) {
+        if (block == null) return null;
+
         Map<Block, VolcanoLavaCoolData> lavaCoolHashMap = this.lavaCools.get(block.getChunk());
         if (lavaCoolHashMap == null) {
             return this.getCachedLavaCoolData(block);
@@ -1558,6 +1560,8 @@ public class VolcanoLavaFlow implements Listener {
     public boolean extendLava() {
         // get the terminal blocks (at the end of the
         Block targetBlock = this.getRandomTerminalBlock();
+        if (targetBlock == null) return false;
+
         VolcanoLavaCoolData data = this.getLavaCoolData(targetBlock);
         if (data == null) {
             return false;
