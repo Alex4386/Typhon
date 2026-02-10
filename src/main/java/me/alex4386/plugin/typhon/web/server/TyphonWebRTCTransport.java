@@ -168,10 +168,6 @@ public class TyphonWebRTCTransport {
             @Override
             public void onRenegotiationNeeded() {}
             @Override
-            public void onAddStream(MediaStream stream) {}
-            @Override
-            public void onRemoveStream(MediaStream stream) {}
-            @Override
             public void onTrack(RTCRtpTransceiver transceiver) {}
         });
 
@@ -297,10 +293,6 @@ public class TyphonWebRTCTransport {
             public void onIceConnectionChange(RTCIceConnectionState state) {}
             @Override
             public void onRenegotiationNeeded() {}
-            @Override
-            public void onAddStream(MediaStream stream) {}
-            @Override
-            public void onRemoveStream(MediaStream stream) {}
             @Override
             public void onTrack(RTCRtpTransceiver transceiver) {}
         });
@@ -444,9 +436,14 @@ public class TyphonWebRTCTransport {
 
                 List<String> responses = handleDataChannelMessage(message);
                 for (String response : responses) {
-                    byte[] responseBytes = response.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-                    java.nio.ByteBuffer responseBuffer = java.nio.ByteBuffer.wrap(responseBytes);
-                    dc.send(new RTCDataChannelBuffer(responseBuffer, false));
+                    try {
+                        byte[] responseBytes = response.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                        java.nio.ByteBuffer responseBuffer = java.nio.ByteBuffer.wrap(responseBytes);
+                        dc.send(new RTCDataChannelBuffer(responseBuffer, false));
+                    } catch (Exception e) {
+                        TyphonPlugin.logger.error(VolcanoLogClass.WEB,
+                                "Failed to send DataChannel response: " + e.getMessage());
+                    }
                 }
             }
         });

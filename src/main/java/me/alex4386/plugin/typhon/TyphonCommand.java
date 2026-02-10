@@ -522,7 +522,7 @@ public class TyphonCommand {
         }
 
         TyphonAPIServer apiServer = TyphonPlugin.apiServer;
-        if (apiServer == null || !apiServer.isRunning()) {
+        if (apiServer == null || !apiServer.isEnabled()) {
             TyphonMessage.error(sender, "Web features are not enabled. Configure web section in config.yml and reload.");
             return;
         }
@@ -554,23 +554,58 @@ public class TyphonCommand {
      * /typhon web — auto-select best transport. Prefer WebRTC if available.
      */
     private static void handleWebAutoCommand(CommandSender sender, TyphonAPIServer apiServer) {
-        boolean canWebRTC = apiServer.isWebrtcEnabled()
-                && sender instanceof Player
-                && apiServer.getWebrtcTransport() != null
-                && apiServer.getWebrtcTransport().isRunning();
-
-        if (canWebRTC) {
-            handleWebRTCCommand(sender, apiServer);
-        } else if (apiServer.isListening()) {
-            handleWebHTTPCommand(sender, apiServer);
-        } else {
-            sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Typhon Web]");
-            if (apiServer.isWebrtcEnabled()) {
-                sender.sendMessage(ChatColor.YELLOW + "WebRTC is only available to in-game players.");
-            } else {
-                TyphonMessage.error(sender, "No web transport is available.");
+        // Prefer WebRTC if available
+        if (apiServer.isWebrtcEnabled() && sender instanceof Player) {
+            TyphonWebRTCTransport transport = apiServer.getWebrtcTransport();
+            if (transport != null && transport.isAvailable() && transport.isRunning()) {
+                handleWebRTCCommand(sender, apiServer);
+                return;
             }
         }
+
+        // Fall back to HTTP
+        if (apiServer.isListening()) {
+            handleWebHTTPCommand(sender, apiServer);
+            return;
+        }
+
+        // Nothing worked — give a specific reason
+        sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Typhon Web]");
+        if (apiServer.isWebrtcEnabled() && sender instanceof Player) {
+            // WebRTC was preferred but not available — explain why
+            checkWebRTCTransport(sender, apiServer);
+        } else if (apiServer.isWebrtcEnabled()) {
+            sender.sendMessage(ChatColor.YELLOW + "WebRTC manual signaling is only available to in-game players.");
+        } else {
+            TyphonMessage.error(sender, "No web transport is configured. Enable web.connect.listen or web.connect.webrtc in config.yml.");
+        }
+    }
+
+    /**
+     * Check WebRTC transport status and send appropriate error messages.
+     * Returns the transport if ready, or null if an error was reported.
+     */
+    private static TyphonWebRTCTransport checkWebRTCTransport(CommandSender sender, TyphonAPIServer apiServer) {
+        if (!apiServer.isWebrtcEnabled()) {
+            TyphonMessage.error(sender, "WebRTC is not enabled in config.");
+            return null;
+        }
+
+        TyphonWebRTCTransport transport = apiServer.getWebrtcTransport();
+        if (transport == null) {
+            TyphonMessage.error(sender, "WebRTC transport was not initialized. Check server startup logs.");
+            return null;
+        }
+        if (!transport.isAvailable()) {
+            TyphonMessage.error(sender, "WebRTC native libraries (webrtc-java) are not installed. " +
+                    "Place the webrtc-java native jar for your platform in the server's classpath.");
+            return null;
+        }
+        if (!transport.isRunning()) {
+            TyphonMessage.error(sender, "WebRTC transport failed to start. Check server logs for details.");
+            return null;
+        }
+        return transport;
     }
 
     /**
@@ -582,16 +617,8 @@ public class TyphonCommand {
             return;
         }
 
-        if (!apiServer.isWebrtcEnabled()) {
-            TyphonMessage.error(sender, "WebRTC is not enabled in config.");
-            return;
-        }
-
-        TyphonWebRTCTransport webrtcTransport = apiServer.getWebrtcTransport();
-        if (webrtcTransport == null || !webrtcTransport.isRunning()) {
-            TyphonMessage.error(sender, "WebRTC transport is not running.");
-            return;
-        }
+        TyphonWebRTCTransport webrtcTransport = checkWebRTCTransport(sender, apiServer);
+        if (webrtcTransport == null) return;
 
         Player player = (Player) sender;
         sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Typhon Web]");
@@ -641,16 +668,8 @@ public class TyphonCommand {
             return;
         }
 
-        if (!apiServer.isWebrtcEnabled()) {
-            TyphonMessage.error(sender, "WebRTC is not enabled in config.");
-            return;
-        }
-
-        TyphonWebRTCTransport webrtcTransport = apiServer.getWebrtcTransport();
-        if (webrtcTransport == null || !webrtcTransport.isRunning()) {
-            TyphonMessage.error(sender, "WebRTC transport is not running.");
-            return;
-        }
+        TyphonWebRTCTransport webrtcTransport = checkWebRTCTransport(sender, apiServer);
+        if (webrtcTransport == null) return;
 
         Player player = (Player) sender;
 

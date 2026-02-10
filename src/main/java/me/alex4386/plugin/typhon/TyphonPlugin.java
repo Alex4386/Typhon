@@ -164,13 +164,15 @@ public final class TyphonPlugin extends JavaPlugin {
         events = new TyphonToolEvents();
         events.initialize();
 
-        // Start Web API server if enabled (listen section present = enabled)
-        if (plugin.getConfig().isConfigurationSection("web.connect.listen")) {
+        // Start Web API server if any web feature is configured
+        if (plugin.getConfig().isConfigurationSection("web")) {
             logger.log(VolcanoLogClass.WEB, "Initializing Web API server...");
             try {
                 apiServer = new TyphonAPIServer();
                 apiServer.loadConfig(plugin.getConfig());
-                apiServer.start();
+                if (apiServer.isEnabled()) {
+                    apiServer.start();
+                }
             } catch (NoClassDefFoundError e) {
                 logger.warn(VolcanoLogClass.WEB, "Javalin not found. Web API disabled.");
                 apiServer = null;
@@ -228,13 +230,15 @@ public final class TyphonPlugin extends JavaPlugin {
         if (apiServer != null) {
             apiServer.stop();
         }
-        if (plugin.getConfig().isConfigurationSection("web.connect.listen")) {
+        if (plugin.getConfig().isConfigurationSection("web")) {
             try {
                 if (apiServer == null) {
                     apiServer = new TyphonAPIServer();
                 }
                 apiServer.loadConfig(plugin.getConfig());
-                apiServer.start();
+                if (apiServer.isEnabled()) {
+                    apiServer.start();
+                }
             } catch (NoClassDefFoundError | Exception e) {
                 logger.warn(VolcanoLogClass.WEB, "Failed to restart Web API on reload: " + e.getMessage());
                 apiServer = null;
