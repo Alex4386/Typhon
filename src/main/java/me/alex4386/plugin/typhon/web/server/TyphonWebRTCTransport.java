@@ -8,7 +8,9 @@ import org.json.simple.parser.JSONParser;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -22,6 +24,19 @@ public class TyphonWebRTCTransport {
     private String stunServer;
     private PeerConnectionFactory factory;
     private final Set<RTCPeerConnection> activePeers = ConcurrentHashMap.newKeySet();
+
+    private static final long SESSION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+    private final Map<UUID, PendingSession> pendingSessions = new ConcurrentHashMap<>();
+
+    private static class PendingSession {
+        final RTCPeerConnection pc;
+        final long createdAt;
+
+        PendingSession(RTCPeerConnection pc) {
+            this.pc = pc;
+            this.createdAt = System.currentTimeMillis();
+        }
+    }
 
     public TyphonWebRTCTransport(String stunServer) {
         this.stunServer = stunServer;
@@ -41,6 +56,11 @@ public class TyphonWebRTCTransport {
         return stunServer;
     }
 
+    /**
+     * Start the WebRTC transport.
+     * @param app Javalin instance for HTTP signaling endpoint, or null if HTTP listener is disabled.
+     * @param router API router for handling DataChannel requests.
+     */
     public void start(Javalin app, TyphonAPIRouter router) {
         this.router = router;
 
@@ -52,7 +72,9 @@ public class TyphonWebRTCTransport {
 
         try {
             factory = new PeerConnectionFactory();
-            registerSignalingEndpoint(app);
+            if (app != null) {
+                registerSignalingEndpoint(app);
+            }
             running = true;
             TyphonPlugin.logger.log(VolcanoLogClass.WEB,
                     "WebRTC transport started (STUN: " + stunServer + ").");
@@ -225,6 +247,181 @@ public class TyphonWebRTCTransport {
         return localDesc.sdp;
     }
 
+    /**
+     * Server-offers-first: create PeerConnection + DataChannel + offer.
+     * The offer SDP is returned (raw, not compressed). Caller should compress it.
+     * The PeerConnection is stored as a pending session keyed by player UUID.
+     */
+    @SuppressWarnings("unchecked")
+    public String createOffer(UUID playerUuid) throws Exception {
+        if (!available || factory == null) {
+            throw new IllegalStateException("WebRTC is not available");
+        }
+
+        // Clean up any existing pending session for this player
+        PendingSession existing = pendingSessions.remove(playerUuid);
+        if (existing != null) {
+            try { existing.pc.close(); } catch (Exception e) { /* ignore */ }
+            activePeers.remove(existing.pc);
+        }
+        cleanExpiredSessions();
+
+        RTCConfiguration config = new RTCConfiguration();
+        RTCIceServer iceServer = new RTCIceServer();
+        iceServer.urls = List.of("stun:" + stunServer);
+        config.iceServers = List.of(iceServer);
+
+        CountDownLatch iceLatch = new CountDownLatch(1);
+        CountDownLatch offerLatch = new CountDownLatch(1);
+        final Exception[] errorHolder = new Exception[1];
+
+        RTCPeerConnection pc = factory.createPeerConnection(config, new PeerConnectionObserver() {
+            @Override
+            public void onIceCandidate(RTCIceCandidate candidate) {}
+
+            @Override
+            public void onIceGatheringChange(RTCIceGatheringState state) {
+                if (state == RTCIceGatheringState.COMPLETE) {
+                    iceLatch.countDown();
+                }
+            }
+
+            @Override
+            public void onDataChannel(RTCDataChannel dc) {}
+
+            @Override
+            public void onConnectionChange(RTCPeerConnectionState state) {}
+            @Override
+            public void onSignalingChange(RTCSignalingState state) {}
+            @Override
+            public void onIceConnectionChange(RTCIceConnectionState state) {}
+            @Override
+            public void onRenegotiationNeeded() {}
+            @Override
+            public void onAddStream(MediaStream stream) {}
+            @Override
+            public void onRemoveStream(MediaStream stream) {}
+            @Override
+            public void onTrack(RTCRtpTransceiver transceiver) {}
+        });
+
+        activePeers.add(pc);
+
+        // Create DataChannel on the server side — browser will receive it via ondatachannel
+        RTCDataChannelInit dcInit = new RTCDataChannelInit();
+        dcInit.ordered = true;
+        RTCDataChannel dc = pc.createDataChannel("typhon", dcInit);
+        setupDataChannel(dc);
+
+        // Create offer
+        pc.createOffer(new RTCOfferOptions(), new CreateSessionDescriptionObserver() {
+            @Override
+            public void onSuccess(RTCSessionDescription offer) {
+                pc.setLocalDescription(offer, new SetSessionDescriptionObserver() {
+                    @Override
+                    public void onSuccess() {
+                        offerLatch.countDown();
+                    }
+                    @Override
+                    public void onFailure(String error) {
+                        errorHolder[0] = new Exception("Failed to set local description: " + error);
+                        offerLatch.countDown();
+                        iceLatch.countDown();
+                    }
+                });
+            }
+            @Override
+            public void onFailure(String error) {
+                errorHolder[0] = new Exception("Failed to create offer: " + error);
+                offerLatch.countDown();
+                iceLatch.countDown();
+            }
+        });
+
+        // Wait for offer creation
+        if (!offerLatch.await(10, TimeUnit.SECONDS)) {
+            activePeers.remove(pc);
+            pc.close();
+            throw new Exception("Timeout waiting for offer creation");
+        }
+        if (errorHolder[0] != null) {
+            activePeers.remove(pc);
+            pc.close();
+            throw errorHolder[0];
+        }
+
+        // Wait for ICE gathering
+        if (!iceLatch.await(10, TimeUnit.SECONDS)) {
+            TyphonPlugin.logger.warn(VolcanoLogClass.WEB, "ICE gathering timed out, using partial candidates");
+        }
+
+        RTCSessionDescription localDesc = pc.getLocalDescription();
+        if (localDesc == null) {
+            activePeers.remove(pc);
+            pc.close();
+            throw new Exception("No local description available");
+        }
+
+        // Store as pending session
+        pendingSessions.put(playerUuid, new PendingSession(pc));
+
+        return localDesc.sdp;
+    }
+
+    /**
+     * Server-offers-first: accept the browser's answer for a pending session.
+     */
+    public void acceptAnswer(UUID playerUuid, String answerSdp) throws Exception {
+        PendingSession session = pendingSessions.remove(playerUuid);
+        if (session == null) {
+            throw new IllegalStateException("No pending WebRTC session. Run /typhon web first.");
+        }
+
+        if (System.currentTimeMillis() - session.createdAt > SESSION_TIMEOUT_MS) {
+            try { session.pc.close(); } catch (Exception e) { /* ignore */ }
+            activePeers.remove(session.pc);
+            throw new IllegalStateException("WebRTC session expired. Run /typhon web again.");
+        }
+
+        CountDownLatch latch = new CountDownLatch(1);
+        final Exception[] errorHolder = new Exception[1];
+
+        RTCSessionDescription answer = new RTCSessionDescription(RTCSdpType.ANSWER, answerSdp);
+        session.pc.setRemoteDescription(answer, new SetSessionDescriptionObserver() {
+            @Override
+            public void onSuccess() {
+                latch.countDown();
+            }
+            @Override
+            public void onFailure(String error) {
+                errorHolder[0] = new Exception("Failed to set remote description: " + error);
+                latch.countDown();
+            }
+        });
+
+        if (!latch.await(10, TimeUnit.SECONDS)) {
+            throw new Exception("Timeout waiting to set answer");
+        }
+
+        if (errorHolder[0] != null) {
+            activePeers.remove(session.pc);
+            session.pc.close();
+            throw errorHolder[0];
+        }
+    }
+
+    private void cleanExpiredSessions() {
+        long now = System.currentTimeMillis();
+        pendingSessions.entrySet().removeIf(entry -> {
+            if (now - entry.getValue().createdAt > SESSION_TIMEOUT_MS) {
+                try { entry.getValue().pc.close(); } catch (Exception e) { /* ignore */ }
+                activePeers.remove(entry.getValue().pc);
+                return true;
+            }
+            return false;
+        });
+    }
+
     private void setupDataChannel(RTCDataChannel dc) {
         dc.registerObserver(new RTCDataChannelObserver() {
             @Override
@@ -323,6 +520,12 @@ public class TyphonWebRTCTransport {
 
     public void stop() {
         if (!running) return;
+
+        // Close pending sessions
+        for (PendingSession session : pendingSessions.values()) {
+            try { session.pc.close(); } catch (Exception e) { /* ignore */ }
+        }
+        pendingSessions.clear();
 
         // Close all active peer connections
         for (RTCPeerConnection pc : activePeers) {

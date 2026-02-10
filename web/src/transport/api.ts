@@ -107,21 +107,22 @@ export function resetWebRTCState(): void {
 }
 
 /**
- * Create a manual WebRTC transport and generate an offer.
- * Returns the compressed offer string to copy-paste into a Minecraft command.
+ * Server-offers-first: process a compressed offer from the server.
+ * Returns the transport and compressed answer string for the user to copy.
  */
-export async function createManualOffer(): Promise<{ transport: WebRTCTransport; offer: string }> {
+export async function processServerOffer(compressedOffer: string, stunServer?: string): Promise<{ transport: WebRTCTransport; answer: string }> {
   resetWebRTCState();
-  const transport = new WebRTCTransport(''); // no signaling URL needed for manual mode
-  const offer = await transport.createOffer();
-  return { transport, offer };
+  const transport = new WebRTCTransport('', stunServer);
+  const answer = await transport.acceptOffer(compressedOffer);
+  return { transport, answer };
 }
 
 /**
- * Accept a compressed answer and finalize the manual WebRTC connection.
+ * After processServerOffer(), wait for the DataChannel to open.
+ * Registers the transport as the active WebRTC connection.
  */
-export async function acceptManualAnswer(transport: WebRTCTransport, compressedAnswer: string): Promise<void> {
-  await transport.acceptAnswer(compressedAnswer);
+export async function finalizeServerOffer(transport: WebRTCTransport): Promise<void> {
+  await transport.waitForConnection();
   _webrtcTransport = transport;
   _webrtcAdapter = new WebRTCAdapter(transport);
 }

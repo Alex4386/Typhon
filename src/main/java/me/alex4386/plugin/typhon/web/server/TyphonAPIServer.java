@@ -15,7 +15,7 @@ public class TyphonAPIServer {
     private TyphonAPIAuth auth;
     private TyphonWebRTCTransport webrtcTransport;
 
-    private boolean enabled = false;
+    private boolean listenEnabled = false;
     private String host = "0.0.0.0";
     private int port = 18080;
     private boolean webrtcEnabled = false;
@@ -25,8 +25,7 @@ public class TyphonAPIServer {
     private boolean issueTempToken = true;
 
     public void loadConfig(FileConfiguration config) {
-        // web.connect.listen section: presence = enabled, absence = disabled
-        this.enabled = config.isConfigurationSection("web.connect.listen");
+        this.listenEnabled = config.getBoolean("web.connect.listen.enable", false);
         this.host = config.getString("web.connect.listen.host", "0.0.0.0");
         this.port = config.getInt("web.connect.listen.port", 18080);
 
@@ -53,68 +52,71 @@ public class TyphonAPIServer {
     }
 
     public void start() {
-        if (!enabled) return;
+        if (!listenEnabled && !webrtcEnabled) return;
 
         auth = auth != null ? auth : new TyphonAPIAuth();
         router = new TyphonAPIRouter(auth);
 
-        app = Javalin.create(config -> {
-            config.showJavalinBanner = false;
+        // Start HTTP listener if enabled
+        if (listenEnabled) {
+            app = Javalin.create(config -> {
+                config.showJavalinBanner = false;
+                if (serveBundled) {
+                    config.staticFiles.add("/web", Location.CLASSPATH);
+                }
+                config.bundledPlugins.enableCors(cors -> cors.addRule(rule -> rule.anyHost()));
+            });
+
+            // Root redirect to web dashboard (only if serving bundled UI)
             if (serveBundled) {
-                config.staticFiles.add("/web", Location.CLASSPATH);
+                app.get("/", ctx -> ctx.redirect("/web/"));
             }
-            config.bundledPlugins.enableCors(cors -> cors.addRule(rule -> rule.anyHost()));
-        });
 
-        // Root redirect to web dashboard (only if serving bundled UI)
-        if (serveBundled) {
-            app.get("/", ctx -> ctx.redirect("/web/"));
+            // Before handler for auth
+            app.before("/api/*", ctx -> {
+                TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
+                if (!auth.authenticate(request)) {
+                    throw new UnauthorizedResponse("Unauthorized");
+                }
+            });
+
+            // Register Javalin routes that delegate to the router
+            app.get("/api/*", ctx -> {
+                TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
+                TyphonAPIResponse response = router.dispatch(request);
+                response.applyToJavalinContext(ctx);
+            });
+
+            app.post("/api/*", ctx -> {
+                TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
+                TyphonAPIResponse response = router.dispatch(request);
+                response.applyToJavalinContext(ctx);
+            });
+
+            app.put("/api/*", ctx -> {
+                TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
+                TyphonAPIResponse response = router.dispatch(request);
+                response.applyToJavalinContext(ctx);
+            });
+
+            app.delete("/api/*", ctx -> {
+                TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
+                TyphonAPIResponse response = router.dispatch(request);
+                response.applyToJavalinContext(ctx);
+            });
+
+            try {
+                app.start(host, port);
+                TyphonPlugin.logger.log(VolcanoLogClass.WEB,
+                        "API server started on " + host + ":" + port);
+            } catch (Exception e) {
+                TyphonPlugin.logger.error(VolcanoLogClass.WEB,
+                        "Failed to start API server: " + e.getMessage());
+                app = null;
+            }
         }
 
-        // Before handler for auth
-        app.before("/api/*", ctx -> {
-            TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
-            if (!auth.authenticate(request)) {
-                throw new UnauthorizedResponse("Unauthorized");
-            }
-        });
-
-        // Register Javalin routes that delegate to the router
-        app.get("/api/*", ctx -> {
-            TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
-            TyphonAPIResponse response = router.dispatch(request);
-            response.applyToJavalinContext(ctx);
-        });
-
-        app.post("/api/*", ctx -> {
-            TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
-            TyphonAPIResponse response = router.dispatch(request);
-            response.applyToJavalinContext(ctx);
-        });
-
-        app.put("/api/*", ctx -> {
-            TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
-            TyphonAPIResponse response = router.dispatch(request);
-            response.applyToJavalinContext(ctx);
-        });
-
-        app.delete("/api/*", ctx -> {
-            TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
-            TyphonAPIResponse response = router.dispatch(request);
-            response.applyToJavalinContext(ctx);
-        });
-
-        try {
-            app.start(host, port);
-            TyphonPlugin.logger.log(VolcanoLogClass.WEB,
-                    "API server started on " + host + ":" + port);
-        } catch (Exception e) {
-            TyphonPlugin.logger.error(VolcanoLogClass.WEB,
-                    "Failed to start API server: " + e.getMessage());
-            return;
-        }
-
-        // Start WebRTC transport if enabled
+        // Start WebRTC transport if enabled (independently of HTTP listener)
         if (webrtcEnabled) {
             try {
                 webrtcTransport = new TyphonWebRTCTransport(stunServer);
@@ -152,10 +154,20 @@ public class TyphonAPIServer {
     }
 
     public boolean isEnabled() {
-        return enabled;
+        return listenEnabled || webrtcEnabled;
     }
 
+    /**
+     * True if any web component is active (HTTP listener or WebRTC transport).
+     */
     public boolean isRunning() {
+        return app != null || (webrtcTransport != null && webrtcTransport.isRunning());
+    }
+
+    /**
+     * True if the HTTP listener is active and bound to a port.
+     */
+    public boolean isListening() {
         return app != null;
     }
 

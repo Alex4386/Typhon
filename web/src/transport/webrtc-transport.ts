@@ -22,6 +22,7 @@ export interface TransportResponse {
 
 export class WebRTCTransport {
   private signalingUrl: string;
+  private stunServer: string;
   private pc: RTCPeerConnection | null = null;
   private dc: RTCDataChannel | null = null;
   connected = false;
@@ -33,9 +34,15 @@ export class WebRTCTransport {
   private _currentReject: ((reason: Error) => void) | null = null;
   private _headerMsg: Record<string, unknown> | null = null;
   private _pingInterval: ReturnType<typeof setInterval> | null = null;
+  private _dcPromise: Promise<RTCDataChannel> | null = null;
 
-  constructor(signalingUrl: string) {
+  constructor(signalingUrl: string, stunServer: string = 'stun.l.google.com:19302') {
     this.signalingUrl = signalingUrl;
+    this.stunServer = stunServer;
+  }
+
+  private _iceServers(): RTCIceServer[] {
+    return [{ urls: 'stun:' + this.stunServer }];
   }
 
   async connect(): Promise<void> {
@@ -53,7 +60,7 @@ export class WebRTCTransport {
 
     try {
       this.pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+        iceServers: this._iceServers(),
       });
 
       this.dc = this.pc.createDataChannel('typhon', { ordered: true });
@@ -101,10 +108,12 @@ export class WebRTCTransport {
   }
 
   /**
-   * Manual signaling: create an offer and return a compressed SDP string.
-   * Does NOT send anywhere — the user copies the string to a Minecraft command.
+   * Server-offers-first: accept a compressed offer from the server.
+   * Sets the remote description, creates an answer, gathers ICE candidates,
+   * and returns the compressed answer SDP string for the user to copy.
+   * The DataChannel is received via ondatachannel (server created it).
    */
-  async createOffer(): Promise<string> {
+  async acceptOffer(compressedOffer: string): Promise<string> {
     if (this.connected || this.connecting) {
       throw new Error('Already connected or connecting');
     }
@@ -113,19 +122,28 @@ export class WebRTCTransport {
 
     try {
       this.pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+        iceServers: this._iceServers(),
       });
 
-      this.dc = this.pc.createDataChannel('typhon', { ordered: true });
-      this._setupDataChannel(this.dc);
+      // Listen for DataChannel from server (server created it)
+      this._dcPromise = new Promise<RTCDataChannel>((resolve) => {
+        this.pc!.ondatachannel = (event) => {
+          resolve(event.channel);
+        };
+      });
 
-      const offer = await this.pc.createOffer();
-      await this.pc.setLocalDescription(offer);
+      // Set remote description (server's offer)
+      const offerSdp = await decompress(compressedOffer);
+      await this.pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerSdp }));
+
+      // Create answer
+      const answer = await this.pc.createAnswer();
+      await this.pc.setLocalDescription(answer);
 
       await this._waitForICEGathering();
 
-      const sdp = this.pc.localDescription!.sdp;
-      return await compress(sdp);
+      const answerSdp = this.pc.localDescription!.sdp;
+      return await compress(answerSdp);
     } catch (e) {
       this.connecting = false;
       this.disconnect();
@@ -134,23 +152,24 @@ export class WebRTCTransport {
   }
 
   /**
-   * Manual signaling: accept a compressed answer SDP from the server.
-   * Completes the WebRTC handshake started by createOffer().
+   * After acceptOffer(), wait for the DataChannel to open.
+   * Call this after the user has copied the answer back to the server.
    */
-  async acceptAnswer(compressedAnswer: string): Promise<void> {
-    if (!this.pc || !this.dc) {
-      throw new Error('No pending offer — call createOffer() first');
+  async waitForConnection(): Promise<void> {
+    if (!this.pc || !this._dcPromise) {
+      throw new Error('No pending connection — call acceptOffer() first');
     }
 
     try {
-      const answerSdp = await decompress(compressedAnswer);
-      await this.pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: answerSdp }));
+      this.dc = await this._dcPromise;
+      this._setupDataChannel(this.dc);
 
       await this._waitForDataChannel();
 
       this.connected = true;
       this.connecting = false;
       this._startPingInterval();
+      this._dcPromise = null;
     } catch (e) {
       this.connecting = false;
       this.disconnect();
