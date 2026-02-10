@@ -12,6 +12,13 @@ import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoConstructionStatus;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
+import me.alex4386.plugin.typhon.web.server.TyphonAPIServer;
+import me.alex4386.plugin.typhon.web.server.TyphonSDPCodec;
+import me.alex4386.plugin.typhon.web.server.TyphonWebRTCTransport;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.*;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -436,6 +443,9 @@ public class TyphonCommand {
                         }
                         break;
                     }
+                    case WEB:
+                        handleWebCommand(sender, args);
+                        break;
                     default:
                         break;
                 }
@@ -501,6 +511,118 @@ public class TyphonCommand {
         }
 
         return true;
+    }
+
+    private static final String TYPHON_UI_BASE = "https://typhon-ui.alex4386.me";
+
+    public static void handleWebCommand(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("typhon.web")) {
+            TyphonMessage.error(sender, "You don't have enough permission!");
+            return;
+        }
+
+        TyphonAPIServer apiServer = TyphonPlugin.apiServer;
+        if (apiServer == null || !apiServer.isRunning()) {
+            TyphonMessage.error(sender, "Web API server is not running. Add web.connect.listen section in config.yml and reload.");
+            return;
+        }
+
+        // /typhon web offer <compressed-sdp>
+        if (args.length >= 3 && "offer".equalsIgnoreCase(args[1])) {
+            handleWebOfferCommand(sender, args, apiServer);
+            return;
+        }
+
+        // Default: show dashboard URL
+        String serverUrl = apiServer.getPublicUrl();
+        boolean hasPlaceholder = serverUrl.contains("<your-server-ip>");
+
+        sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Typhon Web]");
+
+        // If bundled UI is served, show the direct link
+        if (apiServer.isServeBundled()) {
+            String bundledUrl = serverUrl + "/web/";
+            if (!hasPlaceholder) {
+                sender.sendMessage(ChatColor.GRAY + "Dashboard:");
+                Component bundledLink = Component.text(bundledUrl)
+                        .color(NamedTextColor.AQUA)
+                        .decorate(TextDecoration.UNDERLINED)
+                        .clickEvent(ClickEvent.openUrl(bundledUrl));
+                sender.sendMessage(bundledLink);
+            } else {
+                sender.sendMessage(ChatColor.GRAY + "Dashboard: " + bundledUrl);
+            }
+        }
+
+        // Build connect URL: WebRTC auto-connect with temp token, or HTTP fallback
+        if (apiServer.getAuth().isIssueTempTokenEnabled()) {
+            String token = apiServer.getAuth().createTempToken(5 * 60 * 1000L);
+            String connectUrl = TYPHON_UI_BASE + "/#/connect?server=" + serverUrl + "&token=" + token;
+
+            sender.sendMessage(ChatColor.GRAY + "Click below to open remote dashboard (expires in 5 min):");
+
+            Component link = Component.text("[Open Typhon Dashboard]")
+                    .color(NamedTextColor.GREEN)
+                    .decorate(TextDecoration.BOLD)
+                    .clickEvent(ClickEvent.openUrl(connectUrl));
+            sender.sendMessage(link);
+
+            if (hasPlaceholder) {
+                sender.sendMessage(ChatColor.YELLOW + "Note: Replace <your-server-ip> with your server's public IP address.");
+            }
+        } else {
+            sender.sendMessage(ChatColor.GRAY + "Temp tokens disabled. Connect manually at:");
+            sender.sendMessage(ChatColor.AQUA + TYPHON_UI_BASE);
+        }
+
+        // Manual WebRTC hint
+        if (apiServer.isWebrtcEnabled()) {
+            sender.sendMessage("");
+            sender.sendMessage(ChatColor.GRAY + "For manual WebRTC: open the dashboard, click \"Manual WebRTC\", then run:");
+            sender.sendMessage(ChatColor.YELLOW + "/typhon web offer <code>");
+        }
+    }
+
+    private static void handleWebOfferCommand(CommandSender sender, String[] args, TyphonAPIServer apiServer) {
+        if (!apiServer.isWebrtcEnabled()) {
+            TyphonMessage.error(sender, "WebRTC is not enabled in config.");
+            return;
+        }
+
+        TyphonWebRTCTransport webrtcTransport = apiServer.getWebrtcTransport();
+        if (webrtcTransport == null || !webrtcTransport.isAvailable()) {
+            TyphonMessage.error(sender, "WebRTC native libraries are not available.");
+            return;
+        }
+
+        String compressedOffer = args[2];
+
+        sender.sendMessage(ChatColor.GRAY + "Processing WebRTC offer...");
+
+        // Run async since WebRTC operations block
+        Bukkit.getScheduler().runTaskAsynchronously(TyphonPlugin.plugin, () -> {
+            try {
+                String offerSdp = TyphonSDPCodec.decompress(compressedOffer);
+                String answerSdp = webrtcTransport.handleOffer(offerSdp);
+                String compressedAnswer = TyphonSDPCodec.compress(answerSdp);
+
+                // Send result on main thread
+                Bukkit.getScheduler().runTask(TyphonPlugin.plugin, () -> {
+                    sender.sendMessage(ChatColor.GREEN + "WebRTC answer generated!");
+                    sender.sendMessage(ChatColor.GRAY + "Click below to copy the answer, then paste it in the browser:");
+
+                    Component copyButton = Component.text("[Click to copy answer]")
+                            .color(NamedTextColor.AQUA)
+                            .decorate(TextDecoration.BOLD)
+                            .clickEvent(ClickEvent.copyToClipboard(compressedAnswer));
+                    sender.sendMessage(copyButton);
+                });
+            } catch (Exception e) {
+                Bukkit.getScheduler().runTask(TyphonPlugin.plugin, () -> {
+                    TyphonMessage.error(sender, "Failed to process WebRTC offer: " + e.getMessage());
+                });
+            }
+        });
     }
 
     public static boolean hasPermission(CommandSender sender, String actionName) {

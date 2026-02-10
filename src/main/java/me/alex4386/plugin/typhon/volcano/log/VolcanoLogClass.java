@@ -27,6 +27,7 @@ public enum VolcanoLogClass {
     TREMOR("Tremor"),
     UTILS("Utils"),
     VENT("Vent"),
+    WEB("Web API"),
     ;
 
     private final String string;

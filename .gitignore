@@ -10,3 +10,6 @@ target/
 
 google-java-formatter.jar
 
+web/node_modules/
+web/dist/
+

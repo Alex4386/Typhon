@@ -18,5 +18,8 @@ softdepend: [BlueMap, WorldGuard, CoreProtect]
 permissions:
   typhon.*:
     description: Allow using volcano plugins
+  typhon.web:
+    description: Allow using the Typhon web control panel
+    default: op
   volcano.*:
     description: Allow using volcano plugins

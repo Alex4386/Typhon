@@ -24,3 +24,24 @@ worldGuard:
   respectRegions: true
   # Permission to bypass WorldGuard protection for volcano actions
   bypassPermission: "typhon.worldguard.bypass"
+
+web:
+  connect:
+    listen:           # <- remove listen section entirely to disable binding port for api server
+      host: 0.0.0.0   # defaults to 0.0.0.0
+      port: 18080     #
+      #publicUrl: https://typhon-api.my-server.com   # <- use this if your public point is different (i.e. CF ArgoTunnel)
+    webrtc:
+      enable: true
+      stunServer: stun.l.google.com:19302
+
+  ui:
+    serveBundled: false                        # whether bundled ui should be served from api server from path /web
+
+  api: # Authentication - else the people with permission should
+    auth:
+      tokens:
+      #  - AuthorizedToken
+      #  - username: username
+      #    password: password
+      issueTempToken: true      # when person runs /typhon web allow providing temporary token for that session

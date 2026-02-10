@@ -12,7 +12,8 @@ public enum TyphonCommandAction {
     CONSTRUCTIONS("constructions", "", "Show current constructions running by typhon"),
     GAIA("gaia", "<?subcmd>", "Show gaia information"),
     SUCCESSOR("successor", "", "Give a tool for primary succession"),
-    DEBUG("debug", "", "Some undocumented debug feature for testing functions.");
+    DEBUG("debug", "", "Some undocumented debug feature for testing functions."),
+    WEB("web", "[offer <data>]", "Open the Typhon web control panel");
 
     String cmdline;
     String usage;

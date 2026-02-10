@@ -12,6 +12,7 @@ import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogger;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoConstructionStatus;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
+import me.alex4386.plugin.typhon.web.server.TyphonAPIServer;
 
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -41,6 +42,8 @@ public final class TyphonPlugin extends JavaPlugin {
     public static boolean enableBlueMap = true;
     public static TyphonWorldGuardUtils worldGuard = null;
     public static TyphonCoreProtectUtils coreProtect = null;
+
+    public static TyphonAPIServer apiServer = null;
 
     public static boolean isShuttingdown = false;
 
@@ -161,6 +164,22 @@ public final class TyphonPlugin extends JavaPlugin {
         events = new TyphonToolEvents();
         events.initialize();
 
+        // Start Web API server if enabled (listen section present = enabled)
+        if (plugin.getConfig().isConfigurationSection("web.connect.listen")) {
+            logger.log(VolcanoLogClass.WEB, "Initializing Web API server...");
+            try {
+                apiServer = new TyphonAPIServer();
+                apiServer.loadConfig(plugin.getConfig());
+                apiServer.start();
+            } catch (NoClassDefFoundError e) {
+                logger.warn(VolcanoLogClass.WEB, "Javalin not found. Web API disabled.");
+                apiServer = null;
+            } catch (Exception e) {
+                logger.error(VolcanoLogClass.WEB, "Failed to start Web API: " + e.getMessage());
+                apiServer = null;
+            }
+        }
+
         logger.log(VolcanoLogClass.INIT, "Initialization Complete!");
     }
 
@@ -205,6 +224,25 @@ public final class TyphonPlugin extends JavaPlugin {
         logger.debug(VolcanoLogClass.CORE, "Reloading Default Config...");
         loadConfig();
 
+        // Restart API server on reload
+        if (apiServer != null) {
+            apiServer.stop();
+        }
+        if (plugin.getConfig().isConfigurationSection("web.connect.listen")) {
+            try {
+                if (apiServer == null) {
+                    apiServer = new TyphonAPIServer();
+                }
+                apiServer.loadConfig(plugin.getConfig());
+                apiServer.start();
+            } catch (NoClassDefFoundError | Exception e) {
+                logger.warn(VolcanoLogClass.WEB, "Failed to restart Web API on reload: " + e.getMessage());
+                apiServer = null;
+            }
+        } else if (apiServer != null) {
+            apiServer = null;
+        }
+
         logger.log(VolcanoLogClass.CORE, "Reload Complete!");
     }
 
@@ -224,12 +262,23 @@ public final class TyphonPlugin extends JavaPlugin {
             config.set("coreProtect.enable", true);
             plugin.saveConfig();
         }
+
+        // Reload API server config
+        if (apiServer != null) {
+            apiServer.loadConfig(config);
+        }
     }
 
     @Override
     public void onDisable() {
         logger.debug(VolcanoLogClass.CORE, "Disabling Plugin...");
         isShuttingdown = true;
+
+        // Stop Web API server
+        if (apiServer != null) {
+            apiServer.stop();
+            apiServer = null;
+        }
 
         TyphonGaia.shutdown();
 

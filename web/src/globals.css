@@ -1,0 +1,65 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: oklch(0.145 0.02 260);
+  --color-foreground: oklch(0.9 0.01 260);
+  --color-card: oklch(0.18 0.025 250);
+  --color-card-foreground: oklch(0.9 0.01 260);
+  --color-popover: oklch(0.18 0.025 250);
+  --color-popover-foreground: oklch(0.9 0.01 260);
+  --color-primary: oklch(0.55 0.2 15);
+  --color-primary-foreground: oklch(0.98 0 0);
+  --color-secondary: oklch(0.25 0.04 250);
+  --color-secondary-foreground: oklch(0.9 0.01 260);
+  --color-muted: oklch(0.22 0.03 250);
+  --color-muted-foreground: oklch(0.6 0.01 260);
+  --color-accent: oklch(0.25 0.04 250);
+  --color-accent-foreground: oklch(0.9 0.01 260);
+  --color-destructive: oklch(0.55 0.2 25);
+  --color-destructive-foreground: oklch(0.98 0 0);
+  --color-border: oklch(0.3 0.04 250);
+  --color-input: oklch(0.3 0.04 250);
+  --color-ring: oklch(0.55 0.2 15);
+  --radius: 0.5rem;
+
+  --color-success: oklch(0.6 0.15 150);
+  --color-success-foreground: oklch(0.98 0 0);
+  --color-info: oklch(0.6 0.12 230);
+  --color-info-foreground: oklch(0.98 0 0);
+
+  --color-sidebar-ring: var(--color-ring);
+  --color-sidebar-border: var(--color-border);
+  --color-sidebar-accent-foreground: var(--color-accent-foreground);
+  --color-sidebar-accent: var(--color-accent);
+  --color-sidebar-primary-foreground: var(--color-primary-foreground);
+  --color-sidebar-primary: var(--color-primary);
+  --color-sidebar-foreground: var(--color-foreground);
+  --color-sidebar: var(--color-card);
+  --color-chart-1: oklch(0.488 0.243 264.376);
+  --color-chart-2: oklch(0.696 0.17 162.48);
+  --color-chart-3: oklch(0.769 0.188 70.08);
+  --color-chart-4: oklch(0.627 0.265 303.9);
+  --color-chart-5: oklch(0.645 0.246 16.439);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    min-height: 100vh;
+  }
+}
