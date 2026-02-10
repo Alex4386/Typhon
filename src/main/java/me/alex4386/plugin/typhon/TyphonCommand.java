@@ -13,8 +13,6 @@ import me.alex4386.plugin.typhon.volcano.utils.VolcanoConstructionStatus;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 import me.alex4386.plugin.typhon.web.server.TyphonAPIServer;
-import me.alex4386.plugin.typhon.web.server.TyphonSDPCodec;
-import me.alex4386.plugin.typhon.web.server.TyphonWebRTCTransport;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -527,180 +525,12 @@ public class TyphonCommand {
             return;
         }
 
-        String subCommand = args.length >= 2 ? args[1].toLowerCase() : "";
-
-        switch (subCommand) {
-            case "webrtc":
-                handleWebRTCCommand(sender, apiServer);
-                return;
-            case "webrtc-answer":
-                if (args.length < 3) {
-                    TyphonMessage.error(sender, "Usage: /typhon web webrtc-answer <data>");
-                    return;
-                }
-                handleWebRTCAnswerCommand(sender, args[2], apiServer);
-                return;
-            case "http":
-                handleWebHTTPCommand(sender, apiServer);
-                return;
-            default:
-                // /typhon web (no subcommand) — auto-select, prefer WebRTC
-                handleWebAutoCommand(sender, apiServer);
-                return;
-        }
-    }
-
-    /**
-     * /typhon web — auto-select best transport. Prefer WebRTC if available.
-     */
-    private static void handleWebAutoCommand(CommandSender sender, TyphonAPIServer apiServer) {
-        // Prefer WebRTC if available
-        if (apiServer.isWebrtcEnabled() && sender instanceof Player) {
-            TyphonWebRTCTransport transport = apiServer.getWebrtcTransport();
-            if (transport != null && transport.isAvailable() && transport.isRunning()) {
-                handleWebRTCCommand(sender, apiServer);
-                return;
-            }
-        }
-
-        // Fall back to HTTP
-        if (apiServer.isListening()) {
-            handleWebHTTPCommand(sender, apiServer);
+        if (!apiServer.isRunning()) {
+            TyphonMessage.error(sender, "Web API server is not running. Check server logs for errors.");
             return;
         }
 
-        // Nothing worked — give a specific reason
         sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Typhon Web]");
-        if (apiServer.isWebrtcEnabled() && sender instanceof Player) {
-            // WebRTC was preferred but not available — explain why
-            checkWebRTCTransport(sender, apiServer);
-        } else if (apiServer.isWebrtcEnabled()) {
-            sender.sendMessage(ChatColor.YELLOW + "WebRTC manual signaling is only available to in-game players.");
-        } else {
-            TyphonMessage.error(sender, "No web transport is configured. Enable web.connect.listen or web.connect.webrtc in config.yml.");
-        }
-    }
-
-    /**
-     * Check WebRTC transport status and send appropriate error messages.
-     * Returns the transport if ready, or null if an error was reported.
-     */
-    private static TyphonWebRTCTransport checkWebRTCTransport(CommandSender sender, TyphonAPIServer apiServer) {
-        if (!apiServer.isWebrtcEnabled()) {
-            TyphonMessage.error(sender, "WebRTC is not enabled in config.");
-            return null;
-        }
-
-        TyphonWebRTCTransport transport = apiServer.getWebrtcTransport();
-        if (transport == null) {
-            TyphonMessage.error(sender, "WebRTC transport was not initialized. Check server startup logs.");
-            return null;
-        }
-        if (!transport.isAvailable()) {
-            TyphonMessage.error(sender, "WebRTC native libraries (webrtc-java) are not installed. " +
-                    "Place the webrtc-java native jar for your platform in the server's classpath.");
-            return null;
-        }
-        if (!transport.isRunning()) {
-            TyphonMessage.error(sender, "WebRTC transport failed to start. Check server logs for details.");
-            return null;
-        }
-        return transport;
-    }
-
-    /**
-     * /typhon web webrtc — generate offer and show clickable URL.
-     */
-    private static void handleWebRTCCommand(CommandSender sender, TyphonAPIServer apiServer) {
-        if (!(sender instanceof Player)) {
-            TyphonMessage.error(sender, "WebRTC manual signaling is only available to players.");
-            return;
-        }
-
-        TyphonWebRTCTransport webrtcTransport = checkWebRTCTransport(sender, apiServer);
-        if (webrtcTransport == null) return;
-
-        Player player = (Player) sender;
-        sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Typhon Web]");
-        sender.sendMessage(ChatColor.GRAY + "Generating WebRTC connection...");
-
-        Bukkit.getScheduler().runTaskAsynchronously(TyphonPlugin.plugin, () -> {
-            try {
-                String offerSdp = webrtcTransport.createOffer(player.getUniqueId());
-                String compressedOffer = TyphonSDPCodec.compress(offerSdp);
-
-                StringBuilder url = new StringBuilder(TYPHON_UI_BASE);
-                url.append("/#/connect?offer=").append(compressedOffer);
-                url.append("&stun=").append(apiServer.getStunServer());
-
-                if (apiServer.isIssueTempTokenEnabled()) {
-                    String token = apiServer.getAuth().createTempToken(5 * 60 * 1000L);
-                    url.append("&token=").append(token);
-                }
-
-                final String webrtcUrl = url.toString();
-
-                Bukkit.getScheduler().runTask(TyphonPlugin.plugin, () -> {
-                    sender.sendMessage(ChatColor.GREEN + "WebRTC connection ready!");
-                    Component link = Component.text("[Open Typhon Dashboard]")
-                            .color(NamedTextColor.GREEN)
-                            .decorate(TextDecoration.BOLD)
-                            .clickEvent(ClickEvent.openUrl(webrtcUrl));
-                    sender.sendMessage(link);
-                    sender.sendMessage("");
-                    sender.sendMessage(ChatColor.GRAY + "After opening, copy the answer code and run:");
-                    sender.sendMessage(ChatColor.YELLOW + "/typhon web webrtc-answer <code>");
-                });
-            } catch (Exception e) {
-                Bukkit.getScheduler().runTask(TyphonPlugin.plugin, () -> {
-                    TyphonMessage.error(sender, "Failed to generate WebRTC offer: " + e.getMessage());
-                });
-            }
-        });
-    }
-
-    /**
-     * /typhon web webrtc-answer <data> — accept browser's answer for pending session.
-     */
-    private static void handleWebRTCAnswerCommand(CommandSender sender, String compressedAnswer, TyphonAPIServer apiServer) {
-        if (!(sender instanceof Player)) {
-            TyphonMessage.error(sender, "This command can only be used by players.");
-            return;
-        }
-
-        TyphonWebRTCTransport webrtcTransport = checkWebRTCTransport(sender, apiServer);
-        if (webrtcTransport == null) return;
-
-        Player player = (Player) sender;
-
-        sender.sendMessage(ChatColor.GRAY + "Processing WebRTC answer...");
-
-        Bukkit.getScheduler().runTaskAsynchronously(TyphonPlugin.plugin, () -> {
-            try {
-                String answerSdp = TyphonSDPCodec.decompress(compressedAnswer);
-                webrtcTransport.acceptAnswer(player.getUniqueId(), answerSdp);
-
-                Bukkit.getScheduler().runTask(TyphonPlugin.plugin, () -> {
-                    sender.sendMessage(ChatColor.GREEN + "WebRTC connection established!");
-                });
-            } catch (Exception e) {
-                Bukkit.getScheduler().runTask(TyphonPlugin.plugin, () -> {
-                    TyphonMessage.error(sender, "Failed to process answer: " + e.getMessage());
-                });
-            }
-        });
-    }
-
-    /**
-     * /typhon web http — show HTTP dashboard link.
-     */
-    private static void handleWebHTTPCommand(CommandSender sender, TyphonAPIServer apiServer) {
-        sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Typhon Web]");
-
-        if (!apiServer.isListening()) {
-            TyphonMessage.error(sender, "HTTP listener is not enabled. Set web.connect.listen.enable to true in config.yml.");
-            return;
-        }
 
         String serverUrl = apiServer.getPublicUrl();
         boolean hasPlaceholder = serverUrl.contains("<your-server-ip>");

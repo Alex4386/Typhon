@@ -224,12 +224,5 @@
             <version>6.6.0</version>
         </dependency>
 
-        <!-- WebRTC (optional - requires platform-specific native JARs at runtime) -->
-        <dependency>
-            <groupId>dev.onvoid.webrtc</groupId>
-            <artifactId>webrtc-java</artifactId>
-            <version>0.8.0</version>
-            <scope>provided</scope>
-        </dependency>
     </dependencies>
 </project>

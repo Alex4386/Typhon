@@ -32,9 +32,6 @@ web:
       host: 0.0.0.0   # defaults to 0.0.0.0
       port: 18080     #
       #publicUrl: https://typhon-api.my-server.com   # <- use this if your public point is different (i.e. CF ArgoTunnel)
-    webrtc:
-      enable: true
-      stunServer: stun.l.google.com:19302
 
   ui:
     serveBundled: false                        # whether bundled ui should be served from api server from path /web

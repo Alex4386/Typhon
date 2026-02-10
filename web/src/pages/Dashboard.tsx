@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { StatusData } from '../transport/types';
-import { getApi, connectWebRTC, isWebRTCActive } from '../transport/api';
+import { getApi } from '../transport/api';
 import { getAuthToken, setAuthToken, clearAuthToken } from '../transport/auth';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardAction } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Wifi, WifiOff, KeyRound, Loader2 } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, KeyRound } from 'lucide-react';
 
-type TransportState = 'http' | 'webrtc' | 'offline';
+type TransportState = 'http' | 'offline';
 
 export default function Dashboard() {
   const [status, setStatus] = useState<StatusData | null>(null);
@@ -25,47 +25,26 @@ export default function Dashboard() {
     setLogs((prev) => [...prev, `[${ts}] ${msg}`]);
   }, []);
 
-  const updateTransport = useCallback(() => {
-    setTransport(isWebRTCActive() ? 'webrtc' : 'http');
-  }, []);
-
   const refreshStatus = useCallback(async () => {
     try {
       const api = getApi();
       const res = await api.get<StatusData>('/api/status');
       if (res.status === 200 && res.data) {
         setStatus(res.data);
-        log('Status refreshed via ' + (isWebRTCActive() ? 'WebRTC' : 'HTTP'));
+        setTransport('http');
+        log('Status refreshed');
       } else if (res.status === 401) {
         setError('Unauthorized. Set an auth token.');
         log('Status request returned 401 Unauthorized');
       } else {
         log('Status request returned ' + res.status);
       }
-      updateTransport();
     } catch (e) {
       setError('Failed to fetch status: ' + (e as Error).message);
       log('Error: ' + (e as Error).message);
       setTransport('offline');
     }
-  }, [log, updateTransport]);
-
-  const tryWebRTC = useCallback(async () => {
-    log('Attempting WebRTC connection...');
-    try {
-      const adapter = await connectWebRTC();
-      if (adapter) {
-        log('WebRTC connected successfully!');
-        updateTransport();
-        refreshStatus();
-      } else {
-        log('WebRTC not available, using HTTP fallback');
-      }
-    } catch (e) {
-      log('WebRTC failed: ' + (e as Error).message);
-      setError('WebRTC connection failed');
-    }
-  }, [log, updateTransport, refreshStatus]);
+  }, [log]);
 
   const applyToken = useCallback(() => {
     const token = tokenInput.trim();
@@ -84,11 +63,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     log('Typhon Dashboard loaded');
-    updateTransport();
     refreshStatus();
     const interval = setInterval(refreshStatus, 30000);
     return () => clearInterval(interval);
-  }, [log, updateTransport, refreshStatus]);
+  }, [log, refreshStatus]);
 
   useEffect(() => {
     if (logRef.current) {
@@ -108,7 +86,6 @@ export default function Dashboard() {
   }, []);
 
   const transportBadge = () => {
-    if (transport === 'webrtc') return <Badge variant="default" className="bg-success text-success-foreground"><Wifi className="size-3" /> WebRTC</Badge>;
     if (transport === 'http') return <Badge variant="secondary"><Wifi className="size-3" /> HTTP</Badge>;
     return <Badge variant="outline"><WifiOff className="size-3" /> Offline</Badge>;
   };
@@ -150,13 +127,12 @@ export default function Dashboard() {
             <CardTitle>Server Status</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
                 { label: 'Status', value: status?.status ?? '--' },
                 { label: 'Plugin', value: status?.plugin ?? '--' },
                 { label: 'Version', value: status?.version ?? '--' },
                 { label: 'Volcanoes', value: status?.volcanoCount ?? '--' },
-                { label: 'Transport', value: transport === 'webrtc' ? 'WebRTC' : transport === 'http' ? 'HTTP' : 'Offline' },
               ].map((item) => (
                 <div key={item.label} className="rounded-lg bg-muted p-4 text-center">
                   <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{item.label}</div>
@@ -166,7 +142,6 @@ export default function Dashboard() {
             </div>
             <div className="flex gap-2">
               <Button size="sm" onClick={refreshStatus}><RefreshCw className="size-4" /> Refresh</Button>
-              <Button variant="secondary" size="sm" onClick={tryWebRTC}><Wifi className="size-4" /> Connect WebRTC</Button>
               <Button variant="secondary" size="sm" onClick={() => setShowAuth(!showAuth)}><KeyRound className="size-4" /> Auth</Button>
             </div>
           </CardContent>
