@@ -152,11 +152,11 @@ export default function VentDetail() {
   // Initial load
   useEffect(() => { fetchVent(); fetchConfig(); fetchMetrics(); fetchBuilder(); }, [fetchVent, fetchConfig, fetchMetrics, fetchBuilder]);
 
-  // Poll metrics
+  // Poll metrics + vent data (geometry changes during eruptions)
   useEffect(() => {
-    metricsTimer.current = setInterval(fetchMetrics, METRICS_POLL_INTERVAL);
+    metricsTimer.current = setInterval(() => { fetchMetrics(); fetchVent(); }, METRICS_POLL_INTERVAL);
     return () => clearInterval(metricsTimer.current);
-  }, [fetchMetrics]);
+  }, [fetchMetrics, fetchVent]);
 
   // Merge static vent data with live metrics
   const live = useMemo((): (VentDetailType & VentMetrics) | null => {

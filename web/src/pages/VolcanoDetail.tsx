@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import type { VolcanoDetail as VolcanoDetailType, VentDetail, VentSummary } from '@/transport/types';
 import { getApi } from '@/transport/api';
@@ -58,8 +58,9 @@ export default function VolcanoDetail() {
   const [volcano, setVolcano] = useState<VolcanoDetailType | null>(null);
   const [vents, setVents] = useState<VentDetail[]>([]);
   const [error, setError] = useState('');
+  const pollTimer = useRef<ReturnType<typeof setInterval>>(undefined);
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
     if (!name) return;
     const api = getApi();
 
@@ -78,6 +79,13 @@ export default function VolcanoDetail() {
       })
       .catch(() => {});
   }, [name]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    pollTimer.current = setInterval(fetchData, 2000);
+    return () => clearInterval(pollTimer.current);
+  }, [fetchData]);
 
   // Cross-section: tallest vent, fallback to main
   const crossSectionVent = useMemo(() => {

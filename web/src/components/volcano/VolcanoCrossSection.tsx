@@ -111,9 +111,10 @@ function computeGeo(vent: VentDetail): Geo {
   const craterDepthPx = (GROUND_Y - summitPx) * craterDepthFrac;
 
   const seaLevelDelta = seaLevel - baseY;
+  const seaLevelRawPxY = GROUND_Y - seaLevelDelta * scaleV;
   const seaLevelPxY =
-    seaLevelDelta > 0 && seaLevelDelta < height
-      ? GROUND_Y - seaLevelDelta * scaleV
+    seaLevelRawPxY > TOP_PAD && seaLevelRawPxY < GROUND_Y
+      ? seaLevelRawPxY
       : null;
 
   return {
