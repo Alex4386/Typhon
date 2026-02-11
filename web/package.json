@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:cloudflare": "tsc && vite build --outDir dist/web && printf '/ /web/ 302\n/web/* /web/index.html 200' > dist/_redirects",
     "preview": "vite preview"
   },
   "dependencies": {
