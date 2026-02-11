@@ -1,169 +1,158 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import type { StatusData } from '../transport/types';
-import { getApi } from '../transport/api';
-import { getAuthToken, setAuthToken, clearAuthToken } from '../transport/auth';
-
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { useConnectionStatus } from '@/hooks/useConnectionStatus';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Wifi, WifiOff, KeyRound } from 'lucide-react';
+import {
+  Flame,
+  Activity,
+  Moon,
+  RefreshCw,
+} from 'lucide-react';
+import { VolcanoIcon } from '@/components/icons/VolcanoIcon';
+import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
 
-type TransportState = 'http' | 'offline';
+const STATUS_COLORS: Record<string, string> = {
+  ERUPTING: 'bg-red-500',
+  ERUPTION_IMMINENT: 'bg-orange-500',
+  MAJOR_ACTIVITY: 'bg-amber-500',
+  MINOR_ACTIVITY: 'bg-yellow-500',
+  DORMANT: 'bg-blue-400',
+  EXTINCT: 'bg-gray-400',
+};
 
 export default function Dashboard() {
-  const [status, setStatus] = useState<StatusData | null>(null);
-  const [transport, setTransport] = useState<TransportState>('offline');
-  const [showAuth, setShowAuth] = useState(false);
-  const [tokenInput, setTokenInput] = useState('');
-  const [error, setError] = useState('');
-  const [logs, setLogs] = useState<string[]>([]);
-  const logRef = useRef<HTMLDivElement>(null);
+  const { version, volcanoes, online, error, refresh } = useConnectionStatus();
 
-  const log = useCallback((msg: string) => {
-    const ts = new Date().toLocaleTimeString();
-    setLogs((prev) => [...prev, `[${ts}] ${msg}`]);
-  }, []);
-
-  const refreshStatus = useCallback(async () => {
-    try {
-      const api = getApi();
-      const res = await api.get<StatusData>('/api/status');
-      if (res.status === 200 && res.data) {
-        setStatus(res.data);
-        setTransport('http');
-        log('Status refreshed');
-      } else if (res.status === 401) {
-        setError('Unauthorized. Set an auth token.');
-        log('Status request returned 401 Unauthorized');
-      } else {
-        log('Status request returned ' + res.status);
-      }
-    } catch (e) {
-      setError('Failed to fetch status: ' + (e as Error).message);
-      log('Error: ' + (e as Error).message);
-      setTransport('offline');
-    }
-  }, [log]);
-
-  const applyToken = useCallback(() => {
-    const token = tokenInput.trim();
-    if (token) {
-      setAuthToken(token);
-      log('Auth token set');
-      refreshStatus();
-    }
-  }, [tokenInput, log, refreshStatus]);
-
-  const clearToken = useCallback(() => {
-    clearAuthToken();
-    setTokenInput('');
-    log('Auth token cleared');
-  }, [log]);
-
-  useEffect(() => {
-    log('Typhon Dashboard loaded');
-    refreshStatus();
-    const interval = setInterval(refreshStatus, 30000);
-    return () => clearInterval(interval);
-  }, [log, refreshStatus]);
-
-  useEffect(() => {
-    if (logRef.current) {
-      logRef.current.scrollTop = logRef.current.scrollHeight;
-    }
-  }, [logs]);
-
-  useEffect(() => {
-    if (!error) return;
-    const t = setTimeout(() => setError(''), 5000);
-    return () => clearTimeout(t);
-  }, [error]);
-
-  useEffect(() => {
-    const saved = getAuthToken();
-    if (saved) setTokenInput(saved);
-  }, []);
-
-  const transportBadge = () => {
-    if (transport === 'http') return <Badge variant="secondary"><Wifi className="size-3" /> HTTP</Badge>;
-    return <Badge variant="outline"><WifiOff className="size-3" /> Offline</Badge>;
-  };
+  const erupting = volcanoes.filter((v) => v.status === 'ERUPTING').length;
+  const active = volcanoes.filter((v) =>
+    ['ERUPTION_IMMINENT', 'MAJOR_ACTIVITY', 'MINOR_ACTIVITY'].includes(v.status)
+  ).length;
+  const dormant = volcanoes.filter((v) => v.status === 'DORMANT').length;
+  const extinct = volcanoes.filter((v) => v.status === 'EXTINCT').length;
 
   return (
-    <div className="min-h-screen">
+    <div className="p-6 space-y-6">
       {/* Header */}
-      <header className="border-b border-border bg-card px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-primary tracking-wide">Typhon Dashboard</h1>
-        {transportBadge()}
-      </header>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Overview</h1>
+          <p className="text-sm text-muted-foreground">
+            {version
+              ? `${version.plugin} v${version.version}`
+              : 'Connecting...'}
+          </p>
+        </div>
+        <Button variant="ghost" size="icon-sm" onClick={refresh}>
+          <RefreshCw className="size-4" />
+        </Button>
+      </div>
 
-      {/* Auth bar */}
-      {showAuth && (
-        <div className="border-b border-border bg-card px-6 py-3 flex items-center gap-2">
-          <Input
-            type="password"
-            placeholder="Bearer token or Basic credentials..."
-            value={tokenInput}
-            onChange={(e) => setTokenInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && applyToken()}
-            className="flex-1"
-          />
-          <Button size="sm" onClick={applyToken}>Set Token</Button>
-          <Button variant="secondary" size="sm" onClick={clearToken}>Clear</Button>
+      {error && (
+        <div className="rounded-lg border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
         </div>
       )}
 
-      <main className="max-w-3xl mx-auto p-6 space-y-4">
-        {error && (
-          <div className="rounded-lg border border-destructive bg-destructive/10 p-4 text-sm text-destructive">
-            {error}
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard
+          icon={<VolcanoIcon className="size-4" />}
+          label="Total"
+          value={volcanoes.length}
+          color="text-info"
+        />
+        <StatCard
+          icon={<Flame className="size-4" />}
+          label="Erupting"
+          value={erupting}
+          color="text-red-400"
+        />
+        <StatCard
+          icon={<Activity className="size-4" />}
+          label="Active"
+          value={active}
+          color="text-amber-400"
+        />
+        <StatCard
+          icon={<Moon className="size-4" />}
+          label="Dormant"
+          value={dormant + extinct}
+          color="text-blue-400"
+        />
+      </div>
+
+      {/* Volcano list */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">Volcanoes</h2>
+          <Link to="/volcanoes" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            View all
+          </Link>
+        </div>
+
+        {volcanoes.length === 0 ? (
+          <div className="rounded-lg border border-border bg-muted/50 p-8 text-center text-sm text-muted-foreground">
+            {online ? 'No volcanoes registered.' : 'Server not connected.'}
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {volcanoes.slice(0, 10).map((v) => (
+              <Link
+                key={v.name}
+                to={`/volcanoes/${encodeURIComponent(v.name)}`}
+                className="flex items-center justify-between rounded-lg px-4 py-3 hover:bg-muted/50 transition-colors group"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <VolcanoIcon className="size-4 shrink-0 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{v.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {v.style} &middot; {v.ventCount} vent{v.ventCount !== 1 ? 's' : ''}
+                      {v.location.world && (
+                        <span className="hidden sm:inline">
+                          {' '}&middot; {v.location.world}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <Badge variant="secondary" className="gap-1 shrink-0">
+                  <span className={`inline-block size-2 rounded-full ${STATUS_COLORS[v.status] || 'bg-gray-400'}`} />
+                  {v.status.replace(/_/g, ' ')}
+                </Badge>
+              </Link>
+            ))}
+            {volcanoes.length > 10 && (
+              <div className="text-center py-2">
+                <Link to="/volcanoes" className="text-sm text-muted-foreground hover:text-foreground">
+                  +{volcanoes.length - 10} more
+                </Link>
+              </div>
+            )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
 
-        {/* Server Status */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Server Status</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {[
-                { label: 'Status', value: status?.status ?? '--' },
-                { label: 'Plugin', value: status?.plugin ?? '--' },
-                { label: 'Version', value: status?.version ?? '--' },
-                { label: 'Volcanoes', value: status?.volcanoCount ?? '--' },
-              ].map((item) => (
-                <div key={item.label} className="rounded-lg bg-muted p-4 text-center">
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{item.label}</div>
-                  <div className="text-lg font-bold text-info">{item.value}</div>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" onClick={refreshStatus}><RefreshCw className="size-4" /> Refresh</Button>
-              <Button variant="secondary" size="sm" onClick={() => setShowAuth(!showAuth)}><KeyRound className="size-4" /> Auth</Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Connection Log */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Connection Log</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div
-              ref={logRef}
-              className="rounded-md bg-muted p-3 font-mono text-xs max-h-48 overflow-y-auto text-muted-foreground break-all"
-            >
-              {logs.map((line, i) => (
-                <div key={i}>{line}</div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </main>
+function StatCard({
+  icon,
+  label,
+  value,
+  color,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  color: string;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+        {icon}
+        <span className="uppercase tracking-wider">{label}</span>
+      </div>
+      <div className={`text-2xl font-bold ${color}`}>{value}</div>
     </div>
   );
 }

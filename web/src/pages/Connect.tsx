@@ -1,21 +1,34 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import type { StatusData } from '../transport/types';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
+import type { VersionData } from '../transport/types';
 import { setAuthToken } from '../transport/auth';
-import { getApi, setHttpApiBase } from '../transport/api';
+import { getApi, setApiBase } from '../transport/api';
 
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardAction } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { VolcanoIcon } from '@/components/icons/VolcanoIcon';
 
 type Phase = 'form' | 'connecting' | 'connected' | 'error';
 
 export default function Connect() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [phase, setPhase] = useState<Phase>('form');
-  const [status, setStatus] = useState<StatusData | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const logRef = useRef<HTMLDivElement>(null);
@@ -45,27 +58,43 @@ export default function Connect() {
         setAuthToken('Bearer ' + token);
       }
 
-      const apiBase = server.replace(/\/+$/, '') + '/api';
-      setHttpApiBase(apiBase);
+      setApiBase(server);
       log('Connecting to ' + server + '...');
+
+      const api = getApi();
+
+      log('Checking server health...');
+      const health = await api.get<{ status: string }>('/health');
+      if (health.status !== 200) {
+        throw new Error('Health check failed: HTTP ' + health.status);
+      }
+      log('Server is healthy');
+
+      const ver = await api.get<VersionData>('/version');
+      if (ver.status === 200 && ver.data) {
+        log('Connected: ' + ver.data.plugin + ' v' + ver.data.version);
+      }
+
+      // Check authentication
+      log('Checking authentication...');
+      const authRes = await api.get<{ authenticated: boolean; authConfigured: boolean }>('/auth');
+      if (authRes.status === 200 && authRes.data) {
+        if (authRes.data.authConfigured && !authRes.data.authenticated) {
+          throw new Error('Authentication required. Please provide a valid token.');
+        }
+        log(authRes.data.authConfigured ? 'Authenticated' : 'No auth configured (open access)');
+      }
 
       setPhase('connected');
 
-      log('Fetching server status...');
-      const api = getApi();
-      const res = await api.get<StatusData>('/api/status');
-      if (res.status === 200 && res.data) {
-        setStatus(res.data);
-        log('Server: ' + res.data.plugin + ' v' + res.data.version);
-      } else {
-        log('Status request returned ' + res.status);
-      }
+      log('Redirecting to dashboard...');
+      setTimeout(() => navigate('/'), 1000);
     } catch (e) {
       setPhase('error');
       setErrorMsg((e as Error).message);
       log('Connection failed: ' + (e as Error).message);
     }
-  }, [log]);
+  }, [log, navigate]);
 
   // Auto-connect from URL params
   useEffect(() => {
@@ -87,142 +116,94 @@ export default function Connect() {
     doConnect(server, tokenInput.trim());
   }, [serverInput, tokenInput, doConnect]);
 
-  const refreshStatus = useCallback(async () => {
-    try {
-      const api = getApi();
-      const res = await api.get<StatusData>('/api/status');
-      if (res.status === 200 && res.data) {
-        setStatus(res.data);
-        log('Status refreshed');
-      }
-    } catch (e) {
-      log('Error: ' + (e as Error).message);
-    }
-  }, [log]);
-
-  useEffect(() => {
-    if (phase !== 'connected') return;
-    const interval = setInterval(refreshStatus, 30000);
-    return () => clearInterval(interval);
-  }, [phase, refreshStatus]);
-
-  const transportBadge = () => {
-    if (phase === 'connected') {
-      return <Badge variant="secondary"><Wifi className="size-3" /> HTTP</Badge>;
-    }
-    if (phase === 'connecting') {
-      return <Badge variant="secondary"><Loader2 className="size-3 animate-spin" /> Connecting</Badge>;
-    }
-    if (phase === 'error') return <Badge variant="destructive"><WifiOff className="size-3" /> Failed</Badge>;
-    return <Badge variant="outline"><WifiOff className="size-3" /> Disconnected</Badge>;
-  };
-
   return (
-    <div className="min-h-screen">
-      {/* Header */}
-      <header className="border-b border-border bg-card px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-primary tracking-wide">Typhon Remote</h1>
-        {transportBadge()}
-      </header>
-
-      <main className="max-w-3xl mx-auto p-6 space-y-4">
-        {errorMsg && (
-          <div className="rounded-lg border border-destructive bg-destructive/10 p-4 text-sm text-destructive">
-            {errorMsg}
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted p-6 md:p-10">
+      <div className="flex w-full max-w-sm flex-col gap-6">
+        {/* Brand */}
+        <Link to="/" className="flex items-center gap-2 self-center hover:opacity-80 transition-opacity">
+          <div className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <VolcanoIcon className="size-5" />
           </div>
-        )}
+          <span className="text-xl font-bold tracking-wide">Typhon</span>
+        </Link>
 
         {/* Connect form */}
-        {phase === 'form' && (
+        <div className={cn("flex flex-col gap-6")}>
           <Card>
-            <CardHeader>
-              <CardTitle>Connect to Server</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-muted-foreground">Server URL</label>
-                <Input
-                  placeholder="http://your-server:18080"
-                  value={serverInput}
-                  onChange={(e) => setServerInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-muted-foreground">Auth Token (optional)</label>
-                <Input
-                  type="password"
-                  placeholder="Bearer token..."
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                />
-              </div>
-              <Button onClick={handleSubmit}>Connect</Button>
-              <p className="text-xs text-muted-foreground">
-                Run <code className="bg-muted px-1 rounded">/typhon web</code> in Minecraft to get a connect link with a temporary token.
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Connecting state */}
-        {phase === 'connecting' && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Loader2 className="size-4 animate-spin" /> Connecting to {serverInput}...
-              </CardTitle>
-            </CardHeader>
-          </Card>
-        )}
-
-        {/* Connected — server status */}
-        {phase === 'connected' && status && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Server Status</CardTitle>
-              <CardAction>
-                <Button variant="ghost" size="sm" onClick={refreshStatus}>
-                  <RefreshCw className="size-4" /> Refresh
-                </Button>
-              </CardAction>
+            <CardHeader className="text-center">
+              <CardTitle className="text-xl">Connect to Server</CardTitle>
+              <CardDescription>
+                Enter your Typhon server details to continue
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {[
-                  { label: 'Status', value: status.status },
-                  { label: 'Plugin', value: status.plugin },
-                  { label: 'Version', value: status.version },
-                  { label: 'Volcanoes', value: status.volcanoCount },
-                ].map((item) => (
-                  <div key={item.label} className="rounded-lg bg-muted p-4 text-center">
-                    <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{item.label}</div>
-                    <div className="text-lg font-bold text-info">{item.value}</div>
+              {errorMsg && (
+                <div className="mb-4 rounded-lg border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
+                  {errorMsg}
+                </div>
+              )}
+
+              {phase === 'connecting' ? (
+                <div className="flex flex-col items-center gap-3 py-6">
+                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Connecting to {serverInput}...</p>
+                </div>
+              ) : phase === 'connected' ? (
+                <div className="flex flex-col items-center gap-3 py-6">
+                  <div className="size-8 rounded-full bg-success/20 flex items-center justify-center">
+                    <div className="size-3 rounded-full bg-success" />
                   </div>
-                ))}
-              </div>
+                  <p className="text-sm text-muted-foreground">Connected. Redirecting...</p>
+                </div>
+              ) : (
+                <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+                  <FieldGroup>
+                    <Field>
+                      <FieldLabel htmlFor="server">Server URL</FieldLabel>
+                      <Input
+                        id="server"
+                        placeholder="http://your-server:18080"
+                        value={serverInput}
+                        onChange={(e) => setServerInput(e.target.value)}
+                        required
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="token">Auth Token</FieldLabel>
+                      <Input
+                        id="token"
+                        type="password"
+                        placeholder="Optional bearer token..."
+                        value={tokenInput}
+                        onChange={(e) => setTokenInput(e.target.value)}
+                      />
+                    </Field>
+                    <Field>
+                      <Button type="submit" className="w-full">Connect</Button>
+                      <FieldDescription className="text-center">
+                        Run <code className="bg-muted px-1 rounded text-xs">/typhon web</code> in
+                        Minecraft to get a connect link.
+                      </FieldDescription>
+                    </Field>
+                  </FieldGroup>
+                </form>
+              )}
             </CardContent>
           </Card>
-        )}
 
-        {/* Connection log */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Connection Log</CardTitle>
-          </CardHeader>
-          <CardContent>
+          {/* Connection log */}
+          {logs.length > 0 && (
             <div
               ref={logRef}
-              className="rounded-md bg-muted p-3 font-mono text-xs max-h-48 overflow-y-auto text-muted-foreground break-all"
+              className="rounded-md bg-card border border-border p-3 font-mono text-xs max-h-32 overflow-y-auto text-muted-foreground break-all"
             >
               {logs.map((line, i) => (
                 <div key={i}>{line}</div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      </main>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

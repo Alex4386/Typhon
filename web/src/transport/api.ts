@@ -1,10 +1,14 @@
 import type { ApiClient, ApiResponse, RequestConfig } from './types';
 import { getAuthHeader } from './auth';
 
-let API_BASE = '/api';
+let API_BASE = '/v1';
 
-export function setHttpApiBase(base: string): void {
-  API_BASE = base;
+export function setApiBase(serverUrl: string): void {
+  API_BASE = serverUrl.replace(/\/+$/, '') + '/v1';
+}
+
+export function getApiBase(): string {
+  return API_BASE;
 }
 
 const httpApi: ApiClient = {
@@ -16,6 +20,9 @@ const httpApi: ApiClient = {
   },
   async put<T = unknown>(url: string, data?: unknown, config?: RequestConfig): Promise<ApiResponse<T>> {
     return httpRequest<T>({ url, method: 'PUT', data, ...config });
+  },
+  async patch<T = unknown>(url: string, data?: unknown, config?: RequestConfig): Promise<ApiResponse<T>> {
+    return httpRequest<T>({ url, method: 'PATCH', data, ...config });
   },
   async delete<T = unknown>(url: string, config?: RequestConfig): Promise<ApiResponse<T>> {
     return httpRequest<T>({ url, method: 'DELETE', ...config });

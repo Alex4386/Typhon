@@ -47,6 +47,11 @@ public class VolcanoBombs {
 
     boolean isBaseYConfigured = true;
 
+    // Bomb launch rate tracking
+    private long bombsSinceRateCalc = 0;
+    private long lastBombRateCalcTime = 0;
+    private long bombsLaunchedPerSecond = 0;
+
 
     /* == SETUP GLOW == */
     static Team bombGlowRed = null, bombGlowGold = null, bombGlowYellow = null;
@@ -416,6 +421,21 @@ public class VolcanoBombs {
         } else {
             this.launchBomb();
         }
+
+        // Update bomb rate tracking
+        bombsSinceRateCalc++;
+        long now = System.currentTimeMillis();
+        if (lastBombRateCalcTime == 0) {
+            lastBombRateCalcTime = now;
+        } else if (now - lastBombRateCalcTime >= 1000) {
+            bombsLaunchedPerSecond = bombsSinceRateCalc;
+            bombsSinceRateCalc = 0;
+            lastBombRateCalcTime = now;
+        }
+    }
+
+    public long getBombsLaunchedPerSecond() {
+        return bombsLaunchedPerSecond;
     }
 
     public void launchBomb() {

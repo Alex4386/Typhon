@@ -40,6 +40,7 @@ public final class TyphonPlugin extends JavaPlugin {
 
     public static BlueMapAPI blueMap = null;
     public static boolean enableBlueMap = true;
+    public static String blueMapPublicUrl = null;
     public static TyphonWorldGuardUtils worldGuard = null;
     public static TyphonCoreProtectUtils coreProtect = null;
 
@@ -252,6 +253,7 @@ public final class TyphonPlugin extends JavaPlugin {
 
     public static void loadConfig() {
         enableBlueMap = plugin.getConfig().getBoolean("blueMap.enable", true);
+        blueMapPublicUrl = plugin.getConfig().getString("blueMap.publicUrl", null);
         TyphonGaia.loadConfig(plugin.getConfig());
         
         // Add WorldGuard config defaults if they don't exist

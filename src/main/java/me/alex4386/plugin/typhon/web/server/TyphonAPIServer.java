@@ -1,7 +1,6 @@
 package me.alex4386.plugin.typhon.web.server;
 
 import io.javalin.Javalin;
-import io.javalin.http.UnauthorizedResponse;
 import io.javalin.http.staticfiles.Location;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
@@ -55,6 +54,7 @@ public class TyphonAPIServer {
             if (serveBundled) {
                 config.staticFiles.add("/web", Location.CLASSPATH);
             }
+
             config.bundledPlugins.enableCors(cors -> cors.addRule(rule -> rule.anyHost()));
         });
 
@@ -63,34 +63,32 @@ public class TyphonAPIServer {
             app.get("/", ctx -> ctx.redirect("/web/"));
         }
 
-        // Before handler for auth
-        app.before("/api/*", ctx -> {
-            TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
-            if (!auth.authenticate(request)) {
-                throw new UnauthorizedResponse("Unauthorized");
-            }
-        });
-
-        // Register Javalin routes that delegate to the router
-        app.get("/api/*", ctx -> {
+        // All API methods delegate to the router (which handles auth per-route)
+        app.get("/v1/*", ctx -> {
             TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
             TyphonAPIResponse response = router.dispatch(request);
             response.applyToJavalinContext(ctx);
         });
 
-        app.post("/api/*", ctx -> {
+        app.post("/v1/*", ctx -> {
             TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
             TyphonAPIResponse response = router.dispatch(request);
             response.applyToJavalinContext(ctx);
         });
 
-        app.put("/api/*", ctx -> {
+        app.put("/v1/*", ctx -> {
             TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
             TyphonAPIResponse response = router.dispatch(request);
             response.applyToJavalinContext(ctx);
         });
 
-        app.delete("/api/*", ctx -> {
+        app.patch("/v1/*", ctx -> {
+            TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
+            TyphonAPIResponse response = router.dispatch(request);
+            response.applyToJavalinContext(ctx);
+        });
+
+        app.delete("/v1/*", ctx -> {
             TyphonAPIRequest request = TyphonAPIRequest.fromJavalinContext(ctx);
             TyphonAPIResponse response = router.dispatch(request);
             response.applyToJavalinContext(ctx);

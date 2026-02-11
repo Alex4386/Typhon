@@ -119,12 +119,6 @@
                     <include>**</include>
                   </includes>
                 </filter>
-                <filter>
-                  <artifact>dev.onvoid.webrtc:*</artifact>
-                  <includes>
-                    <include>**</include>
-                  </includes>
-                </filter>
               </filters>
             </configuration>
           </execution>

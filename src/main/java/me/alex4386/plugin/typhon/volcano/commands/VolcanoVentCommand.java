@@ -24,34 +24,11 @@ public class VolcanoVentCommand {
     VolcanoVent vent;
     boolean isMainVent;
 
-    String[] configNodes = {
-            "lavaflow:delay",
-            "lavaflow:flowed",
-            "lavaflow:silicateLevel",
-            "lavaflow:gasContent",
-            "lavaflow:usePouredLava",
-            "lavaflow:allowPickUp",
-            "bombs:explosionPower:min",
-            "bombs:explosionPower:max",
-            "bombs:radius:min",
-            "bombs:radius:max",
-            "bombs:delay",
-            "bombs:baseY",
-            "erupt:style",
-            "erupt:autoconfig",
-            "explosion:bombs:min",
-            "explosion:bombs:max",
-            "explosion:scheduler:size",
-            "explosion:scheduler:damagingSize",
-            "vent:craterRadius",
-            "vent:type",
-            "vent:fissureLength",
-            "vent:fissureAngle",
-            "succession:enable",
-            "succession:probability",
-            "succession:treeProbability",
-            "ash:fullPyroclasticFlowProbability",
-    };
+    List<String> configNodes;
+    {
+        configNodes = new ArrayList<>(VolcanoVentConfigNodeManager.getKeys());
+        configNodes.add("erupt:autoconfig"); // command-only action
+    }
 
     public VolcanoVentCommand(VolcanoVent vent) {
         this.vent = vent;
@@ -87,7 +64,7 @@ public class VolcanoVentCommand {
                     if (action == VolcanoVentCommandAction.CONFIG) {
                         if (args.length == baseOffset + 2) {
                             return TyphonCommand.search(
-                                    args[baseOffset + 1], Arrays.asList(configNodes));
+                                    args[baseOffset + 1], configNodes);
                         } else if (args.length == baseOffset + 3) {
                             String[] res = { "<? value>" };
                             return Arrays.asList(res);
@@ -682,238 +659,96 @@ public class VolcanoVentCommand {
                     msg.error("Invalid usage");
                     return true;
                 }
-                if (newArgs[1].equalsIgnoreCase("lavaflow:delay")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.lavaFlow.settings.delayFlowed = Integer.parseInt(newArgs[2]);
-                        msg.info(
-                                "lavaflow:delay - "
-                                        + vent.lavaFlow.settings.delayFlowed
-                                        + " ticks");
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("lavaflow:silicateLevel")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.lavaFlow.settings.silicateLevel = Math.min(0.9, Math.max(0.3, Double.parseDouble(newArgs[2])));
-                        msg.info(
-                                "lavaflow:silicateLevel - "
-                                    + vent.lavaFlow.settings.silicateLevel
-                                    + " ("
-                                    + String.format("%.2f", vent.lavaFlow.settings.silicateLevel * 100)
-                                    + "%, " + TyphonUtils.getLavaTypeBySilicateLevel(vent.lavaFlow.settings.silicateLevel) + ")"
-                        );
 
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("lavaflow:gasContent")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.lavaFlow.settings.gasContent = Math.min(1.0, Math.max(0.0, Double.parseDouble(newArgs[2])));
-                        msg.info(
-                                "lavaflow:gasContent - "
-                                    + vent.lavaFlow.settings.gasContent
-                                    + " ("
-                                    + String.format("%.2f", vent.lavaFlow.settings.gasContent * 100)
-                                    + "%)"
-                        );
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("lavaflow:flowed")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.lavaFlow.settings.flowed = Integer.parseInt(newArgs[2]);
-                        msg.info("lavaflow:flowed - " + vent.lavaFlow.settings.flowed + " ticks");
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("lavaflow:usePouredLava")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.lavaFlow.settings.usePouredLava = Boolean.parseBoolean(newArgs[2]);
-                        msg.info("lavaflow:usePouredLava - " + vent.lavaFlow.settings.usePouredLava);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("lavaflow:allowPickUp")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.lavaFlow.settings.allowPickUp = Boolean.parseBoolean(newArgs[2]);
-                        msg.info("lavaflow:allowPickUp - " + vent.lavaFlow.settings.allowPickUp);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("bombs:explosionPower:min")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.bombs.minBombPower = Float.parseFloat(newArgs[2]);
-                        msg.info("bombs:explosionPower:min - " + vent.bombs.minBombPower);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("bombs:explosionPower:max")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.bombs.maxBombPower = Float.parseFloat(newArgs[2]);
-                        msg.info("bombs:explosionPower:max - " + vent.bombs.maxBombPower);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("bombs:radius:min")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.bombs.minBombRadius = Integer.parseInt(newArgs[2]);
-                        msg.info("bombs:radius:min - " + vent.bombs.minBombRadius);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("bombs:radius:max")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.bombs.maxBombRadius = Integer.parseInt(newArgs[2]);
-                        msg.info("bombs:radius:max - " + vent.bombs.maxBombRadius);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("bombs:delay")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.bombs.bombDelay = Integer.parseInt(newArgs[2]);
-                        msg.info("bombs:delay - " + vent.bombs.bombDelay);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("bombs:baseY")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) {
-                            if (newArgs[2].toLowerCase().equalsIgnoreCase("reset")) {
-                                vent.bombs.resetBaseY();
-                            } else {
-                                vent.bombs.baseY = Integer.parseInt(newArgs[2]);
-                            }
-                        }
+                String nodeKey = newArgs[1];
 
-                        msg.info("bombs:baseY - " + vent.bombs.baseY);
+                // Command-only actions (not in VolcanoVentConfigNodeManager)
+                if (nodeKey.equalsIgnoreCase("erupt:autoconfig")) {
+                    if (newArgs.length == 3 && newArgs[2].equalsIgnoreCase("confirm")) {
+                        vent.erupt.autoConfig();
+                        msg.info("erupt:autoconfig applied!");
+                    } else {
+                        msg.info("run erupt:autoconfig with confirm to apply autoconfig.");
                     }
-                } else if (newArgs[1].equalsIgnoreCase("erupt:style")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) {
-                            VolcanoEruptStyle style = VolcanoEruptStyle.getVolcanoEruptStyle(newArgs[2]);
-                            if (style != null)
-                                vent.erupt.setStyle(style);
-                        }
-                        msg.info("erupt:style - " + vent.erupt.getStyle().toString());
+                    vent.volcano.trySave(true);
+                    break;
+                }
+
+                // Player-only special value handling before delegating to manager
+                if (nodeKey.equalsIgnoreCase("erupt:style")) {
+                    // Command sets style without autoConfig (use erupt:autoconfig separately)
+                    if (newArgs.length == 3) {
+                        VolcanoEruptStyle style = VolcanoEruptStyle.getVolcanoEruptStyle(newArgs[2]);
+                        if (style != null) vent.erupt.setStyle(style);
                     }
-                } else if (newArgs[1].equalsIgnoreCase("erupt:autoconfig")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3 && newArgs[2].equalsIgnoreCase("confirm")) {
-                            vent.erupt.autoConfig();
-                            msg.info("erupt:autoconfig applied!");
-                        } else {
-                            msg.info("run erupt:autoconfig with confirm to apply autoconfig.");
-                        }
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("explosion:bombs:min")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.explosion.settings.minBombCount = Integer.parseInt(newArgs[2]);
-                        msg.info("explosion:bombs:min - " + vent.explosion.settings.minBombCount);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("explosion:bombs:max")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.explosion.settings.maxBombCount = Integer.parseInt(newArgs[2]);
-                        msg.info("explosion:bombs:max - " + vent.explosion.settings.maxBombCount);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("explosion:scheduler:size")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.explosion.settings.explosionSize = Integer.parseInt(newArgs[2]);
-                        msg.info(
-                                "explosion:scheduler:size - "
-                                        + vent.explosion.settings.explosionSize);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("explosion:scheduler:damagingSize")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3)
-                            vent.explosion.settings.damagingExplosionSize = Integer.parseInt(newArgs[2]);
-                        msg.info(
-                                "explosion:scheduler:damagingSize - "
-                                        + vent.explosion.settings.damagingExplosionSize);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("vent:craterRadius")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) {
-                            vent.setRadius(Integer.parseInt(newArgs[2]));
+                    msg.info("erupt:style - " + vent.erupt.getStyle().toString());
+                    vent.volcano.trySave(true);
+                    break;
+                }
+
+                if (nodeKey.equalsIgnoreCase("vent:fissureAngle") && newArgs.length == 3) {
+                    if (newArgs[2].equalsIgnoreCase("get") || newArgs[2].equalsIgnoreCase("auto")) {
+                        if (sender instanceof Player) {
+                            Player player = (Player) sender;
+                            float yaw = -1 * player.getLocation().getYaw();
+                            yaw = (yaw % 360 + 360) % 360;
+                            vent.fissureAngle = Math.toRadians(yaw);
                             vent.flushCache();
                         }
+                        msg.info("vent:fissureAngle - " + vent.fissureAngle
+                                + " (" + Math.toDegrees(vent.fissureAngle) + " deg)");
+                        vent.volcano.trySave(true);
+                        break;
+                    }
+                }
 
-                        msg.info("vent:craterRadius - " + vent.craterRadius);
+                if (nodeKey.equalsIgnoreCase("vent:type") && newArgs.length == 3) {
+                    VolcanoVentConfigNodeManager.setValue(vent, "vent:type", newArgs[2]);
+                    // Also set fissure angle from player yaw when changing type in-game
+                    if (sender instanceof Player) {
+                        Player player = (Player) sender;
+                        float yaw = player.getLocation().getYaw();
+                        yaw = (yaw % 360 + 360) % 360;
+                        vent.fissureAngle = Math.toRadians(yaw);
+                        vent.flushCache();
                     }
-                } else if (newArgs[1].equalsIgnoreCase("vent:fissureAngle")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) {
-                            if (newArgs[2].equalsIgnoreCase("get")
-                                    || newArgs[2].equalsIgnoreCase("auto")) {
-                                if (sender instanceof Player) {
-                                    Player player = (Player) sender;
+                    msg.info("vent:type - " + vent.getType().toString());
+                    vent.volcano.trySave(true);
+                    break;
+                }
 
-                                    float yaw = -1 * player.getLocation().getYaw();
-                                    yaw = (yaw % 360 + 360) % 360;
-
-                                    vent.fissureAngle = Math.toRadians(yaw);
-                                }
-                            } else {
-                                vent.fissureAngle = Double.parseDouble(newArgs[2]);
-                            }
-
-                            vent.flushCache();
-                        }
-
-                        msg.info(
-                                "vent:fissureAngle - "
-                                        + vent.fissureAngle
-                                        + " ("
-                                        + Math.toDegrees(vent.fissureAngle)
-                                        + " deg)");
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("succession:enable")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) {
-                            vent.enableSuccession = Boolean.parseBoolean(newArgs[2]);
-                        }
-                        msg.info("succession:enable - " + vent.enableSuccession);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("succession:probability")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) {
-                            vent.successionProbability = Double.parseDouble(newArgs[2]);
-                        }
-                        msg.info("succession:probability - " + vent.successionProbability);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("succession:treeProbability")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) {
-                            vent.successionTreeProbability = Double.parseDouble(newArgs[2]);
-                        }
-                        msg.info("succession:treeProbability - " + vent.successionTreeProbability);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("ash:fullPyroclasticFlowProbability")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) {
-                            vent.fullPyroclasticFlowProbability = Double.parseDouble(newArgs[2]);
-                        }
-                        msg.info("ash:fullPyroclasticFlowProbability - " + vent.fullPyroclasticFlowProbability);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("vent:fissureLength")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) {
-                            vent.fissureLength = Integer.parseInt(newArgs[2]);
-                            vent.flushCache();
-                        }
-                        msg.info("vent:fissureLength - " + vent.fissureLength);
-                    }
-                } else if (newArgs[1].equalsIgnoreCase("vent:type")) {
-                    if (newArgs.length >= 2) {
-                        if (newArgs.length == 3) {
-                            VolcanoVentType type = VolcanoVentType.fromString(newArgs[2]);
-                            vent.setType(type);
-                            if (sender instanceof Player) {
-                                Player player = (Player) sender;
-
-                                float yaw = player.getLocation().getYaw();
-                                yaw = (yaw % 360 + 360) % 360;
-
-                                vent.fissureAngle = Math.toRadians(yaw);
-                            }
-                            vent.flushCache();
-                        }
-                        msg.info("vent:type - " + vent.getType().toString());
-                    }
-                } else {
+                // Generic path: delegate to VolcanoVentConfigNodeManager
+                if (VolcanoVentConfigNodeManager.getInfo(nodeKey) == null) {
                     msg.error("Invalid config node!");
                     msg.error("Available config nodes: " + String.join(", ", configNodes));
+                    break;
+                }
+
+                if (newArgs.length == 3) {
+                    String err = VolcanoVentConfigNodeManager.setValue(vent, nodeKey, newArgs[2]);
+                    if (err != null) {
+                        msg.error(err);
+                        break;
+                    }
+                }
+
+                // Display current value with custom formatting for some nodes
+                Object val = VolcanoVentConfigNodeManager.getValue(vent, nodeKey);
+                if (nodeKey.equalsIgnoreCase("lavaflow:silicateLevel")) {
+                    double sl = ((Number) val).doubleValue();
+                    msg.info("lavaflow:silicateLevel - " + sl
+                            + " (" + String.format("%.2f", sl * 100) + "%, "
+                            + TyphonUtils.getLavaTypeBySilicateLevel(sl) + ")");
+                } else if (nodeKey.equalsIgnoreCase("lavaflow:gasContent")) {
+                    double gc = ((Number) val).doubleValue();
+                    msg.info("lavaflow:gasContent - " + gc
+                            + " (" + String.format("%.2f", gc * 100) + "%)");
+                } else if (nodeKey.equalsIgnoreCase("vent:fissureAngle")) {
+                    double angle = ((Number) val).doubleValue();
+                    msg.info("vent:fissureAngle - " + angle
+                            + " (" + Math.toDegrees(angle) + " deg)");
+                } else {
+                    msg.info(nodeKey + " - " + val);
                 }
 
                 vent.volcano.trySave(true);

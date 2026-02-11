@@ -530,22 +530,37 @@ public class TyphonCommand {
             return;
         }
 
+        // /typhon web token — issue a token only
+        if (args.length >= 2 && args[1].equalsIgnoreCase("token")) {
+            if (!apiServer.isIssueTempTokenEnabled()) {
+                TyphonMessage.error(sender, "Temporary token issuance is disabled.");
+                return;
+            }
+            String token = apiServer.getAuth().createTempToken(5 * 60 * 1000L);
+            sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Typhon Web]");
+            sender.sendMessage(ChatColor.GRAY + "Token (expires in 5 min):");
+            sender.sendMessage(ChatColor.GREEN + token);
+            return;
+        }
+
         sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Typhon Web]");
 
         String serverUrl = apiServer.getPublicUrl();
         boolean hasPlaceholder = serverUrl.contains("<your-server-ip>");
 
+        boolean isConsole = !(sender instanceof Player);
+
         if (apiServer.isServeBundled()) {
             String bundledUrl = serverUrl + "/web/";
-            if (!hasPlaceholder) {
-                sender.sendMessage(ChatColor.GRAY + "Bundled Dashboard:");
+            sender.sendMessage(ChatColor.GRAY + "Bundled Dashboard:");
+            if (isConsole || hasPlaceholder) {
+                sender.sendMessage(ChatColor.AQUA + bundledUrl);
+            } else {
                 Component bundledLink = Component.text(bundledUrl)
                         .color(NamedTextColor.AQUA)
                         .decorate(TextDecoration.UNDERLINED)
                         .clickEvent(ClickEvent.openUrl(bundledUrl));
                 sender.sendMessage(bundledLink);
-            } else {
-                sender.sendMessage(ChatColor.GRAY + "Bundled Dashboard: " + bundledUrl);
             }
         }
 
@@ -559,11 +574,15 @@ public class TyphonCommand {
 
         sender.sendMessage(ChatColor.GRAY + "Remote Dashboard" +
                 (apiServer.isIssueTempTokenEnabled() ? " (expires in 5 min):" : ":"));
-        Component link = Component.text("[Open Typhon Dashboard]")
-                .color(NamedTextColor.GREEN)
-                .decorate(TextDecoration.BOLD)
-                .clickEvent(ClickEvent.openUrl(connectUrl.toString()));
-        sender.sendMessage(link);
+        if (isConsole) {
+            sender.sendMessage(ChatColor.GREEN + connectUrl.toString());
+        } else {
+            Component link = Component.text("[Open Typhon Dashboard]")
+                    .color(NamedTextColor.GREEN)
+                    .decorate(TextDecoration.BOLD)
+                    .clickEvent(ClickEvent.openUrl(connectUrl.toString()));
+            sender.sendMessage(link);
+        }
 
         if (hasPlaceholder) {
             sender.sendMessage(ChatColor.YELLOW + "Note: Replace <your-server-ip> with your server's public IP.");

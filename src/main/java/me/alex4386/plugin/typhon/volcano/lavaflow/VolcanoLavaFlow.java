@@ -61,6 +61,15 @@ public class VolcanoLavaFlow implements Listener {
 
     public long lastQueueUpdates = 0;
 
+    // Lava flow rate tracking (flows per second from autoFlowLava)
+    private long flowedBlocksSinceRateCalc = 0;
+    private long lastFlowRateCalcTime = 0;
+    private long flowedBlocksPerSecond = 0;
+
+    // Cached counts — updated on main thread, safe to read from web thread
+    private volatile int cachedActiveLavaCount = 0;
+    private volatile int cachedTerminalBlockCount = 0;
+
     // Disable rootless cone for now.
     private double rootlessConeProbability = (0.0 / 10.0);
 
@@ -170,6 +179,28 @@ public class VolcanoLavaFlow implements Listener {
         if (passedMs < 50) return lastQueueUpdates * 20;
 
         return (long) (lastQueueUpdatesPerSecond / (passedMs / (double) 1000));
+    }
+
+    public long getFlowedBlocksPerSecond() {
+        return flowedBlocksPerSecond;
+    }
+
+    public int getActiveLavaCount() {
+        return cachedActiveLavaCount;
+    }
+
+    public int getTerminalBlockCount() {
+        return cachedTerminalBlockCount;
+    }
+
+    private void updateCachedCounts() {
+        int count = 0;
+        for (Map<Block, VolcanoLavaCoolData> lavaCoolMap : lavaCools.values()) {
+            count += lavaCoolMap.size();
+        }
+        count += pillowLavaMap.size();
+        cachedActiveLavaCount = count;
+        cachedTerminalBlockCount = terminalBlocks.size();
     }
 
     public Volcano getVolcano() {
@@ -2041,6 +2072,20 @@ public class VolcanoLavaFlow implements Listener {
 
         prevQueuedLavaInflux = queuedLavaInflux;
         queuedLavaInflux = 0;
+
+        // Update flow rate tracking
+        flowedBlocksSinceRateCalc += flowedBlocks;
+        long now = System.currentTimeMillis();
+        if (lastFlowRateCalcTime == 0) {
+            lastFlowRateCalcTime = now;
+        } else if (now - lastFlowRateCalcTime >= 1000) {
+            flowedBlocksPerSecond = flowedBlocksSinceRateCalc;
+            flowedBlocksSinceRateCalc = 0;
+            lastFlowRateCalcTime = now;
+        }
+
+        // Update cached counts (safe for web thread reads)
+        updateCachedCounts();
     }
 
     public void handleSurtseyan() {

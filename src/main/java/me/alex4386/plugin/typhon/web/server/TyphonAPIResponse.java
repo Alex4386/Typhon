@@ -1,5 +1,6 @@
 package me.alex4386.plugin.typhon.web.server;
 
+import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
 import java.util.LinkedHashMap;
@@ -53,6 +54,13 @@ public class TyphonAPIResponse {
     @SuppressWarnings("unchecked")
     public TyphonAPIResponse json(JSONObject obj) {
         this.body = obj.toJSONString();
+        this.contentType = "application/json";
+        return this;
+    }
+
+    @SuppressWarnings("unchecked")
+    public TyphonAPIResponse json(JSONArray arr) {
+        this.body = arr.toJSONString();
         this.contentType = "application/json";
         return this;
     }

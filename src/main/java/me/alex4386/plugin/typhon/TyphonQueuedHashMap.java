@@ -54,6 +54,7 @@ public class TyphonQueuedHashMap<K,V> {
         K realKey = this.getRealKey(key);
         while (!queue.isEmpty()) {
             K oldestKey = queue.poll();
+            if (oldestKey == null) break;
             if (oldestKey.equals(realKey)) {
                 break;
             }
@@ -72,7 +73,9 @@ public class TyphonQueuedHashMap<K,V> {
             queue.remove(realKey);
         } else if (map.size() >= maxSize) {
             K oldestKey = queue.poll();
-            this.removeByRealKey(oldestKey);
+            if (oldestKey != null) {
+                this.removeByRealKey(oldestKey);
+            }
         }
 
         map.put(realKey, new TyphonCache<V>(value));

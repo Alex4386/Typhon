@@ -11,6 +11,7 @@ public class TyphonAPIRequest {
     private final Map<String, String> headers;
     private final Map<String, List<String>> queryParams;
     private final String body;
+    private Map<String, String> pathParams;
 
     public TyphonAPIRequest(String method, String path, Map<String, String> headers, Map<String, List<String>> queryParams, String body) {
         this.method = method;
@@ -18,6 +19,7 @@ public class TyphonAPIRequest {
         this.headers = headers;
         this.queryParams = queryParams;
         this.body = body;
+        this.pathParams = Collections.emptyMap();
     }
 
     public String getMethod() {
@@ -55,6 +57,18 @@ public class TyphonAPIRequest {
 
     public String getBody() {
         return body;
+    }
+
+    public Map<String, String> getPathParams() {
+        return pathParams;
+    }
+
+    public String getPathParam(String name) {
+        return pathParams.get(name);
+    }
+
+    public void setPathParams(Map<String, String> pathParams) {
+        this.pathParams = pathParams;
     }
 
     public static TyphonAPIRequest fromJavalinContext(io.javalin.http.Context ctx) {
