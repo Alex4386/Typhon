@@ -20,10 +20,12 @@ import {
   FieldLabel,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 import { VolcanoIcon } from '@/components/icons/VolcanoIcon';
 
 type Phase = 'form' | 'connecting' | 'connected' | 'error';
+type AuthMode = 'token' | 'basic';
 
 export default function Connect() {
   const [searchParams] = useSearchParams();
@@ -36,6 +38,9 @@ export default function Connect() {
 
   const [serverInput, setServerInput] = useState(searchParams.get('server') || '');
   const [tokenInput, setTokenInput] = useState(searchParams.get('token') || '');
+  const [authMode, setAuthMode] = useState<AuthMode>(searchParams.get('token') ? 'token' : 'token');
+  const [usernameInput, setUsernameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
 
   const log = useCallback((msg: string) => {
     const ts = new Date().toLocaleTimeString();
@@ -48,14 +53,20 @@ export default function Connect() {
     }
   }, [logs]);
 
-  const doConnect = useCallback(async (server: string, token: string) => {
+  const doConnect = useCallback(async (
+    server: string,
+    opts: { token?: string; username?: string; password?: string },
+  ) => {
     setPhase('connecting');
     setErrorMsg('');
 
     try {
-      if (token) {
+      if (opts.username && opts.password) {
+        log('Setting basic credentials...');
+        setAuthToken('Basic ' + btoa(opts.username + ':' + opts.password));
+      } else if (opts.token) {
         log('Setting auth token...');
-        setAuthToken('Bearer ' + token);
+        setAuthToken('Bearer ' + opts.token);
       }
 
       setApiBase(server);
@@ -80,7 +91,7 @@ export default function Connect() {
       const authRes = await api.get<{ authenticated: boolean; authConfigured: boolean }>('/auth');
       if (authRes.status === 200 && authRes.data) {
         if (authRes.data.authConfigured && !authRes.data.authenticated) {
-          throw new Error('Authentication required. Please provide a valid token.');
+          throw new Error('Authentication failed. Please check your credentials.');
         }
         log(authRes.data.authConfigured ? 'Authenticated' : 'No auth configured (open access)');
       }
@@ -105,7 +116,7 @@ export default function Connect() {
 
     if (server) {
       attempted.current = true;
-      doConnect(server, token);
+      doConnect(server, { token });
     }
   }, [searchParams, doConnect]);
 
@@ -113,8 +124,12 @@ export default function Connect() {
     const server = serverInput.trim();
     if (!server) return;
     attempted.current = true;
-    doConnect(server, tokenInput.trim());
-  }, [serverInput, tokenInput, doConnect]);
+    if (authMode === 'basic') {
+      doConnect(server, { username: usernameInput.trim(), password: passwordInput });
+    } else {
+      doConnect(server, { token: tokenInput.trim() });
+    }
+  }, [serverInput, tokenInput, usernameInput, passwordInput, authMode, doConnect]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted p-6 md:p-10">
@@ -168,16 +183,49 @@ export default function Connect() {
                         required
                       />
                     </Field>
-                    <Field>
-                      <FieldLabel htmlFor="token">Auth Token</FieldLabel>
-                      <Input
-                        id="token"
-                        type="password"
-                        placeholder="Optional bearer token..."
-                        value={tokenInput}
-                        onChange={(e) => setTokenInput(e.target.value)}
-                      />
-                    </Field>
+
+                    <Tabs value={authMode} onValueChange={(v) => setAuthMode(v as AuthMode)}>
+                      <TabsList className="w-full">
+                        <TabsTrigger value="token" className="flex-1">Token</TabsTrigger>
+                        <TabsTrigger value="basic" className="flex-1">Username &amp; Password</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+
+                    {authMode === 'token' ? (
+                      <Field>
+                        <FieldLabel htmlFor="token">Auth Token</FieldLabel>
+                        <Input
+                          id="token"
+                          type="password"
+                          placeholder="Bearer token..."
+                          value={tokenInput}
+                          onChange={(e) => setTokenInput(e.target.value)}
+                        />
+                      </Field>
+                    ) : (
+                      <>
+                        <Field>
+                          <FieldLabel htmlFor="username">Username</FieldLabel>
+                          <Input
+                            id="username"
+                            placeholder="Username"
+                            value={usernameInput}
+                            onChange={(e) => setUsernameInput(e.target.value)}
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor="password">Password</FieldLabel>
+                          <Input
+                            id="password"
+                            type="password"
+                            placeholder="Password"
+                            value={passwordInput}
+                            onChange={(e) => setPasswordInput(e.target.value)}
+                          />
+                        </Field>
+                      </>
+                    )}
+
                     <Field>
                       <Button type="submit" className="w-full">Connect</Button>
                       <FieldDescription className="text-center">

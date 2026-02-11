@@ -12,6 +12,7 @@ public class TyphonAPIAuth {
     private final List<String[]> basicCredentials = new ArrayList<>();
     private final Map<String, Long> tempTokens = new ConcurrentHashMap<>();
     private boolean issueTempTokenEnabled = true;
+    private boolean allowAnonymous = false;
 
     public void setIssueTempTokenEnabled(boolean enabled) {
         this.issueTempTokenEnabled = enabled;
@@ -19,6 +20,14 @@ public class TyphonAPIAuth {
 
     public boolean isIssueTempTokenEnabled() {
         return issueTempTokenEnabled;
+    }
+
+    public void setAllowAnonymous(boolean allowAnonymous) {
+        this.allowAnonymous = allowAnonymous;
+    }
+
+    public boolean isAllowAnonymous() {
+        return allowAnonymous;
     }
 
     public void addToken(String token) {
@@ -36,6 +45,7 @@ public class TyphonAPIAuth {
     }
 
     public boolean isConfigured() {
+        if (!allowAnonymous) return true;
         return !tokens.isEmpty() || !basicCredentials.isEmpty() || !tempTokens.isEmpty();
     }
 

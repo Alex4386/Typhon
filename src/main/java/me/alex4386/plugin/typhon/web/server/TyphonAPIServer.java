@@ -38,9 +38,12 @@ public class TyphonAPIServer {
             auth = new TyphonAPIAuth();
         }
 
+        boolean allowAnonymous = config.getBoolean("web.api.auth.allowAnonymous", false);
+
         List<?> authList = config.getList("web.api.auth.tokens");
         auth.parseAuthConfig(authList);
         auth.setIssueTempTokenEnabled(issueTempToken);
+        auth.setAllowAnonymous(allowAnonymous);
     }
 
     public void start() {

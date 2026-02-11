@@ -38,6 +38,7 @@ web:
 
   api: # Authentication - else the people with permission should
     auth:
+      allowAnonymous: false     # if false, authentication is always required (temp tokens from /typhon web still work)
       #tokens:
       #   - AuthorizedToken
       #   - username: username

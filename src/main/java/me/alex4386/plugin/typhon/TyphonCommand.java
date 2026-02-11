@@ -530,15 +530,29 @@ public class TyphonCommand {
             return;
         }
 
-        // /typhon web token — issue a token only
+        // /typhon web token [duration] — issue a token only
         if (args.length >= 2 && args[1].equalsIgnoreCase("token")) {
             if (!apiServer.isIssueTempTokenEnabled()) {
                 TyphonMessage.error(sender, "Temporary token issuance is disabled.");
                 return;
             }
-            String token = apiServer.getAuth().createTempToken(5 * 60 * 1000L);
+
+            long duration = 2 * 60 * 60 * 1000L; // default 2h
+            String durationLabel = "2 hours";
+
+            if (args.length >= 3) {
+                long parsed = parseDuration(args[2]);
+                if (parsed <= 0) {
+                    TyphonMessage.error(sender, "Invalid duration: " + args[2] + ". Use formats like 30s, 30m, 2h, 7d");
+                    return;
+                }
+                duration = parsed;
+                durationLabel = args[2];
+            }
+
+            String token = apiServer.getAuth().createTempToken(duration);
             sender.sendMessage(ChatColor.DARK_RED + "" + ChatColor.BOLD + "[Typhon Web]");
-            sender.sendMessage(ChatColor.GRAY + "Token (expires in 5 min):");
+            sender.sendMessage(ChatColor.GRAY + "Token (expires in " + durationLabel + "):");
             sender.sendMessage(ChatColor.GREEN + token);
             return;
         }
@@ -568,12 +582,12 @@ public class TyphonCommand {
         connectUrl.append("/#/connect?server=").append(serverUrl);
 
         if (apiServer.isIssueTempTokenEnabled()) {
-            String token = apiServer.getAuth().createTempToken(5 * 60 * 1000L);
+            String token = apiServer.getAuth().createTempToken(2 * 60 * 60 * 1000L);
             connectUrl.append("&token=").append(token);
         }
 
         sender.sendMessage(ChatColor.GRAY + "Remote Dashboard" +
-                (apiServer.isIssueTempTokenEnabled() ? " (expires in 5 min):" : ":"));
+                (apiServer.isIssueTempTokenEnabled() ? " (expires in 2 hours):" : ":"));
         if (isConsole) {
             sender.sendMessage(ChatColor.GREEN + connectUrl.toString());
         } else {
@@ -586,6 +600,33 @@ public class TyphonCommand {
 
         if (hasPlaceholder) {
             sender.sendMessage(ChatColor.YELLOW + "Note: Replace <your-server-ip> with your server's public IP.");
+        }
+    }
+
+    /**
+     * Parse a duration string like "30s", "30m", "2h", "7d" into milliseconds.
+     * Plain numbers are treated as minutes.
+     */
+    private static long parseDuration(String input) {
+        input = input.trim().toLowerCase();
+        if (input.isEmpty()) return -1;
+
+        char suffix = input.charAt(input.length() - 1);
+        try {
+            if (Character.isDigit(suffix)) {
+                return Long.parseLong(input) * 60 * 1000L;
+            }
+            long number = Long.parseLong(input.substring(0, input.length() - 1));
+            if (number <= 0) return -1;
+            switch (suffix) {
+                case 's': return number * 1000L;
+                case 'm': return number * 60 * 1000L;
+                case 'h': return number * 60 * 60 * 1000L;
+                case 'd': return number * 24 * 60 * 60 * 1000L;
+                default: return -1;
+            }
+        } catch (NumberFormatException e) {
+            return -1;
         }
     }
 
