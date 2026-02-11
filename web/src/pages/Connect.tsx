@@ -38,9 +38,9 @@ export default function Connect() {
 
   const [serverInput, setServerInput] = useState(searchParams.get('server') || '');
   const [tokenInput, setTokenInput] = useState(searchParams.get('token') || '');
-  const [authMode, setAuthMode] = useState<AuthMode>(searchParams.get('token') ? 'token' : 'token');
-  const [usernameInput, setUsernameInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
+  const [authMode, setAuthMode] = useState<AuthMode>(searchParams.get('username') ? 'basic' : 'token');
+  const [usernameInput, setUsernameInput] = useState(searchParams.get('username') || '');
+  const [passwordInput, setPasswordInput] = useState(searchParams.get('password') || '');
 
   const log = useCallback((msg: string) => {
     const ts = new Date().toLocaleTimeString();
@@ -107,16 +107,22 @@ export default function Connect() {
     }
   }, [log, navigate]);
 
-  // Auto-connect from URL params
+  // Auto-connect from URL params (only when all required credentials are present)
   useEffect(() => {
     if (attempted.current) return;
 
     const server = searchParams.get('server');
     const token = searchParams.get('token') || '';
+    const username = searchParams.get('username') || '';
+    const password = searchParams.get('password') || '';
 
-    if (server) {
+    if (server && (token || (username && password))) {
       attempted.current = true;
-      doConnect(server, { token });
+      if (username && password) {
+        doConnect(server, { username, password });
+      } else {
+        doConnect(server, { token });
+      }
     }
   }, [searchParams, doConnect]);
 
