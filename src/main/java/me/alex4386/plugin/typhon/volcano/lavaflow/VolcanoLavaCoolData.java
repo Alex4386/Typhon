@@ -33,10 +33,13 @@ public class VolcanoLavaCoolData {
     public boolean isProcessed = false;
     private boolean quickCoolKillSwitch = false;
 
+    public int ejectaRecordIdx = -1;
     public int runExtensionCount = 0;
     public boolean skipNormalLavaFlowLengthCheck = false;
 
     public double plumbExtension = 1;
+
+    public boolean isUnderfill = false;
 
     public VolcanoLavaCoolData(
             Block source,
@@ -205,9 +208,29 @@ public class VolcanoLavaCoolData {
 
                 this.flowedFromVent.lavaFlow.queueBlockUpdate(block, material, TyphonUtils.getBlockFaceUpdater(flowVector.toVector()));
 
-                BlockFace[] flowableFaces = {
+                BlockFace[] baseFaces = {
                         BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.NORTH,
                 };
+
+                // For underfill: also consider UP if under the volcano slope
+                BlockFace[] flowableFaces;
+                if (this.isUnderfill) {
+                    Block highestRock = TyphonUtils.getHighestRocklikes(block);
+                    if (highestRock.getY() > block.getY()) {
+                        Block upBlock = block.getRelative(BlockFace.UP);
+                        if (upBlock.getType().isAir()) {
+                            flowableFaces = new BlockFace[] {
+                                    BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.NORTH, BlockFace.UP
+                            };
+                        } else {
+                            flowableFaces = baseFaces;
+                        }
+                    } else {
+                        flowableFaces = baseFaces;
+                    }
+                } else {
+                    flowableFaces = baseFaces;
+                }
 
                 if (Math.random() < 0.3) {
                     for (BlockFace bf : flowableFaces) {
@@ -226,6 +249,7 @@ public class VolcanoLavaCoolData {
 
                                 if (obj instanceof VolcanoLavaCoolData data) {
                                     data.plumbExtension = this.plumbExtension * (0.5 + (Math.random() * 0.25));
+                                    if (this.isUnderfill) data.isUnderfill = true;
                                 }
                             }
                         }
@@ -237,13 +261,30 @@ public class VolcanoLavaCoolData {
                         Block flowDirectionBlock = block.getRelative(targetFlowFace);
 
                         if (!this.flowedFromVent.lavaFlow.isLavaRegistered(flowDirectionBlock)) {
-                            this.flowedFromVent.lavaFlow.registerLavaCoolData(
+                            Object obj = this.flowedFromVent.lavaFlow.registerLavaCoolData(
                                     source,
                                     block,
                                     flowDirectionBlock,
                                     isBomb,
                                     targetExtensionValue
                             );
+
+                            if (obj instanceof VolcanoLavaCoolData data) {
+                                if (this.isUnderfill) data.isUnderfill = true;
+                            }
+                        }
+                    } else if (this.isUnderfill) {
+                        // Underfill dead end: add flowable neighbors as new underfill targets
+                        for (BlockFace bf : flowableFaces) {
+                            Block neighbor = block.getRelative(bf);
+                            if (neighbor.getType().isAir() && !this.flowedFromVent.lavaFlow.isLavaRegistered(neighbor)) {
+                                this.flowedFromVent.lavaFlow.underfillTargets.add(neighbor);
+                            }
+                        }
+                        // Also check DOWN for caves
+                        Block downBlock = block.getRelative(BlockFace.DOWN);
+                        if (downBlock.getType().isAir() && !this.flowedFromVent.lavaFlow.isLavaRegistered(downBlock)) {
+                            this.flowedFromVent.lavaFlow.underfillTargets.add(downBlock);
                         }
                     }
                 }
@@ -254,13 +295,17 @@ public class VolcanoLavaCoolData {
                 if (!this.flowedFromVent.lavaFlow.isLavaRegistered(flowDirectionBlock)) {
                     this.flowedFromVent.lavaFlow.queueBlockUpdate(flowDirectionBlock, material, TyphonUtils.getBlockFaceUpdater(flowVector.toVector()));
 
-                    this.flowedFromVent.lavaFlow.registerLavaCoolData(
+                    Object obj = this.flowedFromVent.lavaFlow.registerLavaCoolData(
                             source,
                             block,
                             flowDirectionBlock,
                             isBomb,
                             -1
                     );
+
+                    if (obj instanceof VolcanoLavaCoolData data) {
+                        if (this.isUnderfill) data.isUnderfill = true;
+                    }
                 }
 
                 if (flowDirectionBlock.getType() == Material.WATER) return;

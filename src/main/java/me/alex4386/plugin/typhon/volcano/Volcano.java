@@ -60,6 +60,9 @@ public class Volcano implements Listener {
     // volcano successions
     public VolcanoSuccession succession = new VolcanoSuccession(this);
 
+    // chunk loader
+    public VolcanoChunkLoader chunkLoader = new VolcanoChunkLoader(this);
+
     // vents. that spew out lavas everywhere <3
     public VolcanoVent mainVent = new VolcanoVent(this);
     public Map<String, VolcanoVent> subVents = new HashMap<>();
@@ -160,6 +163,7 @@ public class Volcano implements Listener {
         autoStart.initialize();
         geoThermal.initialize();
         succession.initialize();
+        chunkLoader.initialize();
     }
 
     public void initializeVents() {
@@ -210,6 +214,7 @@ public class Volcano implements Listener {
         autoStart.shutdown();
         geoThermal.shutdown();
         succession.shutdown();
+        chunkLoader.shutdown();
 
         logger.log(VolcanoLogClass.CORE, "Shutdown Complete!");
     }

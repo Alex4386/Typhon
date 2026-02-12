@@ -3,6 +3,8 @@ package me.alex4386.plugin.typhon.web.server.controller;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.TyphonScheduler;
 import me.alex4386.plugin.typhon.volcano.Volcano;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoVentEjectaTimeData;
+import me.alex4386.plugin.typhon.volcano.log.VolcanoVentRecord;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentBuilder;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentBuilderType;
@@ -358,9 +360,13 @@ public class VolcanoController {
                 try {
                     json.put("longestNormalLavaFlowLength", vent.longestNormalLavaFlowLength);
                     json.put("currentNormalLavaFlowLength", vent.currentNormalLavaFlowLength);
+                    json.put("currentFlowLength", vent.currentFlowLength);
+                    json.put("longestFlowLength", vent.longestFlowLength);
                 } catch (Exception ignored) {
                     json.put("longestNormalLavaFlowLength", 0);
                     json.put("currentNormalLavaFlowLength", 0);
+                    json.put("currentFlowLength", 0);
+                    json.put("longestFlowLength", 0);
                 }
 
                 try {
@@ -377,6 +383,20 @@ public class VolcanoController {
                 } catch (Exception ignored) {
                     json.put("currentEjecta", 0);
                     json.put("totalEjecta", 0);
+                }
+
+                try {
+                    json.put("plumbedBlocksPerSecond", vent.lavaFlow != null ? vent.lavaFlow.getPlumbedBlocksPerSecond() : 0);
+                    json.put("successfulPlumbsPerSecond", vent.lavaFlow != null ? vent.lavaFlow.getSuccessfulPlumbsPerSecond() : 0);
+                    json.put("normalFlowEndBlocks", vent.lavaFlow != null ? vent.lavaFlow.getNormalFlowEndBlockCount() : 0);
+                    json.put("pillowFlowEndBlocks", vent.lavaFlow != null ? vent.lavaFlow.getPillowFlowEndBlockCount() : 0);
+                    json.put("underfillTargets", vent.lavaFlow != null ? vent.lavaFlow.underfillTargets.size() : 0);
+                } catch (Exception ignored) {
+                    json.put("plumbedBlocksPerSecond", 0);
+                    json.put("successfulPlumbsPerSecond", 0);
+                    json.put("normalFlowEndBlocks", 0);
+                    json.put("pillowFlowEndBlocks", 0);
+                    json.put("underfillTargets", 0);
                 }
 
             }
@@ -405,6 +425,7 @@ public class VolcanoController {
             try {
                 json.put("currentNormalLavaFlowLength", vent.currentNormalLavaFlowLength);
                 json.put("longestNormalLavaFlowLength", vent.longestNormalLavaFlowLength);
+                json.put("currentFlowLength", vent.currentFlowLength);
                 json.put("longestFlowLength", vent.longestFlowLength);
             } catch (Exception ignored) {}
 
@@ -430,6 +451,20 @@ public class VolcanoController {
             try { json.put("terminalLavaBlocks", vent.lavaFlow != null ? vent.lavaFlow.getTerminalBlockCount() : 0); }
             catch (Exception ignored) { json.put("terminalLavaBlocks", 0); }
 
+            try {
+                json.put("plumbedBlocksPerSecond", vent.lavaFlow != null ? vent.lavaFlow.getPlumbedBlocksPerSecond() : 0);
+                json.put("successfulPlumbsPerSecond", vent.lavaFlow != null ? vent.lavaFlow.getSuccessfulPlumbsPerSecond() : 0);
+                json.put("normalFlowEndBlocks", vent.lavaFlow != null ? vent.lavaFlow.getNormalFlowEndBlockCount() : 0);
+                json.put("pillowFlowEndBlocks", vent.lavaFlow != null ? vent.lavaFlow.getPillowFlowEndBlockCount() : 0);
+                json.put("underfillTargets", vent.lavaFlow != null ? vent.lavaFlow.underfillTargets.size() : 0);
+            } catch (Exception ignored) {
+                json.put("plumbedBlocksPerSecond", 0);
+                json.put("successfulPlumbsPerSecond", 0);
+                json.put("normalFlowEndBlocks", 0);
+                json.put("pillowFlowEndBlocks", 0);
+                json.put("underfillTargets", 0);
+            }
+
             try { json.put("bombsPerSecond", vent.bombs != null ? vent.bombs.getLaunchRate() : 0); }
             catch (Exception ignored) { json.put("bombsPerSecond", 0); }
 
@@ -444,6 +479,62 @@ public class VolcanoController {
         } catch (Exception e) {
             e.printStackTrace();
         }
+        return json;
+    }
+
+    // ── Vent record (eruption history) ─────────────────────────────────
+
+    public TyphonAPIResponse getVentRecord(TyphonAPIRequest request) {
+        String name = request.getPathParam("name");
+        String ventName = request.getPathParam("vent");
+
+        Volcano volcano = TyphonPlugin.listVolcanoes.get(name);
+        if (volcano == null) return ResponseHelper.notFound("Volcano '" + name + "' not found");
+
+        VolcanoVent vent = ResponseHelper.resolveVent(volcano, ventName);
+        if (vent == null) return ResponseHelper.notFound("Vent '" + ventName + "' not found");
+
+        return new TyphonAPIResponse().json(recordToJson(vent.record));
+    }
+
+    @SuppressWarnings("unchecked")
+    public static JSONObject recordToJson(VolcanoVentRecord record) {
+        JSONObject json = new JSONObject();
+        json.put("currentEjecta", record.currentEjectaVolume);
+        json.put("totalEjecta", record.getTotalEjecta());
+        json.put("startEjectaTracking", record.startEjectaTracking);
+
+        JSONArray records = new JSONArray();
+        for (VolcanoVentEjectaTimeData entry : record.ejectaVolumeList) {
+            JSONObject rec = new JSONObject();
+            rec.put("startTime", entry.startTime);
+            rec.put("endTime", entry.endTime);
+            rec.put("ejectaVolume", entry.ejectaVolume);
+
+            if (entry.hasMetadata()) {
+                JSONObject meta = new JSONObject();
+                JSONObject summit = new JSONObject();
+                summit.put("x", entry.summitX);
+                summit.put("y", entry.summitY);
+                summit.put("z", entry.summitZ);
+                meta.put("summit", summit);
+                meta.put("baseY", entry.baseY);
+                meta.put("silicateLevel", entry.silicateLevel);
+                meta.put("gasContent", entry.gasContent);
+                meta.put("eruptionStyle", entry.eruptionStyle);
+                meta.put("ventType", entry.ventType);
+                meta.put("craterRadius", entry.craterRadius);
+                meta.put("longestFlowLength", entry.longestFlowLength);
+                meta.put("longestNormalLavaFlowLength", entry.longestNormalLavaFlowLength);
+                meta.put("currentFlowLength", entry.currentFlowLength);
+                meta.put("currentNormalLavaFlowLength", entry.currentNormalLavaFlowLength);
+                rec.put("metadata", meta);
+            }
+
+            records.add(rec);
+        }
+        json.put("records", records);
+
         return json;
     }
 

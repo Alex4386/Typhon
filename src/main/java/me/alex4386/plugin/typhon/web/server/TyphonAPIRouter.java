@@ -3,6 +3,7 @@ package me.alex4386.plugin.typhon.web.server;
 import me.alex4386.plugin.typhon.TyphonPlugin;
 import me.alex4386.plugin.typhon.web.server.controller.VentConfigController;
 import me.alex4386.plugin.typhon.web.server.controller.VolcanoController;
+import org.bukkit.Bukkit;
 import org.json.simple.JSONObject;
 
 import java.util.ArrayList;
@@ -26,6 +27,7 @@ public class TyphonAPIRouter {
         register("GET", "/v1/version", this::handleVersion, true);
         register("GET", "/v1/health", this::handleHealth, true);
         register("GET", "/v1/auth", this::handleAuth, true);
+        register("GET", "/v1/tps", this::handleTps, true);
 
         // Authenticated
         register("GET", "/v1/settings", this::handleSettings);
@@ -53,6 +55,9 @@ public class TyphonAPIRouter {
         // Vent builder
         register("GET", "/v1/volcanoes/{name}/vents/{vent}/builder", VolcanoController.INSTANCE::getBuilder);
         register("POST", "/v1/volcanoes/{name}/vents/{vent}/builder", VolcanoController.INSTANCE::configureBuilder);
+
+        // Vent record (eruption history)
+        register("GET", "/v1/volcanoes/{name}/vents/{vent}/record", VolcanoController.INSTANCE::getVentRecord);
     }
 
     // ── System handlers (small, kept inline) ─────────────────────────────
@@ -77,6 +82,27 @@ public class TyphonAPIRouter {
         JSONObject json = new JSONObject();
         json.put("authenticated", auth.authenticate(request));
         json.put("authConfigured", auth.isConfigured());
+        return new TyphonAPIResponse().json(json);
+    }
+
+    @SuppressWarnings("unchecked")
+    private TyphonAPIResponse handleTps(TyphonAPIRequest request) {
+        JSONObject json = new JSONObject();
+        try {
+            double[] tps = Bukkit.getServer().getTPS();
+            json.put("tps1m", Math.min(tps[0], 20.0));
+            json.put("tps5m", Math.min(tps[1], 20.0));
+            json.put("tps15m", Math.min(tps[2], 20.0));
+        } catch (Exception e) {
+            json.put("tps1m", 20.0);
+            json.put("tps5m", 20.0);
+            json.put("tps15m", 20.0);
+        }
+        try {
+            json.put("mspt", Bukkit.getServer().getAverageTickTime());
+        } catch (Exception e) {
+            json.put("mspt", 0.0);
+        }
         return new TyphonAPIResponse().json(json);
     }
 

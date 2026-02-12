@@ -4,28 +4,67 @@ import { useConnectionStatus } from '@/hooks/useConnectionStatus';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KeyRound, Wifi, WifiOff } from 'lucide-react';
+
+type AuthMode = 'token' | 'basic';
+
+/** Try to decode the stored auth header back into mode + fields. */
+function parseStoredAuth(raw: string): { mode: AuthMode; token: string; username: string; password: string } {
+  if (raw.startsWith('Basic ')) {
+    try {
+      const decoded = atob(raw.slice(6));
+      const idx = decoded.indexOf(':');
+      if (idx !== -1) {
+        return { mode: 'basic', token: '', username: decoded.slice(0, idx), password: decoded.slice(idx + 1) };
+      }
+    } catch { /* fall through */ }
+  }
+  // Strip "Bearer " prefix if present for display
+  const token = raw.startsWith('Bearer ') ? raw.slice(7) : raw;
+  return { mode: 'token', token, username: '', password: '' };
+}
 
 export default function Settings() {
   const { online, version, refresh } = useConnectionStatus();
+  const [authMode, setAuthMode] = useState<AuthMode>('token');
   const [tokenInput, setTokenInput] = useState('');
+  const [usernameInput, setUsernameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
 
   useEffect(() => {
     const saved = getAuthToken();
-    if (saved) setTokenInput(saved);
+    if (saved) {
+      const parsed = parseStoredAuth(saved);
+      setAuthMode(parsed.mode);
+      setTokenInput(parsed.token);
+      setUsernameInput(parsed.username);
+      setPasswordInput(parsed.password);
+    }
   }, []);
 
-  const applyToken = useCallback(() => {
-    const token = tokenInput.trim();
-    if (token) {
-      setAuthToken(token);
-      refresh();
+  const applyAuth = useCallback(() => {
+    if (authMode === 'basic') {
+      const u = usernameInput.trim();
+      const p = passwordInput;
+      if (u && p) {
+        setAuthToken('Basic ' + btoa(u + ':' + p));
+        refresh();
+      }
+    } else {
+      const t = tokenInput.trim();
+      if (t) {
+        setAuthToken('Bearer ' + t);
+        refresh();
+      }
     }
-  }, [tokenInput, refresh]);
+  }, [authMode, tokenInput, usernameInput, passwordInput, refresh]);
 
   const handleClear = useCallback(() => {
     clearAuthToken();
     setTokenInput('');
+    setUsernameInput('');
+    setPasswordInput('');
   }, []);
 
   return (
@@ -58,21 +97,49 @@ export default function Settings() {
           <KeyRound className="size-4 text-muted-foreground" />
           <h2 className="font-semibold">Authentication</h2>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Set a bearer token or basic credentials to authenticate with the server.
-        </p>
-        <div className="flex gap-2">
-          <Input
-            type="password"
-            placeholder="Bearer token or Basic credentials..."
-            value={tokenInput}
-            onChange={(e) => setTokenInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && applyToken()}
-            className="flex-1"
-          />
-          <Button size="sm" onClick={applyToken}>Set</Button>
-          <Button variant="secondary" size="sm" onClick={handleClear}>Clear</Button>
-        </div>
+
+        <Tabs value={authMode} onValueChange={(v) => setAuthMode(v as AuthMode)}>
+          <TabsList className="w-full">
+            <TabsTrigger value="token" className="flex-1">Token</TabsTrigger>
+            <TabsTrigger value="basic" className="flex-1">Username &amp; Password</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {authMode === 'token' ? (
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              placeholder="Bearer token..."
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && applyAuth()}
+              className="flex-1"
+            />
+            <Button size="sm" onClick={applyAuth}>Set</Button>
+            <Button variant="secondary" size="sm" onClick={handleClear}>Clear</Button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Input
+              placeholder="Username"
+              value={usernameInput}
+              onChange={(e) => setUsernameInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && applyAuth()}
+            />
+            <div className="flex gap-2">
+              <Input
+                type="password"
+                placeholder="Password"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && applyAuth()}
+                className="flex-1"
+              />
+              <Button size="sm" onClick={applyAuth}>Set</Button>
+              <Button variant="secondary" size="sm" onClick={handleClear}>Clear</Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

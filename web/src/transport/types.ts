@@ -18,6 +18,13 @@ export interface AuthData {
   authConfigured: boolean;
 }
 
+export interface TpsData {
+  tps1m: number;
+  tps5m: number;
+  tps15m: number;
+  mspt: number;
+}
+
 export interface LocationData {
   world: string | null;
   x: number;
@@ -36,7 +43,6 @@ export interface VentSummary {
 export interface VentDetail extends VentSummary {
   location: LocationData;
   craterRadius: number;
-  longestFlowLength: number;
   silicateLevel: number;
   fissureAngle: number;
   calderaRadius: number;
@@ -55,11 +61,18 @@ export interface VentDetail extends VentSummary {
   isExploding: boolean;
   longestNormalLavaFlowLength: number;
   currentNormalLavaFlowLength: number;
+  currentFlowLength: number;
+  longestFlowLength: number;
   longestAshFlowLength: number;
   currentAshFlowLength: number;
   currentEjecta: number;
   totalEjecta: number;
   ejectaPerSecond: number;
+  plumbedBlocksPerSecond: number;
+  successfulPlumbsPerSecond: number;
+  normalFlowEndBlocks: number;
+  pillowFlowEndBlocks: number;
+  underfillTargets: number;
 }
 
 /** Lightweight metrics returned by GET /vents/:vent/metrics — poll-friendly */
@@ -71,6 +84,7 @@ export interface VentMetrics {
   isExploding: boolean;
   currentNormalLavaFlowLength: number;
   longestNormalLavaFlowLength: number;
+  currentFlowLength: number;
   longestFlowLength: number;
   currentAshFlowLength: number;
   longestAshFlowLength: number;
@@ -80,6 +94,11 @@ export interface VentMetrics {
   lavaFlowsPerSecond: number;
   activeLavaBlocks: number;
   terminalLavaBlocks: number;
+  plumbedBlocksPerSecond: number;
+  successfulPlumbsPerSecond: number;
+  normalFlowEndBlocks: number;
+  pillowFlowEndBlocks: number;
+  underfillTargets: number;
   bombsPerSecond: number;
   activeBombs: number;
   maxActiveBombs: number;
@@ -103,6 +122,34 @@ export interface SettingsData {
   blueMap: {
     publicUrl: string | null;
   };
+}
+
+export interface EjectaRecordMetadata {
+  summit: { x: number; y: number; z: number };
+  baseY: number;
+  silicateLevel: number;
+  gasContent: number;
+  eruptionStyle: string;
+  ventType: string;
+  craterRadius: number;
+  longestFlowLength: number;
+  longestNormalLavaFlowLength: number;
+  currentFlowLength: number;
+  currentNormalLavaFlowLength: number;
+}
+
+export interface EjectaRecord {
+  startTime: number;
+  endTime: number;
+  ejectaVolume: number;
+  metadata?: EjectaRecordMetadata;
+}
+
+export interface VentRecordData {
+  currentEjecta: number;
+  totalEjecta: number;
+  startEjectaTracking: number;
+  records: EjectaRecord[];
 }
 
 export interface BuilderData {

@@ -109,9 +109,9 @@ public class VolcanoExplosion {
             fissureLengthMultiplier = this.vent.fissureLength / this.vent.craterRadius;
         }
 
-        int bombCount = (int) (
+        int bombCount = (int) Math.round(
             (
-                Math.random() * 
+                Math.random() *
                 (settings.maxBombCount - settings.minBombCount)
                 + settings.minBombCount
             ) * bombMultiplier * this.vent.lavaFlow.settings.gasContent * fissureLengthMultiplier

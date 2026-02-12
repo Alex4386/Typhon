@@ -7,6 +7,7 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 
 public class VolcanoPillowLavaData {
     int extensionCount;
+    public int ejectaRecordIdx = -1;
     VolcanoVent vent;
 
     Block sourceBlock;

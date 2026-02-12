@@ -34,7 +34,6 @@ public class VolcanoLavaFlow implements Listener {
 
     public static Set<VolcanoVent> flowingVents = new HashSet<>();
 
-    public Set<Chunk> lavaFlowChunks = new HashSet<>();
 
     public Map<Chunk, Map<Block, VolcanoLavaCoolData>> lavaCools = new HashMap<>();
     public Map<Chunk, Map<Block, VolcanoLavaCoolData>> cachedCools = new HashMap<>();
@@ -42,6 +41,9 @@ public class VolcanoLavaFlow implements Listener {
     public Map<Block, VolcanoPillowLavaData> cachedPillowLavaMap = new HashMap<>();
 
     public Set<Block> terminalBlocks = new HashSet<>();
+    public Set<Block> normalFlowEndBlocks = new HashSet<>();
+    public Set<Block> pillowFlowEndBlocks = new HashSet<>();
+    public Set<Block> underfillTargets = new HashSet<>();
 
     private int lavaFlowScheduleId = -1;
     private int lavaCoolScheduleId = -1;
@@ -65,6 +67,20 @@ public class VolcanoLavaFlow implements Listener {
     private long flowedBlocksSinceRateCalc = 0;
     private long lastFlowRateCalcTime = 0;
     private long flowedBlocksPerSecond = 0;
+
+    // Plumbing rate tracking (lava diverted to extension per second)
+    private long plumbedBlocksSinceRateCalc = 0;
+    private volatile long plumbedBlocksPerSecond = 0;
+
+    // Successful plumbing tracking (how many extendLava() calls actually flowed)
+    private long successfulPlumbsSinceRateCalc = 0;
+    private volatile long successfulPlumbsPerSecond = 0;
+
+    // Column index for flow end block staleness detection (packed x,z -> block)
+    private final Map<Long, Block> flowEndColumnIndex = new HashMap<>();
+
+    // Chunk-level plumbing dedup: only one active plumbing target per chunk (chunkKey -> block)
+    private final Map<Long, Block> plumbingChunkTargets = new HashMap<>();
 
     // Cached counts — updated on main thread, safe to read from web thread
     private volatile int cachedActiveLavaCount = 0;
@@ -191,6 +207,64 @@ public class VolcanoLavaFlow implements Listener {
 
     public int getTerminalBlockCount() {
         return cachedTerminalBlockCount;
+    }
+
+    public long getPlumbedBlocksPerSecond() {
+        return plumbedBlocksPerSecond;
+    }
+
+    public long getSuccessfulPlumbsPerSecond() {
+        return successfulPlumbsPerSecond;
+    }
+
+    public int getNormalFlowEndBlockCount() {
+        return normalFlowEndBlocks.size();
+    }
+
+    public int getPillowFlowEndBlockCount() {
+        return pillowFlowEndBlocks.size();
+    }
+
+    // ── Flow end block management (with column-based staleness detection) ──
+
+    private static long packXZ(int x, int z) {
+        return ((long) x << 32) | (z & 0xFFFFFFFFL);
+    }
+
+    private void addFlowEndBlock(Block block, boolean isPillow) {
+        long key = packXZ(block.getX(), block.getZ());
+        Block existing = flowEndColumnIndex.get(key);
+        if (existing != null && !existing.equals(block)) {
+            // Remove stale block at same x,z column
+            normalFlowEndBlocks.remove(existing);
+            pillowFlowEndBlocks.remove(existing);
+            terminalBlocks.remove(existing);
+        }
+        flowEndColumnIndex.put(key, block);
+        terminalBlocks.add(block);
+        if (isPillow) {
+            pillowFlowEndBlocks.add(block);
+        } else {
+            normalFlowEndBlocks.add(block);
+        }
+    }
+
+    private void removeFlowEndBlock(Block block) {
+        terminalBlocks.remove(block);
+        normalFlowEndBlocks.remove(block);
+        pillowFlowEndBlocks.remove(block);
+        long key = packXZ(block.getX(), block.getZ());
+        Block indexed = flowEndColumnIndex.get(key);
+        if (indexed != null && indexed.equals(block)) {
+            flowEndColumnIndex.remove(key);
+        }
+    }
+
+    private void clearFlowEndBlocks() {
+        terminalBlocks.clear();
+        normalFlowEndBlocks.clear();
+        pillowFlowEndBlocks.clear();
+        flowEndColumnIndex.clear();
     }
 
     private void updateCachedCounts() {
@@ -507,7 +581,10 @@ public class VolcanoLavaFlow implements Listener {
                     VolcanoLavaCoolData data = this.getLavaCoolData(fromBlock);
                     if (data != null) {
                         createEffectOnLavaSeaEntry(block);
-                        cachedPillowLavaMap.put(block, new VolcanoPillowLavaData(data.flowedFromVent, data.source, data.fromBlock, data.runExtensionCount));
+                        VolcanoPillowLavaData pillow = new VolcanoPillowLavaData(data.flowedFromVent, data.source, data.fromBlock, data.runExtensionCount);
+                        pillow.ejectaRecordIdx = data.ejectaRecordIdx;
+                        cachedPillowLavaMap.put(block, pillow);
+                        this.addFlowEndBlock(block, true);
                         queueImmediateBlockUpdate(block, VolcanoComposition.getExtrusiveRock(data.flowedFromVent.lavaFlow.settings.silicateLevel));
                         break;
                     }
@@ -517,24 +594,18 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public Block getRandomTerminalBlock() {
-        if (this.terminalBlocks.isEmpty()) return null;
+        return getRandomFromSet(this.normalFlowEndBlocks);
+    }
 
-        List<Block> filteredBlocks = this.terminalBlocks.stream()
-                .filter(b -> {
-                    VolcanoLavaCoolData data = this.getLavaCoolData(b);
-                    if (data != null) {
-                        if (b.getBlockData() instanceof Levelled levelled) {
-                            return data.runExtensionCount == 0 && levelled.getLevel() == levelled.getMinimumLevel();
-                        }
-                    }
-                    return false;
-                })
-                .toList();
+    private static Block getRandomFromSet(Set<Block> set) {
+        if (set.isEmpty()) return null;
 
-        if (filteredBlocks.isEmpty()) return null;
-
-        int index = (int) (Math.random() * filteredBlocks.size());
-        return filteredBlocks.get(index);
+        int index = (int) (Math.random() * set.size());
+        Iterator<Block> it = set.iterator();
+        for (int i = 0; i < index; i++) {
+            it.next();
+        }
+        return it.next();
     }
 
     @EventHandler
@@ -557,7 +628,7 @@ public class VolcanoLavaFlow implements Listener {
         VolcanoLavaCoolData data = this.getLavaCoolData(block);
 
         // remove from terminalBlocks
-        this.terminalBlocks.remove(block);
+        this.removeFlowEndBlock(block);
 
         int level = -1;
         BlockData bd = block.getBlockData();
@@ -664,7 +735,7 @@ public class VolcanoLavaFlow implements Listener {
                     vent.getVolcano().trySave(false);
                 }
 
-                vent.record.addEjectaVolume(1);
+                vent.record.addEjectaVolume(1, data.ejectaRecordIdx);
 
                 // force load chunk.
                 if (!vent.location.getChunk().isLoaded()) vent.location.getChunk().load();
@@ -689,10 +760,7 @@ public class VolcanoLavaFlow implements Listener {
 
             Block underToBlock = toBlock.getRelative(BlockFace.DOWN);
 
-            if (!lavaFlowChunks.contains(toBlock.getChunk())) {
-                lavaFlowChunks.add(toBlock.getLocation().getChunk());
-                toBlock.getLocation().getChunk().setForceLoaded(true);
-            }
+            this.vent.getVolcano().chunkLoader.add(toBlock.getChunk());
 
             // load toBlock chunk
             Chunk toBlockChunk = toBlock.getLocation().getChunk();
@@ -727,16 +795,12 @@ public class VolcanoLavaFlow implements Listener {
             if (underIsAir && underUnderToBlock.getType().isAir() && fillUnderUnder) {
                 queueImmediateBlockUpdate(underToBlock, data.material);
 
-                // bifurcate lava -
+                // Defer underfill to plumbing instead of immediate lava placement
                 if (!data.isBomb) {
-                    // register underUnderToBlock as terminalBlocks
-                    registerLavaCoolData(data.source, underToBlock, underUnderToBlock, data.isBomb, -1, false, true);
-                    this.terminalBlocks.add(underUnderToBlock);
+                    underfillTargets.add(underUnderToBlock);
                 } else {
                     this.flowLavaFromBomb(underUnderToBlock);
                 }
-
-                queueBlockUpdate(underUnderToBlock, Material.LAVA);
             }
 
             // affect nearby blocks run metamorphism
@@ -762,8 +826,15 @@ public class VolcanoLavaFlow implements Listener {
 
             Object obj = this.registerLavaCoolData(data.source, block, toBlock, data.isBomb, extensionCount);
             if (obj instanceof VolcanoLavaCoolData coolData) {
-                // register on terminalBlocks
-                this.terminalBlocks.add(toBlock);
+                if (data.isUnderfill) {
+                    // Underfill flow: propagate flag, route end-of-flow to underfillTargets
+                    coolData.isUnderfill = true;
+                    // Skip x,z column dedup — underfill needs to fill underneath
+                    terminalBlocks.add(toBlock);
+                } else {
+                    // Normal flow: register on terminalBlocks with column dedup
+                    this.addFlowEndBlock(toBlock, false);
+                }
 
                 if (data.skipNormalLavaFlowLengthCheck) {
                     coolData.skipNormalLavaFlowLengthCheck = true;
@@ -773,6 +844,7 @@ public class VolcanoLavaFlow implements Listener {
                     coolData.flowLimit = data.flowLimit;
                 }
             } else if (obj instanceof VolcanoPillowLavaData pillowData) {
+                this.addFlowEndBlock(toBlock, true);
                 Block targetBlock = TyphonUtils.getHighestRocklikes(pillowData.fromBlock);
                 this.createEffectOnLavaSeaEntry(targetBlock);
             }
@@ -842,8 +914,41 @@ public class VolcanoLavaFlow implements Listener {
         return this.isNormalLavaRegistered(block) || this.isPillowLavaRegistered(block);
     }
 
+    private int resolveEjectaRecordIdx(Block fromBlock, Block source) {
+        VolcanoLavaCoolData fromData = getLavaCoolData(fromBlock);
+        if (fromData != null && fromData.ejectaRecordIdx >= 0) {
+            return fromData.ejectaRecordIdx;
+        }
+        VolcanoPillowLavaData fromPillow = getPillowLavaCoolData(fromBlock);
+        if (fromPillow != null && fromPillow.ejectaRecordIdx >= 0) {
+            return fromPillow.ejectaRecordIdx;
+        }
+
+        VolcanoLavaCoolData sourceData = getLavaCoolData(source);
+        if (sourceData != null && sourceData.ejectaRecordIdx >= 0) {
+            return sourceData.ejectaRecordIdx;
+        }
+        VolcanoPillowLavaData sourcePillow = getPillowLavaCoolData(source);
+        if (sourcePillow != null && sourcePillow.ejectaRecordIdx >= 0) {
+            return sourcePillow.ejectaRecordIdx;
+        }
+
+        return vent.record.getRecordIndex();
+    }
+
     private Object registerLavaCoolData(Block block, boolean isBomb, int extension) {
         return this.registerLavaCoolData(block, block, block, isBomb, extension);
+    }
+
+    private Object registerLavaCoolData(Block block, boolean isBomb, int extension, int explicitRecordIdx) {
+        boolean isUnderWater = block.getType() == Material.WATER;
+        if (!isUnderWater) {
+            BlockFace[] waterFaces = { BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.NORTH, BlockFace.UP };
+            for (BlockFace face : waterFaces) {
+                if (block.getRelative(face).getType() == Material.WATER) { isUnderWater = true; break; }
+            }
+        }
+        return this.registerLavaCoolData(block, block, block, isBomb, extension, isUnderWater, false, explicitRecordIdx);
     }
 
     private Object registerLavaCoolData(Block source, Block fromBlock, Block block, boolean isBomb) {
@@ -1091,7 +1196,20 @@ public class VolcanoLavaFlow implements Listener {
             int extension,
             boolean isUnderWater,
             boolean skipLava) {
+        return registerLavaCoolData(source, fromBlock, block, isBomb, extension, isUnderWater, skipLava, -1);
+    }
+
+    private Object registerLavaCoolData(
+            Block source,
+            Block fromBlock,
+            Block block,
+            boolean isBomb,
+            int extension,
+            boolean isUnderWater,
+            boolean skipLava,
+            int explicitRecordIdx) {
         Object result = null;
+        int recordIdx = explicitRecordIdx >= 0 ? explicitRecordIdx : resolveEjectaRecordIdx(fromBlock, source);
         Material targetMaterial =
                 isBomb && !isUnderWater
                         ? VolcanoComposition.getBombRock(this.settings.silicateLevel, this.getDistanceRatio(block.getLocation()))
@@ -1122,11 +1240,7 @@ public class VolcanoLavaFlow implements Listener {
             }
 
             // Force-load the chunk to ensure lava physics are applied
-            Chunk chunk = block.getChunk();
-            if (!lavaFlowChunks.contains(chunk)) {
-                lavaFlowChunks.add(chunk);
-                chunk.setForceLoaded(true);
-            }
+            this.vent.getVolcano().chunkLoader.add(block.getChunk());
 
             int ticks = 30;
             VolcanoLavaCoolData coolData;
@@ -1153,6 +1267,7 @@ public class VolcanoLavaFlow implements Listener {
                         extension);
                 result = coolData;
             }
+            coolData.ejectaRecordIdx = recordIdx;
             registerToCacheCools(block, coolData);
         } else {
             VolcanoPillowLavaData lavaData = cachedPillowLavaMap.get(block);
@@ -1160,9 +1275,11 @@ public class VolcanoLavaFlow implements Listener {
                 this.queueBlockUpdate(block, Material.MAGMA_BLOCK);
                 VolcanoPillowLavaData coolData = new VolcanoPillowLavaData(
                         this.vent, source, fromBlock, extension);
+                coolData.ejectaRecordIdx = recordIdx;
 
                 // reset extensions since lava can not travel long underwater
                 cachedPillowLavaMap.put(block, coolData);
+                this.addFlowEndBlock(block, true);
                 result = coolData;
 
                 /* - backup!
@@ -1178,7 +1295,7 @@ public class VolcanoLavaFlow implements Listener {
         }
 
         if (vent != null) {
-            vent.record.addEjectaVolume(1);
+            vent.record.addEjectaVolume(1, recordIdx);
         }
 
         return result;
@@ -1186,6 +1303,7 @@ public class VolcanoLavaFlow implements Listener {
 
     public Block getRandomLavaBlock() {
         List<Block> target = getRandomLavaBlocks(1);
+        if (target.isEmpty()) return null;
         return target.get(0);
     }
 
@@ -1200,23 +1318,24 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public List<Block> getRandomLavaBlocks(int count) {
-        List<Block> lavaBlocks = (ArrayList<Block>) new ArrayList<>(lavaCools.values().stream().map(Map::keySet).flatMap(Set::stream).collect(Collectors.toList()));
-        List<Block> pillowBlocks = (ArrayList<Block>) new ArrayList<>(pillowLavaMap.keySet());
-
-        Collections.shuffle(lavaBlocks);
-        Collections.shuffle(pillowBlocks);
-
         List<Block> targetBlocks = new ArrayList<>();
 
         for (int i = 0; i < count; i++) {
             Block block = null;
-            if (pillowBlocks.size() > 0) {
-                block = pillowBlocks.get(0);
+
+            // 30% chance to pick from pillow flow endpoints
+            if (!pillowFlowEndBlocks.isEmpty() && Math.random() >= 0.7) {
+                block = getRandomFromSet(pillowFlowEndBlocks);
             }
 
-            if (Math.random() < 0.7 || block == null) {
-                if (lavaBlocks.size() > 0)
-                    block = lavaBlocks.get(0);
+            // 70% chance (or fallback) to pick from normal flow endpoints
+            if (block == null && !normalFlowEndBlocks.isEmpty()) {
+                block = getRandomFromSet(normalFlowEndBlocks);
+            }
+
+            // Final fallback to pillow if normal is empty
+            if (block == null && !pillowFlowEndBlocks.isEmpty()) {
+                block = getRandomFromSet(pillowFlowEndBlocks);
             }
 
             if (block != null) {
@@ -1271,6 +1390,10 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void flowLavaFromBomb(Block bomb, int flowLimit) {
+        this.flowLavaFromBomb(bomb, flowLimit, -1);
+    }
+
+    public void flowLavaFromBomb(Block bomb, int flowLimit, int recordIdx) {
         // if it is underwater, randomly give it an offset.
         if (TyphonUtils.containsLiquidWater(bomb)) {
             double multiplier = 1 - (Math.pow(Math.random(), 2));
@@ -1284,7 +1407,9 @@ public class VolcanoLavaFlow implements Listener {
             bomb = TyphonUtils.getHighestRocklikes(targetBlock).getRelative(BlockFace.UP);
         }
 
-        Object data = this.registerLavaCoolData(bomb, true, 0);
+        Object data = recordIdx >= 0
+                ? this.registerLavaCoolData(bomb, true, 0, recordIdx)
+                : this.registerLavaCoolData(bomb, true, 0);
         if (data instanceof VolcanoLavaCoolData coolData) {
             if (flowLimit > 0) {
                 coolData.flowLimit = flowLimit;
@@ -1596,7 +1721,7 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public boolean extendLava() {
-        // get the terminal blocks (at the end of the
+        // get the terminal blocks (at the end of the flow)
         Block targetBlock = this.getRandomTerminalBlock();
         if (targetBlock == null) return false;
 
@@ -1605,11 +1730,40 @@ public class VolcanoLavaFlow implements Listener {
             return false;
         }
 
+        // Chunk-level plumbing dedup (skip for underfill — needs to fill underneath)
+        if (!data.isUnderfill) {
+            long chunkKey = packXZ(targetBlock.getX() >> 4, targetBlock.getZ() >> 4);
+            Block existingTarget = plumbingChunkTargets.get(chunkKey);
+            if (existingTarget != null) {
+                VolcanoLavaCoolData existingData = this.getLavaCoolData(existingTarget);
+                if (existingData != null) {
+                    return false;
+                }
+                plumbingChunkTargets.remove(chunkKey);
+            }
+        }
+
         BlockFace target = data.getExtensionTargetBlockFace();
         List<BlockFace> flowableFaces = new ArrayList<>();
-        BlockFace[] flowableFacesArray = {
-                BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.NORTH, BlockFace.DOWN
-        };
+        BlockFace[] flowableFacesArray;
+
+        if (data.isUnderfill) {
+            // Underfill: include UP if under the volcano slope
+            Block highestRock = TyphonUtils.getHighestRocklikes(targetBlock);
+            if (highestRock.getY() > targetBlock.getY() && targetBlock.getRelative(BlockFace.UP).getType().isAir()) {
+                flowableFacesArray = new BlockFace[] {
+                        BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.NORTH, BlockFace.DOWN, BlockFace.UP
+                };
+            } else {
+                flowableFacesArray = new BlockFace[] {
+                        BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.NORTH, BlockFace.DOWN
+                };
+            }
+        } else {
+            flowableFacesArray = new BlockFace[] {
+                    BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.NORTH, BlockFace.DOWN
+            };
+        }
 
         for (BlockFace flowableFace : flowableFacesArray) {
             if (flowableFace.equals(target)) continue;
@@ -1623,10 +1777,28 @@ public class VolcanoLavaFlow implements Listener {
             boolean flowableConditionCheck = flowBlock.isEmpty() || TyphonUtils.containsLiquidWater(flowUnderBlock);
             if (flowableConditionCheck && this.isLavaOKForFlowOnTop(flowUnderBlock)) {
                 this.extendLava(flowBlock);
+                // Register chunk target (only for non-underfill)
+                if (!data.isUnderfill) {
+                    long chunkKey = packXZ(targetBlock.getX() >> 4, targetBlock.getZ() >> 4);
+                    plumbingChunkTargets.put(chunkKey, flowBlock);
+                }
                 return true;
             }
         }
 
+        // No flowable direction found — dead end
+        if (data.isUnderfill) {
+            // Underfill dead end: add flowable neighbors as new underfill targets
+            terminalBlocks.remove(targetBlock);
+            for (BlockFace face : flowableFacesArray) {
+                Block neighbor = targetBlock.getRelative(face);
+                if (neighbor.getType().isAir() && !isLavaRegistered(neighbor)) {
+                    underfillTargets.add(neighbor);
+                }
+            }
+        } else {
+            removeFlowEndBlock(targetBlock);
+        }
         return false;
     }
 
@@ -1643,6 +1815,44 @@ public class VolcanoLavaFlow implements Listener {
         } else if (TyphonUtils.containsLiquidWater(fromVent)) {
 
         }
+    }
+
+    /**
+     * Attempt to flow lava into an underfill target (cave/underground void).
+     * Picks from underfillTargets, checks flowability, removes non-flowable targets.
+     * @return true if lava was successfully placed at an underfill target
+     */
+    public boolean flowUnderfillLava() {
+        int maxAttempts = Math.min(5, underfillTargets.size());
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            Block target = getRandomFromSet(underfillTargets);
+            if (target == null) return false;
+
+            // Check if target is still flowable (air or water)
+            if (!target.getType().isAir() && !TyphonUtils.containsLiquidWater(target)) {
+                underfillTargets.remove(target);
+                continue;
+            }
+
+            // Check if already registered
+            if (isLavaRegistered(target)) {
+                underfillTargets.remove(target);
+                continue;
+            }
+
+            underfillTargets.remove(target);
+
+            // Use block above as fromBlock (lava flowing downward)
+            Block fromBlock = target.getRelative(BlockFace.UP);
+            Block source = TyphonUtils.getHighestRocklikes(this.vent.getNearestVentBlock(target.getLocation()));
+
+            Object obj = registerLavaCoolData(source, fromBlock, target, false, -1);
+            if (obj instanceof VolcanoLavaCoolData coolData) {
+                coolData.isUnderfill = true;
+            }
+            return true;
+        }
+        return false;
     }
 
     public double getLavaStickiness() {
@@ -1871,6 +2081,7 @@ public class VolcanoLavaFlow implements Listener {
 
         for (Block flowedBlock : flowedBlocks) {
             pillowLavaMap.remove(flowedBlock);
+            removeFlowEndBlock(flowedBlock);
         }
 
         Map<Block, VolcanoPillowLavaData> cache = cachedPillowLavaMap;
@@ -2048,6 +2259,7 @@ public class VolcanoLavaFlow implements Listener {
 
         if (flowAmount - flowedBlocks > 0) {
             int leftOvers = flowAmount - flowedBlocks;
+            plumbedBlocksSinceRateCalc += leftOvers;
             leftOvers = Math.min(10, leftOvers);
 
             // all of them into extension
@@ -2069,10 +2281,18 @@ public class VolcanoLavaFlow implements Listener {
                             continue;
                         }
                     } else {
-                        this.extendLava();
+                        // 70% chance to try underfill first
+                        if (!underfillTargets.isEmpty() && Math.random() < 0.7) {
+                            if (this.flowUnderfillLava()) { successfulPlumbsSinceRateCalc++; continue; }
+                        }
+                        if (this.extendLava()) successfulPlumbsSinceRateCalc++;
                     }
                 } else {
-                    this.extendLava();
+                    // 70% chance to try underfill first
+                    if (!underfillTargets.isEmpty() && Math.random() < 0.7) {
+                        if (this.flowUnderfillLava()) { successfulPlumbsSinceRateCalc++; continue; }
+                    }
+                    if (this.extendLava()) successfulPlumbsSinceRateCalc++;
                 }
             }
         }
@@ -2088,6 +2308,10 @@ public class VolcanoLavaFlow implements Listener {
         } else if (now - lastFlowRateCalcTime >= 1000) {
             flowedBlocksPerSecond = flowedBlocksSinceRateCalc;
             flowedBlocksSinceRateCalc = 0;
+            plumbedBlocksPerSecond = plumbedBlocksSinceRateCalc;
+            plumbedBlocksSinceRateCalc = 0;
+            successfulPlumbsPerSecond = successfulPlumbsSinceRateCalc;
+            successfulPlumbsSinceRateCalc = 0;
             lastFlowRateCalcTime = now;
         }
 
@@ -2122,6 +2346,7 @@ public class VolcanoLavaFlow implements Listener {
 
         for (Block removeTarget : removeTargets) {
             lavaCoolMap.remove(removeTarget);
+            removeFlowEndBlock(removeTarget);
         }
     }
 
@@ -2199,6 +2424,7 @@ public class VolcanoLavaFlow implements Listener {
             coolEntry.getValue().clear();
         }
         cachedCools.clear();
+        clearFlowEndBlocks();
 
         for (Map.Entry<Block, VolcanoPillowLavaData> entry : pillowLavaMap.entrySet()) {
             Block block = entry.getKey();

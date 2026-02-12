@@ -1,12 +1,13 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VersionData, VolcanoSummary, HealthData } from '@/transport/types';
+import type { VersionData, VolcanoSummary, HealthData, TpsData } from '@/transport/types';
 import { getApi } from '@/transport/api';
 
 interface ConnectionState {
   online: boolean;
   version: VersionData | null;
   volcanoes: VolcanoSummary[];
+  tps: TpsData | null;
   error: string;
   refresh: () => Promise<void>;
 }
@@ -15,6 +16,7 @@ const ConnectionContext = createContext<ConnectionState>({
   online: false,
   version: null,
   volcanoes: [],
+  tps: null,
   error: '',
   refresh: async () => {},
 });
@@ -24,6 +26,7 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
   const [online, setOnline] = useState(false);
   const [version, setVersion] = useState<VersionData | null>(null);
   const [volcanoes, setVolcanoes] = useState<VolcanoSummary[]>([]);
+  const [tps, setTps] = useState<TpsData | null>(null);
   const [error, setError] = useState('');
   const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const checkedRef = useRef(false);
@@ -31,9 +34,10 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
   const refresh = useCallback(async () => {
     const api = getApi();
     try {
-      const [verRes, volRes] = await Promise.all([
+      const [verRes, volRes, tpsRes] = await Promise.all([
         api.get<VersionData>('/version'),
         api.get<VolcanoSummary[]>('/volcanoes'),
+        api.get<TpsData>('/tps'),
       ]);
 
       if (verRes.status === 200 && verRes.data) {
@@ -42,6 +46,9 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
       }
       if (volRes.status === 200 && volRes.data) {
         setVolcanoes(volRes.data);
+      }
+      if (tpsRes.status === 200 && tpsRes.data) {
+        setTps(tpsRes.data);
       }
       setError('');
     } catch (e) {
@@ -83,7 +90,7 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
   }, [refresh, navigate]);
 
   return (
-    <ConnectionContext.Provider value={{ online, version, volcanoes, error, refresh }}>
+    <ConnectionContext.Provider value={{ online, version, volcanoes, tps, error, refresh }}>
       {children}
     </ConnectionContext.Provider>
   );

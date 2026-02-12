@@ -51,6 +51,7 @@ public class VolcanoBomb {
 
     Material targetMaterial = null;
 
+    public int ejectaRecordIdx = -1;
     public boolean isLanded = false;
     public VolcanoBomb(
             VolcanoVent vent,
@@ -66,6 +67,11 @@ public class VolcanoBomb {
 
         this.launchLocation = loc;
         this.targetLocation = targetLocation;
+
+        // Capture record index at launch time so landing credits the correct eruption
+        if (vent != null) {
+            this.ejectaRecordIdx = vent.record.getRecordIndex();
+        }
 
         double randomMultiplier = 1.0 + (Math.random() * 0.25);
 
@@ -475,7 +481,7 @@ public class VolcanoBomb {
 
             if (flowLava) {
                 for (Block bombBlock : bomb) {
-                    lavaFlow.flowLavaFromBomb(bombBlock, baseFlowLimit);
+                    lavaFlow.flowLavaFromBomb(bombBlock, baseFlowLimit, ejectaRecordIdx);
                 }
 
                 finalBlock.getWorld().createExplosion(finalBlock.getLocation(), 1, true, false);
@@ -507,7 +513,7 @@ public class VolcanoBomb {
                         break;
                     case 2:
                         if (flowLava) {
-                            lavaFlow.flowLavaFromBomb(bombBlock);
+                            lavaFlow.flowLavaFromBomb(bombBlock, 0, ejectaRecordIdx);
                             material = null;
                         }
                         break;
@@ -524,7 +530,7 @@ public class VolcanoBomb {
             totalEjecta = bomb.size();
         }
 
-        vent.record.addEjectaVolume(totalEjecta);
+        vent.record.addEjectaVolume(totalEjecta, ejectaRecordIdx);
     }
 
     public void explode() {
