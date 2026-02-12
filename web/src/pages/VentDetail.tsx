@@ -348,15 +348,15 @@ function ActivityCards({ vent }: { vent: LiveVent }) {
   return (
     <div className="grid gap-3 sm:grid-cols-3">
       <ActivityCard
-        icon={Flame} label="Lava" active={vent.isFlowingLava} color="text-orange-400"
+        icon={Flame} label="Lava" active={vent.isFlowingLava} color="text-orange-400" barColor="bg-orange-400"
         current={vent.currentNormalLavaFlowLength} max={vent.longestFlowLength} unit="m"
       />
       <ActivityCard
-        icon={Bomb} label="Bombs" active={vent.isExploding} color="text-red-400"
+        icon={Bomb} label="Bombs" active={vent.isExploding} color="text-red-400" barColor="bg-red-400"
         current={vent.bombMaxDistance} max={vent.bombMaxDistance} unit="m"
       />
       <ActivityCard
-        icon={Wind} label="Ash" active={(vent.currentAshFlowLength ?? 0) > 0} color="text-gray-400"
+        icon={Wind} label="Ash" active={(vent.currentAshFlowLength ?? 0) > 0} color="text-gray-400" barColor="bg-gray-400"
         current={vent.currentAshFlowLength} max={vent.longestAshFlowLength} unit="m"
       />
     </div>
@@ -1021,12 +1021,13 @@ function StringNodeField({ node, label, onChange }: { node: ConfigNode; label: s
 /* ── Activity Card ────────────────────────────────────────────────────────── */
 
 function ActivityCard({
-  icon: Icon, label, active, color, current, max, unit,
+  icon: Icon, label, active, color, barColor, current, max, unit,
 }: {
   icon: React.ElementType;
   label: string;
   active: boolean;
   color: string;
+  barColor: string;
   current: number;
   max: number;
   unit: string;
@@ -1051,7 +1052,7 @@ function ActivityCard({
         </div>
         <div className="h-1.5 rounded-full bg-muted overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all ${active ? color.replace('text-', 'bg-') : 'bg-muted-foreground/30'}`}
+            className={`h-full rounded-full transition-all ${active ? barColor : 'bg-muted-foreground/30'}`}
             style={{ width: `${pct}%` }}
           />
         </div>
