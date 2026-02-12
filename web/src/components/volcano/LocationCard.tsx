@@ -5,7 +5,8 @@ import type { ElementType } from 'react';
 export function buildBlueMapUrl(baseUrl: string, loc: LocationData): string | null {
   if (!loc.world) return null;
   const url = baseUrl.replace(/\/+$/, '');
-  return `${url}#${loc.world}:${loc.x}:${loc.z}:100`;
+  // Format: #world:x:y:z:distance:rotX:rotY:0:0:perspective
+  return `${url}#${loc.world}:${loc.x}:${loc.y}:${loc.z}:1500:0:0:0:0:perspective`;
 }
 
 interface LocationCardProps {
