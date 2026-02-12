@@ -843,7 +843,7 @@ public class VolcanoLavaFlow implements Listener {
                 }
             }
 
-            Object obj = this.registerLavaCoolData(data.source, block, toBlock, data.isBomb, extensionCount);
+            Object obj = this.registerLavaCoolData(data.source, block, toBlock, data.isBomb, extensionCount, data.ejectaRecordIdx);
             if (obj instanceof VolcanoLavaCoolData coolData) {
                 if (data.isUnderfill) {
                     // Underfill flow: propagate flag, route end-of-flow to underfillTargets
@@ -976,6 +976,11 @@ public class VolcanoLavaFlow implements Listener {
 
     public Object registerLavaCoolData(
             Block source, Block fromBlock, Block block, boolean isBomb, int extension) {
+        return this.registerLavaCoolData(source, fromBlock, block, isBomb, extension, -1);
+    }
+
+    public Object registerLavaCoolData(
+            Block source, Block fromBlock, Block block, boolean isBomb, int extension, int recordIdx) {
 
         boolean isUnderWater = block.getType() == Material.WATER;
 
@@ -996,7 +1001,7 @@ public class VolcanoLavaFlow implements Listener {
             if (isSurroundedByWater) isUnderWater = true;
         }
 
-        return this.registerLavaCoolData(source, fromBlock, block, isBomb, extension, isUnderWater);
+        return this.registerLavaCoolData(source, fromBlock, block, isBomb, extension, isUnderWater, false, recordIdx);
     }
 
     private Material getVolcanicPlugOre() {
