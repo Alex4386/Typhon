@@ -183,22 +183,18 @@ public class VolcanoMath {
         return circleBlocks;
     }
 
-    public static List<Block> getLine(Block centerBlock, double angle, int length) {
-        List<Block> lineBlocks = new ArrayList<>();
+    public static Set<Block> getLine(Block centerBlock, double angle, int length) {
+        Set<Block> lineBlocks = new HashSet<>();
 
         for (double i = 0; i <= (length / 2); i++) {
             double x = Math.sin(angle) * i;
             double z = Math.cos(angle) * i;
 
             Block negativeBlock = centerBlock.getRelative((int) -x, 0, (int) -z);
-            if (!lineBlocks.contains(negativeBlock)) {
-                lineBlocks.add(negativeBlock);
-            }
+            lineBlocks.add(negativeBlock);
 
             Block block = centerBlock.getRelative((int) x, 0, (int) z);
-            if (!lineBlocks.contains(block)) {
-                lineBlocks.add(block);
-            }
+            lineBlocks.add(block);
         }
 
         return lineBlocks;

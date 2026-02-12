@@ -32,9 +32,9 @@ import java.util.stream.Collectors;
 public class VolcanoLavaFlow implements Listener {
     public VolcanoVent vent = null;
 
-    public static List<VolcanoVent> flowingVents = new ArrayList<>();
+    public static Set<VolcanoVent> flowingVents = new HashSet<>();
 
-    public List<Chunk> lavaFlowChunks = new ArrayList<>();
+    public Set<Chunk> lavaFlowChunks = new HashSet<>();
 
     public Map<Chunk, Map<Block, VolcanoLavaCoolData>> lavaCools = new HashMap<>();
     public Map<Chunk, Map<Block, VolcanoLavaCoolData>> cachedCools = new HashMap<>();

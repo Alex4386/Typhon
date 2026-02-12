@@ -20,16 +20,16 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.json.simple.JSONObject;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
+
+
 
 public class TyphonGaia {
 
     //  if we were to imagine a hypothetical scenario in which all active volcanoes were evenly spaced,
     //  the average distance between them would be approximately 40 to 50 kilometers (25 to 31 miles) apart.
     public static int bubbleRadius = 4000;
-    public static List<World> enabledWorlds = new ArrayList<>();
+    public static Set<World> enabledWorlds = new HashSet<>();
 
     public static int scheduleId = -1;
     public static long interval = 20 * 60 * 60;

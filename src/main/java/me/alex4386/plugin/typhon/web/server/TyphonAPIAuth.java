@@ -1,14 +1,10 @@
 package me.alex4386.plugin.typhon.web.server;
 
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class TyphonAPIAuth {
-    private final List<String> tokens = new ArrayList<>();
+    private final Set<String> tokens = new HashSet<>();
     private final List<String[]> basicCredentials = new ArrayList<>();
     private final Map<String, Long> tempTokens = new ConcurrentHashMap<>();
     private boolean issueTempTokenEnabled = true;
