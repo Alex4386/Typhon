@@ -49,7 +49,7 @@ const CALDERA_WALL_CP_Y = 0.3;    // inner wall bezier Y offset
 const CALDERA_FLOOR_W = 0.4;      // caldera floor half-width as fraction of caldera radius
 
 // Flow & extent scaling
-const MIN_FLOW_CRATER_MULT = 3;   // minimum flow length as multiple of crater radius
+const MIN_FLOW_CRATER_MULT = 1;   // minimum flow length as multiple of crater radius
 const MIN_FLOW_LENGTH = 20;       // absolute minimum flow length (world units)
 const MIN_EXTENT_CRATER_MULT = 4; // minimum max extent as multiple of crater radius
 const MAX_VSCALE_RATIO = 1.5;     // max vertical scale relative to horizontal
