@@ -166,7 +166,10 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
                       <TableCell className="tabular-nums">{fmtDate(r.startTime)}</TableCell>
                       <TableCell className="tabular-nums">{fmtDate(r.endTime)}</TableCell>
                       <TableCell className="text-right tabular-nums">{fmtDuration(duration)}</TableCell>
-                      <TableCell className="text-right tabular-nums font-medium">{formatVolume(r.ejectaVolume)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        <div className="font-medium">{formatVolume(r.ejectaVolume)}</div>
+                        <div className="text-[10px] text-muted-foreground">{r.ejectaVolume.toLocaleString()} blocks</div>
+                      </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1">
                           <VEIBadge volume={r.ejectaVolume} />

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import type { VersionData } from '../transport/types';
+import type { VersionData, AuthData } from '../transport/types';
 import { setAuthToken } from '../transport/auth';
 import { getApi, setApiBase } from '../transport/api';
 
@@ -41,6 +41,8 @@ export default function Connect() {
   const [authMode, setAuthMode] = useState<AuthMode>(searchParams.get('username') ? 'basic' : 'token');
   const [usernameInput, setUsernameInput] = useState(searchParams.get('username') || '');
   const [passwordInput, setPasswordInput] = useState(searchParams.get('password') || '');
+  const [sameOrigin, setSameOrigin] = useState(false);
+  const [authRequired, setAuthRequired] = useState(false);
 
   const log = useCallback((msg: string) => {
     const ts = new Date().toLocaleTimeString();
@@ -107,6 +109,30 @@ export default function Connect() {
     }
   }, [log, navigate]);
 
+  // Probe same-origin API on mount to detect auth-required redirect
+  useEffect(() => {
+    if (searchParams.get('server')) return; // Skip if connecting to external server
+    const api = getApi();
+    api.get<{ status: string }>('/health').then(async (res) => {
+      if (res.status === 200 && res.data && typeof res.data === 'object' && 'status' in res.data) {
+        setSameOrigin(true);
+        const authRes = await api.get<AuthData>('/auth');
+        if (authRes.status === 200 && authRes.data?.authConfigured) {
+          setAuthRequired(true);
+          if (authRes.data.authenticated) {
+            // Already authenticated — go to dashboard
+            navigate('/', { replace: true });
+          }
+        } else {
+          // No auth needed — go to dashboard
+          navigate('/', { replace: true });
+        }
+      }
+    }).catch(() => {
+      // No same-origin API, show full connect form
+    });
+  }, [searchParams, navigate]);
+
   // Auto-connect from URL params (only when all required credentials are present)
   useEffect(() => {
     if (attempted.current) return;
@@ -127,7 +153,7 @@ export default function Connect() {
   }, [searchParams, doConnect]);
 
   const handleSubmit = useCallback(() => {
-    const server = serverInput.trim();
+    const server = sameOrigin ? window.location.origin : serverInput.trim();
     if (!server) return;
     attempted.current = true;
     if (authMode === 'basic') {
@@ -135,7 +161,7 @@ export default function Connect() {
     } else {
       doConnect(server, { token: tokenInput.trim() });
     }
-  }, [serverInput, tokenInput, usernameInput, passwordInput, authMode, doConnect]);
+  }, [sameOrigin, serverInput, tokenInput, usernameInput, passwordInput, authMode, doConnect]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted p-6 md:p-10">
@@ -152,9 +178,13 @@ export default function Connect() {
         <div className={cn("flex flex-col gap-6")}>
           <Card>
             <CardHeader className="text-center">
-              <CardTitle className="text-xl">Connect to Server</CardTitle>
+              <CardTitle className="text-xl">
+                {sameOrigin && authRequired ? 'Sign In' : 'Connect to Server'}
+              </CardTitle>
               <CardDescription>
-                Enter your Typhon server details to continue
+                {sameOrigin && authRequired
+                  ? 'Authentication is required to continue'
+                  : 'Enter your Typhon server details to continue'}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -179,16 +209,18 @@ export default function Connect() {
               ) : (
                 <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
                   <FieldGroup>
-                    <Field>
-                      <FieldLabel htmlFor="server">Server URL</FieldLabel>
-                      <Input
-                        id="server"
-                        placeholder="http://your-server:18080"
-                        value={serverInput}
-                        onChange={(e) => setServerInput(e.target.value)}
-                        required
-                      />
-                    </Field>
+                    {!(sameOrigin && authRequired) && (
+                      <Field>
+                        <FieldLabel htmlFor="server">Server URL</FieldLabel>
+                        <Input
+                          id="server"
+                          placeholder="http://your-server:18080"
+                          value={serverInput}
+                          onChange={(e) => setServerInput(e.target.value)}
+                          required
+                        />
+                      </Field>
+                    )}
 
                     <Tabs value={authMode} onValueChange={(v) => setAuthMode(v as AuthMode)}>
                       <TabsList className="w-full">
@@ -233,11 +265,15 @@ export default function Connect() {
                     )}
 
                     <Field>
-                      <Button type="submit" className="w-full">Connect</Button>
-                      <FieldDescription className="text-center">
-                        Run <code className="bg-muted px-1 rounded text-xs">/typhon web</code> in
-                        Minecraft to get a connect link.
-                      </FieldDescription>
+                      <Button type="submit" className="w-full">
+                        {sameOrigin && authRequired ? 'Sign In' : 'Connect'}
+                      </Button>
+                      {!(sameOrigin && authRequired) && (
+                        <FieldDescription className="text-center">
+                          Run <code className="bg-muted px-1 rounded text-xs">/typhon web</code> in
+                          Minecraft to get a connect link.
+                        </FieldDescription>
+                      )}
                     </Field>
                   </FieldGroup>
                 </form>

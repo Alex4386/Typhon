@@ -49,6 +49,7 @@ public class VolcanoLavaFlow implements Listener {
     private int lavaCoolScheduleId = -1;
     private int lavaInfluxScheduleId = -1;
     private int queueScheduleId = -1;
+    private int underfillCleanupScheduleId = -1;
     public VolcanoLavaFlowSettings settings = new VolcanoLavaFlowSettings();
 
     public boolean registeredEvent = false;
@@ -360,6 +361,12 @@ public class VolcanoLavaFlow implements Listener {
                             },
                             1L);
         }
+        if (underfillCleanupScheduleId == -1) {
+            underfillCleanupScheduleId =
+                    TyphonScheduler.registerGlobalTask(
+                            this::cleanupUnderfillTargets,
+                            100L); // every 5 seconds (100 ticks)
+        }
         this.registerQueueUpdate();
     }
 
@@ -490,7 +497,11 @@ public class VolcanoLavaFlow implements Listener {
                     "Shutting down lava cooldown queue handler of VolcanoLavaFlow for vent "
                             + vent.getName());
             TyphonScheduler.unregisterTask(queueScheduleId);
-            lavaCoolScheduleId = -1;
+            queueScheduleId = -1;
+        }
+        if (underfillCleanupScheduleId != -1) {
+            TyphonScheduler.unregisterTask(underfillCleanupScheduleId);
+            underfillCleanupScheduleId = -1;
         }
     }
 
@@ -744,8 +755,6 @@ public class VolcanoLavaFlow implements Listener {
                 if (trySave) {
                     vent.getVolcano().trySave(false);
                 }
-
-                vent.record.addEjectaVolume(1, data.ejectaRecordIdx);
 
                 // force load chunk.
                 if (!vent.location.getChunk().isLoaded()) vent.location.getChunk().load();
@@ -1863,6 +1872,28 @@ public class VolcanoLavaFlow implements Listener {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Periodic cleanup of underfill targets that are no longer valid.
+     * Processes a batch per tick to avoid TPS impact.
+     */
+    public void cleanupUnderfillTargets() {
+        if (underfillTargets.isEmpty()) return;
+
+        int batchSize = Math.min(2000, underfillTargets.size());
+        Iterator<Block> it = underfillTargets.iterator();
+        int removed = 0;
+        for (int i = 0; i < batchSize && it.hasNext(); i++) {
+            Block target = it.next();
+            if (!target.getType().isAir() && !TyphonUtils.containsLiquidWater(target)) {
+                it.remove();
+                removed++;
+            } else if (isLavaRegistered(target)) {
+                it.remove();
+                removed++;
+            }
+        }
     }
 
     public double getLavaStickiness() {

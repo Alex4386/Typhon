@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VersionData, VolcanoSummary, HealthData, TpsData } from '@/transport/types';
+import type { VersionData, VolcanoSummary, HealthData, TpsData, AuthData } from '@/transport/types';
 import { getApi } from '@/transport/api';
 
 interface ConnectionState {
@@ -55,12 +55,12 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
       setOnline(false);
       const msg = (e as Error).message;
       if (msg.includes('401') || msg.includes('Unauthorized')) {
-        setError('Unauthorized. Set an auth token in Settings.');
+        navigate('/connect', { replace: true });
       } else {
         setError('Failed to fetch: ' + msg);
       }
     }
-  }, []);
+  }, [navigate]);
 
   // On first mount, probe /v1/health to check if we're on the unified server.
   // If it fails (e.g. different origin, no API here), redirect to /connect.
@@ -71,9 +71,14 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
     const api = getApi();
     api
       .get<HealthData>('/health')
-      .then((res) => {
+      .then(async (res) => {
         if (res.status === 200 && res.data && typeof res.data === 'object' && 'status' in res.data) {
-          // Unified server — proceed normally
+          // Unified server — check if auth is needed before proceeding
+          const authRes = await api.get<AuthData>('/auth');
+          if (authRes.status === 200 && authRes.data?.authConfigured && !authRes.data?.authenticated) {
+            navigate('/connect', { replace: true });
+            return;
+          }
           refresh();
           intervalRef.current = setInterval(refresh, 30000);
         } else {

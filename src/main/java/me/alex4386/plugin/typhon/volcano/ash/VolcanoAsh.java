@@ -284,7 +284,7 @@ public class VolcanoAsh {
             for (int i = 0; i < thisHeight; i++) {
                 Block pileUp = circleTarget.getRelative(0, i, 0);
                 this.vent.lavaFlow.queueBlockUpdate(pileUp, Material.TUFF);
-                this.vent.record.addEjectaVolume(1);
+                this.vent.record.addEjectaVolume(1, this.vent.record.getRecordIndex());
             }
         }
     }

@@ -38,6 +38,7 @@ public class VolcanoVentCaldera {
     long notProcessedEjecta = 0;
 
     int scheduleID = -1;
+    int ejectaRecordIdx = -1;
 
     int targetY = 0;
 
@@ -282,7 +283,7 @@ public class VolcanoVentCaldera {
 
             int excavated = this.excavateUntilSpecificY(targetBlock, targetY);
             if (excavated > 0) {
-                this.vent.record.addEjectaVolume(excavated);
+                this.vent.record.addEjectaVolume(excavated, this.ejectaRecordIdx);
                 notProcessedEjecta += excavated;
             }
         }
@@ -342,6 +343,7 @@ public class VolcanoVentCaldera {
 
         this.backedupStyle = this.vent.erupt.getStyle();
         this.vent.erupt.setStyle(VolcanoEruptStyle.PLINIAN);
+        this.ejectaRecordIdx = this.vent.record.getRecordIndex();
         this.initialize();
 
         this.isRunning = true;

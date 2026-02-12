@@ -37,6 +37,7 @@ public class VolcanoPyroclasticFlow {
 
     boolean isFinished = false;
     int scheduleID = -1;
+    int ejectaRecordIdx = -1;
 
     boolean underTheWater = false;
 
@@ -122,6 +123,7 @@ public class VolcanoPyroclasticFlow {
         this.initRadius = radius;
         this.life = life;
         this.maxDistance = maxDistance;
+        this.ejectaRecordIdx = ash.vent.record.getRecordIndex();
     }
 
     public void setDirection(Vector direction) {
@@ -516,7 +518,7 @@ public class VolcanoPyroclasticFlow {
                             continue;
                         }
                         this.ash.vent.lavaFlow.queueBlockUpdate(targetBlock, Material.TUFF);
-                        this.ash.vent.record.addEjectaVolume(1);
+                        this.ash.vent.record.addEjectaVolume(1, this.ejectaRecordIdx);
                     }
 
                     if (!this.underTheWater) {
