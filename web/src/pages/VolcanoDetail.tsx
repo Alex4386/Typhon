@@ -243,7 +243,7 @@ function VentsTab({
             {'craterRadius' in mainVent && (
               <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-muted-foreground sm:grid-cols-4">
                 <div>Crater: {(mainVent as VentDetail).craterRadius}</div>
-                <div>Flow: {(mainVent as VentDetail).longestFlowLength}</div>
+                <div>Flow: {((mainVent as VentDetail).longestFlowLength || 0).toFixed(2)}</div>
                 <div>Style: {mainVent.style}</div>
               </div>
             )}
