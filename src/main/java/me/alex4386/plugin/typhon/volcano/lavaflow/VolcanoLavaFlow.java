@@ -822,9 +822,9 @@ public class VolcanoLavaFlow implements Listener {
                     if (this.vent.isFlowingLava() && Math.random() < (Math.pow(runniness, 2))
                             && data.source != null && this.vent.longestNormalLavaFlowLength > 0) {
                         double dist = TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation());
-                        double ratio = (this.vent.longestNormalLavaFlowLength - dist) / this.vent.longestNormalLavaFlowLength;
-                        ratio = Math.max(0, Math.min(1, ratio));
-                        if (Math.random() < Math.pow(ratio, 2)) {
+                        double distanceRatio = (this.vent.longestNormalLavaFlowLength - dist) / this.vent.longestNormalLavaFlowLength;
+                        distanceRatio = Math.max(0, Math.min(1, distanceRatio));
+                        if (Math.random() < Math.pow(distanceRatio, 2)) {
                             underfillTargets.add(underUnderToBlock);
                         }
                     }
