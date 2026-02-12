@@ -816,7 +816,18 @@ public class VolcanoLavaFlow implements Listener {
 
                 // Defer underfill to plumbing instead of immediate lava placement
                 if (!data.isBomb) {
-                    underfillTargets.add(underUnderToBlock);
+                    double runniness = 1.0 - (Math.max(0.45, this.settings.silicateLevel) - 0.45 / (0.53 - 0.45));
+
+                    // No underfill for sticky (andesitic+) lava or when not flowing
+                    if (this.vent.isFlowingLava() && Math.random() < (Math.pow(runniness, 2))
+                            && data.source != null && this.vent.longestNormalLavaFlowLength > 0) {
+                        double dist = TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation());
+                        double ratio = (this.vent.longestNormalLavaFlowLength - dist) / this.vent.longestNormalLavaFlowLength;
+                        ratio = Math.max(0, Math.min(1, ratio));
+                        if (Math.random() < Math.pow(ratio, 2)) {
+                            underfillTargets.add(underUnderToBlock);
+                        }
+                    }
                 } else {
                     this.flowLavaFromBomb(underUnderToBlock);
                 }
