@@ -1121,6 +1121,13 @@ public class VolcanoLavaFlow implements Listener {
                 TyphonBlocks.setBlockType(block, Material.LAVA);
             }
 
+            // Force-load the chunk to ensure lava physics are applied
+            Chunk chunk = block.getChunk();
+            if (!lavaFlowChunks.contains(chunk)) {
+                lavaFlowChunks.add(chunk);
+                chunk.setForceLoaded(true);
+            }
+
             int ticks = 30;
             VolcanoLavaCoolData coolData;
 
