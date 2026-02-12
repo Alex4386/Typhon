@@ -29,7 +29,20 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
   const [tps, setTps] = useState<TpsData | null>(null);
   const [error, setError] = useState('');
   const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const tpsIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const checkedRef = useRef(false);
+
+  const refreshTps = useCallback(async () => {
+    const api = getApi();
+    try {
+      const tpsRes = await api.get<TpsData>('/tps');
+      if (tpsRes.status === 200 && tpsRes.data) {
+        setTps(tpsRes.data);
+      }
+    } catch {
+      // TPS fetch failures are non-critical; silently ignore
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     const api = getApi();
@@ -81,6 +94,7 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
           }
           refresh();
           intervalRef.current = setInterval(refresh, 30000);
+          tpsIntervalRef.current = setInterval(refreshTps, 5000);
         } else {
           // Unexpected response — not our server
           navigate('/connect', { replace: true });
@@ -91,8 +105,11 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
         navigate('/connect', { replace: true });
       });
 
-    return () => clearInterval(intervalRef.current);
-  }, [refresh, navigate]);
+    return () => {
+      clearInterval(intervalRef.current);
+      clearInterval(tpsIntervalRef.current);
+    };
+  }, [refresh, refreshTps, navigate]);
 
   return (
     <ConnectionContext.Provider value={{ online, version, volcanoes, tps, error, refresh }}>
