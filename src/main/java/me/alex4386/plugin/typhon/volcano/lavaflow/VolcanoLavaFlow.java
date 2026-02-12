@@ -1646,7 +1646,7 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public double getLavaStickiness() {
-        return (this.settings.silicateLevel - 0.48 / 0.63 - 0.48);
+        return (this.settings.silicateLevel - 0.50 / 0.63 - 0.50);
     }
 
     public boolean extensionCapable(Location location) {

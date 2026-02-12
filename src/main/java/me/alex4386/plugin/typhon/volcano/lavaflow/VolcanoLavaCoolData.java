@@ -101,11 +101,11 @@ public class VolcanoLavaCoolData {
     }
 
     public static int calculateExtensionCount(double silicateLevel, double distance, double height) {
-        // 0.48 is lower end. minimum travel distance should be 10km. 
+        // 0.50 is lower end. minimum travel distance should be 10km.
         // but this is Minecraft. 10000 blocks is way too much. scaling down
         if (silicateLevel > 0.68) return 0;
 
-        double silicateRatio = (Math.max(0.48, silicateLevel) - 0.48) / (0.68 - 0.48);
+        double silicateRatio = (Math.max(0.50, silicateLevel) - 0.50) / (0.68 - 0.50);
         double extensionRate = 0.1;
 
         //if (Math.random() > extensionRate) return 0;
