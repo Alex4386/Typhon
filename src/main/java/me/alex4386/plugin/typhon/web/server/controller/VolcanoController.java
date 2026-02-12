@@ -430,7 +430,7 @@ public class VolcanoController {
             try { json.put("terminalLavaBlocks", vent.lavaFlow != null ? vent.lavaFlow.getTerminalBlockCount() : 0); }
             catch (Exception ignored) { json.put("terminalLavaBlocks", 0); }
 
-            try { json.put("bombsPerSecond", vent.bombs != null ? vent.bombs.getBombsLaunchedPerSecond() : 0); }
+            try { json.put("bombsPerSecond", vent.bombs != null ? vent.bombs.getLaunchRate() : 0); }
             catch (Exception ignored) { json.put("bombsPerSecond", 0); }
 
             try { json.put("activeBombs", vent.bombs != null ? vent.bombs.bombMap.size() : 0); }

@@ -421,8 +421,9 @@ public class VolcanoBombs {
         } else {
             this.launchBomb();
         }
+    }
 
-        // Update bomb rate tracking
+    private void updateBombRate() {
         bombsSinceRateCalc++;
         long now = System.currentTimeMillis();
         if (lastBombRateCalcTime == 0) {
@@ -434,7 +435,7 @@ public class VolcanoBombs {
         }
     }
 
-    public long getBombsLaunchedPerSecond() {
+    public long getLaunchRate() {
         return bombsLaunchedPerSecond;
     }
 
@@ -452,6 +453,7 @@ public class VolcanoBombs {
         if (bomb.block != null) {
             bombMap.put(bomb.block, bomb);
         }
+        updateBombRate();
     }
 
     public void customLaunchSpecifiedBomb(VolcanoBomb bomb, Consumer<VolcanoBomb> launcher) {
@@ -459,6 +461,7 @@ public class VolcanoBombs {
         if (bomb.block != null) {
             bombMap.put(bomb.block, bomb);
         }
+        updateBombRate();
     }
 
     public void trackAll() {
