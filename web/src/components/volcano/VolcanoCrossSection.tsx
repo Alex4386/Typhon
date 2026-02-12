@@ -393,8 +393,8 @@ export function VolcanoCrossSectionRaw({ vent }: Props) {
           </>
         )}
 
-        {/* ── 6b. Lava flow on slope ──────────────────────────────── */}
-        {geo.currentFlowPxR > 0 && geo.flowPxR > 0 && (() => {
+        {/* ── 6b. Lava flow on slope (only when lava is actively flowing) */}
+        {vent.isFlowingLava && geo.currentFlowPxR > 0 && geo.flowPxR > 0 && (() => {
           // Draw lava overlay following the slope from crater rim to currentFlowLength
           const slopeLen = geo.flowPxR - geo.craterPxR; // total slope px
           const flowFromRimPx = Math.max(geo.currentFlowPxR - geo.craterPxR, 0);
