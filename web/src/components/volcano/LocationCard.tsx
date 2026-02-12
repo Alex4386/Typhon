@@ -1,6 +1,7 @@
 import type { LocationData } from '@/transport/types';
-import { MapPin, Mountain, ExternalLink } from 'lucide-react';
+import { MapPin, Mountain, ExternalLink, Map } from 'lucide-react';
 import type { ElementType } from 'react';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 export function buildBlueMapUrl(baseUrl: string, loc: LocationData): string | null {
   if (!loc.world) return null;
@@ -29,15 +30,30 @@ export function LocationCard({ label, icon: Icon = MapPin, location, blueMapUrl 
           {label}
         </div>
         {blueMapUrl && (
-          <a
-            href={blueMapUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            View in BlueMap
-            <ExternalLink className="size-3" />
-          </a>
+          <>
+            <a
+              href={blueMapUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              View in BlueMap
+              <ExternalLink className="size-3" />
+            </a>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a
+                  href={blueMapUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex sm:hidden items-center text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Map className="size-4" />
+                </a>
+              </TooltipTrigger>
+              <TooltipContent>Show in BlueMap</TooltipContent>
+            </Tooltip>
+          </>
         )}
       </div>
       <div className="text-sm text-muted-foreground">{coords}</div>

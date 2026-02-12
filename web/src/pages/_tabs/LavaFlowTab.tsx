@@ -16,11 +16,16 @@ export function LavaFlowTab({ vent, configNodes, onSetConfig }: {
     ? Math.min((vent.currentFlowLength / vent.longestFlowLength) * 100, 100)
     : 0;
 
-  const frontPct = vent.activeLavaBlocks > 0
-    ? Math.min((vent.terminalLavaBlocks / vent.activeLavaBlocks) * 100, 100)
+  const activeLavaBlocks = vent.activeLavaBlocks ?? 0;
+  const terminalLavaBlocks = vent.terminalLavaBlocks ?? 0;
+  const normalFlowEndBlocks = vent.normalFlowEndBlocks ?? 0;
+  const pillowFlowEndBlocks = vent.pillowFlowEndBlocks ?? 0;
+
+  const frontPct = activeLavaBlocks > 0
+    ? Math.min((terminalLavaBlocks / activeLavaBlocks) * 100, 100)
     : 0;
 
-  const totalEndpoints = vent.normalFlowEndBlocks + vent.pillowFlowEndBlocks;
+  const totalEndpoints = normalFlowEndBlocks + pillowFlowEndBlocks;
   const endpointNormalPct = totalEndpoints > 0 ? (vent.normalFlowEndBlocks / totalEndpoints) * 100 : 50;
   const isPlumbing = vent.plumbedBlocksPerSecond > 0;
   const plumbSuccessPct = vent.plumbedBlocksPerSecond > 0
@@ -83,11 +88,11 @@ export function LavaFlowTab({ vent, configNodes, onSetConfig }: {
           {/* Active lava — stacked bar: flow front vs total */}
           <div className="space-y-1">
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{vent.activeLavaBlocks.toLocaleString()} active blocks</span>
-              <span>{vent.terminalLavaBlocks.toLocaleString()} flow front</span>
+              <span>{activeLavaBlocks.toLocaleString()} active blocks</span>
+              <span>{terminalLavaBlocks.toLocaleString()} flow front</span>
             </div>
             <div className="h-2 rounded-full bg-muted overflow-hidden flex">
-              {vent.activeLavaBlocks > 0 && (<>
+              {activeLavaBlocks > 0 && (<>
                 <div
                   className="h-full bg-orange-500/60 transition-all"
                   style={{ width: `${100 - frontPct}%` }}
@@ -150,8 +155,8 @@ export function LavaFlowTab({ vent, configNodes, onSetConfig }: {
           {/* Normal vs Pillow endpoints */}
           <div className="space-y-1">
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Normal: {vent.normalFlowEndBlocks.toLocaleString()}</span>
-              <span>Pillow: {vent.pillowFlowEndBlocks.toLocaleString()}</span>
+              <span>Normal: {normalFlowEndBlocks.toLocaleString()}</span>
+              <span>Pillow: {pillowFlowEndBlocks.toLocaleString()}</span>
             </div>
             <div className="h-2 rounded-full bg-muted overflow-hidden flex">
               {totalEndpoints > 0 && (<>
@@ -175,11 +180,11 @@ export function LavaFlowTab({ vent, configNodes, onSetConfig }: {
       </div>
 
       {/* Underfill card */}
-      {(vent.underfillTargets > 0 || vent.underfillLavaBlocks > 0) && (
+      {((vent.underfillTargets ?? 0) > 0 || (vent.underfillLavaBlocks ?? 0) > 0) && (
         <UnderfillCard
-          underfillTargets={vent.underfillTargets}
-          underfillLavaBlocks={vent.underfillLavaBlocks}
-          activeLavaBlocks={vent.activeLavaBlocks}
+          underfillTargets={vent.underfillTargets ?? 0}
+          underfillLavaBlocks={vent.underfillLavaBlocks ?? 0}
+          activeLavaBlocks={activeLavaBlocks}
           successfulPlumbsPerSecond={vent.successfulPlumbsPerSecond}
           plumbedBlocksPerSecond={vent.plumbedBlocksPerSecond}
         />

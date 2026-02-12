@@ -55,6 +55,7 @@ public class VolcanoVent {
 
     public double calderaRadius = 0.0;
     private Block cachedSummitBlock = null;
+    private Block previousSummitBlock = null;
     private long cachedSummitBlockLastSync = 0;
 
     private List<Block> cachedVentBlocks = null;
@@ -492,6 +493,7 @@ public class VolcanoVent {
         this.cachedVentBlocks = null;
         this.coreBlocks = null;
         this.leeveBlocks = null;
+        this.previousSummitBlock = null;
         this.flushSummitCache();
     }
 
@@ -761,9 +763,17 @@ public class VolcanoVent {
             }
         }
 
-        this.cachedSummitBlock = highestBlock;
+        Block previousHighest = this.previousSummitBlock != null
+                ? TyphonUtils.getHighestRocklikes(this.previousSummitBlock)
+                : null;
+        if (previousHighest != null && highestBlock.getY() == previousHighest.getY()) {
+            this.cachedSummitBlock = this.previousSummitBlock;
+        } else {
+            this.cachedSummitBlock = highestBlock;
+            this.previousSummitBlock = highestBlock;
+        }
         this.cachedSummitBlockLastSync = System.currentTimeMillis();
-        return highestBlock;
+        return this.cachedSummitBlock;
     }
 
     public void cool() {
