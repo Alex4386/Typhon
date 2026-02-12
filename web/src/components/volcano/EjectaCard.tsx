@@ -1,3 +1,4 @@
+import { useState, useCallback, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 
 /* ── VEI Scale ───────────────────────────────────────────────────────────── */
@@ -51,12 +52,25 @@ export function EjectaCard({ label, volume, rate, subtitle }: {
   subtitle?: string;
 }) {
   const vei = getVEI(volume);
+  const [showRaw, setShowRaw] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+  const handleVolumeClick = useCallback(() => {
+    setShowRaw(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setShowRaw(false), 3000);
+  }, []);
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-xs text-muted-foreground uppercase tracking-wider">{label}</span>
-        <span className="text-xs text-muted-foreground">{formatVolume(volume)}</span>
+        <span
+          className="text-xs text-muted-foreground cursor-pointer select-none transition-opacity hover:opacity-70"
+          onClick={handleVolumeClick}
+        >
+          {showRaw ? `${volume.toLocaleString()} m³` : formatVolume(volume)}
+        </span>
       </div>
       <div className="flex items-baseline gap-2">
         <span className="text-2xl font-bold tabular-nums">{vei.vei}</span>

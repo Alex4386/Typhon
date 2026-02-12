@@ -73,6 +73,7 @@ export interface VentDetail extends VentSummary {
   normalFlowEndBlocks: number;
   pillowFlowEndBlocks: number;
   underfillTargets: number;
+  underfillLavaBlocks: number;
 }
 
 /** Lightweight metrics returned by GET /vents/:vent/metrics — poll-friendly */
@@ -99,6 +100,7 @@ export interface VentMetrics {
   normalFlowEndBlocks: number;
   pillowFlowEndBlocks: number;
   underfillTargets: number;
+  underfillLavaBlocks: number;
   bombsPerSecond: number;
   activeBombs: number;
   maxActiveBombs: number;

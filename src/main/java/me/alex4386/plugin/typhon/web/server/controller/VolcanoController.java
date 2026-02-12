@@ -391,12 +391,14 @@ public class VolcanoController {
                     json.put("normalFlowEndBlocks", vent.lavaFlow != null ? vent.lavaFlow.getNormalFlowEndBlockCount() : 0);
                     json.put("pillowFlowEndBlocks", vent.lavaFlow != null ? vent.lavaFlow.getPillowFlowEndBlockCount() : 0);
                     json.put("underfillTargets", vent.lavaFlow != null ? vent.lavaFlow.underfillTargets.size() : 0);
+                    json.put("underfillLavaBlocks", vent.lavaFlow != null ? vent.lavaFlow.getUnderfillLavaCount() : 0);
                 } catch (Exception ignored) {
                     json.put("plumbedBlocksPerSecond", 0);
                     json.put("successfulPlumbsPerSecond", 0);
                     json.put("normalFlowEndBlocks", 0);
                     json.put("pillowFlowEndBlocks", 0);
                     json.put("underfillTargets", 0);
+                    json.put("underfillLavaBlocks", 0);
                 }
 
             }
@@ -457,12 +459,14 @@ public class VolcanoController {
                 json.put("normalFlowEndBlocks", vent.lavaFlow != null ? vent.lavaFlow.getNormalFlowEndBlockCount() : 0);
                 json.put("pillowFlowEndBlocks", vent.lavaFlow != null ? vent.lavaFlow.getPillowFlowEndBlockCount() : 0);
                 json.put("underfillTargets", vent.lavaFlow != null ? vent.lavaFlow.underfillTargets.size() : 0);
+                json.put("underfillLavaBlocks", vent.lavaFlow != null ? vent.lavaFlow.getUnderfillLavaCount() : 0);
             } catch (Exception ignored) {
                 json.put("plumbedBlocksPerSecond", 0);
                 json.put("successfulPlumbsPerSecond", 0);
                 json.put("normalFlowEndBlocks", 0);
                 json.put("pillowFlowEndBlocks", 0);
                 json.put("underfillTargets", 0);
+                json.put("underfillLavaBlocks", 0);
             }
 
             try { json.put("bombsPerSecond", vent.bombs != null ? vent.bombs.getLaunchRate() : 0); }

@@ -85,6 +85,7 @@ public class VolcanoLavaFlow implements Listener {
     // Cached counts — updated on main thread, safe to read from web thread
     private volatile int cachedActiveLavaCount = 0;
     private volatile int cachedTerminalBlockCount = 0;
+    private volatile int cachedUnderfillLavaCount = 0;
 
     // Disable rootless cone for now.
     private double rootlessConeProbability = (0.0 / 10.0);
@@ -209,6 +210,10 @@ public class VolcanoLavaFlow implements Listener {
         return cachedTerminalBlockCount;
     }
 
+    public int getUnderfillLavaCount() {
+        return cachedUnderfillLavaCount;
+    }
+
     public long getPlumbedBlocksPerSecond() {
         return plumbedBlocksPerSecond;
     }
@@ -269,12 +274,17 @@ public class VolcanoLavaFlow implements Listener {
 
     private void updateCachedCounts() {
         int count = 0;
+        int underfillCount = 0;
         for (Map<Block, VolcanoLavaCoolData> lavaCoolMap : lavaCools.values()) {
             count += lavaCoolMap.size();
+            for (VolcanoLavaCoolData data : lavaCoolMap.values()) {
+                if (data.isUnderfill) underfillCount++;
+            }
         }
         count += pillowLavaMap.size();
         cachedActiveLavaCount = count;
         cachedTerminalBlockCount = terminalBlocks.size();
+        cachedUnderfillLavaCount = underfillCount;
     }
 
     public Volcano getVolcano() {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { VentRecordData, EjectaRecord } from '@/transport/types';
 import { ClipboardList, ChevronDown, ChevronUp } from 'lucide-react';
 import {
@@ -101,7 +101,15 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
   const { records, currentEjecta, totalEjecta, startEjectaTracking } = record;
   const isTracking = startEjectaTracking > 0;
 
-  const totalDuration = records.reduce((acc, r) => acc + (r.endTime - r.startTime), 0);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!isTracking) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isTracking]);
+
+  const finishedDuration = records.reduce((acc, r) => acc + (r.endTime - r.startTime), 0);
+  const totalDuration = finishedDuration + (isTracking ? now - startEjectaTracking : 0);
 
   return (
     <div className="space-y-4">
