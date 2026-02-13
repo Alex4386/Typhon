@@ -308,6 +308,7 @@ public class VolcanoLavaFlow implements Listener {
                             () -> {
                                 this.plumbLava();
                                 this.autoFlowLava();
+                                this.resolveUnderfill();
                             },
                             1L);
         }
@@ -1778,6 +1779,26 @@ public class VolcanoLavaFlow implements Listener {
                 it.remove();
                 removed++;
             }
+        }
+    }
+
+    /**
+     * Resolve remaining underfill targets after eruption wanes.
+     * Called when lava is no longer actively flowing but underfill targets remain.
+     * Processes a small batch per tick to gradually fill underground voids.
+     */
+    private void resolveUnderfill() {
+        // if the eruption is ongoing, the plumbing
+        // will resolve the underfill targets
+        if (this.settings.flowing) return;
+
+        if (underfillTargets.isEmpty()) return;
+
+        // Process a small batch per tick to avoid TPS impact
+        int batchSize = Math.min(100, underfillTargets.size());
+        for (int i = 0; i < batchSize; i++) {
+            this.flowUnderfillLava();
+            if (underfillTargets.isEmpty()) break;
         }
     }
 
