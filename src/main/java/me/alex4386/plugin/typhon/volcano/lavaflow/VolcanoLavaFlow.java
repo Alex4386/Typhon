@@ -499,19 +499,208 @@ public class VolcanoLavaFlow implements Listener {
         return it.next();
     }
 
+
+    // === Helper methods for onBlockFromTo ===
+
+    /**
+     * Checks if lava flow should be cancelled due to stickiness.
+     * @return true if flow should be cancelled
+     */
+    private boolean shouldCancelDueToStickiness(VolcanoLavaCoolData data, Block block, BlockFace face, int level) {
+        boolean isPrimary = true;
+        if (data.fromBlock != null) {
+            BlockFace fromFace = data.fromBlock.getFace(block);
+            if (fromFace != BlockFace.DOWN && fromFace != null) {
+                isPrimary = face.getDirection().equals(fromFace.getDirection());
+            }
+        }
+
+        if (face == BlockFace.DOWN) {
+            isPrimary = true;
+        }
+
+        int decrementAmount = block.getWorld().isUltraWarm() ? 1 : 2;
+        int levelConverted = level >= 8 ? 8 : (8 - level);
+
+        int levelT = isPrimary ? levelConverted : levelConverted - decrementAmount;
+        double ratio = Math.min(1, Math.max(0, levelT / (8.0 - decrementAmount)));
+
+        double levelProbability = Math.pow(ratio, 2);
+        if (isPrimary) {
+            levelProbability = Math.pow(ratio, 1.25);
+        }
+
+        if (Math.random() < this.getLavaStickiness()) {
+            if (Math.random() > levelProbability) {
+                vent.volcano.logger.debug(VolcanoLogClass.LAVA_FLOW, "Lava stickiness match! levelProbability: " + levelProbability);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Updates flow distance tracking and triggers save if needed.
+     */
+    private void updateFlowDistanceTracking(VolcanoLavaCoolData data, Block block) {
+        if (this.vent == null || data.isBomb || data.source == null) {
+            return;
+        }
+
+        double distance = TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), block.getLocation());
+
+        boolean trySave = false;
+        if (distance > vent.longestFlowLength) {
+            vent.longestFlowLength = distance;
+            trySave = true;
+        }
+
+        if (distance > vent.currentFlowLength) {
+            vent.currentFlowLength = distance;
+            trySave = true;
+        }
+
+        if (!data.skipNormalLavaFlowLengthCheck) {
+            if (distance > vent.longestNormalLavaFlowLength) {
+                vent.longestNormalLavaFlowLength = distance;
+                trySave = true;
+            }
+
+            if (distance > vent.currentNormalLavaFlowLength) {
+                vent.currentNormalLavaFlowLength = distance;
+                trySave = true;
+            }
+
+            if (vent.calderaRadius < distance) {
+                vent.calderaRadius = -1;
+                trySave = true;
+            }
+        }
+
+        if (trySave) {
+            vent.getVolcano().trySave(false);
+        }
+
+        // force load chunk.
+        if (!vent.location.getChunk().isLoaded()) {
+            vent.location.getChunk().load();
+        }
+    }
+
+    /**
+     * Checks if bomb flow should be cancelled due to flow limit.
+     * @return true if flow should be cancelled
+     */
+    private boolean shouldCancelBombFlow(VolcanoLavaCoolData data, Block toBlock) {
+        if (!data.isBomb || this.vent == null || data.source == null) {
+            return false;
+        }
+
+        if (this.vent.isInVent(toBlock.getLocation())) {
+            return false;
+        }
+
+        if (data.flowLimit >= 0) {
+            double dist = TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation());
+            if (dist > data.flowLimit && !vent.isInVent(toBlock.getLocation())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Determines if underfill should run based on flow data and silicate level.
+     */
+    private boolean shouldRunUnderfill(VolcanoLavaCoolData data) {
+        boolean shouldRunUnderfill = true;
+
+        if (data.isBomb && data.flowLimit >= 0) {
+            shouldRunUnderfill = Math.random() < 0.1;
+        }
+
+        if (data.flowedFromVent != null && shouldRunUnderfill) {
+            double silicateLevel = data.flowedFromVent.lavaFlow.settings.silicateLevel;
+            if (silicateLevel > 0.50) {
+                double silicaRatio = Math.min(0.57, silicateLevel) - 0.50 / 0.07;
+                if (silicaRatio > 1 - Math.pow(silicaRatio, 2)) {
+                    shouldRunUnderfill = Math.random() > 0.5;
+                }
+            }
+        }
+
+        return shouldRunUnderfill;
+    }
+
+    /**
+     * Handles underfill processing for lava flow.
+     */
+    private void processUnderfill(VolcanoLavaCoolData data, Block toBlock, Block underToBlock, Block underUnderToBlock) {
+        queueImmediateBlockUpdate(underToBlock, data.material);
+
+        if (!data.isBomb) {
+            double runniness = 1.0 - (Math.max(0.45, this.settings.silicateLevel) - 0.45 / (0.53 - 0.45));
+
+            // No underfill for sticky (andesitic+) lava or when not flowing
+            if (this.vent.isFlowingLava() && Math.random() < (Math.pow(runniness, 2))
+                    && data.source != null && this.vent.longestNormalLavaFlowLength > 0) {
+                double dist = TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation());
+                double distanceRatio = (this.vent.longestNormalLavaFlowLength - dist) / this.vent.longestNormalLavaFlowLength;
+                distanceRatio = Math.max(0, Math.min(1, distanceRatio));
+                if (Math.random() < Math.pow(distanceRatio, 2)) {
+                    underfillTargets.add(underUnderToBlock);
+                }
+            }
+        } else {
+            this.flowLavaFromBomb(underUnderToBlock);
+        }
+    }
+
+    /**
+     * Applies metamorphism to blocks around the target location.
+     */
+    private void applyNearbyMetamorphism(Block toBlock, boolean isBomb) {
+        BlockFace[] nearByFaces = { BlockFace.UP, BlockFace.WEST, BlockFace.EAST, BlockFace.NORTH, BlockFace.SOUTH };
+        for (BlockFace nearByFace : nearByFaces) {
+            Block targetBlock = toBlock.getRelative(nearByFace);
+            this.getVolcano().metamorphism.metamorphoseBlock(vent, targetBlock, isBomb);
+        }
+    }
+
+
+    /**
+     * Registers cool data and handles terminal block registration.
+     */
+    private void registerFlowDataAndTerminalBlocks(VolcanoLavaCoolData data, Block block, Block toBlock, int extensionCount) {
+        Object obj = this.registerLavaCoolData(data.source, block, toBlock, data.isBomb, extensionCount, data.ejectaRecordIdx);
+
+        if (obj instanceof VolcanoLavaCoolData coolData) {
+            if (data.isUnderfill) {
+                // Underfill flow: propagate flag, route end-of-flow to underfillTargets
+                coolData.isUnderfill = true;
+                // Skip x,z column dedup — underfill needs to fill underneath
+                terminalBlocks.add(toBlock);
+            } else {
+                // Normal flow: register on terminalBlocks with column dedup
+                this.addFlowEndBlock(toBlock, false);
+            }
+
+            if (data.skipNormalLavaFlowLengthCheck) {
+                coolData.skipNormalLavaFlowLengthCheck = true;
+            }
+
+            if (data.isBomb) {
+                coolData.flowLimit = data.flowLimit;
+            }
+        } else if (obj instanceof VolcanoPillowLavaData pillowData) {
+            this.addFlowEndBlock(toBlock, true);
+            Block targetBlock = TyphonUtils.getHighestRocklikes(pillowData.fromBlock);
+            this.createEffectOnLavaSeaEntry(targetBlock);
+        }
+    }
+
     @EventHandler
     public void onBlockFromTo(BlockFromToEvent event) {
-
-        // new lava flow,
-        /*
-            If you set the count of the particle to 0, the "offset" should be treated as motion parameters for the particle.
-            The particle system in Minecraft is sometimes a bit weird, but that's just how it works.
-
-            (Edit: And yes, the "extra" argument will determine the speed of the particle)
-
-            https://www.spigotmc.org/threads/spawn-a-campfire-particle.403246/
-        */
-
         Block block = event.getBlock();
         Block toBlock = event.getToBlock();
         BlockFace face = event.getFace();
@@ -527,6 +716,7 @@ public class VolcanoLavaFlow implements Listener {
             level = ((Levelled) bd).getLevel();
         }
 
+        // Handle lava flowing into existing lava
         if (toBlock.getType() == Material.LAVA) {
             if (data != null) {
                 if (data.fromBlock != block) {
@@ -536,122 +726,33 @@ public class VolcanoLavaFlow implements Listener {
             }
         }
 
-        // this is lava. flow it.
+        // Main lava flow handling
         if (data != null) {
-            /*
-            // for realistic lava flows
-            if (face != BlockFace.DOWN) {
-                if (Math.random() < 0.01 * this.vent.lavaFlow.settings.silicateLevel) {
-                    event.setCancelled(true);
-                    toBlock.setType(Material.AIR);
-                    return;
-                }
-            }
-            */
-            // calculate flow direction
-            boolean isPrimary = true;
-            if (data.fromBlock != null) {
-                BlockFace fromFace = data.fromBlock.getFace(block);
-                if (fromFace != BlockFace.DOWN) {
-                    if (fromFace != null) {
-                        isPrimary = face.getDirection().equals(fromFace.getDirection());
-                    }
-                }
+            // Check stickiness-based flow cancellation
+            if (shouldCancelDueToStickiness(data, block, face, level)) {
+                event.setCancelled(true);
+                return;
             }
 
-            if (face == BlockFace.DOWN) {
-                isPrimary = true;
-            }
-
-            int decrementAmount = block.getWorld().isUltraWarm() ? 1 : 2;
-            int levelConverted = level >= 8 ? 8 : (8 - level);
-
-            int levelT = isPrimary ? levelConverted : levelConverted - decrementAmount;
-            double ratio = Math.min(1, Math.max(0, levelT / (8.0 - decrementAmount)));
-
-            double levelProbability = Math.pow(ratio, 2);
-            if (isPrimary) {
-                levelProbability = Math.pow(ratio, 1.25);
-            }
-
-            if (Math.random() < this.getLavaStickiness()) {
-                if (Math.random() > levelProbability) {
-                    vent.volcano.logger.debug(VolcanoLogClass.LAVA_FLOW, "Lava stickiness match! levelProbability: "+levelProbability);
-
-                    event.setCancelled(true);
-                    return;
-                }
-            }
-
+            // Random rootless cone generation
             if (Math.random() < rootlessConeProbability) {
                 this.doPlumbingToRootlessCone();
             }
 
-            if (this.vent != null && !data.isBomb && data.source != null) {
-                double distance;
-                distance =
-                        TyphonUtils.getTwoDimensionalDistance(
-                                data.source.getLocation(), block.getLocation());
+            // Update flow distance tracking
+            updateFlowDistanceTracking(data, block);
 
-                boolean trySave = false;
-                if (distance > vent.longestFlowLength) {
-                    vent.longestFlowLength = distance;
-                    trySave = true;
-                }
-
-                if (distance > vent.currentFlowLength) {
-                    vent.currentFlowLength = distance;
-                    trySave = true;
-                }
-
-                if (!data.skipNormalLavaFlowLengthCheck) {
-                    if (distance > vent.longestNormalLavaFlowLength) {
-                        vent.longestNormalLavaFlowLength = distance;
-                        trySave = true;
-                    }
-
-                    if (distance > vent.currentNormalLavaFlowLength) {
-                        vent.currentNormalLavaFlowLength = distance;
-                        trySave = true;
-                    }
-
-                    if (vent.calderaRadius < distance) {
-                        vent.calderaRadius = -1;
-                        trySave = true;
-                    }
-                }
-
-
-                if (trySave) {
-                    vent.getVolcano().trySave(false);
-                }
-
-                // force load chunk.
-                if (!vent.location.getChunk().isLoaded()) vent.location.getChunk().load();
-            } else if (data.isBomb) {
-                if (this.vent != null && data.source != null) {
-                    if (!this.vent.isInVent(toBlock.getLocation())) {
-                        if (data.flowLimit >= 0) {
-                            if (TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation()) > data.flowLimit) {
-                                if (vent != null && !vent.isInVent(toBlock.getLocation())) {
-//                                  vent.volcano.logger.log(
-//                                        VolcanoLogClass.LAVA_FLOW,
-//                                        "flowLimit match! flowLimit: "+data.flowLimit
-//                                  );
-                                    event.setCancelled(true);
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                }
+            // Check bomb flow limit
+            if (shouldCancelBombFlow(data, toBlock)) {
+                event.setCancelled(true);
+                return;
             }
 
+            // Prepare destination block
             Block underToBlock = toBlock.getRelative(BlockFace.DOWN);
-
             this.vent.getVolcano().chunkLoader.add(toBlock.getChunk());
 
-            // load toBlock chunk
+            // Load toBlock chunk
             Chunk toBlockChunk = toBlock.getLocation().getChunk();
             if (!toBlockChunk.isLoaded()) {
                 toBlockChunk.load();
@@ -660,94 +761,37 @@ public class VolcanoLavaFlow implements Listener {
             Block underUnderToBlock = underToBlock.getRelative(BlockFace.DOWN);
             boolean underIsAir = underToBlock.getType().isAir();
 
+            // Apply metamorphism to block underneath
             if (!underIsAir && underToBlock.getType() != Material.LAVA) {
                 getVolcano().metamorphism.metamorphoseBlock(vent, underToBlock, true);
             }
 
-            boolean fillUnderUnder = true;
-            if (data.isBomb) {
-                if (data.flowLimit >= 0) {
-                    fillUnderUnder = Math.random() < 0.1;
-                }
-            }
+            // Handle underfill
+            boolean shouldUnderfill = shouldRunUnderfill(data);
 
-            if (data.flowedFromVent != null && fillUnderUnder) {
-                double silicateLevel = data.flowedFromVent.lavaFlow.settings.silicateLevel;
-                if (silicateLevel > 0.50) {
-                    double silicaRatio = Math.min(0.57, silicateLevel) - 0.50 / 0.07;
-                    if (silicaRatio > 1 - Math.pow(silicaRatio, 2)) {
-                        fillUnderUnder = Math.random() > 0.5;
-                    }
-                }
-            }
-
-            if (underIsAir && underUnderToBlock.getType().isAir() && fillUnderUnder) {
-                queueImmediateBlockUpdate(underToBlock, data.material);
-
-                // Defer underfill to plumbing instead of immediate lava placement
-                if (!data.isBomb) {
-                    double runniness = 1.0 - (Math.max(0.45, this.settings.silicateLevel) - 0.45 / (0.53 - 0.45));
-
-                    // No underfill for sticky (andesitic+) lava or when not flowing
-                    if (this.vent.isFlowingLava() && Math.random() < (Math.pow(runniness, 2))
-                            && data.source != null && this.vent.longestNormalLavaFlowLength > 0) {
-                        double dist = TyphonUtils.getTwoDimensionalDistance(data.source.getLocation(), toBlock.getLocation());
-                        double distanceRatio = (this.vent.longestNormalLavaFlowLength - dist) / this.vent.longestNormalLavaFlowLength;
-                        distanceRatio = Math.max(0, Math.min(1, distanceRatio));
-                        if (Math.random() < Math.pow(distanceRatio, 2)) {
-                            underfillTargets.add(underUnderToBlock);
-                        }
-                    }
-                } else {
-                    this.flowLavaFromBomb(underUnderToBlock);
-                }
-            }
-
-            // affect nearby blocks run metamorphism
-            BlockFace[] nearByFaces = { BlockFace.UP, BlockFace.WEST, BlockFace.EAST, BlockFace.NORTH, BlockFace.SOUTH};
-            for (BlockFace nearByFace : nearByFaces) {
-                Block targetBlock = toBlock.getRelative(nearByFace);
-                this.getVolcano().metamorphism.metamorphoseBlock(vent, targetBlock, data.isBomb);
-            }
-
+            // Calculate extension count and register flow data
             int extensionCount = data.runExtensionCount;
 
+            if (underIsAir && underUnderToBlock.getType().isAir() && shouldUnderfill) {
+                // consider extensionCount has deducted for underUnderToBlock
+                if (extensionCount > 0) {
+                    processUnderfill(data, toBlock, underToBlock, underUnderToBlock);
+                    extensionCount--;
+                }
+            }
+
+            // reset if flowDirection is downwards.
             if (data.fromBlock != null) {
                 Location flowVector = block.getLocation().subtract(data.fromBlock.getLocation());
-                // this.flowedFromVent.volcano.logger.log(VolcanoLogClass.LAVA_FLOW,
-                //      "FlowVector: " + TyphonUtils.blockLocationTostring(flowVector.getBlock()));
 
-                if (!data.isBomb) {
-                    if (flowVector.getBlockY() < 0) {
-                            extensionCount = -1;
-                    }
+                if (!data.isBomb && flowVector.getBlockY() < 0) {
+                    extensionCount = -1;
                 }
             }
 
-            Object obj = this.registerLavaCoolData(data.source, block, toBlock, data.isBomb, extensionCount, data.ejectaRecordIdx);
-            if (obj instanceof VolcanoLavaCoolData coolData) {
-                if (data.isUnderfill) {
-                    // Underfill flow: propagate flag, route end-of-flow to underfillTargets
-                    coolData.isUnderfill = true;
-                    // Skip x,z column dedup — underfill needs to fill underneath
-                    terminalBlocks.add(toBlock);
-                } else {
-                    // Normal flow: register on terminalBlocks with column dedup
-                    this.addFlowEndBlock(toBlock, false);
-                }
-
-                if (data.skipNormalLavaFlowLengthCheck) {
-                    coolData.skipNormalLavaFlowLengthCheck = true;
-                }
-
-                if (data.isBomb) {
-                    coolData.flowLimit = data.flowLimit;
-                }
-            } else if (obj instanceof VolcanoPillowLavaData pillowData) {
-                this.addFlowEndBlock(toBlock, true);
-                Block targetBlock = TyphonUtils.getHighestRocklikes(pillowData.fromBlock);
-                this.createEffectOnLavaSeaEntry(targetBlock);
-            }
+            // Apply metamorphism to nearby blocks
+            applyNearbyMetamorphism(toBlock, data.isBomb);
+            registerFlowDataAndTerminalBlocks(data, block, toBlock, extensionCount);
         }
     }
 
