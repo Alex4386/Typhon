@@ -8,24 +8,49 @@ import org.bukkit.entity.Player;
 public class TyphonBlocks {
     /**
      * Sets the type of a block with WorldGuard region protection check
-     * 
+     *
      * @param block The block to modify
      * @param material The material to set
      * @return true if the block was modified, false if blocked by WorldGuard
      */
     public static boolean setBlockType(Block block, Material material) {
-        return TyphonBlocks.setBlockType(block, material, null);
+        return TyphonBlocks.setBlockType(block, material, null, true);
+    }
+
+    /**
+     * Sets the type of a block with WorldGuard region protection check
+     *
+     * @param block The block to modify
+     * @param material The material to set
+     * @param applyPhysics Whether to apply physics after setting the block type
+     * @return true if the block was modified, false if blocked by WorldGuard
+     */
+    public static boolean setBlockType(Block block, Material material, boolean applyPhysics) {
+        return TyphonBlocks.setBlockType(block, material, null, applyPhysics);
     }
 
     /**
      * Sets the type of a block with WorldGuard region protection check and player context
-     * 
+     *
      * @param block The block to modify
      * @param material The material to set
      * @param player The player context for permission checking
      * @return true if the block was modified, false if blocked by WorldGuard
      */
     public static boolean setBlockType(Block block, Material material, Player player) {
+        return TyphonBlocks.setBlockType(block, material, player, true);
+    }
+
+    /**
+     * Sets the type of a block with WorldGuard region protection check and player context
+     *
+     * @param block The block to modify
+     * @param material The material to set
+     * @param player The player context for permission checking
+     * @param applyPhysics Whether to apply physics after setting the block type
+     * @return true if the block was modified, false if blocked by WorldGuard
+     */
+    public static boolean setBlockType(Block block, Material material, Player player, boolean applyPhysics) {
         if (TyphonPlugin.worldGuard != null) {
             if (player == null) {
                 if (!TyphonPlugin.worldGuard.isAllowedAt(block.getLocation())) {
@@ -37,7 +62,7 @@ public class TyphonBlocks {
                 }
             }
         }
-        block.setType(material);
+        block.setType(material, applyPhysics);
         if (TyphonPlugin.coreProtect != null) {
             TyphonCoreProtectUtils coreProtect = TyphonPlugin.coreProtect;
             if (coreProtect.isCoreProtectEnabled()) {

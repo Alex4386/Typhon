@@ -48,7 +48,6 @@ public class VolcanoLavaFlow implements Listener {
     private int lavaFlowScheduleId = -1;
     private int lavaCoolScheduleId = -1;
     private int lavaInfluxScheduleId = -1;
-    private int queueScheduleId = -1;
     private int underfillCleanupScheduleId = -1;
     public VolcanoLavaFlowSettings settings = new VolcanoLavaFlowSettings();
 
@@ -59,10 +58,7 @@ public class VolcanoLavaFlow implements Listener {
     private double hawaiianBaseY = Double.NEGATIVE_INFINITY;
 
 
-    public long lastQueueUpdatesPerSecond = 0;
-    public long lastQueueUpdatedPerSecondAt = 0;
-
-    public long lastQueueUpdates = 0;
+    private final TyphonBlockQueue blockQueue = new TyphonBlockQueue();
 
     // Lava flow rate tracking (flows per second from autoFlowLava)
     private long flowedBlocksSinceRateCalc = 0;
@@ -90,12 +86,6 @@ public class VolcanoLavaFlow implements Listener {
 
     // Disable rootless cone for now.
     private double rootlessConeProbability = (0.0 / 10.0);
-
-    private static Map<Chunk, Queue<Map.Entry<Block, Material>>> immediateBlockUpdateQueues = new HashMap<>();
-
-    // temporary queue to store Block and Material to update
-    private static Map<Chunk, Queue<Map.Entry<Block, Material>>> blockUpdateQueues = new HashMap<>();
-    private static Map<Block, Consumer<Block>> postUpdater = new HashMap<>();
 
     private int configuredLavaInflux = -1;
     private double queuedLavaInflux = 0;
@@ -157,46 +147,19 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public void queueBlockUpdate(Block block, Material material, Consumer<Block> callback) {
-        if (this.queueScheduleId == -1) {
-            this.registerQueueUpdate();
-        }
-
-        Chunk chunk = block.getChunk();
-        if (!blockUpdateQueues.containsKey(chunk)) {
-            blockUpdateQueues.put(chunk, new LinkedList<>());
-        }
-
-        Queue<Map.Entry<Block, Material>> blockUpdateQueue = blockUpdateQueues.get(chunk);
-
-        blockUpdateQueue.add(new AbstractMap.SimpleEntry<>(block, material));
-        if (callback != null) postUpdater.put(block, callback);
+        blockQueue.add(block, material, callback);
     }
 
     public void queueImmediateBlockUpdate(Block block, Material material) {
-        Chunk chunk = block.getChunk();
-        if (!immediateBlockUpdateQueues.containsKey(chunk)) {
-            immediateBlockUpdateQueues.put(chunk, new LinkedList<>());
-        }
-
-        Queue<Map.Entry<Block, Material>> blockUpdateQueue = immediateBlockUpdateQueues.get(chunk);
-        blockUpdateQueue.add(new AbstractMap.SimpleEntry<>(block, material));
+        blockQueue.addImmediate(block, material);
     }
 
     public long unprocessedQueueBlocks() {
-        long count = 0;
-        for (Queue<Map.Entry<Block, Material>> blockUpdateQueue : blockUpdateQueues.values()) {
-            count += blockUpdateQueue.size();
-        }
-        return count;
+        return blockQueue.unprocessedCount();
     }
 
     public long getProcessedBlocksPerSecond() {
-        if (lastQueueUpdatedPerSecondAt == 0) return 0;
-
-        long passedMs = (System.currentTimeMillis() - lastQueueUpdatedPerSecondAt);
-        if (passedMs < 50) return lastQueueUpdates * 20;
-
-        return (long) (lastQueueUpdatesPerSecond / (passedMs / (double) 1000));
+        return (long) blockQueue.getProcessedPerSecond();
     }
 
     public long getFlowedBlocksPerSecond() {
@@ -367,103 +330,16 @@ public class VolcanoLavaFlow implements Listener {
                             this::cleanupUnderfillTargets,
                             100L); // every 5 seconds (100 ticks)
         }
-        this.registerQueueUpdate();
-    }
-
-    public void registerQueueUpdate() {
-        if (queueScheduleId == -1) {
-            this.vent.volcano.logger.log(
-                    VolcanoLogClass.LAVA_FLOW,
-                    "Intializing lava cooldown scheduler of VolcanoLavaFlow for vent "
-                            + vent.getName());
-            queueScheduleId =
-                    TyphonScheduler.registerGlobalTask(
-                            this::delegateQueue,
-                            1L);
-        }
-    }
-
-    public void delegateQueue() {
-        for (Map.Entry<Chunk, Queue<Map.Entry<Block, Material>>> entry : immediateBlockUpdateQueues.entrySet()) {
-            if (entry.getValue().isEmpty()) continue;
-
-            TyphonScheduler.run(entry.getKey(),
-                    () -> {
-                        runQueue(entry.getValue());
-                    });
-            rerenderTargets.add(entry.getKey());
-        }
-
-        for (Map.Entry<Chunk, Queue<Map.Entry<Block, Material>>> entry : blockUpdateQueues.entrySet()) {
-            if (entry.getValue().isEmpty()) continue;
-            TyphonScheduler.run(entry.getKey(),
-                    () -> {
-                        runBlockUpdateQueueWithinTick(entry.getValue());
-                    });
-            rerenderTargets.add(entry.getKey());
-        }
-
-        // update bluemap
-        if (TyphonBlueMapUtils.isInitialized) {
-            if (previousRerender == 0 || System.currentTimeMillis() - previousRerender > rerenderInterval) {
-                TyphonBlueMapUtils.updateChunks(vent.location.getWorld(), rerenderTargets);
-                previousRerender = System.currentTimeMillis();
-                rerenderTargets.clear();
-            }
-        }
-    }
-
-    public long runQueue(Queue<Map.Entry<Block, Material>> blockUpdateQueue) {
-        // get starting time
-        long count = 1;
-
-        while (true) {
-            Map.Entry<Block, Material> entry = blockUpdateQueue.poll();
-            if (entry != null) {
-                Block block = entry.getKey();
-                Material material = entry.getValue();
-                TyphonBlocks.setBlockType(block, material);
-            } else {
-                break;
-            }
-
-            count++;
-        }
-
-        return count;
-    }
-
-    public long runBlockUpdateQueueWithinTick(Queue<Map.Entry<Block, Material>> blockUpdateQueue) {
-        // get starting time
-        long startTime = System.currentTimeMillis();
-        long count = 1;
-
-        while (true) {
-            Map.Entry<Block, Material> entry = blockUpdateQueue.poll();
-            if (entry != null) {
-                Block block = entry.getKey();
-                Material material = entry.getValue();
-                TyphonBlocks.setBlockType(block, material);
-
-                if (postUpdater.containsKey(block)) {
-                    Consumer<Block> callback = postUpdater.get(block);
-                    callback.accept(block);
-
-                    postUpdater.remove(block);
+        this.blockQueue.setDirtyChunkListener(dirtyChunks -> {
+            rerenderTargets.addAll(dirtyChunks);
+            if (TyphonBlueMapUtils.isInitialized) {
+                if (previousRerender == 0 || System.currentTimeMillis() - previousRerender > rerenderInterval) {
+                    TyphonBlueMapUtils.updateChunks(vent.location.getWorld(), rerenderTargets);
+                    previousRerender = System.currentTimeMillis();
+                    rerenderTargets.clear();
                 }
-            } else {
-                break;
             }
-
-            if (count % 1000 == 0) {
-                // if time is up, break
-                if (System.currentTimeMillis() - startTime > 50) break;
-            }
-
-            count++;
-        }
-
-        return count;
+        });
     }
 
     public void unregisterTask() {
@@ -491,14 +367,7 @@ public class VolcanoLavaFlow implements Listener {
             TyphonScheduler.unregisterTask(lavaCoolScheduleId);
             lavaCoolScheduleId = -1;
         }
-        if (queueScheduleId != -1) {
-            this.vent.volcano.logger.log(
-                    VolcanoLogClass.LAVA_FLOW,
-                    "Shutting down lava cooldown queue handler of VolcanoLavaFlow for vent "
-                            + vent.getName());
-            TyphonScheduler.unregisterTask(queueScheduleId);
-            queueScheduleId = -1;
-        }
+        blockQueue.shutdown();
         if (underfillCleanupScheduleId != -1) {
             TyphonScheduler.unregisterTask(underfillCleanupScheduleId);
             underfillCleanupScheduleId = -1;
