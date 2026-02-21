@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { VersionData, VolcanoSummary, HealthData, TpsData, AuthData } from '@/transport/types';
 import { getApi } from '@/transport/api';
@@ -28,9 +28,7 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
   const [volcanoes, setVolcanoes] = useState<VolcanoSummary[]>([]);
   const [tps, setTps] = useState<TpsData | null>(null);
   const [error, setError] = useState('');
-  const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
-  const tpsIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
-  const checkedRef = useRef(false);
+  const [ready, setReady] = useState(false);
 
   const refreshTps = useCallback(async () => {
     const api = getApi();
@@ -75,41 +73,44 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
     }
   }, [navigate]);
 
-  // On first mount, probe /v1/health to check if we're on the unified server.
-  // If it fails (e.g. different origin, no API here), redirect to /connect.
+  // One-time health check to verify we're on the unified server.
   useEffect(() => {
-    if (checkedRef.current) return;
-    checkedRef.current = true;
-
+    let cancelled = false;
     const api = getApi();
     api
       .get<HealthData>('/health')
       .then(async (res) => {
+        if (cancelled) return;
         if (res.status === 200 && res.data && typeof res.data === 'object' && 'status' in res.data) {
-          // Unified server — check if auth is needed before proceeding
           const authRes = await api.get<AuthData>('/auth');
+          if (cancelled) return;
           if (authRes.status === 200 && authRes.data?.authConfigured && !authRes.data?.authenticated) {
             navigate('/connect', { replace: true });
             return;
           }
-          refresh();
-          intervalRef.current = setInterval(refresh, 30000);
-          tpsIntervalRef.current = setInterval(refreshTps, 5000);
+          setReady(true);
         } else {
-          // Unexpected response — not our server
           navigate('/connect', { replace: true });
         }
       })
       .catch(() => {
-        // Health check failed — redirect to connect page
-        navigate('/connect', { replace: true });
+        if (!cancelled) navigate('/connect', { replace: true });
       });
 
+    return () => { cancelled = true; };
+  }, [navigate]);
+
+  // Periodic data refresh — only starts after health check succeeds.
+  useEffect(() => {
+    if (!ready) return;
+    refresh();
+    const interval = setInterval(refresh, 30000);
+    const tpsInterval = setInterval(refreshTps, 5000);
     return () => {
-      clearInterval(intervalRef.current);
-      clearInterval(tpsIntervalRef.current);
+      clearInterval(interval);
+      clearInterval(tpsInterval);
     };
-  }, [refresh, refreshTps, navigate]);
+  }, [ready, refresh, refreshTps]);
 
   return (
     <ConnectionContext.Provider value={{ online, version, volcanoes, tps, error, refresh }}>
