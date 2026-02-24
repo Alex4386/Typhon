@@ -6,6 +6,7 @@ import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.bomb.VolcanoBomb;
 import me.alex4386.plugin.typhon.volcano.erupt.VolcanoEruptStyle;
 import me.alex4386.plugin.typhon.volcano.log.VolcanoLogClass;
+import me.alex4386.plugin.typhon.volcano.utils.RandomizedSet;
 import me.alex4386.plugin.typhon.volcano.utils.VolcanoMath;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
@@ -42,7 +43,7 @@ public class VolcanoLavaFlow implements Listener {
     public Set<Block> terminalBlocks = new HashSet<>();
     public Set<Block> normalFlowEndBlocks = new HashSet<>();
     public Set<Block> pillowFlowEndBlocks = new HashSet<>();
-    public Set<Block> underfillTargets = new HashSet<>();
+    public RandomizedSet<Block> underfillTargets = new RandomizedSet<>();
 
     private int lavaFlowScheduleId = -1;
     private int lavaCoolScheduleId = -1;
@@ -1724,22 +1725,20 @@ public class VolcanoLavaFlow implements Listener {
     public boolean flowUnderfillLava() {
         int maxAttempts = Math.min(5, underfillTargets.size());
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
-            Block target = getRandomFromSet(underfillTargets);
+            // this polls and removes
+            Block target = underfillTargets.pollRandom();
+
             if (target == null) return false;
 
             // Check if target is still flowable (air or water)
             if (!target.getType().isAir() && !TyphonUtils.containsLiquidWater(target)) {
-                underfillTargets.remove(target);
                 continue;
             }
 
             // Check if already registered
             if (isLavaRegistered(target)) {
-                underfillTargets.remove(target);
                 continue;
             }
-
-            underfillTargets.remove(target);
 
             // Use block above as fromBlock (lava flowing downward)
             Block fromBlock = target.getRelative(BlockFace.UP);
