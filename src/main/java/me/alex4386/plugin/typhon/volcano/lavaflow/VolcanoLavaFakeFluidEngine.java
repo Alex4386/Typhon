@@ -1,27 +1,29 @@
 package me.alex4386.plugin.typhon.volcano.lavaflow;
 
+import me.alex4386.plugin.typhon.TyphonBlocks;
 import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 
+import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 
 import java.util.*;
 
-public class VolcanoPillowLavaFlow {
+public class VolcanoLavaFakeFluidEngine {
 
     final VolcanoLavaFlow lavaFlow;
 
     // active pillow lava blocks being simulated this tick
-    public Map<Block, VolcanoPillowLavaData> activeMap = new HashMap<>();
+    public Map<Block, VolcanoLavaFluidState> activeMap = new HashMap<>();
 
     // newly registered blocks, merged into activeMap at end of tick
-    public Map<Block, VolcanoPillowLavaData> cachedMap = new HashMap<>();
+    public Map<Block, VolcanoLavaFluidState> cachedMap = new HashMap<>();
 
-    public VolcanoPillowLavaFlow(VolcanoLavaFlow lavaFlow) {
+    public VolcanoLavaFakeFluidEngine(VolcanoLavaFlow lavaFlow) {
         this.lavaFlow = lavaFlow;
     }
 
@@ -29,18 +31,20 @@ public class VolcanoPillowLavaFlow {
     // Registration & Lookup
     // ==========================================
 
-    public VolcanoPillowLavaData register(
+    public VolcanoLavaFluidState register(
             Block block, Block sourceBlock, Block fromBlock,
-            int extensionCount, int ejectaRecordIdx) {
-        VolcanoPillowLavaData existing = cachedMap.get(block);
+            int extensionCount, int ejectaRecordIdx,
+            VolcanoLavaType type) {
+        VolcanoLavaFluidState existing = cachedMap.get(block);
         if (existing != null) {
             return null;
         }
 
         lavaFlow.queueBlockUpdate(block, Material.MAGMA_BLOCK);
 
-        VolcanoPillowLavaData data = new VolcanoPillowLavaData(
+        VolcanoLavaFluidState data = new VolcanoLavaFluidState(
                 getVent(), sourceBlock, fromBlock, extensionCount);
+        data.type = type;
         data.ejectaRecordIdx = ejectaRecordIdx;
 
         cachedMap.put(block, data);
@@ -49,7 +53,7 @@ public class VolcanoPillowLavaFlow {
         return data;
     }
 
-    public void registerDirect(Block block, VolcanoPillowLavaData data) {
+    public void registerDirect(Block block, VolcanoLavaFluidState data) {
         cachedMap.put(block, data);
         lavaFlow.addFlowEndBlock(block, true);
     }
@@ -58,8 +62,8 @@ public class VolcanoPillowLavaFlow {
         return getData(block) != null;
     }
 
-    public VolcanoPillowLavaData getData(Block block) {
-        VolcanoPillowLavaData data = activeMap.get(block);
+    public VolcanoLavaFluidState getData(Block block) {
+        VolcanoLavaFluidState data = activeMap.get(block);
         if (data == null) {
             data = cachedMap.get(block);
         }
@@ -79,26 +83,27 @@ public class VolcanoPillowLavaFlow {
     // ==========================================
 
     public void tick() {
-        Iterator<Map.Entry<Block, VolcanoPillowLavaData>> iterator =
+        Iterator<Map.Entry<Block, VolcanoLavaFluidState>> iterator =
                 activeMap.entrySet().iterator();
         List<Block> flowedBlocks = new ArrayList<>();
 
         try {
             while (iterator.hasNext()) {
-                Map.Entry<Block, VolcanoPillowLavaData> entry = iterator.next();
+                Map.Entry<Block, VolcanoLavaFluidState> entry = iterator.next();
                 Block block = entry.getKey();
-                VolcanoPillowLavaData data = entry.getValue();
+                VolcanoLavaFluidState data = entry.getValue();
 
-                // caldera override: dissolve pillow lava in caldera range
+                // caldera override: dissolve lava in caldera range
                 if (getVent().caldera.isForming()
                         && getVent().caldera.isInCalderaRange(block.getLocation())) {
-                    lavaFlow.queueBlockUpdate(block, Material.WATER);
+                    lavaFlow.queueBlockUpdate(block,
+                            data.getType() == VolcanoLavaType.PILLOW ? Material.WATER : Material.AIR);
                     flowedBlocks.add(block);
                     continue;
                 }
 
-                // 20% skip — simulates slow underwater flow
-                if (Math.random() < 0.2) {
+                // 20% skip — simulates slow underwater flow (PILLOW only)
+                if (data.getType() == VolcanoLavaType.PILLOW && Math.random() < 0.2) {
                     continue;
                 }
 
@@ -130,18 +135,19 @@ public class VolcanoPillowLavaFlow {
 
     public void solidifyAll() {
         double silicateLevel = getSettings().silicateLevel;
+        Material fallback = VolcanoComposition.getExtrusiveRock(silicateLevel);
 
-        for (Map.Entry<Block, VolcanoPillowLavaData> entry : activeMap.entrySet()) {
-            lavaFlow.queueBlockUpdate(
-                    entry.getKey(),
-                    VolcanoComposition.getExtrusiveRock(silicateLevel));
+        for (Map.Entry<Block, VolcanoLavaFluidState> entry : activeMap.entrySet()) {
+            VolcanoLavaFluidState state = entry.getValue();
+            Material mat = (state.material != null) ? state.material : fallback;
+            lavaFlow.queueBlockUpdate(entry.getKey(), mat);
         }
         activeMap.clear();
 
-        for (Map.Entry<Block, VolcanoPillowLavaData> entry : cachedMap.entrySet()) {
-            lavaFlow.queueBlockUpdate(
-                    entry.getKey(),
-                    VolcanoComposition.getExtrusiveRock(silicateLevel));
+        for (Map.Entry<Block, VolcanoLavaFluidState> entry : cachedMap.entrySet()) {
+            VolcanoLavaFluidState state = entry.getValue();
+            Material mat = (state.material != null) ? state.material : fallback;
+            lavaFlow.queueBlockUpdate(entry.getKey(), mat);
         }
         cachedMap.clear();
     }
@@ -151,11 +157,26 @@ public class VolcanoPillowLavaFlow {
         cachedMap.clear();
     }
 
+    /**
+     * Remove a block from the engine (used during LITE→NORMAL conversion).
+     * Returns the state if found, null otherwise.
+     */
+    public VolcanoLavaFluidState remove(Block block) {
+        VolcanoLavaFluidState data = activeMap.remove(block);
+        if (data == null) {
+            data = cachedMap.remove(block);
+        }
+        if (data != null) {
+            lavaFlow.removeFlowEndBlock(block);
+        }
+        return data;
+    }
+
     // ==========================================
     // Internal: Tick sub-steps
     // ==========================================
 
-    private void processBlock(Block block, VolcanoPillowLavaData data, List<Block> flowedBlocks) {
+    private void processBlock(Block block, VolcanoLavaFluidState data, List<Block> flowedBlocks) {
         Block fromBlock = data.fromBlock;
         Block sourceBlock = data.sourceBlock;
 
@@ -167,7 +188,7 @@ public class VolcanoPillowLavaFlow {
 
         // solidify the current block
         if (fromBlock != null) {
-            Material material = getSolidificationMaterial(sourceBlock, block);
+            Material material = getSolidificationMaterial(data, sourceBlock, block);
 
             lavaFlow.queueBlockUpdate(block, material,
                     TyphonUtils.getBlockFaceUpdater(fromBlock, block));
@@ -188,16 +209,16 @@ public class VolcanoPillowLavaFlow {
         handleLateralFlow(block, data);
     }
 
-    private boolean handleDownwardFlow(Block block, VolcanoPillowLavaData data,
+    private boolean handleDownwardFlow(Block block, VolcanoLavaFluidState data,
                                         List<Block> flowedBlocks) {
         Block underBlock = block.getRelative(BlockFace.DOWN);
         Block sourceBlock = data.sourceBlock;
 
-        Material material = getSolidificationMaterial(sourceBlock, underBlock);
+        Material material = getSolidificationMaterial(data, sourceBlock, underBlock);
 
         if (underBlock.getType() == Material.MAGMA_BLOCK) {
-            // another pillow block below — try to merge fluid levels
-            VolcanoPillowLavaData underData = activeMap.get(underBlock);
+            // another fake-fluid block below — try to merge fluid levels
+            VolcanoLavaFluidState underData = activeMap.get(underBlock);
             if (underData != null) {
                 int underFluidLevel = underData.fluidLevel;
                 int level = data.fluidLevel;
@@ -221,7 +242,8 @@ public class VolcanoPillowLavaFlow {
                         underBlock,
                         false,
                         -1);
-                if (Math.random() < 0.1) {
+                // steam effects only for underwater (PILLOW) mode
+                if (data.getType() == VolcanoLavaType.PILLOW && Math.random() < 0.1) {
                     TyphonUtils.createRisingSteam(
                             data.fromBlock.getLocation().add(0, 1, 0), 1, 2);
                 }
@@ -234,7 +256,7 @@ public class VolcanoPillowLavaFlow {
         return false;
     }
 
-    private void handleLateralFlow(Block block, VolcanoPillowLavaData data) {
+    private void handleLateralFlow(Block block, VolcanoLavaFluidState data) {
         int extension = data.extensionCount;
         int level = data.fluidLevel;
 
@@ -328,7 +350,7 @@ public class VolcanoPillowLavaFlow {
 
                     if (obj instanceof VolcanoLavaCoolData coolData) {
                         coolData.skipNormalLavaFlowLengthCheck = true;
-                    } else if (obj instanceof VolcanoPillowLavaData pillowData) {
+                    } else if (obj instanceof VolcanoLavaFluidState pillowData) {
                         pillowData.fluidLevel = levelT;
                     }
                 }
@@ -337,11 +359,11 @@ public class VolcanoPillowLavaFlow {
     }
 
     private void mergeCacheToActive() {
-        Iterator<Map.Entry<Block, VolcanoPillowLavaData>> iterator =
+        Iterator<Map.Entry<Block, VolcanoLavaFluidState>> iterator =
                 cachedMap.entrySet().iterator();
 
         while (iterator.hasNext()) {
-            Map.Entry<Block, VolcanoPillowLavaData> entry = iterator.next();
+            Map.Entry<Block, VolcanoLavaFluidState> entry = iterator.next();
             activeMap.put(entry.getKey(), entry.getValue());
             iterator.remove();
         }
@@ -351,7 +373,13 @@ public class VolcanoPillowLavaFlow {
     // Internal: Helpers
     // ==========================================
 
-    private Material getSolidificationMaterial(Block sourceBlock, Block targetBlock) {
+    private Material getSolidificationMaterial(VolcanoLavaFluidState data,
+                                               Block sourceBlock, Block targetBlock) {
+        // LITE blocks carry their own material (set during registration)
+        if (data.material != null) {
+            return data.material;
+        }
+        // PILLOW: compute from distance (ore chance + silicate-based rock)
         double distance = TyphonUtils.getTwoDimensionalDistance(
                 sourceBlock.getLocation(), targetBlock.getLocation());
         Material ore = lavaFlow.getOre(distance);
@@ -365,5 +393,89 @@ public class VolcanoPillowLavaFlow {
 
     private VolcanoLavaFlowSettings getSettings() {
         return lavaFlow.settings;
+    }
+
+    // ==========================================
+    // NORMAL ↔ LITE Dynamic Conversion
+    // ==========================================
+
+    /**
+     * Periodic scan that converts NORMAL lava to LITE (when underground & no player nearby)
+     * and LITE back to NORMAL (when player approaches or sky access gained).
+     */
+    void runConversionScan() {
+        // --- NORMAL → LITE ---
+        List<Map.Entry<Block, VolcanoLavaCoolData>> normalToConvert = new ArrayList<>();
+
+        for (Map<Block, VolcanoLavaCoolData> chunkMap : lavaFlow.lavaCools.values()) {
+            for (Map.Entry<Block, VolcanoLavaCoolData> entry : chunkMap.entrySet()) {
+                Block block = entry.getKey();
+                if (lavaFlow.shouldUseLiteMode(block)) {
+                    normalToConvert.add(entry);
+                }
+            }
+        }
+
+        for (Map.Entry<Block, VolcanoLavaCoolData> entry : normalToConvert) {
+            convertNormalToLite(entry.getKey(), entry.getValue());
+        }
+
+        // --- LITE → NORMAL ---
+        List<Map.Entry<Block, VolcanoLavaFluidState>> liteToConvert = new ArrayList<>();
+
+        for (Map.Entry<Block, VolcanoLavaFluidState> entry : activeMap.entrySet()) {
+            VolcanoLavaFluidState state = entry.getValue();
+            if (state.getType() != VolcanoLavaType.LITE) continue;
+
+            Block block = entry.getKey();
+            if (!lavaFlow.shouldUseLiteMode(block)) {
+                liteToConvert.add(entry);
+            }
+        }
+
+        for (Map.Entry<Block, VolcanoLavaFluidState> entry : liteToConvert) {
+            convertLiteToNormal(entry.getKey(), entry.getValue());
+        }
+    }
+
+    private void convertNormalToLite(Block block, VolcanoLavaCoolData coolData) {
+        // Remove from normal lava tracking
+        Map<Block, VolcanoLavaCoolData> chunkMap = lavaFlow.lavaCools.get(block.getChunk());
+        if (chunkMap != null) {
+            chunkMap.remove(block);
+        }
+        Map<Block, VolcanoLavaCoolData> cachedChunkMap = lavaFlow.cachedCools.get(block.getChunk());
+        if (cachedChunkMap != null) {
+            cachedChunkMap.remove(block);
+        }
+        lavaFlow.removeFlowEndBlock(block);
+
+        // Create LITE state from cool data
+        VolcanoLavaFluidState state = VolcanoLavaFluidState.fromCoolData(coolData);
+
+        // Replace LAVA with MAGMA_BLOCK
+        lavaFlow.queueBlockUpdate(block, Material.MAGMA_BLOCK);
+
+        // Register into the fake fluid engine
+        registerDirect(block, state);
+    }
+
+    private void convertLiteToNormal(Block block, VolcanoLavaFluidState state) {
+        // Remove from fake fluid engine
+        remove(block);
+
+        // Convert state back to cool data
+        int ticks = 30 * lavaFlow.settings.flowed;
+        VolcanoLavaCoolData coolData = state.toCoolData(block, ticks);
+
+        // Replace MAGMA_BLOCK with real LAVA
+        TyphonBlocks.setBlockType(block, Material.LAVA);
+
+        // Force-load the chunk for physics
+        lavaFlow.vent.getVolcano().chunkLoader.add(block.getChunk());
+
+        // Register into normal cooldown tracking
+        lavaFlow.registerToCacheCools(block, coolData);
+        lavaFlow.addFlowEndBlock(block, false);
     }
 }

@@ -6,7 +6,6 @@ import me.alex4386.plugin.typhon.TyphonUtils;
 import me.alex4386.plugin.typhon.volcano.VolcanoComposition;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVent;
 import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
-import me.alex4386.plugin.typhon.volcano.lavaflow.VolcanoPillowLavaData;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -21,7 +20,7 @@ import org.bukkit.util.Vector;
 import java.util.Queue;
 import java.util.function.Consumer;
 
-public class VolcanoLavaCoolData {
+public class VolcanoLavaCoolData implements VolcanoLavaFluidAdapter {
     public int ticks;
     public Block block;
     public Block fromBlock;
@@ -384,4 +383,30 @@ public class VolcanoLavaCoolData {
 
         TyphonBlocks.setBlockType(block, material);
     }
+
+    // ==========================================
+    // VolcanoLavaFluidAdapter implementation
+    // ==========================================
+
+    @Override public VolcanoLavaType getType() { return VolcanoLavaType.NORMAL; }
+
+    @Override public int getFluidLevel() {
+        BlockData bd = block.getBlockData();
+        if (bd instanceof Levelled levelled) {
+            int raw = levelled.getLevel();
+            return raw >= 8 ? 8 : (8 - raw);
+        }
+        return 8;
+    }
+
+    @Override public Block getSourceBlock() { return source; }
+    @Override public Block getFromBlock() { return fromBlock; }
+    @Override public int getExtensionCount() { return runExtensionCount; }
+    @Override public Material getMaterial() { return material; }
+    @Override public boolean isBomb() { return isBomb; }
+    @Override public boolean isUnderfill() { return isUnderfill; }
+    @Override public boolean skipNormalLavaFlowLengthCheck() { return skipNormalLavaFlowLengthCheck; }
+    @Override public int getEjectaRecordIdx() { return ejectaRecordIdx; }
+    @Override public VolcanoVent getVent() { return flowedFromVent; }
+    @Override public int getFlowLimit() { return flowLimit; }
 }
