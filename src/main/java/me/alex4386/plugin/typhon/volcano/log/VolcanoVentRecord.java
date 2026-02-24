@@ -90,6 +90,14 @@ public class VolcanoVentRecord {
         return total;
     }
 
+    public boolean isEjectaTrackOngoing() {
+        return startEjectaTracking >= 0;
+    }
+
+    public int getLatestRecordIndex() {
+        return Math.max(0, ejectaVolumeList.size() - 1);
+    }
+
     public void importConfig(JSONObject configData) {
         JSONObject ejectaData = (JSONObject) configData.get("ejecta");
         JSONArray ejectaTimeLog = (JSONArray) ejectaData.get("timeData");

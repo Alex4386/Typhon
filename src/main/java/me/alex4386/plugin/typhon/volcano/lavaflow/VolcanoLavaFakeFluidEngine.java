@@ -238,7 +238,7 @@ public class VolcanoLavaFakeFluidEngine {
             if (!lavaFlow.isPillowLavaRegistered(underBlock)) {
                 lavaFlow.registerLavaCoolData(
                         data.sourceBlock,
-                        data.fromBlock,
+                        block,
                         underBlock,
                         false,
                         -1);
@@ -342,7 +342,7 @@ public class VolcanoLavaFakeFluidEngine {
                     } else {
                         obj = lavaFlow.registerLavaCoolData(
                                 data.sourceBlock,
-                                data.fromBlock,
+                                block,
                                 flowTarget,
                                 false,
                                 extension);

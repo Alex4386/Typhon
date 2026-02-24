@@ -830,7 +830,11 @@ public class VolcanoLavaFlow implements Listener {
             return sourcePillow.ejectaRecordIdx;
         }
 
-        return vent.record.getRecordIndex();
+        if (vent.record.isEjectaTrackOngoing()) {
+            return vent.record.getRecordIndex();
+        }
+
+        return vent.record.getLatestRecordIndex();
     }
 
     private Object registerLavaCoolData(Block block, boolean isBomb, int extension) {
