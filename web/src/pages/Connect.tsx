@@ -26,21 +26,69 @@ import { VolcanoIcon } from '@/components/icons/VolcanoIcon';
 
 type Phase = 'form' | 'connecting' | 'connected' | 'error';
 type AuthMode = 'token' | 'basic';
+const SAVED_CREDENTIALS_KEY = 'typhon_saved_credentials';
+
+type SavedCredentials = {
+  serverUrl: string;
+  mode: AuthMode;
+  token: string;
+  username: string;
+  password: string;
+};
+
+function loadSavedCredentials(): SavedCredentials | null {
+  try {
+    const raw = localStorage.getItem(SAVED_CREDENTIALS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<SavedCredentials>;
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    const mode: AuthMode = parsed.mode === 'basic' ? 'basic' : 'token';
+    return {
+      serverUrl: typeof parsed.serverUrl === 'string' ? parsed.serverUrl : '',
+      mode,
+      token: typeof parsed.token === 'string' ? parsed.token : '',
+      username: typeof parsed.username === 'string' ? parsed.username : '',
+      password: typeof parsed.password === 'string' ? parsed.password : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveCredentials(data: SavedCredentials): void {
+  localStorage.setItem(SAVED_CREDENTIALS_KEY, JSON.stringify(data));
+}
+
+function clearSavedCredentials(): void {
+  localStorage.removeItem(SAVED_CREDENTIALS_KEY);
+}
 
 export default function Connect() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const savedCredentials = useRef<SavedCredentials | null>(loadSavedCredentials());
+  const hasUrlCredentials = Boolean(
+    searchParams.get('server') || searchParams.get('token') || searchParams.get('username') || searchParams.get('password'),
+  );
   const [phase, setPhase] = useState<Phase>('form');
   const [logs, setLogs] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const logRef = useRef<HTMLDivElement>(null);
   const attempted = useRef(false);
 
-  const [serverInput, setServerInput] = useState(searchParams.get('server') || '');
-  const [tokenInput, setTokenInput] = useState(searchParams.get('token') || '');
-  const [authMode, setAuthMode] = useState<AuthMode>(searchParams.get('username') ? 'basic' : 'token');
-  const [usernameInput, setUsernameInput] = useState(searchParams.get('username') || '');
-  const [passwordInput, setPasswordInput] = useState(searchParams.get('password') || '');
+  const [serverInput, setServerInput] = useState(searchParams.get('server') || savedCredentials.current?.serverUrl || '');
+  const [tokenInput, setTokenInput] = useState(searchParams.get('token') || savedCredentials.current?.token || '');
+  const [authMode, setAuthMode] = useState<AuthMode>(
+    searchParams.get('username')
+      ? 'basic'
+      : savedCredentials.current?.mode === 'basic'
+        ? 'basic'
+        : 'token',
+  );
+  const [usernameInput, setUsernameInput] = useState(searchParams.get('username') || savedCredentials.current?.username || '');
+  const [passwordInput, setPasswordInput] = useState(searchParams.get('password') || savedCredentials.current?.password || '');
+  const [rememberCredentials, setRememberCredentials] = useState(Boolean(savedCredentials.current) && !hasUrlCredentials);
   const [sameOrigin, setSameOrigin] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
 
@@ -155,13 +203,26 @@ export default function Connect() {
   const handleSubmit = useCallback(() => {
     const server = sameOrigin ? window.location.origin : serverInput.trim();
     if (!server) return;
+
+    if (rememberCredentials) {
+      saveCredentials({
+        serverUrl: server,
+        mode: authMode,
+        token: authMode === 'token' ? tokenInput.trim() : '',
+        username: authMode === 'basic' ? usernameInput.trim() : '',
+        password: authMode === 'basic' ? passwordInput : '',
+      });
+    } else {
+      clearSavedCredentials();
+    }
+
     attempted.current = true;
     if (authMode === 'basic') {
       doConnect(server, { username: usernameInput.trim(), password: passwordInput });
     } else {
       doConnect(server, { token: tokenInput.trim() });
     }
-  }, [sameOrigin, serverInput, tokenInput, usernameInput, passwordInput, authMode, doConnect]);
+  }, [sameOrigin, serverInput, tokenInput, usernameInput, passwordInput, authMode, rememberCredentials, doConnect]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted p-6 md:p-10">
@@ -263,6 +324,17 @@ export default function Connect() {
                         </Field>
                       </>
                     )}
+
+                    <Field>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={rememberCredentials}
+                          onChange={(e) => setRememberCredentials(e.target.checked)}
+                        />
+                        Save credentials on this device
+                      </label>
+                    </Field>
 
                     <Field>
                       <Button type="submit" className="w-full">
