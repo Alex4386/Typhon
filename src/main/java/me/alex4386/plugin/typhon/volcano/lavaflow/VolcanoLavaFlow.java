@@ -773,8 +773,17 @@ public class VolcanoLavaFlow implements Listener {
      * 2. No player is within 48 blocks
      */
     boolean shouldUseLiteMode(Block block) {
-        // Must be underground (no sky light)
-        if (block.getLightFromSky() > 0) return false;
+
+        // first check if the block get light from the sky
+        if (block.getLightFromSky() > 0) {
+            // check if is TOP of the flow, if that's the case NOPE
+            Block topBlock = TyphonUtils.getHighestRocklikes(block);
+            if (block.getY() >= topBlock.getY()) {
+                return false;
+            }
+
+            // else, it would be ok.
+        }
 
         // No player nearby (48-block radius)
         return block.getLocation().getWorld()
