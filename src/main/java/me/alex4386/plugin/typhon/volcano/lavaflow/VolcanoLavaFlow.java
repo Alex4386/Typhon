@@ -492,7 +492,7 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public Block getRandomTerminalBlock() {
-        return this.getRandomLavaBlock();
+        return this.normalFlowEndBlocks.randomElement();
     }
 
     @EventHandler
