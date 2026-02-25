@@ -117,11 +117,13 @@ public class VolcanoVent {
 
     public Block getLowestCoreBlock() {
         List<Block> coreBlocks = this.getCoreBlocks();
-        Block lowestCoreBlock = coreBlocks.get(0);
+        Block lowestCoreBlock = TyphonUtils.getHighestRocklikes(coreBlocks.get(0));
 
         for (Block coreBlock : coreBlocks) {
-            if (coreBlock.getY() < lowestCoreBlock.getY()) {
-                lowestCoreBlock = coreBlock;
+            Block thisTopCoreBlock = TyphonUtils.getHighestRocklikes(coreBlock);
+
+            if (thisTopCoreBlock.getY() < lowestCoreBlock.getY()) {
+                lowestCoreBlock = thisTopCoreBlock;
             }
         }
 
