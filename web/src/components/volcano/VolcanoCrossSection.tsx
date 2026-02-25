@@ -8,9 +8,10 @@ interface Props {
 // ── Color helpers ────────────────────────────────────────────────────────────
 
 function getMountainColors(silicate: number) {
-  if (silicate < 0.5) return { base: '#2e2418', mid: '#3d3229', top: '#4a3c30', stroke: '#5a4a3a' }; // basalt
-  if (silicate <= 0.65) return { base: '#3a3a3a', mid: '#555555', top: '#6a6a6a', stroke: '#7a7a7a' }; // andesite
-  return { base: '#5a5a5a', mid: '#757575', top: '#909090', stroke: '#a0a0a0' }; // rhyolite
+  // Darker, rock-first palette: basalt is charcoal (not brown), with lighter tones for higher silica.
+  if (silicate < 0.5) return { base: '#13181d', mid: '#1d242b', top: '#2a3138', stroke: '#3a444e' }; // basalt
+  if (silicate <= 0.65) return { base: '#21252b', mid: '#30363d', top: '#3d454e', stroke: '#4d5863' }; // andesite
+  return { base: '#2e3339', mid: '#3d444c', top: '#4c555e', stroke: '#5c6874' }; // rhyolite
 }
 
 function getLavaColor(silicate: number): string {
@@ -70,7 +71,7 @@ interface Geo {
   calderaPxR: number;
   flowPxR: number;
   bombPxR: number;
-  currentFlowPxR: number;
+  currentFlowFromRimPx: number;
   isCaldera: boolean;
   craterRadius: number;
   calderaRadius: number;
@@ -112,7 +113,8 @@ function computeGeo(vent: VentDetail, svgW: number): Geo {
   const calderaPxR = calderaRadius * scaleH;
   const flowPxR = flowLength * scaleH;
   const bombPxR = bombMax * scaleH;
-  const currentFlowPxR = currentFlowLength * scaleH;
+  // currentFlowLength is measured from the crater rim (not vent center)
+  const currentFlowFromRimPx = currentFlowLength * scaleH;
   const avgVentPx = GROUND_Y - (avgVentHeight - baseY) * scaleV;
 
   const lowestCoreYRaw = vent.lowestCoreBlock?.y ?? vent.lowestCoreY;
@@ -138,7 +140,7 @@ function computeGeo(vent: VentDetail, svgW: number): Geo {
   return {
     svgW, centerX,
     summitY, baseY, lowestCoreY, seaLevel, height, scaleH, scaleV,
-    summitPx, craterPxR, calderaPxR, flowPxR, bombPxR, currentFlowPxR,
+    summitPx, craterPxR, calderaPxR, flowPxR, bombPxR, currentFlowFromRimPx,
     isCaldera, craterRadius, calderaRadius,
     flowLength, rawFlowLength, currentFlowLength, bombMax,
     seaLevelPxY, craterDepthPx, avgVentPx,
@@ -404,10 +406,10 @@ export function VolcanoCrossSectionRaw({ vent }: Props) {
         )}
 
         {/* ── 6b. Lava flow on slope (only when lava is actively flowing) */}
-        {vent.isFlowingLava && geo.currentFlowPxR > 0 && geo.flowPxR > 0 && (() => {
+        {vent.isFlowingLava && geo.currentFlowFromRimPx > 0 && geo.flowPxR > 0 && (() => {
           // Draw lava overlay following the slope from crater rim to currentFlowLength
           const slopeLen = geo.flowPxR - geo.craterPxR; // total slope px
-          const flowFromRimPx = Math.max(geo.currentFlowPxR - geo.craterPxR, 0);
+          const flowFromRimPx = geo.currentFlowFromRimPx;
           const flowFrac = Math.min(slopeLen > 0 ? flowFromRimPx / slopeLen : 0, 1);
           const tEnd = flowFrac;
           if (tEnd <= 0) return null;
