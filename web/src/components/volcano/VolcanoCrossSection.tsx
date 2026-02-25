@@ -764,7 +764,7 @@ function Labels({ geo, vent }: { geo: Geo; vent: VentDetail }) {
         x={centerX} y={geo.summitPx - 13}
         fill="#bbb" fontSize="9" fontFamily="monospace" textAnchor="middle"
       >
-        {geo.isCaldera ? 'Caldera' : 'Crater'} r={geo.isCaldera ? geo.calderaRadius : vent.craterRadius}
+        {geo.isCaldera ? 'Caldera' : 'Crater'} {2 * (geo.isCaldera ? geo.calderaRadius : vent.craterRadius)}m (r={geo.isCaldera ? geo.calderaRadius : vent.craterRadius})
       </text>
 
     </g>
