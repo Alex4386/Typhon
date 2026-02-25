@@ -492,7 +492,7 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public Block getRandomTerminalBlock() {
-        return this.normalFlowEndBlocks.randomElement();
+        return this.getRandomLavaBlock();
     }
 
     @EventHandler
@@ -2142,4 +2142,3 @@ class VolcanoLavaFlowDefaultSettings {
         delayFlowed = settings.delayFlowed;
     }
 }
-

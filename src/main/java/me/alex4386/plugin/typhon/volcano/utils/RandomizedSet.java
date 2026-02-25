@@ -66,7 +66,9 @@ public class RandomizedSet<T> extends AbstractSet<T> {
     }
 
     public T randomElement() {
-        return items.get(this.getRandomIdx());
+        int randomIndex = this.getRandomIdx();
+        if (randomIndex < 0) return null;
+        return items.get(randomIndex);
     }
 
     /**
@@ -74,6 +76,7 @@ public class RandomizedSet<T> extends AbstractSet<T> {
      */
     public T pollRandom() {
         int randomIndex = this.getRandomIdx();
+        if (randomIndex < 0) return null;
         return removeAt(randomIndex);
     }
 
