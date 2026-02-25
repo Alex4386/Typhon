@@ -334,6 +334,22 @@ public class VolcanoController {
                 } catch (Exception ignored) {}
                 json.put("summitY", summitY);
 
+                int lowestCoreY = baseY;
+                try {
+                    org.bukkit.block.Block lowestCore = null;
+                    if (vent.isCacheInitialized()) {
+                        lowestCore = vent.getLowestCoreBlock();
+                    } else if (vent.location != null) {
+                        lowestCore = vent.location.getBlock();
+                    }
+
+                    if (lowestCore != null) {
+                        lowestCoreY = lowestCore.getY();
+                        json.put("lowestCoreBlock", locationToJson(lowestCore.getLocation()));
+                    }
+                } catch (Exception ignored) {}
+                json.put("lowestCoreY", lowestCoreY);
+
                 try {
                     json.put("seaLevel", vent.location != null && vent.location.getWorld() != null ? vent.location.getWorld().getSeaLevel() : 63);
                 } catch (Exception ignored) { json.put("seaLevel", 63); }
@@ -513,6 +529,7 @@ public class VolcanoController {
             JSONObject rec = new JSONObject();
             rec.put("startTime", entry.startTime);
             rec.put("endTime", entry.endTime);
+            rec.put("endOfLavaFlowTime", entry.endOfLavaFlowTime > 0 ? entry.endOfLavaFlowTime : entry.endTime);
             rec.put("ejectaVolume", entry.ejectaVolume);
 
             if (entry.hasMetadata()) {

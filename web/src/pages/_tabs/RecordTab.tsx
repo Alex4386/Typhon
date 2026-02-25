@@ -27,10 +27,40 @@ function fmtPct(v: number): string {
   return `${(v * 100).toFixed(0)}%`;
 }
 
+function getTotalLavaFlowDuration(records: EjectaRecord[]): number {
+  const intervals = records
+    .map((r) => {
+      const start = r.startTime;
+      const rawEnd = r.endOfLavaFlowTime ?? r.endTime;
+      const end = Math.min(Math.max(rawEnd, start), r.endTime);
+      return [start, end] as const;
+    })
+    .filter(([start, end]) => end > start)
+    .sort((a, b) => a[0] - b[0]);
+
+  if (intervals.length === 0) return 0;
+
+  let total = 0;
+  let [cursorStart, cursorEnd] = intervals[0];
+  for (let i = 1; i < intervals.length; i++) {
+    const [nextStart, nextEnd] = intervals[i];
+    if (nextStart <= cursorEnd) {
+      cursorEnd = Math.max(cursorEnd, nextEnd);
+      continue;
+    }
+    total += cursorEnd - cursorStart;
+    cursorStart = nextStart;
+    cursorEnd = nextEnd;
+  }
+  total += cursorEnd - cursorStart;
+  return total;
+}
+
 /* ── Expandable Row Detail ───────────────────────────────────────────────── */
 
 function RecordDetailRow({ record }: { record: EjectaRecord }) {
   const meta = record.metadata;
+  const lavaFlowEndTime = record.endOfLavaFlowTime ?? record.endTime;
   if (!meta) {
     return (
       <TableRow>
@@ -83,6 +113,10 @@ function RecordDetailRow({ record }: { record: EjectaRecord }) {
             <span className="text-muted-foreground">Total Flow</span>
             <div className="font-medium tabular-nums">{meta.currentFlowLength.toFixed(1)}m / {meta.longestFlowLength.toFixed(1)}m</div>
           </div>
+          <div>
+            <span className="text-muted-foreground">Lava Flow Ended</span>
+            <div className="font-medium tabular-nums">{fmtDate(lavaFlowEndTime)}</div>
+          </div>
         </div>
       </TableCell>
     </TableRow>
@@ -110,14 +144,16 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
 
   const finishedDuration = records.reduce((acc, r) => acc + (r.endTime - r.startTime), 0);
   const totalDuration = finishedDuration + (isTracking ? now - startEjectaTracking : 0);
+  const totalLavaFlowDuration = getTotalLavaFlowDuration(records);
 
   return (
     <div className="space-y-4">
       {/* Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label="Total Eruptions" value={String(records.length)} />
         <StatCard label="Lifetime Ejecta" value={formatVolume(totalEjecta)} />
         <StatCard label="Total Eruption Time" value={fmtDuration(totalDuration)} />
+        <StatCard label="Total Lava Flow Time" value={fmtDuration(totalLavaFlowDuration)} />
       </div>
 
       {/* VEI cards */}

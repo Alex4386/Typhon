@@ -13,6 +13,7 @@ public class VolcanoVentRecord {
     VolcanoVent vent;
 
     public long startEjectaTracking = -1;
+    public long endOfLavaFlowTracking = -1;
     public int currentEjectaVolume = 0;
 
     public List<VolcanoVentEjectaTimeData> ejectaVolumeList = new ArrayList<>();
@@ -28,7 +29,14 @@ public class VolcanoVentRecord {
     public void startEjectaTracking() {
         if (this.isEjectaTrackingStarted()) {
             startEjectaTracking = System.currentTimeMillis();
+            endOfLavaFlowTracking = -1;
         }
+    }
+
+    public void markEndOfLavaFlow() {
+        if (!this.isEjectaTrackOngoing()) return;
+        if (this.endOfLavaFlowTracking > 0) return;
+        this.endOfLavaFlowTracking = System.currentTimeMillis();
     }
 
     public int getRecordIndex() {
@@ -55,6 +63,7 @@ public class VolcanoVentRecord {
 
         VolcanoVentEjectaTimeData timeData =
                 new VolcanoVentEjectaTimeData(startTime, endTime, currentEjectaVolume);
+        timeData.endOfLavaFlowTime = this.endOfLavaFlowTracking > 0 ? this.endOfLavaFlowTracking : endTime;
 
         // Capture vent metadata snapshot
         Block summitBlock = vent.getSummitBlock();
@@ -76,6 +85,7 @@ public class VolcanoVentRecord {
 
         currentEjectaVolume = 0;
         startEjectaTracking = -1;
+        endOfLavaFlowTracking = -1;
 
         ejectaVolumeList.add(timeData);
     }

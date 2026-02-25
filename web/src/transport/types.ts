@@ -51,6 +51,8 @@ export interface VentDetail extends VentSummary {
   summitY: number;
   summitBlock?: LocationData;
   baseY: number;
+  lowestCoreBlock?: LocationData;
+  lowestCoreY: number;
   seaLevel: number;
   averageVentHeight: number;
   bombMaxDistance: number;
@@ -143,6 +145,7 @@ export interface EjectaRecordMetadata {
 export interface EjectaRecord {
   startTime: number;
   endTime: number;
+  endOfLavaFlowTime?: number;
   ejectaVolume: number;
   metadata?: EjectaRecordMetadata;
 }

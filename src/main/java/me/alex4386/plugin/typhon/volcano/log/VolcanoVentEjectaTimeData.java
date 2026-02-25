@@ -5,6 +5,7 @@ import org.json.simple.JSONObject;
 public class VolcanoVentEjectaTimeData {
     public long startTime;
     public long endTime;
+    public long endOfLavaFlowTime = -1;
 
     public int ejectaVolume;
 
@@ -41,6 +42,7 @@ public class VolcanoVentEjectaTimeData {
         JSONObject timeData = (JSONObject) jsonObject.get("time");
         this.startTime = (long) timeData.get("start");
         this.endTime = (long) timeData.get("end");
+        this.endOfLavaFlowTime = (long) timeData.getOrDefault("endOfLavaFlow", this.endTime);
 
         this.ejectaVolume = (int) (long) jsonObject.get("volume");
 
@@ -73,6 +75,7 @@ public class VolcanoVentEjectaTimeData {
         JSONObject timeData = new JSONObject();
         timeData.put("start", startTime);
         timeData.put("end", endTime);
+        timeData.put("endOfLavaFlow", endOfLavaFlowTime > 0 ? endOfLavaFlowTime : endTime);
 
         jsonObject.put("time", timeData);
         jsonObject.put("volume", ejectaVolume);

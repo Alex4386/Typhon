@@ -60,6 +60,7 @@ interface Geo {
   centerX: number;
   summitY: number;
   baseY: number;
+  lowestCoreY: number;
   seaLevel: number;
   height: number;
   scaleH: number;
@@ -114,9 +115,18 @@ function computeGeo(vent: VentDetail, svgW: number): Geo {
   const currentFlowPxR = currentFlowLength * scaleH;
   const avgVentPx = GROUND_Y - (avgVentHeight - baseY) * scaleV;
 
-  // Crater depth — the bowl sinks below summit proportional to crater radius vs height
+  const lowestCoreYRaw = vent.lowestCoreBlock?.y ?? vent.lowestCoreY;
+  const hasLowestCoreY = typeof lowestCoreYRaw === 'number';
+  const lowestCoreY = Math.min(hasLowestCoreY ? lowestCoreYRaw : baseY, summitY);
+
+  // Crater depth should follow actual crater floor (lowest core block) when available.
+  const craterDepthFromCorePx = (summitY - lowestCoreY) * scaleV;
+  const maxCraterDepthPx = Math.max((GROUND_Y - summitPx) * 0.95, 1);
   const craterDepthFrac = Math.min(craterRadius / Math.max(height, 1), MAX_CRATER_DEPTH_FRAC);
-  const craterDepthPx = (GROUND_Y - summitPx) * craterDepthFrac;
+  const craterDepthHeuristicPx = (GROUND_Y - summitPx) * craterDepthFrac;
+  const craterDepthPx = hasLowestCoreY
+    ? Math.min(Math.max(craterDepthFromCorePx, 0), maxCraterDepthPx)
+    : craterDepthHeuristicPx;
 
   const seaLevelDelta = seaLevel - baseY;
   const seaLevelRawPxY = GROUND_Y - seaLevelDelta * scaleV;
@@ -127,7 +137,7 @@ function computeGeo(vent: VentDetail, svgW: number): Geo {
 
   return {
     svgW, centerX,
-    summitY, baseY, seaLevel, height, scaleH, scaleV,
+    summitY, baseY, lowestCoreY, seaLevel, height, scaleH, scaleV,
     summitPx, craterPxR, calderaPxR, flowPxR, bombPxR, currentFlowPxR,
     isCaldera, craterRadius, calderaRadius,
     flowLength, rawFlowLength, currentFlowLength, bombMax,
@@ -703,6 +713,7 @@ export default function VolcanoCrossSection({ vent }: Props) {
 
 function Labels({ geo, vent }: { geo: Geo; vent: VentDetail }) {
   const { centerX } = geo;
+  const craterFloorY = vent.lowestCoreBlock?.y ?? vent.lowestCoreY ?? geo.lowestCoreY;
   return (
     <g>
       {/* Summit Y */}
@@ -724,6 +735,12 @@ function Labels({ geo, vent }: { geo: Geo; vent: VentDetail }) {
         fill="#777" fontSize="9" fontFamily="monospace"
       >
         Base Y={vent.baseY}
+      </text>
+      <text
+        x={8} y={GROUND_Y + 24}
+        fill="#777" fontSize="9" fontFamily="monospace"
+      >
+        Crater floor Y={Math.round(craterFloorY)}
       </text>
 
       {/* Crater radius dimension */}
