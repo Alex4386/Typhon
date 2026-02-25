@@ -13,7 +13,6 @@ public class VolcanoVentRecord {
     VolcanoVent vent;
 
     public long startEjectaTracking = -1;
-    public long endOfLavaFlowTracking = -1;
     public int currentEjectaVolume = 0;
 
     public List<VolcanoVentEjectaTimeData> ejectaVolumeList = new ArrayList<>();
@@ -29,18 +28,22 @@ public class VolcanoVentRecord {
     public void startEjectaTracking() {
         if (this.isEjectaTrackingStarted()) {
             startEjectaTracking = System.currentTimeMillis();
-            endOfLavaFlowTracking = -1;
         }
-    }
-
-    public void markEndOfLavaFlow() {
-        if (!this.isEjectaTrackOngoing()) return;
-        if (this.endOfLavaFlowTracking > 0) return;
-        this.endOfLavaFlowTracking = System.currentTimeMillis();
     }
 
     public int getRecordIndex() {
         return ejectaVolumeList.size();
+    }
+
+    public long getCurrentLavaFlowEndTime() {
+        // check if we are currently tracking ejecta
+        if (startEjectaTracking >= 0 || this.getRecordIndex() == 0) {
+            // then it is now.
+            return System.currentTimeMillis();
+        } else {
+            // get the latest
+            return ejectaVolumeList.get(this.getRecordIndex() - 1).endOfLavaFlowTime;
+        }
     }
 
     public void addEjectaVolume(int ejectaVolume) {
@@ -51,6 +54,10 @@ public class VolcanoVentRecord {
     public void addEjectaVolume(int ejectaVolume, int recordIndex) {
         if (recordIndex >= 0 && recordIndex < ejectaVolumeList.size()) {
             ejectaVolumeList.get(recordIndex).ejectaVolume += ejectaVolume;
+            
+            // also updating this via recordIdx mean the lavaflow is still going on.
+            // update endOfLavaFlowTracking
+            ejectaVolumeList.get(recordIndex).endOfLavaFlowTime = System.currentTimeMillis();
         } else {
             this.addEjectaVolume(ejectaVolume);
         }
@@ -63,7 +70,7 @@ public class VolcanoVentRecord {
 
         VolcanoVentEjectaTimeData timeData =
                 new VolcanoVentEjectaTimeData(startTime, endTime, currentEjectaVolume);
-        timeData.endOfLavaFlowTime = this.endOfLavaFlowTracking > 0 ? this.endOfLavaFlowTracking : endTime;
+        timeData.endOfLavaFlowTime = endTime;
 
         // Capture vent metadata snapshot
         Block summitBlock = vent.getSummitBlock();
@@ -85,7 +92,6 @@ public class VolcanoVentRecord {
 
         currentEjectaVolume = 0;
         startEjectaTracking = -1;
-        endOfLavaFlowTracking = -1;
 
         ejectaVolumeList.add(timeData);
     }

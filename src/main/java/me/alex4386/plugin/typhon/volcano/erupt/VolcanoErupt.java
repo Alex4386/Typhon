@@ -277,7 +277,6 @@ public class VolcanoErupt {
         if (this.vent != null && this.vent.isKillSwitchActive())
             return;
 
-        this.vent.record.markEndOfLavaFlow();
         vent.lavaFlow.settings.flowing = false;
         this.vent.setStatus((!this.vent.isExploding()) ? VolcanoVentStatus.MAJOR_ACTIVITY : this.vent.getStatus());
         this.vent.cool();

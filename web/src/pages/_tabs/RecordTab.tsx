@@ -27,7 +27,11 @@ function fmtPct(v: number): string {
   return `${(v * 100).toFixed(0)}%`;
 }
 
-function getTotalLavaFlowDuration(records: EjectaRecord[]): number {
+function getTotalLavaFlowDuration(
+  records: EjectaRecord[],
+  activeStartTime?: number,
+  activeEndTime?: number
+): number {
   const intervals = records
     .map((r) => {
       const start = r.startTime;
@@ -37,6 +41,16 @@ function getTotalLavaFlowDuration(records: EjectaRecord[]): number {
     })
     .filter(([start, end]) => end > start)
     .sort((a, b) => a[0] - b[0]);
+
+  if (
+    typeof activeStartTime === 'number'
+    && typeof activeEndTime === 'number'
+    && activeStartTime > 0
+    && activeEndTime > activeStartTime
+  ) {
+    intervals.push([activeStartTime, activeEndTime]);
+    intervals.sort((a, b) => a[0] - b[0]);
+  }
 
   if (intervals.length === 0) return 0;
 
@@ -144,7 +158,11 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
 
   const finishedDuration = records.reduce((acc, r) => acc + (r.endTime - r.startTime), 0);
   const totalDuration = finishedDuration + (isTracking ? now - startEjectaTracking : 0);
-  const totalLavaFlowDuration = getTotalLavaFlowDuration(records);
+  const totalLavaFlowDuration = getTotalLavaFlowDuration(
+    records,
+    startEjectaTracking,
+    record.currentLavaFlowEndTime
+  );
 
   return (
     <div className="space-y-4">

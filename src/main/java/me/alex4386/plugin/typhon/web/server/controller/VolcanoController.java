@@ -523,6 +523,7 @@ public class VolcanoController {
         json.put("currentEjecta", record.currentEjectaVolume);
         json.put("totalEjecta", record.getTotalEjecta());
         json.put("startEjectaTracking", record.startEjectaTracking);
+        json.put("currentLavaFlowEndTime", record.getCurrentLavaFlowEndTime());
 
         JSONArray records = new JSONArray();
         for (VolcanoVentEjectaTimeData entry : record.ejectaVolumeList) {
