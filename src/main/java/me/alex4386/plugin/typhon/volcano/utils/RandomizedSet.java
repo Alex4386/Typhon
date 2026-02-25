@@ -60,12 +60,20 @@ public class RandomizedSet<T> extends AbstractSet<T> {
         indexByItem.clear();
     }
 
+    private int getRandomIdx() {
+        if (items.isEmpty()) return -1;
+        return random.nextInt(items.size());
+    }
+
+    public T randomElement() {
+        return items.get(this.getRandomIdx());
+    }
+
     /**
      * Removes and returns a uniformly random element, or null if empty.
      */
     public T pollRandom() {
-        if (items.isEmpty()) return null;
-        int randomIndex = random.nextInt(items.size());
+        int randomIndex = this.getRandomIdx();
         return removeAt(randomIndex);
     }
 

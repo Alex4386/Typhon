@@ -14,8 +14,6 @@ import me.alex4386.plugin.typhon.volcano.vent.VolcanoVentType;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.block.data.BlockData;
-import org.bukkit.block.data.Levelled;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -27,7 +25,6 @@ import org.json.simple.JSONObject;
 
 import java.util.*;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 
 public class VolcanoLavaFlow implements Listener {
@@ -41,8 +38,8 @@ public class VolcanoLavaFlow implements Listener {
     public final VolcanoLavaFakeFluidEngine fakeFluidEngine;
 
     public Set<Block> terminalBlocks = new HashSet<>();
-    public Set<Block> normalFlowEndBlocks = new HashSet<>();
-    public Set<Block> pillowFlowEndBlocks = new HashSet<>();
+    public RandomizedSet<Block> normalFlowEndBlocks = new RandomizedSet<>();
+    public RandomizedSet<Block> pillowFlowEndBlocks = new RandomizedSet<>();
     public RandomizedSet<Block> underfillTargets = new RandomizedSet<>();
 
     private int lavaFlowScheduleId = -1;
@@ -495,18 +492,7 @@ public class VolcanoLavaFlow implements Listener {
     }
 
     public Block getRandomTerminalBlock() {
-        return getRandomFromSet(this.normalFlowEndBlocks);
-    }
-
-    private static Block getRandomFromSet(Set<Block> set) {
-        if (set.isEmpty()) return null;
-
-        int index = (int) (Math.random() * set.size());
-        Iterator<Block> it = set.iterator();
-        for (int i = 0; i < index; i++) {
-            it.next();
-        }
-        return it.next();
+        return this.normalFlowEndBlocks.randomElement();
     }
 
     @EventHandler
@@ -1229,17 +1215,17 @@ public class VolcanoLavaFlow implements Listener {
 
             // 30% chance to pick from pillow flow endpoints
             if (!pillowFlowEndBlocks.isEmpty() && Math.random() >= 0.7) {
-                block = getRandomFromSet(pillowFlowEndBlocks);
+                block = pillowFlowEndBlocks.randomElement();
             }
 
             // 70% chance (or fallback) to pick from normal flow endpoints
             if (block == null && !normalFlowEndBlocks.isEmpty()) {
-                block = getRandomFromSet(normalFlowEndBlocks);
+                block = normalFlowEndBlocks.randomElement();
             }
 
             // Final fallback to pillow if normal is empty
             if (block == null && !pillowFlowEndBlocks.isEmpty()) {
-                block = getRandomFromSet(pillowFlowEndBlocks);
+                block = pillowFlowEndBlocks.randomElement();
             }
 
             if (block != null) {
