@@ -74,7 +74,9 @@ function getTotalLavaFlowDuration(
 
 function RecordDetailRow({ record }: { record: EjectaRecord }) {
   const meta = record.metadata;
-  const lavaFlowEndTime = record.endOfLavaFlowTime ?? record.endTime;
+  const rawLavaFlowEndTime = record.endOfLavaFlowTime ?? record.endTime;
+  const lavaFlowEndTime = Math.min(Math.max(rawLavaFlowEndTime, record.startTime), record.endTime);
+  const lavaFlowDuration = Math.max(0, lavaFlowEndTime - record.startTime);
   if (!meta) {
     return (
       <TableRow>
@@ -126,6 +128,10 @@ function RecordDetailRow({ record }: { record: EjectaRecord }) {
           <div>
             <span className="text-muted-foreground">Total Flow</span>
             <div className="font-medium tabular-nums">{meta.currentFlowLength.toFixed(1)}m / {meta.longestFlowLength.toFixed(1)}m</div>
+          </div>
+          <div>
+            <span className="text-muted-foreground">Lava Flow Duration</span>
+            <div className="font-medium tabular-nums">{fmtDuration(lavaFlowDuration)}</div>
           </div>
           <div>
             <span className="text-muted-foreground">Lava Flow Ended</span>
