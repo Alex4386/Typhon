@@ -643,18 +643,18 @@ public class VolcanoLavaFlow implements Listener {
 
         VolcanoVent vent = adapter.getVent();
         if (vent != null && fillUnderUnder) {
+            // do silicateLevel Check
+            double silicateLevel = adapter.getVent().lavaFlow.settings.silicateLevel;
+            if (silicateLevel > 0.50) {
+                double silicaRatio = Math.min(0.57, silicateLevel) - 0.50 / 0.07;
+                if (silicaRatio > 1 - Math.pow(silicaRatio, 2)) {
+                    fillUnderUnder = Math.random() > 0.5;
+                }
+            }
+
             // if we are talking about crater, then fillUnderUnder is rolled-back.
             if (vent.isInVent(toBlock.getLocation())) {
-                fillUnderUnder = false;
-            } else {
-                // do silicateLevel Check
-                double silicateLevel = adapter.getVent().lavaFlow.settings.silicateLevel;
-                if (silicateLevel > 0.50) {
-                    double silicaRatio = Math.min(0.57, silicateLevel) - 0.50 / 0.07;
-                    if (silicaRatio > 1 - Math.pow(silicaRatio, 2)) {
-                        fillUnderUnder = Math.random() > 0.5;
-                    }
-                }
+                fillUnderUnder = fillUnderUnder && Math.random() > 0.5;
             }
         }
 
