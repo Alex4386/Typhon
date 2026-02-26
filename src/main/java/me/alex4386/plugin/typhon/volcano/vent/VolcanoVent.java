@@ -450,7 +450,7 @@ public class VolcanoVent {
                     "Vent block calculation of " + this.getName() + " complete.");
 
         this.cachedVentBlocks = newCachedVentBlocks;
-        this.cachedSummitBlockLastSync = System.currentTimeMillis();
+        this.cachedVentBlocksLastSync = System.currentTimeMillis();
 
         // Everyday I'm shuffl'in
         Collections.shuffle(this.cachedVentBlocks);
@@ -493,6 +493,7 @@ public class VolcanoVent {
 
     public void flushCache() {
         this.cachedVentBlocks = null;
+        this.cachedVentBlocksLastSync = 0;
         this.coreBlocks = null;
         this.leeveBlocks = null;
         this.previousSummitBlock = null;
@@ -722,6 +723,7 @@ public class VolcanoVent {
 
     public void flushSummitCache() {
         this.cachedSummitBlock = null;
+        this.cachedSummitBlockLastSync = 0;
     }
 
     public void flushSummitCacheByLocation(Block block) {

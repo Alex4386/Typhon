@@ -197,7 +197,7 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
     return <p className="text-sm text-muted-foreground">Loading record data...</p>;
   }
 
-  const { records, currentEjecta, totalEjecta, startEjectaTracking, startEjectaTrackingTick, currentLavaFlowEndTimeTick } = record;
+  const { records, currentEjecta, totalEjecta, startEjectaTracking, startEjectaTrackingTick, currentLavaFlowEndTick } = record;
   const isTracking = startEjectaTracking > 0;
 
   const [now, setNow] = useState(Date.now());
@@ -237,9 +237,9 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
             label="Current Eruption"
             volume={currentEjecta}
             subtitle={`Since ${fmtDate(startEjectaTracking)} — ${fmtDuration(Date.now() - startEjectaTracking)} elapsed ${
-              (currentLavaFlowEndTimeTick && startEjectaTrackingTick)
+              (currentLavaFlowEndTick && startEjectaTrackingTick)
                 ? `— ingame: ${fmtMinecraftDurationTicks(
-                  Math.max((currentLavaFlowEndTimeTick ?? 0) - (startEjectaTrackingTick ?? 0), 0)
+                  Math.max((currentLavaFlowEndTick ?? 0) - (startEjectaTrackingTick ?? 0), 0)
                 )}` : ''
             }`}
           />
