@@ -46,7 +46,12 @@ function fmtMinecraftDurationTicks(value?: number): string {
   const timeTicks = ((tick % 24000) + 24000) % 24000;
   const hour = Math.floor(timeTicks / 1000);
   const minute = Math.floor((timeTicks % 1000) * 60 / 1000);
-  return `Day ${day} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+
+  let length = '';
+  if (day > 0) length += `${day}d`;
+  if (hour > 0) length += `${hour}h`;
+  if (minute > 0) length += `${minute}m`;
+  return length.length ? length : '0m';
 }
 
 function getTotalLavaFlowDuration(
@@ -96,9 +101,6 @@ function getTotalLavaFlowDuration(
 
 function RecordDetailRow({ record }: { record: EjectaRecord }) {
   const meta = record.metadata;
-  const rawLavaFlowEndTime = record.endOfLavaFlowTime ?? record.endTime;
-  const lavaFlowEndTime = Math.min(Math.max(rawLavaFlowEndTime, record.startTime), record.endTime);
-  const lavaFlowDuration = Math.max(0, lavaFlowEndTime - record.startTime);
   const height = meta ? meta.summit.y - meta.baseY : 0;
   const lavaFlowTick = record.endOfLavaFlowTick ?? record.endTick;
   const lavaFlowTickDuration = typeof record.startTick === 'number' && typeof lavaFlowTick === 'number'
@@ -108,9 +110,39 @@ function RecordDetailRow({ record }: { record: EjectaRecord }) {
   return (
     <TableRow>
       <TableCell colSpan={6} className="bg-muted/30 p-0">
-        <div className="px-6 py-3 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-xs">
+        <div className="px-6 py-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-xs">
+            <div>
+              <span className="text-muted-foreground">Lava Flow Start</span>
+              <div className="flex flex-col">
+                <div className="font-medium tabular-nums">{fmtDate(record.startTime)}</div>
+                {record.startTick && <div className="text-sm">Minecraft: {fmtMinecraftTick(record.startTick)}</div>}
+              </div>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Lava Flow End</span>
+              <div className="flex flex-col">
+                <div className="font-medium tabular-nums">{fmtDate(record.endTime)}</div>
+                {record.endTick && <div className="text-sm">Minecraft: {fmtMinecraftTick(record.endTick)}</div>}
+              </div>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Eruption Duration</span>
+              <div className="flex flex-col">
+                <div className="font-medium tabular-nums">{fmtDuration(Math.max(0, record.endTime - record.startTime))}</div>
+                {(record.startTick && record.endTick) && <div className="text-sm">Minecraft: {fmtMinecraftDurationTicks(Math.max(0, record.endTick - record.startTick))}</div>}
+              </div>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Lava Flow Duration</span>
+              <div className="flex flex-col">
+                <div className="font-medium tabular-nums">{fmtDuration(Math.max(0, Math.max(record.endTime, record.endOfLavaFlowTime ?? 0) - record.startTime))}</div>
+                {(record.startTick && record.endTick) && <div className="text-sm">Minecraft: {fmtMinecraftDurationTicks(Math.max(record.endTick, record.endOfLavaFlowTick ?? 0) - record.startTick)}</div>}
+              </div>
+            </div>
+          </div>
           {meta && (
-            <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-xs">
               <div>
                 <span className="text-muted-foreground">Style</span>
                 <div className="font-medium">{meta.eruptionStyle.replace(/_/g, ' ')}</div>
@@ -147,36 +179,8 @@ function RecordDetailRow({ record }: { record: EjectaRecord }) {
                 <span className="text-muted-foreground">Total Flow</span>
                 <div className="font-medium tabular-nums">{meta.currentFlowLength.toFixed(1)}m / {meta.longestFlowLength.toFixed(1)}m</div>
               </div>
-            </>
-          )}
-          <div>
-            <span className="text-muted-foreground">Lava Flow Duration (MC)</span>
-            <div className="font-medium tabular-nums">
-              {typeof lavaFlowTickDuration === 'number'
-                ? fmtMinecraftDurationTicks(lavaFlowTickDuration)
-                : 'N/A'}
             </div>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Lava Flow Duration (IRL)</span>
-            <div className="font-medium tabular-nums">{fmtDuration(lavaFlowDuration)}</div>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Lava Flow Ended</span>
-            <div className="font-medium tabular-nums">{fmtDate(lavaFlowEndTime)}</div>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Start (MC Time)</span>
-            <div className="font-medium tabular-nums">{fmtMinecraftTick(record.startTick)}</div>
-          </div>
-          <div>
-            <span className="text-muted-foreground">End (MC Time)</span>
-            <div className="font-medium tabular-nums">{fmtMinecraftTick(record.endTick)}</div>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Lava Flow End (MC Time)</span>
-            <div className="font-medium tabular-nums">{fmtMinecraftTick(lavaFlowTick)}</div>
-          </div>
+          )}
         </div>
         {!meta && (
           <div className="px-6 pb-3 text-xs text-muted-foreground italic">
