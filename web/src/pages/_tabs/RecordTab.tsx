@@ -27,6 +27,28 @@ function fmtPct(v: number): string {
   return `${(v * 100).toFixed(0)}%`;
 }
 
+function fmtMinecraftTick(value?: number): string {
+  if (typeof value !== 'number' || Number.isNaN(value) || value < 0) return 'N/A';
+  const tick = Math.floor(value);
+  const day = Math.floor(tick / 24000) + 1;
+  const timeTicks = ((tick % 24000) + 24000) % 24000;
+  // Minecraft day starts at 06:00. Shift by +6000 to align 0 -> 06:00.
+  const shifted = (timeTicks + 6000) % 24000;
+  const hour = Math.floor(shifted / 1000);
+  const minute = Math.floor((shifted % 1000) * 60 / 1000);
+  return `Day ${day} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function fmtMinecraftDurationTicks(value?: number): string {
+  if (typeof value !== 'number' || Number.isNaN(value) || value < 0) return 'N/A';
+  const tick = Math.floor(value);
+  const day = Math.floor(tick / 24000);
+  const timeTicks = ((tick % 24000) + 24000) % 24000;
+  const hour = Math.floor(timeTicks / 1000);
+  const minute = Math.floor((timeTicks % 1000) * 60 / 1000);
+  return `Day ${day} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
 function getTotalLavaFlowDuration(
   records: EjectaRecord[],
   activeStartTime?: number,
@@ -77,67 +99,90 @@ function RecordDetailRow({ record }: { record: EjectaRecord }) {
   const rawLavaFlowEndTime = record.endOfLavaFlowTime ?? record.endTime;
   const lavaFlowEndTime = Math.min(Math.max(rawLavaFlowEndTime, record.startTime), record.endTime);
   const lavaFlowDuration = Math.max(0, lavaFlowEndTime - record.startTime);
-  if (!meta) {
-    return (
-      <TableRow>
-        <TableCell colSpan={6} className="bg-muted/30 px-6 py-3 text-xs text-muted-foreground italic">
-          No metadata recorded for this eruption (recorded before metadata tracking)
-        </TableCell>
-      </TableRow>
-    );
-  }
-
-  const height = meta.summit.y - meta.baseY;
+  const height = meta ? meta.summit.y - meta.baseY : 0;
+  const lavaFlowTick = record.endOfLavaFlowTick ?? record.endTick;
+  const lavaFlowTickDuration = typeof record.startTick === 'number' && typeof lavaFlowTick === 'number'
+    ? Math.max(0, lavaFlowTick - record.startTick)
+    : undefined;
 
   return (
     <TableRow>
       <TableCell colSpan={6} className="bg-muted/30 p-0">
         <div className="px-6 py-3 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-xs">
+          {meta && (
+            <>
+              <div>
+                <span className="text-muted-foreground">Style</span>
+                <div className="font-medium">{meta.eruptionStyle.replace(/_/g, ' ')}</div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Type</span>
+                <div className="font-medium">{meta.ventType}</div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Summit</span>
+                <div className="font-medium tabular-nums">{meta.summit.x}, {meta.summit.y}, {meta.summit.z}</div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Height</span>
+                <div className="font-medium tabular-nums">{height}m (base Y={meta.baseY})</div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Silicate</span>
+                <div className="font-medium tabular-nums">{fmtPct(meta.silicateLevel)}</div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Gas Content</span>
+                <div className="font-medium tabular-nums">{fmtPct(meta.gasContent)}</div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Crater Radius</span>
+                <div className="font-medium tabular-nums">{meta.craterRadius}m</div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Lava Flow</span>
+                <div className="font-medium tabular-nums">{meta.currentNormalLavaFlowLength.toFixed(1)}m / {meta.longestNormalLavaFlowLength.toFixed(1)}m</div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Total Flow</span>
+                <div className="font-medium tabular-nums">{meta.currentFlowLength.toFixed(1)}m / {meta.longestFlowLength.toFixed(1)}m</div>
+              </div>
+            </>
+          )}
           <div>
-            <span className="text-muted-foreground">Style</span>
-            <div className="font-medium">{meta.eruptionStyle.replace(/_/g, ' ')}</div>
+            <span className="text-muted-foreground">Lava Flow Duration (MC)</span>
+            <div className="font-medium tabular-nums">
+              {typeof lavaFlowTickDuration === 'number'
+                ? fmtMinecraftDurationTicks(lavaFlowTickDuration)
+                : 'N/A'}
+            </div>
           </div>
           <div>
-            <span className="text-muted-foreground">Type</span>
-            <div className="font-medium">{meta.ventType}</div>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Summit</span>
-            <div className="font-medium tabular-nums">{meta.summit.x}, {meta.summit.y}, {meta.summit.z}</div>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Height</span>
-            <div className="font-medium tabular-nums">{height}m (base Y={meta.baseY})</div>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Silicate</span>
-            <div className="font-medium tabular-nums">{fmtPct(meta.silicateLevel)}</div>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Gas Content</span>
-            <div className="font-medium tabular-nums">{fmtPct(meta.gasContent)}</div>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Crater Radius</span>
-            <div className="font-medium tabular-nums">{meta.craterRadius}m</div>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Lava Flow</span>
-            <div className="font-medium tabular-nums">{meta.currentNormalLavaFlowLength.toFixed(1)}m / {meta.longestNormalLavaFlowLength.toFixed(1)}m</div>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Total Flow</span>
-            <div className="font-medium tabular-nums">{meta.currentFlowLength.toFixed(1)}m / {meta.longestFlowLength.toFixed(1)}m</div>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Lava Flow Duration</span>
+            <span className="text-muted-foreground">Lava Flow Duration (IRL)</span>
             <div className="font-medium tabular-nums">{fmtDuration(lavaFlowDuration)}</div>
           </div>
           <div>
             <span className="text-muted-foreground">Lava Flow Ended</span>
             <div className="font-medium tabular-nums">{fmtDate(lavaFlowEndTime)}</div>
           </div>
+          <div>
+            <span className="text-muted-foreground">Start (MC Time)</span>
+            <div className="font-medium tabular-nums">{fmtMinecraftTick(record.startTick)}</div>
+          </div>
+          <div>
+            <span className="text-muted-foreground">End (MC Time)</span>
+            <div className="font-medium tabular-nums">{fmtMinecraftTick(record.endTick)}</div>
+          </div>
+          <div>
+            <span className="text-muted-foreground">Lava Flow End (MC Time)</span>
+            <div className="font-medium tabular-nums">{fmtMinecraftTick(lavaFlowTick)}</div>
+          </div>
         </div>
+        {!meta && (
+          <div className="px-6 pb-3 text-xs text-muted-foreground italic">
+            No metadata recorded for this eruption (recorded before metadata tracking)
+          </div>
+        )}
       </TableCell>
     </TableRow>
   );
@@ -209,7 +254,7 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
                 <TableHead className="w-10">#</TableHead>
                 <TableHead>Started</TableHead>
                 <TableHead>Ended</TableHead>
-                <TableHead className="text-right">Duration</TableHead>
+                <TableHead className="text-right">Duration (MC)</TableHead>
                 <TableHead className="text-right">Ejecta</TableHead>
                 <TableHead className="text-center w-20">VEI</TableHead>
               </TableRow>
@@ -217,7 +262,13 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
             <TableBody>
               {[...records].reverse().map((r, i) => {
                 const idx = records.length - i;
-                const duration = r.endTime - r.startTime;
+                const durationMs = r.endTime - r.startTime;
+                const durationTicks = typeof r.startTick === 'number' && typeof r.endTick === 'number'
+                  ? Math.max(0, r.endTick - r.startTick)
+                  : undefined;
+                const durationLabel = typeof durationTicks === 'number'
+                  ? fmtMinecraftDurationTicks(durationTicks)
+                  : fmtDuration(durationMs);
                 const isExpanded = expandedIdx === i;
                 return (
                   <>{/* eslint-disable-next-line react/no-array-index-key */}
@@ -225,7 +276,7 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
                       <TableCell className="text-muted-foreground tabular-nums">{idx}</TableCell>
                       <TableCell className="tabular-nums">{fmtDate(r.startTime)}</TableCell>
                       <TableCell className="tabular-nums">{fmtDate(r.endTime)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{fmtDuration(duration)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{durationLabel}</TableCell>
                       <TableCell className="text-right tabular-nums">
                         <div className="font-medium">{formatVolume(r.ejectaVolume)}</div>
                         <div className="text-[10px] text-muted-foreground">{r.ejectaVolume.toLocaleString()} blocks</div>

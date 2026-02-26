@@ -85,6 +85,10 @@ public class VolcanoVentEjectaTimeData {
         timeData.put("start", startTime);
         timeData.put("end", endTime);
         timeData.put("endOfLavaFlow", endOfLavaFlowTime > 0 ? endOfLavaFlowTime : endTime);
+        if (startTick >= 0) timeData.put("startTick", startTick);
+        if (endTick >= 0) timeData.put("endTick", endTick);
+        long lavaFlowTick = endOfLavaFlowTick >= 0 ? endOfLavaFlowTick : endTick;
+        if (lavaFlowTick >= 0) timeData.put("endOfLavaFlowTick", lavaFlowTick);
 
         jsonObject.put("time", timeData);
         jsonObject.put("volume", ejectaVolume);

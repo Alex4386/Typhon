@@ -37,18 +37,48 @@ public class VolcanoVentRecord {
 
     public int getCurrentRecordIndex() {
         if (this.isEjectaTrackingStarted()) return ejectaVolumeList.size();
+        if (ejectaVolumeList.isEmpty()) return 0;
         return ejectaVolumeList.size() - 1;
     }
 
     public long getCurrentLavaFlowEndTime() {
         // check if we are currently tracking ejecta
-        if (startEjectaTracking >= 0 || this.getCurrentRecordIndex() == 0) {
+        if (this.isEjectaTrackingStarted() || this.getCurrentRecordIndex() == 0) {
             // then it is now.
             return System.currentTimeMillis();
         } else {
             // get the latest
-            return ejectaVolumeList.get(this.getCurrentRecordIndex() - 1).endOfLavaFlowTime;
+            return this.getCurrentRecord().endOfLavaFlowTime;
         }
+    }
+
+    public long getCurrentLavaFlowEndTick() {
+        // check if we are currently tracking ejecta
+        if (this.isEjectaTrackingStarted() || this.getCurrentRecordIndex() == 0) {
+            // then it is now.
+            if (this.vent != null) {
+                return this.vent.location.getWorld().getFullTime();
+            }
+
+            return -1;
+        } else {
+            // get the latest
+            return this.getCurrentRecord().endOfLavaFlowTick;
+        }
+    }
+
+    public VolcanoVentEjectaTimeData getCurrentRecord() {
+        if (this.getCurrentRecordIndex() == 0) return null;
+        if (this.isEjectaTrackingStarted()) {
+            // we should generate this on fly
+            VolcanoVentEjectaTimeData timeData = new VolcanoVentEjectaTimeData(startEjectaTracking, System.currentTimeMillis(), this.currentEjectaVolume);
+            timeData.endOfLavaFlowTime = System.currentTimeMillis();
+            timeData.endOfLavaFlowTick = (timeData.endOfLavaFlowTime - startEjectaTracking);
+
+            // TODO: Generate fake record
+        }
+
+        return this.ejectaVolumeList.get(this.getCurrentRecordIndex());
     }
 
     public void addEjectaVolume(int ejectaVolume) {
@@ -85,14 +115,15 @@ public class VolcanoVentRecord {
         long endTime = System.currentTimeMillis();
 
         // fallback calculation supposing 20tps
-        long startTick = -1;
-        long endTick = (long) (((endTime - startTime) / 1000.0) * 20);
+        long startTick = this.startTick;
+        long fallbackTicks = (long) (((endTime - startTime) / 1000.0) * 20);
+        long endTick = startTick >= 0 ? startTick + fallbackTicks : fallbackTicks;
 
         if (vent != null) {
             long tmpTick = vent.location.getWorld().getFullTime();
 
             // only accept when endTick isn't rolled back
-            if (tmpTick > startTick) {
+            if (startTick < 0 || tmpTick >= startTick) {
                 endTick = tmpTick;
             }
         }

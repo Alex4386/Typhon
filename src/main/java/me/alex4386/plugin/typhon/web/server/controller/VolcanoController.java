@@ -523,7 +523,9 @@ public class VolcanoController {
         json.put("currentEjecta", record.currentEjectaVolume);
         json.put("totalEjecta", record.getTotalEjecta());
         json.put("startEjectaTracking", record.startEjectaTracking);
+        json.put("startEjectaTrackingTick", record.startTick);
         json.put("currentLavaFlowEndTime", record.getCurrentLavaFlowEndTime());
+        json.put("currentLavaFlowEndTick", record.getCurrentLavaFlowEndTick());
 
         JSONArray records = new JSONArray();
         for (VolcanoVentEjectaTimeData entry : record.ejectaVolumeList) {
@@ -532,6 +534,10 @@ public class VolcanoController {
             rec.put("endTime", entry.endTime);
             rec.put("endOfLavaFlowTime", entry.endOfLavaFlowTime > 0 ? entry.endOfLavaFlowTime : entry.endTime);
             rec.put("ejectaVolume", entry.ejectaVolume);
+            if (entry.startTick >= 0) rec.put("startTick", entry.startTick);
+            if (entry.endTick >= 0) rec.put("endTick", entry.endTick);
+            long lavaFlowTick = entry.endOfLavaFlowTick >= 0 ? entry.endOfLavaFlowTick : entry.endTick;
+            if (lavaFlowTick >= 0) rec.put("endOfLavaFlowTick", lavaFlowTick);
 
             if (entry.hasMetadata()) {
                 JSONObject meta = new JSONObject();

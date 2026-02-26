@@ -146,6 +146,9 @@ export interface EjectaRecord {
   startTime: number;
   endTime: number;
   endOfLavaFlowTime?: number;
+  startTick?: number;
+  endTick?: number;
+  endOfLavaFlowTick?: number;
   ejectaVolume: number;
   metadata?: EjectaRecordMetadata;
 }
