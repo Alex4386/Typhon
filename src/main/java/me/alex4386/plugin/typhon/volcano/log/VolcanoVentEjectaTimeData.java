@@ -23,6 +23,9 @@ public class VolcanoVentEjectaTimeData {
     public double longestNormalLavaFlowLength = -1;
     public double currentFlowLength = -1;
     public double currentNormalLavaFlowLength = -1;
+    public long startTick = -1;
+    public long endTick = -1;
+    public long endOfLavaFlowTick = -1;
 
     public VolcanoVentEjectaTimeData(long startTime, long endTime, int ejectaVolume) {
         this.startTime = startTime;
@@ -43,6 +46,10 @@ public class VolcanoVentEjectaTimeData {
         this.startTime = (long) timeData.get("start");
         this.endTime = (long) timeData.get("end");
         this.endOfLavaFlowTime = (long) timeData.getOrDefault("endOfLavaFlow", this.endTime);
+
+        if (timeData.containsKey("startTick")) this.startTick = (long) timeData.get("startTick");
+        if (timeData.containsKey("endTick")) this.endTick = (long) timeData.get("endTick");
+        if (this.endTick != -1) this.endOfLavaFlowTick = (long) timeData.getOrDefault("endOfLavaFlowTick", this.endTick);
 
         this.ejectaVolume = (int) (long) jsonObject.get("volume");
 
@@ -65,6 +72,8 @@ public class VolcanoVentEjectaTimeData {
             if (meta.containsKey("longestNormalLavaFlowLength")) this.longestNormalLavaFlowLength = (double) meta.get("longestNormalLavaFlowLength");
             if (meta.containsKey("currentFlowLength")) this.currentFlowLength = (double) meta.get("currentFlowLength");
             if (meta.containsKey("currentNormalLavaFlowLength")) this.currentNormalLavaFlowLength = (double) meta.get("currentNormalLavaFlowLength");
+
+
         }
     }
 
