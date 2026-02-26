@@ -123,7 +123,7 @@ public class VolcanoPyroclasticFlow {
         this.initRadius = radius;
         this.life = life;
         this.maxDistance = maxDistance;
-        this.ejectaRecordIdx = ash.vent.record.getRecordIndex();
+        this.ejectaRecordIdx = ash.vent.record.getCurrentRecordIndex();
     }
 
     public void setDirection(Vector direction) {

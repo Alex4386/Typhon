@@ -31,24 +31,23 @@ public class VolcanoVentRecord {
         }
     }
 
-    public int getRecordIndex() {
+    public int getCurrentRecordIndex() {
         return ejectaVolumeList.size();
     }
 
     public long getCurrentLavaFlowEndTime() {
         // check if we are currently tracking ejecta
-        if (startEjectaTracking >= 0 || this.getRecordIndex() == 0) {
+        if (startEjectaTracking >= 0 || this.getCurrentRecordIndex() == 0) {
             // then it is now.
             return System.currentTimeMillis();
         } else {
             // get the latest
-            return ejectaVolumeList.get(this.getRecordIndex() - 1).endOfLavaFlowTime;
+            return ejectaVolumeList.get(this.getCurrentRecordIndex() - 1).endOfLavaFlowTime;
         }
     }
 
     public void addEjectaVolume(int ejectaVolume) {
-        this.startEjectaTracking();
-        this.currentEjectaVolume += ejectaVolume;
+        this.addEjectaVolume(ejectaVolume, -1);
     }
 
     public void addEjectaVolume(int ejectaVolume, int recordIndex) {
@@ -59,7 +58,8 @@ public class VolcanoVentRecord {
             // update endOfLavaFlowTracking
             ejectaVolumeList.get(recordIndex).endOfLavaFlowTime = System.currentTimeMillis();
         } else {
-            this.addEjectaVolume(ejectaVolume);
+            this.startEjectaTracking();
+            this.currentEjectaVolume += ejectaVolume;
         }
     }
 

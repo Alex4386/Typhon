@@ -833,7 +833,7 @@ public class VolcanoLavaFlow implements Listener {
         }
 
         if (vent.record.isEjectaTrackOngoing()) {
-            return vent.record.getRecordIndex();
+            return vent.record.getCurrentRecordIndex();
         }
 
         return vent.record.getLatestRecordIndex();

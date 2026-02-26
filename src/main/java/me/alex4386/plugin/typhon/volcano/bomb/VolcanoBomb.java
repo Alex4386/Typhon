@@ -70,7 +70,7 @@ public class VolcanoBomb {
 
         // Capture record index at launch time so landing credits the correct eruption
         if (vent != null) {
-            this.ejectaRecordIdx = vent.record.getRecordIndex();
+            this.ejectaRecordIdx = vent.record.getCurrentRecordIndex();
         }
 
         double randomMultiplier = 1.0 + (Math.random() * 0.25);

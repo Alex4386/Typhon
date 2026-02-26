@@ -343,7 +343,7 @@ public class VolcanoVentCaldera {
 
         this.backedupStyle = this.vent.erupt.getStyle();
         this.vent.erupt.setStyle(VolcanoEruptStyle.PLINIAN);
-        this.ejectaRecordIdx = this.vent.record.getRecordIndex();
+        this.ejectaRecordIdx = this.vent.record.getCurrentRecordIndex();
         this.initialize();
 
         this.isRunning = true;
