@@ -259,7 +259,7 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
                 <TableHead className="w-10">#</TableHead>
                 <TableHead>Started</TableHead>
                 <TableHead>Ended</TableHead>
-                <TableHead className="text-right">Duration (MC)</TableHead>
+                <TableHead className="text-right">Duration</TableHead>
                 <TableHead className="text-right">Ejecta</TableHead>
                 <TableHead className="text-center w-20">VEI</TableHead>
               </TableRow>
@@ -267,13 +267,8 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
             <TableBody>
               {[...records].reverse().map((r, i) => {
                 const idx = records.length - i;
+                const durationFullMs = Math.max(r.endOfLavaFlowTime ?? 0, r.endTime) - r.startTime;
                 const durationMs = r.endTime - r.startTime;
-                const durationTicks = typeof r.startTick === 'number' && typeof r.endTick === 'number'
-                  ? Math.max(0, r.endTick - r.startTick)
-                  : undefined;
-                const durationLabel = typeof durationTicks === 'number'
-                  ? fmtMinecraftDurationTicks(durationTicks)
-                  : fmtDuration(durationMs);
                 const isExpanded = expandedIdx === i;
                 return (
                   <>{/* eslint-disable-next-line react/no-array-index-key */}
@@ -281,7 +276,10 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
                       <TableCell className="text-muted-foreground tabular-nums">{idx}</TableCell>
                       <TableCell className="tabular-nums">{fmtDate(r.startTime)}</TableCell>
                       <TableCell className="tabular-nums">{fmtDate(r.endTime)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{durationLabel}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        <div className="font-medium">{fmtDuration(durationMs)}</div>
+                        <div className="text-[10px] text-muted-foreground">Full: {fmtDuration(durationFullMs)}</div>
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         <div className="font-medium">{formatVolume(r.ejectaVolume)}</div>
                         <div className="text-[10px] text-muted-foreground">{r.ejectaVolume.toLocaleString()} blocks</div>
