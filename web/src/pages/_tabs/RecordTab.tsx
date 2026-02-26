@@ -237,9 +237,10 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
             label="Current Eruption"
             volume={currentEjecta}
             subtitle={`Since ${fmtDate(startEjectaTracking)} — ${fmtDuration(Date.now() - startEjectaTracking)} elapsed ${
-              currentLavaFlowEndTimeTick ? `— ingame: ${fmtMinecraftDurationTicks(
-                Math.max((currentLavaFlowEndTimeTick ?? 0) - (startEjectaTrackingTick ?? 0), 0)
-              )}` : ''
+              (currentLavaFlowEndTimeTick && startEjectaTrackingTick)
+                ? `— ingame: ${fmtMinecraftDurationTicks(
+                  Math.max((currentLavaFlowEndTimeTick ?? 0) - (startEjectaTrackingTick ?? 0), 0)
+                )}` : ''
             }`}
           />
         )}
