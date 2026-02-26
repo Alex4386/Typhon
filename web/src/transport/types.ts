@@ -156,8 +156,13 @@ export interface EjectaRecord {
 export interface VentRecordData {
   currentEjecta: number;
   totalEjecta: number;
+  
   startEjectaTracking: number;
+  startEjectaTrackingTick?: number;
+
   currentLavaFlowEndTime: number;
+  currentLavaFlowEndTimeTick?: number;
+
   records: EjectaRecord[];
 }
 

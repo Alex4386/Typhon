@@ -102,10 +102,6 @@ function getTotalLavaFlowDuration(
 function RecordDetailRow({ record }: { record: EjectaRecord }) {
   const meta = record.metadata;
   const height = meta ? meta.summit.y - meta.baseY : 0;
-  const lavaFlowTick = record.endOfLavaFlowTick ?? record.endTick;
-  const lavaFlowTickDuration = typeof record.startTick === 'number' && typeof lavaFlowTick === 'number'
-    ? Math.max(0, lavaFlowTick - record.startTick)
-    : undefined;
 
   return (
     <TableRow>
@@ -201,7 +197,7 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
     return <p className="text-sm text-muted-foreground">Loading record data...</p>;
   }
 
-  const { records, currentEjecta, totalEjecta, startEjectaTracking } = record;
+  const { records, currentEjecta, totalEjecta, startEjectaTracking, startEjectaTrackingTick, currentLavaFlowEndTimeTick } = record;
   const isTracking = startEjectaTracking > 0;
 
   const [now, setNow] = useState(Date.now());
@@ -240,7 +236,11 @@ export function RecordTab({ record }: { record: VentRecordData | null }) {
           <EjectaCard
             label="Current Eruption"
             volume={currentEjecta}
-            subtitle={`Since ${fmtDate(startEjectaTracking)} — ${fmtDuration(Date.now() - startEjectaTracking)} elapsed`}
+            subtitle={`Since ${fmtDate(startEjectaTracking)} — ${fmtDuration(Date.now() - startEjectaTracking)} elapsed ${
+              currentLavaFlowEndTimeTick ? `— ingame: ${fmtMinecraftDurationTicks(
+                Math.max((currentLavaFlowEndTimeTick ?? 0) - (startEjectaTrackingTick ?? 0), 0)
+              )}` : ''
+            }`}
           />
         )}
       </div>
