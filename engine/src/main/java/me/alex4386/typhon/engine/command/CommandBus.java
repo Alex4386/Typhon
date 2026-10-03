@@ -1,26 +1,32 @@
 package me.alex4386.typhon.engine.command;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
-/** Dispatches commands to the handler registered for their exact type. */
+/**
+ * Dispatches commands to every handler registered for their exact type, in registration order.
+ *
+ * <p>Several subsystems may handle the same command type (e.g. one tephra subsystem per volcano);
+ * commands aimed at one of them carry a target id and the other handlers ignore them.
+ */
 public final class CommandBus {
-    private final Map<Class<?>, Consumer<? super EngineCommand>> handlers = new HashMap<>();
+    private final Map<Class<?>, List<Consumer<? super EngineCommand>>> handlers = new HashMap<>();
 
     public <T extends EngineCommand> void register(Class<T> type, Consumer<? super T> handler) {
-        if (handlers.containsKey(type)) {
-            throw new IllegalStateException("Handler already registered for " + type.getName());
-        }
-        handlers.put(type, command -> handler.accept(type.cast(command)));
+        handlers.computeIfAbsent(type, k -> new ArrayList<>()).add(command -> handler.accept(type.cast(command)));
     }
 
     public void dispatch(EngineCommand command) {
-        Consumer<? super EngineCommand> handler = handlers.get(command.getClass());
-        if (handler == null) {
+        List<Consumer<? super EngineCommand>> list = handlers.get(command.getClass());
+        if (list == null) {
             throw new UnhandledCommandException(command);
         }
-        handler.accept(command);
+        for (Consumer<? super EngineCommand> handler : list) {
+            handler.accept(command);
+        }
     }
 
     public static final class UnhandledCommandException extends RuntimeException {

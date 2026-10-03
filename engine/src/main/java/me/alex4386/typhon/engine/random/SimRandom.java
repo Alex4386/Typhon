@@ -98,7 +98,7 @@ public final class SimRandom {
             u1 = nextDouble();
         } while (u1 <= Double.MIN_VALUE);
         double u2 = nextDouble();
-        return Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+        return StrictMath.sqrt(-2.0 * StrictMath.log(u1)) * StrictMath.cos(2.0 * Math.PI * u2);
     }
 
     public double nextGaussian(double mean, double stdDev) {
@@ -108,7 +108,7 @@ public final class SimRandom {
     /** Exponentially distributed sample with the given rate (events per unit). */
     public double nextExponential(double rate) {
         if (rate <= 0) throw new IllegalArgumentException("rate must be positive");
-        return -Math.log(1.0 - nextDouble()) / rate;
+        return -StrictMath.log(1.0 - nextDouble()) / rate;
     }
 
     /** Poisson-distributed count with the given mean (Knuth for small means, normal approx above). */
@@ -116,9 +116,9 @@ public final class SimRandom {
         if (mean < 0) throw new IllegalArgumentException("mean must be non-negative");
         if (mean == 0) return 0;
         if (mean > 30) {
-            return Math.max(0, (int) Math.round(nextGaussian(mean, Math.sqrt(mean))));
+            return Math.max(0, (int) Math.round(nextGaussian(mean, StrictMath.sqrt(mean))));
         }
-        double limit = Math.exp(-mean);
+        double limit = StrictMath.exp(-mean);
         int k = 0;
         double p = nextDouble();
         while (p > limit) {
