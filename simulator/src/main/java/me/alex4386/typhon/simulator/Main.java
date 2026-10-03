@@ -34,12 +34,12 @@ import me.alex4386.typhon.simulator.terrain.DemImporter;
  */
 public final class Main {
     /**
-     * Per-step telemetry that would dominate the log: GasHazard alone is ~150 events/s around an active
-     * vent, and LavaEnteredWater currently re-fires for tiny films every step (~30 events/tick in the
-     * Surtsey preset). Still counted in the report; pass {@code --skip-events none} to write everything.
+     * Per-step lava telemetry that would dominate the log: LavaSolidified fires every tick and
+     * LavaEnteredWater currently re-fires for tiny films every step (~30 events/tick in the Surtsey
+     * preset). Still counted in the report; pass {@code --skip-events none} to write everything.
+     * (Gas hazards, fumarole activity and ash fall are aggregated by the engine and written.)
      */
-    static final Set<String> DEFAULT_SKIPPED_EVENTS =
-            Set.of("GasHazard", "FumaroleActivity", "AshFall", "LavaSolidified", "LavaEnteredWater");
+    static final Set<String> DEFAULT_SKIPPED_EVENTS = Set.of("LavaSolidified", "LavaEnteredWater");
 
     private Main() {}
 

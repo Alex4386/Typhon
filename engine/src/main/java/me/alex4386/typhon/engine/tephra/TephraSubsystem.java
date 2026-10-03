@@ -6,7 +6,9 @@ import com.google.gson.JsonObject;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.command.EngineCommand;
 import me.alex4386.typhon.engine.math.BlockPos;
@@ -68,10 +70,12 @@ public final class TephraSubsystem implements Subsystem {
     private final String id;
     private final TerrainModel terrain;
     private final TephraConfig config;
-    private final WindField wind = new WindField(5, 0, 0);
+    private final WindField wind;
     private final List<EngineCommand> pending = new ArrayList<>();
     private final List<Bomb> bombs = new ArrayList<>();
     private final List<Cooling> coolings = new ArrayList<>();
+    /** Last announced ash fall per region: {fallRate, airborneLoad, tick}. */
+    private final TreeMap<Integer, double[]> ashReports = new TreeMap<>();
 
     private ExplosivePhase phase;
     private long nextBombId = 1;
@@ -82,6 +86,8 @@ public final class TephraSubsystem implements Subsystem {
         this.terrain = Objects.requireNonNull(terrain, "terrain");
         this.config = config.copy();
         this.config.validate();
+        this.wind = new WindField(this.config.initialWindSpeed, this.config.initialWindDirectionRad,
+                this.config.initialWindVariability);
     }
 
     public TephraSubsystem(String id, TerrainModel terrain) {
@@ -413,7 +419,9 @@ public final class TephraSubsystem implements Subsystem {
         if (phase != null) {
             BlockPos vent = phase.vent().position();
             ensureGrid(vent);
-            double height = PlumeModel.minecraftHeight(phase.massEruptionRate(), vent.y(), config);
+            // The column rises from the block above the vent, so cap its height at the world top from there.
+            BlockPos base = vent.offset(0, 1, 0);
+            double height = PlumeModel.minecraftHeight(phase.massEruptionRate(), base.y(), config);
             double sigma = Math.max(config.cellSize * 0.5, 0.25 * height);
             grid.plumeHeight = height;
             grid.inject(
@@ -422,7 +430,6 @@ public final class TephraSubsystem implements Subsystem {
                     vent.x() + 0.5,
                     vent.z() + 0.5,
                     sigma);
-            BlockPos base = vent.offset(0, 1, 0);
             context.outbox().emit(new PlumeColumn(
                     context.tick(), id, base, base.y() + (int) Math.round(height), 2 * sigma, phase.massEruptionRate()));
             lightning(context, base, height, sigma, dt);
@@ -451,11 +458,18 @@ public final class TephraSubsystem implements Subsystem {
         }
     }
 
+    /**
+     * Ash fall aggregated over square regions. A region is announced when ash starts falling on it,
+     * when its fall rate or airborne load changes by {@code ashEventChangeFraction}, at least every
+     * {@code ashEventRefreshTicks}, and once with zero rates when it clears.
+     */
     private void emitAshFall(StepContext context) {
         int r = Math.max(1, config.ashEventRegionCells);
         int regions = (grid.cells + r - 1) / r;
         for (int rj = 0; rj < regions; rj++) {
             for (int ri = 0; ri < regions; ri++) {
+                int region = rj * regions + ri;
+                double[] last = ashReports.get(region);
                 double rate = 0, load = 0;
                 int count = 0;
                 for (int j = rj * r; j < Math.min(grid.cells, (rj + 1) * r); j++) {
@@ -469,13 +483,30 @@ public final class TephraSubsystem implements Subsystem {
                 double area = count * grid.cellArea();
                 double fallRate = rate / area;
                 double airborneLoad = load / area;
-                if (fallRate < config.ashFallRateThreshold && airborneLoad < config.ashLoadThreshold) continue;
                 int half = r * grid.cellSize / 2;
                 BlockPos center = new BlockPos(
                         grid.originX + ri * r * grid.cellSize + half, 0, grid.originZ + rj * r * grid.cellSize + half);
+                if (fallRate < config.ashFallRateThreshold && airborneLoad < config.ashLoadThreshold) {
+                    if (last != null) {
+                        ashReports.remove(region);
+                        context.outbox().emit(new AshFall(context.tick(), id, center, half, 0, 0));
+                    }
+                    continue;
+                }
+                boolean report = last == null
+                        || changed(fallRate, last[0], config.ashFallRateThreshold)
+                        || changed(airborneLoad, last[1], config.ashLoadThreshold)
+                        || context.tick() - (long) last[2] >= config.ashEventRefreshTicks;
+                if (!report) continue;
+                ashReports.put(region, new double[] {fallRate, airborneLoad, context.tick()});
                 context.outbox().emit(new AshFall(context.tick(), id, center, half, fallRate, airborneLoad));
             }
         }
+    }
+
+    /** Relative change beyond {@code ashEventChangeFraction}, ignoring changes below the threshold. */
+    private boolean changed(double now, double before, double threshold) {
+        return Math.abs(now - before) >= config.ashEventChangeFraction * Math.max(before, threshold);
     }
 
     private static double clamp(double v, double min, double max) {
@@ -510,6 +541,16 @@ public final class TephraSubsystem implements Subsystem {
             grid.save(gridState);
             out.add("ash", gridState);
         }
+        JsonArray reports = new JsonArray();
+        for (Map.Entry<Integer, double[]> e : ashReports.entrySet()) {
+            JsonArray entry = new JsonArray();
+            entry.add(e.getKey());
+            entry.add(Double.doubleToRawLongBits(e.getValue()[0]));
+            entry.add(Double.doubleToRawLongBits(e.getValue()[1]));
+            entry.add((long) e.getValue()[2]);
+            reports.add(entry);
+        }
+        out.add("ashReports", reports);
     }
 
     @Override
@@ -533,6 +574,16 @@ public final class TephraSubsystem implements Subsystem {
             if (grid.cellSize != config.cellSize || grid.cells != config.gridCells) {
                 throw new IllegalStateException("Saved ash grid " + grid.cells + "x" + grid.cellSize
                         + " does not match config " + config.gridCells + "x" + config.cellSize);
+            }
+        }
+        ashReports.clear();
+        if (in.has("ashReports")) {
+            for (JsonElement e : in.getAsJsonArray("ashReports")) {
+                JsonArray entry = e.getAsJsonArray();
+                ashReports.put(entry.get(0).getAsInt(), new double[] {
+                    Double.longBitsToDouble(entry.get(1).getAsLong()),
+                    Double.longBitsToDouble(entry.get(2).getAsLong()),
+                    entry.get(3).getAsLong()});
             }
         }
     }

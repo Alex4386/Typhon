@@ -83,10 +83,8 @@ public final class Presets {
         return new BlockPos(p.x(), Math.max(-56, p.y() - depthBlocks), p.z());
     }
 
-    /** Sets a real-world wind (m/s, bearing the wind blows towards) scaled by Froude similarity. */
-    static void wind(VolcanoSystem volcano, double realSpeed, double bearingRad) {
-        volcano.tephra().setWind(realSpeed * volcano.scaling().velocityScale(), bearingRad, 0.3);
-    }
+    /** Wind variability used by every preset (real speeds are scaled by Froude similarity in the engine). */
+    static final double WIND_VARIABILITY = 0.3;
 
     // ── presets ──
 
@@ -125,8 +123,8 @@ public final class Presets {
                     VolcanoSystem volcano = VolcanoSystem.builder("kilauea", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
                             .scaling(scaling)
+                            .wind(7, 0.6, WIND_VARIABILITY)
                             .build();
-                    wind(volcano, 7, 0.6);
                     return b.volcano(volcano).build();
                 });
     }
@@ -167,8 +165,8 @@ public final class Presets {
                             .chamber(chamber)
                             .scaling(scaling)
                             .ballisticFraction(0.3)
+                            .wind(8, 1.2, WIND_VARIABILITY)
                             .build();
-                    wind(volcano, 8, 1.2);
                     return b.volcano(volcano).build();
                 });
     }
@@ -209,8 +207,8 @@ public final class Presets {
                             .chamber(chamber)
                             .scaling(scaling)
                             .ballisticFraction(0.02)
+                            .wind(15, 0.0, WIND_VARIABILITY)
                             .build();
-                    wind(volcano, 15, 0.0);
                     return b.volcano(volcano).build();
                 });
     }
@@ -251,8 +249,8 @@ public final class Presets {
                             .chamber(chamber)
                             .scaling(scaling)
                             .ballisticFraction(0.005)
+                            .wind(20, Math.PI, WIND_VARIABILITY)
                             .build();
-                    wind(volcano, 20, Math.PI);
                     return b.volcano(volcano).build();
                 });
     }
@@ -292,8 +290,8 @@ public final class Presets {
                     VolcanoSystem volcano = VolcanoSystem.builder("surtsey", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
                             .scaling(scaling)
+                            .wind(10, 0.8, WIND_VARIABILITY)
                             .build();
-                    wind(volcano, 10, 0.8);
                     return b.volcano(volcano).build();
                 });
     }
@@ -316,8 +314,8 @@ public final class Presets {
                 seed -> TerrainGenerators.caldera(256, seed, 40, 160, 240, 34, 4),
                 (seed, terrain) -> {
                     Scenario.Builder b = new Scenario.Builder("yellowstone", seed, terrain);
-                    // Heat sources are hydrothermal basins, not eruptive vents; the first one also centres the
-                    // geothermal grid. West Thumb lies in the lake, like its real counterpart.
+                    // Heat sources are hydrothermal basins, not eruptive vents; the geothermal grid is centred on
+                    // the caldera above the chamber. West Thumb lies in the lake, like its real counterpart.
                     List<VentSite> basins = List.of(
                             crater("upper-geyser-basin", terrain, 40, 20, 8),
                             crater("norris", terrain, 30, -80, 6),
@@ -339,12 +337,14 @@ public final class Presets {
                     geothermal.radius = 192;
                     geothermal.timeScale = 30;
                     geothermal.ventHeatRate = 0.1;
+                    geothermal.baseSaturation = 0.55; // wet plateau (~500–1500 mm/yr) of porous rhyolite and sinter
+                    geothermal.maxGeysers = 20;       // > 500 geysers in reality; the densest field on Earth
                     VolcanoSystem volcano = VolcanoSystem.builder("yellowstone", basins, b.terrain(), b.lava())
                             .chamber(chamber)
                             .scaling(scaling)
                             .geothermal(geothermal)
+                            .geothermalPrewarm(6 * 3600)
                             .build();
-                    b.afterFirstTick(s -> s.volcano().geothermal().equilibrate(6 * 3600));
                     return b.volcano(volcano).build();
                 });
     }

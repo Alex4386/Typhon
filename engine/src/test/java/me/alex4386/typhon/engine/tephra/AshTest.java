@@ -200,4 +200,65 @@ class AshTest {
         assertEquals(1000, grid.airborneTotal() + grid.exported, 1e-9);
         for (double[] layer : grid.airborne) for (double m : layer) assertTrue(m >= 0);
     }
+
+    @Test
+    void plumeTopNeverExceedsTheWorldTop() {
+        TerrainModel terrain = new TerrainModel();
+        TephraConfig config = smallGrid();
+        config.massScale = 1e-9; // the column height uses the real rate; keep the deposit negligible
+        TephraSubsystem tephra = new TephraSubsystem("tephra", terrain, config);
+        Engine engine = Engine.builder(3).add(terrain).add(tephra).build();
+        engine.submit(TephraTestSupport.flat(22, 99));
+        tephra.startPhase(ExplosivePhase.plinian(VENT, 1e10));
+        List<PlumeColumn> columns = events(run(engine, 20 * 5), PlumeColumn.class);
+        assertFalse(columns.isEmpty());
+        assertTrue(columns.stream().allMatch(c -> c.topY() == new TephraConfig().worldTopY), "capped exactly at the top");
+    }
+
+    /** Count of AshFall events over a Vulcanian run with the given aggregation. */
+    private static List<AshFall> ashFalls(double changeFraction, int refreshTicks) {
+        TerrainModel terrain = new TerrainModel();
+        TephraConfig config = smallGrid();
+        config.ashEventChangeFraction = changeFraction;
+        config.ashEventRefreshTicks = refreshTicks;
+        TephraSubsystem tephra = new TephraSubsystem("tephra", terrain, config);
+        Engine engine = Engine.builder(9).add(terrain).add(tephra).build();
+        engine.submit(TephraTestSupport.flat(22, 99));
+        tephra.setWind(6, 0, 0.5);
+        tephra.startPhase(ExplosivePhase.vulcanian(VENT, 1e5));
+        List<AshFall> falls = new ArrayList<>();
+        for (int i = 0; i < 20 * 840; i++) {
+            if (i == 20 * 240) tephra.stopPhase();
+            // Keep only the ash-fall events: whole frames of a 14-minute run would not fit the test heap.
+            events(List.of(engine.tick()), AshFall.class).forEach(falls::add);
+        }
+        return falls;
+    }
+
+    @Test
+    void ashFallEventsAreAggregatedAndRegionsClear() {
+        List<AshFall> everyEvaluation = ashFalls(0, 1);
+        List<AshFall> aggregated = ashFalls(new TephraConfig().ashEventChangeFraction, new TephraConfig().ashEventRefreshTicks);
+        assertTrue(aggregated.size() * 3 < everyEvaluation.size(),
+                aggregated.size() + " aggregated vs " + everyEvaluation.size() + " unaggregated");
+
+        // The last event of every region announced after the phase ended and the ash settled is a clear.
+        java.util.Map<BlockPos, AshFall> last = new java.util.LinkedHashMap<>();
+        for (AshFall fall : aggregated) last.put(fall.center(), fall);
+        assertFalse(last.isEmpty());
+        assertTrue(last.values().stream().allMatch(f -> f.fallRate() == 0 && f.airborneLoad() == 0),
+                "every reported region is cleared once the ash is gone");
+    }
+
+    @Test
+    void initialWindComesFromConfig() {
+        TephraConfig config = new TephraConfig();
+        config.initialWindSpeed = 3.5;
+        config.initialWindDirectionRad = 1.2;
+        config.initialWindVariability = 0.25;
+        TephraSubsystem tephra = new TephraSubsystem("tephra", new TerrainModel(), config);
+        assertEquals(3.5, tephra.wind().baseSpeed());
+        assertEquals(1.2, tephra.wind().baseDirectionRad());
+        assertEquals(0.25, tephra.wind().variability());
+    }
 }

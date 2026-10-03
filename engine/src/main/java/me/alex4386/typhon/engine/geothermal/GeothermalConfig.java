@@ -46,14 +46,40 @@ public final class GeothermalConfig {
     public double eruptionRateFull = 10.0;
 
     // ── Groundwater ──
-    /** Saturation of a dry-land cell level with its surroundings. */
+    /**
+     * Saturation of a dry-land cell level with its surroundings: the meteoric-water supply of the
+     * climate (wet, porous volcanic plateaus ~0.5–0.6, arid ground ~0.3).
+     */
     public double baseSaturation = 0.45;
     /** Extra saturation per block a cell lies below the local mean ground height. */
     public double elevationSaturationPerBlock = 0.04;
+    /** Extra saturation next to standing water (lakes, sea), decaying over {@link #lakeInfluenceBlocks}. */
+    public double lakeSaturationBonus = 0.35;
+    public double lakeInfluenceBlocks = 24.0;
     /** Relaxation rate (1/s) of saturation towards its terrain-derived target. */
     public double rechargePerSecond = 1.0 / 1800.0;
     /** Boil-off rate (1/s) per 100 °C above boiling; hot cells become vapour-dominated. */
     public double boilOffPerSecond = 1.0 / 3600.0;
+    /**
+     * Depth (m) of the shallow reservoir a cell represents; its boiling point follows the
+     * boiling-point-with-depth curve (≈115 °C at 10 m, ≈150 °C at 50 m).
+     */
+    public double reservoirDepthM = 10.0;
+    /**
+     * Rate (1/s) at which a liquid-dominated cell above its boiling point sheds heat by boiling
+     * outflow (springs, geysers, steam). Scales with how far saturation exceeds
+     * {@link #vapourDominatedWater}; drier ground cannot convect, heats up and becomes
+     * vapour-dominated (fumarolic).
+     */
+    public double boilingBufferPerSecond = 1.0 / 60.0;
+    /** Saturation below which the shallow system is vapour-dominated (no liquid convection). */
+    public double vapourDominatedWater = 0.35;
+
+    /**
+     * Model seconds of heat and groundwater spin-up ({@link Geothermal#equilibrate}), run once on the
+     * first step that has terrain, so a new volcano starts from a developed thermal state.
+     */
+    public double prewarmSeconds = 0;
 
     // ── Fumaroles & sulfur ──
     public double fumaroleMinC = 100.0;
@@ -99,22 +125,63 @@ public final class GeothermalConfig {
     public int submarineVentSpacing = 4;
 
     // ── Alteration ──
+    /**
+     * Acid-sulfate (steam-heated) alteration: H₂S in condensing steam oxidises to sulfuric acid in the
+     * vadose zone. It spreads slowly from fumaroles and already altered ground (at any saturation);
+     * isolated patches nucleate only on two-phase/vapour-dominated ground (below {@link #acidMaxWater})
+     * and {@link #alterationNucleationFactor} times as often, so altered ground is patchy.
+     */
     public double acidMinC = 100.0;
-    public double acidMaxWater = 0.65;
-    public double acidAlterationPerHour = 1.0;
+    public double acidMaxWater = 0.5;
+    public double acidAlterationPerHour = 0.08;
+    public double alterationNucleationFactor = 0.1;
+    public int alterationGrowthRadius = 3;
+    public int maxAltered = 1500;
+    /**
+     * Siliceous sinter / travertine precipitates where hot spring and geyser water discharges and
+     * cools, so it grows outward from springs, geysers and existing sinter (within
+     * {@link #sinterGrowthRadius}); isolated seeps nucleate only {@link #sinterNucleationFactor} as often.
+     */
     public double sinterMinC = 60.0;
     public double sinterMaxC = 180.0;
     public double sinterMinWater = 0.5;
     public double sinterPerHour = 0.6;
-    /** Low-temperature epithermal band in which cinnabar (HgS) precipitates. */
+    public int sinterGrowthRadius = 4;
+    public double sinterNucleationFactor = 0.02;
+    public int maxSinter = 600;
+    /**
+     * Cinnabar (HgS) is a trace mineral of low-temperature epithermal systems: it precipitates from
+     * cooling, liquid-dominated hot-spring fluids (e.g. the spring and sinter deposits of Sulphur
+     * Bank and McLaughlin, California). It needs liquid-dominated ground in its band and a spring,
+     * geyser or sinter within {@link #cinnabarSpringRadius} blocks (0 disables that requirement).
+     */
     public double cinnabarMinC = 80.0;
     public double cinnabarMaxC = 160.0;
-    public double cinnabarMinWater = 0.25;
-    public double cinnabarPerHour = 0.15;
+    public double cinnabarMinWater = 0.5;
+    public double cinnabarPerHour = 0.01;
+    public int cinnabarSpringRadius = 6;
+    public int maxCinnabar = 32;
+
+    // ── Events ──
+    /**
+     * Fumarole activity is re-announced when its intensity changes by at least this much and at
+     * least every {@link #fumaroleRefreshSeconds} (unscaled), so hosts keep rendering it.
+     */
+    public double fumaroleReportDelta = 0.1;
+    public double fumaroleRefreshSeconds = 60.0;
 
     // ── Gas hazards ──
-    /** Seconds (unscaled) between gas hazard updates. */
+    /** Seconds (unscaled) between gas hazard evaluations. */
     public double hazardIntervalSeconds = 10.0;
+    /** Gas hazards are aggregated over square zones of this many cells per side. */
+    public int hazardZoneCells = 8;
+    /**
+     * A zone's hazard is re-announced when it appears or clears, when its concentration changes by
+     * {@link #hazardChangeFraction}, and at least every {@link #hazardRefreshSeconds} (unscaled). Each
+     * event stays valid until the next one for the same zone and species.
+     */
+    public double hazardChangeFraction = 0.25;
+    public double hazardRefreshSeconds = 600.0;
     /** Total gas concentration (ppm) above a fumarole cell of intensity 1. */
     public double gasFluxPpm = 2000.0;
     public double minHazardPpm = 1.0;
@@ -132,6 +199,10 @@ public final class GeothermalConfig {
         if (stepSeconds <= 0) throw new IllegalArgumentException("stepSeconds must be > 0");
         if (timeScale <= 0) throw new IllegalArgumentException("timeScale must be > 0");
         if (diffusivity < 0 || surfaceLossPerSecond < 0) throw new IllegalArgumentException("negative heat rate");
+        if (hazardZoneCells < 1) throw new IllegalArgumentException("hazardZoneCells must be >= 1");
+        if (!(vapourDominatedWater >= 0 && vapourDominatedWater < 1)) {
+            throw new IllegalArgumentException("vapourDominatedWater must be in [0, 1)");
+        }
         if (fumaroleFullC <= fumaroleMinC) throw new IllegalArgumentException("fumaroleFullC must exceed fumaroleMinC");
         if (activityFullChamberC <= activityMinChamberC) {
             throw new IllegalArgumentException("activityFullChamberC must exceed activityMinChamberC");
