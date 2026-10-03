@@ -226,6 +226,19 @@ public final class MagmaChamber implements Subsystem, MagmaState {
                 eruptionRate, eruptedVolume, erupting);
     }
 
+    /**
+     * Removes magma into an intrusion (dike or sill) without erupting it. Overpressure drops by
+     * {@code volume / (V β)}, the same elastic relation that recharge raises it by.
+     *
+     * @return the overpressure drop (MPa)
+     */
+    public double withdraw(double volume) {
+        if (!(volume > 0)) return 0;
+        double drop = volume / (config.volume() * effectiveCompressibility());
+        overpressure -= drop;
+        return drop;
+    }
+
     // ── Derived physics ──
 
     /** Lithostatic pressure at the chamber's physical depth (MPa). */
