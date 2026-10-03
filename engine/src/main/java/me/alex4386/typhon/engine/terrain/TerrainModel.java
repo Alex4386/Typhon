@@ -50,6 +50,15 @@ public final class TerrainModel implements Subsystem {
         return chunks.containsKey(key(x >> 4, z >> 4));
     }
 
+    /**
+     * Read-only view of a chunk for hot loops, or {@code null} if unknown. A view stays valid until
+     * a {@link TerrainSnapshot} replaces the chunk; compare instances and {@link
+     * TerrainChunkView#version()} to detect changes.
+     */
+    public TerrainChunkView chunkView(int chunkX, int chunkZ) {
+        return chunks.get(key(chunkX, chunkZ));
+    }
+
     /** Returns the column, or {@code null} if the host has not sent that chunk. */
     public TerrainColumn column(int x, int z) {
         TerrainChunk chunk = chunks.get(key(x >> 4, z >> 4));

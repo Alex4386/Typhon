@@ -1,5 +1,7 @@
 package me.alex4386.typhon.engine.lava;
 
+import me.alex4386.typhon.engine.terrain.TerrainChunkView;
+
 /** Lava state of one 16×16 chunk as flat primitive arrays, indexed {@code (z & 15) * 16 + (x & 15)}. */
 final class LavaChunk {
     static final int AREA = 256;
@@ -10,14 +12,23 @@ final class LavaChunk {
     final long key;
 
     // Simulation state (persisted)
-    double[] thickness = new double[AREA];
+    double[] thickness = new double[AREA]; // molten core (m)
     double[] temperature = new double[AREA];
     double[] silica = new double[AREA];
     double[] water = new double[AREA];
     final double[] solid = new double[AREA]; // solidified rock not yet amounting to a whole block
+    final double[] crust = new double[AREA]; // rigid crust/roof on top of the melt (m)
+    final double[] roofTop = new double[AREA]; // absolute y of the crust top (valid while crust > 0)
+    final byte[] crustKind = new byte[AREA]; // LavaPalette.crustKind of the crust
+
+    // What is currently shown in the world (persisted, for compare-and-set diffs). From renderBottom
+    // upward: renderMelt lava blocks, renderGap air blocks, renderRoof roof blocks.
     final int[] renderBottom = new int[AREA];
-    final short[] renderCount = new short[AREA];
-    final byte[] renderTop = new byte[AREA]; // kind << 3 | level; kind 0 none, 1 lava, 2 magma crust
+    final short[] renderMelt = new short[AREA];
+    final short[] renderGap = new short[AREA];
+    final short[] renderRoof = new short[AREA];
+    final byte[] renderTop = new byte[AREA]; // top melt block: kind << 3 | level; kind 1 lava, 2 magma crust
+    final byte[] renderRoofKind = new byte[AREA];
 
     // Double buffers and per-step scratch (transient)
     double[] nextThickness = new double[AREA];
@@ -25,19 +36,25 @@ final class LavaChunk {
     double[] nextSilica = new double[AREA];
     double[] nextWater = new double[AREA];
     final double[] outflow = new double[4 * AREA]; // direction-major
+    final double[] speed = new double[AREA]; // physical mean flow speed q/h this step (m/s)
     final int[] ground = new int[AREA];
     final int[] waterY = new int[AREA];
+    final long[] sourceStamp = new long[AREA]; // == step stamp while an effusive source feeds the cell
     final LavaChunk[] neighbours = new LavaChunk[4];
+    TerrainChunkView terrainView; // terrain the ground/waterY caches were read from
+    int terrainVersion;
     long freshStamp = Long.MIN_VALUE;
     long fluxStamp = Long.MIN_VALUE;
     long neighbourStamp = Long.MIN_VALUE;
     long touchedStamp = Long.MIN_VALUE;
     int lavaCells;
+    int crustCells;
 
     LavaChunk(int cx, int cz) {
         this.cx = cx;
         this.cz = cz;
         this.key = key(cx, cz);
+        java.util.Arrays.fill(sourceStamp, Long.MIN_VALUE);
     }
 
     static long key(int cx, int cz) {
@@ -50,6 +67,10 @@ final class LavaChunk {
 
     int worldZ(int i) {
         return (cz << 4) | (i >> 4);
+    }
+
+    int renderCount(int i) {
+        return renderMelt[i] + renderGap[i] + renderRoof[i];
     }
 
     void swapBuffers() {
@@ -69,14 +90,23 @@ final class LavaChunk {
 
     void recount() {
         int n = 0;
-        for (int i = 0; i < AREA; i++) if (thickness[i] > 0) n++;
+        int k = 0;
+        for (int i = 0; i < AREA; i++) {
+            if (thickness[i] > 0) n++;
+            if (crust[i] > 0) k++;
+        }
         lavaCells = n;
+        crustCells = k;
+    }
+
+    boolean isActive() {
+        return lavaCells > 0 || crustCells > 0;
     }
 
     boolean hasPersistentState() {
-        if (lavaCells > 0) return true;
+        if (isActive()) return true;
         for (int i = 0; i < AREA; i++) {
-            if (solid[i] != 0 || renderCount[i] != 0) return true;
+            if (solid[i] != 0 || renderCount(i) != 0) return true;
         }
         return false;
     }
