@@ -82,14 +82,16 @@ class GeothermalTest {
     }
 
     /**
-     * Config for a frozen, uniform thermal state: no diffusion, no loss, no sources, water pinned at
-     * {@code water}, and two simulated hours per step.
+     * Config for a frozen, uniform thermal state: no diffusion, no loss, no boiling buffer, no
+     * sources, water pinned at {@code water}, and two simulated hours per step.
      */
     static GeothermalConfig frozenConfig(double water) {
         GeothermalConfig config = smallConfig();
         config.diffusivity = 0;
         config.surfaceLossPerSecond = 0;
         config.boilOffPerSecond = 0;
+        config.boilingBufferPerSecond = 0;
+        config.lakeSaturationBonus = 0;
         config.baseSaturation = water;
         config.elevationSaturationPerBlock = 0;
         config.timeScale = 3600;
@@ -295,7 +297,8 @@ class GeothermalTest {
         double hotSo2 = hot.stream().filter(h -> h.species() == GasSpecies.SO2).mapToDouble(GasHazard::concentrationPpm).max().orElse(0);
         double mildSo2 = mild.stream().filter(h -> h.species() == GasSpecies.SO2).mapToDouble(GasHazard::concentrationPpm).max().orElse(0);
         assertTrue(hotSo2 > mildSo2, hotSo2 + " vs " + mildSo2);
-        assertTrue(hot.stream().allMatch(h -> h.durationSeconds() == config.hazardIntervalSeconds));
+        // Hazards stay valid until the zone's next update (refresh, change or clear).
+        assertTrue(hot.stream().allMatch(h -> h.durationSeconds() == config.hazardRefreshSeconds + config.hazardIntervalSeconds));
 
         List<GasHazard> cold = events(run(frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 60), 1, 10), GasHazard.class);
         assertTrue(cold.isEmpty());
@@ -428,6 +431,7 @@ class GeothermalTest {
     private static int cinnabar(double temperatureC) {
         GeothermalConfig config = frozenConfig(0.5);
         config.cinnabarPerHour = 5;
+        config.cinnabarSpringRadius = 0; // isolate the temperature band from the spring requirement
         Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), temperatureC);
         List<EngineFrame> frames = run(geothermal, 11, 30);
         long placed = changes(frames).stream().filter(c -> c.to().id().equals(GeothermalBlocks.CINNABAR)).count();

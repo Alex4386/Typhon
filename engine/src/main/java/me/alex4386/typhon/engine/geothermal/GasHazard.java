@@ -4,12 +4,13 @@ import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.EngineEvent;
 
 /**
- * A volume with elevated gas concentration, valid for {@code durationSeconds} (until the next
- * update). Hosts decide the consequences (nausea, poison, plant die-off, tool corrosion).
+ * A zone with elevated gas concentration. Each event replaces the previous one for the same zone
+ * and species and is valid for at most {@code durationSeconds}; a concentration of 0 clears the
+ * zone. Hosts decide the consequences (nausea, poison, plant die-off, tool corrosion).
  *
- * @param center centre of the hazard, one block above ground
+ * @param center centre of the hazard (above the hottest ground), one block above ground
  * @param radius horizontal radius in blocks
- * @param concentrationPpm concentration at the centre
+ * @param concentrationPpm peak concentration in the zone (0 = cleared)
  */
 public record GasHazard(
         long tick, BlockPos center, double radius, GasSpecies species, double concentrationPpm, double durationSeconds)

@@ -28,10 +28,13 @@ public final class PlumeModel {
         return StrictMath.pow(heightMeters / 2000.0, 1 / 0.241);
     }
 
-    /** Scaled plume height above the vent in blocks. */
-    public static double minecraftHeight(double massEruptionRate, int ventY, TephraConfig config) {
+    /**
+     * Scaled plume height in blocks above {@code baseY}, the y the column rises from; the top
+     * ({@code baseY + height}) never exceeds {@link TephraConfig#worldTopY}.
+     */
+    public static double minecraftHeight(double massEruptionRate, int baseY, TephraConfig config) {
         double real = realHeightMeters(massEruptionRate / ExplosivePhase.DRE_DENSITY);
         double scaled = real * config.plumeHeightScale;
-        return Math.max(0, Math.min(scaled, config.worldTopY - ventY));
+        return Math.max(0, Math.min(scaled, config.worldTopY - baseY));
     }
 }

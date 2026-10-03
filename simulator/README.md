@@ -38,7 +38,7 @@ Elevation 0 m maps to y = 62, and columns below it are flooded.
 
 Columns in `timeseries.csv` include overpressure, eruption rate, RSAM, VT/LP rates, alert level and style, plus lava, plume, tephra and geothermal state.
 
-Some high-frequency telemetry is left out of `events.ndjson` by default: `GasHazard`, `FumaroleActivity`, `AshFall`, `LavaSolidified` and `LavaEnteredWater`. These events are still counted in the report. Pass `--skip-events none` to write all of them.
+Some high-frequency lava telemetry is left out of `events.ndjson` by default: `LavaSolidified` and `LavaEnteredWater`. These events are still counted in the report. Pass `--skip-events none` to write all of them. (Gas hazards, fumarole activity and ash fall are aggregated by the engine, so they are written.)
 
 ## Presets
 

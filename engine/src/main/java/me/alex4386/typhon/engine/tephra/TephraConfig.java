@@ -91,6 +91,18 @@ public final class TephraConfig {
     /** Regions below both thresholds are not reported. */
     public double ashFallRateThreshold = 1e-5;
     public double ashLoadThreshold = 1e-3;
+    /**
+     * A region's ash fall is re-announced when it starts or clears (once, with zero rates), when its
+     * fall rate or airborne load changes by this fraction, and at least every
+     * {@link #ashEventRefreshTicks}. Each event stays valid until the next one for the same region.
+     */
+    public double ashEventChangeFraction = 0.5;
+    public int ashEventRefreshTicks = 1200;
+
+    /** Initial wind in model units (blocks/s), bearing it blows towards and variability in [0, 1]. */
+    public double initialWindSpeed = 5;
+    public double initialWindDirectionRad = 0;
+    public double initialWindVariability = 0;
     /** Airborne mass below this (kg) is discarded once the phase has ended. */
     public double minAirborneMass = 1;
 
@@ -144,6 +156,11 @@ public final class TephraConfig {
         c.ashEventRegionCells = ashEventRegionCells;
         c.ashFallRateThreshold = ashFallRateThreshold;
         c.ashLoadThreshold = ashLoadThreshold;
+        c.ashEventChangeFraction = ashEventChangeFraction;
+        c.ashEventRefreshTicks = ashEventRefreshTicks;
+        c.initialWindSpeed = initialWindSpeed;
+        c.initialWindDirectionRad = initialWindDirectionRad;
+        c.initialWindVariability = initialWindVariability;
         c.minAirborneMass = minAirborneMass;
         c.lightningPerMassRate = lightningPerMassRate;
         c.maxLightningPerSecond = maxLightningPerSecond;
@@ -153,6 +170,7 @@ public final class TephraConfig {
 
     void validate() {
         if (!(massScale > 0)) throw new IllegalArgumentException("massScale must be > 0");
+        if (ashEventRefreshTicks < 1) throw new IllegalArgumentException("ashEventRefreshTicks must be >= 1");
         if (substepsPerTick < 1) throw new IllegalArgumentException("substepsPerTick must be >= 1");
         if (ashStepTicks < 1 || ashEventTicks < 1) throw new IllegalArgumentException("tick intervals must be >= 1");
         if (cellSize < 1 || gridCells < 1) throw new IllegalArgumentException("grid must be non-empty");

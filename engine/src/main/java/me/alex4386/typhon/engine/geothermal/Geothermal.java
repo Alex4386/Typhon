@@ -44,8 +44,16 @@ import me.alex4386.typhon.engine.world.BlockState;
  *       H·d³/(r² + d²)^{3/2}} is the surface footprint of a buried point source at depth {@code d}.
  *       Lava on the surface adds heat via {@link #addLavaHeat}.
  *   <li><b>Water</b>: {@code w} relaxes towards a terrain-derived target (submerged ⇒ 1, otherwise
- *       {@code base + (localMeanGround − ground)·k}) and boils off above 100 °C, so the hottest ground
- *       becomes vapour-dominated (fumaroles) while warm, wet lowlands host springs and geysers.
+ *       {@code base + (localMeanGround − ground)·k + lakeBonus·e^(−d_lake/L)}) and boils off above
+ *       100 °C.
+ *   <li><b>Boiling</b>: a cell represents a shallow reservoir at {@code reservoirDepthM}; its boiling
+ *       point follows the boiling-point-with-depth curve {@code T_bp = 100 + 3·z^0.7} (fit to Haas
+ *       1971: ≈115 °C at 10 m, ≈150 °C at 50 m, ≈200 °C at 150 m). Liquid-dominated cells
+ *       ({@code w} above {@code vapourDominatedWater}) cannot heat beyond it: excess heat leaves as
+ *       boiling outflow, {@code T → T_bp} at a rate ∝ {@code (w − w_v)/(1 − w_v)}. Well-watered
+ *       basins therefore stay near boiling and wet (springs, geysers), while poorly supplied ground
+ *       heats up, boils dry and becomes vapour-dominated (fumaroles, acid alteration) — the
+ *       liquid-/vapour-dominated dichotomy of real hydrothermal systems.
  *   <li><b>Manifestations</b>: per cell and feature, a Poisson number of formation attempts with mean
  *       {@code rate × strength × dt/3600} is drawn; each attempt picks a random column in the cell
  *       and builds the feature if local conditions allow (surface type, spacing, caps, containment).
@@ -68,12 +76,18 @@ public final class Geothermal implements Subsystem {
     private final TreeMap<Long, PlacedFeature> features = new TreeMap<>();
     private final Map<HydrothermalFeature, Integer> counts = new EnumMap<>(HydrothermalFeature.class);
     private double hazardClock;
+    private boolean prewarmed;
+    /** Last announced fumarole intensity and tick, by column key. */
+    private final TreeMap<Long, double[]> fumaroleReports = new TreeMap<>();
+    /** Last announced hazard concentration and tick, by {@code zone · species count + species}. */
+    private final TreeMap<Long, double[]> hazardReports = new TreeMap<>();
 
     // Derived each step from the terrain (not persisted).
     private final boolean[] known;
     private final boolean[] submerged;
     private final int[] ground;
     private final double[] localMean;
+    private final double[] lakeDistance;
     private final double[] source;
 
     public Geothermal(
@@ -100,6 +114,7 @@ public final class Geothermal implements Subsystem {
         this.submerged = new boolean[n];
         this.ground = new int[n];
         this.localMean = new double[n];
+        this.lakeDistance = new double[n];
         this.source = new double[n];
     }
 
@@ -119,6 +134,10 @@ public final class Geothermal implements Subsystem {
     public void step(StepContext context) {
         double dt = context.dtSeconds() * config.timeScale;
         sampleTerrain();
+        if (!prewarmed && config.prewarmSeconds > 0 && knownFraction() >= 0.5) {
+            equilibrate(config.prewarmSeconds);
+            prewarmed = true;
+        }
         updateWater(dt);
         updateHeat(dt);
 
@@ -200,7 +219,29 @@ public final class Geothermal implements Subsystem {
             double dt = Math.min(chunk, seconds - t);
             updateWater(dt);
             grid.diffuse(dt, config.diffusivity, config.surfaceLossPerSecond, source);
+            boilingBuffer(dt);
         }
+    }
+
+    /** Boiling point (°C) of the shallow reservoir a cell represents (boiling-point-with-depth curve). */
+    public double boilingPointC() {
+        return boilingPointAtDepth(config.reservoirDepthM);
+    }
+
+    /** {@code T_bp(z) = 100 + 3·z^0.7}: fit to the boiling-point-with-depth curve of pure water. */
+    static double boilingPointAtDepth(double depthM) {
+        return 100 + 3.0 * StrictMath.pow(Math.max(0, depthM), 0.7);
+    }
+
+    /** True once the shallow system at the column is vapour-dominated (too dry to convect). */
+    public boolean vapourDominatedAt(int x, int z) {
+        return waterAt(x, z) <= config.vapourDominatedWater;
+    }
+
+    private double knownFraction() {
+        int n = 0;
+        for (boolean k : known) if (k) n++;
+        return (double) n / known.length;
     }
 
     private static final double EQUILIBRATE_CHUNK_SECONDS = 300;
@@ -253,6 +294,39 @@ public final class Geothermal implements Subsystem {
             }
             localMean[idx] = count == 0 ? ground[idx] : (double) sum / count;
         }
+        computeLakeDistance();
+    }
+
+    /** Chamfer (3-4) distance transform, in blocks, from each cell to the nearest submerged cell. */
+    private void computeLakeDistance() {
+        int sx = grid.sizeX();
+        int sz = grid.sizeZ();
+        double inf = Double.POSITIVE_INFINITY;
+        for (int idx = 0; idx < lakeDistance.length; idx++) lakeDistance[idx] = submerged[idx] ? 0 : inf;
+        double straight = grid.cellSize();
+        double diagonal = grid.cellSize() * Math.sqrt(2);
+        for (int j = 0; j < sz; j++) {
+            for (int i = 0; i < sx; i++) {
+                int idx = grid.index(i, j);
+                double d = lakeDistance[idx];
+                if (i > 0) d = Math.min(d, lakeDistance[idx - 1] + straight);
+                if (j > 0) d = Math.min(d, lakeDistance[idx - sx] + straight);
+                if (i > 0 && j > 0) d = Math.min(d, lakeDistance[idx - sx - 1] + diagonal);
+                if (i + 1 < sx && j > 0) d = Math.min(d, lakeDistance[idx - sx + 1] + diagonal);
+                lakeDistance[idx] = d;
+            }
+        }
+        for (int j = sz - 1; j >= 0; j--) {
+            for (int i = sx - 1; i >= 0; i--) {
+                int idx = grid.index(i, j);
+                double d = lakeDistance[idx];
+                if (i + 1 < sx) d = Math.min(d, lakeDistance[idx + 1] + straight);
+                if (j + 1 < sz) d = Math.min(d, lakeDistance[idx + sx] + straight);
+                if (i + 1 < sx && j + 1 < sz) d = Math.min(d, lakeDistance[idx + sx + 1] + diagonal);
+                if (i > 0 && j + 1 < sz) d = Math.min(d, lakeDistance[idx + sx - 1] + diagonal);
+                lakeDistance[idx] = d;
+            }
+        }
     }
 
     private void updateWater(double dt) {
@@ -264,8 +338,11 @@ public final class Geothermal implements Subsystem {
             } else if (submerged[idx]) {
                 target = 1;
             } else {
+                double lake = lakeDistance[idx] == Double.POSITIVE_INFINITY
+                        ? 0
+                        : config.lakeSaturationBonus * Math.exp(-lakeDistance[idx] / config.lakeInfluenceBlocks);
                 target = clamp(
-                        config.baseSaturation + (localMean[idx] - ground[idx]) * config.elevationSaturationPerBlock,
+                        config.baseSaturation + (localMean[idx] - ground[idx]) * config.elevationSaturationPerBlock + lake,
                         0,
                         1);
             }
@@ -281,6 +358,27 @@ public final class Geothermal implements Subsystem {
     private void updateHeat(double dt) {
         computeSources();
         grid.diffuse(dt, config.diffusivity, config.surfaceLossPerSecond, source);
+        boilingBuffer(dt);
+    }
+
+    /**
+     * Liquid-dominated dry-land cells above their boiling point lose the excess heat by boiling
+     * outflow: {@code T → T_bp} at {@code boilingBufferPerSecond · (w − w_v)/(1 − w_v)} (exact
+     * exponential relaxation, so stiff rates stay stable).
+     */
+    private void boilingBuffer(double dt) {
+        if (config.boilingBufferPerSecond <= 0) return;
+        double boiling = boilingPointC();
+        double wv = config.vapourDominatedWater;
+        for (int idx = 0; idx < grid.cellCount(); idx++) {
+            if (!known[idx] || submerged[idx]) continue;
+            double temperature = config.ambientC + grid.excess(idx);
+            if (temperature <= boiling) continue;
+            double liquid = (grid.water(idx) - wv) / (1 - wv);
+            if (liquid <= 0) continue;
+            double next = boiling + (temperature - boiling) * Math.exp(-config.boilingBufferPerSecond * liquid * dt);
+            grid.setExcess(idx, next - config.ambientC);
+        }
     }
 
     private void computeSources() {
@@ -367,19 +465,19 @@ public final class Geothermal implements Subsystem {
                     && w <= config.mudPotMaxWater) {
                 attempts(context, idx, config.mudPotFormationPerHour * dtHours, (x, z) -> tryMudPot(context, x, z));
             }
-            if (temperature >= config.acidMinC && w < config.acidMaxWater) {
+            if (temperature >= config.acidMinC && count(HydrothermalFeature.ACID_ALTERATION) < config.maxAltered) {
                 double strength = clamp((temperature - config.acidMinC) / 100, 0.1, 1);
+                boolean unsaturated = w < config.acidMaxWater;
                 attempts(context, idx, config.acidAlterationPerHour * strength * dtHours,
-                        (x, z) -> tryAlteration(context, x, z, HydrothermalFeature.ACID_ALTERATION,
-                                pickAcidProduct(random)));
+                        (x, z) -> tryAcidAlteration(context, x, z, unsaturated, random));
             }
-            if (inBand(temperature, config.sinterMinC, config.sinterMaxC) && w >= config.sinterMinWater) {
-                attempts(context, idx, config.sinterPerHour * dtHours,
-                        (x, z) -> tryAlteration(context, x, z, HydrothermalFeature.SINTER, pickSinterProduct(random)));
+            if (inBand(temperature, config.sinterMinC, config.sinterMaxC) && w >= config.sinterMinWater
+                    && count(HydrothermalFeature.SINTER) < config.maxSinter) {
+                attempts(context, idx, config.sinterPerHour * dtHours, (x, z) -> trySinter(context, x, z, random));
             }
-            if (inBand(temperature, config.cinnabarMinC, config.cinnabarMaxC) && w >= config.cinnabarMinWater) {
-                attempts(context, idx, config.cinnabarPerHour * dtHours,
-                        (x, z) -> tryAlteration(context, x, z, HydrothermalFeature.CINNABAR, GeothermalBlocks.CINNABAR));
+            if (inBand(temperature, config.cinnabarMinC, config.cinnabarMaxC) && w >= config.cinnabarMinWater
+                    && count(HydrothermalFeature.CINNABAR) < config.maxCinnabar) {
+                attempts(context, idx, config.cinnabarPerHour * dtHours, (x, z) -> tryCinnabar(context, x, z));
             }
         }
     }
@@ -551,6 +649,40 @@ public final class Geothermal implements Subsystem {
         return true;
     }
 
+    /**
+     * Acid-sulfate alteration grows outward from fumaroles and altered ground, where condensing steam
+     * acidifies the soil whatever the deeper saturation. An isolated patch nucleates only on
+     * unsaturated (two-phase / vapour-dominated) ground, with probability
+     * {@code alterationNucleationFactor}.
+     */
+    private boolean tryAcidAlteration(StepContext context, int x, int z, boolean unsaturated, SimRandom random) {
+        if (count(HydrothermalFeature.ACID_ALTERATION) >= config.maxAltered) return false;
+        boolean adjacent = hasNearby(x, z, config.alterationGrowthRadius,
+                HydrothermalFeature.FUMAROLE, HydrothermalFeature.ACID_ALTERATION, HydrothermalFeature.SULFUR_DEPOSIT);
+        if (!adjacent && !(unsaturated && random.chance(config.alterationNucleationFactor))) return false;
+        return tryAlteration(context, x, z, HydrothermalFeature.ACID_ALTERATION, pickAcidProduct(random));
+    }
+
+    /** Sinter spreads from springs, geysers and existing sinter; isolated seeps are rare. */
+    private boolean trySinter(StepContext context, int x, int z, SimRandom random) {
+        if (count(HydrothermalFeature.SINTER) >= config.maxSinter) return false;
+        boolean adjacent = hasNearby(x, z, config.sinterGrowthRadius, HydrothermalFeature.HOT_SPRING,
+                HydrothermalFeature.SULFUR_SPRING, HydrothermalFeature.GEYSER, HydrothermalFeature.SINTER);
+        if (!adjacent && !random.chance(config.sinterNucleationFactor)) return false;
+        return tryAlteration(context, x, z, HydrothermalFeature.SINTER, pickSinterProduct(random));
+    }
+
+    /** Cinnabar precipitates where cooling spring fluids reach the surface: next to springs, geysers or sinter. */
+    private boolean tryCinnabar(StepContext context, int x, int z) {
+        if (count(HydrothermalFeature.CINNABAR) >= config.maxCinnabar) return false;
+        if (config.cinnabarSpringRadius > 0 && !hasNearby(x, z, config.cinnabarSpringRadius,
+                HydrothermalFeature.HOT_SPRING, HydrothermalFeature.SULFUR_SPRING, HydrothermalFeature.GEYSER,
+                HydrothermalFeature.SINTER)) {
+            return false;
+        }
+        return tryAlteration(context, x, z, HydrothermalFeature.CINNABAR, GeothermalBlocks.CINNABAR);
+    }
+
     private boolean tryAlteration(StepContext context, int x, int z, HydrothermalFeature kind, BlockId product) {
         TerrainColumn column = buildableColumn(x, z);
         if (column == null) return false;
@@ -656,11 +788,28 @@ public final class Geothermal implements Subsystem {
 
     // ── Events ──
 
+    /**
+     * Announces fumarole activity when it starts, when its intensity changes by
+     * {@code fumaroleReportDelta}, at least every {@code fumaroleRefreshSeconds}, and once with
+     * intensity 0 when it dies down. Hosts keep rendering the last announced state.
+     */
     private void emitFumaroleActivity(StepContext context) {
+        long refreshTicks = Math.max(1, Math.round(config.fumaroleRefreshSeconds * 20));
         for (PlacedFeature fumarole : features(HydrothermalFeature.FUMAROLE)) {
+            long key = PlacedFeature.key(fumarole.x(), fumarole.z());
             double temperature = temperatureAt(fumarole.x(), fumarole.z());
             double intensity = fumaroleIntensity(temperature);
-            if (intensity <= 0) continue;
+            double[] last = fumaroleReports.get(key);
+            boolean report;
+            if (intensity <= 0) {
+                report = last != null && last[0] > 0;
+            } else {
+                report = last == null
+                        || Math.abs(intensity - last[0]) >= config.fumaroleReportDelta
+                        || context.tick() - (long) last[1] >= refreshTicks;
+            }
+            if (!report) continue;
+            fumaroleReports.put(key, new double[] {intensity, context.tick()});
             context.outbox().emit(new FumaroleActivity(
                     context.tick(),
                     new BlockPos(fumarole.x(), fumarole.y() + 1, fumarole.z()),
@@ -669,27 +818,78 @@ public final class Geothermal implements Subsystem {
         }
     }
 
+    /**
+     * Gas hazards aggregated over square zones of {@code hazardZoneCells} cells: per zone and species
+     * the peak concentration, centred on the zone and covering it. A zone is announced
+     * when it appears, when its concentration changes by {@code hazardChangeFraction}, at least every
+     * {@code hazardRefreshSeconds}, and once with concentration 0 when it clears.
+     */
     private void emitHazards(StepContext context) {
-        for (int idx = 0; idx < grid.cellCount(); idx++) {
-            if (!known[idx]) continue;
-            double temperature = config.ambientC + grid.excess(idx);
-            double intensity = fumaroleIntensity(temperature);
-            if (intensity <= 0) continue;
-            GasComposition gas = GasComposition.atTemperature(temperature);
-            BlockPos center = new BlockPos(grid.cellCenterX(idx), ground[idx] + 1, grid.cellCenterZ(idx));
-            double radius = config.cellSize * (1 + intensity);
-            for (GasSpecies species : GasSpecies.values()) {
-                double ppm = gas.fraction(species) * intensity * config.gasFluxPpm;
-                if (species == GasSpecies.CO2) {
-                    // CO₂ is denser than air and pools in depressions.
-                    ppm *= 1 + clamp((localMean[idx] - ground[idx]) / 4, 0, 2);
+        int zoneCells = config.hazardZoneCells;
+        int zonesX = (grid.sizeX() + zoneCells - 1) / zoneCells;
+        int zonesZ = (grid.sizeZ() + zoneCells - 1) / zoneCells;
+        GasSpecies[] speciesList = GasSpecies.values();
+        long refreshTicks = Math.max(1, Math.round(config.hazardRefreshSeconds * 20));
+        double radius = zoneCells * config.cellSize * Math.sqrt(0.5);
+        double validFor = config.hazardRefreshSeconds + config.hazardIntervalSeconds;
+
+        double[] peak = new double[speciesList.length];
+        for (int zj = 0; zj < zonesZ; zj++) {
+            for (int zi = 0; zi < zonesX; zi++) {
+                Arrays.fill(peak, 0);
+                for (int j = zj * zoneCells; j < Math.min(grid.sizeZ(), (zj + 1) * zoneCells); j++) {
+                    for (int i = zi * zoneCells; i < Math.min(grid.sizeX(), (zi + 1) * zoneCells); i++) {
+                        int idx = grid.index(i, j);
+                        if (!known[idx]) continue;
+                        double temperature = config.ambientC + grid.excess(idx);
+                        double intensity = fumaroleIntensity(temperature);
+                        if (intensity <= 0) continue;
+                        GasComposition gas = GasComposition.atTemperature(temperature);
+                        for (int s = 0; s < speciesList.length; s++) {
+                            double ppm = gas.fraction(speciesList[s]) * intensity * config.gasFluxPpm;
+                            if (speciesList[s] == GasSpecies.CO2) {
+                                // CO₂ is denser than air and pools in depressions.
+                                ppm *= 1 + clamp((localMean[idx] - ground[idx]) / 4, 0, 2);
+                            }
+                            peak[s] = Math.max(peak[s], ppm);
+                        }
+                    }
                 }
-                if (ppm >= config.minHazardPpm) {
-                    context.outbox().emit(new GasHazard(
-                            context.tick(), center, radius, species, ppm, config.hazardIntervalSeconds));
+
+                int zone = zj * zonesX + zi;
+                for (int s = 0; s < speciesList.length; s++) {
+                    long key = (long) zone * speciesList.length + s;
+                    double[] last = hazardReports.get(key);
+                    double ppm = peak[s] >= config.minHazardPpm ? peak[s] : 0;
+                    if (ppm == 0) {
+                        if (last == null) continue;
+                        hazardReports.remove(key);
+                        context.outbox().emit(new GasHazard(context.tick(), zoneCenter(zi, zj, zoneCells), radius,
+                                speciesList[s], 0, 0));
+                        continue;
+                    }
+                    boolean report = last == null
+                            || Math.abs(ppm - last[0]) >= config.hazardChangeFraction * last[0]
+                            || context.tick() - (long) last[1] >= refreshTicks;
+                    if (!report) continue;
+                    hazardReports.put(key, new double[] {ppm, context.tick()});
+                    context.outbox().emit(new GasHazard(context.tick(), zoneCenter(zi, zj, zoneCells), radius,
+                            speciesList[s], ppm, validFor));
                 }
             }
         }
+    }
+
+    /**
+     * Hazard centre: the middle of the zone, one block above its ground. It is the same for every
+     * event of a zone, so hosts can key hazards by centre and species.
+     */
+    private BlockPos zoneCenter(int zi, int zj, int zoneCells) {
+        int i = Math.min(grid.sizeX() - 1, zi * zoneCells + zoneCells / 2);
+        int j = Math.min(grid.sizeZ() - 1, zj * zoneCells + zoneCells / 2);
+        int idx = grid.index(i, j);
+        int y = known[idx] ? ground[idx] : referenceY;
+        return new BlockPos(grid.cellMinX(idx), y + 1, grid.cellMinZ(idx));
     }
 
     private void formed(StepContext context, HydrothermalFeature kind, BlockPos pos) {
@@ -806,6 +1006,31 @@ public final class Geothermal implements Subsystem {
             list.add(entry);
         }
         out.add("features", list);
+        out.addProperty("prewarmed", prewarmed);
+        out.add("fumaroleReports", saveReports(fumaroleReports));
+        out.add("hazardReports", saveReports(hazardReports));
+    }
+
+    private static JsonArray saveReports(TreeMap<Long, double[]> reports) {
+        JsonArray list = new JsonArray();
+        for (Map.Entry<Long, double[]> e : reports.entrySet()) {
+            JsonArray entry = new JsonArray();
+            entry.add(e.getKey());
+            entry.add(Double.doubleToRawLongBits(e.getValue()[0]));
+            entry.add((long) e.getValue()[1]);
+            list.add(entry);
+        }
+        return list;
+    }
+
+    private static void loadReports(JsonObject in, String name, TreeMap<Long, double[]> target) {
+        target.clear();
+        if (!in.has(name)) return;
+        for (JsonElement element : in.getAsJsonArray(name)) {
+            JsonArray entry = element.getAsJsonArray();
+            target.put(entry.get(0).getAsLong(), new double[] {
+                Double.longBitsToDouble(entry.get(1).getAsLong()), entry.get(2).getAsLong()});
+        }
     }
 
     @Override
@@ -831,6 +1056,9 @@ public final class Geothermal implements Subsystem {
                     HydrothermalFeature.valueOf(entry.get(3).getAsString()),
                     entry.get(4).getAsInt()));
         }
+        prewarmed = in.has("prewarmed") && in.get("prewarmed").getAsBoolean();
+        loadReports(in, "fumaroleReports", fumaroleReports);
+        loadReports(in, "hazardReports", hazardReports);
     }
 
     private static String encode(double[] values) {

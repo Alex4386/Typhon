@@ -94,12 +94,24 @@ public final class VolcanoSystem {
         tephraConfig.ballisticSpeedScale = scaling.velocityScale();
         tephraConfig.plumeHeightScale = scaling.plumeHeightScale();
         tephraConfig.massScale = scaling.volumeScale();
+        if (b.windSet) {
+            tephraConfig.initialWindSpeed = b.windSpeed * scaling.velocityScale();
+            tephraConfig.initialWindDirectionRad = b.windBearing;
+            tephraConfig.initialWindVariability = b.windVariability;
+        }
         this.tephra = new TephraSubsystem("tephra:" + volcanoId, b.terrain, tephraConfig);
 
-        this.geothermal = b.geothermal
-                ? new Geothermal(volcanoId, b.geothermalConfig != null ? b.geothermalConfig : new GeothermalConfig(),
-                        primary, chamber, b.terrain, b.palette, vents)
-                : null;
+        if (b.geothermal) {
+            GeothermalConfig geothermalConfig = b.geothermalConfig != null ? b.geothermalConfig : new GeothermalConfig();
+            if (b.geothermalPrewarmSeconds >= 0) geothermalConfig.prewarmSeconds = b.geothermalPrewarmSeconds;
+            BlockPos chamberCenter = chamberConfig.center();
+            BlockPos center = b.geothermalCenter != null
+                    ? b.geothermalCenter
+                    : new BlockPos(chamberCenter.x(), primary.y(), chamberCenter.z());
+            this.geothermal = new Geothermal(volcanoId, geothermalConfig, center, chamber, b.terrain, b.palette, vents);
+        } else {
+            this.geothermal = null;
+        }
 
         if (b.massFlows) {
             MassFlowConfig pdcConfig = b.pdcConfig != null ? b.pdcConfig.copy() : MassFlowConfig.pdc();
@@ -150,6 +162,15 @@ public final class VolcanoSystem {
         return engine;
     }
 
+    /**
+     * Changes the wind tephra is carried by: real speed (m/s, scaled by
+     * {@link VolcanoScaling#velocityScale()}), bearing it blows towards and variability in [0, 1].
+     * Applied on the tephra subsystem's next step.
+     */
+    public void setWind(double realSpeed, double bearingRad, double variability) {
+        tephra.setWind(realSpeed * scaling.velocityScale(), bearingRad, variability);
+    }
+
     public String volcanoId() { return volcanoId; }
     public List<VentSite> vents() { return vents; }
     public VolcanoScaling scaling() { return scaling; }
@@ -187,6 +208,12 @@ public final class VolcanoSystem {
         private MassFlowConfig pdcConfig;
         private MassFlowConfig laharConfig;
         private double ballisticFraction = 0.05;
+        private boolean windSet;
+        private double windSpeed;
+        private double windBearing;
+        private double windVariability;
+        private BlockPos geothermalCenter;
+        private double geothermalPrewarmSeconds = -1;
 
         private Builder(String volcanoId, List<VentSite> vents, TerrainModel terrain, LavaFlow lava) {
             this.volcanoId = Objects.requireNonNull(volcanoId, "volcanoId");
@@ -203,6 +230,37 @@ public final class VolcanoSystem {
         public Builder tephra(TephraConfig config) { this.tephraConfig = config; return this; }
         public Builder geothermal(GeothermalConfig config) { this.geothermalConfig = config; return this; }
         public Builder geothermalEnabled(boolean enabled) { this.geothermal = enabled; return this; }
+
+        /**
+         * Initial wind for tephra transport: real speed (m/s, converted with
+         * {@link VolcanoScaling#velocityScale()}), bearing it blows towards (radians from +X towards
+         * +Z) and variability in [0, 1].
+         */
+        public Builder wind(double realSpeed, double bearingRad, double variability) {
+            if (!(realSpeed >= 0)) throw new IllegalArgumentException("wind speed must be >= 0");
+            this.windSet = true;
+            this.windSpeed = realSpeed;
+            this.windBearing = bearingRad;
+            this.windVariability = variability;
+            return this;
+        }
+
+        /**
+         * Centre of the geothermal grid. Defaults to the volcano centre: above the magma chamber, at the
+         * primary vent's height.
+         */
+        public Builder geothermalCenter(BlockPos center) { this.geothermalCenter = Objects.requireNonNull(center); return this; }
+
+        /**
+         * Model seconds of geothermal spin-up run once on the first step with terrain (overrides
+         * {@link GeothermalConfig#prewarmSeconds}), so the volcano starts with a developed
+         * hydrothermal system.
+         */
+        public Builder geothermalPrewarm(double seconds) {
+            if (!(seconds >= 0)) throw new IllegalArgumentException("prewarm seconds must be >= 0");
+            this.geothermalPrewarmSeconds = seconds;
+            return this;
+        }
         public Builder dikesEnabled(boolean enabled) { this.dikes = enabled; return this; }
         public Builder massFlowsEnabled(boolean enabled) { this.massFlows = enabled; return this; }
         public Builder deformationEnabled(boolean enabled) { this.deformation = enabled; return this; }
