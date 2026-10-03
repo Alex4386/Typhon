@@ -39,9 +39,12 @@ Tests assert physical relationships (basalt runs farther than dacite), not tuned
 | `magma` | `MagmaChamber` (lumped chamber: recharge, overpressure, crystallisation, Poiseuille eruption), `MeltViscosity` |
 | `seismic` | `SeismicityModel` (VT/LP/tremor/explosion, Gutenberg–Richter, RSAM), `SeismicIntensity` |
 | `alert` | `AlertLevelEstimator` (status with hysteresis), `EruptionStyleClassifier` |
-| `lava` | `LavaFlow` (MAGFLOW-style Bingham cellular automaton, cooling, solidification) |
+| `lava` | `LavaFlow` (MAGFLOW-style Bingham cellular automaton, cooling, crust and lava tubes, ocean-entry deltas) |
+| `dike` | `DikePropagation` (buoyancy/stress-driven dike ascent, flank fissures, induced VT hypocentres) |
+| `deformation` | `DeformationModel` (Mogi chamber source + dike dislocation, virtual GNSS/tilt stations) |
+| `massflow` | `PyroclasticFlows`, `Lahars` (Voellmy–Salm depth-averaged flows), `ColumnCollapse` (Woods 1988) |
 | `tephra` | `TephraSubsystem` (drag ballistics, Mastin plume, ash advection–diffusion and fall) |
 | `geothermal` | `Geothermal` (heat/groundwater grid, fumaroles, sulfur, geysers, springs, alteration) |
-| `assembly` | `VolcanoSystem` (wires one volcano together), `VolcanoCoupler` (eruption → lava/tephra) |
+| `assembly` | `VolcanoSystem` (wires one volcano together), `VolcanoCoupler` (vent selection, eruption → lava/tephra/PDC) |
 
 Build and test: `./gradlew :engine:test` (performance smoke tests: `./gradlew :engine:perfTest`).

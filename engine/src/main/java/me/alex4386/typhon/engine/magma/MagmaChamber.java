@@ -67,6 +67,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private double overpressureRate;
     private boolean pendingStart;
     private boolean pendingStop;
+    private boolean pendingFlank;
 
     public MagmaChamber(MagmaChamberConfig config) {
         this.config = config;
@@ -169,7 +170,21 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         }
     }
 
+    /**
+     * Starts an eruption at the current overpressure on the chamber's next step because magma reached
+     * the surface through a dike (no artificial pressure boost, unlike a forced start).
+     */
+    public void requestFlankEruption() {
+        pendingFlank = true;
+    }
+
     private void applyOverrides(StepContext context) {
+        if (pendingFlank) {
+            pendingFlank = false;
+            if (!erupting && overpressure > config.eruptionEndOverpressureMPa()) {
+                startEruption(context, Cause.DIKE);
+            }
+        }
         if (pendingStop) {
             pendingStop = false;
             if (erupting) {
@@ -376,6 +391,9 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     @Override
     public void saveState(JsonObject out) {
+        out.addProperty("pendingStart", pendingStart);
+        out.addProperty("pendingStop", pendingStop);
+        out.addProperty("pendingFlank", pendingFlank);
         out.addProperty("overpressure", overpressure);
         out.addProperty("temperature", temperature);
         out.addProperty("bulkSilica", bulkSilica);
@@ -392,6 +410,9 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     @Override
     public void loadState(JsonObject in) {
+        pendingStart = in.has("pendingStart") && in.get("pendingStart").getAsBoolean();
+        pendingStop = in.has("pendingStop") && in.get("pendingStop").getAsBoolean();
+        pendingFlank = in.has("pendingFlank") && in.get("pendingFlank").getAsBoolean();
         overpressure = in.get("overpressure").getAsDouble();
         temperature = in.get("temperature").getAsDouble();
         bulkSilica = in.get("bulkSilica").getAsDouble();

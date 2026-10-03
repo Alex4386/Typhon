@@ -1,6 +1,10 @@
 package me.alex4386.typhon.engine.seismic;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import java.util.ArrayList;
+import java.util.List;
 import me.alex4386.typhon.engine.magma.MeltViscosity;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.random.SimRandom;
@@ -34,6 +38,7 @@ public final class SeismicityModel implements Subsystem {
     private final SeismicConfig config;
     private final MagmaState magma;
 
+    private final List<BlockPos> induced = new ArrayList<>();
     private double rsam;
     private double vtRatePerMinute;
     private double lpRatePerMinute;
@@ -92,6 +97,14 @@ public final class SeismicityModel implements Subsystem {
             }
         }
 
+        // Induced VT events (e.g. dike-tip fracturing) at the hypocentres other subsystems reported.
+        for (BlockPos hypocenter : induced) {
+            double m = GutenbergRichter.sample(random, config.swarmBValue(), config.minMagnitude(), config.maxMagnitude());
+            transientAmplitude += emit(context, SeismicEventType.VT, m, hypocenter, transientTicks(0.5, m), true);
+        }
+        vtCount += induced.size();
+        induced.clear();
+
         int lpCount = random.nextPoisson(expectedLpRate * dt);
         for (int i = 0; i < lpCount; i++) {
             double m = GutenbergRichter.sample(random, config.lpBValue(), config.minMagnitude(), config.lpMaxMagnitude());
@@ -138,6 +151,14 @@ public final class SeismicityModel implements Subsystem {
             context.outbox().emit(new RsamSample(tick, config.volcanoId(), rsam, vtRatePerMinute, lpRatePerMinute,
                     explosionRatePerMinute, tremorActive(tick), swarmActive(tick)));
         }
+    }
+
+    /**
+     * Queues VT events at given hypocentres (e.g. a propagating dike's tip); they are emitted with
+     * swarm statistics on this model's next step and count towards VT rate and RSAM.
+     */
+    public void queueInducedVt(List<BlockPos> hypocenters) {
+        induced.addAll(hypocenters);
     }
 
     /** Expected VT rate (events/s) for the current magma state. */
@@ -269,6 +290,9 @@ public final class SeismicityModel implements Subsystem {
         out.addProperty("expectedLpRate", expectedLpRate);
         out.addProperty("expectedExplosionRate", expectedExplosionRate);
         out.addProperty("lastTick", lastTick);
+        JsonArray pendingInduced = new JsonArray();
+        for (BlockPos p : induced) pendingInduced.add(p.pack());
+        out.add("induced", pendingInduced);
     }
 
     @Override
@@ -284,5 +308,9 @@ public final class SeismicityModel implements Subsystem {
         expectedLpRate = in.get("expectedLpRate").getAsDouble();
         expectedExplosionRate = in.get("expectedExplosionRate").getAsDouble();
         lastTick = in.get("lastTick").getAsLong();
+        induced.clear();
+        if (in.has("induced")) {
+            for (JsonElement e : in.getAsJsonArray("induced")) induced.add(BlockPos.unpack(e.getAsLong()));
+        }
     }
 }

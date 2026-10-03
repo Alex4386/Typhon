@@ -9,6 +9,8 @@ import com.google.gson.JsonParser;
 import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.alert.AlertLevel;
+import me.alex4386.typhon.engine.dike.DikeEvents.FissureOpened;
+import me.alex4386.typhon.engine.magma.MagmaEvents;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
@@ -77,11 +79,17 @@ class VolcanoSystemTest {
     record World(Engine engine, TerrainModel terrain, LavaFlow lava, VolcanoSystem volcano) {}
 
     static World world(long seed, MagmaChamberConfig chamber, JsonObject restore) {
+        return world(seed, chamber, restore, false);
+    }
+
+    /** Dikes are off by default so the summit scenarios stay focused; see {@link #dikeOpensAFlankEruption}. */
+    static World world(long seed, MagmaChamberConfig chamber, JsonObject restore, boolean dikes) {
         TerrainModel terrain = new TerrainModel();
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder("test", List.of(CRATER), terrain, lava)
                 .chamber(chamber)
                 .scaling(VolcanoScaling.DEFAULT)
+                .dikesEnabled(dikes)
                 .build();
         Engine.Builder builder = Engine.builder(seed).add(terrain);
         volcano.addTo(builder).add(lava);
@@ -91,10 +99,10 @@ class VolcanoSystemTest {
         return new World(engine, terrain, lava, volcano);
     }
 
-    /** Basaltic chamber just below failure: erupts within minutes. */
+    /** Basaltic 10 km³ chamber just below failure: erupts within minutes. */
     static MagmaChamberConfig basalt() {
         return MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
-                .initialOverpressureMPa(14.5)
+                .initialOverpressureMPa(14.9)
                 .supplyVariability(0)
                 .build();
     }
@@ -173,7 +181,7 @@ class VolcanoSystemTest {
 
     @Test
     void saveAndRestoreMidEruptionIsBitForBit() {
-        int before = 20 * 120;
+        int before = 20 * 240;
         int after = 20 * 60;
 
         World reference = world(9, basalt(), null);
@@ -190,5 +198,33 @@ class VolcanoSystemTest {
         List<EngineFrame> resumed = run(second.engine(), after);
 
         assertEquals(referenceFrames.subList(before, before + after), resumed);
+    }
+
+    @Test
+    void dikeOpensAFlankEruption() {
+        MagmaChamberConfig chamber = MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
+                .initialOverpressureMPa(14.0) // above dike nucleation, below summit failure
+                .supplyVariability(0)
+                .build();
+        World w = world(3, chamber, null, true);
+        w.engine().tick();
+        w.volcano().dikes().forceDike();
+        List<EngineFrame> frames = run(w.engine(), 20 * 60 * 10);
+
+        List<FissureOpened> fissures = events(frames, FissureOpened.class);
+        assertFalse(fissures.isEmpty(), "the dike should reach the surface");
+        List<EruptionStarted> starts = events(frames, EruptionStarted.class);
+        assertFalse(starts.isEmpty(), "a flank eruption should follow");
+        assertEquals(MagmaEvents.Cause.DIKE, starts.get(0).cause());
+        assertTrue(fissures.get(0).tick() < starts.get(0).tick());
+
+        String fissureId = fissures.get(0).vent().id();
+        assertTrue(w.volcano().coupler().activeVents().stream().anyMatch(v -> v.id().equals(fissureId)),
+                "lava should come out of the fissure");
+        assertTrue(w.volcano().coupler().activeVents().stream().noneMatch(v -> v.id().equals(CRATER.id())),
+                "the summit stays quiet during a flank eruption");
+        long swarmEvents = events(frames, SeismicEvent.class).stream()
+                .filter(e -> e.swarm() && e.tick() <= fissures.get(0).tick()).count();
+        assertTrue(swarmEvents > 0, "the rising dike should cause a VT swarm");
     }
 }

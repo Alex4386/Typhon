@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.Objects;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.deformation.DikeGeometry;
@@ -62,6 +63,8 @@ public final class DikePropagation implements Subsystem {
      * @param terrain surface model for slopes and fissure elevation; may be {@code null} (flat world
      *     at the chamber's assumed surface)
      */
+    private Consumer<List<BlockPos>> hypocenterListener;
+
     public DikePropagation(DikeConfig config, DikeMagmaSource magma, TerrainModel terrain) {
         config.validate();
         this.config = config;
@@ -88,6 +91,14 @@ public final class DikePropagation implements Subsystem {
     }
 
     /** Nucleates a dike at the next step (same as {@link DikeCommands.ForceDike}). */
+    /**
+     * Receives the hypocentres of tip fracturing each time a dike advances (e.g.
+     * {@code seismicity::queueInducedVt}). Not persisted: re-attach when building the engine.
+     */
+    public void setHypocenterListener(Consumer<List<BlockPos>> listener) {
+        this.hypocenterListener = listener;
+    }
+
     public void forceDike() {
         forcedPending++;
     }
@@ -219,6 +230,7 @@ public final class DikePropagation implements Subsystem {
 
         dike.tipY = worldY(dike, dike.x, dike.z, dike.depth);
         if (travelled > 0) {
+            if (hypocenterListener != null && !hypocenters.isEmpty()) hypocenterListener.accept(hypocenters);
             context.outbox().emit(new DikeEvents.DikeAdvanced(context.tick(), volcanoId, dike.id, dike.tip(), dike.depth,
                     dike.speed, dike.opening, dike.volume, hypocenters));
         }

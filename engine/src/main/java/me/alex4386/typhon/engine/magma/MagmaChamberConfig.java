@@ -134,13 +134,13 @@ public record MagmaChamberConfig(
     public static final class Builder {
         private final String volcanoId;
         private final BlockPos center;
-        private double volume = 5e7;
+        private double volume = 1e10; // 10 km³; real chambers are ~1–100 km³
         private double compressibilityPerMPa = 2e-4;
         private double lithostaticDepth = 4000;
         private double conduitRadius = 1.5;
         private double tensileStrengthMPa = 15;
         private double eruptionEndOverpressureMPa = 2;
-        private double supplyRate = 0.01;
+        private double supplyRate = 0.3; // between arc (~0.01–0.1) and hotspot (~1–5) supply
         private double supplyVariability = 0.3;
         private double rechargeTemperatureC = 1180;
         private double rechargeSilicaWt = 50;

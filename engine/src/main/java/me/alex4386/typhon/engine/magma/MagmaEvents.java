@@ -10,7 +10,9 @@ public final class MagmaEvents {
         /** Overpressure exceeded the roof's tensile strength / fell below the end threshold. */
         AUTOMATIC,
         /** Started or stopped by a command. */
-        FORCED
+        FORCED,
+        /** Started because a dike reached the surface and opened a flank vent. */
+        DIKE
     }
 
     public record EruptionStarted(long tick, String volcanoId, double overpressureMPa, Cause cause)

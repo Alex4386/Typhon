@@ -25,8 +25,9 @@ import org.junit.jupiter.api.Test;
 class MagmaChamberTest {
     private static final BlockPos CENTER = new BlockPos(0, -40, 0);
 
+    /** A small, weakly supplied chamber (0.05 km³) so mechanics tests cycle quickly. */
     private static MagmaChamberConfig.Builder steady() {
-        return MagmaChamberConfig.builder("v", CENTER).supplyVariability(0);
+        return MagmaChamberConfig.builder("v", CENTER).volume(5e7).supplyRate(0.01).supplyVariability(0);
     }
 
     private static <T extends EngineEvent> List<T> run(Engine engine, int ticks, Class<T> type) {

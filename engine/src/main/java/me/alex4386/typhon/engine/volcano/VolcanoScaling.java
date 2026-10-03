@@ -23,8 +23,11 @@ public record VolcanoScaling(
         double dormantTimeCompression,
         double eruptiveTimeCompression) {
 
-    /** A small stratovolcano: 1 block = 4 m, columns 1 block = 100 m, dormancy ×5000. */
-    public static final VolcanoScaling DEFAULT = new VolcanoScaling(4, 100, 5000, 1);
+    /**
+     * A small stratovolcano: 1 block = 4 m, columns 1 block = 100 m, dormancy ×5000 (years of
+     * recharge in hours of play), eruptions ×20 (days-long eruptions in hours).
+     */
+    public static final VolcanoScaling DEFAULT = new VolcanoScaling(4, 100, 5000, 20);
 
     /** 1:1 physics, no compression (tests and reference runs). */
     public static final VolcanoScaling REAL = new VolcanoScaling(1, 1, 1, 1);
