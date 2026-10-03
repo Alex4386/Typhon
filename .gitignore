@@ -15,3 +15,7 @@ web/dist/
 
 .env
 .deploy/typhon.jar
+
+# gradle
+.gradle/
+build/

@@ -11,9 +11,9 @@ if [ -f ".env" ]; then
   source .env
 fi
 
-mvn package
+./gradlew build
 mkdir -p .deploy
-cp ./target/typhon-*.jar ./.deploy/typhon.jar
+cp ./build/libs/typhon-*.jar ./.deploy/typhon.jar
 
 if [ "$DEPLOY_METHOD" = "minehub" ]; then
   cd .deploy

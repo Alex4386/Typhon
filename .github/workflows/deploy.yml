@@ -1,5 +1,4 @@
-# This workflow will build a Java project with Maven
-# For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-maven
+# Builds the plugin with Gradle (via deploy.sh) and deploys it to the test server.
 
 name: Deploy to Test Server
 
@@ -20,7 +19,7 @@ jobs:
       with:
         distribution: 'temurin'
         java-version: 21
-        cache: 'maven'
+    - uses: gradle/actions/setup-gradle@v4
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v1
       with:
