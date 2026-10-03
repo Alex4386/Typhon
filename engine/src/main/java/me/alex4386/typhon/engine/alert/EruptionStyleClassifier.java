@@ -1,6 +1,7 @@
 package me.alex4386.typhon.engine.alert;
 
 import me.alex4386.typhon.engine.magma.MeltViscosity;
+import me.alex4386.typhon.engine.volcano.EruptiveRegime;
 import me.alex4386.typhon.engine.volcano.MagmaState;
 
 /**
@@ -15,8 +16,32 @@ public final class EruptionStyleClassifier {
     private EruptionStyleClassifier() {}
 
     public static EruptionStyle classify(MagmaState magma) {
+        if (magma.erupting()) {
+            EruptionStyle fromConduit = fromRegime(magma.eruptiveRegime(), magma);
+            if (fromConduit != null) return fromConduit;
+        }
         double viscosity = MeltViscosity.log10(magma.silicaWt(), magma.waterWt(), magma.temperatureC(), magma.crystalFraction());
         return classify(viscosity, magma.waterWt(), magma.eruptionRate());
+    }
+
+    /** Mass eruption rate (kg/s) separating sustained Plinian columns from weaker ash venting. */
+    public static final double PLINIAN_MASS_RATE = 1e6;
+
+    /**
+     * Style of an ongoing eruption from its conduit regime: fountains are Hawaiian, open vents
+     * Strombolian, outgassed viscous extrusion a lava dome; a sustained explosive column is Plinian
+     * above {@link #PLINIAN_MASS_RATE} (sub-Plinian columns included) and Vulcanian below.
+     *
+     * @return {@code null} when the regime is not resolved
+     */
+    public static EruptionStyle fromRegime(EruptiveRegime regime, MagmaState magma) {
+        return switch (regime) {
+            case FOUNTAINING -> EruptionStyle.HAWAIIAN;
+            case OPEN_VENT -> EruptionStyle.STROMBOLIAN;
+            case DOME -> EruptionStyle.LAVA_DOME;
+            case EXPLOSIVE -> magma.eruptionRate() * 2500 >= PLINIAN_MASS_RATE ? EruptionStyle.PLINIAN : EruptionStyle.VULCANIAN;
+            case UNKNOWN, QUIESCENT -> null;
+        };
     }
 
     /**

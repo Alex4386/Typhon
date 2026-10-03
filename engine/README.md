@@ -36,7 +36,7 @@ Tests assert physical relationships (basalt runs farther than dacite), not tuned
 | `math`, `world` | `BlockPos`, `BlockId`, `BlockState` |
 | `terrain` | `TerrainModel` (sparse column grid), `TerrainSnapshot` command |
 | `volcano` | Shared volcano model: `VentSite`, `MagmaState`, `VolcanoScaling` |
-| `magma` | `MagmaChamber` (lumped chamber: recharge, overpressure, crystallisation, Poiseuille eruption), `MeltViscosity` |
+| `magma` | `MagmaChamber` (lumped chamber: recharge, overpressure, crystallisation, Poiseuille eruption, open/closed conduit, Strombolian slugs, Vulcanian plugs), `ConduitFlow` (outgassing, brittle fragmentation, gas segregation → `EruptiveRegime`), `MeltViscosity` |
 | `seismic` | `SeismicityModel` (VT/LP/tremor/explosion, Gutenberg–Richter, RSAM), `SeismicIntensity` |
 | `alert` | `AlertLevelEstimator` (status with hysteresis), `EruptionStyleClassifier` |
 | `lava` | `LavaFlow` (MAGFLOW-style Bingham cellular automaton, cooling, crust and lava tubes, ocean-entry deltas) |

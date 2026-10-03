@@ -36,4 +36,17 @@ public interface MagmaState {
     default boolean erupting() {
         return eruptionRate() > 0;
     }
+
+    /** How the magma currently leaves the conduit; {@link EruptiveRegime#UNKNOWN} if not modelled. */
+    default EruptiveRegime eruptiveRegime() {
+        return EruptiveRegime.UNKNOWN;
+    }
+
+    /**
+     * Dissolved H₂O (wt%) still in the magma when it reaches the vent, after conduit outgassing.
+     * Controls surface explosivity; defaults to the chamber value when conduit flow is not modelled.
+     */
+    default double ventWaterWt() {
+        return waterWt();
+    }
 }

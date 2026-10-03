@@ -18,6 +18,7 @@ import me.alex4386.typhon.engine.sim.SimTime;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.tephra.TephraCommands.LaunchBomb;
+import me.alex4386.typhon.engine.tephra.TephraCommands.LaunchSalvo;
 import me.alex4386.typhon.engine.tephra.TephraCommands.SetWind;
 import me.alex4386.typhon.engine.tephra.TephraCommands.StartExplosivePhase;
 import me.alex4386.typhon.engine.tephra.TephraCommands.StopExplosivePhase;
@@ -105,6 +106,7 @@ public final class TephraSubsystem implements Subsystem {
         bus.register(StopExplosivePhase.class, c -> { if (c.target().equals(id)) pending.add(c); });
         bus.register(SetWind.class, c -> { if (c.target().equals(id)) pending.add(c); });
         bus.register(LaunchBomb.class, c -> { if (c.target().equals(id)) pending.add(c); });
+        bus.register(LaunchSalvo.class, c -> { if (c.target().equals(id)) pending.add(c); });
     }
 
     // ── Direct API (same effect as the commands; applied at this subsystem's next step) ──
@@ -119,6 +121,12 @@ public final class TephraSubsystem implements Subsystem {
 
     public void setWind(double speed, double directionRad, double variability) {
         pending.add(new SetWind(id, speed, directionRad, variability));
+    }
+
+    /** See {@link LaunchSalvo}; applied at this subsystem's next step. */
+    public void launchSalvo(VentSite vent, double ballisticMassKg, double exitSpeed, double zenithMeanDeg,
+            double zenithSigmaDeg, double silicaWt, int maxBombs) {
+        pending.add(new LaunchSalvo(id, vent, ballisticMassKg, exitSpeed, zenithMeanDeg, zenithSigmaDeg, silicaWt, maxBombs));
     }
 
     public void launchBomb(Vec3d start, Vec3d velocity, double diameter, double silicaWt) {
@@ -204,6 +212,7 @@ public final class TephraSubsystem implements Subsystem {
                 }
                 case SetWind set -> wind.set(set.speed(), set.directionRad(), set.variability(), context.random());
                 case LaunchBomb launch -> launch(context, launch.start(), launch.velocity(), launch.diameter(), launch.silicaWt());
+                case LaunchSalvo salvo -> launchSalvo(context, salvo);
                 default -> throw new IllegalStateException("Unexpected command " + command);
             }
         }
@@ -245,6 +254,39 @@ public final class TephraSubsystem implements Subsystem {
             Vec3d velocity = new Vec3d(
                     horizontal * StrictMath.cos(azimuth), speed * StrictMath.cos(zenith), horizontal * StrictMath.sin(azimuth));
             launch(context, sampleVentPoint(phase.vent(), random), velocity, diameter, phase.silicaWt());
+        }
+    }
+
+    private double meanBombMass() {
+        double sigma = config.bombDiameterSigma;
+        return Ballistics.sphereMass(config.bombMedianDiameter, config.bombDensity) * StrictMath.exp(4.5 * sigma * sigma);
+    }
+
+    private void launchSalvo(StepContext context, LaunchSalvo salvo) {
+        SimRandom random = context.random();
+        double expected = salvo.ballisticMassKg() * config.massScale / meanBombMass();
+        int count = (int) Math.floor(expected);
+        if (random.chance(expected - count)) count++;
+        count = Math.min(count, salvo.maxBombs());
+        if (count <= 0) return;
+
+        double exitSpeed = Math.max(config.minExitSpeed, Math.min(config.maxExitSpeed, salvo.exitSpeed()))
+                * config.ballisticSpeedScale;
+        double sigma = config.bombDiameterSigma;
+        for (int n = 0; n < count; n++) {
+            double diameter = clamp(
+                    config.bombMedianDiameter * StrictMath.exp(sigma * random.nextGaussian()),
+                    config.minBombDiameter,
+                    config.maxBombDiameter);
+            double speed = exitSpeed * StrictMath.exp(0.15 * random.nextGaussian()) / Math.sqrt(1 + diameter);
+            double zenithDeg = clamp(salvo.zenithMeanDeg() + random.nextGaussian() * salvo.zenithSigmaDeg(),
+                    0, config.maxLaunchAngleDeg);
+            double zenith = Math.toRadians(zenithDeg);
+            double azimuth = random.nextDouble(0, 2 * Math.PI);
+            double horizontal = speed * StrictMath.sin(zenith);
+            Vec3d velocity = new Vec3d(
+                    horizontal * StrictMath.cos(azimuth), speed * StrictMath.cos(zenith), horizontal * StrictMath.sin(azimuth));
+            launch(context, sampleVentPoint(salvo.vent(), random), velocity, diameter, salvo.silicaWt());
         }
     }
 
