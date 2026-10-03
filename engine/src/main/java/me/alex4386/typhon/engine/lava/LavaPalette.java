@@ -22,7 +22,35 @@ public final class LavaPalette {
     private static final BlockState OBSIDIAN = BlockState.minecraft("obsidian");
     private static final BlockState CRYING_OBSIDIAN = BlockState.minecraft("crying_obsidian");
 
+    /** Quench-shattered glassy fragments shed down a lava delta front. */
+    public static final BlockState HYALOCLASTITE = TUFF;
+
     private LavaPalette() {}
+
+    /** Crust/roof composition class: 0 basaltic, 1 andesitic, 2 silicic. */
+    public static byte crustKind(double silicaWt) {
+        if (silicaWt < 57) return 0;
+        if (silicaWt < 65) return 1;
+        return 2;
+    }
+
+    /** Representative SiO₂ of a crust class, for rock choices once the melt is gone. */
+    public static double crustSilica(byte kind) {
+        return switch (kind) {
+            case 0 -> 50;
+            case 1 -> 60;
+            default -> 70;
+        };
+    }
+
+    /** Solid crust / tube roof: smooth glassy pāhoehoe skin, or a silicic glassy carapace. */
+    public static BlockState roof(byte kind) {
+        return switch (kind) {
+            case 0 -> SMOOTH_BASALT;
+            case 1 -> ANDESITE;
+            default -> OBSIDIAN;
+        };
+    }
 
     /** Molten lava; {@code level} 0 is a full block, 7 the thinnest film. */
     public static BlockState lava(int level) {

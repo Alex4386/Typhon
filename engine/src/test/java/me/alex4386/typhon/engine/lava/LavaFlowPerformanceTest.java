@@ -6,7 +6,7 @@ import me.alex4386.typhon.engine.sim.Engine;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-/** Smoke test for throughput; exclude with {@code -PexcludeTags=perf} style filters if needed. */
+/** Throughput smoke test (tagged {@code perf}; run with {@code ./gradlew :engine:perfTest}). */
 @Tag("perf")
 class LavaFlowPerformanceTest {
     @Test
@@ -20,18 +20,31 @@ class LavaFlowPerformanceTest {
         }
         world.run(engine, 20); // warm-up
 
-        int steps = 200;
-        long start = System.nanoTime();
-        long cellSteps = 0;
-        for (int i = 0; i < steps; i++) {
-            cellSteps += lava.activeCellCount();
-            engine.tick();
+        // Best of several batches, so a busy machine does not hide the steady-state cost.
+        int batches = 5;
+        int steps = 60;
+        double bestPerStepMs = Double.MAX_VALUE;
+        double bestRate = 0;
+        long cells = 0;
+        long total = 0;
+        double seconds = 0;
+        for (int b = 0; b < batches; b++) {
+            long start = System.nanoTime();
+            long cellSteps = 0;
+            for (int i = 0; i < steps; i++) {
+                cellSteps += lava.activeCellCount();
+                engine.tick();
+            }
+            double s = (System.nanoTime() - start) / 1e9;
+            seconds += s;
+            total += cellSteps;
+            cells = cellSteps / steps;
+            bestPerStepMs = Math.min(bestPerStepMs, s * 1000 / steps);
+            bestRate = Math.max(bestRate, cellSteps / s / 1e6);
         }
-        double seconds = (System.nanoTime() - start) / 1e9;
-        double perStepMs = seconds * 1000 / steps;
-        System.out.printf("lava perf: %d cell-steps in %.3f s = %.2f M cell-steps/s, %.2f ms/step (avg %d cells)%n",
-                cellSteps, seconds, cellSteps / seconds / 1e6, perStepMs, cellSteps / steps);
-        assertTrue(cellSteps / steps >= 10_000);
+        System.out.printf("lava perf: best %.2f M cell-steps/s, %.2f ms/step (avg %d cells; %d cell-steps in %.3f s)%n",
+                bestRate, bestPerStepMs, cells, total, seconds);
+        assertTrue(cells >= 10_000);
         assertTrue(seconds < 30, "took " + seconds + " s");
     }
 }

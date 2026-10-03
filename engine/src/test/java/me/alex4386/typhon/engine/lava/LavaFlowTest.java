@@ -41,7 +41,8 @@ class LavaFlowTest {
         for (int i = 0; i < 400; i++) {
             if (i == 200) lava.removeSource("vent");
             world.run(engine, 1);
-            double accounted = lava.totalLavaVolume() + lava.solidifiedVolume();
+            // Crust is a third reservoir: melt that froze onto the roof but has not left the flow.
+            double accounted = lava.totalLavaVolume() + lava.crustVolume() + lava.solidifiedVolume();
             assertEquals(lava.emittedVolume(), accounted, 1e-9 * Math.max(1, lava.emittedVolume()), "tick " + i);
         }
         assertEquals(3 * 200 * 0.05 * 5, lava.emittedVolume(), 1e-9);
