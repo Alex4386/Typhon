@@ -19,3 +19,6 @@ web/dist/
 # gradle
 .gradle/
 build/
+
+# simulator output
+sim-out/
