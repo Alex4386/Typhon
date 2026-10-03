@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.sim;
 
+import com.google.gson.JsonObject;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -19,18 +20,25 @@ import me.alex4386.typhon.engine.random.SimRandom;
  * due (in registration order) and returns the resulting {@link EngineFrame}. Given the same seed,
  * subsystems and command sequence, the frames are identical across runs.
  *
+ * <p>{@link #saveState()} captures the tick, every subsystem's random state and its own state, so a
+ * run restored with {@link Builder#restore} continues exactly as if it had never stopped. Commands
+ * still queued at save time are not persisted.
+ *
  * <p>The engine is confined to a single thread; only {@link #submit} may be called from others.
  */
 public final class Engine {
+    public static final int STATE_FORMAT = 1;
+
     private final long seed;
     private final List<Registered> subsystems;
     private final CommandBus commandBus;
     private final Queue<EngineCommand> pendingCommands = new ConcurrentLinkedQueue<>();
     private final Outbox outbox = new Outbox();
-    private long currentTick = 0;
+    private long currentTick;
 
-    private Engine(long seed, List<Registered> subsystems, CommandBus commandBus) {
+    private Engine(long seed, long startTick, List<Registered> subsystems, CommandBus commandBus) {
         this.seed = seed;
+        this.currentTick = startTick;
         this.subsystems = subsystems;
         this.commandBus = commandBus;
     }
@@ -71,6 +79,25 @@ public final class Engine {
         return outbox.drain(tick);
     }
 
+    public JsonObject saveState() {
+        JsonObject root = new JsonObject();
+        root.addProperty("format", STATE_FORMAT);
+        root.addProperty("seed", seed);
+        root.addProperty("tick", currentTick);
+
+        JsonObject subsystemStates = new JsonObject();
+        for (Registered registered : subsystems) {
+            JsonObject entry = new JsonObject();
+            entry.addProperty("random", registered.random.state());
+            JsonObject data = new JsonObject();
+            registered.subsystem.saveState(data);
+            entry.add("data", data);
+            subsystemStates.add(registered.subsystem.id(), entry);
+        }
+        root.add("subsystems", subsystemStates);
+        return root;
+    }
+
     private record Registered(Subsystem subsystem, int interval, int phase, double dtSeconds, SimRandom random) {
         boolean isDue(long tick) {
             return tick >= phase && (tick - phase) % interval == 0;
@@ -81,6 +108,7 @@ public final class Engine {
         private final long seed;
         private final SimRandom root;
         private final List<Subsystem> subsystems = new ArrayList<>();
+        private JsonObject restoreFrom;
 
         private Builder(long seed) {
             this.seed = seed;
@@ -92,10 +120,28 @@ public final class Engine {
             return this;
         }
 
+        /**
+         * Resumes from a {@link Engine#saveState()} snapshot. Subsystems missing from the snapshot
+         * start fresh; snapshot entries without a matching subsystem are ignored.
+         */
+        public Builder restore(JsonObject state) {
+            int format = state.get("format").getAsInt();
+            if (format != STATE_FORMAT) {
+                throw new IllegalArgumentException("Unsupported engine state format: " + format);
+            }
+            long savedSeed = state.get("seed").getAsLong();
+            if (savedSeed != seed) {
+                throw new IllegalArgumentException("State was saved with seed " + savedSeed + ", not " + seed);
+            }
+            this.restoreFrom = state;
+            return this;
+        }
+
         public Engine build() {
             CommandBus bus = new CommandBus();
             Set<String> ids = new HashSet<>();
             List<Registered> registered = new ArrayList<>();
+            JsonObject savedSubsystems = restoreFrom == null ? null : restoreFrom.getAsJsonObject("subsystems");
 
             for (Subsystem subsystem : subsystems) {
                 String id = subsystem.id();
@@ -112,11 +158,19 @@ public final class Engine {
                             "Subsystem " + id + " phase must be in [0, " + interval + "): " + phase);
                 }
                 subsystem.registerCommands(bus);
-                registered.add(new Registered(
-                        subsystem, interval, phase, SimTime.ticksToSeconds(interval), root.fork("subsystem:" + id)));
+
+                SimRandom random = root.fork("subsystem:" + id);
+                if (savedSubsystems != null && savedSubsystems.has(id)) {
+                    JsonObject entry = savedSubsystems.getAsJsonObject(id);
+                    random.restore(entry.get("random").getAsLong());
+                    subsystem.loadState(entry.getAsJsonObject("data"));
+                }
+
+                registered.add(new Registered(subsystem, interval, phase, SimTime.ticksToSeconds(interval), random));
             }
 
-            return new Engine(seed, List.copyOf(registered), bus);
+            long startTick = restoreFrom == null ? 0 : restoreFrom.get("tick").getAsLong();
+            return new Engine(seed, startTick, List.copyOf(registered), bus);
         }
     }
 }

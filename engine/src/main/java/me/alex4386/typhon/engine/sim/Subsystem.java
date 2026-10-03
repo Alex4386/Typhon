@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.sim;
 
+import com.google.gson.JsonObject;
 import me.alex4386.typhon.engine.command.CommandBus;
 
 /**
@@ -28,4 +29,13 @@ public interface Subsystem {
     default void registerCommands(CommandBus bus) {}
 
     void step(StepContext context);
+
+    /**
+     * Writes this subsystem's persistent state. Together with the engine tick and random states this
+     * must be enough to resume the simulation bit-for-bit after {@link #loadState}.
+     */
+    default void saveState(JsonObject out) {}
+
+    /** Restores state written by {@link #saveState}. Called once while building, before any step. */
+    default void loadState(JsonObject in) {}
 }

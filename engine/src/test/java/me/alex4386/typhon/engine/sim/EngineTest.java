@@ -3,6 +3,8 @@ package me.alex4386.typhon.engine.sim;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.command.CommandBus;
@@ -123,6 +125,58 @@ class EngineTest {
         List<EngineFrame> together = new ArrayList<>();
         for (int i = 0; i < 50; i++) together.add(withExtra.tick());
         assertEquals(alone, together);
+    }
+
+    /** Random walk whose position is persisted. */
+    static final class Walker implements Subsystem {
+        long position;
+        final List<Long> trace = new ArrayList<>();
+
+        @Override public String id() { return "walker"; }
+        @Override public int interval() { return 3; }
+
+        @Override
+        public void step(StepContext context) {
+            position += context.random().nextInt(-2, 3);
+            trace.add(position);
+        }
+
+        @Override public void saveState(JsonObject out) { out.addProperty("position", position); }
+        @Override public void loadState(JsonObject in) { position = in.get("position").getAsLong(); }
+    }
+
+    @Test
+    void savedStateResumesBitForBit() {
+        Walker straight = new Walker();
+        Engine reference = Engine.builder(77).add(straight).add(new NoiseMaker()).build();
+        List<EngineFrame> referenceFrames = new ArrayList<>();
+        for (int i = 0; i < 100; i++) referenceFrames.add(reference.tick());
+
+        Walker first = new Walker();
+        Engine before = Engine.builder(77).add(first).add(new NoiseMaker()).build();
+        for (int i = 0; i < 40; i++) before.tick();
+        String saved = before.saveState().toString();
+
+        Walker second = new Walker();
+        Engine after = Engine.builder(77)
+                .add(second)
+                .add(new NoiseMaker())
+                .restore(JsonParser.parseString(saved).getAsJsonObject())
+                .build();
+        assertEquals(40, after.currentTick());
+        List<EngineFrame> resumed = new ArrayList<>();
+        for (int i = 0; i < 60; i++) resumed.add(after.tick());
+
+        assertEquals(referenceFrames.subList(40, 100), resumed);
+        List<Long> combined = new ArrayList<>(first.trace);
+        combined.addAll(second.trace);
+        assertEquals(straight.trace, combined);
+    }
+
+    @Test
+    void restoreRejectsDifferentSeed() {
+        JsonObject saved = Engine.builder(1).add(new Walker()).build().saveState();
+        assertThrows(IllegalArgumentException.class, () -> Engine.builder(2).restore(saved));
     }
 
     @Test

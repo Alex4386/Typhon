@@ -13,6 +13,9 @@ tasks.withType<JavaCompile>().configureEach {
 }
 
 dependencies {
+    // State serialization. Gson ships with both Paper and Fabric servers, so hosts need not shade it.
+    api("com.google.code.gson:gson:2.14.0")
+
     testImplementation(platform("org.junit:junit-bom:5.12.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
