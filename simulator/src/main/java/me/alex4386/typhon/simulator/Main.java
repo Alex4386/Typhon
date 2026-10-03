@@ -34,12 +34,11 @@ import me.alex4386.typhon.simulator.terrain.DemImporter;
  */
 public final class Main {
     /**
-     * Per-step lava telemetry that would dominate the log: LavaSolidified fires every tick and
-     * LavaEnteredWater currently re-fires for tiny films every step (~30 events/tick in the Surtsey
-     * preset). Still counted in the report; pass {@code --skip-events none} to write everything.
-     * (Gas hazards, fumarole activity and ash fall are aggregated by the engine and written.)
+     * Event types left out of {@code events.ndjson} by default. The engine now aggregates its
+     * high-volume telemetry (gas hazards, fumaroles, ash fall, lava solidification and ocean entry),
+     * so nothing is skipped; pass {@code --skip-events A,B} to drop types from the log.
      */
-    static final Set<String> DEFAULT_SKIPPED_EVENTS = Set.of("LavaSolidified", "LavaEnteredWater");
+    static final Set<String> DEFAULT_SKIPPED_EVENTS = Set.of();
 
     private Main() {}
 
@@ -140,8 +139,8 @@ public final class Main {
         out.printf(Locale.ROOT, "  eruptions=%d first=%s peakRate=%.3g m3/s erupted=%.3g m3 alert=%s style=%s%n",
                 summary.eruptions, Double.isNaN(summary.firstEruptionSeconds) ? "none" : time(summary.firstEruptionSeconds),
                 summary.peakEruptionRate, last.get("erupted_volume_m3"), last.alertLevel(), last.style());
-        out.printf(Locale.ROOT, "  lava emitted=%.0f solidified=%.0f blocks, longest flow=%.0f blocks; plumeTop=%s; bombs=%d; quakes=%s%n",
-                last.get("lava_emitted_blocks"), last.get("lava_solidified_blocks"), summary.maxFlowLength,
+        out.printf(Locale.ROOT, "  lava emitted=%.0f solidified=%.0f blocks, longest flow=%.0f m; plumeTop=%s; bombs=%d; quakes=%s%n",
+                last.get("lava_emitted_blocks"), last.get("lava_solidified_blocks"), summary.maxFlowLengthM,
                 summary.maxPlumeTopY == Integer.MIN_VALUE ? "none" : Integer.toString(summary.maxPlumeTopY),
                 summary.bombsLaunched, summary.seismicCounts);
         if (!summary.featuresFormed.isEmpty()) out.println("  hydrothermal features: " + summary.featuresFormed);

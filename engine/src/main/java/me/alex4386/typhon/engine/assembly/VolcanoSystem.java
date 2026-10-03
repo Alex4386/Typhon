@@ -33,7 +33,9 @@ import me.alex4386.typhon.engine.volcano.VolcanoScaling;
  * One volcano: magma chamber, dikes, seismicity, alert level, surface coupling, tephra, pyroclastic
  * flows, lahars, geothermal activity and ground deformation, wired together and consistently scaled.
  *
- * <p>Terrain and lava are shared by every volcano in an engine, so the caller registers them:
+ * <p>Terrain and lava are shared by every volcano in an engine, so the caller registers them. The
+ * lava grid takes its scale from the volcano's {@link VolcanoScaling#metersPerBlock()}; since the
+ * field is shared, every volcano using it must have the same {@code metersPerBlock}.
  *
  * <pre>{@code
  * TerrainModel terrain = new TerrainModel();
@@ -63,6 +65,7 @@ public final class VolcanoSystem {
         this.volcanoId = b.volcanoId;
         this.vents = b.vents;
         this.scaling = b.scaling;
+        b.lava.setMetersPerBlock(scaling.metersPerBlock());
 
         BlockPos primary = vents.get(0).position();
         MagmaChamberConfig chamberConfig = (b.chamberConfig != null

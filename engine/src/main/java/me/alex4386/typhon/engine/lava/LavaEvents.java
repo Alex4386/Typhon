@@ -12,25 +12,39 @@ public final class LavaEvents {
      * Periodic flow telemetry.
      *
      * @param front active lava column farthest from any source
-     * @param lengthM horizontal distance from the nearest source to {@code front}
+     * @param lengthM horizontal distance from the nearest source to {@code front}, real metres
+     * @param volumeM3 molten volume, real m³
      */
     public record LavaFlowFront(long tick, BlockPos front, double lengthM, int activeCells, double volumeM3)
             implements EngineEvent {}
 
-    /** Lava that turned to rock during one step. */
-    public record LavaSolidified(long tick, int cells, double volumeM3, int blocks) implements EngineEvent {}
+    /**
+     * Lava that turned to rock during the last {@code intervalTicks} (aggregated; see
+     * {@link LavaConfig#eventIntervalTicks()}).
+     *
+     * @param cells columns that solidified (a column may count more than once)
+     * @param volumeM3 real volume solidified
+     * @param blocks whole blocks of rock placed
+     */
+    public record LavaSolidified(long tick, int intervalTicks, int cells, double volumeM3, int blocks)
+            implements EngineEvent {}
 
     /**
-     * Lava reached a submerged column for the first time.
+     * Lava in contact with water in one zone (a 16×16 chunk), aggregated over
+     * {@link LavaConfig#eventIntervalTicks()}. Emitted while the zone holds submerged molten lava.
      *
-     * @param volumeM3 lava that entered the column this step
-     * @param powerMW thermal power released into the water, {@code ρ·Q·(c·ΔT + L)}
+     * @param pos submerged molten column with the strongest lava inflow (where hosts should centre
+     *     steam plumes and spatter)
+     * @param columns submerged molten columns in the zone at the end of the interval
+     * @param moltenVolumeM3 molten lava in those columns
+     * @param inflowM3PerS mean rate at which lava flowed into submerged columns
+     * @param powerMW mean heat released into the water over the interval
      * @param steamKgPerS water boiled off by that power (upper bound: all heat goes into steam)
-     * @param littoralExplosion entry flux above {@link LavaConfig#littoralExplosionFluxM3s()}: hosts
-     *     may render steam blasts and spatter instead of a quiet plume
+     * @param littoralExplosion some column's entry flux exceeded
+     *     {@link LavaConfig#littoralExplosionFluxM3s()}: hosts may render steam blasts and spatter
      */
-    public record LavaEnteredWater(long tick, BlockPos pos, double volumeM3, double powerMW, double steamKgPerS,
-            boolean littoralExplosion) implements EngineEvent {}
+    public record LavaOceanEntry(long tick, int intervalTicks, BlockPos pos, int columns, double moltenVolumeM3,
+            double inflowM3PerS, double powerMW, double steamKgPerS, boolean littoralExplosion) implements EngineEvent {}
 
     /** Drained lava tubes left hollow this step (see {@link LavaFlow#tubes()}). */
     public record LavaTubesFormed(long tick, List<LavaTube> tubes) implements EngineEvent {

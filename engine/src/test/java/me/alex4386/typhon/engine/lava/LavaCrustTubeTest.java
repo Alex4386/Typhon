@@ -100,7 +100,9 @@ class LavaCrustTubeTest {
         world.run(engine, 300);
         double crust = 0;
         double melt = 0;
-        for (int x = 1; x <= 20; x++) {
+        // Proximal half only: with 8-neighbour flux the flow fans out, and its thin distal sheet
+        // (x ≳ 16) legitimately slows below the disruption speed and crusts.
+        for (int x = 1; x <= 12; x++) {
             crust += lava.crustThickness(x, 0);
             melt += lava.thickness(x, 0);
         }
@@ -251,7 +253,7 @@ class LavaCrustTubeTest {
 
         JsonObject resaved = new JsonObject();
         lava.saveState(resaved);
-        assertEquals(2, resaved.get("format").getAsInt());
+        assertEquals(3, resaved.get("format").getAsInt()); // re-saved in the current format
     }
 
     // ── Ocean entry ──
@@ -275,9 +277,9 @@ class LavaCrustTubeTest {
         }
         assertTrue(hyaloclastite > 0, "quench fragments should be shed down the delta front");
 
-        List<LavaEvents.LavaEnteredWater> entries = world.events(LavaEvents.LavaEnteredWater.class);
+        List<LavaEvents.LavaOceanEntry> entries = world.events(LavaEvents.LavaOceanEntry.class);
         assertFalse(entries.isEmpty());
-        for (LavaEvents.LavaEnteredWater e : entries) {
+        for (LavaEvents.LavaOceanEntry e : entries) {
             assertTrue(e.powerMW() > 0 && e.steamKgPerS() > 0, e.toString());
         }
     }
@@ -300,13 +302,13 @@ class LavaCrustTubeTest {
     /** Peak entry power (MW), or with {@code explosive}, the number of littoral explosions. */
     private static double maxEntry(double rate, boolean explosive) {
         LavaTestWorld world = new LavaTestWorld(-1, -1, 1, 0, (x, z) -> 80 - x, (x, z) -> x >= 10 ? 75 : LavaTestWorld.NO_WATER);
-        LavaConfig config = LavaConfig.defaults().toBuilder().timeScale(10).coolingScale(0).littoralExplosionFluxM3s(0.5).build();
+        LavaConfig config = LavaConfig.defaults().toBuilder().timeScale(10).coolingScale(1).littoralExplosionFluxM3s(0.5).build();
         LavaFlow lava = new LavaFlow(world.terrain, config);
         Engine engine = world.engine(lava, 6);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), rate, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 400);
-        List<LavaEvents.LavaEnteredWater> entries = world.events(LavaEvents.LavaEnteredWater.class);
-        if (explosive) return entries.stream().filter(LavaEvents.LavaEnteredWater::littoralExplosion).count();
-        return entries.stream().mapToDouble(LavaEvents.LavaEnteredWater::powerMW).max().orElse(0);
+        List<LavaEvents.LavaOceanEntry> entries = world.events(LavaEvents.LavaOceanEntry.class);
+        if (explosive) return entries.stream().filter(LavaEvents.LavaOceanEntry::littoralExplosion).count();
+        return entries.stream().mapToDouble(LavaEvents.LavaOceanEntry::powerMW).max().orElse(0);
     }
 }

@@ -93,7 +93,7 @@ public final class ReportWriter {
         row(h, "Final alert level / style", esc(last.alertLevel()) + " / " + esc(last.style()));
         row(h, "Lava emitted / solidified (model)", fmt(last.get("lava_emitted_blocks")) + " / "
                 + fmt(last.get("lava_solidified_blocks")) + " blocks³");
-        row(h, "Longest lava flow", fmt(s.maxFlowLength) + " blocks (≈ " + fmt(s.maxFlowLength * scaling.metersPerBlock()) + " m real)");
+        row(h, "Longest lava flow", fmt(s.maxFlowLengthM / scaling.metersPerBlock()) + " blocks (≈ " + fmt(s.maxFlowLengthM) + " m real)");
         row(h, "Highest plume top", s.maxPlumeTopY == Integer.MIN_VALUE ? "none" : "y=" + s.maxPlumeTopY
                 + " (MER " + fmt(s.maxPlumeMassRate) + " kg/s)");
         row(h, "Ballistic bombs launched / landed", s.bombsLaunched + " / " + s.bombsLanded
@@ -101,7 +101,7 @@ public final class ReportWriter {
         row(h, "Volcanic lightning", Long.toString(s.lightning));
         row(h, "Earthquakes", s.seismicCounts.toString() + (s.maxMagnitude > -10 ? ", max M" + fmt(s.maxMagnitude) : ""));
         row(h, "Hydrothermal features formed", s.featuresFormed.isEmpty() ? "none" : s.featuresFormed.toString());
-        row(h, "Lava entered water", s.lavaWaterEntries + " times");
+        row(h, "Lava ocean-entry reports", Long.toString(s.lavaWaterEntries));
         row(h, "World changes applied / CAS conflicts", fmt(last.get("world_changes")) + " / " + fmt(last.get("world_conflicts")));
         row(h, "Scaling", String.format(Locale.ROOT, "1 block = %s m, plume 1 block = %s m, dormant ×%s, eruptive ×%s",
                 fmt(scaling.metersPerBlock()), fmt(scaling.plumeMetersPerBlock()),

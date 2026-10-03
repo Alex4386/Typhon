@@ -6,19 +6,21 @@ import me.alex4386.typhon.engine.terrain.TerrainChunkView;
 final class LavaChunk {
     static final int AREA = 256;
     static final int UNKNOWN = Integer.MIN_VALUE;
+    /** Flow directions: 4 orthogonal then 4 diagonal, ordered so that {@code d ^ 1} is the opposite. */
+    static final int DIRECTIONS = 8;
 
     final int cx;
     final int cz;
     final long key;
 
     // Simulation state (persisted)
-    double[] thickness = new double[AREA]; // molten core (m)
+    double[] thickness = new double[AREA]; // molten core (real m)
     double[] temperature = new double[AREA];
     double[] silica = new double[AREA];
     double[] water = new double[AREA];
-    final double[] solid = new double[AREA]; // solidified rock not yet amounting to a whole block
-    final double[] crust = new double[AREA]; // rigid crust/roof on top of the melt (m)
-    final double[] roofTop = new double[AREA]; // absolute y of the crust top (valid while crust > 0)
+    final double[] solid = new double[AREA]; // solidified rock not yet amounting to a whole block (real m)
+    final double[] crust = new double[AREA]; // rigid crust/roof on top of the melt (real m)
+    final double[] roofTop = new double[AREA]; // absolute elevation of the crust top, real m (= y · L)
     final byte[] crustKind = new byte[AREA]; // LavaPalette.crustKind of the crust
 
     // What is currently shown in the world (persisted, for compare-and-set diffs). From renderBottom
@@ -35,12 +37,12 @@ final class LavaChunk {
     double[] nextTemperature = new double[AREA];
     double[] nextSilica = new double[AREA];
     double[] nextWater = new double[AREA];
-    final double[] outflow = new double[4 * AREA]; // direction-major
+    final double[] outflow = new double[DIRECTIONS * AREA]; // direction-major, as thickness (m)
     final double[] speed = new double[AREA]; // physical mean flow speed q/h this step (m/s)
     final int[] ground = new int[AREA];
     final int[] waterY = new int[AREA];
     final long[] sourceStamp = new long[AREA]; // == step stamp while an effusive source feeds the cell
-    final LavaChunk[] neighbours = new LavaChunk[4];
+    final LavaChunk[] neighbours = new LavaChunk[9]; // by chunk offset: (dz + 1) * 3 + (dx + 1)
     TerrainChunkView terrainView; // terrain the ground/waterY caches were read from
     int terrainVersion;
     long freshStamp = Long.MIN_VALUE;
@@ -49,6 +51,8 @@ final class LavaChunk {
     long touchedStamp = Long.MIN_VALUE;
     int lavaCells;
     int crustCells;
+    Object ocean; // LavaFlow's ocean-entry accumulator for this chunk (cache)
+    long oceanGeneration = -1;
 
     LavaChunk(int cx, int cz) {
         this.cx = cx;
