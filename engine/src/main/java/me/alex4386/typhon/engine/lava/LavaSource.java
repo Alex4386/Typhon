@@ -45,14 +45,18 @@ public record LavaSource(String id, List<BlockPos> cells, double rateM3PerS, dou
             }
         } else {
             int half = Math.max(0, vent.fissureLength() / 2);
-            double cos = Math.cos(vent.fissureAngleRad());
-            double sin = Math.sin(vent.fissureAngleRad());
+            double cos = StrictMath.cos(vent.fissureAngleRad());
+            double sin = StrictMath.sin(vent.fissureAngleRad());
             for (int t = -half; t <= half; t++) {
                 BlockPos p = c.offset((int) Math.round(t * cos), 0, (int) Math.round(t * sin));
                 if (!cells.contains(p)) cells.add(p);
             }
         }
         return new LavaSource(vent.id(), cells, rateM3PerS, temperatureC, silicaWt, waterWt);
+    }
+
+    public LavaSource withId(String id) {
+        return new LavaSource(id, cells, rateM3PerS, temperatureC, silicaWt, waterWt);
     }
 
     public LavaSource withRate(double rateM3PerS) {

@@ -28,6 +28,13 @@ public final class TephraConfig {
     public double minExitSpeed = 20;
     public double maxExitSpeed = 400;
     public double maxBombsPerSecond = 20;
+
+    /**
+     * Multiplier from real erupted mass to deposited model mass. Plume height is computed from the
+     * real mass eruption rate, but bombs and ash fall carry {@code massScale} times that mass, so a
+     * volcano modelled at {@code L} metres per block uses {@code 1/L³}.
+     */
+    public double massScale = 1.0;
     /** Bombs still airborne after this long are dropped. */
     public double maxFlightSeconds = 120;
 
@@ -109,6 +116,7 @@ public final class TephraConfig {
         c.minExitSpeed = minExitSpeed;
         c.maxExitSpeed = maxExitSpeed;
         c.maxBombsPerSecond = maxBombsPerSecond;
+        c.massScale = massScale;
         c.maxFlightSeconds = maxFlightSeconds;
         c.bombMedianDiameter = bombMedianDiameter;
         c.bombDiameterSigma = bombDiameterSigma;
@@ -144,6 +152,7 @@ public final class TephraConfig {
     }
 
     void validate() {
+        if (!(massScale > 0)) throw new IllegalArgumentException("massScale must be > 0");
         if (substepsPerTick < 1) throw new IllegalArgumentException("substepsPerTick must be >= 1");
         if (ashStepTicks < 1 || ashEventTicks < 1) throw new IllegalArgumentException("tick intervals must be >= 1");
         if (cellSize < 1 || gridCells < 1) throw new IllegalArgumentException("grid must be non-empty");

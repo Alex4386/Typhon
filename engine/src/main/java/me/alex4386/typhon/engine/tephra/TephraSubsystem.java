@@ -217,7 +217,7 @@ public final class TephraSubsystem implements Subsystem {
         double sigma = config.bombDiameterSigma;
         double meanMass = Ballistics.sphereMass(config.bombMedianDiameter, config.bombDensity)
                 * StrictMath.exp(4.5 * sigma * sigma);
-        double rate = Math.min(config.maxBombsPerSecond, phase.massEruptionRate() * phase.ballisticFraction() / meanMass);
+        double rate = Math.min(config.maxBombsPerSecond, phase.massEruptionRate() * config.massScale * phase.ballisticFraction() / meanMass);
         int count = random.nextPoisson(rate / SimTime.TICKS_PER_SECOND);
         if (count == 0) return;
 
@@ -417,7 +417,7 @@ public final class TephraSubsystem implements Subsystem {
             double sigma = Math.max(config.cellSize * 0.5, 0.25 * height);
             grid.plumeHeight = height;
             grid.inject(
-                    phase.massEruptionRate() * (1 - phase.ballisticFraction()) * dt,
+                    phase.massEruptionRate() * config.massScale * (1 - phase.ballisticFraction()) * dt,
                     phase.grainSize().fractions(),
                     vent.x() + 0.5,
                     vent.z() + 0.5,
