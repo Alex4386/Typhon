@@ -11,6 +11,7 @@ import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.SimTime;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
+import me.alex4386.typhon.engine.volcano.EruptiveRegime;
 import me.alex4386.typhon.engine.volcano.MagmaState;
 
 /**
@@ -39,6 +40,7 @@ public final class SeismicityModel implements Subsystem {
     private final MagmaState magma;
 
     private final List<BlockPos> induced = new ArrayList<>();
+    private final List<QueuedExplosion> explosions = new ArrayList<>();
     private double rsam;
     private double vtRatePerMinute;
     private double lpRatePerMinute;
@@ -82,7 +84,12 @@ public final class SeismicityModel implements Subsystem {
 
         expectedVtRate = vtRate(tick);
         expectedLpRate = Math.min(config.maxEventRate(), config.backgroundLpRate() + config.lpPerEruptionRate() * eruptionRate);
-        expectedExplosionRate = erupting ? Math.min(config.maxEventRate(), config.explosionRate() * explosivity(magma)) : 0;
+        // Sustained explosive columns crackle with explosion quakes; discrete explosions (Strombolian,
+        // Vulcanian, phreatomagmatic) are reported by the surface coupling via queueExplosion.
+        EruptiveRegime regime = magma.eruptiveRegime();
+        boolean continuous = regime == EruptiveRegime.UNKNOWN || regime == EruptiveRegime.EXPLOSIVE;
+        expectedExplosionRate = erupting && continuous
+                ? Math.min(config.maxEventRate(), config.explosionRate() * explosivity(magma)) : 0;
 
         double transientAmplitude = 0;
         int vtCount = random.nextPoisson(expectedVtRate * dt);
@@ -119,6 +126,12 @@ public final class SeismicityModel implements Subsystem {
             BlockPos hypocenter = config.conduitTop().offset(0, -random.nextInt(0, 10), 0);
             transientAmplitude += emit(context, SeismicEventType.EXPLOSION, m, hypocenter, transientTicks(1.0, m), false);
         }
+        for (QueuedExplosion q : explosions) {
+            transientAmplitude += emit(context, SeismicEventType.EXPLOSION, q.magnitude(), q.hypocenter(),
+                    transientTicks(1.0, q.magnitude()), false);
+        }
+        explosionCount += explosions.size();
+        explosions.clear();
 
         if (!erupting && tremorActive(tick)) {
             tremorUntilTick = tick;
@@ -161,6 +174,24 @@ public final class SeismicityModel implements Subsystem {
         induced.addAll(hypocenters);
     }
 
+    /**
+     * Queues an explosion quake for a discrete explosion of kinetic energy {@code energyJ} at
+     * {@code hypocenter}. The radiated seismic energy is {@link #EXPLOSION_SEISMIC_EFFICIENCY} of the
+     * kinetic energy, converted with {@code log10 E = 1.5 M + 4.8} (Gutenberg–Richter) and clamped to
+     * the configured explosion magnitude range.
+     */
+    public void queueExplosion(BlockPos hypocenter, double energyJ) {
+        double seismic = Math.max(1, energyJ * EXPLOSION_SEISMIC_EFFICIENCY);
+        double m = (Math.log10(seismic) - 4.8) / 1.5;
+        m = Math.max(config.minMagnitude(), Math.min(config.explosionMaxMagnitude(), m));
+        explosions.add(new QueuedExplosion(hypocenter, m));
+    }
+
+    /** Fraction of an explosion's kinetic energy radiated seismically (observed ~1e-5–1e-3). */
+    public static final double EXPLOSION_SEISMIC_EFFICIENCY = 1e-4;
+
+    private record QueuedExplosion(BlockPos hypocenter, double magnitude) {}
+
     /** Expected VT rate (events/s) for the current magma state. */
     private double vtRate(long tick) {
         double pressurisation = Math.max(0, magma.overpressureRateMPaPerSecond());
@@ -184,7 +215,7 @@ public final class SeismicityModel implements Subsystem {
     public static double explosivity(MagmaState magma) {
         double viscosity = MeltViscosity.log10(magma.silicaWt(), magma.waterWt(), magma.temperatureC(), magma.crystalFraction());
         double viscous = clamp01((viscosity - 3) / 4);
-        double wet = clamp01(magma.waterWt() / 4);
+        double wet = clamp01(magma.ventWaterWt() / 4);
         return viscous * wet;
     }
 
@@ -293,6 +324,14 @@ public final class SeismicityModel implements Subsystem {
         JsonArray pendingInduced = new JsonArray();
         for (BlockPos p : induced) pendingInduced.add(p.pack());
         out.add("induced", pendingInduced);
+        JsonArray pendingExplosions = new JsonArray();
+        for (QueuedExplosion q : explosions) {
+            JsonObject o = new JsonObject();
+            o.addProperty("at", q.hypocenter().pack());
+            o.addProperty("m", q.magnitude());
+            pendingExplosions.add(o);
+        }
+        out.add("explosions", pendingExplosions);
     }
 
     @Override
@@ -311,6 +350,13 @@ public final class SeismicityModel implements Subsystem {
         induced.clear();
         if (in.has("induced")) {
             for (JsonElement e : in.getAsJsonArray("induced")) induced.add(BlockPos.unpack(e.getAsLong()));
+        }
+        explosions.clear();
+        if (in.has("explosions")) {
+            for (JsonElement e : in.getAsJsonArray("explosions")) {
+                JsonObject o = e.getAsJsonObject();
+                explosions.add(new QueuedExplosion(BlockPos.unpack(o.get("at").getAsLong()), o.get("m").getAsDouble()));
+            }
         }
     }
 }

@@ -31,7 +31,8 @@ import me.alex4386.typhon.engine.math.BlockPos;
  * @param coolingTimescale e-folding time of conductive cooling (physical s)
  * @param degassingTimescale e-folding time for venting exsolved volatiles (physical s)
  * @param crystalSilicaWt SiO₂ of the crystallising (mafic) assemblage; drives melt evolution
- * @param fragmentationWaterWt dissolved H₂O above which erupting magma fragments (explosive)
+ * @param conduit conduit-flow physics: outgassing, fragmentation, open/closed conduit, explosion
+ *     cycles (see {@link ConduitConfig})
  * @param fragmentedViscosity effective conduit viscosity (Pa·s) of a fragmented gas–pyroclast mixture
  * @param maxEruptionRate cap on the eruption rate (m³ per physical second)
  * @param dormantTimeScale physical seconds per simulated second while not erupting
@@ -61,7 +62,7 @@ public record MagmaChamberConfig(
         double coolingTimescale,
         double degassingTimescale,
         double crystalSilicaWt,
-        double fragmentationWaterWt,
+        ConduitConfig conduit,
         double fragmentedViscosity,
         double maxEruptionRate,
         double dormantTimeScale,
@@ -84,12 +85,22 @@ public record MagmaChamberConfig(
         if (supplyVariability < 0) throw new IllegalArgumentException("supplyVariability must be >= 0");
         requirePositive("coolingTimescale", coolingTimescale);
         requirePositive("degassingTimescale", degassingTimescale);
+        Objects.requireNonNull(conduit, "conduit");
         requirePositive("fragmentedViscosity", fragmentedViscosity);
         requirePositive("maxEruptionRate", maxEruptionRate);
         requirePositive("dormantTimeScale", dormantTimeScale);
         requirePositive("eruptiveTimeScale", eruptiveTimeScale);
         if (stepIntervalTicks < 1) throw new IllegalArgumentException("stepIntervalTicks must be >= 1");
         if (sampleIntervalTicks < 0) throw new IllegalArgumentException("sampleIntervalTicks must be >= 0");
+    }
+
+    /**
+     * Overpressure that re-opens an open conduit, kept between the eruption end threshold and the
+     * tensile strength.
+     */
+    public double reopenOverpressureMPa() {
+        double low = Math.min(tensileStrengthMPa, eruptionEndOverpressureMPa + 0.5);
+        return Math.max(low, Math.min(tensileStrengthMPa, conduit.reopenOverpressureMPa()));
     }
 
     public static Builder builder(String volcanoId, BlockPos center) {
@@ -117,7 +128,7 @@ public record MagmaChamberConfig(
         b.coolingTimescale = coolingTimescale;
         b.degassingTimescale = degassingTimescale;
         b.crystalSilicaWt = crystalSilicaWt;
-        b.fragmentationWaterWt = fragmentationWaterWt;
+        b.conduit = conduit;
         b.fragmentedViscosity = fragmentedViscosity;
         b.maxEruptionRate = maxEruptionRate;
         b.dormantTimeScale = dormantTimeScale;
@@ -153,7 +164,7 @@ public record MagmaChamberConfig(
         private double coolingTimescale = 2e10;
         private double degassingTimescale = 1e9;
         private double crystalSilicaWt = 47;
-        private double fragmentationWaterWt = 3.0;
+        private ConduitConfig conduit = ConduitConfig.DEFAULT;
         private double fragmentedViscosity = 100;
         private double maxEruptionRate = 100;
         private double dormantTimeScale = 5000;
@@ -185,7 +196,7 @@ public record MagmaChamberConfig(
         public Builder coolingTimescale(double v) { coolingTimescale = v; return this; }
         public Builder degassingTimescale(double v) { degassingTimescale = v; return this; }
         public Builder crystalSilicaWt(double v) { crystalSilicaWt = v; return this; }
-        public Builder fragmentationWaterWt(double v) { fragmentationWaterWt = v; return this; }
+        public Builder conduit(ConduitConfig v) { conduit = v; return this; }
         public Builder fragmentedViscosity(double v) { fragmentedViscosity = v; return this; }
         public Builder maxEruptionRate(double v) { maxEruptionRate = v; return this; }
         public Builder dormantTimeScale(double v) { dormantTimeScale = v; return this; }
@@ -198,7 +209,7 @@ public record MagmaChamberConfig(
                     conduitRadius, tensileStrengthMPa, eruptionEndOverpressureMPa, supplyRate, supplyVariability,
                     rechargeTemperatureC, rechargeSilicaWt, rechargeWaterWt, initialTemperatureC, initialSilicaWt,
                     initialWaterWt, initialOverpressureMPa, wallTemperatureC, coolingTimescale, degassingTimescale,
-                    crystalSilicaWt, fragmentationWaterWt, fragmentedViscosity, maxEruptionRate, dormantTimeScale,
+                    crystalSilicaWt, conduit, fragmentedViscosity, maxEruptionRate, dormantTimeScale,
                     eruptiveTimeScale, stepIntervalTicks, sampleIntervalTicks);
         }
     }

@@ -122,8 +122,8 @@ public final class VolcanoSystem {
             this.deformation = null;
         }
 
-        this.coupler = new VolcanoCoupler(volcanoId, chamber, alert, vents, dikes, b.lava, tephra, pdc, geothermal,
-                scaling, b.ballisticFraction);
+        this.coupler = new VolcanoCoupler(volcanoId, chamber, seismicity, vents, dikes, b.terrain, b.lava, tephra, pdc,
+                geothermal, scaling, b.ballisticFraction);
     }
 
     /** Chamber a few dozen blocks under the primary vent, kept inside the overworld. */

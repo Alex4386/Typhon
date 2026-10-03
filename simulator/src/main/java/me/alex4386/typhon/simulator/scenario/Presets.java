@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.function.LongFunction;
 import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.geothermal.GeothermalConfig;
+import me.alex4386.typhon.engine.magma.ConduitConfig;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.volcano.VentSite;
@@ -160,8 +161,11 @@ public final class Presets {
                             .initialSilicaWt(50).rechargeSilicaWt(50)
                             .initialWaterWt(2.7).rechargeWaterWt(2.7)
                             .initialTemperatureC(1140).rechargeTemperatureC(1150)
-                            .fragmentationWaterWt(3.5)
-                            .initialOverpressureMPa(7.8)
+                            // Persistently active open conduit near its steady state: supply (0.4 m³/s) balances
+                            // outflow at ~1.3 MPa, so activity never stops. Slugs: Stromboli explosions carry
+                            // ~10-1000 kg of gas (Mori & Burton 2009), a few % of the total gas flux.
+                            .initialOverpressureMPa(1.5)
+                            .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
                             .build();
                     VolcanoSystem volcano = VolcanoSystem.builder("stromboli", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)

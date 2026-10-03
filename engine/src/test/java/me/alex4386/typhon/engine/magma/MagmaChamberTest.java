@@ -91,7 +91,9 @@ class MagmaChamberTest {
 
         run(engine, 40, EngineEvent.class); // starts on first step, flows on the next
         assertTrue(chamber.erupting());
-        double viscosity = Math.pow(10, chamber.viscosityLog10());
+        // Coherent magma degasses as it rises, so the conduit is more viscous than the chamber melt.
+        assertTrue(chamber.conduitViscosityLog10() > chamber.viscosityLog10());
+        double viscosity = Math.pow(10, chamber.conduitViscosityLog10());
         double r = config.conduitRadius();
         double poiseuille = Math.PI * r * r * r * r * chamber.overpressureMPa() * 1e6 / (8 * viscosity * config.lithostaticDepth());
         assertEquals(poiseuille, chamber.eruptionRate(), poiseuille * 0.02);
@@ -218,7 +220,8 @@ class MagmaChamberTest {
                 .build();
         MagmaChamber chamber = new MagmaChamber(config);
         Engine engine = Engine.builder(0).add(chamber).build();
-        run(engine, 20 * 3600 * 4, EngineEvent.class);
+        // The degassing (more viscous) conduit relaxes slowly (τ = Vβ/c ≈ 7 h here); run several τ.
+        run(engine, 20 * 3600 * 48, EngineEvent.class);
         assertTrue(chamber.erupting());
         assertEquals(20, chamber.eruptionRate(), 2, "steady state: output matches supply");
     }

@@ -1,6 +1,7 @@
 package me.alex4386.typhon.engine.magma;
 
 import me.alex4386.typhon.engine.output.EngineEvent;
+import me.alex4386.typhon.engine.volcano.EruptiveRegime;
 
 /** Events emitted by {@link MagmaChamber}. */
 public final class MagmaEvents {
@@ -40,6 +41,18 @@ public final class MagmaEvents {
             double supplyRate,
             double eruptionRate,
             double eruptedVolume,
-            boolean erupting)
+            boolean erupting,
+            EruptiveRegime regime,
+            double ventWaterWt,
+            double conduitOpenness)
             implements EngineEvent {}
+
+    /**
+     * The way magma leaves the conduit changed (e.g. Plinian column → dome extrusion).
+     *
+     * @param ascentVelocity mean magma ascent speed in the conduit (m/s)
+     * @param ventWaterWt dissolved H₂O reaching the fragmentation level (wt%)
+     */
+    public record EruptiveRegimeChanged(long tick, String volcanoId, EruptiveRegime previous, EruptiveRegime current,
+            double ascentVelocity, double ventWaterWt) implements EngineEvent {}
 }
