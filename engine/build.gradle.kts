@@ -22,5 +22,19 @@ dependencies {
 }
 
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags("perf")
+    }
+}
+
+// Performance smoke tests: ./gradlew :engine:perfTest
+val perfTest by tasks.registering(Test::class) {
+    description = "Runs performance smoke tests (tagged 'perf')."
+    group = "verification"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform {
+        includeTags("perf")
+    }
+    testLogging.showStandardStreams = true
 }
