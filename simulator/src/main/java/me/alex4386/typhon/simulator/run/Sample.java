@@ -57,10 +57,10 @@ public record Sample(long tick, double timeSeconds, Map<String, Double> values, 
         v.put("style", (double) volcano.alert().suggestedStyle().ordinal());
         v.put("effusing", bool(volcano.coupler().effusing()));
         v.put("explosive", bool(volcano.coupler().explosive()));
-        v.put("lava_volume_blocks", lava.totalLavaVolume());
+        v.put("lava_volume_blocks", lava.toBlocks(lava.totalLavaVolume()));
         v.put("lava_active_cells", (double) lava.activeCellCount());
-        v.put("lava_emitted_blocks", lava.emittedVolume());
-        v.put("lava_solidified_blocks", lava.solidifiedVolume());
+        v.put("lava_emitted_blocks", lava.toBlocks(lava.emittedVolume()));
+        v.put("lava_solidified_blocks", lava.toBlocks(lava.solidifiedVolume()));
         v.put("plume_height_blocks", tephra.plumeHeight());
         TephraSubsystem.MassBudget budget = tephra.massBudget();
         v.put("ash_emitted_kg", budget.emitted());

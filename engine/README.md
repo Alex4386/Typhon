@@ -39,7 +39,7 @@ Tests assert physical relationships (basalt runs farther than dacite), not tuned
 | `magma` | `MagmaChamber` (lumped chamber: recharge, overpressure, crystallisation, Poiseuille eruption), `MeltViscosity` |
 | `seismic` | `SeismicityModel` (VT/LP/tremor/explosion, Gutenberg–Richter, RSAM), `SeismicIntensity` |
 | `alert` | `AlertLevelEstimator` (status with hysteresis), `EruptionStyleClassifier` |
-| `lava` | `LavaFlow` (MAGFLOW-style Bingham cellular automaton, cooling, crust and lava tubes, ocean-entry deltas) |
+| `lava` | `LavaFlow` (MAGFLOW-style Bingham cellular automaton on an 8-neighbour L-metre grid in real units, cooling, crust and lava tubes, ocean-entry deltas) |
 | `dike` | `DikePropagation` (buoyancy/stress-driven dike ascent, flank fissures, induced VT hypocentres) |
 | `deformation` | `DeformationModel` (Mogi chamber source + dike dislocation, virtual GNSS/tilt stations) |
 | `massflow` | `PyroclasticFlows`, `Lahars` (Voellmy–Salm depth-averaged flows), `ColumnCollapse` (Woods 1988) |

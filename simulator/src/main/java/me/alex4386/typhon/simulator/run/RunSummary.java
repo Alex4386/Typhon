@@ -10,7 +10,7 @@ import me.alex4386.typhon.engine.alert.AlertEvents.EruptionStyleSuggested;
 import me.alex4386.typhon.engine.geothermal.GeyserFormed;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeature;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeatureFormed;
-import me.alex4386.typhon.engine.lava.LavaEvents.LavaEnteredWater;
+import me.alex4386.typhon.engine.lava.LavaEvents.LavaOceanEntry;
 import me.alex4386.typhon.engine.lava.LavaEvents.LavaFlowFront;
 import me.alex4386.typhon.engine.lava.LavaEvents.TerrainNeeded;
 import me.alex4386.typhon.engine.magma.MagmaEvents.ChamberSample;
@@ -41,7 +41,7 @@ public final class RunSummary {
     public double maxMagnitude = Double.NEGATIVE_INFINITY;
     public int maxPlumeTopY = Integer.MIN_VALUE;
     public double maxPlumeMassRate;
-    public double maxFlowLength;
+    public double maxFlowLengthM; // real metres
     public long bombsLaunched;
     public long bombsLanded;
     public double maxBombEnergy;
@@ -79,7 +79,7 @@ public final class RunSummary {
                 maxPlumeTopY = Math.max(maxPlumeTopY, e.topY());
                 maxPlumeMassRate = Math.max(maxPlumeMassRate, e.massEruptionRate());
             }
-            case LavaFlowFront e -> maxFlowLength = Math.max(maxFlowLength, e.lengthM());
+            case LavaFlowFront e -> maxFlowLengthM = Math.max(maxFlowLengthM, e.lengthM());
             case BombLaunched e -> bombsLaunched++;
             case BombLanded e -> {
                 bombsLanded++;
@@ -95,7 +95,7 @@ public final class RunSummary {
                 long n = featuresFormed.merge(e.feature(), 1L, Long::sum);
                 if (n == 1) milestones.add(new Milestone(t, "First " + e.feature() + " at " + e.pos()));
             }
-            case LavaEnteredWater e -> {
+            case LavaOceanEntry e -> {
                 lavaWaterEntries++;
                 if (lavaWaterEntries == 1) milestones.add(new Milestone(t, "Lava reached water at " + e.pos()));
             }

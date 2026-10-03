@@ -38,9 +38,9 @@ import me.alex4386.typhon.engine.volcano.VolcanoScaling;
  *   <li>Feeds heat from effusing vents into the geothermal field.
  * </ul>
  *
- * <p>Physics stays in real units: lava receives the volume scaled by
- * {@link VolcanoScaling#volumeScale()}, while tephra and mass flows take real rates and apply the
- * scaling themselves. Register after the chamber, dikes and alert estimator and before the lava,
+ * <p>Physics stays in real units: lava, tephra and mass flows all take real rates (m³/s, kg/s) and
+ * map them onto the block world themselves (the lava grid is {@link VolcanoScaling#metersPerBlock()}
+ * wide per column, set by {@link VolcanoSystem}). Register after the chamber, dikes and alert estimator and before the lava,
  * tephra and mass-flow subsystems so changes apply in the same tick.
  */
 public final class VolcanoCoupler implements Subsystem {
@@ -182,7 +182,7 @@ public final class VolcanoCoupler implements Subsystem {
     }
 
     private void updateLava(List<VentSite> vents, double realRate) {
-        double perVent = realRate * scaling.volumeScale() / vents.size();
+        double perVent = realRate / vents.size();
         Set<String> wanted = new TreeSet<>();
         for (VentSite vent : vents) {
             String sourceId = sourceId(vent);

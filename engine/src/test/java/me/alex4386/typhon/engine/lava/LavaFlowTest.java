@@ -283,7 +283,7 @@ class LavaFlowTest {
         Engine engine = world.engine(lava, 11);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 400);
-        List<LavaEvents.LavaEnteredWater> entries = world.events(LavaEvents.LavaEnteredWater.class);
+        List<LavaEvents.LavaOceanEntry> entries = world.events(LavaEvents.LavaOceanEntry.class);
         assertFalse(entries.isEmpty());
         assertTrue(entries.stream().allMatch(e -> e.pos().x() >= 10));
     }

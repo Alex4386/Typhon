@@ -152,8 +152,9 @@ class VolcanoSystemTest {
                 .map(BlockChange::to).anyMatch(s -> s.id().equals(LAVA));
         assertTrue(lavaPlaced, "lava blocks should appear at the surface");
         assertTrue(w.lava().totalLavaVolume() + w.lava().solidifiedVolume() > 0);
-        // Volume reaching the world is the real erupted volume scaled by 1/L³.
-        double expected = w.volcano().chamber().eruptedVolume() * VolcanoScaling.DEFAULT.volumeScale();
+        // The lava field receives the real erupted volume on an L-metre grid (V/L³ blocks).
+        assertEquals(VolcanoScaling.DEFAULT.metersPerBlock(), w.lava().metersPerBlock());
+        double expected = w.volcano().chamber().eruptedVolume();
         assertEquals(expected, w.lava().emittedVolume(), expected * 0.2 + 1);
     }
 
