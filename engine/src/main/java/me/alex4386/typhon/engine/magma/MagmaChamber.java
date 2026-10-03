@@ -93,7 +93,14 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     @Override
     public void registerCommands(CommandBus bus) {
-        MagmaCommandRouter.join(bus, this);
+        bus.register(SetSupplyRate.class, this::handleIfTargeted);
+        bus.register(InjectRecharge.class, this::handleIfTargeted);
+        bus.register(StartEruption.class, this::handleIfTargeted);
+        bus.register(StopEruption.class, this::handleIfTargeted);
+    }
+
+    private void handleIfTargeted(MagmaCommand command) {
+        if (command.volcanoId().equals(config.volcanoId())) handle(command);
     }
 
     void handle(MagmaCommand command) {

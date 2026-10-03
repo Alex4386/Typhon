@@ -233,8 +233,9 @@ class MagmaChamberTest {
         assertFalse(a.erupting());
         assertTrue(b.erupting());
 
-        engine.submit(new StartEruption("nope"));
-        assertThrows(IllegalArgumentException.class, engine::tick);
+        engine.submit(new StartEruption("nope")); // no such volcano: ignored by every chamber
+        run(engine, 40, EngineEvent.class);
+        assertFalse(a.erupting());
 
         MagmaChamber duplicate = new MagmaChamber(MagmaChamberConfig.builder("a", CENTER).build());
         assertThrows(IllegalArgumentException.class,
