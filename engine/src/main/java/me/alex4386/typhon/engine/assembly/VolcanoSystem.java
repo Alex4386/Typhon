@@ -66,6 +66,7 @@ public final class VolcanoSystem {
         this.vents = b.vents;
         this.scaling = b.scaling;
         b.lava.setMetersPerBlock(scaling.metersPerBlock());
+        b.terrain.setMetersPerBlock(scaling.metersPerBlock());
 
         BlockPos primary = vents.get(0).position();
         MagmaChamberConfig chamberConfig = (b.chamberConfig != null

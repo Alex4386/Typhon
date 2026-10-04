@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.save.FieldChunk;
 import me.alex4386.typhon.engine.save.StateReader;
@@ -14,21 +15,50 @@ import me.alex4386.typhon.engine.save.StateWriter;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.world.BlockMaterialPalette;
+import me.alex4386.typhon.engine.world.Material;
+import me.alex4386.typhon.engine.world.MaterialTable;
+import me.alex4386.typhon.engine.world.UnitTable;
+import me.alex4386.typhon.engine.world.WorldModel;
+import me.alex4386.typhon.engine.world.WorldSpec;
 
 /**
- * The engine's view of the world surface: a sparse set of chunk column grids.
+ * Block-level view of the {@link WorldModel}: per column the ground block, the water surface block
+ * and the visible surface block, in sparse 16×16 chunks.
  *
- * <p>Hosts feed it with {@link TerrainSnapshot} commands; simulation subsystems read it and update it
- * when they change the surface (e.g. lava solidifying raises the ground). Register it before the
- * subsystems that depend on it so snapshots are applied first.
+ * <p>The world model (stratigraphic stacks in real metres) is the source of truth for what lies
+ * underground; this class is the bridge that keeps the existing block-oriented subsystems working.
+ * Every surface change made through it is mirrored into the stacks: raising the ground deposits the
+ * surface block's material (unattributed unless a unit is given), lowering it erodes. A host
+ * {@link TerrainSnapshot} is an import path: unknown columns are built from the world spec's
+ * geology, known ones are reconciled (layers are kept when the surface did not move). Blocks are
+ * cubes {@link WorldSpec#metersPerColumn()} on a side, so ground block {@code y} has its top at
+ * {@code (y + 1)·L} metres.
  *
- * <p>Terrain is persisted with the engine state (it is the simulator's source of truth). Hosts may
- * still send fresh snapshots after a restart to pick up edits made while the engine was stopped.
+ * <p>Register it before the subsystems that depend on it so snapshots are applied first. The block
+ * cache (ground, water and surface ids) and the world model are both persisted.
  */
 public final class TerrainModel implements Subsystem {
     public static final String ID = "terrain";
+    private static final double EPS = 1e-6;
 
     private final Map<Long, TerrainChunk> chunks = new HashMap<>();
+    private final WorldModel world;
+    private final BlockMaterialPalette palette;
+
+    /** Stand-alone terrain over a default one-metre world model (tests, simple hosts). */
+    public TerrainModel() {
+        this(new WorldModel(WorldSpec.defaults()));
+    }
+
+    public TerrainModel(WorldModel world) {
+        this(world, BlockMaterialPalette.minecraft());
+    }
+
+    public TerrainModel(WorldModel world, BlockMaterialPalette palette) {
+        this.world = Objects.requireNonNull(world);
+        this.palette = Objects.requireNonNull(palette);
+    }
 
     @Override
     public String id() {
@@ -41,6 +71,11 @@ public final class TerrainModel implements Subsystem {
     }
 
     @Override
+    public Object config() {
+        return world.spec();
+    }
+
+    @Override
     public void registerCommands(CommandBus bus) {
         bus.register(TerrainSnapshot.class, this::apply);
     }
@@ -48,10 +83,79 @@ public final class TerrainModel implements Subsystem {
     @Override
     public void step(StepContext context) {}
 
+    /** The underlying world model. */
+    public WorldModel world() {
+        return world;
+    }
+
+    /**
+     * Sets the block size (metres per block and per column) while the world model is still empty;
+     * a no-op if it already matches. Volcano assemblies call this like {@code LavaFlow#setMetersPerBlock}.
+     */
+    public void setMetersPerBlock(double meters) {
+        WorldSpec spec = world.spec();
+        if (spec.metersPerColumn() == meters) return;
+        world.setSpec(spec.withMetersPerColumn(meters));
+    }
+
+    public BlockMaterialPalette palette() {
+        return palette;
+    }
+
     public void apply(TerrainSnapshot snapshot) {
+        List<WorldModel.ColumnImport> imports = new ArrayList<>();
         for (TerrainChunk chunk : snapshot.chunks()) {
             chunks.put(key(chunk.chunkX(), chunk.chunkZ()), chunk.copy());
+            for (int lz = 0; lz < TerrainChunk.SIZE; lz++) {
+                for (int lx = 0; lx < TerrainChunk.SIZE; lx++) {
+                    int x = chunk.chunkX() * TerrainChunk.SIZE + lx;
+                    int z = chunk.chunkZ() * TerrainChunk.SIZE + lz;
+                    TerrainColumn column = chunk.get(x, z);
+                    if (world.isKnown(x, z)) {
+                        sync(x, z, column, UnitTable.UNATTRIBUTED);
+                    } else {
+                        Material cover = palette.knows(column.surface()) && solid(column.surface())
+                                ? palette.material(column.surface()) : null;
+                        imports.add(new WorldModel.ColumnImport(x, z, world.spec().blockTop(column.groundY()), cover));
+                    }
+                }
+            }
         }
+        world.importColumns(imports);
+        for (TerrainChunk chunk : snapshot.chunks()) {
+            for (int i = 0; i < TerrainChunk.AREA; i++) {
+                int x = chunk.chunkX() * TerrainChunk.SIZE + (i & 15);
+                int z = chunk.chunkZ() * TerrainChunk.SIZE + (i >> 4);
+                syncWater(x, z, chunk.waterY[i]);
+            }
+        }
+    }
+
+    private boolean solid(BlockId block) {
+        return palette.material(block).solid();
+    }
+
+    /** Mirrors a block-level column change into the world model. */
+    private void sync(int x, int z, TerrainColumn column, int unit) {
+        WorldSpec spec = world.spec();
+        double target = spec.blockTop(column.groundY());
+        double current = world.surfaceZ(x, z);
+        if (Double.isNaN(current)) {
+            Material cover = palette.knows(column.surface()) && solid(column.surface())
+                    ? palette.material(column.surface()) : null;
+            world.importColumn(x, z, target, cover);
+        } else if (target > current + EPS) {
+            Material material = palette.material(column.surface());
+            if (!material.solid()) material = MaterialTable.require(spec.surfaceMaterial());
+            world.deposit(x, z, target - current, material, unit);
+        } else if (target < current - EPS) {
+            world.erode(x, z, current - target, false);
+        }
+        syncWater(x, z, column.waterY());
+    }
+
+    private void syncWater(int x, int z, int waterY) {
+        world.setWaterZ(x, z, waterY == TerrainColumn.NO_WATER ? Double.NaN : world.spec().blockTop(waterY));
     }
 
     public boolean isKnown(int x, int z) {
@@ -79,15 +183,28 @@ public final class TerrainModel implements Subsystem {
         return chunk == null ? fallback : chunk.groundY[TerrainChunk.index(x, z)];
     }
 
-    /** Updates a column the engine itself changed. Creates the chunk if it is unknown. */
+    /**
+     * Updates a column the engine itself changed (creates the chunk if it is unknown) and mirrors the
+     * change into the world model as unattributed material.
+     */
     public void setColumn(int x, int z, TerrainColumn column) {
+        setColumn(x, z, column, UnitTable.UNATTRIBUTED);
+    }
+
+    /** {@link #setColumn} with the stratigraphic unit a raised ground belongs to. */
+    public void setColumn(int x, int z, TerrainColumn column, int unit) {
         chunks.computeIfAbsent(key(x >> 4, z >> 4), k -> new TerrainChunk(x >> 4, z >> 4)).set(x, z, column);
+        sync(x, z, column, unit);
     }
 
     public void setGround(int x, int z, int groundY, BlockId surface) {
+        setGround(x, z, groundY, surface, UnitTable.UNATTRIBUTED);
+    }
+
+    public void setGround(int x, int z, int groundY, BlockId surface, int unit) {
         TerrainColumn current = column(x, z);
         int waterY = current == null ? TerrainColumn.NO_WATER : current.waterY();
-        setColumn(x, z, new TerrainColumn(groundY, waterY, surface));
+        setColumn(x, z, new TerrainColumn(groundY, waterY, surface), unit);
     }
 
     public int chunkCount() {
@@ -99,45 +216,48 @@ public final class TerrainModel implements Subsystem {
         return new ArrayList<>(chunks.values());
     }
 
-    // ── Persistence: one field chunk per terrain chunk; surface ids through a shared palette ──
+    // ── Persistence: block cache (one field chunk per terrain chunk, surface ids through a palette)
+    //    plus the world model (stacks per 32×32 tile) ──
 
     private static final int SCHEMA = 1;
 
     @Override
     public void saveState(StateWriter out) {
         StateWriter.Field field = out.field("columns", SCHEMA);
-        Map<BlockId, Integer> palette = new LinkedHashMap<>();
+        Map<BlockId, Integer> ids = new LinkedHashMap<>();
         List<Long> keys = new ArrayList<>(chunks.keySet());
         keys.sort(null);
         for (long key : keys) {
             TerrainChunk chunk = chunks.get(key);
             int[] surface = new int[TerrainChunk.AREA];
             for (int i = 0; i < TerrainChunk.AREA; i++) {
-                surface[i] = palette.computeIfAbsent(chunk.surface[i], id -> palette.size());
+                surface[i] = ids.computeIfAbsent(chunk.surface[i], id -> ids.size());
             }
             field.put(chunk.chunkX(), chunk.chunkZ(), new FieldChunk()
                     .ints("groundY", chunk.groundY.clone())
                     .ints("waterY", chunk.waterY.clone())
                     .ints("surface", surface));
         }
-        JsonArray ids = new JsonArray();
-        palette.keySet().forEach(id -> ids.add(id.toString()));
-        out.json().add("palette", ids);
+        JsonArray palette = new JsonArray();
+        ids.keySet().forEach(id -> palette.add(id.toString()));
+        out.json().add("palette", palette);
+        world.save(out);
     }
 
     @Override
     public void loadState(StateReader in) {
         chunks.clear();
+        world.load(in);
         StateReader.Field field = in.field("columns");
         if (field == null) return;
-        List<BlockId> palette = new ArrayList<>();
-        for (JsonElement e : in.json().getAsJsonArray("palette")) palette.add(BlockId.parse(e.getAsString()));
+        List<BlockId> ids = new ArrayList<>();
+        for (JsonElement e : in.json().getAsJsonArray("palette")) ids.add(BlockId.parse(e.getAsString()));
         for (StateReader.Entry entry : field.chunks()) {
             TerrainChunk chunk = new TerrainChunk(entry.chunkX(), entry.chunkZ());
             System.arraycopy(entry.data().ints("groundY"), 0, chunk.groundY, 0, TerrainChunk.AREA);
             System.arraycopy(entry.data().ints("waterY"), 0, chunk.waterY, 0, TerrainChunk.AREA);
             int[] surface = entry.data().ints("surface");
-            for (int i = 0; i < TerrainChunk.AREA; i++) chunk.surface[i] = palette.get(surface[i]);
+            for (int i = 0; i < TerrainChunk.AREA; i++) chunk.surface[i] = ids.get(surface[i]);
             chunks.put(key(entry.chunkX(), entry.chunkZ()), chunk);
         }
     }
