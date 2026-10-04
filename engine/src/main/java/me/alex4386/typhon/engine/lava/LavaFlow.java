@@ -891,7 +891,7 @@ public final class LavaFlow implements Subsystem {
         Material roofRock = LavaPalette.rockMaterial(LavaPalette.crustSilica(kind), false, false);
         world.deposit(x, z, hc, roofRock, Provenance.sibling(world, lavaUnit, DepositType.TUBE_ROOF, currentTime),
                 LayerFlags.FRACTURED, roofRock.porosity(), 1);
-        c.bed[i] += cavity + hc;
+        rereadBed(c, i);
         tubeColumns.put(columnKey(x, z), new int[] {voidBottom, roofBottom - 1});
 
         solidifiedVolume += hc * area();
@@ -974,8 +974,10 @@ public final class LavaFlow implements Subsystem {
      */
     private void depositRock(LavaChunk c, int i, double thickness, Material material, int unit, int flags) {
         if (!(thickness > 0)) return;
-        world().deposit(c.worldX(i), c.worldZ(i), thickness, material, unit, flags, material.porosity(), 1.0);
-        c.bed[i] += thickness;
+        int x = c.worldX(i);
+        int z = c.worldZ(i);
+        world().deposit(x, z, thickness, material, unit, flags, material.porosity(), 1.0);
+        rereadBed(c, i); // the stacks hold elevations as floats; stay identical to a fresh read (restores)
         c.solid[i] += thickness;
     }
 
@@ -1229,6 +1231,14 @@ public final class LavaFlow implements Subsystem {
                     ? surface + world.uplift(x, z)
                     : c.ground[i] == UNKNOWN ? Double.NaN : (c.ground[i] + 1) * metersPerBlock;
         }
+    }
+
+    private void rereadBed(LavaChunk c, int i) {
+        WorldModel world = world();
+        int x = c.worldX(i);
+        int z = c.worldZ(i);
+        double surface = world.surfaceZ(x, z);
+        if (surface == surface) c.bed[i] = surface + world.uplift(x, z);
     }
 
     /** Fed by an effusive source this step: vents stay open (no crust). */

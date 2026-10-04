@@ -19,7 +19,6 @@ final class MassFlowChunk {
     final double[] depositHeat = new double[AREA];  // Σ thickness·temperature of the partial deposit
     final double[] depositSpeed = new double[AREA]; // Σ thickness·speed of the partial deposit
     final double[] depositTotal = new double[AREA]; // all deposit laid down in the column (m)
-    final double[] erodible = new double[AREA];     // loose material available to lahars (m)
     final double[] soak = new double[AREA];         // rain soaked into the loose material (m of water)
     final byte[] veneer = new byte[AREA];           // rendered veneer tier: 0 none, 1 thin, 2 thick
 
@@ -40,7 +39,7 @@ final class MassFlowChunk {
     long touchedStamp = Long.MIN_VALUE;
     long depositStamp = Long.MIN_VALUE;
     int flowCells;
-    int erodibleCells;
+    int soakedCells;
 
     MassFlowChunk(int cx, int cz) {
         this.cx = cx;
@@ -83,14 +82,14 @@ final class MassFlowChunk {
         int e = 0;
         for (int i = 0; i < AREA; i++) {
             if (depth[i] > 0) n++;
-            if (erodible[i] > 0) e++;
+            if (soak[i] > 0) e++;
         }
         flowCells = n;
-        erodibleCells = e;
+        soakedCells = e;
     }
 
     boolean hasPersistentState() {
-        if (flowCells > 0 || erodibleCells > 0) return true;
+        if (flowCells > 0 || soakedCells > 0) return true;
         for (int i = 0; i < AREA; i++) {
             if (deposit[i] != 0 || depositTotal[i] != 0 || veneer[i] != 0) return true;
         }

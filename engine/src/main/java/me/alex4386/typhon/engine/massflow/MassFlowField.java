@@ -27,6 +27,10 @@ import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
+import me.alex4386.typhon.engine.world.DepositType;
+import me.alex4386.typhon.engine.world.LayerFlags;
+import me.alex4386.typhon.engine.world.Material;
+import me.alex4386.typhon.engine.world.UnitSource;
 import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.BlockState;
 import me.alex4386.typhon.engine.save.FieldChunk;
@@ -96,7 +100,8 @@ public abstract class MassFlowField implements Subsystem {
     protected double entrained;
     protected double deposited;
     protected double lost;
-    private DepositListener depositListener;
+    protected UnitSource units = UnitSource.UNATTRIBUTED;
+    private double currentTime;
 
     // per-step / per-substep scratch
     private final TreeSet<Long> neededTerrain = new TreeSet<>();
@@ -154,9 +159,13 @@ public abstract class MassFlowField implements Subsystem {
         return config.copy();
     }
 
-    /** Called for every deposit increment (e.g. to feed lahars with fresh loose material). */
-    public void setDepositListener(DepositListener listener) {
-        this.depositListener = listener;
+    /**
+     * Attributes deposits to the producing volcano's current eruption. Deposits go into the world
+     * model as layers of that unit; loose ones (non-welded ignimbrite, lahar deposits) are what rain
+     * and later lahars entrain.
+     */
+    public void setUnits(UnitSource units) {
+        this.units = units;
     }
 
     /**
@@ -275,6 +284,18 @@ public abstract class MassFlowField implements Subsystem {
     /** Block laid down for one whole block of deposit, from the partial deposit's averages. */
     protected abstract BlockState depositBlock(MassFlowChunk c, int i, double meanTemperatureC, double meanSpeed);
 
+    /** Stratigraphic deposit type of this kind's deposits. */
+    protected abstract DepositType depositType();
+
+    /** World-model material laid down at a deposition temperature and flow speed. */
+    protected abstract Material depositMaterial(double temperatureC, double speed);
+
+    /** Layer flags of the deposit (e.g. {@link LayerFlags#LOOSE} for non-welded material). */
+    protected abstract int depositFlags(double temperatureC);
+
+    /** Welding (0 loose – 1 fully welded) of the deposit. */
+    protected abstract double depositWelding(double temperatureC);
+
     /** Veneer for thin deposit (tier 1 thin, 2 thick). */
     protected abstract BlockState veneer(int tier);
 
@@ -300,6 +321,7 @@ public abstract class MassFlowField implements Subsystem {
     @Override
     public void step(StepContext context) {
         double time = context.time();
+        currentTime = time;
         stamp = context.step();
         double dt = context.dtSeconds() * config.timeScale;
         Outbox outbox = context.outbox();
@@ -616,7 +638,10 @@ public abstract class MassFlowField implements Subsystem {
         c.depositHeat[i] += depositThicknessM * temperature;
         c.depositSpeed[i] += depositThicknessM * speed;
         c.depositTotal[i] += depositThicknessM;
-        if (depositListener != null) depositListener.deposited(c.worldX(i), c.worldZ(i), depositThicknessM);
+        Material material = depositMaterial(temperature, speed);
+        int unit = units.unit(depositType(), currentTime, temperature);
+        terrain.world().deposit(c.worldX(i), c.worldZ(i), depositThicknessM, material, unit, depositFlags(temperature),
+                material.porosity(), depositWelding(temperature));
         while (c.deposit[i] >= dx - 1e-9) placeBlock(c, i, outbox);
     }
 
@@ -638,7 +663,7 @@ public abstract class MassFlowField implements Subsystem {
                 ? MassFlowPalette.WATER.id() : MassFlowPalette.AIR.id();
         BlockState block = depositBlock(c, i, meanT, meanU);
         outbox.setBlock(BlockChange.replace(new BlockPos(x, y, z), expected, block));
-        terrain.setGround(x, z, y, block.id());
+        terrain.updateBlockCache(x, z, y, block.id()); // the world model already holds the deposit
         c.ground[i] = y;
         c.veneer[i] = 0;
         stats.blocks++;
@@ -660,7 +685,7 @@ public abstract class MassFlowField implements Subsystem {
                 BlockState state = veneer(tier);
                 if (!state.id().equals(column.surface())) {
                     outbox.setBlock(BlockChange.replace(new BlockPos(x, c.ground[i], z), column.surface(), state));
-                    terrain.setGround(x, z, c.ground[i], state.id());
+                    terrain.updateBlockCache(x, z, c.ground[i], state.id());
                 }
                 c.veneer[i] = (byte) tier;
             }
@@ -821,7 +846,7 @@ public abstract class MassFlowField implements Subsystem {
     // ── Persistence ──
 
     /** Schema of the per-chunk {@code cells} field. */
-    private static final int CELLS_SCHEMA = 1;
+    private static final int CELLS_SCHEMA = 2;
 
     @Override
     public void saveState(StateWriter writer) {
@@ -873,7 +898,6 @@ public abstract class MassFlowField implements Subsystem {
                     .doubles("depositHeat", c.depositHeat.clone())
                     .doubles("depositSpeed", c.depositSpeed.clone())
                     .doubles("depositTotal", c.depositTotal.clone())
-                    .doubles("erodible", c.erodible.clone())
                     .doubles("soak", c.soak.clone())
                     .bytes("veneer", c.veneer.clone()));
         }
@@ -925,7 +949,6 @@ public abstract class MassFlowField implements Subsystem {
                 System.arraycopy(f.doubles("depositHeat"), 0, c.depositHeat, 0, AREA);
                 System.arraycopy(f.doubles("depositSpeed"), 0, c.depositSpeed, 0, AREA);
                 System.arraycopy(f.doubles("depositTotal"), 0, c.depositTotal, 0, AREA);
-                System.arraycopy(f.doubles("erodible"), 0, c.erodible, 0, AREA);
                 System.arraycopy(f.doubles("soak"), 0, c.soak, 0, AREA);
                 System.arraycopy(f.bytes("veneer"), 0, c.veneer, 0, AREA);
                 c.recount();

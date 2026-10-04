@@ -105,14 +105,15 @@ public final class TerrainModel implements Subsystem {
     public void apply(TerrainSnapshot snapshot) {
         List<WorldModel.ColumnImport> imports = new ArrayList<>();
         for (TerrainChunk chunk : snapshot.chunks()) {
-            chunks.put(key(chunk.chunkX(), chunk.chunkZ()), chunk.copy());
+            // a re-sent column whose ground block did not move keeps the world model's exact surface
+            TerrainChunk previous = chunks.put(key(chunk.chunkX(), chunk.chunkZ()), chunk.copy());
             for (int lz = 0; lz < TerrainChunk.SIZE; lz++) {
                 for (int lx = 0; lx < TerrainChunk.SIZE; lx++) {
                     int x = chunk.chunkX() * TerrainChunk.SIZE + lx;
                     int z = chunk.chunkZ() * TerrainChunk.SIZE + lz;
                     TerrainColumn column = chunk.get(x, z);
                     if (world.isKnown(x, z)) {
-                        sync(x, z, column, UnitTable.UNATTRIBUTED, null);
+                        sync(x, z, column, UnitTable.UNATTRIBUTED, previous == null ? null : previous.get(x, z));
                     } else {
                         Material cover = palette.knows(column.surface()) && solid(column.surface())
                                 ? palette.material(column.surface()) : null;

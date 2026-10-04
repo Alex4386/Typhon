@@ -98,7 +98,9 @@ class VolcanoSystemTest {
         volcano.addTo(builder).add(lava);
         if (restore != null) builder.restore(restore);
         Engine engine = builder.build();
-        engine.submit(cone());
+        // A restored engine already holds its terrain (persisted world model); re-sending the boot-time
+        // cone would erase the stratigraphy laid down since.
+        if (restore == null) engine.submit(cone());
         return new World(engine, terrain, lava, volcano);
     }
 
@@ -198,7 +200,7 @@ class VolcanoSystemTest {
         TerrainSnapshot terrain = resample(first.terrain());
 
         World second = world(9, basalt(), saved);
-        second.engine().submit(terrain); // host re-sends the live terrain after the cone it submitted at boot
+        second.engine().submit(terrain); // host re-sends the live terrain (unchanged blocks keep the exact surface)
         List<EngineFrame> resumed = run(second.engine(), after);
 
         assertEquals(referenceFrames.subList(before, before + after), resumed);

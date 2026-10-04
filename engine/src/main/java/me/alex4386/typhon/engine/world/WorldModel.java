@@ -41,6 +41,7 @@ public final class WorldModel implements WorldQuery, WorldEdit {
     private final TreeMap<String, Integer> volcanoEdificeUnits = new TreeMap<>();
     private List<Edifice> edifices = List.of();
     private WaterSink waterSink;
+    private final List<DepositObserver> depositObservers = new ArrayList<>();
 
     public WorldModel(WorldSpec spec) {
         this.spec = Objects.requireNonNull(spec);
@@ -322,7 +323,26 @@ public final class WorldModel implements WorldQuery, WorldEdit {
     @Override
     public boolean deposit(int x, int z, double thickness, Material material, int unit, int flags, double porosity,
             double welding) {
-        return stacks.deposit(x, z, thickness, material.id(), unit, flags, porosity, welding);
+        boolean done = stacks.deposit(x, z, thickness, material.id(), unit, flags, porosity, welding);
+        if (done && !depositObservers.isEmpty()) {
+            for (DepositObserver o : depositObservers) o.deposited(x, z, thickness, unit, flags);
+        }
+        return done;
+    }
+
+    /** Notified after every successful {@link #deposit}. */
+    @FunctionalInterface
+    public interface DepositObserver {
+        void deposited(int x, int z, double thickness, int unit, int flags);
+    }
+
+    /**
+     * Registers an observer of deposits (e.g. lahars tracking where fresh loose material lies).
+     * Observers are not persisted: subsystems register when the engine is built and persist whatever
+     * they derive.
+     */
+    public void addDepositObserver(DepositObserver observer) {
+        depositObservers.add(Objects.requireNonNull(observer));
     }
 
     @Override

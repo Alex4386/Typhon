@@ -9,6 +9,10 @@ import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.world.BlockState;
+import me.alex4386.typhon.engine.world.DepositType;
+import me.alex4386.typhon.engine.world.LayerFlags;
+import me.alex4386.typhon.engine.world.Material;
+import me.alex4386.typhon.engine.world.MaterialTable;
 
 /**
  * Pyroclastic density currents: the dense basal part of a column-collapse or dome-collapse flow,
@@ -116,6 +120,30 @@ public final class PyroclasticFlows extends MassFlowField {
     @Override
     protected BlockState veneer(int tier) {
         return MassFlowPalette.PDC_VENEER;
+    }
+
+    @Override
+    protected DepositType depositType() {
+        return DepositType.PDC;
+    }
+
+    /** Ignimbrite: tuff (welded or not; welded at or above the welding temperature). */
+    @Override
+    protected Material depositMaterial(double temperatureC, double speed) {
+        return MaterialTable.TUFF;
+    }
+
+    /** Non-welded ignimbrite is loose: rain and lahars rework it. */
+    @Override
+    protected int depositFlags(double temperatureC) {
+        return temperatureC >= config.weldingTemperatureC ? 0 : LayerFlags.LOOSE;
+    }
+
+    /** Welding grows linearly from 0 at {@code 0.6·T_weld} to 1 at the welding temperature. */
+    @Override
+    protected double depositWelding(double temperatureC) {
+        double lo = 0.6 * config.weldingTemperatureC;
+        return Math.max(0, Math.min(1, (temperatureC - lo) / (config.weldingTemperatureC - lo)));
     }
 
     @Override

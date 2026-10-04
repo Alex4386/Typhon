@@ -29,6 +29,11 @@ import me.alex4386.typhon.engine.tephra.TephraEvents.PlumeColumn;
 import me.alex4386.typhon.engine.tephra.TephraEvents.VolcanicLightning;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
+import me.alex4386.typhon.engine.world.DepositType;
+import me.alex4386.typhon.engine.world.LayerFlags;
+import me.alex4386.typhon.engine.world.MaterialTable;
+import me.alex4386.typhon.engine.world.UnitSource;
+import me.alex4386.typhon.engine.world.WorldModel;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.world.BlockId;
@@ -71,6 +76,7 @@ public final class TephraSubsystem implements Subsystem {
 
     private final String id;
     private final TerrainModel terrain;
+    private UnitSource units = UnitSource.UNATTRIBUTED;
     private final TephraConfig config;
     private final WindField wind;
     private final List<EngineCommand> pending = new ArrayList<>();
@@ -118,6 +124,11 @@ public final class TephraSubsystem implements Subsystem {
 
     public void stopPhase() {
         pending.add(new StopExplosivePhase(id));
+    }
+
+    /** Attributes ash fall and bombs to the producing volcano's current eruption ({@link DepositType#FALL}). */
+    public void setUnits(UnitSource units) {
+        this.units = units;
     }
 
     public void setWind(double speed, double directionRad, double variability) {
@@ -424,9 +435,22 @@ public final class TephraSubsystem implements Subsystem {
                     context.outbox().setBlock(new BlockChange(
                             new BlockPos(x + dx, y, z + dz), expected, BlockState.of(to)));
                 }
-                terrain.setGround(x + dx, z + dz, column.groundY() - depth, column.surface());
+                terrain.world().erode(x + dx, z + dz, depth * metersPerBlock(), false);
+                terrain.updateBlockCache(x + dx, z + dz, column.groundY() - depth, column.surface());
             }
         }
+    }
+
+    private double metersPerBlock() {
+        return terrain.world().spec().metersPerColumn();
+    }
+
+    /** Rock a bomb of {@code silicaWt} cools into, for the world model. */
+    private static me.alex4386.typhon.engine.world.Material bombRock(double silicaWt) {
+        if (silicaWt < 53) return MaterialTable.BASALT;
+        if (silicaWt < 63) return MaterialTable.ANDESITE;
+        if (silicaWt < 69) return MaterialTable.DACITE;
+        return MaterialTable.RHYOLITE;
     }
 
     private void placeBomb(StepContext context, int x, int z, Bomb bomb) {
@@ -436,7 +460,13 @@ public final class TephraSubsystem implements Subsystem {
         boolean inWater = column.waterY() != TerrainColumn.NO_WATER && y <= column.waterY();
         BlockPos pos = new BlockPos(x, y, z);
         context.outbox().setBlock(BlockChange.replace(pos, inWater ? WATER : BlockId.AIR, MAGMA_BLOCK));
-        terrain.setGround(x, z, y, MAGMA_BLOCK);
+        terrain.updateBlockCache(x, z, y, MAGMA_BLOCK);
+        // The world model gets the bomb's real volume spread over the column (a bomb is far smaller
+        // than a column; the block above only shows it).
+        double l = metersPerBlock();
+        double thickness = Math.PI / 6 * bomb.diameter * bomb.diameter * bomb.diameter / (l * l);
+        terrain.world().deposit(x, z, thickness, bombRock(bomb.silicaWt),
+                units.unit(DepositType.FALL, context.time(), Double.NaN), LayerFlags.FRACTURED, 0.1, 1.0);
 
         double seconds = Math.max(config.minCoolingSeconds, config.coolingSecondsPerSquareMeter * bomb.diameter * bomb.diameter);
         if (inWater) seconds *= config.waterCoolingFactor;
@@ -455,7 +485,7 @@ public final class TephraSubsystem implements Subsystem {
             context.outbox().setBlock(BlockChange.replace(pos, MAGMA_BLOCK, cooling.target()));
             TerrainColumn column = terrain.column(pos.x(), pos.z());
             if (column != null && column.groundY() == pos.y() && column.surface().equals(MAGMA_BLOCK)) {
-                terrain.setGround(pos.x(), pos.z(), pos.y(), cooling.target());
+                terrain.updateBlockCache(pos.x(), pos.z(), pos.y(), cooling.target());
             }
         }
     }
@@ -489,7 +519,8 @@ public final class TephraSubsystem implements Subsystem {
             grid.settle(dt, config.settlingVelocities, grid.plumeHeight);
             if (phase == null && grid.airborneTotal() < config.minAirborneMass) grid.discardAirborne();
         }
-        grid.applyDeposits(terrain, context.outbox(), config);
+        grid.applyDeposits(terrain, context.outbox(), config,
+                units.unit(DepositType.FALL, context.time(), Double.NaN));
     }
 
     private void lightning(StepContext context, BlockPos base, double height, double sigma, double dt) {

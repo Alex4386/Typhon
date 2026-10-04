@@ -16,6 +16,12 @@ import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
+import me.alex4386.typhon.engine.world.DepositType;
+import me.alex4386.typhon.engine.world.Material;
+import me.alex4386.typhon.engine.world.MaterialTable;
+import me.alex4386.typhon.engine.world.UnitSource;
+import me.alex4386.typhon.engine.world.WorldModel;
+import java.util.TreeSet;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
@@ -66,6 +72,7 @@ public final class DikePropagation implements Subsystem {
      *     at the chamber's assumed surface)
      */
     private Consumer<List<BlockPos>> hypocenterListener;
+    private UnitSource units = UnitSource.UNATTRIBUTED;
 
     public DikePropagation(DikeConfig config, DikeMagmaSource magma, TerrainModel terrain) {
         config.validate();
@@ -239,11 +246,55 @@ public final class DikePropagation implements Subsystem {
 
         if (dike.depth <= 0) {
             openFissure(dike, context);
+            emplaceIntrusion(dike, context.time());
         } else if (stall != null) {
             dike.status = DikeStatus.STALLED;
+            emplaceIntrusion(dike, context.time());
             context.outbox().emit(new DikeEvents.DikeStalled(context.time(), volcanoId, dike.id, dike.tip(), dike.depth,
                     dike.volume, stall));
         }
+    }
+
+    /**
+     * Records the frozen dike as {@link DepositType#INTRUSION} rock in the world model: in every
+     * column its path crossed (nucleation point to tip), from the chamber depth up to the tip depth
+     * (for a dike that reached the surface, up to one column-width below the surface, leaving the
+     * vent itself open). Dikes are thinner than a column; the layer marks where the intrusion is so
+     * cross-sections, heat and groundwater can see it.
+     */
+    private void emplaceIntrusion(Dike dike, double time) {
+        if (terrain == null) return;
+        WorldModel world = terrain.world();
+        double l = world.spec().metersPerColumn();
+        Material rock = intrusiveRock(magma.silicaWt());
+        int unit = units.unit(DepositType.INTRUSION, time, Double.NaN);
+        double dx = dike.x - dike.startX;
+        double dz = dike.z - dike.startZ;
+        int steps = Math.max(1, (int) Math.ceil(2 * Math.hypot(dx, dz)));
+        TreeSet<Long> done = new TreeSet<>();
+        for (int s = 0; s <= steps; s++) {
+            double f = (double) s / steps;
+            int x = (int) Math.floor(dike.startX + f * dx);
+            int z = (int) Math.floor(dike.startZ + f * dz);
+            if (!done.add(((long) x << 32) | (z & 0xffffffffL))) continue;
+            double surface = world.surfaceZ(x, z);
+            if (Double.isNaN(surface)) continue;
+            double top = surface - Math.max(dike.depth, l);
+            double bottom = surface - dike.chamberDepth;
+            if (top > bottom) world.fill(x, z, bottom, top, rock, unit);
+        }
+    }
+
+    /** Coarse-grained rock a dike of {@code silicaWt} crystallises into. */
+    static Material intrusiveRock(double silicaWt) {
+        if (silicaWt < 53) return MaterialTable.GABBRO;
+        if (silicaWt < 63) return MaterialTable.ANDESITE;
+        return MaterialTable.GRANITE;
+    }
+
+    /** Attributes the frozen dike's intrusion layers to the volcano's current eruption episode. */
+    public void setUnits(UnitSource units) {
+        this.units = units;
     }
 
     private void openFissure(Dike dike, StepContext context) {

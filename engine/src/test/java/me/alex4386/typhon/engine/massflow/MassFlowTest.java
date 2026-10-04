@@ -264,7 +264,8 @@ class MassFlowTest {
         assertEquals(1, started.size());
         assertEquals(Trigger.RAIN, started.get(0).trigger());
         assertEquals(0, l.erodibleThickness(20, 32), "slope deposit failed");
-        assertEquals(0.2, l.erodibleThickness(120, 32), 1e-12, "flat deposit stays");
+        // the world model stores layer tops as float metres
+        assertEquals(0.2, l.erodibleThickness(120, 32), 1e-5, "flat deposit stays");
         assertTrue(l.massBudget().entrained() > 0);
         assertTrue(w.reachX(l) > 60, "lahar reaches the plain");
     }

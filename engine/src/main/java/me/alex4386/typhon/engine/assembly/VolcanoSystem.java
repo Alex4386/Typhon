@@ -129,7 +129,7 @@ public final class VolcanoSystem {
             laharConfig.metersPerBlock = scaling.metersPerBlock();
             this.pdc = new PyroclasticFlows(PyroclasticFlows.defaultId(volcanoId), b.terrain, pdcConfig);
             this.lahars = new Lahars(Lahars.defaultId(volcanoId), b.terrain, laharConfig);
-            pdc.setDepositListener(lahars::addErodibleDeposit); // fresh ignimbrite is lahar source material
+            // loose ignimbrite and tephra in the world model are lahar source material automatically
         } else {
             this.pdc = null;
             this.lahars = null;
@@ -149,6 +149,12 @@ public final class VolcanoSystem {
         // Every deposit is attributed to this volcano's current eruption (stratigraphy).
         this.units = new VolcanoUnits(b.terrain.world(), volcanoId, chamber);
         coupler.setUnits(units);
+        tephra.setUnits(units);
+        if (dikes != null) dikes.setUnits(units);
+        if (pdc != null) {
+            pdc.setUnits(units);
+            lahars.setUnits(units);
+        }
     }
 
     /** Chamber a few dozen blocks under the primary vent, kept inside the overworld. */

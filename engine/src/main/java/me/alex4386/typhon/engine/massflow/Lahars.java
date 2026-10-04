@@ -1,8 +1,13 @@
 package me.alex4386.typhon.engine.massflow;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.FlowCell;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
@@ -13,6 +18,13 @@ import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.BlockState;
+import me.alex4386.typhon.engine.world.DepositType;
+import me.alex4386.typhon.engine.world.LayerFlags;
+import me.alex4386.typhon.engine.world.LayerView;
+import me.alex4386.typhon.engine.world.Material;
+import me.alex4386.typhon.engine.world.MaterialTable;
+import me.alex4386.typhon.engine.world.Provenance;
+import me.alex4386.typhon.engine.world.WorldModel;
 
 /**
  * Lahars: water–sediment flows (hyperconcentrated flow to debris flow) on the shared Voellmy solver
@@ -21,8 +33,9 @@ import me.alex4386.typhon.engine.world.BlockState;
  * <ul>
  *   <li>Friction rises with sediment: {@code μ = μ₀ + (μ_max − μ₀)·min(1, c/c_max)}, so dilute floods
  *       run farthest and debris flows stop sooner.
- *   <li>Bulking: faster than {@link MassFlowConfig#erosionSpeed}, the flow entrains loose deposit
- *       ({@link #addErodibleDeposit}) at {@code E = k·u·dt·(1 − c/c_max)} m per step; the eroded bulk
+ *   <li>Bulking: faster than {@link MassFlowConfig#erosionSpeed}, the flow entrains loose volcanic
+ *       deposit (unconsolidated tephra-fall, ignimbrite and lahar layers in the world model) at
+ *       {@code E = k·u·dt·(1 − c/c_max)} m per step, eroding it out of the stacks; the eroded bulk
  *       joins the flow with solids fraction {@code 1 − porosity}.
  *   <li>Deposition: {@code r = 1/τ_sed + max(0, 1 − u/u_stop)/τ_stop (+ 1/τ_water in standing
  *       water)}; settled flow leaves sediment {@code c·Δh/(1 − porosity)} thick and its water
@@ -42,9 +55,16 @@ public final class Lahars extends MassFlowField {
 
     private double rainfallMmPerHour;
     private boolean rainLaharActive;
+    /** Columns where loose volcanic material was deposited (packed x/z), oldest first; may hold stale entries. */
+    private final TreeSet<Long> erodibleColumns = new TreeSet<>();
 
     public Lahars(String id, TerrainModel terrain, MassFlowConfig config) {
         super(id, MassFlowKind.LAHAR, terrain, config);
+        terrain.world().addDepositObserver((x, z, thickness, unit, flags) -> {
+            if ((flags & LayerFlags.LOOSE) != 0 && ERODIBLE.contains(terrain.world().unit(unit).type())) {
+                erodibleColumns.add(columnKey(x, z));
+            }
+        });
     }
 
     public Lahars(String id, TerrainModel terrain) {
@@ -61,22 +81,45 @@ public final class Lahars extends MassFlowField {
 
     // ── Triggers ──
 
+    /** Deposit types whose loose layers rain and lahars rework: fresh tephra, ignimbrite, lahar deposits. */
+    static final Set<DepositType> ERODIBLE = EnumSet.of(DepositType.FALL, DepositType.PDC, DepositType.LAHAR);
+
     /**
-     * Marks loose material (fresh tephra or PDC deposit) that rain and passing lahars can mobilise.
-     * It describes the existing surface (already part of the terrain), so it does not raise the bed.
+     * Lays {@code thicknessM} of loose ash (an unattributed {@link DepositType#FALL} unit) on a known
+     * column of the world model, e.g. to script a deposit that rain can later mobilise. Normally
+     * deposits come from tephra fall and pyroclastic flows by themselves.
      */
     public void addErodibleDeposit(int x, int z, double thicknessM) {
         if (thicknessM <= 0) return;
-        MassFlowChunk c = chunkFor(x >> 4, z >> 4);
-        if (c == null) return;
-        int i = index(x, z);
-        if (c.erodible[i] <= 0) c.erodibleCells++;
-        c.erodible[i] += thicknessM;
+        WorldModel world = terrain.world();
+        int unit = Provenance.unitFor(world, null, -1, DepositType.FALL, 0, Double.NaN, Double.NaN);
+        world.deposit(x, z, thicknessM, MaterialTable.ASH, unit);
     }
 
+    /**
+     * Loose volcanic material at the top of a column (m): the unconsolidated {@link #ERODIBLE} layers
+     * down to the first consolidated layer, cavity or non-volcanic layer.
+     */
     public double erodibleThickness(int x, int z) {
-        MassFlowChunk c = chunkAt(x, z);
-        return c == null ? 0 : c.erodible[index(x, z)];
+        WorldModel world = terrain.world();
+        double sum = 0;
+        for (int k = world.layerCount(x, z) - 1; k > 0; k--) {
+            LayerView layer = world.layer(x, z, k);
+            if (!layer.loose() || layer.material() == MaterialTable.VOID.id()) break;
+            if (!ERODIBLE.contains(world.unit(layer.unit()).type())) break;
+            sum += layer.thickness();
+        }
+        return sum;
+    }
+
+    /** Removes up to {@code thicknessM} of loose material from the world model; returns what was removed. */
+    private double erodeLoose(int x, int z, double thicknessM) {
+        if (thicknessM <= 0) return 0;
+        return terrain.world().erode(x, z, thicknessM, true).removedM();
+    }
+
+    private static long columnKey(int x, int z) {
+        return ((long) x << 32) | (z & 0xffffffffL);
     }
 
     /** Rainfall intensity over the field (mm/h); 0 ends the rain. */
@@ -111,7 +154,8 @@ public final class Lahars extends MassFlowField {
      * Rain soaks into loose deposit; once its pores are full ({@code soaked ≥ porosity · e}) a deposit
      * on a slope steeper than {@link MassFlowConfig#rainMinSlope} fails and flows off as a slug: the
      * saturated bulk {@code e} (solids fraction {@code 1 − porosity}) plus concentrated runoff of
-     * {@code rainFailureWaterRatio · e}. Gentle slopes just stay saturated.
+     * {@code rainFailureWaterRatio · e}. Gentle slopes just stay saturated. The loose layers are read
+     * from (and eroded out of) the world model.
      */
     @Override
     protected void beforeTransport(double dt, double time, Outbox outbox) {
@@ -122,33 +166,38 @@ public final class Lahars extends MassFlowField {
         BlockPos strongest = null;
         double strongestVolume = 0;
 
-        for (MassFlowChunk c : new ArrayList<>(chunks())) {
-            if (c.erodibleCells == 0) continue;
+        for (long key : new ArrayList<>(erodibleColumns)) {
+            int x = (int) (key >> 32);
+            int z = (int) key;
+            double e = erodibleThickness(x, z);
+            if (e <= 0) {
+                erodibleColumns.remove(key);
+                continue;
+            }
+            MassFlowChunk c = chunkFor(x >> 4, z >> 4);
+            if (c == null) continue;
             ensureFresh(c);
-            for (int i = 0; i < AREA; i++) {
-                double e = c.erodible[i];
-                if (e <= 0 || c.ground[i] == UNKNOWN) continue;
-                c.soak[i] = Math.min(c.soak[i] + rain, config.porosity * e);
-                if (e < config.rainMinErodible || c.soak[i] < config.porosity * e) continue;
-                if (steepestBedSlope(c, i) < config.rainMinSlope) continue;
+            int i = index(x, z);
+            if (c.ground[i] == UNKNOWN) continue;
+            c.soak[i] = Math.min(c.soak[i] + rain, config.porosity * e);
+            if (c.soak[i] > 0 && c.soakedCells == 0) c.soakedCells = 1;
+            if (e < config.rainMinErodible || c.soak[i] < config.porosity * e) continue;
+            if (steepestBedSlope(c, i) < config.rainMinSlope) continue;
 
-                double runoff = config.rainFailureWaterRatio * e;
-                c.erodible[i] = 0;
-                c.soak[i] = 0;
-                c.erodibleCells--;
-                int x = c.worldX(i);
-                int z = c.worldZ(i);
-                if (runoff > 0) {
-                    inject(x, z, runoff * cellArea, config.ambientC, 0);
-                    released += runoff * cellArea;
-                }
-                entrain(c, i, e, solids);
-                double volume = (runoff + e) * cellArea;
-                mobilised += volume;
-                if (volume > strongestVolume) {
-                    strongestVolume = volume;
-                    strongest = new BlockPos(x, c.ground[i], z);
-                }
+            double removed = erodeLoose(x, z, e);
+            c.soak[i] = 0;
+            if (removed <= 0) continue;
+            double runoff = config.rainFailureWaterRatio * removed;
+            if (runoff > 0) {
+                inject(x, z, runoff * cellArea, config.ambientC, 0);
+                released += runoff * cellArea;
+            }
+            entrain(c, i, removed, solids);
+            double volume = (runoff + removed) * cellArea;
+            mobilised += volume;
+            if (volume > strongestVolume) {
+                strongestVolume = volume;
+                strongest = new BlockPos(x, c.ground[i], z);
             }
         }
         if (mobilised > 0 && !rainLaharActive) {
@@ -181,15 +230,18 @@ public final class Lahars extends MassFlowField {
         double sediment = c.sediment[i];
         double solids = 1 - config.porosity;
 
-        if (u > config.erosionSpeed && c.erodible[i] > 0) {
-            double capacity = Math.max(0, 1 - sediment / config.maxSedimentFraction);
-            double eroded = Math.min(c.erodible[i], config.erosionCoefficient * u * dt * capacity);
-            if (eroded > 0) {
-                c.erodible[i] -= eroded;
-                if (c.erodible[i] <= 0) c.erodible[i] = 0;
-                c.soak[i] = Math.min(c.soak[i], config.porosity * c.erodible[i]);
-                entrain(c, i, eroded, solids);
-                sediment = c.sediment[i];
+        if (u > config.erosionSpeed) {
+            int x = c.worldX(i);
+            int z = c.worldZ(i);
+            if (erodibleColumns.contains(columnKey(x, z))) {
+                double e = erodibleThickness(x, z);
+                double capacity = Math.max(0, 1 - sediment / config.maxSedimentFraction);
+                double eroded = erodeLoose(x, z, Math.min(e, config.erosionCoefficient * u * dt * capacity));
+                if (eroded > 0) {
+                    c.soak[i] = Math.min(c.soak[i], config.porosity * Math.max(0, e - eroded));
+                    entrain(c, i, eroded, solids);
+                    sediment = c.sediment[i];
+                }
             }
         }
 
@@ -199,6 +251,26 @@ public final class Lahars extends MassFlowField {
         double settled = c.depth[i] * (1 - StrictMath.exp(-rate * dt));
         if (c.depth[i] - settled < config.minDepth) settled = c.depth[i];
         depositFlow(c, i, settled, settled * sediment / solids, outbox);
+    }
+
+    @Override
+    protected DepositType depositType() {
+        return DepositType.LAHAR;
+    }
+
+    @Override
+    protected Material depositMaterial(double temperatureC, double speed) {
+        return MaterialTable.LAHAR_DEPOSIT;
+    }
+
+    @Override
+    protected int depositFlags(double temperatureC) {
+        return LayerFlags.LOOSE;
+    }
+
+    @Override
+    protected double depositWelding(double temperatureC) {
+        return 0;
     }
 
     @Override
@@ -240,11 +312,16 @@ public final class Lahars extends MassFlowField {
     protected void saveExtra(JsonObject out) {
         out.addProperty("rainfall", rainfallMmPerHour);
         out.addProperty("rainLaharActive", rainLaharActive);
+        JsonArray columns = new JsonArray();
+        for (long key : erodibleColumns) columns.add(key);
+        out.add("erodibleColumns", columns);
     }
 
     @Override
     protected void loadExtra(JsonObject in) {
         rainfallMmPerHour = in.get("rainfall").getAsDouble();
         rainLaharActive = in.get("rainLaharActive").getAsBoolean();
+        erodibleColumns.clear();
+        for (JsonElement e : in.getAsJsonArray("erodibleColumns")) erodibleColumns.add(e.getAsLong());
     }
 }

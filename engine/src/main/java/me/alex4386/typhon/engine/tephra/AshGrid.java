@@ -7,6 +7,8 @@ import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.save.FieldChunk;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
+import me.alex4386.typhon.engine.world.MaterialTable;
+import me.alex4386.typhon.engine.world.WorldModel;
 import me.alex4386.typhon.engine.world.BlockId;
 
 /**
@@ -255,9 +257,15 @@ final class AshGrid {
      * Columns the terrain model does not know are skipped.
      */
     void applyDeposits(TerrainModel terrain, Outbox outbox, TephraConfig config) {
+        applyDeposits(terrain, outbox, config, me.alex4386.typhon.engine.world.UnitTable.UNATTRIBUTED);
+    }
+
+    void applyDeposits(TerrainModel terrain, Outbox outbox, TephraConfig config, int unit) {
         AshPalette palette = config.palette;
         double minVisible = palette.minimumVisibleThickness();
         double jitter = config.depositJitter;
+        WorldModel world = terrain.world();
+        double metersPerBlock = world.spec().metersPerColumn();
 
         for (int j = 0; j < cells; j++) {
             for (int i = 0; i < cells; i++) {
@@ -265,14 +273,16 @@ final class AshGrid {
                 double t1 = thickness(cell, config.depositBulkDensity);
                 double t0 = applied[cell];
                 if (t1 - t0 < config.depositUpdateThickness) continue;
-                if (t1 * (1 + jitter) < minVisible) continue;
+                boolean visible = t1 * (1 + jitter) >= minVisible;
 
                 int x0 = originX + i * cellSize;
                 int z0 = originZ + j * cellSize;
                 for (int z = z0; z < z0 + cellSize; z++) {
                     for (int x = x0; x < x0 + cellSize; x++) {
                         double f = 1 + jitter * columnNoise(x, z);
-                        applyColumn(terrain, outbox, palette, x, z, t0 * f, t1 * f);
+                        // the world model records every millimetre as a loose fall layer (real m)
+                        world.deposit(x, z, (t1 - t0) * f * metersPerBlock, MaterialTable.ASH, unit);
+                        if (visible) applyColumn(terrain, outbox, palette, x, z, t0 * f, t1 * f);
                     }
                 }
                 applied[cell] = t1;
@@ -294,7 +304,7 @@ final class AshGrid {
                 if (y > BlockPos.MAX_Y) break;
                 BlockId expected = column.waterY() != TerrainColumn.NO_WATER && y <= column.waterY() ? WATER : BlockId.AIR;
                 outbox.setBlock(BlockChange.replace(new BlockPos(x, y, z), expected, palette.wholeBlock()));
-                terrain.setGround(x, z, y, palette.wholeBlock());
+                terrain.updateBlockCache(x, z, y, palette.wholeBlock());
             }
             return;
         }
@@ -306,7 +316,7 @@ final class AshGrid {
         BlockId cover = palette.covers().get(stage1).block();
         if (cover.equals(column.surface())) return;
         outbox.setBlock(BlockChange.replace(new BlockPos(x, column.groundY(), z), column.surface(), cover));
-        terrain.setGround(x, z, column.groundY(), cover);
+        terrain.updateBlockCache(x, z, column.groundY(), cover);
     }
 
     /** Deterministic per-column noise in [-1, 1). */
