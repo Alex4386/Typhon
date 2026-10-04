@@ -180,18 +180,36 @@ final class SubsurfaceHeat {
         for (SolverChunk ch : chunks) {
             for (int c = 0; c < SolverChunk.AREA; c++) {
                 if (!ch.exists[c]) continue;
+                double gradient = headGradient(ch, c);
                 for (int k = 0; k < n; k++) {
                     int i = c * n + k;
                     double cap = Math.max(1e3, ch.heatCapacity[i] + ch.porosity[i] * SubsurfaceGrid.WATER_DENSITY
                             * SubsurfaceGrid.WATER_HEAT_CAPACITY);
                     double kappa = ch.conductivity[i] / cap;
-                    double adv = ch.hydraulicK[i] * SubsurfaceGrid.WATER_DENSITY * SubsurfaceGrid.WATER_HEAT_CAPACITY / cap;
+                    double velocity = belowWaterTable(ch, c, k) ? ch.hydraulicK[i] * gradient : 0;
+                    double adv = velocity * SubsurfaceGrid.WATER_DENSITY * SubsurfaceGrid.WATER_HEAT_CAPACITY / cap;
                     double rate = 4 * kappa / (dx * dx) + 4 * adv / dx;
                     if (rate > 0) minStep = Math.min(minStep, 0.4 / rate);
                 }
             }
         }
         return Double.isInfinite(minStep) ? Double.MAX_VALUE : minStep;
+    }
+
+    /** Largest water-table slope from a column to its existing neighbours. */
+    private double headGradient(SolverChunk ch, int c) {
+        int gx = ch.gx(c);
+        int gz = ch.gz(c);
+        double max = 0;
+        int[][] around = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        for (int[] d : around) {
+            SolverChunk o = grid.chunkOf(gx + d[0], gz + d[1]);
+            if (o == null) continue;
+            int oc = SolverChunk.column(gx + d[0], gz + d[1]);
+            if (!o.exists[oc]) continue;
+            max = Math.max(max, Math.abs(o.head[oc] - ch.head[c]) / grid.dx());
+        }
+        return max;
     }
 
     private double capacity(SolverChunk ch, int c, int k, double volume) {
@@ -229,6 +247,9 @@ final class SubsurfaceHeat {
                 if (other == null) continue;
                 int oc = SolverChunk.column(ngx, ngz);
                 if (!other.exists[oc]) continue;
+                // Faces exchange heat only between chunks stepped together with the same time step;
+                // others (dormant, or warm next to hot) are treated as insulating for this step.
+                if (other != ch && !stepped.get(ch).equals(stepped.get(other))) continue;
                 double[] theirs = lateral.get(other);
                 double headGradient = (other.head[oc] - ch.head[c]) / dx;
                 for (int k = 0; k < n; k++) {
@@ -250,7 +271,7 @@ final class SubsurfaceHeat {
                         energy -= SubsurfaceGrid.WATER_DENSITY * SubsurfaceGrid.WATER_HEAT_CAPACITY * flow * upwind * dt;
                     }
                     mine[i] += energy;
-                    if (theirs != null) theirs[j] -= energy;
+                    theirs[j] -= energy;
                 }
             }
         }

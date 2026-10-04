@@ -126,7 +126,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
     }
 
     /** Brings the grid and surface water up to date with the world model (new columns, lakes, edits). */
-    private void prepare() {
+    void prepare() {
         List<HeatSources.Chamber> chambers = chambers();
         grid.refresh((ch, c) -> initializeColumn(ch, c, chambers));
         surface.seedLakes();
@@ -178,7 +178,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
      * One heat + groundwater step of {@code dtPhysical} seconds. {@code dtSim} is the simulated time it
      * covers (rain is integrated over physical time).
      */
-    private void macroStep(double dtPhysical, double dtSim, boolean withSurface) {
+    void macroStep(double dtPhysical, double dtSim, boolean withSurface) {
         macroSteps++;
         List<HeatSources.Chamber> chambers = chambers();
         if (withSurface) applyRain(dtPhysical);
@@ -251,17 +251,15 @@ public final class Subsurface implements Subsystem, HydrothermalField {
         Map<SolverChunk, Double> steps = new LinkedHashMap<>();
         for (SolverChunk ch : grid.chunks()) {
             if (!ch.anyExists()) continue;
+            // HOT: anomalous or next to an anomaly (so heat never crosses into a chunk that is not
+            // stepped with it); WARM: within two chunks; DORMANT otherwise.
             SolverChunk.Activity want = SolverChunk.Activity.DORMANT;
-            if (Boolean.TRUE.equals(anomalous.get(SubsurfaceGrid.key(ch.cx, ch.cz)))) {
-                want = SolverChunk.Activity.HOT;
-            } else {
-                for (int dz = -1; dz <= 1 && want == SolverChunk.Activity.DORMANT; dz++) {
-                    for (int dx = -1; dx <= 1; dx++) {
-                        if (Boolean.TRUE.equals(anomalous.get(SubsurfaceGrid.key(ch.cx + dx, ch.cz + dz)))) {
-                            want = SolverChunk.Activity.WARM;
-                            break;
-                        }
-                    }
+            for (int dz = -2; dz <= 2; dz++) {
+                for (int dx = -2; dx <= 2; dx++) {
+                    if (!Boolean.TRUE.equals(anomalous.get(SubsurfaceGrid.key(ch.cx + dx, ch.cz + dz)))) continue;
+                    SolverChunk.Activity level = Math.abs(dx) <= 1 && Math.abs(dz) <= 1
+                            ? SolverChunk.Activity.HOT : SolverChunk.Activity.WARM;
+                    if (level.ordinal() > want.ordinal()) want = level;
                 }
             }
             if (want.ordinal() >= ch.activity.ordinal()) {
@@ -529,6 +527,20 @@ public final class Subsurface implements Subsystem, HydrothermalField {
         SolverChunk ch = chunkAt(x, z);
         int c = SolverChunk.column(grid.solverCoord(x), grid.solverCoord(z));
         return ch == null || !ch.exists[c] ? 0 : ch.vadose[c];
+    }
+
+    /** Cumulative spring discharge into the surface-water field (m³). */
+    public double springDischarge() {
+        return surface.springInflow;
+    }
+
+    /** Cumulative rain runoff into the surface-water field (m³). */
+    public double runoff() {
+        return surface.runoff;
+    }
+
+    SubsurfaceGrid grid() {
+        return grid;
     }
 
     public WaterBudget budget() {
