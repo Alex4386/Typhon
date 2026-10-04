@@ -3,12 +3,11 @@ package me.alex4386.typhon.engine.geothermal;
 import java.util.Arrays;
 
 /**
- * Coarse 2D grid of shallow-subsurface state: excess temperature over ambient (°C) and groundwater
- * saturation (0..1) per cell.
+ * Coarse 2D feature grid: per cell, the shallow-reservoir excess temperature over ambient (°C) and
+ * liquid saturation (0..1) last sampled from the subsurface model.
  *
  * <p>Cell {@code (i, j)} covers blocks {@code [minX + i·s, minX + (i+1)·s) × [minZ + j·s, ...)} for
- * cell size {@code s}. Cells outside the grid are held at ambient (excess 0), so heat leaks out of
- * the boundary.
+ * cell size {@code s}.
  */
 public final class GeothermalGrid {
     private final int minX;
@@ -18,7 +17,6 @@ public final class GeothermalGrid {
     private final int cellSize;
     final double[] excess;
     final double[] water;
-    private final double[] scratch;
 
     public GeothermalGrid(int minX, int minZ, int sizeX, int sizeZ, int cellSize) {
         if (sizeX < 1 || sizeZ < 1 || cellSize < 1) throw new IllegalArgumentException("grid must be non-empty");
@@ -29,7 +27,6 @@ public final class GeothermalGrid {
         this.cellSize = cellSize;
         this.excess = new double[sizeX * sizeZ];
         this.water = new double[sizeX * sizeZ];
-        this.scratch = new double[sizeX * sizeZ];
     }
 
     /** Grid covering {@code [cx - radius, cx + radius)} in both axes. */
@@ -128,39 +125,5 @@ public final class GeothermalGrid {
         double max = 0;
         for (double e : excess) max = Math.max(max, e);
         return max;
-    }
-
-    /** Number of explicit substeps needed for a stable, positivity-preserving step of length dt. */
-    public int substepsFor(double dt, double diffusivity, double loss) {
-        double h = cellSize;
-        double rate = 4 * diffusivity / (h * h) + loss;
-        return Math.max(1, (int) Math.ceil(dt * rate / 0.9));
-    }
-
-    /**
-     * Advances {@code ∂T/∂t = κ∇²T + S − λT} by {@code dt} seconds with forward Euler on a 5-point
-     * stencil. Substeps keep {@code Δt(4κ/h² + λ) ≤ 0.9}, which guarantees stability and that the
-     * field stays non-negative for non-negative sources.
-     */
-    public void diffuse(double dt, double diffusivity, double loss, double[] source) {
-        int substeps = substepsFor(dt, diffusivity, loss);
-        double h = dt / substeps;
-        double k = diffusivity / ((double) cellSize * cellSize);
-        for (int s = 0; s < substeps; s++) {
-            for (int j = 0; j < sizeZ; j++) {
-                for (int i = 0; i < sizeX; i++) {
-                    int idx = index(i, j);
-                    double t = excess[idx];
-                    double east = i + 1 < sizeX ? excess[idx + 1] : 0;
-                    double west = i > 0 ? excess[idx - 1] : 0;
-                    double south = j + 1 < sizeZ ? excess[idx + sizeX] : 0;
-                    double north = j > 0 ? excess[idx - sizeX] : 0;
-                    double laplacian = east + west + south + north - 4 * t;
-                    double next = t + h * (k * laplacian + source[idx] - loss * t);
-                    scratch[idx] = next < 0 ? 0 : next;
-                }
-            }
-            System.arraycopy(scratch, 0, excess, 0, excess.length);
-        }
     }
 }

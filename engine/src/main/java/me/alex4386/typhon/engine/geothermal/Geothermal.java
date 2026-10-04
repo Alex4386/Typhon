@@ -20,6 +20,9 @@ import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
+import me.alex4386.typhon.engine.subsurface.HeatSources;
+import me.alex4386.typhon.engine.subsurface.HydrothermalField;
+import me.alex4386.typhon.engine.subsurface.Subsurface;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.MagmaState;
@@ -27,51 +30,49 @@ import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.BlockState;
-import me.alex4386.typhon.engine.save.FieldChunk;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
 
 /**
- * Geothermal and hydrothermal activity around one volcano.
+ * Geothermal and hydrothermal manifestations around one volcano: fumaroles, sulfur, geysers, hot
+ * and sulfur springs, mud pots, sinter, alteration, cinnabar, submarine vents and gas hazards.
  *
  * <h2>Model</h2>
  *
- * A coarse grid ({@link GeothermalGrid}) holds the excess temperature {@code T} of the shallow
- * subsurface and its groundwater saturation {@code w}. Each step of {@code dt = stepSeconds ×
- * timeScale} simulated seconds:
- *
+ * The physics lives in the world-level subsurface model ({@link HydrothermalField}, normally the
+ * shared {@link me.alex4386.typhon.engine.subsurface.Subsurface}): heat conduction and advection,
+ * the water table, boiling and steam. This subsystem
  * <ul>
- *   <li><b>Heat</b>: {@code ∂T/∂t = κ∇²T + a·(S_vent + S_chamber) − λT}, where the magma activity
- *       {@code a} grows with chamber temperature, overpressure and eruption rate; {@code S_vent} is a
- *       Gaussian around each vent (distance to the segment for fissures) and {@code S_chamber =
- *       H·d³/(r² + d²)^{3/2}} is the surface footprint of a buried point source at depth {@code d}.
- *       Lava on the surface adds heat via {@link #addLavaHeat}.
- *   <li><b>Water</b>: {@code w} relaxes towards a terrain-derived target (submerged ⇒ 1, otherwise
- *       {@code base + (localMeanGround − ground)·k + lakeBonus·e^(−d_lake/L)}) and boils off above
- *       100 °C.
- *   <li><b>Boiling</b>: a cell represents a shallow reservoir at {@code reservoirDepthM}; its boiling
- *       point follows the boiling-point-with-depth curve {@code T_bp = 100 + 3·z^0.7} (fit to Haas
- *       1971: ≈115 °C at 10 m, ≈150 °C at 50 m, ≈200 °C at 150 m). Liquid-dominated cells
- *       ({@code w} above {@code vapourDominatedWater}) cannot heat beyond it: excess heat leaves as
- *       boiling outflow, {@code T → T_bp} at a rate ∝ {@code (w − w_v)/(1 − w_v)}. Well-watered
- *       basins therefore stay near boiling and wet (springs, geysers), while poorly supplied ground
- *       heats up, boils dry and becomes vapour-dominated (fumaroles, acid alteration) — the
- *       liquid-/vapour-dominated dichotomy of real hydrothermal systems.
- *   <li><b>Manifestations</b>: per cell and feature, a Poisson number of formation attempts with mean
- *       {@code rate × strength × dt/3600} is drawn; each attempt picks a random column in the cell
- *       and builds the feature if local conditions allow (surface type, spacing, caps, containment).
+ *   <li>supplies the volcano's heat to it ({@link HeatSources}): the chamber's conductive halo and
+ *       vent heat pipes whose power grows with the magma activity (chamber temperature,
+ *       overpressure, eruption rate);
+ *   <li>samples it every step on a coarse feature grid ({@link GeothermalGrid}): the temperature of
+ *       the shallow reservoir at {@code reservoirDepthM}, and its liquid saturation
+ *       {@code w = clamp(½ + (R − d)/(2R)) · (1 − steam)} from the water-table depth {@code d} and
+ *       the steam fraction (a water table at the surface gives 1, at the reservoir depth ½, at
+ *       twice that depth 0);
+ *   <li>decides manifestations from those fields: per cell and feature, a Poisson number of
+ *       formation attempts with mean {@code rate × strength × dt/3600} is drawn; each attempt picks
+ *       a random column of the cell and builds the feature if local conditions allow (surface
+ *       type, spacing, caps, containment).
  * </ul>
+ * Wet ground is held near its boiling point by the subsurface model (liquid-dominated: springs,
+ * geysers, sinter), while poorly supplied ground boils dry and heats up (vapour-dominated:
+ * fumaroles, acid alteration) — the dichotomy of real hydrothermal systems emerges from the water
+ * table and boiling physics rather than a parameterised saturation.
  *
  * <p>All surface edits are compare-and-set against the surface id from the {@link TerrainModel} and
  * are mirrored back into it. Blocks below the surface (geyser pipes, spring floors) are unknown to
  * the terrain model and are written unconditionally.
  */
-public final class Geothermal implements Subsystem {
+public final class Geothermal implements Subsystem, HeatSources {
     private final String id;
+    private final String volcanoId;
     private final GeothermalConfig config;
     private final MagmaState magma;
     private final TerrainModel terrain;
     private final BlockPalette palette;
+    private final HydrothermalField field;
     private final GeothermalGrid grid;
     private final int referenceY;
     private List<VentSite> vents;
@@ -85,13 +86,12 @@ public final class Geothermal implements Subsystem {
     /** Last announced hazard concentration and time (s), by {@code zone · species count + species}. */
     private final TreeMap<Long, double[]> hazardReports = new TreeMap<>();
 
-    // Derived each step from the terrain (not persisted).
+    // Derived each step from the terrain and the subsurface (not persisted).
     private final boolean[] known;
     private final boolean[] submerged;
     private final int[] ground;
+    /** Mean ground height of the surrounding 5×5 cells (for gas pooling in depressions). */
     private final double[] localMean;
-    private final double[] lakeDistance;
-    private final double[] source;
 
     private final BlockPos center;
 
@@ -102,31 +102,35 @@ public final class Geothermal implements Subsystem {
             MagmaState magma,
             TerrainModel terrain,
             BlockPalette palette,
-            List<VentSite> vents) {
+            List<VentSite> vents,
+            HydrothermalField field) {
         config.validate();
-        this.id = "geothermal:" + Objects.requireNonNull(volcanoId, "volcanoId");
+        this.volcanoId = Objects.requireNonNull(volcanoId, "volcanoId");
+        this.id = "geothermal:" + volcanoId;
         this.config = config;
         this.magma = Objects.requireNonNull(magma, "magma");
         this.terrain = Objects.requireNonNull(terrain, "terrain");
         this.palette = Objects.requireNonNull(palette, "palette");
+        this.field = Objects.requireNonNull(field, "field");
         this.center = center;
         this.referenceY = center.y();
         this.vents = List.copyOf(vents);
         this.grid = GeothermalGrid.centeredOn(center.x(), center.z(), config.radius, config.cellSize);
-        this.grid.fillWater(config.baseSaturation);
 
         int n = grid.cellCount();
         this.known = new boolean[n];
         this.submerged = new boolean[n];
         this.ground = new int[n];
         this.localMean = new double[n];
-        this.lakeDistance = new double[n];
-        this.source = new double[n];
     }
 
-    /** Centre of the geothermal grid. */
+    /** Centre of the feature grid. */
     public BlockPos center() {
         return center;
+    }
+
+    public String volcanoId() {
+        return volcanoId;
     }
 
     // ── Subsystem ──
@@ -154,8 +158,7 @@ public final class Geothermal implements Subsystem {
             equilibrate(config.prewarmSeconds);
             prewarmed = true;
         }
-        updateWater(dt);
-        updateHeat(dt);
+        sampleField();
 
         double dtHours = dt / 3600.0;
         formFeatures(context, dtHours);
@@ -171,46 +174,44 @@ public final class Geothermal implements Subsystem {
 
     // ── Public API ──
 
+    /** The coarse feature grid, holding the last sampled reservoir excess temperature and saturation. */
     public GeothermalGrid grid() {
         return grid;
+    }
+
+    public HydrothermalField field() {
+        return field;
     }
 
     public void setVents(List<VentSite> vents) {
         this.vents = List.copyOf(vents);
     }
 
-    /** Absolute shallow-subsurface temperature (°C) at a block column; ambient outside the grid. */
+    /** Shallow-reservoir temperature (°C) at a block column, as last sampled; ambient outside the grid. */
     public double temperatureAt(int x, int z) {
         return config.ambientC + grid.excessAtBlock(x, z);
     }
 
-    /** Groundwater saturation at a block column; base saturation outside the grid. */
+    /** Shallow-reservoir liquid saturation at a block column, as last sampled; 0 outside the grid. */
     public double waterAt(int x, int z) {
         int index = grid.indexOfBlock(x, z);
-        return index < 0 ? config.baseSaturation : grid.water(index);
-    }
-
-    /** Adds {@code deltaC} of excess temperature to the cell containing {@code (x, z)}. */
-    public void addHeat(int x, int z, double deltaC) {
-        int index = grid.indexOfBlock(x, z);
-        if (index >= 0) grid.setExcess(index, Math.max(0, grid.excess(index) + deltaC));
+        return index < 0 ? 0 : grid.water(index);
     }
 
     /**
-     * Heat transferred from a lava column of {@code thicknessM} at {@code lavaTemperatureC} resting
-     * on block column {@code (x, z)}: the column's heat is shared with a shallow layer of the
-     * cell ({@code cellSize² × lavaCouplingDepth}).
+     * Heat from a lava column of {@code thicknessM} at {@code lavaTemperatureC} resting on block
+     * column {@code (x, z)} for one second: conduction through the flow's lower half,
+     * {@code k·(T_lava − T_ground)/(h/2)}, into the top of the ground.
      */
     public void addLavaHeat(int x, int z, double lavaTemperatureC, double thicknessM) {
-        int index = grid.indexOfBlock(x, z);
-        if (index < 0 || thicknessM <= 0) return;
-        double current = config.ambientC + grid.excess(index);
-        double layerVolume = (double) config.cellSize * config.cellSize * config.lavaCouplingDepth;
-        double delta = thicknessM * (lavaTemperatureC - current) / layerVolume;
-        if (delta > 0) addHeat(x, z, delta);
+        if (!(thicknessM > 0)) return;
+        double groundC = field.temperatureC(x, z, 0);
+        double flux = config.lavaConductivity * Math.max(0, lavaTemperatureC - groundC) / Math.max(0.25, thicknessM / 2);
+        double l = terrain.world().spec().metersPerColumn();
+        field.addSurfaceHeat(x, z, flux * l * l);
     }
 
-    /** Magma activity factor driving the heat sources (0 when the chamber is cold). */
+    /** Magma activity factor driving the vent heat pipes (0 when the chamber is cold). */
     public double activity() {
         double thermal = clamp(
                 (magma.temperatureC() - config.activityMinChamberC)
@@ -223,25 +224,14 @@ public final class Geothermal implements Subsystem {
     }
 
     /**
-     * Runs heat and groundwater only (no features, no randomness) for {@code seconds} of model time;
-     * use when a volcano is created to start from a developed thermal state.
+     * Spins the subsurface up for {@code seconds} of physical time (no features, no randomness) when
+     * the field supports it — use when a volcano is created to start from a developed hydrothermal
+     * system.
      */
     public void equilibrate(double seconds) {
+        if (field instanceof Subsurface subsurface) subsurface.equilibrate(seconds);
         sampleTerrain();
-        computeSources(); // constant while equilibrating
-        // Diffusion substeps keep each chunk stable; the chunk only bounds the water/heat coupling lag.
-        double chunk = Math.max(config.stepSeconds * config.timeScale, EQUILIBRATE_CHUNK_SECONDS);
-        for (double t = 0; t < seconds; t += chunk) {
-            double dt = Math.min(chunk, seconds - t);
-            updateWater(dt);
-            grid.diffuse(dt, config.diffusivity, config.surfaceLossPerSecond, source);
-            boilingBuffer(dt);
-        }
-    }
-
-    /** Boiling point (°C) of the shallow reservoir a cell represents (boiling-point-with-depth curve). */
-    public double boilingPointC() {
-        return boilingPointAtDepth(config.reservoirDepthM);
+        sampleField();
     }
 
     /** {@code T_bp(z) = 100 + 3·z^0.7}: fit to the boiling-point-with-depth curve of pure water. */
@@ -249,7 +239,7 @@ public final class Geothermal implements Subsystem {
         return 100 + 3.0 * StrictMath.pow(Math.max(0, depthM), 0.7);
     }
 
-    /** True once the shallow system at the column is vapour-dominated (too dry to convect). */
+    /** True when the shallow system at the column is vapour-dominated (too dry to convect). */
     public boolean vapourDominatedAt(int x, int z) {
         return waterAt(x, z) <= config.vapourDominatedWater;
     }
@@ -259,8 +249,6 @@ public final class Geothermal implements Subsystem {
         for (boolean k : known) if (k) n++;
         return (double) n / known.length;
     }
-
-    private static final double EQUILIBRATE_CHUNK_SECONDS = 300;
 
     public Map<Long, PlacedFeature> featuresByColumn() {
         return Collections.unmodifiableMap(features);
@@ -282,15 +270,51 @@ public final class Geothermal implements Subsystem {
         return clamp((temperatureC - config.fumaroleMinC) / (config.fumaroleFullC - config.fumaroleMinC), 0, 1);
     }
 
-    // ── Physics ──
+    // ── Heat sources (HeatSources) ──
+
+    @Override
+    public List<Chamber> chambers() {
+        double t = magma.temperatureC();
+        if (!(t > 0)) return List.of();
+        BlockPos c = magma.chamberCenter();
+        double l = terrain.world().spec().metersPerColumn();
+        double surface = terrain.world().isKnown(c.x(), c.z())
+                ? terrain.world().surfaceZ(c.x(), c.z()) : terrain.world().spec().blockTop(referenceY);
+        double centre = (c.y() + 0.5) * l;
+        double depth = surface - centre;
+        if (!(depth > 0)) return List.of();
+        double radius = Math.min(config.chamberRadiusM, 0.5 * depth);
+        return List.of(new Chamber(c.x() + 0.5, c.z() + 0.5, centre, surface, radius, t));
+    }
+
+    @Override
+    public List<Vent> vents() {
+        double activity = activity();
+        if (activity <= 0 || config.ventHeatPowerW <= 0) return List.of();
+        double l = terrain.world().spec().metersPerColumn();
+        List<Vent> list = new ArrayList<>();
+        for (VentSite vent : vents) {
+            BlockPos p = vent.position();
+            double sigma = (Math.max(config.cellSize, vent.craterRadius()) + config.ventHaloBlocks) * l;
+            double extent = vent.kind() == VentKind.FISSURE ? vent.fissureLength() * l / 2 : 0;
+            list.add(new Vent(p.x() + 0.5, p.z() + 0.5, activity * config.ventHeatPowerW,
+                    Math.sqrt(sigma * sigma + extent * extent), config.ventPipeDepthM));
+        }
+        return list;
+    }
+
+    // ── Sampling ──
 
     private void sampleTerrain() {
         int n = grid.cellCount();
         for (int idx = 0; idx < n; idx++) {
-            TerrainColumn column = terrain.column(grid.cellCenterX(idx), grid.cellCenterZ(idx));
+            int x = grid.cellCenterX(idx);
+            int z = grid.cellCenterZ(idx);
+            TerrainColumn column = terrain.column(x, z);
             known[idx] = column != null;
-            submerged[idx] = column != null && column.submerged();
             ground[idx] = column == null ? referenceY : column.groundY();
+            submerged[idx] = column != null
+                    && (column.submerged() || field.surfaceWaterDepthM(x, z) >= config.submergedDepthM);
         }
         int sx = grid.sizeX();
         int sz = grid.sizeZ();
@@ -310,135 +334,25 @@ public final class Geothermal implements Subsystem {
             }
             localMean[idx] = count == 0 ? ground[idx] : (double) sum / count;
         }
-        computeLakeDistance();
     }
 
-    /** Chamfer (3-4) distance transform, in blocks, from each cell to the nearest submerged cell. */
-    private void computeLakeDistance() {
-        int sx = grid.sizeX();
-        int sz = grid.sizeZ();
-        double inf = Double.POSITIVE_INFINITY;
-        for (int idx = 0; idx < lakeDistance.length; idx++) lakeDistance[idx] = submerged[idx] ? 0 : inf;
-        double straight = grid.cellSize();
-        double diagonal = grid.cellSize() * Math.sqrt(2);
-        for (int j = 0; j < sz; j++) {
-            for (int i = 0; i < sx; i++) {
-                int idx = grid.index(i, j);
-                double d = lakeDistance[idx];
-                if (i > 0) d = Math.min(d, lakeDistance[idx - 1] + straight);
-                if (j > 0) d = Math.min(d, lakeDistance[idx - sx] + straight);
-                if (i > 0 && j > 0) d = Math.min(d, lakeDistance[idx - sx - 1] + diagonal);
-                if (i + 1 < sx && j > 0) d = Math.min(d, lakeDistance[idx - sx + 1] + diagonal);
-                lakeDistance[idx] = d;
-            }
-        }
-        for (int j = sz - 1; j >= 0; j--) {
-            for (int i = sx - 1; i >= 0; i--) {
-                int idx = grid.index(i, j);
-                double d = lakeDistance[idx];
-                if (i + 1 < sx) d = Math.min(d, lakeDistance[idx + 1] + straight);
-                if (j + 1 < sz) d = Math.min(d, lakeDistance[idx + sx] + straight);
-                if (i + 1 < sx && j + 1 < sz) d = Math.min(d, lakeDistance[idx + sx + 1] + diagonal);
-                if (i > 0 && j + 1 < sz) d = Math.min(d, lakeDistance[idx + sx - 1] + diagonal);
-                lakeDistance[idx] = d;
-            }
-        }
-    }
-
-    private void updateWater(double dt) {
-        double relax = Math.exp(-config.rechargePerSecond * dt);
+    /** Reads the reservoir temperature and liquid saturation of every cell from the subsurface. */
+    private void sampleField() {
+        double r = config.reservoirDepthM;
         for (int idx = 0; idx < grid.cellCount(); idx++) {
-            double target;
-            if (!known[idx]) {
-                target = config.baseSaturation;
-            } else if (submerged[idx]) {
-                target = 1;
-            } else {
-                double lake = lakeDistance[idx] == Double.POSITIVE_INFINITY
-                        ? 0
-                        : config.lakeSaturationBonus * Math.exp(-lakeDistance[idx] / config.lakeInfluenceBlocks);
-                target = clamp(
-                        config.baseSaturation + (localMean[idx] - ground[idx]) * config.elevationSaturationPerBlock + lake,
-                        0,
-                        1);
+            int x = grid.cellCenterX(idx);
+            int z = grid.cellCenterZ(idx);
+            if (!known[idx] || !field.known(x, z)) {
+                grid.setExcess(idx, 0);
+                grid.setWater(idx, 0);
+                continue;
             }
-            double w = target + (grid.water(idx) - target) * relax;
-            double temperature = config.ambientC + grid.excess(idx);
-            if (temperature > 100 && !submerged[idx]) {
-                w *= Math.exp(-config.boilOffPerSecond * (temperature - 100) / 100 * dt);
-            }
-            grid.setWater(idx, clamp(w, 0, 1));
+            double temperature = field.temperatureC(x, z, r);
+            grid.setExcess(idx, Math.max(0, temperature - config.ambientC));
+            double depth = field.waterTableDepthM(x, z);
+            double liquid = clamp(0.5 + (r - depth) / (2 * r), 0, 1) * (1 - field.steamFraction(x, z, r));
+            grid.setWater(idx, submerged[idx] ? 1 : liquid);
         }
-    }
-
-    private void updateHeat(double dt) {
-        computeSources();
-        grid.diffuse(dt, config.diffusivity, config.surfaceLossPerSecond, source);
-        boilingBuffer(dt);
-    }
-
-    /**
-     * Liquid-dominated dry-land cells above their boiling point lose the excess heat by boiling
-     * outflow: {@code T → T_bp} at {@code boilingBufferPerSecond · (w − w_v)/(1 − w_v)} (exact
-     * exponential relaxation, so stiff rates stay stable).
-     */
-    private void boilingBuffer(double dt) {
-        if (config.boilingBufferPerSecond <= 0) return;
-        double boiling = boilingPointC();
-        double wv = config.vapourDominatedWater;
-        for (int idx = 0; idx < grid.cellCount(); idx++) {
-            if (!known[idx] || submerged[idx]) continue;
-            double temperature = config.ambientC + grid.excess(idx);
-            if (temperature <= boiling) continue;
-            double liquid = (grid.water(idx) - wv) / (1 - wv);
-            if (liquid <= 0) continue;
-            double next = boiling + (temperature - boiling) * Math.exp(-config.boilingBufferPerSecond * liquid * dt);
-            grid.setExcess(idx, next - config.ambientC);
-        }
-    }
-
-    private void computeSources() {
-        double activity = activity();
-        if (activity <= 0) {
-            Arrays.fill(source, 0);
-            return;
-        }
-        BlockPos chamber = magma.chamberCenter();
-        for (int idx = 0; idx < grid.cellCount(); idx++) {
-            double cx = grid.cellCenterX(idx) + 0.5;
-            double cz = grid.cellCenterZ(idx) + 0.5;
-
-            double ventHeat = 0;
-            for (VentSite vent : vents) {
-                double d = distanceToVent(vent, cx, cz);
-                double sigma = Math.max(config.cellSize, vent.craterRadius()) + config.ventHaloBlocks;
-                ventHeat += Math.exp(-d * d / (2 * sigma * sigma));
-            }
-
-            double depth = Math.max(config.minChamberDepth, ground[idx] - chamber.y());
-            double dx = cx - chamber.x();
-            double dz = cz - chamber.z();
-            double r2 = dx * dx + dz * dz;
-            double halo = depth * depth * depth / Math.pow(r2 + depth * depth, 1.5);
-
-            source[idx] = activity * (config.ventHeatRate * ventHeat + config.chamberHeatRate * halo);
-        }
-    }
-
-    private static double distanceToVent(VentSite vent, double x, double z) {
-        BlockPos p = vent.position();
-        if (vent.kind() != VentKind.FISSURE || vent.fissureLength() == 0) {
-            double dx = x - p.x();
-            double dz = z - p.z();
-            return Math.sqrt(dx * dx + dz * dz);
-        }
-        double ux = Math.cos(vent.fissureAngleRad());
-        double uz = Math.sin(vent.fissureAngleRad());
-        double half = vent.fissureLength() / 2.0;
-        double t = clamp((x - p.x()) * ux + (z - p.z()) * uz, -half, half);
-        double dx = x - (p.x() + t * ux);
-        double dz = z - (p.z() + t * uz);
-        return Math.sqrt(dx * dx + dz * dz);
     }
 
     // ── Manifestations ──
@@ -1002,14 +916,6 @@ public final class Geothermal implements Subsystem {
     @Override
     public void saveState(StateWriter writer) {
         JsonObject out = writer.json();
-        out.addProperty("minX", grid.minX());
-        out.addProperty("minZ", grid.minZ());
-        out.addProperty("sizeX", grid.sizeX());
-        out.addProperty("sizeZ", grid.sizeZ());
-        out.addProperty("cellSize", grid.cellSize());
-        writer.field("grid", 1).put(0, 0, new FieldChunk()
-                .doubles("excess", grid.excess.clone())
-                .doubles("water", grid.water.clone()));
         out.addProperty("hazardClock", hazardClock);
         JsonArray list = new JsonArray();
         for (PlacedFeature feature : features.values()) {
@@ -1052,16 +958,6 @@ public final class Geothermal implements Subsystem {
     @Override
     public void loadState(StateReader reader) {
         JsonObject in = reader.json();
-        if (in.get("minX").getAsInt() != grid.minX()
-                || in.get("minZ").getAsInt() != grid.minZ()
-                || in.get("sizeX").getAsInt() != grid.sizeX()
-                || in.get("sizeZ").getAsInt() != grid.sizeZ()
-                || in.get("cellSize").getAsInt() != grid.cellSize()) {
-            throw new IllegalArgumentException("Saved geothermal grid does not match the configured grid for " + id);
-        }
-        FieldChunk saved = reader.field("grid").get(0, 0);
-        copyField(saved.doubles("excess"), grid.excess);
-        copyField(saved.doubles("water"), grid.water);
         hazardClock = in.get("hazardClock").getAsDouble();
         features.clear();
         counts.clear();
@@ -1077,12 +973,5 @@ public final class Geothermal implements Subsystem {
         prewarmed = in.has("prewarmed") && in.get("prewarmed").getAsBoolean();
         loadReports(in, "fumaroleReports", fumaroleReports);
         loadReports(in, "hazardReports", hazardReports);
-    }
-
-    private static void copyField(double[] saved, double[] target) {
-        if (saved == null || saved.length != target.length) {
-            throw new IllegalArgumentException("Saved field has wrong length");
-        }
-        System.arraycopy(saved, 0, target, 0, target.length);
     }
 }

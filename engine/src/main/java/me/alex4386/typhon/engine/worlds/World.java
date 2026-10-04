@@ -29,6 +29,7 @@ import me.alex4386.typhon.engine.save.SaveFormat;
 import me.alex4386.typhon.engine.save.SaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.sim.Subsystem;
+import me.alex4386.typhon.engine.subsurface.Subsurface;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
 import me.alex4386.typhon.engine.world.Edifice;
@@ -39,8 +40,9 @@ import me.alex4386.typhon.engine.world.WorldModel;
  * and {@link VolcanoDefinition}s.
  *
  * <ul>
- *   <li><b>Shared</b>: the world model / terrain (subsystem {@code terrain}) and the lava field
- *       ({@code lava}) — lava from neighbouring volcanoes meets in one field.
+ *   <li><b>Shared</b>: the world model / terrain (subsystem {@code terrain}), the subsurface model
+ *       ({@code subsurface}: heat, groundwater, surface water — every volcano heats it) and the lava
+ *       field ({@code lava}) — lava from neighbouring volcanoes meets in one field.
  *   <li><b>Per volcano</b> (ids namespaced by volcano): chamber, dikes, seismicity, alert, coupler,
  *       tephra, mass flows, geothermal, deformation. Stratigraphic units record the volcano id.
  * </ul>
@@ -87,6 +89,7 @@ public final class World {
     private Engine engine;
     private TerrainModel terrain;
     private LavaFlow lava;
+    private Subsurface subsurface;
     private final TreeMap<String, VolcanoSystem> systems = new TreeMap<>();
 
     private World(WorldDirectory directory, SaveStore stateStore, SaveStore historyStore, WorldDefinition definition,
@@ -243,11 +246,13 @@ public final class World {
         }
         terrain.world().setEdifices(edifices);
         lava = new LavaFlow(terrain, definition.lava());
+        subsurface = new Subsurface(terrain.world(), definition.subsurfaceConfig());
         systems.clear();
-        Engine.Builder builder = Engine.builder(definition.seed()).baseStepMicros(definition.baseStepMicros()).add(terrain);
+        Engine.Builder builder = Engine.builder(definition.seed()).baseStepMicros(definition.baseStepMicros())
+                .add(terrain).add(subsurface);
         Set<String> hidden = new HashSet<>();
         for (VolcanoDefinition v : volcanoDefinitions()) {
-            VolcanoSystem system = v.assemble(terrain, lava, definition);
+            VolcanoSystem system = v.assemble(terrain, lava, definition, subsurface);
             systems.put(v.id(), system);
             system.addTo(builder);
             if (resetVolcanoes.contains(v.id())) {
@@ -413,6 +418,11 @@ public final class World {
 
     public LavaFlow lava() {
         return lava;
+    }
+
+    /** The shared subsurface model (heat, groundwater, surface water). Replaced by engine rebuilds. */
+    public Subsurface subsurface() {
+        return subsurface;
     }
 
     /** Assembled volcanoes by id (sorted). */

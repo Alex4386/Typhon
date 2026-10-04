@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import me.alex4386.typhon.engine.lava.LavaConfig;
+import me.alex4386.typhon.engine.subsurface.SubsurfaceConfig;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import me.alex4386.typhon.engine.world.WorldSpec;
 
@@ -40,15 +41,20 @@ import me.alex4386.typhon.engine.world.WorldSpec;
  * aquifer: {waterTableDepth: 20, specificYield: 0.1, topographyFactor: 0.6, baseLevel: .nan, rechargeFraction: 0.3}
  * terrain: {source: preset, preset: kilauea}   # free-form, interpreted by the host
  * lava: {coolingScale: 1}                       # any LavaConfig component
+ * subsurface: {timeScale: 5000, macroStepSeconds: 60}   # any SubsurfaceConfig field except those
+ *                                                     # set from climate/geotherm/aquifer
  * }</pre>
  *
  * @param baseStepMs engine base step (simulation resolution)
  * @param spec world-model grid and geology
  * @param scaling Froude scaling (its {@code metersPerBlock} is {@code grid.metersPerColumn})
  * @param terrain free-form initial-terrain description for the host (generator, DEM, ...)
+ * @param subsurface heat/groundwater/surface-water parameters, with the climate, geotherm and aquifer
+ *     values filled in; its {@code timeScale} defaults to the dormant time compression
  */
 public record WorldDefinition(String name, long seed, double baseStepMs, WorldSpec spec, VolcanoScaling scaling,
-        Climate climate, Geotherm geotherm, Aquifer aquifer, Map<String, Object> terrain, LavaConfig lava) {
+        Climate climate, Geotherm geotherm, Aquifer aquifer, Map<String, Object> terrain, LavaConfig lava,
+        SubsurfaceConfig subsurface) {
 
     /** @param windSpeed real wind speed (m/s), {@code NaN} to leave each volcano's own wind */
     public record Climate(double rainfallMmPerHour, double evaporationMmPerHour, double windSpeed, double windBearingDeg,
@@ -124,6 +130,46 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
         if (name == null || name.isBlank()) throw new ConfigException("world name is required");
         if (!(baseStepMs > 0)) throw new ConfigException("baseStepMs must be > 0");
         terrain = new LinkedHashMap<>(terrain);
+        if (subsurface == null) subsurface = defaultSubsurface(scaling);
+        subsurface = withDerived(subsurface, climate, geotherm, aquifer);
+        try {
+            subsurface.validate();
+        } catch (IllegalArgumentException e) {
+            throw new ConfigException("subsurface: " + e.getMessage());
+        }
+    }
+
+    /** Definition with default subsurface parameters (derived from climate, geotherm and aquifer). */
+    public WorldDefinition(String name, long seed, double baseStepMs, WorldSpec spec, VolcanoScaling scaling,
+            Climate climate, Geotherm geotherm, Aquifer aquifer, Map<String, Object> terrain, LavaConfig lava) {
+        this(name, seed, baseStepMs, spec, scaling, climate, geotherm, aquifer, terrain, lava, null);
+    }
+
+    /** {@link SubsurfaceConfig} fields set from the climate, geotherm and aquifer sections. */
+    static final Set<String> SUBSURFACE_DERIVED = Set.of("rainfallMmPerHour", "evaporationMmPerHour",
+            "surfaceTemperatureC", "gradientCPerKm", "initialWaterTableDepthM", "specificYield");
+
+    static SubsurfaceConfig defaultSubsurface(VolcanoScaling scaling) {
+        SubsurfaceConfig c = new SubsurfaceConfig();
+        c.timeScale = scaling.dormantTimeCompression();
+        return c;
+    }
+
+    private static SubsurfaceConfig withDerived(SubsurfaceConfig base, Climate climate, Geotherm geotherm,
+            Aquifer aquifer) {
+        SubsurfaceConfig c = base.copy();
+        c.rainfallMmPerHour = climate.rainfallMmPerHour();
+        c.evaporationMmPerHour = climate.evaporationMmPerHour();
+        c.surfaceTemperatureC = geotherm.surfaceTemperatureC();
+        c.gradientCPerKm = geotherm.gradientCPerKm();
+        c.initialWaterTableDepthM = aquifer.waterTableDepth();
+        c.specificYield = aquifer.specificYield();
+        return c;
+    }
+
+    /** A copy of the subsurface parameters (safe to hand to a new {@code Subsurface}). */
+    public SubsurfaceConfig subsurfaceConfig() {
+        return subsurface.copy();
     }
 
     public long baseStepMicros() {
@@ -225,9 +271,13 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
         LavaConfig lava = ConfigBinder.bindRecord(root.child("lava"), LavaConfig.defaults(), Set.of(),
                 Set.of("metersPerBlock"));
 
+        SubsurfaceConfig subsurface = defaultSubsurface(scaling);
+        ConfigBinder.bindFields(root.child("subsurface"), subsurface, Set.of(), SUBSURFACE_DERIVED);
+
         root.finish();
         return new WorldDefinition(name, seed, baseStep, spec, scaling,
-                new Climate(rain, evaporation, windSpeed, windBearing, windVariability), geotherm, aquifer, terrain, lava);
+                new Climate(rain, evaporation, windSpeed, windBearing, windVariability), geotherm, aquifer, terrain, lava,
+                subsurface);
     }
 
     // ── Export ──
@@ -267,6 +317,7 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
                 "rechargeFraction", aquifer.rechargeFraction()));
         root.put("terrain", new LinkedHashMap<>(terrain));
         root.put("lava", ConfigBinder.exportRecord(lava, Set.of("metersPerBlock")));
+        root.put("subsurface", ConfigBinder.exportFields(subsurface, SUBSURFACE_DERIVED));
         return root;
     }
 

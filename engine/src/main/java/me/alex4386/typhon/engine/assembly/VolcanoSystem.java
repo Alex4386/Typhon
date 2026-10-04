@@ -11,6 +11,8 @@ import me.alex4386.typhon.engine.dike.DikeMagmaSource;
 import me.alex4386.typhon.engine.dike.DikePropagation;
 import me.alex4386.typhon.engine.geothermal.BlockPalette;
 import me.alex4386.typhon.engine.geothermal.Geothermal;
+import me.alex4386.typhon.engine.subsurface.Subsurface;
+import me.alex4386.typhon.engine.subsurface.SubsurfaceConfig;
 import me.alex4386.typhon.engine.geothermal.GeothermalBlocks;
 import me.alex4386.typhon.engine.geothermal.GeothermalConfig;
 import me.alex4386.typhon.engine.lava.LavaFlow;
@@ -58,6 +60,9 @@ public final class VolcanoSystem {
     private final VolcanoCoupler coupler;
     private final TephraSubsystem tephra;
     private final Geothermal geothermal;
+    private final Subsurface subsurface;
+    /** Whether {@link #subsurface} was created for this volcano alone (registered with it). */
+    private final boolean ownsSubsurface;
     private final PyroclasticFlows pdc;
     private final Lahars lahars;
     private final DeformationModel deformation;
@@ -110,6 +115,17 @@ public final class VolcanoSystem {
         }
         this.tephra = new TephraSubsystem("tephra:" + volcanoId, b.terrain, tephraConfig);
 
+        if (b.subsurface != null) {
+            this.subsurface = b.subsurface;
+            this.ownsSubsurface = false;
+        } else if (b.geothermal) {
+            this.subsurface = new Subsurface(b.terrain.world(), defaultSubsurfaceConfig(scaling));
+            this.ownsSubsurface = true;
+        } else {
+            this.subsurface = null;
+            this.ownsSubsurface = false;
+        }
+
         if (b.geothermal) {
             GeothermalConfig geothermalConfig = b.geothermalConfig != null ? b.geothermalConfig : new GeothermalConfig();
             if (b.geothermalPrewarmSeconds >= 0) geothermalConfig.prewarmSeconds = b.geothermalPrewarmSeconds;
@@ -117,7 +133,9 @@ public final class VolcanoSystem {
             BlockPos center = b.geothermalCenter != null
                     ? b.geothermalCenter
                     : new BlockPos(chamberCenter.x(), primary.y(), chamberCenter.z());
-            this.geothermal = new Geothermal(volcanoId, geothermalConfig, center, chamber, b.terrain, b.palette, vents);
+            this.geothermal = new Geothermal(volcanoId, geothermalConfig, center, chamber, b.terrain, b.palette, vents,
+                    subsurface);
+            subsurface.setHeatSources(volcanoId, geothermal);
         } else {
             this.geothermal = null;
         }
@@ -158,6 +176,16 @@ public final class VolcanoSystem {
         }
     }
 
+    /**
+     * Subsurface defaults for a volcano that runs its own (no world): heat and groundwater advance at
+     * the dormant time compression, so hydrothermal systems develop over hours of play.
+     */
+    public static SubsurfaceConfig defaultSubsurfaceConfig(VolcanoScaling scaling) {
+        SubsurfaceConfig config = new SubsurfaceConfig();
+        config.timeScale = scaling.dormantTimeCompression();
+        return config;
+    }
+
     /** Chamber a few dozen blocks under the primary vent, kept inside the overworld. */
     public static BlockPos defaultChamberCenter(BlockPos vent) {
         return new BlockPos(vent.x(), Math.max(-56, vent.y() - 48), vent.z());
@@ -180,6 +208,7 @@ public final class VolcanoSystem {
     /** This volcano's subsystems in registration order. */
     public List<Subsystem> subsystems() {
         List<Subsystem> list = new java.util.ArrayList<>();
+        if (ownsSubsurface) list.add(subsurface);
         list.add(chamber);
         if (dikes != null) list.add(dikes);
         list.add(seismicity);
@@ -226,6 +255,8 @@ public final class VolcanoSystem {
     public TephraSubsystem tephra() { return tephra; }
     /** {@code null} when geothermal activity is disabled. */
     public Geothermal geothermal() { return geothermal; }
+    /** The subsurface model this volcano heats ({@code null} without geothermal activity and no world). */
+    public Subsurface subsurface() { return subsurface; }
 
     public static final class Builder {
         private final String volcanoId;
@@ -251,6 +282,7 @@ public final class VolcanoSystem {
         private double windVariability;
         private BlockPos geothermalCenter;
         private double geothermalPrewarmSeconds = -1;
+        private Subsurface subsurface;
 
         private Builder(String volcanoId, List<VentSite> vents, TerrainModel terrain, LavaFlow lava) {
             this.volcanoId = Objects.requireNonNull(volcanoId, "volcanoId");
@@ -289,7 +321,7 @@ public final class VolcanoSystem {
         public Builder geothermalCenter(BlockPos center) { this.geothermalCenter = Objects.requireNonNull(center); return this; }
 
         /**
-         * Model seconds of geothermal spin-up run once on the first step with terrain (overrides
+         * Physical seconds of subsurface spin-up run once on the first step with terrain (overrides
          * {@link GeothermalConfig#prewarmSeconds}), so the volcano starts with a developed
          * hydrothermal system.
          */
@@ -298,6 +330,11 @@ public final class VolcanoSystem {
             this.geothermalPrewarmSeconds = seconds;
             return this;
         }
+        /**
+         * The world's shared subsurface model (registered by the world). Without one, a volcano with
+         * geothermal activity creates and registers its own.
+         */
+        public Builder subsurface(Subsurface subsurface) { this.subsurface = subsurface; return this; }
         public Builder dikesEnabled(boolean enabled) { this.dikes = enabled; return this; }
         public Builder massFlowsEnabled(boolean enabled) { this.massFlows = enabled; return this; }
         public Builder deformationEnabled(boolean enabled) { this.deformation = enabled; return this; }

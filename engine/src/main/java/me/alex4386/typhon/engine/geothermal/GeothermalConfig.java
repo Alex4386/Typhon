@@ -7,9 +7,9 @@ import me.alex4386.typhon.engine.world.BlockId;
  * Tunables of the geothermal subsystem. Fields are public and mutable; adjust before constructing
  * {@link Geothermal} (it reads them on every step, so later changes also take effect).
  *
- * <p>Temperatures are absolute °C of the shallow subsurface represented by each grid cell. Formation
- * rates are expected occurrences per grid cell per simulated hour at full strength; with the default
- * {@link #timeScale} of 1 features accumulate over hours of play, not seconds.
+ * <p>Temperatures are absolute °C of the shallow reservoir sampled from the subsurface model.
+ * Formation rates are expected occurrences per grid cell per hour at full strength; with the
+ * default {@link #timeScale} of 1 features accumulate over hours of play, not seconds.
  */
 public final class GeothermalConfig {
     // ── Grid & time ──
@@ -19,24 +19,26 @@ public final class GeothermalConfig {
     public int cellSize = 4;
     /** Simulated seconds between steps. */
     public double stepSeconds = 2.0;
-    /** Time compression: every step advances the geothermal model by {@code dt × timeScale}. */
+    /** Time compression of feature formation: every step forms features over {@code dt × timeScale}. */
     public double timeScale = 1.0;
 
-    // ── Heat ──
+    // ── Heat supplied to the subsurface model ──
+    /** Reference ground temperature (°C) for the excess temperatures reported on the feature grid. */
     public double ambientC = 15.0;
-    /** Effective (advective, hydrothermal) diffusivity in m²/s; much larger than rock conduction. */
-    public double diffusivity = 0.05;
-    /** Surface heat-loss rate (1/s); sets the e-folding time of a cooling cell (default 2 h). */
-    public double surfaceLossPerSecond = 1.0 / 7200.0;
-    /** Peak heating rate (°C/s) at a vent for activity 1. */
-    public double ventHeatRate = 0.06;
+    /**
+     * Heat carried up each vent's plumbing (magmatic gas, hydrothermal convection) at activity 1, W.
+     * Active volcanoes discharge 10⁷–10⁹ W of hydrothermal heat (e.g. Yellowstone ≈ 5·10⁹ W in total,
+     * Fournier 1989; single vents ≈ 10⁸ W).
+     */
+    public double ventHeatPowerW = 1.0e8;
+    /** Depth (m) over which that heat is released into the ground. */
+    public double ventPipeDepthM = 300.0;
     /** Extra Gaussian halo (blocks) added to a vent's radius for its heat footprint. */
     public double ventHaloBlocks = 8.0;
-    /** Heating rate (°C/s) directly above the chamber for activity 1. */
-    public double chamberHeatRate = 0.02;
-    public double minChamberDepth = 20.0;
-    /** Depth (m) of the shallow layer that absorbs heat from lava resting on the surface. */
-    public double lavaCouplingDepth = 10.0;
+    /** Radius (m) of the magma chamber sphere whose conductive halo heats the ground (≤ half its depth). */
+    public double chamberRadiusM = 1000.0;
+    /** Thermal conductivity (W/m·K) of lava resting on the ground, for {@link Geothermal#addLavaHeat}. */
+    public double lavaConductivity = 1.5;
 
     // ── Activity from the magma system ──
     public double activityMinChamberC = 600.0;
@@ -44,39 +46,21 @@ public final class GeothermalConfig {
     public double overpressureFullMPa = 10.0;
     public double eruptionRateFull = 10.0;
 
-    // ── Groundwater ──
+    // ── Reservoir sampling ──
     /**
-     * Saturation of a dry-land cell level with its surroundings: the meteoric-water supply of the
-     * climate (wet, porous volcanic plateaus ~0.5–0.6, arid ground ~0.3).
-     */
-    public double baseSaturation = 0.45;
-    /** Extra saturation per block a cell lies below the local mean ground height. */
-    public double elevationSaturationPerBlock = 0.04;
-    /** Extra saturation next to standing water (lakes, sea), decaying over {@link #lakeInfluenceBlocks}. */
-    public double lakeSaturationBonus = 0.35;
-    public double lakeInfluenceBlocks = 24.0;
-    /** Relaxation rate (1/s) of saturation towards its terrain-derived target. */
-    public double rechargePerSecond = 1.0 / 1800.0;
-    /** Boil-off rate (1/s) per 100 °C above boiling; hot cells become vapour-dominated. */
-    public double boilOffPerSecond = 1.0 / 3600.0;
-    /**
-     * Depth (m) of the shallow reservoir a cell represents; its boiling point follows the
-     * boiling-point-with-depth curve (≈115 °C at 10 m, ≈150 °C at 50 m).
+     * Depth (m) of the shallow reservoir sampled for manifestations: its temperature and liquid
+     * saturation decide which features form. Water standing deeper than {@code 2 ×} this leaves the
+     * reservoir dry.
      */
     public double reservoirDepthM = 10.0;
-    /**
-     * Rate (1/s) at which a liquid-dominated cell above its boiling point sheds heat by boiling
-     * outflow (springs, geysers, steam). Scales with how far saturation exceeds
-     * {@link #vapourDominatedWater}; drier ground cannot convect, heats up and becomes
-     * vapour-dominated (fumarolic).
-     */
-    public double boilingBufferPerSecond = 1.0 / 60.0;
     /** Saturation below which the shallow system is vapour-dominated (no liquid convection). */
     public double vapourDominatedWater = 0.35;
+    /** Surface water at least this deep (m) makes a cell submerged (submarine/sublacustrine features). */
+    public double submergedDepthM = 0.5;
 
     /**
-     * Model seconds of heat and groundwater spin-up ({@link Geothermal#equilibrate}), run once on the
-     * first step that has terrain, so a new volcano starts from a developed thermal state.
+     * Physical seconds of subsurface spin-up ({@link Geothermal#equilibrate}), run once on the first
+     * step that has terrain, so a new volcano starts from a developed hydrothermal system.
      */
     public double prewarmSeconds = 0;
 
@@ -193,7 +177,10 @@ public final class GeothermalConfig {
         if (cellSize < 1) throw new IllegalArgumentException("cellSize must be >= 1");
         if (stepSeconds <= 0) throw new IllegalArgumentException("stepSeconds must be > 0");
         if (timeScale <= 0) throw new IllegalArgumentException("timeScale must be > 0");
-        if (diffusivity < 0 || surfaceLossPerSecond < 0) throw new IllegalArgumentException("negative heat rate");
+        if (ventHeatPowerW < 0 || !(ventPipeDepthM > 0) || !(chamberRadiusM > 0)) {
+            throw new IllegalArgumentException("bad heat source parameters");
+        }
+        if (!(reservoirDepthM > 0)) throw new IllegalArgumentException("reservoirDepthM must be > 0");
         if (hazardZoneCells < 1) throw new IllegalArgumentException("hazardZoneCells must be >= 1");
         if (!(vapourDominatedWater >= 0 && vapourDominatedWater < 1)) {
             throw new IllegalArgumentException("vapourDominatedWater must be in [0, 1)");

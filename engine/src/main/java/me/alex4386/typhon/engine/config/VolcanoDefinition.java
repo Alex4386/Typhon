@@ -9,6 +9,7 @@ import java.util.Set;
 import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.dike.DikeConfig;
 import me.alex4386.typhon.engine.geothermal.GeothermalConfig;
+import me.alex4386.typhon.engine.subsurface.Subsurface;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.ConduitConfig;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
@@ -260,6 +261,11 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
      * are copied, so a definition can be assembled again (engine rebuilds).
      */
     public VolcanoSystem assemble(TerrainModel terrain, LavaFlow lava, WorldDefinition world) {
+        return assemble(terrain, lava, world, null);
+    }
+
+    /** {@link #assemble(TerrainModel, LavaFlow, WorldDefinition)} heating the world's shared subsurface model. */
+    public VolcanoSystem assemble(TerrainModel terrain, LavaFlow lava, WorldDefinition world, Subsurface subsurface) {
         MagmaChamberConfig chamberConfig = active ? chamber : chamber.toBuilder().supplyRate(0).build();
         VolcanoSystem.Builder b = VolcanoSystem.builder(id, vents, terrain, lava)
                 .scaling(scaling(world.scaling()))
@@ -269,7 +275,8 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
                 .dikesEnabled(dikes != null)
                 .geothermalEnabled(geothermal != null)
                 .massFlowsEnabled(pdc != null)
-                .deformationEnabled(deformation);
+                .deformationEnabled(deformation)
+                .subsurface(subsurface);
         if (dikes != null) b.dikes(dikes.copy());
         if (geothermal != null) b.geothermal(copyFields(geothermal, new GeothermalConfig()));
         if (geothermalCenter != null) b.geothermalCenter(geothermalCenter);
