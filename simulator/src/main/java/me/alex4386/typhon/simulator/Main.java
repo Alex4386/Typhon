@@ -20,6 +20,7 @@ import me.alex4386.typhon.simulator.output.CsvWriter;
 import me.alex4386.typhon.simulator.output.EventLog;
 import me.alex4386.typhon.simulator.output.MapRenderer;
 import me.alex4386.typhon.simulator.output.ReportWriter;
+import me.alex4386.typhon.simulator.run.ReferenceComparison;
 import me.alex4386.typhon.simulator.run.RunSummary;
 import me.alex4386.typhon.simulator.run.Sample;
 import me.alex4386.typhon.simulator.run.Simulation;
@@ -284,6 +285,10 @@ public final class Main {
                 summary.maxPlumeTopY == Integer.MIN_VALUE ? "none" : Integer.toString(summary.maxPlumeTopY),
                 summary.bombsLaunched, summary.seismicCounts);
         if (!summary.featuresFormed.isEmpty()) out.println("  hydrothermal features: " + summary.featuresFormed);
+        for (ReferenceComparison.Row row : ReferenceComparison.compare(preset, result)) {
+            out.printf(Locale.ROOT, "  ref %-28s %-22s model %-18s %s%n", row.reference().quantity(),
+                    row.reference().referenceText(), row.modelText(), row.verdict());
+        }
         out.println("Report: " + dir.resolve("report.html"));
         return 0;
     }

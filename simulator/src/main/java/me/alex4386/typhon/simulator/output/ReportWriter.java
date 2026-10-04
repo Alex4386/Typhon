@@ -9,7 +9,10 @@ import java.util.Locale;
 import java.util.Map;
 import me.alex4386.typhon.engine.alert.AlertLevel;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
+import me.alex4386.typhon.simulator.run.ReferenceComparison;
 import me.alex4386.typhon.simulator.run.RunSummary;
+import me.alex4386.typhon.simulator.scenario.RealSetting;
+import me.alex4386.typhon.simulator.scenario.ReferenceValue;
 import me.alex4386.typhon.simulator.run.Sample;
 import me.alex4386.typhon.simulator.run.Simulation;
 import me.alex4386.typhon.simulator.scenario.Preset;
@@ -109,9 +112,31 @@ public final class ReportWriter {
                 fmt(scaling.dormantTimeCompression()), fmt(scaling.eruptiveTimeCompression())));
         h.append("</table>");
 
+        List<ReferenceComparison.Row> comparison = ReferenceComparison.compare(preset, result);
+        if (!comparison.isEmpty()) {
+            h.append("<h2>Reference vs model</h2><table><tr><th>quantity</th><th>reference</th><th>model</th>")
+                    .append("<th></th><th>source</th></tr>");
+            for (ReferenceComparison.Row row : comparison) {
+                ReferenceValue ref = row.reference();
+                h.append("<tr><td>").append(esc(ref.quantity())).append("</td><td>").append(esc(ref.referenceText()))
+                        .append("</td><td>").append(esc(row.modelText())).append("</td><td>").append(verdict(row.verdict()))
+                        .append("</td><td><small>").append(esc(ref.source())).append("</small></td></tr>");
+            }
+            h.append("</table><p class=\"muted\">A sanity check of magnitudes and behaviour over this run's horizon,"
+                    + " not a calibration target.</p>");
+        }
+
         h.append("<h2>Reference values</h2><ul>");
         for (String ref : preset.references()) h.append("<li>").append(esc(ref)).append("</li>");
         h.append("</ul>");
+        RealSetting real = preset.realSetting();
+        if (real != null) {
+            RealSetting.DemSource dem = real.dem();
+            h.append(String.format(Locale.ROOT, "<p class=\"muted\">Real-scale domain %.1f km at %s m per column,"
+                            + " centred on %.4f, %.4f. Real DEM: <code>%s</code> (Copernicus GLO-30) or SRTM <code>%s</code>."
+                            + " %s</p>", real.domainMeters() / 1000, fmt(real.metersPerColumn()), dem.lat(), dem.lon(),
+                    esc(dem.copernicusTile()), esc(dem.srtmTile()), esc(dem.notes())));
+        }
 
         h.append("<h2>Timeline</h2><table><tr><th>time</th><th>event</th></tr>");
         int shown = 0;
@@ -224,6 +249,16 @@ public final class ReportWriter {
         if (series.column().equals("silica_wt")) v /= 10;
         if (chart.log()) return v > 0 ? Math.log10(v) : Double.NaN;
         return v;
+    }
+
+    private static String verdict(ReferenceValue.Verdict v) {
+        return switch (v) {
+            case WITHIN, MATCH -> "<span style=\"color:#1e7e34\">✓ within</span>";
+            case BELOW -> "<span style=\"color:#b35c00\">▼ below</span>";
+            case ABOVE -> "<span style=\"color:#b35c00\">▲ above</span>";
+            case MISMATCH -> "<span style=\"color:#b35c00\">✗ differs</span>";
+            case NOT_OBSERVED -> "<span class=\"muted\">not observed</span>";
+        };
     }
 
     private static void row(StringBuilder h, String key, String value) {

@@ -61,6 +61,30 @@ class OutputTest {
     }
 
     @Test
+    void realPresetReportComparesWithReferenceValues(@TempDir Path dir) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        int code = MainAccess.run(new String[] {
+            "run", "--preset", "kilauea-real", "--hours", "0.02", "--out", dir.toString(), "--quiet"},
+                new PrintStream(out), System.err);
+        assertEquals(0, code, out.toString());
+        String text = out.toString();
+        assertTrue(text.contains("ref Summit elevation") && text.contains("WITHIN"), text);
+        String html = Files.readString(dir.resolve("report.html"));
+        assertTrue(html.contains("Reference vs model"));
+        assertTrue(html.contains("Copernicus_DSM_COG_10_N19_00_W156_00_DEM.tif"), "DEM source documented");
+    }
+
+    @Test
+    void demInfoPointsAtRealTiles() throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        assertEquals(0, MainAccess.run(new String[] {"dem-info", "--preset", "st-helens-real"}, new PrintStream(out),
+                System.err));
+        assertTrue(out.toString().contains("Copernicus_DSM_COG_10_N46_00_W123_00_DEM"), out.toString());
+        assertEquals(1, MainAccess.run(new String[] {"dem-info", "--preset", "kilauea"}, new PrintStream(out),
+                new PrintStream(out)));
+    }
+
+    @Test
     void listPresetsAndUsage() throws Exception {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         assertEquals(0, MainAccess.run(new String[] {"list-presets"}, new PrintStream(out), System.err));
