@@ -9,14 +9,64 @@ feed it commands and terrain snapshots and apply the block changes and events it
   ids, e.g. `minecraft:potent_sulfur`); hosts resolve them against their registries.
 - **Deterministic.** All randomness comes from the `SimRandom` in `StepContext` (never
   `Math.random()`, `new Random()` or wall-clock time). Same seed + same commands ⇒ same frames.
-- **Persistent.** Subsystem state must round-trip through `saveState` / `loadState` so a restored
-  engine continues bit-for-bit (see `EngineTest.savedStateResumesBitForBit`). Terrain is not
-  persisted; hosts re-send snapshots.
+- **Persistent.** Subsystem state must round-trip through `saveState(StateWriter)` /
+  `loadState(StateReader)` so a restored engine continues bit-for-bit (see
+  `EngineTest.savedStateResumesBitForBit`, `SaveFormatTest`). Scalars go to `json()`, spatial arrays
+  to `field(name, schema)`. Expose the build configuration through `config()` (hash-checked on
+  restore) and a cheap immutable `snapshot()` for dashboards.
 - **Semantic output.** Subsystems emit `EngineEvent`s describing what happened (a tremor of
   magnitude M at P), never how to render it. Block edits go through `Outbox.setBlock` as
   compare-and-set `BlockChange`s.
-- **Multi-rate.** Pick each subsystem's `interval()` from the physics it models (a magma
-  chamber every few seconds, lava every tick) and use `StepContext.dtSeconds()`.
+- **Multi-rate, in seconds.** Pick each subsystem's `periodSeconds()` from the physics it models
+  (a magma chamber every second, lava every base step) and use `StepContext.dtSeconds()`. Never
+  assume a particular base step; sub-step internally when stability needs a finer step.
+
+## Time model
+
+Simulation time is an exact `long` count of microseconds. The engine advances in fixed **base
+steps** (`Engine.builder(seed).baseStepMicros(...)`, default 50 ms). The base step is a simulator
+accuracy/performance setting, not a game tick: hosts convert simulation time to their own clock.
+Subsystem periods and phases are rounded to whole base steps (minimum one step; `∞` = command-driven,
+never stepped). Events carry `time()` in simulated seconds; frames carry the step index and
+`timeMicros`. Results are invariant to the base step where physics allows
+(`BaseStepInvarianceTest`) and bit-identical for a fixed base step.
+
+Physical time compression (dormancy ×5000, eruptions ×20 by default) lives in `VolcanoScaling` and
+is part of the model; how fast simulation time runs against the wall clock is the runner's job.
+
+## Runner
+
+`EngineRunner` runs an engine on its own thread:
+
+| Mode | Behaviour |
+|---|---|
+| `REALTIME` | simulation time = speed × wall time (speed adjustable while running, e.g. 0.1–1000×); catches up at most `maxCatchUpSteps` steps, then lets time slip |
+| `UNBOUNDED` | as fast as the CPU allows |
+| `PAUSED` | no steps; `step(n)` runs n steps; `pauseAtStep` / `pauseAtTime` pause automatically |
+
+Output: an optional **lossless** frame queue (back-pressure; hosts that must apply every block
+change), a bounded **lossy** event ring with a dropped-event count (UIs), and a throttled
+`EngineSnapshot`. Saves and inspection run between steps via `onEngineThread`. The mode never
+changes results (`EngineRunnerTest.resultsDoNotDependOnRunnerSpeed`).
+
+## Save format
+
+`Engine.save(SaveStore)` / `Engine.builder(seed)...restore(SaveStore)`; `DirectorySaveStore` on
+disk, `InMemorySaveStore` for tests and `stateHash()`. Paths are relative, so a store can be rooted
+anywhere (e.g. `worlds/<world>/state/`).
+
+```
+meta.json                              format, engine version, seed, step, time, base step,
+                                       subsystems in order with config + config hash, queued commands
+subsystems/<id>.json                   random state + scalar/transient state + field schema versions
+fields/<id>/<field>/r.<rx>.<rz>.bin    deflated typed arrays, 32×32 chunks per region file
+log/events.ndjson                      append-only HistoricalEvents (eruptions, quakes, alert changes,
+                                       dikes, fissures, flow onsets, ...)
+```
+
+Ids are percent-encoded (`magma:v` → `magma%3Av`). Unchanged files are not rewritten, so periodic
+saves are incremental. Restoring checks format, seed, base step and every subsystem's config hash
+(`allowConfigChanges()` to override). Terrain is part of the save.
 
 ## Units and scaling
 
@@ -29,9 +79,10 @@ Tests assert physical relationships (basalt runs farther than dacite), not tuned
 
 | Package | Contents |
 |---|---|
-| `sim` | `Engine` loop, `Subsystem`, `StepContext`, `EngineRunner` (off-thread runner) |
+| `sim` | `Engine` loop, `Subsystem`, `StepContext`, `SimTime`, `EngineRunner` (modes, frames, events, snapshots), `EngineSnapshot` |
+| `save` | `SaveStore` (directory / in-memory), `StateWriter` / `StateReader`, `FieldChunk`, `SaveFormat` (region files) |
 | `command` | `EngineCommand`, `CommandBus` |
-| `output` | `BlockChange`, `EngineEvent`, `EngineFrame`, `Outbox` |
+| `output` | `BlockChange`, `EngineEvent`, `HistoricalEvent`, `EngineFrame`, `Outbox` |
 | `random` | `SimRandom` (SplitMix64, forkable, saveable) |
 | `math`, `world` | `BlockPos`, `BlockId`, `BlockState` |
 | `terrain` | `TerrainModel` (sparse column grid), `TerrainSnapshot` command |

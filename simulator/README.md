@@ -16,9 +16,15 @@ simulator/build/install/simulator/bin/simulator run --preset pinatubo --seed 7
 
 ```
 run --preset NAME [--seed N] [--hours H] [--out DIR] [--sample-seconds S]
+    [--base-step-ms MS] [--save DIR] [--load DIR]
     [--skip-events Type,Type|none] [--dem FILE [--dem-cell M] [--dem-meters-per-block L]
     [--dem-max-meters M]] [--quiet]
 ```
+
+`--base-step-ms` sets the engine's base step (default 50 ms; a resolution setting, results are
+largely invariant to it). `--save DIR` writes the engine state plus the simulated world at the end of
+the run; `--load DIR` resumes such a save and runs `--hours` more. A load must use the same preset,
+seed, base step and terrain options (mismatches are rejected by the engine's configuration check).
 
 `--dem` swaps the preset's synthetic terrain for real elevation data and re-anchors the vents to the new ground. It accepts two formats:
 
