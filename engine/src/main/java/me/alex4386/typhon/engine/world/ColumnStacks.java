@@ -132,8 +132,21 @@ public final class ColumnStacks {
         }
     }
 
-    static long key(int tx, int tz) {
+    /** Packed tile coordinates; also the persistence order of tiles. */
+    static long pack(int tx, int tz) {
         return ((long) tx << 32) | (tz & 0xffffffffL);
+    }
+
+    /**
+     * Map key of a tile: the packed coordinates through a bijective mixer. {@code Long.hashCode} of the
+     * plain packed value is {@code tx ^ tz}, which collides for every tile on a diagonal; on km-wide
+     * worlds HashMap bins then degrade into trees and lookups dominate profiles.
+     */
+    static long key(int tx, int tz) {
+        long z = pack(tx, tz);
+        z = (z ^ (z >>> 30)) * 0xbf58476d1ce4e5b9L;
+        z = (z ^ (z >>> 27)) * 0x94d049bb133111ebL;
+        return z ^ (z >>> 31);
     }
 
     static int tileCoord(int c) {
@@ -156,10 +169,8 @@ public final class ColumnStacks {
 
     /** Tiles sorted by key (deterministic iteration for persistence). */
     List<Tile> sortedTiles() {
-        List<Long> keys = new ArrayList<>(tiles.keySet());
-        keys.sort(null);
-        List<Tile> list = new ArrayList<>(keys.size());
-        for (long k : keys) list.add(tiles.get(k));
+        List<Tile> list = new ArrayList<>(tiles.values());
+        list.sort(java.util.Comparator.comparingLong(t -> pack(t.tx, t.tz)));
         return list;
     }
 

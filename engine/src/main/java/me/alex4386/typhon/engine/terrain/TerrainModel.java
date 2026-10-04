@@ -225,10 +225,9 @@ public final class TerrainModel implements Subsystem {
     public void saveState(StateWriter out) {
         StateWriter.Field field = out.field("columns", SCHEMA);
         Map<BlockId, Integer> ids = new LinkedHashMap<>();
-        List<Long> keys = new ArrayList<>(chunks.keySet());
-        keys.sort(null);
-        for (long key : keys) {
-            TerrainChunk chunk = chunks.get(key);
+        List<TerrainChunk> sorted = new ArrayList<>(chunks.values());
+        sorted.sort(java.util.Comparator.comparingLong(c -> pack(c.chunkX(), c.chunkZ())));
+        for (TerrainChunk chunk : sorted) {
             int[] surface = new int[TerrainChunk.AREA];
             for (int i = 0; i < TerrainChunk.AREA; i++) {
                 surface[i] = ids.computeIfAbsent(chunk.surface[i], id -> ids.size());
@@ -262,7 +261,20 @@ public final class TerrainModel implements Subsystem {
         }
     }
 
-    private static long key(int chunkX, int chunkZ) {
+    /** Packed chunk coordinates; the persistence order of chunks. */
+    private static long pack(int chunkX, int chunkZ) {
         return ((long) chunkX << 32) | (chunkZ & 0xffffffffL);
+    }
+
+    /**
+     * Map key of a chunk: the packed coordinates through a bijective mixer, so that {@code Long.hashCode}
+     * (which folds the plain packed value to {@code chunkX ^ chunkZ}) does not collide for whole
+     * diagonals of chunks on km-wide worlds.
+     */
+    private static long key(int chunkX, int chunkZ) {
+        long z = pack(chunkX, chunkZ);
+        z = (z ^ (z >>> 30)) * 0xbf58476d1ce4e5b9L;
+        z = (z ^ (z >>> 27)) * 0x94d049bb133111ebL;
+        return z ^ (z >>> 31);
     }
 }
