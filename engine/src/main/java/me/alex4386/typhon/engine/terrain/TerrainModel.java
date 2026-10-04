@@ -112,7 +112,7 @@ public final class TerrainModel implements Subsystem {
                     int z = chunk.chunkZ() * TerrainChunk.SIZE + lz;
                     TerrainColumn column = chunk.get(x, z);
                     if (world.isKnown(x, z)) {
-                        sync(x, z, column, UnitTable.UNATTRIBUTED);
+                        sync(x, z, column, UnitTable.UNATTRIBUTED, null);
                     } else {
                         Material cover = palette.knows(column.surface()) && solid(column.surface())
                                 ? palette.material(column.surface()) : null;
@@ -135,11 +135,21 @@ public final class TerrainModel implements Subsystem {
         return palette.material(block).solid();
     }
 
-    /** Mirrors a block-level column change into the world model. */
-    private void sync(int x, int z, TerrainColumn column, int unit) {
+    /**
+     * Mirrors a block-level column change into the world model. When the ground block did not move
+     * ({@code previous} has the same {@code groundY}) only the surface block or water changed, so the
+     * stacks keep their exact (possibly sub-block) surface: engine subsystems deposit physical
+     * thicknesses straight into the world model and only use the block cache for rendering.
+     */
+    private void sync(int x, int z, TerrainColumn column, int unit, TerrainColumn previous) {
         WorldSpec spec = world.spec();
         double target = spec.blockTop(column.groundY());
         double current = world.surfaceZ(x, z);
+        if (previous != null && previous.groundY() == column.groundY() && !Double.isNaN(current)
+                && Math.abs(current - target) < spec.metersPerColumn()) {
+            syncWater(x, z, column.waterY());
+            return;
+        }
         if (Double.isNaN(current)) {
             Material cover = palette.knows(column.surface()) && solid(column.surface())
                     ? palette.material(column.surface()) : null;
@@ -193,8 +203,33 @@ public final class TerrainModel implements Subsystem {
 
     /** {@link #setColumn} with the stratigraphic unit a raised ground belongs to. */
     public void setColumn(int x, int z, TerrainColumn column, int unit) {
-        chunks.computeIfAbsent(key(x >> 4, z >> 4), k -> new TerrainChunk(x >> 4, z >> 4)).set(x, z, column);
-        sync(x, z, column, unit);
+        TerrainChunk chunk = chunks.get(key(x >> 4, z >> 4));
+        TerrainColumn previous = chunk == null ? null : chunk.get(x, z);
+        if (chunk == null) {
+            chunk = new TerrainChunk(x >> 4, z >> 4);
+            chunks.put(key(x >> 4, z >> 4), chunk);
+        }
+        chunk.set(x, z, column);
+        sync(x, z, column, unit, previous);
+    }
+
+    /**
+     * Updates only the block cache of a column, leaving the world model untouched: for subsystems that
+     * already wrote the physical change (deposit, erosion, cavity) into the {@link #world()} and now
+     * show it as whole blocks. Keeps the water surface.
+     */
+    public void updateBlockCache(int x, int z, int groundY, BlockId surface) {
+        TerrainChunk chunk = chunks.computeIfAbsent(key(x >> 4, z >> 4), k -> new TerrainChunk(x >> 4, z >> 4));
+        TerrainColumn current = chunk.get(x, z);
+        chunk.set(x, z, new TerrainColumn(groundY, current.waterY(), surface));
+    }
+
+    /**
+     * The ground block that shows a world-model surface elevation {@code surfaceZ}: the highest block
+     * whose top lies at or below it, counting a block once more than half of it is filled.
+     */
+    public int blockForSurface(double surfaceZ) {
+        return (int) Math.floor(surfaceZ / world.spec().metersPerColumn() + 0.5) - 1;
     }
 
     public void setGround(int x, int z, int groundY, BlockId surface) {

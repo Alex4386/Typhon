@@ -261,6 +261,51 @@ public final class ColumnStacks {
         return t == null ? 0 : t.version[local(x, z)];
     }
 
+    /**
+     * Sum of the change counters of a rectangle of columns: a cheap way for per-chunk caches (16×16
+     * surface-flow chunks) to notice that any column under them was edited.
+     */
+    public long versionSum(int x0, int z0, int width, int depth) {
+        long sum = 0;
+        Tile t = null;
+        long tileKey = Long.MIN_VALUE;
+        for (int z = z0; z < z0 + depth; z++) {
+            for (int x = x0; x < x0 + width; x++) {
+                long k = key(tileCoord(x), tileCoord(z));
+                if (k != tileKey) {
+                    t = tiles.get(k);
+                    tileKey = k;
+                }
+                if (t != null) sum += t.version[local(x, z)];
+            }
+        }
+        return sum;
+    }
+
+    /** Coordinates {@code {tx, tz}} of every tile, sorted by key (deterministic). */
+    public List<int[]> tileCoords() {
+        List<int[]> list = new ArrayList<>();
+        for (Tile t : sortedTiles()) list.add(new int[] {t.tx, t.tz});
+        return list;
+    }
+
+    /**
+     * Thickness (m) of the unconsolidated ({@link LayerFlags#LOOSE}) layers at the top of a column,
+     * down to the first consolidated layer or cavity; 0 for unknown columns.
+     */
+    public double looseTopThickness(int x, int z) {
+        Tile t = tile(x, z);
+        if (t == null) return 0;
+        int c = local(x, z);
+        int s = t.start[c];
+        double thickness = 0;
+        for (int g = t.start[c + 1] - 1; g > s; g--) {
+            if ((t.flags[g] & LayerFlags.LOOSE) == 0 || t.material[g] == MaterialTable.VOID.id()) break;
+            thickness += t.top[g] - t.top[g - 1];
+        }
+        return thickness;
+    }
+
     public double uplift(int x, int z) {
         Tile t = tile(x, z);
         return t == null ? 0 : t.uplift[local(x, z)];
