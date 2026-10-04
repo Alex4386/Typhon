@@ -61,6 +61,7 @@ public final class VolcanoSystem {
     private final PyroclasticFlows pdc;
     private final Lahars lahars;
     private final DeformationModel deformation;
+    private final VolcanoUnits units;
 
     private final double ballisticFraction;
 
@@ -144,6 +145,10 @@ public final class VolcanoSystem {
 
         this.coupler = new VolcanoCoupler(volcanoId, chamber, seismicity, vents, dikes, b.terrain, b.lava, tephra, pdc,
                 geothermal, scaling, b.ballisticFraction);
+
+        // Every deposit is attributed to this volcano's current eruption (stratigraphy).
+        this.units = new VolcanoUnits(b.terrain.world(), volcanoId, chamber);
+        coupler.setUnits(units);
     }
 
     /** Chamber a few dozen blocks under the primary vent, kept inside the overworld. */
@@ -198,6 +203,8 @@ public final class VolcanoSystem {
     public List<VentSite> vents() { return vents; }
     public VolcanoScaling scaling() { return scaling; }
     public MagmaChamber chamber() { return chamber; }
+    /** Attributes this volcano's deposits to its eruptions. */
+    public VolcanoUnits units() { return units; }
     /** {@code null} when dikes are disabled. */
     public DikePropagation dikes() { return dikes; }
     /** {@code null} when mass flows are disabled. */

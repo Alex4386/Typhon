@@ -236,7 +236,7 @@ class LavaCrustTubeTest {
         SubsystemState saved = new SubsystemState();
         lava.saveState(saved);
         assertNotNull(saved.field("cells"), "lava cells are stored as a region field");
-        assertEquals(4, saved.json().get("format").getAsInt());
+        assertEquals(5, saved.json().get("format").getAsInt());
 
         LavaFlow copy = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(10));
         copy.loadState(saved);

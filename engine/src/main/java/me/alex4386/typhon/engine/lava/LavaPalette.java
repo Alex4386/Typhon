@@ -2,6 +2,8 @@ package me.alex4386.typhon.engine.lava;
 
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.world.BlockState;
+import me.alex4386.typhon.engine.world.Material;
+import me.alex4386.typhon.engine.world.MaterialTable;
 
 /** Every block {@link LavaFlow} places, chosen from composition and cooling history. */
 public final class LavaPalette {
@@ -90,6 +92,19 @@ public final class LavaPalette {
         }
         if (quenched || submerged) return glass(random);
         return random.chance(0.6) ? GRANITE : STONE;
+    }
+
+    /**
+     * World-model material of solidified lava: the volcanic rock for its silica (basalt &lt; 53 wt%,
+     * andesite &lt; 63, dacite &lt; 69, rhyolite above), or obsidian when a silicic melt was quenched
+     * or erupted under water.
+     */
+    public static Material rockMaterial(double silicaWt, boolean submerged, boolean quenched) {
+        if (silicaWt >= 63 && (quenched || submerged)) return MaterialTable.OBSIDIAN;
+        if (silicaWt < 53) return MaterialTable.BASALT;
+        if (silicaWt < 63) return MaterialTable.ANDESITE;
+        if (silicaWt < 69) return MaterialTable.DACITE;
+        return MaterialTable.RHYOLITE;
     }
 
     private static BlockState glass(SimRandom random) {

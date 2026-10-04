@@ -85,6 +85,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private double supplyRate;
     private boolean erupting;
     private double eruptionStartTime;
+    private int eruptionCount;
     private double lastTime;
     private double eruptedVolume;
     private double eruptionRate;
@@ -255,6 +256,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         ventWater = ConduitFlow.retainedWaterWt(config, waterWt(), onsetRate);
         erupting = true;
         eruptionStartTime = context.time();
+        eruptionCount++;
         eruptedVolume = 0;
         slugGas = 0;
         plugGas = 0;
@@ -618,6 +620,19 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     }
 
     /** DRE volume erupted so far in the current (or last) eruption (m³). */
+    /**
+     * Number of eruptions started so far: the current (or most recent) eruption's id. Deposits are
+     * attributed to it, so stratigraphy shows one unit per eruption. 0 before the first eruption.
+     */
+    public int eruptionCount() {
+        return eruptionCount;
+    }
+
+    /** Simulation time (s) at which the current or most recent eruption started. */
+    public double eruptionStartTime() {
+        return eruptionStartTime;
+    }
+
     public double eruptedVolume() {
         return eruptedVolume;
     }
@@ -637,6 +652,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         out.addProperty("supplyRate", supplyRate);
         out.addProperty("erupting", erupting);
         out.addProperty("eruptionStartTime", eruptionStartTime);
+        out.addProperty("eruptionCount", eruptionCount);
         out.addProperty("lastTime", lastTime);
         out.addProperty("eruptedVolume", eruptedVolume);
         out.addProperty("eruptionRate", eruptionRate);
@@ -678,6 +694,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         supplyRate = in.get("supplyRate").getAsDouble();
         erupting = in.get("erupting").getAsBoolean();
         eruptionStartTime = in.get("eruptionStartTime").getAsDouble();
+        eruptionCount = in.has("eruptionCount") ? in.get("eruptionCount").getAsInt() : 0;
         lastTime = in.get("lastTime").getAsDouble();
         eruptedVolume = in.get("eruptedVolume").getAsDouble();
         eruptionRate = in.get("eruptionRate").getAsDouble();

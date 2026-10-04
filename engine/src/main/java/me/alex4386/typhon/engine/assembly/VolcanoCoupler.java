@@ -31,6 +31,8 @@ import me.alex4386.typhon.engine.tephra.GrainSizeDistribution;
 import me.alex4386.typhon.engine.tephra.TephraSubsystem;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
+import me.alex4386.typhon.engine.world.DepositType;
+import me.alex4386.typhon.engine.world.UnitSource;
 import me.alex4386.typhon.engine.volcano.EruptiveRegime;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
@@ -108,6 +110,7 @@ public final class VolcanoCoupler implements Subsystem {
     private final List<VentSite> baseVents;
     private final DikePropagation dikes;
     private final TerrainModel terrain;
+    private UnitSource units = UnitSource.UNATTRIBUTED;
     private final LavaFlow lava;
     private final TephraSubsystem tephra;
     private final PyroclasticFlows pdc;
@@ -248,8 +251,9 @@ public final class VolcanoCoupler implements Subsystem {
             String sourceId = sourceId(vent);
             wanted.add(sourceId);
             if (activeLavaSources.add(sourceId)) {
+                int unit = units.unit(DepositType.LAVA, chamber.eruptionStartTime(), chamber.temperatureC());
                 lava.addSource(LavaSource.atVent(vent, perVent, chamber.temperatureC(), chamber.silicaWt(), chamber.ventWaterWt())
-                        .withId(sourceId));
+                        .withId(sourceId).withUnit(unit));
             } else {
                 lava.setRate(sourceId, perVent);
             }
@@ -472,7 +476,7 @@ public final class VolcanoCoupler implements Subsystem {
                 int y = column.groundY() + 1;
                 BlockId expected = column.waterY() != TerrainColumn.NO_WATER && column.waterY() >= y ? WATER : BlockId.AIR;
                 context.outbox().setBlock(BlockChange.replace(new BlockPos(x, y, z), expected, TUFF));
-                terrain.setGround(x, z, y, TUFF);
+                terrain.setGround(x, z, y, TUFF, units.unit(DepositType.FALL, context.time(), Double.NaN));
                 column = terrain.column(x, z);
                 debt -= 1;
                 placed++;
@@ -486,6 +490,11 @@ public final class VolcanoCoupler implements Subsystem {
         phreatomagmatic = active;
         BlockPos at = vent != null ? vent.position() : baseVents.get(0).position();
         context.outbox().emit(new SurfaceEvents.PhreatomagmaticChanged(context.time(), volcanoId, active, at, waterDepthM));
+    }
+
+    /** Attributes lava sources and tuff-ring deposits to this volcano's eruptions. */
+    public void setUnits(UnitSource units) {
+        this.units = units;
     }
 
     private String sourceId(VentSite vent) {

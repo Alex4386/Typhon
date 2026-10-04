@@ -22,6 +22,7 @@ final class LavaChunk {
     final double[] crust = new double[AREA]; // rigid crust/roof on top of the melt (real m)
     final double[] roofTop = new double[AREA]; // absolute elevation of the crust top, real m (= y · L)
     final byte[] crustKind = new byte[AREA]; // LavaPalette.crustKind of the crust
+    int[] unit = new int[AREA]; // stratigraphic unit (eruption) of the melt; kept after it drains (roofs, films)
 
     // What is currently shown in the world (persisted, for compare-and-set diffs). From renderBottom
     // upward: renderMelt lava blocks, renderGap air blocks, renderRoof roof blocks.
@@ -37,10 +38,14 @@ final class LavaChunk {
     double[] nextTemperature = new double[AREA];
     double[] nextSilica = new double[AREA];
     double[] nextWater = new double[AREA];
+    int[] nextUnit = new int[AREA];
     final double[] outflow = new double[DIRECTIONS * AREA]; // direction-major, as thickness (m)
     final double[] speed = new double[AREA]; // physical mean flow speed q/h this step (m/s)
     final int[] ground = new int[AREA];
     final int[] waterY = new int[AREA];
+    /** World-model ground surface + uplift (real m), NaN where unknown: the bed the lava flows on. */
+    final double[] bed = new double[AREA];
+    long bedVersion = Long.MIN_VALUE; // world version sum the bed cache was read at
     final long[] sourceStamp = new long[AREA]; // == step stamp while an effusive source feeds the cell
     final LavaChunk[] neighbours = new LavaChunk[9]; // by chunk offset: (dz + 1) * 3 + (dx + 1)
     TerrainChunkView terrainView; // terrain the ground/waterY caches were read from
@@ -59,6 +64,7 @@ final class LavaChunk {
         this.cz = cz;
         this.key = key(cx, cz);
         java.util.Arrays.fill(sourceStamp, Long.MIN_VALUE);
+        java.util.Arrays.fill(bed, Double.NaN);
     }
 
     static long key(int cx, int cz) {
@@ -90,6 +96,9 @@ final class LavaChunk {
         t = water;
         water = nextWater;
         nextWater = t;
+        int[] u = unit;
+        unit = nextUnit;
+        nextUnit = u;
     }
 
     void recount() {

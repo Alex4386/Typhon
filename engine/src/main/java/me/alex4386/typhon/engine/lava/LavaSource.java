@@ -6,6 +6,7 @@ import java.util.Objects;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
+import me.alex4386.typhon.engine.world.UnitTable;
 
 /**
  * An effusive lava source: lava welling up at a set of surface columns.
@@ -16,14 +17,21 @@ import me.alex4386.typhon.engine.volcano.VentSite;
  * @param temperatureC eruption temperature
  * @param silicaWt SiO₂ content
  * @param waterWt dissolved H₂O remaining at the surface
+ * @param unit stratigraphic unit (volcano, eruption) the lava's rock is attributed to; {@link
+ *     UnitTable#UNATTRIBUTED} when unknown
  */
 public record LavaSource(String id, List<BlockPos> cells, double rateM3PerS, double temperatureC, double silicaWt,
-        double waterWt) {
+        double waterWt, int unit) {
     public LavaSource {
         Objects.requireNonNull(id, "id");
         cells = List.copyOf(cells);
         if (cells.isEmpty()) throw new IllegalArgumentException("A lava source needs at least one cell");
         if (rateM3PerS < 0) throw new IllegalArgumentException("rate must be >= 0");
+    }
+
+    public LavaSource(String id, List<BlockPos> cells, double rateM3PerS, double temperatureC, double silicaWt,
+            double waterWt) {
+        this(id, cells, rateM3PerS, temperatureC, silicaWt, waterWt, UnitTable.UNATTRIBUTED);
     }
 
     public static LavaSource at(String id, BlockPos position, double rateM3PerS, double temperatureC, double silicaWt,
@@ -56,10 +64,14 @@ public record LavaSource(String id, List<BlockPos> cells, double rateM3PerS, dou
     }
 
     public LavaSource withId(String id) {
-        return new LavaSource(id, cells, rateM3PerS, temperatureC, silicaWt, waterWt);
+        return new LavaSource(id, cells, rateM3PerS, temperatureC, silicaWt, waterWt, unit);
     }
 
     public LavaSource withRate(double rateM3PerS) {
-        return new LavaSource(id, cells, rateM3PerS, temperatureC, silicaWt, waterWt);
+        return new LavaSource(id, cells, rateM3PerS, temperatureC, silicaWt, waterWt, unit);
+    }
+
+    public LavaSource withUnit(int unit) {
+        return new LavaSource(id, cells, rateM3PerS, temperatureC, silicaWt, waterWt, unit);
     }
 }
