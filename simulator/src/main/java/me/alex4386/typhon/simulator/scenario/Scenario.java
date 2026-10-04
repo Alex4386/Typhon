@@ -10,6 +10,7 @@ import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.save.SaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
+import me.alex4386.typhon.engine.worlds.World;
 import me.alex4386.typhon.simulator.terrain.ColumnGrid;
 import me.alex4386.typhon.simulator.world.VoxelWorld;
 
@@ -29,6 +30,7 @@ public final class Scenario {
     private final VoxelWorld world;
     private final List<Consumer<Scenario>> afterFirstTick;
     private final boolean restored;
+    private final World session;
 
     /**
      * How the engine is built.
@@ -65,6 +67,7 @@ public final class Scenario {
         this.engine = engineBuilder.build();
         this.world = new VoxelWorld(initialTerrain);
         this.restored = restore != null;
+        this.session = null;
         if (restored) {
             byte[] edits = restore.read(VoxelWorld.SAVE_PATH);
             if (edits != null) world.loadEdits(edits);
@@ -73,10 +76,49 @@ public final class Scenario {
         }
     }
 
+    private Scenario(String name, World session, ColumnGrid initialTerrain, boolean restored) {
+        this.presetName = name;
+        this.seed = session.definition().seed();
+        this.initialTerrain = initialTerrain;
+        this.terrain = session.terrain();
+        this.lava = session.lava();
+        this.volcanoes = List.copyOf(session.volcanoes().values());
+        this.afterFirstTick = List.of();
+        this.engine = session.engine();
+        this.world = new VoxelWorld(initialTerrain);
+        this.restored = restored;
+        this.session = session;
+        if (restored) {
+            byte[] edits = session.stateStore().read(VoxelWorld.SAVE_PATH);
+            if (edits != null) world.loadEdits(edits);
+        }
+    }
+
+    /**
+     * Runs a {@link World} (a {@code worlds/<name>} directory or an in-memory world) through the
+     * simulator; {@code initialTerrain} must be the terrain the world was created on.
+     */
+    public static Scenario fromWorld(String name, World session, ColumnGrid initialTerrain, boolean restored) {
+        if (session.volcanoes().isEmpty()) throw new IllegalStateException("A world needs at least one volcano to run");
+        return new Scenario(name, session, initialTerrain, restored);
+    }
+
+    /** The world this scenario runs, or {@code null} for preset scenarios. */
+    public World session() {
+        return session;
+    }
+
     /** Saves the engine and the simulator's host world (between steps). */
     public void save(SaveStore store) {
         engine.save(store);
         store.write(VoxelWorld.SAVE_PATH, world.saveEdits());
+    }
+
+    /** Saves a world scenario into its own world directory (state, history, host world). */
+    public void saveWorld() {
+        if (session == null) throw new IllegalStateException("not a world scenario");
+        session.save();
+        session.stateStore().write(VoxelWorld.SAVE_PATH, world.saveEdits());
     }
 
     /** Whether this scenario resumed from a save. */

@@ -33,6 +33,29 @@ seed, base step and terrain options (mismatches are rejected by the engine's con
 
 Elevation 0 m maps to y = 62, and columns below it are flooded.
 
+## Worlds
+
+A world directory (`worlds/<name>/world.yaml` + `volcanoes/<id>.yaml`, see `engine/README.md`) can
+hold any number of volcanoes and keeps its own state and history:
+
+```
+init-world --preset NAME [--seed N] --out DIR     # template that reproduces a preset exactly
+init-world --example twin --out DIR               # two volcanoes sharing terrain and lava
+run --world DIR [--hours H (default 1)] [--out DIR (default DIR/runs/latest)] [--sample-seconds S]
+    [--accept-config-change | --reset-changed] [--no-save] [--skip-events ...] [--quiet]
+```
+
+`run --world` starts the world from its definitions, or resumes `DIR/state` when it exists, and
+saves back into `DIR` at the end (unless `--no-save`). If the definitions changed since the last
+save in ways that do not fit the saved state (grid, geology, chamber geometry, vents, ...), the run
+is refused with the list of changes; `--accept-config-change` keeps the state and applies them,
+`--reset-changed` restarts only the volcanoes that changed. Hot changes (climate, time compression,
+magma supply, feature rates, `active`) apply without a flag.
+
+The `terrain` section of `world.yaml` says where the initial terrain comes from:
+`{source: preset, preset: kilauea, seed: 1}`, `{source: dem, path: dem.asc, cell: 30}` (path relative
+to the world directory) or `{source: twin-cones, separation: 160, height: 60, radius: 140}`.
+
 ## Outputs (in `--out`, default `sim-out/<preset>-<seed>`)
 
 | File | Contents |
