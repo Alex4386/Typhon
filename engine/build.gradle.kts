@@ -15,6 +15,9 @@ tasks.withType<JavaCompile>().configureEach {
 dependencies {
     // State serialization. Gson ships with both Paper and Fabric servers, so hosts need not shade it.
     api("com.google.code.gson:gson:2.14.0")
+    // World/volcano definitions (world.yaml, volcanoes/<id>.yaml). YAML 1.2, no object construction
+    // from tags (safe by design), small and dependency-free.
+    implementation("org.snakeyaml:snakeyaml-engine:3.2")
 
     testImplementation(platform("org.junit:junit-bom:5.12.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")

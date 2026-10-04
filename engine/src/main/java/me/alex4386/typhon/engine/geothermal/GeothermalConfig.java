@@ -189,7 +189,7 @@ public final class GeothermalConfig {
     /** Surface blocks hydrothermal processes may replace. */
     public Set<BlockId> alterableSurfaces = new HashSet<>(GeothermalBlocks.DEFAULT_ALTERABLE);
 
-    void validate() {
+    public void validate() {
         if (radius < 1) throw new IllegalArgumentException("radius must be >= 1");
         if (cellSize < 1) throw new IllegalArgumentException("cellSize must be >= 1");
         if (stepSeconds <= 0) throw new IllegalArgumentException("stepSeconds must be > 0");

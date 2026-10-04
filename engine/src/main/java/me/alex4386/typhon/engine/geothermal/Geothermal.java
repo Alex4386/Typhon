@@ -93,6 +93,8 @@ public final class Geothermal implements Subsystem {
     private final double[] lakeDistance;
     private final double[] source;
 
+    private final BlockPos center;
+
     public Geothermal(
             String volcanoId,
             GeothermalConfig config,
@@ -107,6 +109,7 @@ public final class Geothermal implements Subsystem {
         this.magma = Objects.requireNonNull(magma, "magma");
         this.terrain = Objects.requireNonNull(terrain, "terrain");
         this.palette = Objects.requireNonNull(palette, "palette");
+        this.center = center;
         this.referenceY = center.y();
         this.vents = List.copyOf(vents);
         this.grid = GeothermalGrid.centeredOn(center.x(), center.z(), config.radius, config.cellSize);
@@ -119,6 +122,11 @@ public final class Geothermal implements Subsystem {
         this.localMean = new double[n];
         this.lakeDistance = new double[n];
         this.source = new double[n];
+    }
+
+    /** Centre of the geothermal grid. */
+    public BlockPos center() {
+        return center;
     }
 
     // ── Subsystem ──

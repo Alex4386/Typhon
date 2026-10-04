@@ -608,6 +608,15 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return supplyRate;
     }
 
+    /**
+     * Sets the deep magma supply (m³/s) directly; call between steps (e.g. when a world applies a
+     * changed definition to restored state). Running hosts use {@code MagmaCommands.SetSupplyRate}.
+     */
+    public void setSupplyRate(double rate) {
+        if (!(rate >= 0)) throw new IllegalArgumentException("supply rate must be >= 0");
+        this.supplyRate = rate;
+    }
+
     /** DRE volume erupted so far in the current (or last) eruption (m³). */
     public double eruptedVolume() {
         return eruptedVolume;

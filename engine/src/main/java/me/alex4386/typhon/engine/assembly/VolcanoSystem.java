@@ -23,6 +23,7 @@ import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.seismic.SeismicConfig;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
 import me.alex4386.typhon.engine.sim.Engine;
+import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.tephra.TephraConfig;
 import me.alex4386.typhon.engine.tephra.TephraSubsystem;
@@ -61,8 +62,11 @@ public final class VolcanoSystem {
     private final Lahars lahars;
     private final DeformationModel deformation;
 
+    private final double ballisticFraction;
+
     private VolcanoSystem(Builder b) {
         this.volcanoId = b.volcanoId;
+        this.ballisticFraction = b.ballisticFraction;
         this.vents = b.vents;
         this.scaling = b.scaling;
         b.lava.setMetersPerBlock(scaling.metersPerBlock());
@@ -143,7 +147,7 @@ public final class VolcanoSystem {
     }
 
     /** Chamber a few dozen blocks under the primary vent, kept inside the overworld. */
-    static BlockPos defaultChamberCenter(BlockPos vent) {
+    public static BlockPos defaultChamberCenter(BlockPos vent) {
         return new BlockPos(vent.x(), Math.max(-56, vent.y() - 48), vent.z());
     }
 
@@ -157,13 +161,26 @@ public final class VolcanoSystem {
      * attached at construction, so a restored engine must be built from a fresh {@code VolcanoSystem}.
      */
     public Engine.Builder addTo(Engine.Builder engine) {
-        engine.add(chamber);
-        if (dikes != null) engine.add(dikes);
-        engine.add(seismicity).add(alert).add(coupler).add(tephra);
-        if (pdc != null) engine.add(pdc).add(lahars);
-        if (geothermal != null) engine.add(geothermal);
-        if (deformation != null) engine.add(deformation);
+        for (Subsystem subsystem : subsystems()) engine.add(subsystem);
         return engine;
+    }
+
+    /** This volcano's subsystems in registration order. */
+    public List<Subsystem> subsystems() {
+        List<Subsystem> list = new java.util.ArrayList<>();
+        list.add(chamber);
+        if (dikes != null) list.add(dikes);
+        list.add(seismicity);
+        list.add(alert);
+        list.add(coupler);
+        list.add(tephra);
+        if (pdc != null) {
+            list.add(pdc);
+            list.add(lahars);
+        }
+        if (geothermal != null) list.add(geothermal);
+        if (deformation != null) list.add(deformation);
+        return list;
     }
 
     /**
@@ -176,6 +193,8 @@ public final class VolcanoSystem {
     }
 
     public String volcanoId() { return volcanoId; }
+    /** Share of explosive ejecta leaving as ballistic bombs. */
+    public double ballisticFraction() { return ballisticFraction; }
     public List<VentSite> vents() { return vents; }
     public VolcanoScaling scaling() { return scaling; }
     public MagmaChamber chamber() { return chamber; }

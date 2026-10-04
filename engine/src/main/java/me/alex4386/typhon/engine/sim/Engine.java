@@ -146,15 +146,21 @@ public final class Engine {
      * since the previous save are appended to the history log.
      */
     public void save(SaveStore store) {
+        save(store, events -> {
+            StringBuilder lines = new StringBuilder();
+            for (HistoricalEvent event : events) lines.append(SaveFormat.historyLine(event)).append('\n');
+            store.append(SaveFormat.HISTORY, lines.toString().getBytes(StandardCharsets.UTF_8));
+        });
+    }
+
+    /**
+     * Like {@link #save(SaveStore)}, but historical events produced since the previous save go to
+     * {@code historySink} instead of the store's log (e.g. split per volcano). The sink is not called
+     * when there are none.
+     */
+    public void save(SaveStore store, java.util.function.Consumer<List<HistoricalEvent>> historySink) {
         writeState(store);
-        StringBuilder lines = new StringBuilder();
-        for (HistoricalEvent event : history) {
-            JsonObject line = new JsonObject();
-            line.addProperty("type", event.getClass().getSimpleName());
-            line.add("event", SaveFormat.gson().toJsonTree(event));
-            lines.append(SaveFormat.gson().toJson(line)).append('\n');
-        }
-        if (!lines.isEmpty()) store.append(SaveFormat.HISTORY, lines.toString().getBytes(StandardCharsets.UTF_8));
+        if (!history.isEmpty()) historySink.accept(List.copyOf(history));
         history.clear();
     }
 

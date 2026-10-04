@@ -64,6 +64,14 @@ public final class SaveFormat {
         return sb.toString();
     }
 
+    /** One history log line: {@code {"type": <simple class name>, "event": <event fields>}}. */
+    public static String historyLine(me.alex4386.typhon.engine.output.HistoricalEvent event) {
+        JsonObject line = new JsonObject();
+        line.addProperty("type", event.getClass().getSimpleName());
+        line.add("event", GSON.toJsonTree(event));
+        return GSON.toJson(line);
+    }
+
     public static String subsystemPath(String id) {
         return "subsystems/" + encode(id) + ".json";
     }
