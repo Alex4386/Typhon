@@ -19,6 +19,7 @@ import me.alex4386.typhon.engine.tephra.TephraConfig;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
+import me.alex4386.typhon.engine.world.Edifice;
 import me.alex4386.typhon.engine.world.MaterialTable;
 
 /**
@@ -44,7 +45,7 @@ import me.alex4386.typhon.engine.world.MaterialTable;
  * massFlows: {enabled: true, pdc: {frictionCoefficient: 0.18}, lahar: {}}
  * deformation: {enabled: true}
  * tephra: {bombMedianDiameter: 0.3}
- * edifice: {material: basalt}
+ * edifice: {material: basalt, radius: 400, baseZ: 200}   # radius in columns, baseZ in metres
  * }</pre>
  *
  * Inactive volcanoes are built with no magma supply (dormant); their state is kept.
@@ -57,11 +58,16 @@ import me.alex4386.typhon.engine.world.MaterialTable;
  * @param pdc {@code null} when mass flows are disabled
  * @param lahar {@code null} when mass flows are disabled
  * @param edificeMaterial material of this volcano's edifice for imported columns, {@code null} = world
+ * @param edificeRadius radius of the edifice around the primary vent in columns, {@code +∞} = everywhere
+ *     this volcano is the nearest one
+ * @param edificeBaseZ elevation of the edifice's base, the pre-volcano surface (m); {@code NaN} = the
+ *     top of the world's basement cake
  */
 public record VolcanoDefinition(String id, String name, boolean active, List<VentSite> vents,
         MagmaChamberConfig chamber, DikeConfig dikes, GeothermalConfig geothermal, BlockPos geothermalCenter,
         MassFlowConfig pdc, MassFlowConfig lahar, boolean deformation, TephraConfig tephra, double dormantCompression,
-        double eruptiveCompression, double ballisticFraction, String edificeMaterial) {
+        double eruptiveCompression, double ballisticFraction, String edificeMaterial, double edificeRadius,
+        double edificeBaseZ) {
 
     static final Set<String> CHAMBER_DERIVED = Set.of("dormantTimeScale", "eruptiveTimeScale");
     static final Set<String> CHAMBER_SKIP = Set.of("volcanoId", "center", "conduit", "dormantTimeScale", "eruptiveTimeScale");
@@ -76,6 +82,24 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
         if (vents.isEmpty()) throw new ConfigException("volcano " + id + " needs at least one vent");
         Objects.requireNonNull(chamber, "chamber");
         Objects.requireNonNull(tephra, "tephra");
+        if (!(edificeRadius > 0)) throw new ConfigException("volcano " + id + ": edifice radius must be > 0");
+    }
+
+    /** Definition with an unbounded edifice at the world's basement top (no edifice radius/base). */
+    public VolcanoDefinition(String id, String name, boolean active, List<VentSite> vents,
+            MagmaChamberConfig chamber, DikeConfig dikes, GeothermalConfig geothermal, BlockPos geothermalCenter,
+            MassFlowConfig pdc, MassFlowConfig lahar, boolean deformation, TephraConfig tephra, double dormantCompression,
+            double eruptiveCompression, double ballisticFraction, String edificeMaterial) {
+        this(id, name, active, vents, chamber, dikes, geothermal, geothermalCenter, pdc, lahar, deformation, tephra,
+                dormantCompression, eruptiveCompression, ballisticFraction, edificeMaterial, Double.POSITIVE_INFINITY,
+                Double.NaN);
+    }
+
+    /** This volcano's edifice zone for importing columns, or {@code null} if it uses the world's rock. */
+    public Edifice edifice() {
+        if (edificeMaterial == null) return null;
+        BlockPos c = primaryVent().position();
+        return new Edifice(id, c.x() + 0.5, c.z() + 0.5, edificeRadius, edificeBaseZ, edificeMaterial);
     }
 
     public VentSite primaryVent() {
@@ -177,6 +201,8 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
         ConfigBinder.bindFields(root.child("tephra"), tephra, Set.of(), TEPHRA_DERIVED);
 
         String edifice = null;
+        double edificeRadius = Double.POSITIVE_INFINITY;
+        double edificeBase = Double.NaN;
         if (root.has("edifice")) {
             ConfigNode e = root.child("edifice");
             edifice = e.requireString("material");
@@ -184,12 +210,15 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
                 throw e.error("material", "unknown material '" + edifice + "'; known: "
                         + MaterialTable.all().stream().map(m -> m.name()).toList());
             }
+            edificeRadius = e.number("radius", Double.POSITIVE_INFINITY);
+            if (!(edificeRadius > 0)) throw e.error("radius", "must be > 0 (columns)");
+            edificeBase = e.number("baseZ", Double.NaN);
             e.finish();
         }
 
         root.finish();
         return new VolcanoDefinition(id, name, active, vents, chamber, dikes, geothermal, geothermalCenter, pdc, lahar,
-                deformation, tephra, dormant, eruptive, ballistic, edifice);
+                deformation, tephra, dormant, eruptive, ballistic, edifice, edificeRadius, edificeBase);
     }
 
     static VentSite parseVent(ConfigNode v) {
@@ -348,13 +377,19 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
         root.put("massFlows", flows);
         root.put("deformation", WorldDefinition.map("enabled", deformation));
         root.put("tephra", ConfigBinder.exportFields(tephra, TEPHRA_DERIVED));
-        if (edificeMaterial != null) root.put("edifice", WorldDefinition.map("material", edificeMaterial));
+        if (edificeMaterial != null) {
+            Map<String, Object> edifice = WorldDefinition.map("material", edificeMaterial);
+            if (!Double.isInfinite(edificeRadius)) edifice.put("radius", ConfigBinder.export(edificeRadius));
+            if (!Double.isNaN(edificeBaseZ)) edifice.put("baseZ", ConfigBinder.export(edificeBaseZ));
+            root.put("edifice", edifice);
+        }
         return root;
     }
 
     /** Same definition with a different {@code active} flag. */
     public VolcanoDefinition withActive(boolean value) {
         return new VolcanoDefinition(id, name, value, vents, chamber, dikes, geothermal, geothermalCenter, pdc, lahar,
-                deformation, tephra, dormantCompression, eruptiveCompression, ballisticFraction, edificeMaterial);
+                deformation, tephra, dormantCompression, eruptiveCompression, ballisticFraction, edificeMaterial,
+                edificeRadius, edificeBaseZ);
     }
 }

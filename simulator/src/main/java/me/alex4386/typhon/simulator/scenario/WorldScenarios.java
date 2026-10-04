@@ -163,7 +163,7 @@ public final class WorldScenarios {
                             initialSilicaWt: 60, rechargeSilicaWt: 58, initialWaterWt: 3.5, rechargeWaterWt: 3.5,
                             initialTemperatureC: 1000}
                 geothermal: {radius: 64, maxGeysers: 4}
-                edifice: {material: andesite}
+                edifice: {material: andesite, radius: 140}
                 """));
         new WorldDirectory(out).writeDefinitions(world, List.of(east, west), HEADER + "# Example world 'twin'.\n");
     }

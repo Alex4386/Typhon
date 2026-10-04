@@ -31,6 +31,7 @@ import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
+import me.alex4386.typhon.engine.world.Edifice;
 import me.alex4386.typhon.engine.world.WorldModel;
 
 /**
@@ -235,6 +236,12 @@ public final class World {
      */
     private void build(SaveStore restore, Set<String> resetVolcanoes, Set<String> resyncSupply) {
         terrain = new TerrainModel(new WorldModel(definition.spec()));
+        List<Edifice> edifices = new ArrayList<>();
+        for (VolcanoDefinition v : volcanoDefinitions()) {
+            Edifice e = v.edifice();
+            if (e != null) edifices.add(e);
+        }
+        terrain.world().setEdifices(edifices);
         lava = new LavaFlow(terrain, definition.lava());
         systems.clear();
         Engine.Builder builder = Engine.builder(definition.seed()).baseStepMicros(definition.baseStepMicros()).add(terrain);

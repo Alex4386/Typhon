@@ -38,6 +38,8 @@ public final class WorldModel implements WorldQuery, WorldEdit {
     private final TreeMap<Long, Double> pendingWater = new TreeMap<>();
     private int basementUnit = -1;
     private int edificeUnit = -1;
+    private final TreeMap<String, Integer> volcanoEdificeUnits = new TreeMap<>();
+    private List<Edifice> edifices = List.of();
     private WaterSink waterSink;
 
     public WorldModel(WorldSpec spec) {
@@ -77,12 +79,25 @@ public final class WorldModel implements WorldQuery, WorldEdit {
     // ── Import ──
 
     /**
-     * Builds a fresh column reaching up to {@code surfaceZ}: the basement layer cake, the edifice
-     * material up to the cover, and a cover of {@code coverMaterial} (or the spec's surface material
-     * when {@code null}). Replaces the column if it existed.
+     * Volcano edifices used when columns are imported (not persisted: they come from the volcano
+     * definitions). Columns imported earlier keep their layers.
+     */
+    public void setEdifices(List<Edifice> edifices) {
+        this.edifices = List.copyOf(edifices);
+    }
+
+    public List<Edifice> edifices() {
+        return edifices;
+    }
+
+    /**
+     * Builds a fresh column reaching up to {@code surfaceZ}: the basement layer cake, the country rock
+     * (or the edifice of the volcano whose {@link Edifice} covers the column) up to the cover, and a
+     * cover of {@code coverMaterial} (or the spec's surface material when {@code null}). Replaces the
+     * column if it existed.
      */
     public void importColumn(int x, int z, double surfaceZ, Material coverMaterial) {
-        stacks.setLayers(x, z, importLayers(surfaceZ, coverMaterial));
+        stacks.setLayers(x, z, importLayers(x, z, surfaceZ, coverMaterial));
     }
 
     /** A column to import: surface elevation and cover material ({@code null} = spec default). */
@@ -95,16 +110,17 @@ public final class WorldModel implements WorldQuery, WorldEdit {
             long tile = packColumn(ColumnStacks.tileOf(column.x()), ColumnStacks.tileOf(column.z()));
             byTile.computeIfAbsent(tile, k -> new TreeMap<>())
                     .put(ColumnStacks.localIndex(column.x(), column.z()),
-                            importLayers(column.surfaceZ(), column.coverMaterial()));
+                            importLayers(column.x(), column.z(), column.surfaceZ(), column.coverMaterial()));
         }
         for (Map.Entry<Long, Map<Integer, List<ColumnStacks.LayerSpec>>> e : byTile.entrySet()) {
             stacks.setLayersBatch(unpackX(e.getKey()), unpackZ(e.getKey()), e.getValue());
         }
     }
 
-    private List<ColumnStacks.LayerSpec> importLayers(double surfaceZ, Material coverMaterial) {
+    private List<ColumnStacks.LayerSpec> importLayers(int x, int z, double surfaceZ, Material coverMaterial) {
         Material cover = coverMaterial != null ? coverMaterial : MaterialTable.require(spec.surfaceMaterial());
-        Material edifice = MaterialTable.require(spec.edificeMaterial());
+        Material country = MaterialTable.require(spec.edificeMaterial());
+        Edifice zone = edifices.isEmpty() ? null : Edifice.at(edifices, x, z);
         double coverBottom = Math.max(spec.datumZ(), surfaceZ - spec.surfaceThickness());
         List<ColumnStacks.LayerSpec> layers = new ArrayList<>();
         double previous = spec.datumZ();
@@ -116,17 +132,33 @@ public final class WorldModel implements WorldQuery, WorldEdit {
                     LayerFlags.defaults(m)));
             previous = top;
         }
-        if (coverBottom > previous) {
-            layers.add(new ColumnStacks.LayerSpec(coverBottom, edifice.id(), edificeUnit(), edifice.porosity(), 1.0,
-                    LayerFlags.defaults(edifice)));
+        int coverUnit = edificeUnit();
+        if (zone != null) {
+            // country rock up to the edifice base, the volcano's own edifice above it
+            double base = Double.isNaN(zone.baseZ()) ? previous : Math.min(zone.baseZ(), coverBottom);
+            if (base > previous) {
+                layers.add(new ColumnStacks.LayerSpec(base, country.id(), edificeUnit(), country.porosity(), 1.0,
+                        LayerFlags.defaults(country)));
+                previous = base;
+            }
+            Material own = MaterialTable.require(zone.material());
+            coverUnit = edificeUnit(zone.volcanoId());
+            if (coverBottom > previous) {
+                layers.add(new ColumnStacks.LayerSpec(coverBottom, own.id(), coverUnit, own.porosity(), 1.0,
+                        LayerFlags.defaults(own)));
+                previous = coverBottom;
+            }
+        } else if (coverBottom > previous) {
+            layers.add(new ColumnStacks.LayerSpec(coverBottom, country.id(), edificeUnit(), country.porosity(), 1.0,
+                    LayerFlags.defaults(country)));
             previous = coverBottom;
         }
         if (surfaceZ > previous) {
-            layers.add(new ColumnStacks.LayerSpec(surfaceZ, cover.id(), edificeUnit(), cover.porosity(),
+            layers.add(new ColumnStacks.LayerSpec(surfaceZ, cover.id(), coverUnit, cover.porosity(),
                     cover.loose() ? 0 : 1.0, LayerFlags.defaults(cover)));
         }
         if (layers.isEmpty()) {
-            Material bottom = spec.basement().isEmpty() ? edifice : MaterialTable.require(spec.basement().get(0).material());
+            Material bottom = spec.basement().isEmpty() ? country : MaterialTable.require(spec.basement().get(0).material());
             layers.add(new ColumnStacks.LayerSpec(Math.max(surfaceZ, spec.datumZ() + ColumnStacks.MIN_BOTTOM),
                     bottom.id(), basementUnit(), bottom.porosity(), 1.0, 0));
         }
@@ -141,6 +173,12 @@ public final class WorldModel implements WorldQuery, WorldEdit {
     private int edificeUnit() {
         if (edificeUnit < 0) edificeUnit = units.add(UnitRecord.of(DepositType.EDIFICE));
         return edificeUnit;
+    }
+
+    /** The edifice unit of one volcano (created on first use). */
+    private int edificeUnit(String volcanoId) {
+        return volcanoEdificeUnits.computeIfAbsent(volcanoId,
+                id -> units.add(new UnitRecord(id, -1, DepositType.EDIFICE, 0, Double.NaN, Double.NaN)));
     }
 
     // ── WorldQuery ──
@@ -392,6 +430,11 @@ public final class WorldModel implements WorldQuery, WorldEdit {
         world.add("units", units.toJson());
         world.addProperty("basementUnit", basementUnit);
         world.addProperty("edificeUnit", edificeUnit);
+        if (!volcanoEdificeUnits.isEmpty()) {
+            JsonObject perVolcano = new JsonObject();
+            volcanoEdificeUnits.forEach(perVolcano::addProperty);
+            world.add("volcanoEdificeUnits", perVolcano);
+        }
         JsonArray water = new JsonArray();
         for (Map.Entry<Long, Double> e : pendingWater.entrySet()) {
             JsonArray entry = new JsonArray();
@@ -406,11 +449,17 @@ public final class WorldModel implements WorldQuery, WorldEdit {
     public void load(StateReader in) {
         stacks.clear();
         pendingWater.clear();
+        volcanoEdificeUnits.clear();
         JsonObject world = in.json().getAsJsonObject("world");
         if (world == null) return;
         units.load(world.getAsJsonArray("units"));
         basementUnit = world.get("basementUnit").getAsInt();
         edificeUnit = world.get("edificeUnit").getAsInt();
+        if (world.has("volcanoEdificeUnits")) {
+            for (Map.Entry<String, JsonElement> e : world.getAsJsonObject("volcanoEdificeUnits").entrySet()) {
+                volcanoEdificeUnits.put(e.getKey(), e.getValue().getAsInt());
+            }
+        }
         for (JsonElement e : world.getAsJsonArray("pendingWater")) {
             JsonArray entry = e.getAsJsonArray();
             pendingWater.put(entry.get(0).getAsLong(), entry.get(1).getAsDouble());

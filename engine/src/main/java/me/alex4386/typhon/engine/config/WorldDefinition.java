@@ -36,8 +36,8 @@ import me.alex4386.typhon.engine.world.WorldSpec;
  *   edificeMaterial: basalt
  *   surfaceMaterial: soil
  *   surfaceThickness: 8
- * geotherm: {surfaceTemperatureC: 15, gradientCPerKm: 30}
- * aquifer: {waterTableDepth: 20, specificYield: 0.1}
+ * geotherm: {surfaceTemperatureC: 15, gradientCPerKm: 30, lapseRateCPerKm: 6.5}
+ * aquifer: {waterTableDepth: 20, specificYield: 0.1, topographyFactor: 0.6, baseLevel: .nan, rechargeFraction: 0.3}
  * terrain: {source: preset, preset: kilauea}   # free-form, interpreted by the host
  * lava: {coolingScale: 1}                       # any LavaConfig component
  * }</pre>
@@ -58,10 +58,67 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
         }
     }
 
-    public record Geotherm(double surfaceTemperatureC, double gradientCPerKm) {}
+    /**
+     * Initial temperature field (consumed by the subsurface heat solver).
+     *
+     * <p>Initial ground temperature at a point {@code d} metres below a surface at elevation {@code zs}:
+     * {@code T = surfaceTemperatureC − lapseRateCPerKm·zs/1000 + gradientCPerKm·d/1000}. Volcanic heat
+     * (chamber halo, intrusions) is added on top by the solvers.
+     *
+     * @param surfaceTemperatureC mean annual ground-surface temperature at sea level (°C)
+     * @param gradientCPerKm background geothermal gradient (°C/km); ~25–30 continental, 40–80 in arcs
+     * @param lapseRateCPerKm decrease of surface temperature with elevation (°C/km; 6.5 = standard atmosphere)
+     */
+    public record Geotherm(double surfaceTemperatureC, double gradientCPerKm, double lapseRateCPerKm) {
+        public Geotherm(double surfaceTemperatureC, double gradientCPerKm) {
+            this(surfaceTemperatureC, gradientCPerKm, 6.5);
+        }
 
-    /** @param waterTableDepth initial depth of the water table below the surface (m) */
-    public record Aquifer(double waterTableDepth, double specificYield) {}
+        /** Initial temperature (°C) {@code depth} metres below a surface at {@code surfaceZ}. */
+        public double initialTemperature(double surfaceZ, double depth) {
+            return surfaceTemperatureC - lapseRateCPerKm * Math.max(0, surfaceZ) / 1000 + gradientCPerKm * depth / 1000;
+        }
+    }
+
+    /**
+     * Initial water table and aquifer properties (consumed by the groundwater solver).
+     *
+     * <p>Initial water-table elevation under a surface at {@code zs}:
+     * {@code hw = base + topographyFactor·(zs − waterTableDepth − base)}, never above the surface, where
+     * {@code base} is {@code baseLevel} or, when that is {@code NaN}, the sea level (or the lowest
+     * surface of the domain without a sea). {@code topographyFactor = 1} keeps the table a constant
+     * {@code waterTableDepth} below ground; {@code 0} makes it flat at the base level (very permeable
+     * ground). Real water tables are subdued replicas of topography (≈0.3–0.8).
+     *
+     * @param waterTableDepth depth of the water table below the surface where it follows topography (m)
+     * @param specificYield drainable porosity of the aquifer (–)
+     * @param topographyFactor how closely the water table follows the topography (0–1)
+     * @param baseLevel regional base level (m), {@code NaN} = sea level / lowest surface
+     * @param rechargeFraction fraction of rainfall that reaches the water table (–)
+     */
+    public record Aquifer(double waterTableDepth, double specificYield, double topographyFactor, double baseLevel,
+            double rechargeFraction) {
+        public Aquifer {
+            if (!(waterTableDepth >= 0)) throw new ConfigException("aquifer.waterTableDepth must be >= 0");
+            if (!(specificYield > 0 && specificYield <= 1)) throw new ConfigException("aquifer.specificYield must be in (0, 1]");
+            if (!(topographyFactor >= 0 && topographyFactor <= 1)) {
+                throw new ConfigException("aquifer.topographyFactor must be in [0, 1]");
+            }
+            if (!(rechargeFraction >= 0 && rechargeFraction <= 1)) {
+                throw new ConfigException("aquifer.rechargeFraction must be in [0, 1]");
+            }
+        }
+
+        public Aquifer(double waterTableDepth, double specificYield) {
+            this(waterTableDepth, specificYield, 1.0, Double.NaN, 0.3);
+        }
+
+        /** Initial water-table elevation (m) under a surface at {@code surfaceZ}, given the resolved base level. */
+        public double initialWaterTable(double surfaceZ, double resolvedBase) {
+            double hw = resolvedBase + topographyFactor * (surfaceZ - waterTableDepth - resolvedBase);
+            return Math.min(surfaceZ, hw);
+        }
+    }
 
     public WorldDefinition {
         if (name == null || name.isBlank()) throw new ConfigException("world name is required");
@@ -148,11 +205,18 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
 
         ConfigNode geothermNode = root.child("geotherm");
         Geotherm geotherm = new Geotherm(geothermNode.number("surfaceTemperatureC", 15),
-                geothermNode.number("gradientCPerKm", 30));
+                geothermNode.number("gradientCPerKm", 30), geothermNode.number("lapseRateCPerKm", 6.5));
         geothermNode.finish();
 
         ConfigNode aquiferNode = root.child("aquifer");
-        Aquifer aquifer = new Aquifer(aquiferNode.number("waterTableDepth", 20), aquiferNode.number("specificYield", 0.1));
+        Aquifer aquifer;
+        try {
+            aquifer = new Aquifer(aquiferNode.number("waterTableDepth", 20), aquiferNode.number("specificYield", 0.1),
+                    aquiferNode.number("topographyFactor", 1.0), aquiferNode.number("baseLevel", Double.NaN),
+                    aquiferNode.number("rechargeFraction", 0.3));
+        } catch (ConfigException e) {
+            throw aquiferNode.error(e.getMessage());
+        }
         aquiferNode.finish();
 
         Map<String, Object> terrain = root.has("terrain") ? root.child("terrain").asMap() : new LinkedHashMap<>();
@@ -197,8 +261,10 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
         geology.put("surfaceThickness", spec.surfaceThickness());
         root.put("geology", geology);
         root.put("geotherm", map("surfaceTemperatureC", geotherm.surfaceTemperatureC(),
-                "gradientCPerKm", geotherm.gradientCPerKm()));
-        root.put("aquifer", map("waterTableDepth", aquifer.waterTableDepth(), "specificYield", aquifer.specificYield()));
+                "gradientCPerKm", geotherm.gradientCPerKm(), "lapseRateCPerKm", geotherm.lapseRateCPerKm()));
+        root.put("aquifer", map("waterTableDepth", aquifer.waterTableDepth(), "specificYield", aquifer.specificYield(),
+                "topographyFactor", aquifer.topographyFactor(), "baseLevel", aquifer.baseLevel(),
+                "rechargeFraction", aquifer.rechargeFraction()));
         root.put("terrain", new LinkedHashMap<>(terrain));
         root.put("lava", ConfigBinder.exportRecord(lava, Set.of("metersPerBlock")));
         return root;
