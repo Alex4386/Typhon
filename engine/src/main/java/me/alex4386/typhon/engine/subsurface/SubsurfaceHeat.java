@@ -10,7 +10,7 @@ import java.util.Map;
  *
  * <p>Per macro step of length {@code dt} (operator split):
  * <ol>
- *   <li><b>Lateral</b> (explicit): conduction between neighbouring columns at the same level, face
+ *   <li><b>Lateral</b> (explicit, sub-stepped for stability, applied to the temperatures): conduction between neighbouring columns at the same level, face
  *       conductance {@code dz·k_h} ({@code k_h} harmonic mean), plus upwind advection by the Darcy
  *       flux {@code q = −K ∂h/∂x} in levels below both water tables. Sub-stepped for stability.
  *   <li><b>Vertical</b> (implicit, Thomas algorithm): conduction between levels with conductivity
@@ -34,6 +34,12 @@ import java.util.Map;
 final class SubsurfaceHeat {
     private final SubsurfaceGrid grid;
     private final SubsurfaceConfig config;
+
+    private double[] scratchLower;
+    private double[] scratchDiag;
+    private double[] scratchUpper;
+    private double[] scratchRhs;
+    private double[] scratchG;
 
     /** Water removed by boiling during the last step, per chunk and column (m³), read by groundwater. */
     final Map<SolverChunk, double[]> boiledVolume = new IdentityHashMap<>();
@@ -148,20 +154,31 @@ final class SubsurfaceHeat {
         int substeps = Math.max(1, (int) Math.ceil(maxDt / stableLateralStep(steps.keySet())));
         Map<SolverChunk, double[]> lateral = new IdentityHashMap<>();
         for (SolverChunk ch : steps.keySet()) lateral.put(ch, new double[SolverChunk.AREA * n]);
+        // Lateral transport: explicit sub-steps, applied directly to the temperatures.
         for (int s = 0; s < substeps; s++) {
             for (double[] a : lateral.values()) java.util.Arrays.fill(a, 0);
             for (Map.Entry<SolverChunk, Double> e : steps.entrySet()) {
                 lateralEnergy(e.getKey(), e.getValue() / substeps, steps, lateral, groundwater);
             }
-            for (Map.Entry<SolverChunk, Double> e : steps.entrySet()) {
-                SolverChunk ch = e.getKey();
-                double dt = e.getValue() / substeps;
-                double[] src = sources.get(ch);
+            double area = grid.area();
+            for (SolverChunk ch : steps.keySet()) {
                 double[] lat = lateral.get(ch);
                 for (int c = 0; c < SolverChunk.AREA; c++) {
                     if (!ch.exists[c]) continue;
-                    vertical(ch, c, dt, lat, src, s == 0 ? 1.0 : 0.0, chambers, waterDepth.depth(ch, c));
+                    for (int k = 0; k < n; k++) {
+                        int i = c * n + k;
+                        if (lat[i] != 0) ch.temperature[i] += lat[i] / capacity(ch, c, k, area * grid.thickness(k));
+                    }
                 }
+            }
+        }
+        // Vertical conduction and sources: one implicit step.
+        for (Map.Entry<SolverChunk, Double> e : steps.entrySet()) {
+            SolverChunk ch = e.getKey();
+            double[] src = sources.get(ch);
+            for (int c = 0; c < SolverChunk.AREA; c++) {
+                if (!ch.exists[c]) continue;
+                vertical(ch, c, e.getValue(), null, src, 1.0, chambers, waterDepth.depth(ch, c));
             }
         }
         for (Map.Entry<SolverChunk, Double> e : steps.entrySet()) {
@@ -293,11 +310,20 @@ final class SubsurfaceHeat {
             List<HeatSources.Chamber> chambers, double waterDepth) {
         int n = grid.levels();
         double area = grid.area();
-        double[] lower = new double[n];
-        double[] diag = new double[n];
-        double[] upper = new double[n];
-        double[] rhs = new double[n];
-        double[] g = new double[n]; // conductance between k and k+1 (W/K)
+        if (scratchLower == null || scratchLower.length != n) {
+            scratchLower = new double[n];
+            scratchDiag = new double[n];
+            scratchUpper = new double[n];
+            scratchRhs = new double[n];
+            scratchG = new double[n];
+        }
+        double[] lower = scratchLower;
+        double[] diag = scratchDiag;
+        double[] upper = scratchUpper;
+        double[] rhs = scratchRhs;
+        double[] g = scratchG; // conductance between k and k+1 (W/K)
+        java.util.Arrays.fill(lower, 0);
+        java.util.Arrays.fill(upper, 0);
         double nusselt = nusselt(ch, c);
         double waterTableDepth = ch.surfaceZ[c] - ch.head[c];
         for (int k = 0; k < n - 1; k++) {
@@ -319,7 +345,8 @@ final class SubsurfaceHeat {
             int i = c * n + k;
             double cap = capacity(ch, c, k, area * grid.thickness(k));
             double d = cap;
-            double r = cap * ch.temperature[i] + lateral[i] + (sources != null ? sources[i] * sourceShare : 0);
+            double r = cap * ch.temperature[i] + (lateral != null ? lateral[i] : 0)
+                    + (sources != null ? sources[i] * sourceShare : 0);
             if (k > 0) {
                 d += dt * g[k - 1];
                 lower[k] = -dt * g[k - 1];

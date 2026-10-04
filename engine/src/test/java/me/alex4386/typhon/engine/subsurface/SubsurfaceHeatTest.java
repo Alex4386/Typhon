@@ -77,7 +77,7 @@ class SubsurfaceHeatTest {
         s.prepare(); // background only: no chamber yet
         HeatSources.Chamber chamber = new HeatSources.Chamber(10.5, 10.5, -1800, 0, 400, 900);
         s.setHeatSources("v", new FixedSources(List.of(chamber), List.of()));
-        s.equilibrate(300_000 * YEAR, 5000 * YEAR);
+        s.equilibrate(300_000 * YEAR, 500 * YEAR); // steps short enough that operator splitting is accurate
 
         SubsurfaceHeat heat = new SubsurfaceHeat(s.grid(), c);
         List<HeatSources.Chamber> list = List.of(chamber);
