@@ -148,4 +148,53 @@ public final class VoxelWorld {
         }
         return counts;
     }
+
+    // ── Persistence (the simulator's "host world", saved next to the engine state) ──
+
+    /** Path of the edit log inside a save store. */
+    public static final String SAVE_PATH = "host/voxel-world.bin";
+
+    /** Writes every edit (the base terrain is regenerated from the preset). */
+    public byte[] saveEdits() {
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        try (java.io.DataOutputStream out = new java.io.DataOutputStream(new java.util.zip.DeflaterOutputStream(bytes))) {
+            out.writeLong(applied);
+            out.writeLong(conflicts);
+            out.writeLong(outside);
+            TreeMap<Long, NavigableMap<Integer, BlockState>> sorted = new TreeMap<>(edits);
+            out.writeInt(sorted.size());
+            for (Map.Entry<Long, NavigableMap<Integer, BlockState>> column : sorted.entrySet()) {
+                out.writeLong(column.getKey());
+                out.writeInt(column.getValue().size());
+                for (Map.Entry<Integer, BlockState> e : column.getValue().entrySet()) {
+                    out.writeInt(e.getKey());
+                    out.writeUTF(e.getValue().toString());
+                }
+            }
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+        return bytes.toByteArray();
+    }
+
+    /** Replaces the edits with ones written by {@link #saveEdits()}. */
+    public void loadEdits(byte[] data) {
+        edits.clear();
+        try (java.io.DataInputStream in = new java.io.DataInputStream(
+                new java.util.zip.InflaterInputStream(new java.io.ByteArrayInputStream(data)))) {
+            applied = in.readLong();
+            conflicts = in.readLong();
+            outside = in.readLong();
+            int columns = in.readInt();
+            for (int c = 0; c < columns; c++) {
+                long key = in.readLong();
+                int n = in.readInt();
+                NavigableMap<Integer, BlockState> column = new TreeMap<>();
+                for (int i = 0; i < n; i++) column.put(in.readInt(), BlockState.parse(in.readUTF()));
+                edits.put(key, column);
+            }
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
 }

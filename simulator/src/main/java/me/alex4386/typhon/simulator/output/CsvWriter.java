@@ -10,7 +10,7 @@ import java.util.Locale;
 import java.util.Map;
 import me.alex4386.typhon.simulator.run.Sample;
 
-/** Writes the sampled time series as CSV (columns: tick, time, alert, style, then numeric values). */
+/** Writes the sampled time series as CSV (columns: step, time, alert, style, then numeric values). */
 public final class CsvWriter {
     private CsvWriter() {}
 
@@ -32,11 +32,11 @@ public final class CsvWriter {
 
     static void write(Writer out, List<Sample> samples) throws IOException {
         if (samples.isEmpty()) return;
-        out.write("tick,time_s,alert_level_name,style_name");
+        out.write("step,time_s,alert_level_name,style_name");
         for (String column : samples.get(0).values().keySet()) out.write("," + column);
         out.write('\n');
         for (Sample s : samples) {
-            out.write(s.tick() + "," + format(s.timeSeconds()) + "," + s.alertLevel() + "," + s.style());
+            out.write(s.step() + "," + format(s.timeSeconds()) + "," + s.alertLevel() + "," + s.style());
             for (Map.Entry<String, Double> e : s.values().entrySet()) out.write("," + format(e.getValue()));
             out.write('\n');
         }

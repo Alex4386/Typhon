@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import me.alex4386.typhon.engine.save.DirectorySaveStore;
 import me.alex4386.typhon.simulator.output.CsvWriter;
 import me.alex4386.typhon.simulator.output.EventLog;
 import me.alex4386.typhon.simulator.output.MapRenderer;
@@ -28,7 +29,8 @@ import me.alex4386.typhon.simulator.terrain.DemImporter;
  *
  * <pre>
  * list-presets
- * run --preset NAME [--seed N] [--hours H] [--out DIR] [--sample-seconds S]
+ * run --preset NAME [--seed N] [--hours H] [--out DIR] [--sample-seconds S] [--base-step-ms MS]
+ *     [--save DIR] [--load DIR]
  *     [--skip-events Type,Type|none] [--dem FILE [--dem-cell M] [--dem-meters-per-block L]] [--quiet]
  * </pre>
  */
@@ -116,7 +118,21 @@ public final class Main {
             terrain = DemImporter.toGrid(data, mpb, 384);
             out.println("Terrain replaced by DEM " + dem + " (" + terrain.size() + "x" + terrain.size() + " blocks)");
         }
-        Scenario scenario = preset.build(seed, terrain);
+        double baseStepMs = Double.parseDouble(options.getOrDefault("base-step-ms", "50"));
+        Scenario.Options engineOptions = Scenario.Options.DEFAULT.withBaseStepMicros(Math.round(baseStepMs * 1000));
+        if (options.containsKey("load")) {
+            Path load = Path.of(options.get("load"));
+            if (!Files.isRegularFile(load.resolve("meta.json"))) {
+                err.println("No save found in " + load);
+                return 1;
+            }
+            engineOptions = engineOptions.withRestore(new DirectorySaveStore(load));
+        }
+        Scenario scenario = preset.build(seed, terrain, engineOptions);
+        if (scenario.restored()) {
+            out.printf(Locale.ROOT, "Resumed %s at t=%s from %s%n", preset.name(), time(scenario.engine().time()),
+                    options.get("load"));
+        }
 
         out.printf(Locale.ROOT, "Running %s (seed %d) for %s simulated hours → %s%n", preset.name(), seed, fmt(hours), dir);
         RunSummary summary;
@@ -133,9 +149,17 @@ public final class Main {
         Map<String, String> maps = new MapRenderer(scenario).writeAll(dir);
         ReportWriter.write(dir.resolve("report.html"), preset, result, maps, dir);
 
+        if (options.containsKey("save")) {
+            Path save = Path.of(options.get("save"));
+            DirectorySaveStore store = new DirectorySaveStore(save);
+            scenario.save(store);
+            out.printf(Locale.ROOT, "Saved t=%s to %s (%d files written)%n", time(scenario.engine().time()), save,
+                    store.writeCount());
+        }
+
         Sample last = result.samples().get(result.samples().size() - 1);
-        out.printf(Locale.ROOT, "Done: %s ticks in %.1f s (%.0f ticks/s, %.0fx real time)%n",
-                result.ticks(), result.wallSeconds(), result.ticksPerSecond(), result.ticksPerSecond() / 20);
+        out.printf(Locale.ROOT, "Done: %d steps of %s ms in %.1f s (%.0f steps/s, %.0fx real time)%n",
+                result.steps(), fmt(baseStepMs), result.wallSeconds(), result.stepsPerSecond(), result.speedup());
         out.printf(Locale.ROOT, "  eruptions=%d first=%s peakRate=%.3g m3/s erupted=%.3g m3 alert=%s style=%s%n",
                 summary.eruptions, Double.isNaN(summary.firstEruptionSeconds) ? "none" : time(summary.firstEruptionSeconds),
                 summary.peakEruptionRate, last.get("erupted_volume_m3"), last.alertLevel(), last.style());
@@ -152,14 +176,15 @@ public final class Main {
         Sample s = p.latest();
         String state = s == null ? "" : String.format(Locale.ROOT, " P=%.2f MPa rate=%.3g m3/s %s/%s",
                 s.get("overpressure_mpa"), s.get("eruption_rate_m3s"), s.alertLevel(), s.style());
-        out.printf(Locale.ROOT, "  t=%s (%4.1f%%) %.0f ticks/s%s%n", time(p.tick() / 20.0),
-                100.0 * p.tick() / p.totalTicks(), p.ticksPerSecond(), state);
+        out.printf(Locale.ROOT, "  t+%s (%4.1f%%) %.0f steps/s (%.0fx)%s%n", time(p.simulatedSeconds()),
+                100.0 * p.simulatedSeconds() / p.totalSeconds(), p.stepsPerSecond(), p.speedup(), state);
     }
 
     private static void usage(PrintStream out) {
         out.println("Typhon headless simulator");
         out.println("  list-presets");
         out.println("  run --preset NAME [--seed N] [--hours H] [--out DIR] [--sample-seconds S]");
+        out.println("      [--base-step-ms MS (default 50)] [--save DIR] [--load DIR]");
         out.println("      [--skip-events Type,Type|none] [--dem FILE [--dem-cell M] [--dem-meters-per-block L]");
         out.println("      [--dem-max-meters M (png)]] [--quiet]");
         out.println("  events.ndjson omits " + DEFAULT_SKIPPED_EVENTS + " unless --skip-events is given.");

@@ -53,7 +53,7 @@ public final class RunSummary {
 
     public void observe(EngineEvent event) {
         eventCounts.merge(event.getClass().getSimpleName(), 1L, Long::sum);
-        double t = event.tick() / 20.0;
+        double t = event.time();
         switch (event) {
             case EruptionStarted e -> {
                 eruptions++;
@@ -62,7 +62,7 @@ public final class RunSummary {
                         e.cause(), e.overpressureMPa())));
             }
             case EruptionEnded e -> milestones.add(new Milestone(t, String.format(
-                    "Eruption ended: %.3g m3 DRE over %.0f s (%s)", e.eruptedVolume(), e.durationTicks() / 20.0, e.cause())));
+                    "Eruption ended: %.3g m3 DRE over %.0f s (%s)", e.eruptedVolume(), e.durationSeconds(), e.cause())));
             case ChamberSample e -> {
                 if (e.eruptionRate() > peakEruptionRate) {
                     peakEruptionRate = e.eruptionRate();

@@ -52,10 +52,10 @@ public final class Presets {
         return preset;
     }
 
-    /** Build step of a preset: terrain → scenario. */
+    /** Build step of a preset: terrain → scenario builder (engine options are applied afterwards). */
     @FunctionalInterface
     interface Assembly {
-        Scenario build(long seed, ColumnGrid terrain);
+        Scenario.Builder build(long seed, ColumnGrid terrain);
     }
 
     record Defined(String name, String title, String description, List<String> references, double defaultHours,
@@ -66,8 +66,8 @@ public final class Presets {
         }
 
         @Override
-        public Scenario build(long seed, ColumnGrid terrain) {
-            return assembly.build(seed, terrain);
+        public Scenario build(long seed, ColumnGrid terrain, Scenario.Options options) {
+            return assembly.build(seed, terrain).options(options).build();
         }
     }
 
@@ -126,7 +126,7 @@ public final class Presets {
                             .scaling(scaling)
                             .wind(7, 0.6, WIND_VARIABILITY)
                             .build();
-                    return b.volcano(volcano).build();
+                    return b.volcano(volcano);
                 });
     }
 
@@ -171,7 +171,7 @@ public final class Presets {
                             .ballisticFraction(0.3)
                             .wind(8, 1.2, WIND_VARIABILITY)
                             .build();
-                    return b.volcano(volcano).build();
+                    return b.volcano(volcano);
                 });
     }
 
@@ -213,7 +213,7 @@ public final class Presets {
                             .ballisticFraction(0.02)
                             .wind(15, 0.0, WIND_VARIABILITY)
                             .build();
-                    return b.volcano(volcano).build();
+                    return b.volcano(volcano);
                 });
     }
 
@@ -255,7 +255,7 @@ public final class Presets {
                             .ballisticFraction(0.005)
                             .wind(20, Math.PI, WIND_VARIABILITY)
                             .build();
-                    return b.volcano(volcano).build();
+                    return b.volcano(volcano);
                 });
     }
 
@@ -296,7 +296,7 @@ public final class Presets {
                             .scaling(scaling)
                             .wind(10, 0.8, WIND_VARIABILITY)
                             .build();
-                    return b.volcano(volcano).build();
+                    return b.volcano(volcano);
                 });
     }
 
@@ -349,7 +349,7 @@ public final class Presets {
                             .geothermal(geothermal)
                             .geothermalPrewarm(6 * 3600)
                             .build();
-                    return b.volcano(volcano).build();
+                    return b.volcano(volcano);
                 });
     }
 }

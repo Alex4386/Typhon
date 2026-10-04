@@ -26,7 +26,12 @@ public interface Preset {
      * Builds the scenario on {@code terrain} (normally {@link #terrain(long)}; a DEM may replace it,
      * in which case vents are re-anchored to the new ground).
      */
-    Scenario build(long seed, ColumnGrid terrain);
+    default Scenario build(long seed, ColumnGrid terrain) {
+        return build(seed, terrain, Scenario.Options.DEFAULT);
+    }
+
+    /** Builds the scenario with explicit engine options (base step, resume from a save). */
+    Scenario build(long seed, ColumnGrid terrain, Scenario.Options options);
 
     default Scenario build(long seed) {
         return build(seed, terrain(seed));

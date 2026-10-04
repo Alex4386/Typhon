@@ -78,9 +78,10 @@ public final class ReportWriter {
 
         h.append("<h1>").append(esc(preset.title())).append("</h1>");
         h.append("<p class=\"muted\">preset <code>").append(esc(preset.name())).append("</code> · seed ")
-                .append(result.scenario().seed()).append(" · ").append(fmt(result.ticks() / 20.0 / 3600)).append(" h simulated in ")
-                .append(fmt(result.wallSeconds())).append(" s (").append(fmt(result.ticksPerSecond())).append(" ticks/s, ")
-                .append(fmt(result.ticksPerSecond() / 20)).append("× real time)</p>");
+                .append(result.scenario().seed()).append(" · ").append(fmt(result.simulatedSeconds() / 3600)).append(" h simulated in ")
+                .append(fmt(result.wallSeconds())).append(" s (").append(fmt(result.stepsPerSecond())).append(" steps/s, ")
+                .append(fmt(result.speedup())).append("× real time, base step ")
+                .append(fmt(result.scenario().engine().baseStepMicros() / 1000.0)).append(" ms)</p>");
         h.append("<p>").append(esc(preset.description())).append("</p>");
 
         h.append("<h2>Summary</h2><table>");

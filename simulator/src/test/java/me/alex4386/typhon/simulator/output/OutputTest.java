@@ -25,7 +25,7 @@ class OutputTest {
         assertEquals(0, code, out.toString());
 
         List<String> csv = Files.readAllLines(dir.resolve("timeseries.csv"));
-        assertTrue(csv.get(0).startsWith("tick,time_s,alert_level_name,style_name,overpressure_mpa"));
+        assertTrue(csv.get(0).startsWith("step,time_s,alert_level_name,style_name,overpressure_mpa"));
         assertTrue(csv.size() > 10, "sampled every 5 s over 72 s");
         int columns = csv.get(0).split(",").length;
         for (String line : csv) assertEquals(columns, line.split(",").length);
@@ -35,7 +35,7 @@ class OutputTest {
         boolean sawEruption = false;
         for (String line : events) {
             JsonObject e = JsonParser.parseString(line).getAsJsonObject();
-            assertTrue(e.has("type") && e.has("tick"), line);
+            assertTrue(e.has("type") && e.has("time"), line);
             sawEruption |= e.get("type").getAsString().equals("EruptionStarted");
         }
         assertTrue(sawEruption);

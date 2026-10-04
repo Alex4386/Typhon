@@ -7,26 +7,27 @@ import me.alex4386.typhon.engine.geothermal.Geothermal;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeature;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
+import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
 import me.alex4386.typhon.engine.tephra.TephraSubsystem;
 import me.alex4386.typhon.simulator.scenario.Scenario;
 import me.alex4386.typhon.simulator.world.VoxelWorld;
 
 /**
- * One row of the time series: the state of the primary volcano and the world at a tick.
+ * One row of the time series: the state of the primary volcano and the world at an engine step.
  *
  * @param values numeric columns in a stable order (booleans as 0/1, enums as ordinals)
  * @param alertLevel alert level name
  * @param style suggested eruption style name
  */
-public record Sample(long tick, double timeSeconds, Map<String, Double> values, String alertLevel, String style) {
+public record Sample(long step, double timeSeconds, Map<String, Double> values, String alertLevel, String style) {
 
     public double get(String column) {
         Double v = values.get(column);
         return v == null ? Double.NaN : v;
     }
 
-    public static Sample capture(Scenario scenario, long tick) {
+    public static Sample capture(Scenario scenario, EngineFrame frame) {
         VolcanoSystem volcano = scenario.volcano();
         MagmaChamber chamber = volcano.chamber();
         SeismicityModel seismic = volcano.seismicity();
@@ -76,7 +77,7 @@ public record Sample(long tick, double timeSeconds, Map<String, Double> values, 
         }
         v.put("world_changes", (double) world.appliedChanges());
         v.put("world_conflicts", (double) world.conflicts());
-        return new Sample(tick, tick / 20.0, v, volcano.alert().level().name(), volcano.alert().suggestedStyle().name());
+        return new Sample(frame.step(), frame.time(), v, volcano.alert().level().name(), volcano.alert().suggestedStyle().name());
     }
 
     private static double bool(boolean b) {

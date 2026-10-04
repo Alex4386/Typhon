@@ -38,7 +38,8 @@ class PresetsTest {
     void presetRunsShortHorizonDeterministically(String name) {
         Simulation.Result a = run(name, 42, 60 / 3600.0);
         Simulation.Result b = run(name, 42, 60 / 3600.0);
-        assertEquals(1201, a.ticks() + 1, "ran one simulated minute");
+        assertEquals(1200, a.steps(), "ran one simulated minute");
+        assertEquals(60.0, a.simulatedSeconds(), 1e-9);
         assertEquals(CsvWriter.toString(a.samples()), CsvWriter.toString(b.samples()), "same seed, same time series");
         assertEquals(a.summary().eventCounts, b.summary().eventCounts);
     }
@@ -77,7 +78,7 @@ class PresetsTest {
         for (Preset p : Presets.all()) {
             Simulation.Result r = new Simulation(p.build(1), 30).run(p.defaultHours());
             System.out.printf("%s: %.1f s wall, %.0f ticks/s, eruptions=%d, peak=%.3g m3/s%n", p.name(),
-                    r.wallSeconds(), r.ticksPerSecond(), r.summary().eruptions, r.summary().peakEruptionRate);
+                    r.wallSeconds(), r.stepsPerSecond(), r.summary().eruptions, r.summary().peakEruptionRate);
         }
     }
 
