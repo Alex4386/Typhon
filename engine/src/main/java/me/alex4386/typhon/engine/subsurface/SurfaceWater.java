@@ -127,11 +127,13 @@ final class SurfaceWater {
             t.known[i] = known;
             t.bed[i] = known ? world.surfaceZ(x, z) + world.uplift(x, z) : Double.NaN;
             t.sea[i] = known && !Double.isNaN(sea) && t.bed[i] < sea;
-            if (!known || t.sea[i]) {
-                t.depth[i] = 0;
+            // Discharges are state (inertia) and must survive a refresh; only cells that are not
+            // part of the world lose them. Sea cells never hold depth of their own.
+            if (!known) {
                 t.qEast[i] = 0;
                 t.qSouth[i] = 0;
             }
+            if (!known || t.sea[i]) t.depth[i] = 0;
         }
     }
 
