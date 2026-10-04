@@ -439,8 +439,8 @@ public final class Subsurface implements Subsystem, HydrothermalField {
         SurfaceWater.Tile t = surface.tile(x, z);
         if (t == null || !(volumeM3 > 0)) return 0;
         int i = SurfaceWater.local(x, z);
-        if (t.sea[i]) {
-            removed += volumeM3; // the sea is unlimited
+        if (t.fixed(i)) {
+            removed += volumeM3; // open water is unlimited
             surface.seaInflow += volumeM3;
             return volumeM3;
         }
@@ -648,6 +648,10 @@ public final class Subsurface implements Subsystem, HydrothermalField {
                     .doubles("steamFlux", ch.steamFlux.clone()));
         }
         json.add("chunks", activity);
+        StateWriter.Field open = out.field("openWater", WATER_SCHEMA);
+        for (Map.Entry<Long, double[]> e : surface.openWater.entrySet()) {
+            open.put((int) (e.getKey() >> 32), (int) (long) e.getKey(), new FieldChunk().doubles("level", e.getValue().clone()));
+        }
         StateWriter.Field water = out.field("surfaceWater", WATER_SCHEMA);
         for (SurfaceWater.Tile t : surface.tiles()) {
             water.put(t.tx, t.tz, new FieldChunk()
@@ -714,6 +718,13 @@ public final class Subsurface implements Subsystem, HydrothermalField {
                     ch.warmCounter = a.get(4).getAsInt();
                 }
                 grid.putChunk(ch);
+            }
+        }
+        surface.openWater.clear();
+        StateReader.Field open = in.field("openWater");
+        if (open != null) {
+            for (StateReader.Entry entry : open.chunks()) {
+                surface.openWater.put(SurfaceWater.key(entry.chunkX(), entry.chunkZ()), entry.data().doubles("level").clone());
             }
         }
         StateReader.Field water = in.field("surfaceWater");

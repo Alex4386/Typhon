@@ -6,7 +6,8 @@ package me.alex4386.typhon.engine.subsurface;
  * <p>Column index {@code c = (gz & 15) * 16 + (gx & 15)}; level arrays are indexed
  * {@code c * levels + k} with {@code k = 0} the top level. Persistent state: {@link #initialized},
  * {@link #temperature}, {@link #steam}, {@link #head}, {@link #vadose}, {@link #steamFlux}. Everything
- * else is derived from the world model and recomputed after a load.
+ * else is derived from the world model and recomputed after a load (single precision: material
+ * properties are known to a few percent at best).
  */
 final class SolverChunk {
     static final int SIZE = 16;
@@ -45,14 +46,14 @@ final class SolverChunk {
     /** Standing-water elevation imported with the terrain (m), NaN if none. */
     final double[] lakeZ = new double[AREA];
     /** Thermal conductivity (W/m·K), volumetric heat capacity of the solid frame (J/m³·K). */
-    final double[] conductivity;
-    final double[] heatCapacity;
+    final float[] conductivity;
+    final float[] heatCapacity;
     /** Porosity (0–1), hydraulic conductivity (m/s), melt interval (°C, NaN if none), bulk density. */
-    final double[] porosity;
-    final double[] hydraulicK;
-    final double[] solidus;
-    final double[] liquidus;
-    final double[] density;
+    final float[] porosity;
+    final float[] hydraulicK;
+    final float[] solidus;
+    final float[] liquidus;
+    final float[] density;
 
     // ── Level of detail (persisted in the subsystem JSON) ──
     Activity activity = Activity.DORMANT;
@@ -68,13 +69,13 @@ final class SolverChunk {
         int n = AREA * levels;
         temperature = new double[n];
         steam = new double[n];
-        conductivity = new double[n];
-        heatCapacity = new double[n];
-        porosity = new double[n];
-        hydraulicK = new double[n];
-        solidus = new double[n];
-        liquidus = new double[n];
-        density = new double[n];
+        conductivity = new float[n];
+        heatCapacity = new float[n];
+        porosity = new float[n];
+        hydraulicK = new float[n];
+        solidus = new float[n];
+        liquidus = new float[n];
+        density = new float[n];
         java.util.Arrays.fill(lakeZ, Double.NaN);
     }
 

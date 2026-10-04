@@ -1,8 +1,11 @@
 package me.alex4386.typhon.engine.subsurface;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import me.alex4386.typhon.engine.world.ColumnStacks;
@@ -15,10 +18,14 @@ import me.alex4386.typhon.engine.world.WorldModel;
  * <p>Local-inertial shallow water (Bates, Horritt &amp; Fewtrell 2010): per face,
  * {@code q ← (q − g·h_f·Δt·∂η/∂x) / (1 + g·Δt·n²·|q| / h_f^{7/3})} with flow depth
  * {@code h_f = max(η) − max(z_b)}, then {@code ∂d/∂t = −∇·q}. Sub-steps keep
- * {@code Δt ≤ C·Δx/√(g·d_max)}; outflow is limited so depths stay non-negative (mass is conserved
- * exactly). Columns below sea level are a fixed-level boundary; unknown columns are walls. Water
- * infiltrates into the vadose zone of the solver column below where the water table lies below the
- * ground, and evaporates at the climate rate.
+ * {@code Δt ≤ C·Δx/√(g·h_max)}; outflow is limited so depths stay non-negative (mass is conserved
+ * exactly). Unknown columns are walls.
+ *
+ * <p>Open water is a fixed-level boundary: columns below the world's sea level, and water bodies
+ * imported with the terrain that reach the edge of the known world (the host's ocean or a lake
+ * that continues beyond the modelled area). Imported water bodies enclosed by the known world are
+ * ordinary lakes and evolve. Water infiltrates into the vadose zone where the water table lies
+ * below the ground and evaporates at the climate rate.
  *
  * <p>Storage is sparse 32×32 tiles aligned with the world model's tiles; only tiles holding water
  * (and their neighbours, transiently) exist.
@@ -37,12 +44,25 @@ final class SurfaceWater {
         // Derived from the world model
         final double[] bed = new double[AREA];
         final boolean[] known = new boolean[AREA];
-        final boolean[] sea = new boolean[AREA];
+        /** Fixed water level of open-water columns (sea, open imported water), NaN elsewhere. */
+        final double[] level = new double[AREA];
+        /** Outflow scaling of the current substep (scratch). */
+        final double[] limiter = new double[AREA];
         long version = Long.MIN_VALUE;
+        // Neighbour tiles, refreshed at the start of every step
+        Tile east;
+        Tile west;
+        Tile south;
+        Tile north;
 
         Tile(int tx, int tz) {
             this.tx = tx;
             this.tz = tz;
+            Arrays.fill(level, Double.NaN);
+        }
+
+        boolean fixed(int i) {
+            return !Double.isNaN(level[i]);
         }
 
         boolean dry() {
@@ -58,6 +78,8 @@ final class SurfaceWater {
     private final TreeMap<Long, Tile> tiles = new TreeMap<>();
     /** World-model tiles whose standing water has been imported. */
     final TreeSet<Long> seeded = new TreeSet<>();
+    /** Fixed levels of open water imported with the terrain, by tile key (NaN = not open water). */
+    final TreeMap<Long, double[]> openWater = new TreeMap<>();
 
     // Budget (m³, cumulative since construction or load)
     double poured;
@@ -114,48 +136,61 @@ final class SurfaceWater {
         return t;
     }
 
+    /** Fixed level of a column: open imported water, else the sea below sea level, else NaN. */
+    private double fixedLevel(int x, int z, double bed) {
+        double[] open = openWater.get(key(Math.floorDiv(x, TILE), Math.floorDiv(z, TILE)));
+        if (open != null && !Double.isNaN(open[local(x, z)])) return open[local(x, z)];
+        double sea = world.spec().seaLevelZ();
+        return !Double.isNaN(sea) && bed < sea ? sea : Double.NaN;
+    }
+
     /** Re-reads bed elevations of a tile from the world model when it changed. */
     void refresh(Tile t) {
         long version = world.stacks().tileVersion(t.tx, t.tz);
         if (version == t.version) return;
         t.version = version;
-        double sea = world.spec().seaLevelZ();
         for (int i = 0; i < AREA; i++) {
             int x = t.tx * TILE + (i & 31);
             int z = t.tz * TILE + (i >> 5);
             boolean known = world.isKnown(x, z);
             t.known[i] = known;
             t.bed[i] = known ? world.surfaceZ(x, z) + world.uplift(x, z) : Double.NaN;
-            t.sea[i] = known && !Double.isNaN(sea) && t.bed[i] < sea;
+            t.level[i] = known ? fixedLevel(x, z, t.bed[i]) : Double.NaN;
             // Discharges are state (inertia) and must survive a refresh; only cells that are not
-            // part of the world lose them. Sea cells never hold depth of their own.
+            // part of the world lose them. Open-water cells never hold depth of their own.
             if (!known) {
                 t.qEast[i] = 0;
                 t.qSouth[i] = 0;
             }
-            if (!known || t.sea[i]) t.depth[i] = 0;
+            if (!known || t.fixed(i)) t.depth[i] = 0;
         }
     }
 
     // ── Queries ──
 
-    /** Water depth (m) above the ground of a column; below sea level the sea depth. */
+    /** Water depth (m) above the ground of a column; for open water the depth below its level. */
     double depth(int x, int z) {
         Tile t = tile(x, z);
         if (t != null) {
             int i = local(x, z);
-            if (t.sea[i]) return world.spec().seaLevelZ() - t.bed[i];
+            if (t.fixed(i)) return Math.max(0, t.level[i] - t.bed[i]);
             return t.depth[i];
         }
-        double sea = world.spec().seaLevelZ();
-        if (!Double.isNaN(sea) && world.isKnown(x, z)) {
-            double bed = world.surfaceZ(x, z);
-            if (bed < sea) return sea - bed;
-        }
-        return 0;
+        if (!world.isKnown(x, z)) return 0;
+        double bed = world.surfaceZ(x, z) + world.uplift(x, z);
+        double level = fixedLevel(x, z, bed);
+        return Double.isNaN(level) ? 0 : Math.max(0, level - bed);
     }
 
-    /** Total stored surface water (m³), excluding the sea. */
+    /** Whether a column is open water (fixed level). */
+    boolean open(int x, int z) {
+        Tile t = tile(x, z);
+        if (t != null) return t.fixed(local(x, z));
+        if (!world.isKnown(x, z)) return false;
+        return !Double.isNaN(fixedLevel(x, z, world.surfaceZ(x, z) + world.uplift(x, z)));
+    }
+
+    /** Total stored surface water (m³), excluding open water. */
     double volume() {
         double sum = 0;
         for (Tile t : tiles.values()) for (int i = 0; i < AREA; i++) sum += t.depth[i];
@@ -164,7 +199,9 @@ final class SurfaceWater {
 
     // ── Sources ──
 
-    /** Adds water at a column (bucket, runoff, spring). Returns false (counted as rejected) if unknown/sea. */
+    enum Source { POURED, RUNOFF, SPRING }
+
+    /** Adds water at a column (bucket, runoff, spring). Returns false (counted as rejected) if unknown. */
     boolean add(int x, int z, double volumeM3, Source source) {
         if (!(volumeM3 > 0)) return false;
         Tile t = tileOrCreate(Math.floorDiv(x, TILE), Math.floorDiv(z, TILE));
@@ -173,16 +210,11 @@ final class SurfaceWater {
             rejected += volumeM3;
             return false;
         }
-        if (t.sea[i]) {
-            seaOutflow += volumeM3; // straight into the sea
-            switch (source) {
-                case POURED -> poured += volumeM3;
-                case RUNOFF -> runoff += volumeM3;
-                case SPRING -> springInflow += volumeM3;
-            }
-            return true;
+        if (t.fixed(i)) {
+            seaOutflow += volumeM3; // straight into the open water
+        } else {
+            t.depth[i] += volumeM3 / cellArea();
         }
-        t.depth[i] += volumeM3 / cellArea();
         switch (source) {
             case POURED -> poured += volumeM3;
             case RUNOFF -> runoff += volumeM3;
@@ -191,30 +223,91 @@ final class SurfaceWater {
         return true;
     }
 
-    enum Source { POURED, RUNOFF, SPRING }
-
-    /** Imports standing water of world-model tiles not seen before (lakes from the host's terrain). */
+    /**
+     * Imports standing water of world-model tiles not seen before. Water bodies (4-connected columns
+     * with water above the ground) that touch an unknown column — the edge of the modelled area —
+     * become open water at their level; enclosed ones are seeded as lake water.
+     */
     void seedLakes() {
+        List<Long> fresh = new ArrayList<>();
         for (long key : world.stacks().tileKeys()) {
-            if (seeded.contains(key)) continue;
-            seeded.add(key);
+            if (seeded.add(key)) fresh.add(key);
+        }
+        if (fresh.isEmpty()) return;
+        java.util.Set<Long> freshSet = new java.util.HashSet<>(fresh);
+        Map<Long, Integer> component = new HashMap<>();
+        int next = 0;
+        for (long key : fresh) {
             int tx = ColumnStacks.keyTileX(key);
             int tz = ColumnStacks.keyTileZ(key);
-            Tile t = null;
             for (int i = 0; i < AREA; i++) {
                 int x = tx * TILE + (i & 31);
                 int z = tz * TILE + (i >> 5);
-                if (!world.isKnown(x, z)) continue;
-                double w = world.waterZ(x, z);
-                double bed = world.surfaceZ(x, z) + world.uplift(x, z);
-                if (Double.isNaN(w) || !(w > bed)) continue;
-                if (t == null) t = tileOrCreate(tx, tz);
-                if (t.sea[i]) continue;
-                double d = w - bed;
-                t.depth[i] += d;
-                seededVolume += d * cellArea();
+                long column = columnKey(x, z);
+                if (component.containsKey(column) || waterAbove(x, z) <= 0) continue;
+                // Flood-fill this water body.
+                List<long[]> members = new ArrayList<>();
+                boolean open = false;
+                ArrayDeque<long[]> queue = new ArrayDeque<>();
+                queue.add(new long[] {x, z});
+                component.put(column, next);
+                while (!queue.isEmpty()) {
+                    long[] p = queue.poll();
+                    members.add(p);
+                    int px = (int) p[0];
+                    int pz = (int) p[1];
+                    int[][] around = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+                    for (int[] d : around) {
+                        int nx = px + d[0];
+                        int nz = pz + d[1];
+                        if (!world.isKnown(nx, nz)) {
+                            open = true;
+                            continue;
+                        }
+                        long nk = columnKey(nx, nz);
+                        if (component.containsKey(nk) || waterAbove(nx, nz) <= 0) continue;
+                        component.put(nk, next);
+                        queue.add(new long[] {nx, nz});
+                    }
+                }
+                next++;
+                members.sort((a, b) -> a[1] != b[1] ? Long.compare(a[1], b[1]) : Long.compare(a[0], b[0]));
+                for (long[] p : members) {
+                    int mx = (int) p[0];
+                    int mz = (int) p[1];
+                    double w = world.waterZ(mx, mz);
+                    if (open) {
+                        openWater.computeIfAbsent(key(Math.floorDiv(mx, TILE), Math.floorDiv(mz, TILE)), k -> {
+                            double[] levels = new double[AREA];
+                            Arrays.fill(levels, Double.NaN);
+                            return levels;
+                        })[local(mx, mz)] = w;
+                    } else {
+                        // Water of tiles seeded earlier is already in the field.
+                        if (!freshSet.contains(key(Math.floorDiv(mx, TILE), Math.floorDiv(mz, TILE)))) continue;
+                        Tile t = tileOrCreate(Math.floorDiv(mx, TILE), Math.floorDiv(mz, TILE));
+                        int li = local(mx, mz);
+                        if (t.fixed(li)) continue;
+                        double d = waterAbove(mx, mz);
+                        t.depth[li] += d;
+                        seededVolume += d * cellArea();
+                    }
+                }
             }
         }
+        // Open levels change which cells are fixed: re-derive existing tiles.
+        for (Tile t : tiles.values()) t.version = Long.MIN_VALUE;
+    }
+
+    private double waterAbove(int x, int z) {
+        if (!world.isKnown(x, z)) return 0;
+        double w = world.waterZ(x, z);
+        double bed = world.surfaceZ(x, z) + world.uplift(x, z);
+        return Double.isNaN(w) ? 0 : Math.max(0, w - bed);
+    }
+
+    private static long columnKey(int x, int z) {
+        return ((long) x << 32) | (z & 0xffffffffL);
     }
 
     // ── Step ──
@@ -228,41 +321,45 @@ final class SurfaceWater {
 
     void step(double dt, Infiltration infiltration) {
         if (tiles.isEmpty()) return;
-        // Active tiles and their 4-neighbours (transient dry halo).
-        List<Long> wet = new ArrayList<>();
+        // Wet tiles get their 4 neighbours (transient dry halo) so water can spread.
+        List<Tile> wet = new ArrayList<>();
         for (Tile t : tiles.values()) {
-            refresh(t);
             for (int i = 0; i < AREA; i++) {
                 if (t.depth[i] > 0) {
-                    wet.add(key(t.tx, t.tz));
+                    wet.add(t);
                     break;
                 }
             }
         }
-        for (long k : wet) {
-            int tx = (int) (k >> 32);
-            int tz = (int) k;
-            int[][] around = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        int[][] around = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        for (Tile t : wet) {
             for (int[] d : around) {
-                int nx = tx + d[0];
-                int nz = tz + d[1];
+                int nx = t.tx + d[0];
+                int nz = t.tz + d[1];
                 if (!tiles.containsKey(key(nx, nz)) && world.stacks().tileVersion(nx, nz) != 0) tileOrCreate(nx, nz);
             }
         }
+        for (Tile t : tiles.values()) {
+            refresh(t);
+            t.east = tiles.get(key(t.tx + 1, t.tz));
+            t.west = tiles.get(key(t.tx - 1, t.tz));
+            t.south = tiles.get(key(t.tx, t.tz + 1));
+            t.north = tiles.get(key(t.tx, t.tz - 1));
+        }
+        List<Tile> list = new ArrayList<>(tiles.values());
         double dx = world.spec().metersPerColumn();
         double remaining = dt;
         int guard = 0;
         while (remaining > 1e-9 && guard++ < 10_000) {
-            double maxDepth = config.minFlowDepthM;
-            for (Tile t : tiles.values()) for (double d : t.depth) if (d > maxDepth) maxDepth = d;
+            double maxDepth = Math.max(config.minFlowDepthM, maxFlowDepth(list));
             double stable = config.surfaceWaterCfl * dx / Math.sqrt(SubsurfaceGrid.GRAVITY * maxDepth);
             double h = Math.min(remaining, stable);
-            substep(h, dx);
+            substep(list, h, dx);
             remaining -= h;
         }
         double evaporation = config.evaporationMmPerHour / 1000.0 / 3600.0 * dt;
         double area = cellArea();
-        for (Tile t : tiles.values()) {
+        for (Tile t : list) {
             for (int i = 0; i < AREA; i++) {
                 double d = t.depth[i];
                 if (d <= 0) continue;
@@ -288,17 +385,39 @@ final class SurfaceWater {
         tiles.values().removeIf(Tile::dry);
     }
 
-    private double bed(Tile t, int i) {
-        return t.bed[i];
+    /** Deepest water that can flow this substep: lake/river depths and open water next to land. */
+    private double maxFlowDepth(List<Tile> list) {
+        double max = 0;
+        for (Tile t : list) {
+            for (int i = 0; i < AREA; i++) {
+                if (t.fixed(i)) {
+                    if (hasLandNeighbour(t, i)) max = Math.max(max, t.level[i] - t.bed[i]);
+                } else if (t.depth[i] > max) {
+                    max = t.depth[i];
+                }
+            }
+        }
+        return max;
     }
 
-    private void substep(double dt, double dx) {
+    private boolean hasLandNeighbour(Tile t, int i) {
+        int lx = i & 31;
+        int lz = i >> 5;
+        return landAt(lx < 31 ? t : t.east, lx < 31 ? i + 1 : i - 31)
+                || landAt(lx > 0 ? t : t.west, lx > 0 ? i - 1 : i + 31)
+                || landAt(lz < 31 ? t : t.south, lz < 31 ? i + TILE : i - 31 * TILE)
+                || landAt(lz > 0 ? t : t.north, lz > 0 ? i - TILE : i + 31 * TILE);
+    }
+
+    private static boolean landAt(Tile t, int i) {
+        return t != null && t.known[i] && !t.fixed(i);
+    }
+
+    private void substep(List<Tile> list, double dt, double dx) {
         double g = SubsurfaceGrid.GRAVITY;
         double n2 = config.manningN * config.manningN;
-        double sea = world.spec().seaLevelZ();
         double minDepth = config.minFlowDepthM;
-        List<Tile> list = new ArrayList<>(tiles.values());
-        // 1. Face discharges.
+        // 1. Face discharges (east and south face of every column).
         for (Tile t : list) {
             for (int i = 0; i < AREA; i++) {
                 if (!t.known[i]) {
@@ -306,80 +425,77 @@ final class SurfaceWater {
                     t.qSouth[i] = 0;
                     continue;
                 }
-                int x = t.tx * TILE + (i & 31);
-                int z = t.tz * TILE + (i >> 5);
-                t.qEast[i] = faceFlux(t, i, x + 1, z, t.qEast[i], dt, dx, g, n2, sea, minDepth);
-                t.qSouth[i] = faceFlux(t, i, x, z + 1, t.qSouth[i], dt, dx, g, n2, sea, minDepth);
+                int lx = i & 31;
+                int lz = i >> 5;
+                Tile te = lx < 31 ? t : t.east;
+                int je = lx < 31 ? i + 1 : i - 31;
+                Tile ts = lz < 31 ? t : t.south;
+                int js = lz < 31 ? i + TILE : i - 31 * TILE;
+                t.qEast[i] = faceFlux(t, i, te, je, t.qEast[i], dt, dx, g, n2, minDepth);
+                t.qSouth[i] = faceFlux(t, i, ts, js, t.qSouth[i], dt, dx, g, n2, minDepth);
             }
         }
-        // 2. Outflow limiter: scale the outgoing faces of each wet column so its depth stays ≥ 0.
-        java.util.IdentityHashMap<Tile, double[]> factor = new java.util.IdentityHashMap<>();
+        // 2. Outflow limiter: scale the outgoing faces of each column so its depth stays ≥ 0.
         for (Tile t : list) {
-            double[] f = new double[AREA];
-            Arrays.fill(f, 1);
+            double[] f = t.limiter;
             for (int i = 0; i < AREA; i++) {
-                if (!t.known[i] || t.sea[i]) continue;
-                int x = t.tx * TILE + (i & 31);
-                int z = t.tz * TILE + (i >> 5);
+                f[i] = 1;
+                if (!t.known[i] || t.fixed(i)) continue;
+                int lx = i & 31;
+                int lz = i >> 5;
+                Tile tw = lx > 0 ? t : t.west;
+                int jw = lx > 0 ? i - 1 : i + 31;
+                Tile tn = lz > 0 ? t : t.north;
+                int jn = lz > 0 ? i - TILE : i + 31 * TILE;
                 double out = Math.max(0, t.qEast[i]) + Math.max(0, t.qSouth[i])
-                        + Math.max(0, -q(x - 1, z, true)) + Math.max(0, -q(x, z - 1, false));
+                        + (tw == null ? 0 : Math.max(0, -tw.qEast[jw]))
+                        + (tn == null ? 0 : Math.max(0, -tn.qSouth[jn]));
                 out *= dt / dx;
                 if (out > t.depth[i]) f[i] = out > 0 ? t.depth[i] / out : 0;
             }
-            factor.put(t, f);
         }
         // 3. Apply fluxes (each face once, from the column on its west/north side).
+        double area = cellArea();
         for (Tile t : list) {
-            double[] f = factor.get(t);
             for (int i = 0; i < AREA; i++) {
-                int x = t.tx * TILE + (i & 31);
-                int z = t.tz * TILE + (i >> 5);
-                transfer(t, i, f, x + 1, z, t.qEast[i], dt, dx, factor);
-                transfer(t, i, f, x, z + 1, t.qSouth[i], dt, dx, factor);
+                int lx = i & 31;
+                int lz = i >> 5;
+                if (t.qEast[i] != 0) transfer(t, i, lx < 31 ? t : t.east, lx < 31 ? i + 1 : i - 31, t.qEast[i], dt, dx, area);
+                if (t.qSouth[i] != 0) {
+                    transfer(t, i, lz < 31 ? t : t.south, lz < 31 ? i + TILE : i - 31 * TILE, t.qSouth[i], dt, dx, area);
+                }
             }
         }
     }
 
-    private double q(int x, int z, boolean eastFace) {
-        Tile t = tile(x, z);
-        if (t == null) return 0;
-        int i = local(x, z);
-        return eastFace ? t.qEast[i] : t.qSouth[i];
-    }
-
-    private double faceFlux(Tile t, int i, int nx, int nz, double q, double dt, double dx, double g, double n2,
-            double sea, double minDepth) {
-        Tile o = tile(nx, nz);
-        if (o == null) return 0;
-        int j = local(nx, nz);
-        if (!o.known[j]) return 0;
-        if (t.sea[i] && o.sea[j]) return 0;
-        double etaI = t.sea[i] ? sea : bed(t, i) + t.depth[i];
-        double etaJ = o.sea[j] ? sea : bed(o, j) + o.depth[j];
-        double hf = Math.max(etaI, etaJ) - Math.max(bed(t, i), bed(o, j));
+    private static double faceFlux(Tile t, int i, Tile o, int j, double q, double dt, double dx, double g, double n2,
+            double minDepth) {
+        if (o == null || !o.known[j]) return 0;
+        boolean fi = t.fixed(i);
+        boolean fj = o.fixed(j);
+        if (fi && fj) return 0;
+        if (!fi && !fj && t.depth[i] <= 0 && o.depth[j] <= 0 && q == 0) return 0;
+        double etaI = fi ? t.level[i] : t.bed[i] + t.depth[i];
+        double etaJ = fj ? o.level[j] : o.bed[j] + o.depth[j];
+        double hf = Math.max(etaI, etaJ) - Math.max(t.bed[i], o.bed[j]);
         if (hf <= minDepth) return 0;
         double slope = (etaJ - etaI) / dx;
-        double next = (q - g * hf * dt * slope) / (1 + g * dt * n2 * Math.abs(q) / Math.pow(hf, 7.0 / 3.0));
-        return next;
+        return (q - g * hf * dt * slope) / (1 + g * dt * n2 * Math.abs(q) / Math.pow(hf, 7.0 / 3.0));
     }
 
-    private void transfer(Tile t, int i, double[] f, int nx, int nz, double q, double dt, double dx,
-            java.util.IdentityHashMap<Tile, double[]> factor) {
-        if (q == 0) return;
-        Tile o = tile(nx, nz);
+    private void transfer(Tile t, int i, Tile o, int j, double q, double dt, double dx, double area) {
         if (o == null) return;
-        int j = local(nx, nz);
-        double scale = q > 0 ? f[i] : factor.get(o)[j];
+        double scale = q > 0 ? t.limiter[i] : o.limiter[j];
         double depthMoved = q * scale * dt / dx; // m over one column, + = from (t,i) to (o,j)
-        double volume = depthMoved * cellArea();
-        if (t.sea[i]) {
+        double volume = depthMoved * area;
+        if (t.fixed(i)) {
             seaInflow += Math.max(0, volume);
             seaOutflow += Math.max(0, -volume);
         } else {
             t.depth[i] -= depthMoved;
             if (t.depth[i] < 0) t.depth[i] = 0;
         }
-        if (o.sea[j]) {
+        if (o.fixed(j)) {
             seaOutflow += Math.max(0, volume);
             seaInflow += Math.max(0, -volume);
         } else {

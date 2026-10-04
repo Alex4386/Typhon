@@ -65,9 +65,10 @@ public record WorldSpec(double metersPerColumn, double solverSpacing, double dat
                 List.of(new GeologyLayer("granite", -500, 0.01)), "andesite", "soil", metersPerBlock);
     }
 
+    /** The same world at another column size; the solver grid keeps its columns-per-solver-column ratio. */
     public WorldSpec withMetersPerColumn(double meters) {
-        return new WorldSpec(meters, Math.max(solverSpacing, meters), datumZ, seaLevelZ, basement, edificeMaterial,
-                surfaceMaterial, meters);
+        double spacing = Math.max(meters, solverSpacing * meters / metersPerColumn);
+        return new WorldSpec(meters, spacing, datumZ, seaLevelZ, basement, edificeMaterial, surfaceMaterial, meters);
     }
 
     /** Bottom elevation of block {@code y}. */

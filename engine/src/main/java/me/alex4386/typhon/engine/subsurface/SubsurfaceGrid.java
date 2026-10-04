@@ -288,17 +288,17 @@ final class SubsurfaceGrid {
             int i = c * n + k;
             boolean cavity = m.materialClass() == MaterialClass.VOID || m.materialClass() == MaterialClass.AIR;
             double solidFraction = cavity ? 0 : 1 - voidFraction;
-            ch.conductivity[i] = cavity ? m.conductivityWmK()
-                    : solidFraction * m.conductivityWmK() + (1 - solidFraction) * MaterialTable.AIR.conductivityWmK();
-            ch.density[i] = m.densityKgM3();
-            ch.heatCapacity[i] = m.densityKgM3() * m.heatCapacityJkgK() * (cavity ? 1 : solidFraction)
-                    + (cavity ? 0 : (1 - solidFraction) * MaterialTable.AIR.densityKgM3() * MaterialTable.AIR.heatCapacityJkgK());
-            ch.porosity[i] = cavity ? 0 : Math.max(0, Math.min(1, porosity));
+            ch.conductivity[i] = (float) (cavity ? m.conductivityWmK()
+                    : solidFraction * m.conductivityWmK() + (1 - solidFraction) * MaterialTable.AIR.conductivityWmK());
+            ch.density[i] = (float) m.densityKgM3();
+            ch.heatCapacity[i] = (float) (m.densityKgM3() * m.heatCapacityJkgK() * (cavity ? 1 : solidFraction)
+                    + (cavity ? 0 : (1 - solidFraction) * MaterialTable.AIR.densityKgM3() * MaterialTable.AIR.heatCapacityJkgK()));
+            ch.porosity[i] = (float) (cavity ? 0 : Math.max(0, Math.min(1, porosity)));
             double logK = m.log10HydraulicConductivity();
-            ch.hydraulicK[i] = cavity || Double.isNaN(logK) || m.materialClass() == MaterialClass.WATER
-                    ? 0 : StrictMath.pow(10, logK);
-            ch.solidus[i] = m.solidusC();
-            ch.liquidus[i] = m.liquidusC();
+            ch.hydraulicK[i] = (float) (cavity || Double.isNaN(logK) || m.materialClass() == MaterialClass.WATER
+                    ? 0 : StrictMath.pow(10, logK));
+            ch.solidus[i] = (float) m.solidusC();
+            ch.liquidus[i] = (float) m.liquidusC();
         }
         if (!ch.initialized[c]) {
             ch.initialized[c] = true;
