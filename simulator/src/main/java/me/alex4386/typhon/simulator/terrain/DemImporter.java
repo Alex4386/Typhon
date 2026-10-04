@@ -101,8 +101,7 @@ public final class DemImporter {
         /** Pixel-centre (row, col) of the DEM's middle. */
         public double[] centre() {
             return new double[] {rows() / 2.0 - 0.5, cols() / 2.0 - 0.5};
-        }
-    }
+        }    }
 
     /** What to read and how: crop centre and size, unit conversion, no-data handling. */
     public record ReadOptions(double defaultCell, double pngMinMeters, double pngMaxMeters) {

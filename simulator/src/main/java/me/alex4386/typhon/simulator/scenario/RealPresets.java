@@ -73,6 +73,20 @@ final class RealPresets {
         return DemImporter.groundBlock(elevation, metersPerColumn);
     }
 
+    /** Stromboli's crater terrace, 300 m NW of the summit (m from the centre). */
+    static final double CRATER_X = -300 / Math.sqrt(2);
+    static final double CRATER_Z = -300 / Math.sqrt(2);
+
+    /**
+     * Edifice zone centred on the column of the primary vent at real offset (m) — volcano definitions
+     * place edifices on the primary vent, so world templates reproduce the preset exactly.
+     */
+    static Edifice edifice(String id, double xm, double zm, double metersPerColumn, double radiusColumns, double baseZ,
+            String material) {
+        return new Edifice(id, Math.floor(xm / metersPerColumn) + 0.5, Math.floor(zm / metersPerColumn) + 0.5,
+                radiusColumns, baseZ, material);
+    }
+
     /** Crater vent at real offset (m) from the centre, its floor on the terrain's ground. */
     static VentSite vent(String id, ColumnGrid terrain, double metersPerColumn, double xm, double zm, double radiusM) {
         int x = (int) Math.floor(xm / metersPerColumn);
@@ -102,7 +116,7 @@ final class RealPresets {
         RealSetting setting = new RealSetting(
                 new WorldSpec(L, 4 * L, -6000, Double.NaN,
                         List.of(new WorldSpec.GeologyLayer("gabbro", -5000, 0.01)), "basalt", "basalt", L),
-                List.of(new Edifice("kilauea-real", 0.5, 0.5, Double.POSITIVE_INFINITY, Double.NaN, "basalt")),
+                List.of(edifice("kilauea-real", 0, 0, L, Double.POSITIVE_INFINITY, Double.NaN, "basalt")),
                 new WorldDefinition.Geotherm(18, 60, 6.5),
                 // flat basal water table at ~610 m a.s.l. under the summit (NSF drill hole, Keller et al. 1979)
                 new WorldDefinition.Aquifer(30, 0.1, 0.0, 610, 0.5),
@@ -162,14 +176,14 @@ final class RealPresets {
         RealSetting setting = new RealSetting(
                 new WorldSpec(L, 4 * L, -4000, 0,
                         List.of(new WorldSpec.GeologyLayer("sediment", -2500, 0.15)), "basalt", "scoria", L),
-                List.of(new Edifice("stromboli-real", 0.5, 0.5, 600, -2500, "basalt")),
+                List.of(edifice("stromboli-real", CRATER_X, CRATER_Z, L, 600, -2500, "basalt")),
                 new WorldDefinition.Geotherm(17, 80, 6.5),
                 new WorldDefinition.Aquifer(5, 0.15, 0.05, 0, 0.2), // thin basal lens at sea level
                 half,
                 RealSetting.DemSource.at(38.7939, 15.2133,
                         "Land DEMs set the sea to 0 m: use EMODnet or GEBCO bathymetry for the submarine flanks."));
-        double craterX = -300 / Math.sqrt(2);
-        double craterZ = -300 / Math.sqrt(2);
+        double craterX = CRATER_X;
+        double craterZ = CRATER_Z;
         return new Real(
                 "stromboli-real",
                 "Stromboli at real scale (persistent Strombolian)",
@@ -224,7 +238,7 @@ final class RealPresets {
         RealSetting setting = new RealSetting(
                 new WorldSpec(L, 4 * L, -6000, Double.NaN,
                         List.of(new WorldSpec.GeologyLayer("granite", -2000, 0.01)), "andesite", "soil", L),
-                List.of(new Edifice("st-helens-real", 0.5, 0.5, 300, 1100, "dacite")),
+                List.of(edifice("st-helens-real", 0, 0, L, 300, 1100, "dacite")),
                 new WorldDefinition.Geotherm(8, 40, 6.5),
                 new WorldDefinition.Aquifer(30, 0.1, 0.6, Double.NaN, 0.4),
                 half,
@@ -282,7 +296,7 @@ final class RealPresets {
         RealSetting setting = new RealSetting(
                 new WorldSpec(L, 4 * L, -8000, Double.NaN,
                         List.of(new WorldSpec.GeologyLayer("gabbro", -1500, 0.01)), "andesite", "soil", L),
-                List.of(new Edifice("pinatubo-real", 0.5, 0.5, 240, 400, "dacite")),
+                List.of(edifice("pinatubo-real", 0, 0, L, 240, 400, "dacite")),
                 new WorldDefinition.Geotherm(26, 40, 6.5),
                 new WorldDefinition.Aquifer(20, 0.1, 0.6, Double.NaN, 0.5),
                 half,
@@ -337,7 +351,7 @@ final class RealPresets {
         RealSetting setting = new RealSetting(
                 new WorldSpec(L, 4 * L, -3000, 0,
                         List.of(new WorldSpec.GeologyLayer("basalt", -400, 0.05)), "sediment", "sediment", L),
-                List.of(new Edifice("surtsey-real", 0.5, 0.5, 60, -130, "hyaloclastite")),
+                List.of(edifice("surtsey-real", 0, 0, L, 60, -130, "hyaloclastite")),
                 new WorldDefinition.Geotherm(5, 60, 6.5),
                 new WorldDefinition.Aquifer(0, 0.2, 0.0, 0, 0.5), // saturated by the sea
                 half,

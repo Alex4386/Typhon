@@ -16,10 +16,12 @@ import me.alex4386.typhon.engine.config.Yaml;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.world.Edifice;
 import me.alex4386.typhon.engine.worlds.World;
 import me.alex4386.typhon.engine.worlds.WorldDirectory;
 import me.alex4386.typhon.simulator.terrain.ColumnGrid;
 import me.alex4386.typhon.simulator.terrain.DemImporter;
+import me.alex4386.typhon.simulator.terrain.DemTerrain;
 import me.alex4386.typhon.simulator.terrain.TerrainGenerators;
 
 /**
@@ -29,7 +31,10 @@ import me.alex4386.typhon.simulator.terrain.TerrainGenerators;
  * free-form host data):
  * <pre>
  * terrain: {source: preset, preset: kilauea, seed: 1}              # a preset's synthetic terrain
- * terrain: {source: dem, path: dem.asc, cell: 30, maxMeters: 3000} # ESRI ASCII grid or PNG heightmap
+ * terrain: {source: dem, path: dem.tif, centerLat: 19.4069, centerLon: -155.2834, halfExtent: 256}
+ *                                       # real scale: GeoTIFF / SRTM .hgt (or any DEM with mapping: real),
+ *                                       # grid.metersPerColumn per column, sea level from world.yaml
+ * terrain: {source: dem, path: dem.asc, cell: 30, maxMeters: 3000} # compact: ESRI ASCII grid or PNG heightmap
  * terrain: {source: twin-cones, separation: 160, height: 60, radius: 140, craterRadius: 5}
  * </pre>
  */
@@ -63,7 +68,16 @@ public final class WorldScenarios {
                 if (file == null) throw new ConfigException("world.yaml: terrain.path: is required for source dem");
                 Path path = worldDir.resolve(file);
                 double cell = number(t, "cell", 30).doubleValue();
+                String lower = file.toLowerCase(Locale.ROOT);
+                boolean real = "real".equals(string(t, "mapping", null)) || t.containsKey("centerLat")
+                        || lower.endsWith(".tif") || lower.endsWith(".tiff") || lower.endsWith(".hgt");
                 try {
+                    if (real) {
+                        return DemTerrain.load(path, definition.spec().metersPerColumn(),
+                                number(t, "halfExtent", 256).intValue(), definition.spec().seaLevelZ(),
+                                number(t, "centerLat", Double.NaN).doubleValue(),
+                                number(t, "centerLon", Double.NaN).doubleValue());
+                    }
                     DemImporter.Dem dem = file.toLowerCase(Locale.ROOT).endsWith(".png")
                             ? DemImporter.readPng(path, 0, number(t, "maxMeters", 3000).doubleValue(), cell)
                             : DemImporter.readAscii(path, cell);
@@ -107,17 +121,55 @@ public final class WorldScenarios {
 
     /** Writes a world directory that reproduces a built-in preset. */
     public static void writeFromPreset(Preset preset, long seed, Path out) {
-        Scenario scenario = preset.build(seed);
-        VolcanoScaling scaling = scenario.volcano().scaling();
+        writeFromPreset(preset, seed, out, null);
+    }
+
+    /**
+     * Writes a world directory for a built-in preset; with {@code dem} (real-scale presets only) the
+     * terrain comes from that DEM file, centred on the preset's coordinates, and vents are anchored
+     * to it.
+     */
+    public static void writeFromPreset(Preset preset, long seed, Path out, Path dem) {
+        RealSetting real = preset.realSetting();
         Map<String, Object> terrain = new LinkedHashMap<>();
-        terrain.put("source", "preset");
-        terrain.put("preset", preset.name());
-        terrain.put("seed", seed);
+        Scenario scenario;
+        if (dem != null) {
+            if (real == null) throw new IllegalArgumentException(preset.name() + " is not a real-scale preset");
+            ColumnGrid grid;
+            try {
+                grid = DemTerrain.load(dem, real.metersPerColumn(), real.halfExtentColumns(), real.spec().seaLevelZ(),
+                        real.dem().lat(), real.dem().lon());
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+            scenario = preset.build(seed, grid, Scenario.Options.DEFAULT);
+            terrain.put("source", "dem");
+            terrain.put("path", dem.toAbsolutePath().toString());
+            terrain.put("centerLat", real.dem().lat());
+            terrain.put("centerLon", real.dem().lon());
+            terrain.put("halfExtent", real.halfExtentColumns());
+        } else {
+            scenario = preset.build(seed);
+            terrain.put("source", "preset");
+            terrain.put("preset", preset.name());
+            terrain.put("seed", seed);
+        }
+        VolcanoScaling scaling = scenario.volcano().scaling();
+        WorldDefinition.Geotherm geotherm = real != null ? real.geotherm() : new WorldDefinition.Geotherm(15, 30);
+        WorldDefinition.Aquifer aquifer = real != null ? real.aquifer() : new WorldDefinition.Aquifer(20, 0.1);
         WorldDefinition world = new WorldDefinition(preset.name(), seed, 50, scenario.terrain().world().spec(), scaling,
-                new WorldDefinition.Climate(0, 0.1, Double.NaN, 0, 0.3), new WorldDefinition.Geotherm(15, 30),
-                new WorldDefinition.Aquifer(20, 0.1), terrain, scenario.lava().config());
+                new WorldDefinition.Climate(0, 0.1, Double.NaN, 0, 0.3), geotherm, aquifer, terrain,
+                scenario.lava().config());
         List<VolcanoDefinition> volcanoes = new ArrayList<>();
-        for (VolcanoSystem v : scenario.volcanoes()) volcanoes.add(VolcanoDefinition.fromSystem(v, scaling));
+        for (VolcanoSystem v : scenario.volcanoes()) {
+            VolcanoDefinition definition = VolcanoDefinition.fromSystem(v, scaling);
+            for (Edifice e : scenario.terrain().world().edifices()) {
+                if (e.volcanoId().equals(v.volcanoId())) {
+                    definition = definition.withEdifice(e.material(), e.radiusColumns(), e.baseZ());
+                }
+            }
+            volcanoes.add(definition);
+        }
         new WorldDirectory(out).writeDefinitions(world, volcanoes, HEADER + "# Generated from preset '" + preset.name()
                 + "' (" + preset.title() + ").\n");
     }

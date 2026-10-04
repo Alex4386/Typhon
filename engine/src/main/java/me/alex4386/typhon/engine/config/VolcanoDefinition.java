@@ -386,6 +386,12 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
         return root;
     }
 
+    /** Same definition with an edifice zone (material, radius in columns, base elevation in metres). */
+    public VolcanoDefinition withEdifice(String material, double radius, double baseZ) {
+        return new VolcanoDefinition(id, name, active, vents, chamber, dikes, geothermal, geothermalCenter, pdc, lahar,
+                deformation, tephra, dormantCompression, eruptiveCompression, ballisticFraction, material, radius, baseZ);
+    }
+
     /** Same definition with a different {@code active} flag. */
     public VolcanoDefinition withActive(boolean value) {
         return new VolcanoDefinition(id, name, value, vents, chamber, dikes, geothermal, geothermalCenter, pdc, lahar,
