@@ -19,12 +19,14 @@ import { MockWorld, TILES, type Snapshot } from './world';
 
 const PORT = Number(process.env.MOCK_PORT ?? 8787);
 const WALL_TICK_MS = 100;
+/** Engine base step the mock pretends to use (s); the real engine defaults to 50 ms. */
+const BASE_STEP = 0.05;
 const BROADCAST_MS = 250;
 const KEYFRAME_SECONDS = 300;
 const MAX_KEYFRAMES = 400;
 /** Skip tile frames for a client while this many bytes are still queued on its socket. */
 const MAX_BUFFERED_BYTES = 128 * 1024;
-/** Simulated seconds per wall second in 'unbounded' mode (the mock is not a real solver). */
+/** Simulated seconds per wall second in UNBOUNDED mode (the mock is not a real solver). */
 const UNBOUNDED_RATE = 3000;
 
 interface Client {
@@ -40,7 +42,8 @@ interface Client {
 class Session {
   readonly id = 'mock';
   world = new MockWorld(1);
-  mode: TransportMode = 'play';
+  mode: TransportMode = 'REALTIME';
+  pauseAt: number | null = null;
   speed = 20;
   replay = false;
   rate = 0;
@@ -60,14 +63,19 @@ class Session {
   }
 
   advance(wallSeconds: number): SimEvent[] {
-    if (this.replay || this.mode === 'pause') {
+    if (this.replay || this.mode === 'PAUSED') {
       this.rate = 0;
       return [];
     }
-    const want = this.mode === 'unbounded' ? UNBOUNDED_RATE * wallSeconds : this.speed * wallSeconds;
+    let want = this.mode === 'UNBOUNDED' ? UNBOUNDED_RATE * wallSeconds : this.speed * wallSeconds;
+    if (this.pauseAt !== null) want = Math.max(0, Math.min(want, this.pauseAt - this.world.time));
     const done = this.world.advance(want, WALL_TICK_MS * 0.7);
     this.step++;
     this.rate = done / wallSeconds;
+    if (this.pauseAt !== null && this.world.time >= this.pauseAt - 1e-9) {
+      this.mode = 'PAUSED';
+      this.pauseAt = null;
+    }
     return this.collect();
   }
 
@@ -184,7 +192,7 @@ function sendReplayInfo(c?: Client) {
 }
 
 function clock(): ServerMessage {
-  return { type: 'clock', time: session.world.time, step: session.step, mode: session.mode, speed: session.speed, rate: session.rate, replay: session.replay };
+  return { type: 'clock', time: session.world.time, step: Math.round(session.world.time / BASE_STEP), baseStep: BASE_STEP, mode: session.mode, speed: session.speed, rate: session.rate, replay: session.replay };
 }
 
 function handle(c: Client, msg: ClientMessage) {
@@ -230,11 +238,16 @@ function handle(c: Client, msg: ClientMessage) {
       if (msg.speed !== undefined) session.speed = Math.min(1000, Math.max(0.1, msg.speed));
       broadcast(clock());
       return;
-    case 'step':
+    case 'step': {
       if (session.replay) return;
-      session.mode = 'pause';
-      broadcast({ type: 'events', events: session.stepSeconds(Math.max(0.05, msg.seconds)), dropped: 0 });
+      session.mode = 'PAUSED';
+      const seconds = msg.steps !== undefined ? msg.steps * BASE_STEP : Math.ceil((msg.seconds ?? BASE_STEP) / BASE_STEP - 1e-9) * BASE_STEP;
+      broadcast({ type: 'events', events: session.stepSeconds(Math.max(BASE_STEP, seconds)), dropped: 0 });
       broadcast(clock());
+      return;
+    }
+    case 'pauseAt':
+      session.pauseAt = msg.time;
       return;
     case 'command': {
       const w = session.world;

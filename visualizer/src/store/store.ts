@@ -214,6 +214,6 @@ function defaultServerUrl(): string {
 export function simNow(): number {
   const c = useStore.getState().clock;
   if (!c) return 0;
-  if (c.mode === 'pause' || c.replay) return c.time;
+  if (c.mode === 'PAUSED' || c.replay) return c.time;
   return c.time + (c.rate * (performance.now() - c.receivedAt)) / 1000;
 }

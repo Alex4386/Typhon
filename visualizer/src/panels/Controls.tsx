@@ -21,18 +21,21 @@ export function Transport() {
     if (clock) setSpeed(clock.speed);
   }, [clock?.speed]);
 
-  const mode = clock?.mode ?? 'pause';
+  const mode = clock?.mode ?? 'PAUSED';
   const replay = clock?.replay ?? false;
   return (
     <div className="transport">
       <span className="sim-time" title="simulation time">
         {formatSimTime(now)}
       </span>
-      <button title="Play" className={mode === 'play' ? 'on' : ''} disabled={replay} onClick={() => send({ type: 'transport', mode: 'play', speed })}>
+      <button title="Play" className={mode === 'REALTIME' ? 'on' : ''} disabled={replay} onClick={() => send({ type: 'transport', mode: 'REALTIME', speed })}>
         ▶
       </button>
-      <button title="Pause" className={mode === 'pause' ? 'on' : ''} disabled={replay} onClick={() => send({ type: 'transport', mode: 'pause' })}>
+      <button title="Pause" className={mode === 'PAUSED' ? 'on' : ''} disabled={replay} onClick={() => send({ type: 'transport', mode: 'PAUSED' })}>
         ⏸
+      </button>
+      <button title="One engine step" disabled={replay} onClick={() => send({ type: 'step', steps: 1 })}>
+        +1
       </button>
       <button title="Step 10 s" disabled={replay} onClick={() => send({ type: 'step', seconds: 10 })}>
         +10s
@@ -49,11 +52,11 @@ export function Transport() {
           value={toSlider(speed)}
           disabled={replay}
           onChange={(e) => setSpeed(Number(toSpeed(Number(e.target.value)).toPrecision(2)))}
-          onPointerUp={() => send({ type: 'transport', mode: mode === 'unbounded' ? 'unbounded' : 'play', speed })}
+          onPointerUp={() => send({ type: 'transport', mode: mode === 'UNBOUNDED' ? 'UNBOUNDED' : 'REALTIME', speed })}
         />
         <span>{speed < 1 ? speed.toFixed(1) : speed.toFixed(0)}×</span>
       </label>
-      <button title="Run as fast as possible" className={mode === 'unbounded' ? 'on' : ''} disabled={replay} onClick={() => send({ type: 'transport', mode: 'unbounded', speed })}>
+      <button title="Run as fast as possible" className={mode === 'UNBOUNDED' ? 'on' : ''} disabled={replay} onClick={() => send({ type: 'transport', mode: 'UNBOUNDED', speed })}>
         ⏩ max
       </button>
       <span className="muted" title="measured rate">

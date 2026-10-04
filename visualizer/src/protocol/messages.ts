@@ -13,7 +13,8 @@ export type XY = [number, number];
 
 // ───────────────────────── Client → server ─────────────────────────
 
-export type TransportMode = 'play' | 'pause' | 'unbounded';
+/** Runner modes, named as in the engine's `EngineRunner.Mode`. */
+export type TransportMode = 'REALTIME' | 'UNBOUNDED' | 'PAUSED';
 
 export type ClientMessage =
   | { type: 'hello'; protocol: number; client: string }
@@ -26,8 +27,12 @@ export type ClientMessage =
    * subscribed. The server keeps at most `TILE_WINDOW` unacknowledged tile frames in flight.
    */
   | { type: 'flow'; tilesProcessed: number }
+  /** REALTIME runs at `speed` × wall clock (0.1–1000); UNBOUNDED runs as fast as possible. */
   | { type: 'transport'; mode: TransportMode; speed?: number }
-  | { type: 'step'; seconds: number }
+  /** Pause, then advance exactly `steps` engine base steps, or the smallest number of steps covering `seconds`. */
+  | { type: 'step'; steps?: number; seconds?: number }
+  /** Pause automatically once simulation time reaches `time` (s); null clears it. */
+  | { type: 'pauseAt'; time: number | null }
   | { type: 'command'; requestId?: number; command: SimCommand }
   | { type: 'section'; requestId: number; polyline: XY[]; zMin: number; zMax: number; nu: number; nz: number }
   | { type: 'save'; name: string }
@@ -156,7 +161,10 @@ export interface ClockMessage {
   type: 'clock';
   /** Simulation time (s). */
   time: number;
+  /** Completed engine base steps. */
   step: number;
+  /** Engine base step (s), e.g. 0.05. */
+  baseStep: number;
   mode: TransportMode;
   speed: number;
   /** Measured simulated seconds per wall second. */
