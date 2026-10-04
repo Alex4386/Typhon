@@ -114,7 +114,7 @@ public final class Lahars extends MassFlowField {
      * {@code rainFailureWaterRatio · e}. Gentle slopes just stay saturated.
      */
     @Override
-    protected void beforeTransport(double dt, long tick, Outbox outbox) {
+    protected void beforeTransport(double dt, double time, Outbox outbox) {
         if (rainfallMmPerHour <= 0) return;
         double rain = rainfallMmPerHour / 1000 / 3600 * dt; // m of water this step
         double solids = 1 - config.porosity;
@@ -153,7 +153,7 @@ public final class Lahars extends MassFlowField {
         }
         if (mobilised > 0 && !rainLaharActive) {
             rainLaharActive = true;
-            outbox.emit(new MassFlowEvents.LaharStarted(tick, id, Trigger.RAIN, strongest, mobilised, mobilised / dt));
+            outbox.emit(new MassFlowEvents.LaharStarted(time, id, Trigger.RAIN, strongest, mobilised, mobilised / dt));
         }
     }
 
@@ -176,7 +176,7 @@ public final class Lahars extends MassFlowField {
     private static final int SLOPE_WINDOW = 4;
 
     @Override
-    protected void process(MassFlowChunk c, int i, double dt, Outbox outbox, long tick) {
+    protected void process(MassFlowChunk c, int i, double dt, Outbox outbox, double time) {
         double u = speed(c, i);
         double sediment = c.sediment[i];
         double solids = 1 - config.porosity;
@@ -220,20 +220,20 @@ public final class Lahars extends MassFlowField {
     }
 
     @Override
-    protected EngineEvent startedEvent(long tick, PendingStart start) {
-        return new MassFlowEvents.LaharStarted(tick, id, start.trigger(), start.position(), start.volumeM3(),
+    protected EngineEvent startedEvent(double time, PendingStart start) {
+        return new MassFlowEvents.LaharStarted(time, id, start.trigger(), start.position(), start.volumeM3(),
                 start.rateM3PerS());
     }
 
     @Override
-    protected EngineEvent frontEvent(long tick, BlockPos front, double runoutM, int cells, double volume,
+    protected EngineEvent frontEvent(double time, BlockPos front, double runoutM, int cells, double volume,
             double maxSpeed, double tracer, List<FlowCell> reported) {
-        return new MassFlowEvents.LaharFront(tick, id, front, runoutM, cells, volume, maxSpeed, tracer, reported);
+        return new MassFlowEvents.LaharFront(time, id, front, runoutM, cells, volume, maxSpeed, tracer, reported);
     }
 
     @Override
-    protected EngineEvent depositEvent(long tick, int cells, double volume, int blocks) {
-        return new MassFlowEvents.LaharDeposit(tick, id, cells, volume, blocks);
+    protected EngineEvent depositEvent(double time, int cells, double volume, int blocks) {
+        return new MassFlowEvents.LaharDeposit(time, id, cells, volume, blocks);
     }
 
     @Override

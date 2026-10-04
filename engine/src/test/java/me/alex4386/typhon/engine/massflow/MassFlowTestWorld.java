@@ -82,7 +82,7 @@ final class MassFlowTestWorld {
     }
 
     void run(Engine engine, int ticks) {
-        for (int i = 0; i < ticks; i++) frames.add(engine.tick());
+        for (int i = 0; i < ticks; i++) frames.add(engine.step());
     }
 
     /** Runs until nothing flows (or {@code maxTicks}); returns ticks run. */

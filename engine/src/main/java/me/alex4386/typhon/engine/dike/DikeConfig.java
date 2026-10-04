@@ -7,8 +7,8 @@ import me.alex4386.typhon.engine.volcano.VolcanoScaling;
  * model-world geometry uses {@link #metersPerBlock}.
  */
 public final class DikeConfig {
-    /** Engine ticks between steps. */
-    public int stepIntervalTicks = 20;
+    /** Simulated seconds between steps. */
+    public double stepPeriodSeconds = 1.0;
     /** Physical seconds simulated per engine second while a dike propagates. */
     public double timeScale = 1.0;
     /** Real metres per block of horizontal model geometry (see {@link VolcanoScaling}). */
@@ -90,7 +90,7 @@ public final class DikeConfig {
 
     public DikeConfig copy() {
         DikeConfig c = new DikeConfig();
-        c.stepIntervalTicks = stepIntervalTicks;
+        c.stepPeriodSeconds = stepPeriodSeconds;
         c.timeScale = timeScale;
         c.metersPerBlock = metersPerBlock;
         c.conduitSealing = conduitSealing;
@@ -123,7 +123,7 @@ public final class DikeConfig {
     }
 
     void validate() {
-        if (stepIntervalTicks < 1) throw new IllegalArgumentException("stepIntervalTicks must be >= 1");
+        requirePositive("stepPeriodSeconds", stepPeriodSeconds);
         requirePositive("timeScale", timeScale);
         requirePositive("metersPerBlock", metersPerBlock);
         if (!(conduitSealing >= 0 && conduitSealing <= 1)) {

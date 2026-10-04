@@ -20,7 +20,7 @@ class OutboxTest {
         outbox.setBlock(BlockChange.replace(pos, STONE, LAVA));
         outbox.setBlock(BlockChange.replace(pos, LAVA, BASALT));
 
-        List<BlockChange> changes = outbox.drain(0).blockChanges();
+        List<BlockChange> changes = outbox.drain(0, 0).blockChanges();
         assertEquals(List.of(BlockChange.replace(pos, STONE, BASALT)), changes);
     }
 
@@ -33,9 +33,9 @@ class OutboxTest {
         outbox.setBlock(BlockChange.set(b, LAVA));
         outbox.setBlock(BlockChange.set(a, BASALT));
 
-        EngineFrame frame = outbox.drain(3);
-        assertEquals(3, frame.tick());
+        EngineFrame frame = outbox.drain(3, 0);
+        assertEquals(3, frame.step());
         assertEquals(List.of(BlockChange.set(a, BASALT), BlockChange.set(b, LAVA)), frame.blockChanges());
-        assertTrue(outbox.drain(4).isEmpty());
+        assertTrue(outbox.drain(4, 0).isEmpty());
     }
 }

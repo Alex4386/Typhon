@@ -21,6 +21,8 @@ import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
+import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 class MagmaChamberTest {
     private static final BlockPos CENTER = new BlockPos(0, -40, 0);
@@ -33,7 +35,7 @@ class MagmaChamberTest {
     private static <T extends EngineEvent> List<T> run(Engine engine, int ticks, Class<T> type) {
         List<T> found = new ArrayList<>();
         for (int i = 0; i < ticks; i++) {
-            for (EngineEvent event : engine.tick().events()) {
+            for (EngineEvent event : engine.step().events()) {
                 if (type.isInstance(event)) found.add(type.cast(event));
             }
         }
@@ -75,7 +77,7 @@ class MagmaChamberTest {
         assertTrue(started.overpressureMPa() >= config.tensileStrengthMPa());
         assertNotNull(ended, "eruption should end once overpressure is relieved");
         assertEquals(Cause.AUTOMATIC, ended.cause());
-        assertTrue(ended.tick() > started.tick());
+        assertTrue(ended.time() > started.time());
 
         // Mass balance: erupted volume ≈ elastic storage released (supply is negligible while erupting).
         double released = config.volume() * config.compressibilityPerMPa()
@@ -137,7 +139,7 @@ class MagmaChamberTest {
 
         double volume = 5e3;
         engine.submit(new InjectRecharge("v", volume, 1250, 48, 1.0));
-        engine.tick();
+        engine.step();
 
         double stiffness = config.volume() * config.compressibilityPerMPa();
         assertEquals(volume / stiffness, chamber.overpressureMPa(), 1e-6);
@@ -252,19 +254,18 @@ class MagmaChamberTest {
 
         Engine reference = Engine.builder(9).add(new MagmaChamber(config)).build();
         List<EngineFrame> expected = new ArrayList<>();
-        for (int i = 0; i < 20 * 900; i++) expected.add(reference.tick());
+        for (int i = 0; i < 20 * 900; i++) expected.add(reference.step());
 
         Engine twin = Engine.builder(9).add(new MagmaChamber(config)).build();
-        for (int i = 0; i < 20 * 900; i++) assertEquals(expected.get(i), twin.tick());
+        for (int i = 0; i < 20 * 900; i++) assertEquals(expected.get(i), twin.step());
 
         Engine before = Engine.builder(9).add(new MagmaChamber(config)).build();
-        for (int i = 0; i < 20 * 400; i++) before.tick();
+        for (int i = 0; i < 20 * 400; i++) before.step();
         before.submit(new InjectRecharge("v", 100, 1200, 49, 2));
-        String saved = before.saveState().toString();
-        // the queued command is not persisted; apply it identically on both sides
+        InMemorySaveStore saved = Saves.save(before);
+        // the still-queued command is saved with the engine and re-queued on restore
         Engine resumed = Engine.builder(9).add(new MagmaChamber(config))
-                .restore(JsonParser.parseString(saved).getAsJsonObject()).build();
-        resumed.submit(new InjectRecharge("v", 100, 1200, 49, 2));
-        for (int i = 0; i < 20 * 500; i++) assertEquals(before.tick(), resumed.tick());
+                .restore(saved).build();
+        for (int i = 0; i < 20 * 500; i++) assertEquals(before.step(), resumed.step());
     }
 }

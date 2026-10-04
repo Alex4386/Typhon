@@ -14,6 +14,7 @@ import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
 import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.save.SaveStore;
 
 /** Shared fixtures: terrains, chambers and an engine wired with chamber → dike. */
 final class DikeTestWorld {
@@ -69,7 +70,7 @@ final class DikeTestWorld {
     record World(Engine engine, MagmaChamber chamber, DikePropagation dikes, TerrainModel terrain) {}
 
     static World world(long seed, MagmaChamberConfig chamberConfig, DikeConfig config, TerrainSnapshot snapshot,
-            com.google.gson.JsonObject restore) {
+            me.alex4386.typhon.engine.save.SaveStore restore) {
         TerrainModel terrain = new TerrainModel();
         MagmaChamber chamber = new MagmaChamber(chamberConfig);
         DikePropagation dikes = new DikePropagation(config, DikeMagmaSource.of(chamber), terrain);
@@ -82,15 +83,15 @@ final class DikeTestWorld {
 
     static List<EngineFrame> run(Engine engine, int ticks) {
         List<EngineFrame> frames = new ArrayList<>();
-        for (int i = 0; i < ticks; i++) frames.add(engine.tick());
+        for (int i = 0; i < ticks; i++) frames.add(engine.step());
         return frames;
     }
 
-    /** Runs until the first event of {@code type} (or {@code maxTicks}); returns its tick or −1. */
-    static long runUntil(Engine engine, Class<? extends EngineEvent> type, int maxTicks) {
-        for (int i = 0; i < maxTicks; i++) {
-            EngineFrame frame = engine.tick();
-            for (EngineEvent e : frame.events()) if (type.isInstance(e)) return frame.tick();
+    /** Runs until the first event of {@code type} (or {@code maxSteps}); returns its step or −1. */
+    static long runUntil(Engine engine, Class<? extends EngineEvent> type, int maxSteps) {
+        for (int i = 0; i < maxSteps; i++) {
+            EngineFrame frame = engine.step();
+            for (EngineEvent e : frame.events()) if (type.isInstance(e)) return frame.step();
         }
         return -1;
     }

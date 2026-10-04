@@ -29,6 +29,8 @@ import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.world.BlockId;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
+import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 /** Liquid- vs vapour-dominated ground, patchy alteration, aggregated events and prewarming. */
 class GeothermalHydrologyTest {
@@ -184,22 +186,22 @@ class GeothermalHydrologyTest {
         prewarmConfig.prewarmSeconds = 10 * 3600;
         Geothermal prewarmed = lakesideVolcano(prewarmConfig);
         Engine engine = Engine.builder(3).add(prewarmed).build();
-        engine.tick();
+        engine.step();
 
         Geothermal manual = lakesideVolcano(smallConfig());
         manual.equilibrate(10 * 3600);
         Engine manualEngine = Engine.builder(3).add(manual).build();
-        manualEngine.tick();
+        manualEngine.step();
         assertArrayEquals(manual.grid().excess, prewarmed.grid().excess);
 
         // A restored engine must not prewarm again.
-        String saved = engine.saveState().toString();
+        InMemorySaveStore saved = Saves.save(engine);
         List<EngineFrame> reference = run(engine, prewarmed, 20);
         GeothermalConfig again = smallConfig();
         again.prewarmSeconds = 10 * 3600;
         Geothermal restored = lakesideVolcano(again);
         Engine restoredEngine = Engine.builder(3).add(restored)
-                .restore(JsonParser.parseString(saved).getAsJsonObject()).build();
+                .restore(saved).build();
         assertEquals(reference, run(restoredEngine, restored, 20));
         assertArrayEquals(prewarmed.grid().excess, restored.grid().excess);
     }

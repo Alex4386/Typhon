@@ -9,4 +9,4 @@ import me.alex4386.typhon.engine.output.EngineEvent;
  * @param pos first block above the vent opening
  * @param intensity 0..1
  */
-public record FumaroleActivity(long tick, BlockPos pos, double intensity, GasComposition gas) implements EngineEvent {}
+public record FumaroleActivity(double time, BlockPos pos, double intensity, GasComposition gas) implements EngineEvent {}

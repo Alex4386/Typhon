@@ -15,23 +15,23 @@ public final class LavaEvents {
      * @param lengthM horizontal distance from the nearest source to {@code front}, real metres
      * @param volumeM3 molten volume, real m³
      */
-    public record LavaFlowFront(long tick, BlockPos front, double lengthM, int activeCells, double volumeM3)
+    public record LavaFlowFront(double time, BlockPos front, double lengthM, int activeCells, double volumeM3)
             implements EngineEvent {}
 
     /**
-     * Lava that turned to rock during the last {@code intervalTicks} (aggregated; see
-     * {@link LavaConfig#eventIntervalTicks()}).
+     * Lava that turned to rock during the last {@code intervalSeconds} (aggregated; see
+     * {@link LavaConfig#eventPeriodSeconds()}).
      *
      * @param cells columns that solidified (a column may count more than once)
      * @param volumeM3 real volume solidified
      * @param blocks whole blocks of rock placed
      */
-    public record LavaSolidified(long tick, int intervalTicks, int cells, double volumeM3, int blocks)
+    public record LavaSolidified(double time, double intervalSeconds, int cells, double volumeM3, int blocks)
             implements EngineEvent {}
 
     /**
      * Lava in contact with water in one zone (a 16×16 chunk), aggregated over
-     * {@link LavaConfig#eventIntervalTicks()}. Emitted while the zone holds submerged molten lava.
+     * {@link LavaConfig#eventPeriodSeconds()}. Emitted while the zone holds submerged molten lava.
      *
      * @param pos submerged molten column with the strongest lava inflow (where hosts should centre
      *     steam plumes and spatter)
@@ -43,18 +43,18 @@ public final class LavaEvents {
      * @param littoralExplosion some column's entry flux exceeded
      *     {@link LavaConfig#littoralExplosionFluxM3s()}: hosts may render steam blasts and spatter
      */
-    public record LavaOceanEntry(long tick, int intervalTicks, BlockPos pos, int columns, double moltenVolumeM3,
+    public record LavaOceanEntry(double time, double intervalSeconds, BlockPos pos, int columns, double moltenVolumeM3,
             double inflowM3PerS, double powerMW, double steamKgPerS, boolean littoralExplosion) implements EngineEvent {}
 
     /** Drained lava tubes left hollow this step (see {@link LavaFlow#tubes()}). */
-    public record LavaTubesFormed(long tick, List<LavaTube> tubes) implements EngineEvent {
+    public record LavaTubesFormed(double time, List<LavaTube> tubes) implements EngineEvent {
         public LavaTubesFormed {
             tubes = List.copyOf(tubes);
         }
     }
 
     /** The flow reached chunks the host has not sent terrain for; they act as walls until it does. */
-    public record TerrainNeeded(long tick, List<ChunkCoord> chunks) implements EngineEvent {
+    public record TerrainNeeded(double time, List<ChunkCoord> chunks) implements EngineEvent {
         public TerrainNeeded {
             chunks = List.copyOf(chunks);
         }

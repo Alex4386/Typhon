@@ -37,8 +37,8 @@ import me.alex4386.typhon.engine.math.BlockPos;
  * @param maxEruptionRate cap on the eruption rate (m³ per physical second)
  * @param dormantTimeScale physical seconds per simulated second while not erupting
  * @param eruptiveTimeScale physical seconds per simulated second while erupting
- * @param stepIntervalTicks how often the chamber steps
- * @param sampleIntervalTicks how often a {@link MagmaEvents.ChamberSample} is emitted (0 = never)
+ * @param stepPeriodSeconds how often the chamber steps (simulated seconds)
+ * @param samplePeriodSeconds how often a {@link MagmaEvents.ChamberSample} is emitted (0 = never)
  */
 public record MagmaChamberConfig(
         String volcanoId,
@@ -67,8 +67,8 @@ public record MagmaChamberConfig(
         double maxEruptionRate,
         double dormantTimeScale,
         double eruptiveTimeScale,
-        int stepIntervalTicks,
-        int sampleIntervalTicks) {
+        double stepPeriodSeconds,
+        double samplePeriodSeconds) {
 
     public MagmaChamberConfig {
         Objects.requireNonNull(volcanoId, "volcanoId");
@@ -90,8 +90,8 @@ public record MagmaChamberConfig(
         requirePositive("maxEruptionRate", maxEruptionRate);
         requirePositive("dormantTimeScale", dormantTimeScale);
         requirePositive("eruptiveTimeScale", eruptiveTimeScale);
-        if (stepIntervalTicks < 1) throw new IllegalArgumentException("stepIntervalTicks must be >= 1");
-        if (sampleIntervalTicks < 0) throw new IllegalArgumentException("sampleIntervalTicks must be >= 0");
+        if (!(stepPeriodSeconds > 0)) throw new IllegalArgumentException("stepPeriodSeconds must be > 0");
+        if (!(samplePeriodSeconds >= 0)) throw new IllegalArgumentException("samplePeriodSeconds must be >= 0");
     }
 
     /**
@@ -133,8 +133,8 @@ public record MagmaChamberConfig(
         b.maxEruptionRate = maxEruptionRate;
         b.dormantTimeScale = dormantTimeScale;
         b.eruptiveTimeScale = eruptiveTimeScale;
-        b.stepIntervalTicks = stepIntervalTicks;
-        b.sampleIntervalTicks = sampleIntervalTicks;
+        b.stepPeriodSeconds = stepPeriodSeconds;
+        b.samplePeriodSeconds = samplePeriodSeconds;
         return b;
     }
 
@@ -169,8 +169,8 @@ public record MagmaChamberConfig(
         private double maxEruptionRate = 100;
         private double dormantTimeScale = 5000;
         private double eruptiveTimeScale = 1;
-        private int stepIntervalTicks = 20;
-        private int sampleIntervalTicks = 100;
+        private double stepPeriodSeconds = 1.0;
+        private double samplePeriodSeconds = 5.0;
 
         private Builder(String volcanoId, BlockPos center) {
             this.volcanoId = volcanoId;
@@ -201,8 +201,8 @@ public record MagmaChamberConfig(
         public Builder maxEruptionRate(double v) { maxEruptionRate = v; return this; }
         public Builder dormantTimeScale(double v) { dormantTimeScale = v; return this; }
         public Builder eruptiveTimeScale(double v) { eruptiveTimeScale = v; return this; }
-        public Builder stepIntervalTicks(int v) { stepIntervalTicks = v; return this; }
-        public Builder sampleIntervalTicks(int v) { sampleIntervalTicks = v; return this; }
+        public Builder stepPeriodSeconds(double v) { stepPeriodSeconds = v; return this; }
+        public Builder samplePeriodSeconds(double v) { samplePeriodSeconds = v; return this; }
 
         public MagmaChamberConfig build() {
             return new MagmaChamberConfig(volcanoId, center, volume, compressibilityPerMPa, lithostaticDepth,
@@ -210,7 +210,7 @@ public record MagmaChamberConfig(
                     rechargeTemperatureC, rechargeSilicaWt, rechargeWaterWt, initialTemperatureC, initialSilicaWt,
                     initialWaterWt, initialOverpressureMPa, wallTemperatureC, coolingTimescale, degassingTimescale,
                     crystalSilicaWt, conduit, fragmentedViscosity, maxEruptionRate, dormantTimeScale,
-                    eruptiveTimeScale, stepIntervalTicks, sampleIntervalTicks);
+                    eruptiveTimeScale, stepPeriodSeconds, samplePeriodSeconds);
         }
     }
 }

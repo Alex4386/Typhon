@@ -50,7 +50,7 @@ class AshTest {
 
     private static List<EngineFrame> run(Engine engine, int ticks) {
         List<EngineFrame> frames = new ArrayList<>();
-        for (int i = 0; i < ticks; i++) frames.add(engine.tick());
+        for (int i = 0; i < ticks; i++) frames.add(engine.step());
         return frames;
     }
 
@@ -144,7 +144,7 @@ class AshTest {
         grid.addDeposit(grid.index(1, 0), 0.15 * config.depositBulkDensity * cellArea); // 15 cm
         Outbox outbox = new Outbox();
         grid.applyDeposits(terrain, outbox, config);
-        List<BlockChange> changes = outbox.drain(0).blockChanges();
+        List<BlockChange> changes = outbox.drain(0, 0).blockChanges();
 
         BlockId tuff = BlockId.minecraft("tuff");
         BlockId gravel = BlockId.minecraft("gravel");
@@ -165,13 +165,13 @@ class AshTest {
 
         // Re-applying with no new deposit changes nothing.
         grid.applyDeposits(terrain, outbox, config);
-        assertTrue(outbox.drain(1).blockChanges().isEmpty());
+        assertTrue(outbox.drain(1, 0).blockChanges().isEmpty());
 
         // Growing the thin deposit upgrades the cover in place (CAS against the previous cover).
         grid.addDeposit(grid.index(1, 0), 0.30 * config.depositBulkDensity * cellArea);
         grid.applyDeposits(terrain, outbox, config);
         BlockId powder = BlockId.minecraft("light_gray_concrete_powder");
-        assertTrue(outbox.drain(2).blockChanges().contains(BlockChange.replace(new BlockPos(8, 63, 0), gravel, powder)));
+        assertTrue(outbox.drain(2, 0).blockChanges().contains(BlockChange.replace(new BlockPos(8, 63, 0), gravel, powder)));
     }
 
     @Test
@@ -184,7 +184,7 @@ class AshTest {
         grid.addDeposit(grid.index(0, 0), 0.10 * config.depositBulkDensity * 64);
         Outbox outbox = new Outbox();
         grid.applyDeposits(terrain, outbox, config);
-        long gravel = outbox.drain(0).blockChanges().stream()
+        long gravel = outbox.drain(0, 0).blockChanges().stream()
                 .filter(c -> c.to().id().equals(BlockId.minecraft("gravel"))).count();
         assertTrue(gravel > 5 && gravel < 59, "gravel columns " + gravel);
         assertEquals(AshGrid.columnNoise(3, -7), AshGrid.columnNoise(3, -7));
@@ -216,11 +216,11 @@ class AshTest {
     }
 
     /** Count of AshFall events over a Vulcanian run with the given aggregation. */
-    private static List<AshFall> ashFalls(double changeFraction, int refreshTicks) {
+    private static List<AshFall> ashFalls(double changeFraction, double refreshSeconds) {
         TerrainModel terrain = new TerrainModel();
         TephraConfig config = smallGrid();
         config.ashEventChangeFraction = changeFraction;
-        config.ashEventRefreshTicks = refreshTicks;
+        config.ashEventRefreshSeconds = refreshSeconds;
         TephraSubsystem tephra = new TephraSubsystem("tephra", terrain, config);
         Engine engine = Engine.builder(9).add(terrain).add(tephra).build();
         engine.submit(TephraTestSupport.flat(22, 99));
@@ -230,15 +230,15 @@ class AshTest {
         for (int i = 0; i < 20 * 840; i++) {
             if (i == 20 * 240) tephra.stopPhase();
             // Keep only the ash-fall events: whole frames of a 14-minute run would not fit the test heap.
-            events(List.of(engine.tick()), AshFall.class).forEach(falls::add);
+            events(List.of(engine.step()), AshFall.class).forEach(falls::add);
         }
         return falls;
     }
 
     @Test
     void ashFallEventsAreAggregatedAndRegionsClear() {
-        List<AshFall> everyEvaluation = ashFalls(0, 1);
-        List<AshFall> aggregated = ashFalls(new TephraConfig().ashEventChangeFraction, new TephraConfig().ashEventRefreshTicks);
+        List<AshFall> everyEvaluation = ashFalls(0, 0.05);
+        List<AshFall> aggregated = ashFalls(new TephraConfig().ashEventChangeFraction, new TephraConfig().ashEventRefreshSeconds);
         assertTrue(aggregated.size() * 3 < everyEvaluation.size(),
                 aggregated.size() + " aggregated vs " + everyEvaluation.size() + " unaggregated");
 

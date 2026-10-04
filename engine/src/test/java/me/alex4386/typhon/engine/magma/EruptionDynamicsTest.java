@@ -15,6 +15,8 @@ import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.volcano.EruptiveRegime;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
+import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 /** Conduit-controlled eruption dynamics: explosive → effusive transitions and explosion cycles. */
 class EruptionDynamicsTest {
@@ -54,7 +56,7 @@ class EruptionDynamicsTest {
         List<EngineEvent> events = new ArrayList<>();
         List<ConduitBurst> bursts = new ArrayList<>();
         for (int i = 0; i < ticks; i++) {
-            events.addAll(engine.tick().events());
+            events.addAll(engine.step().events());
             bursts.addAll(chamber.drainBursts());
         }
         return new Run(events, bursts);
@@ -96,9 +98,9 @@ class EruptionDynamicsTest {
         assertTrue(vulcanian.size() >= 2, "repeated plug failures: " + vulcanian.size());
         assertTrue(run.bursts().stream().noneMatch(b -> b.kind() == ConduitBurst.Kind.STROMBOLIAN),
                 "gas slugs cannot form in viscous dacite");
-        double resealTicks = config.conduit().plugResealSeconds() / config.eruptiveTimeScale() * 20;
+        double resealSeconds = config.conduit().plugResealSeconds() / config.eruptiveTimeScale();
         for (int i = 1; i < vulcanian.size(); i++) {
-            assertTrue(vulcanian.get(i).tick() - vulcanian.get(i - 1).tick() > resealTicks, "a new plug must seal first");
+            assertTrue(vulcanian.get(i).time() - vulcanian.get(i - 1).time() > resealSeconds, "a new plug must seal first");
         }
         for (ConduitBurst b : vulcanian) {
             assertTrue(b.overpressureMPa() >= config.conduit().plugStrengthMPa());
@@ -115,14 +117,14 @@ class EruptionDynamicsTest {
 
         assertTrue(chamber.erupting(), "supply balances outflow: persistent activity");
         assertEquals(EruptiveRegime.OPEN_VENT, chamber.eruptiveRegime());
-        List<Long> ticks = run.bursts().stream().map(ConduitBurst::tick).toList();
-        assertTrue(ticks.size() >= 15, "Strombolian explosions: " + ticks.size());
+        List<Double> times = run.bursts().stream().map(ConduitBurst::time).toList();
+        assertTrue(times.size() >= 15, "Strombolian explosions: " + times.size());
         assertTrue(run.bursts().stream().allMatch(b -> b.kind() == ConduitBurst.Kind.STROMBOLIAN));
 
-        double[] intervals = new double[ticks.size() - 1];
+        double[] intervals = new double[times.size() - 1];
         double mean = 0;
         for (int i = 0; i < intervals.length; i++) {
-            intervals[i] = (ticks.get(i + 1) - ticks.get(i)) / 20.0;
+            intervals[i] = times.get(i + 1) - times.get(i);
             mean += intervals[i] / intervals.length;
         }
         double var = 0;
@@ -145,7 +147,7 @@ class EruptionDynamicsTest {
         Engine engine = Engine.builder(0).add(chamber).build();
         boolean ended = false;
         for (int i = 0; i < 20 * 600 && !ended; i++) {
-            ended = !of(engine.tick().events(), EruptionEnded.class).isEmpty();
+            ended = !of(engine.step().events(), EruptionEnded.class).isEmpty();
         }
         assertTrue(ended);
         assertEquals(config.reopenOverpressureMPa(), chamber.failureOverpressureMPa(), 1e-9, "freshly open conduit");
@@ -170,13 +172,13 @@ class EruptionDynamicsTest {
         Engine engine = Engine.builder(3).add(first).build();
         run(engine, first, before);
         assertTrue(first.plugPressureMPa() > 0, "save with gas trapped under the plug");
-        String saved = engine.saveState().toString();
+        InMemorySaveStore saved = Saves.save(engine);
 
         MagmaChamber second = new MagmaChamber(config);
-        Engine resumed = Engine.builder(3).add(second).restore(JsonParser.parseString(saved).getAsJsonObject()).build();
+        Engine resumed = Engine.builder(3).add(second).restore(saved).build();
         Run rest = run(resumed, second, after);
 
-        List<ConduitBurst> expected = all.bursts().stream().filter(b -> b.tick() >= before).toList();
+        List<ConduitBurst> expected = all.bursts().stream().filter(b -> b.time() >= before / 20.0).toList();
         assertEquals(expected, rest.bursts());
         assertEquals(all.events().subList(all.events().size() - rest.events().size(), all.events().size()), rest.events());
         assertEquals(reference.overpressureMPa(), second.overpressureMPa());

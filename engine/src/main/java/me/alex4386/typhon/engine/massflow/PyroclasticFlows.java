@@ -39,7 +39,7 @@ public final class PyroclasticFlows extends MassFlowField {
     public static final double DENSE_FLOW_DENSITY = 1000;
 
     private int steamEvents;
-    private long steamStamp = Long.MIN_VALUE;
+    private double steamStamp = Double.NaN;
 
     public PyroclasticFlows(String id, TerrainModel terrain, MassFlowConfig config) {
         super(id, MassFlowKind.PDC, terrain, config);
@@ -81,18 +81,18 @@ public final class PyroclasticFlows extends MassFlowField {
     }
 
     @Override
-    protected void process(MassFlowChunk c, int i, double dt, Outbox outbox, long tick) {
+    protected void process(MassFlowChunk c, int i, double dt, Outbox outbox, double time) {
         double ambient = config.ambientC;
         c.temperature[i] = ambient + (c.temperature[i] - ambient) * StrictMath.exp(-dt / config.coolingTimescale);
 
         if (submerged(c, i)) {
             double loss = c.depth[i] * (1 - StrictMath.exp(-dt / config.waterLossTimescale));
-            if (steamStamp != tick) {
-                steamStamp = tick;
+            if (steamStamp != time) {
+                steamStamp = time;
                 steamEvents = 0;
             }
             if (loss > 0 && steamEvents < config.maxSteamEventsPerStep) {
-                outbox.emit(new MassFlowEvents.PdcSteam(tick, id,
+                outbox.emit(new MassFlowEvents.PdcSteam(time, id,
                         new BlockPos(c.worldX(i), c.waterY[i], c.worldZ(i)), loss * cellArea));
                 steamEvents++;
             }
@@ -119,19 +119,19 @@ public final class PyroclasticFlows extends MassFlowField {
     }
 
     @Override
-    protected EngineEvent startedEvent(long tick, PendingStart start) {
-        return new MassFlowEvents.PdcStarted(tick, id, start.trigger(), start.position(), start.volumeM3(),
+    protected EngineEvent startedEvent(double time, PendingStart start) {
+        return new MassFlowEvents.PdcStarted(time, id, start.trigger(), start.position(), start.volumeM3(),
                 start.rateM3PerS(), start.temperatureC());
     }
 
     @Override
-    protected EngineEvent frontEvent(long tick, BlockPos front, double runoutM, int cells, double volume,
+    protected EngineEvent frontEvent(double time, BlockPos front, double runoutM, int cells, double volume,
             double maxSpeed, double tracer, List<FlowCell> reported) {
-        return new MassFlowEvents.PdcFront(tick, id, front, runoutM, cells, volume, maxSpeed, tracer, reported);
+        return new MassFlowEvents.PdcFront(time, id, front, runoutM, cells, volume, maxSpeed, tracer, reported);
     }
 
     @Override
-    protected EngineEvent depositEvent(long tick, int cells, double volume, int blocks) {
-        return new MassFlowEvents.PdcDeposit(tick, id, cells, volume, blocks);
+    protected EngineEvent depositEvent(double time, int cells, double volume, int blocks) {
+        return new MassFlowEvents.PdcDeposit(time, id, cells, volume, blocks);
     }
 }

@@ -16,7 +16,8 @@ public final class MassFlowConfig {
     public double metersPerBlock = 1.0;
     /** Simulated seconds per engine second. */
     public double timeScale = 1.0;
-    public int stepIntervalTicks = 2;
+    /** Simulated seconds between field steps (sub-stepped internally for CFL stability). */
+    public double stepPeriodSeconds = 0.1;
     public double gravity = 9.81;
     /** Courant number for sub-stepping: {@code dt ≤ cfl · dx / (|u| + √(g h))}. */
     public double cfl = 0.4;
@@ -80,7 +81,8 @@ public final class MassFlowConfig {
     public double rainMinErodible = 0.05;
 
     // ── Telemetry ──
-    public int frontEventInterval = 20;
+    /** Simulated seconds between front events (0 = never). */
+    public double frontEventPeriodSeconds = 1.0;
     public int maxReportedCells = 256;
 
     /** Dense pyroclastic density current (block-and-ash flow / dense basal underflow). */
@@ -111,7 +113,7 @@ public final class MassFlowConfig {
         MassFlowConfig c = new MassFlowConfig();
         c.metersPerBlock = metersPerBlock;
         c.timeScale = timeScale;
-        c.stepIntervalTicks = stepIntervalTicks;
+        c.stepPeriodSeconds = stepPeriodSeconds;
         c.gravity = gravity;
         c.cfl = cfl;
         c.maxSubsteps = maxSubsteps;
@@ -140,7 +142,7 @@ public final class MassFlowConfig {
         c.rainFailureWaterRatio = rainFailureWaterRatio;
         c.rainMinSlope = rainMinSlope;
         c.rainMinErodible = rainMinErodible;
-        c.frontEventInterval = frontEventInterval;
+        c.frontEventPeriodSeconds = frontEventPeriodSeconds;
         c.maxReportedCells = maxReportedCells;
         return c;
     }
@@ -160,7 +162,7 @@ public final class MassFlowConfig {
         requirePositive("waterLossTimescale", waterLossTimescale);
         requirePositive("waterDepositionTimescale", waterDepositionTimescale);
         requirePositive("maxSedimentFraction", maxSedimentFraction);
-        if (stepIntervalTicks < 1) throw new IllegalArgumentException("stepIntervalTicks must be >= 1");
+        if (!(stepPeriodSeconds > 0)) throw new IllegalArgumentException("stepPeriodSeconds must be > 0");
         if (maxSubsteps < 1) throw new IllegalArgumentException("maxSubsteps must be >= 1");
         if (frictionCoefficient < 0 || frictionAtMaxSediment < 0) {
             throw new IllegalArgumentException("friction coefficients must be >= 0");
@@ -168,7 +170,7 @@ public final class MassFlowConfig {
         if (stopSpeed < 0) throw new IllegalArgumentException("stopSpeed must be >= 0");
         if (rainFailureWaterRatio < 0) throw new IllegalArgumentException("rainFailureWaterRatio must be >= 0");
         if (!(porosity >= 0 && porosity < 1)) throw new IllegalArgumentException("porosity must be in [0, 1)");
-        if (frontEventInterval < 0 || maxReportedCells < 0) throw new IllegalArgumentException("telemetry limits must be >= 0");
+        if (frontEventPeriodSeconds < 0 || maxReportedCells < 0) throw new IllegalArgumentException("telemetry limits must be >= 0");
     }
 
     private static void requirePositive(String name, double value) {

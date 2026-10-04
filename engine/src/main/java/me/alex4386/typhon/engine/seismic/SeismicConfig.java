@@ -36,8 +36,8 @@ import me.alex4386.typhon.engine.math.BlockPos;
  * @param hypocenterSpread lateral scatter of hypocentres (blocks, 1σ)
  * @param rsamWindowSeconds averaging time constant of RSAM
  * @param rateWindowSeconds averaging time constant of the event-rate estimates
- * @param stepIntervalTicks how often the model steps
- * @param sampleIntervalTicks how often an {@link RsamSample} is emitted (0 = never)
+ * @param stepPeriodSeconds how often the model steps (simulated seconds)
+ * @param samplePeriodSeconds how often an {@link RsamSample} is emitted (0 = never)
  */
 public record SeismicConfig(
         String volcanoId,
@@ -68,8 +68,8 @@ public record SeismicConfig(
         double hypocenterSpread,
         double rsamWindowSeconds,
         double rateWindowSeconds,
-        int stepIntervalTicks,
-        int sampleIntervalTicks) {
+        double stepPeriodSeconds,
+        double samplePeriodSeconds) {
 
     public SeismicConfig {
         Objects.requireNonNull(volcanoId, "volcanoId");
@@ -87,8 +87,8 @@ public record SeismicConfig(
         if (!(tremorMeanDurationSeconds > 0) || !(swarmMeanDurationSeconds > 0)) {
             throw new IllegalArgumentException("mean durations must be positive");
         }
-        if (stepIntervalTicks < 1) throw new IllegalArgumentException("stepIntervalTicks must be >= 1");
-        if (sampleIntervalTicks < 0) throw new IllegalArgumentException("sampleIntervalTicks must be >= 0");
+        if (!(stepPeriodSeconds > 0)) throw new IllegalArgumentException("stepPeriodSeconds must be > 0");
+        if (!(samplePeriodSeconds >= 0)) throw new IllegalArgumentException("samplePeriodSeconds must be >= 0");
     }
 
     public static Builder builder(String volcanoId, BlockPos conduitTop) {
@@ -124,8 +124,8 @@ public record SeismicConfig(
         private double hypocenterSpread = 20;
         private double rsamWindowSeconds = 60;
         private double rateWindowSeconds = 120;
-        private int stepIntervalTicks = 10;
-        private int sampleIntervalTicks = 100;
+        private double stepPeriodSeconds = 0.5;
+        private double samplePeriodSeconds = 5.0;
 
         private Builder(String volcanoId, BlockPos conduitTop) {
             this.volcanoId = volcanoId;
@@ -158,8 +158,8 @@ public record SeismicConfig(
         public Builder hypocenterSpread(double v) { hypocenterSpread = v; return this; }
         public Builder rsamWindowSeconds(double v) { rsamWindowSeconds = v; return this; }
         public Builder rateWindowSeconds(double v) { rateWindowSeconds = v; return this; }
-        public Builder stepIntervalTicks(int v) { stepIntervalTicks = v; return this; }
-        public Builder sampleIntervalTicks(int v) { sampleIntervalTicks = v; return this; }
+        public Builder stepPeriodSeconds(double v) { stepPeriodSeconds = v; return this; }
+        public Builder samplePeriodSeconds(double v) { samplePeriodSeconds = v; return this; }
 
         public SeismicConfig build() {
             return new SeismicConfig(volcanoId, conduitTop, failureOverpressureMPa, backgroundVtRate, vtPerMPa,
@@ -167,7 +167,7 @@ public record SeismicConfig(
                     tremorMeanDurationSeconds, tremorBaseMagnitude, explosionRate, swarmTriggerProbability,
                     swarmMeanDurationSeconds, swarmRateMultiplier, vtBValue, swarmBValue, lpBValue, explosionBValue,
                     minMagnitude, maxMagnitude, lpMaxMagnitude, explosionMinMagnitude, explosionMaxMagnitude,
-                    hypocenterSpread, rsamWindowSeconds, rateWindowSeconds, stepIntervalTicks, sampleIntervalTicks);
+                    hypocenterSpread, rsamWindowSeconds, rateWindowSeconds, stepPeriodSeconds, samplePeriodSeconds);
         }
     }
 }

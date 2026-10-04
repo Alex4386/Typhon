@@ -26,6 +26,8 @@ import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.BlockState;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
+import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 class GeothermalTest {
     static final BlockId ANDESITE = BlockId.minecraft("andesite");
@@ -113,7 +115,8 @@ class GeothermalTest {
 
     static List<EngineFrame> run(Engine engine, Geothermal geothermal, int steps) {
         List<EngineFrame> frames = new ArrayList<>();
-        for (int i = 0; i < steps * geothermal.interval(); i++) frames.add(engine.tick());
+        long perStep = Math.round(geothermal.periodSeconds() * 20);
+        for (int i = 0; i < steps * perStep; i++) frames.add(engine.step());
         return frames;
     }
 
@@ -532,13 +535,13 @@ class GeothermalTest {
         Geothermal first = activeVolcano(world);
         Engine before = Engine.builder(5).add(first).build();
         List<EngineFrame> resumed = new ArrayList<>(run(before, first, half));
-        String saved = before.saveState().toString();
+        InMemorySaveStore saved = Saves.save(before);
 
         GeothermalConfig config = smallConfig();
         config.timeScale = 900;
         Geothermal second = new Geothermal("test", config, CENTER, new StubMagma(1150), world,
                 BlockPalette.unrestricted(), List.of(VentSite.crater("main", CENTER, 3), VentSite.fissure("rift", new BlockPos(12, 64, 0), 0.5, 20)));
-        Engine after = Engine.builder(5).add(second).restore(JsonParser.parseString(saved).getAsJsonObject()).build();
+        Engine after = Engine.builder(5).add(second).restore(saved).build();
         resumed.addAll(run(after, second, half));
 
         assertEquals(reference, resumed);
@@ -551,14 +554,17 @@ class GeothermalTest {
     void restoreRejectsMismatchedGrid() {
         Geothermal geothermal = activeVolcano(flatTerrain(40, ANDESITE));
         Engine engine = Engine.builder(1).add(geothermal).build();
-        String saved = engine.saveState().toString();
+        InMemorySaveStore saved = Saves.save(engine);
 
         GeothermalConfig other = smallConfig();
         other.cellSize = 8;
         Geothermal mismatched = new Geothermal("test", other, CENTER, new StubMagma(1150), flatTerrain(40, ANDESITE),
                 BlockPalette.unrestricted(), List.of());
+        // The configuration hash catches the change first ...
+        assertThrows(IllegalStateException.class, () -> Engine.builder(1).add(mismatched).restore(saved).build());
+        // ... and the grid check still guards a forced restore.
         assertThrows(IllegalArgumentException.class, () -> Engine.builder(1).add(mismatched)
-                .restore(JsonParser.parseString(saved).getAsJsonObject()).build());
+                .restore(saved).allowConfigChanges().build());
     }
 
     @Test
@@ -567,7 +573,7 @@ class GeothermalTest {
         config.stepSeconds = 5;
         Geothermal geothermal = new Geothermal("v1", config, CENTER, new StubMagma(0), flatTerrain(40, ANDESITE),
                 BlockPalette.unrestricted(), List.of());
-        assertEquals(100, geothermal.interval());
+        assertEquals(5.0, geothermal.periodSeconds());
         assertEquals("geothermal:v1", geothermal.id());
         assertTrue(BlockState.parse("minecraft:sulfur_spike[thickness=tip,vertical_direction=up]")
                 .equals(Geothermal.spikeState(0, 1)));

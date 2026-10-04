@@ -24,6 +24,9 @@ import me.alex4386.typhon.engine.testing.StubMagmaState;
 import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.BlockState;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
+import me.alex4386.typhon.engine.save.InMemorySaveStore;
+import me.alex4386.typhon.engine.save.SaveStore;
 
 class DeformationModelTest {
     private static final BlockId STONE = BlockId.minecraft("stone");
@@ -154,14 +157,14 @@ class DeformationModelTest {
         DeformationConfig c = new DeformationConfig("v", 1e9, 200, 0, 0);
         c.metersPerBlock = 4;
         c.terrainRadiusBlocks = 6;
-        c.terrainIntervalTicks = 20;
+        c.terrainPeriodSeconds = 1;
         c.maxTerrainChangesPerCheck = 10_000;
         return c;
     }
 
     record World(Engine engine, TerrainModel terrain, DeformationModel model) {}
 
-    private static World world(StubMagmaState magma, JsonObject restore, TerrainSnapshot snapshot) {
+    private static World world(StubMagmaState magma, SaveStore restore, TerrainSnapshot snapshot) {
         TerrainModel terrain = new TerrainModel();
         DeformationModel model = new DeformationModel(shallowConfig(), magma, null, terrain);
         Engine.Builder builder = Engine.builder(0).add(terrain).add(model);
@@ -213,12 +216,12 @@ class DeformationModelTest {
         magma2.overpressure = 50;
         World first = world(magma2, null, flat(32));
         run(first.engine(), 60);
-        String saved = first.engine().saveState().toString();
+        InMemorySaveStore saved = Saves.save(first.engine());
         TerrainSnapshot live = resample(first.terrain(), 32);
 
         StubMagmaState magma3 = StubMagmaState.basalt();
         magma3.overpressure = 50;
-        World second = world(magma3, JsonParser.parseString(saved).getAsJsonObject(), live);
+        World second = world(magma3, saved, live);
         assertEquals(first.model().appliedBlocks(0, 0), second.model().appliedBlocks(0, 0));
         assertEquals(expected.subList(60, 400), run(second.engine(), 340));
     }
@@ -241,7 +244,7 @@ class DeformationModelTest {
 
     private static List<EngineFrame> run(Engine engine, int ticks) {
         List<EngineFrame> frames = new ArrayList<>();
-        for (int i = 0; i < ticks; i++) frames.add(engine.tick());
+        for (int i = 0; i < ticks; i++) frames.add(engine.step());
         return frames;
     }
 

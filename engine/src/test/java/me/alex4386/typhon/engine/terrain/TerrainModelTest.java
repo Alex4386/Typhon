@@ -21,7 +21,7 @@ class TerrainModelTest {
         TerrainChunk chunk = new TerrainChunk(-1, 0);
         chunk.set(-3, 5, new TerrainColumn(70, 72, BlockId.minecraft("sand")));
         engine.submit(new TerrainSnapshot(List.of(chunk)));
-        engine.tick();
+        engine.step();
         chunk.set(-3, 5, TerrainColumn.dry(10, STONE)); // host reuses its buffer
 
         TerrainColumn column = terrain.column(-3, 5);

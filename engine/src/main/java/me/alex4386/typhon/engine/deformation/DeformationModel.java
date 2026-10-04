@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import java.util.function.Supplier;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.BlockChange;
@@ -18,6 +19,9 @@ import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.MagmaState;
 import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.BlockState;
+import me.alex4386.typhon.engine.save.FieldChunk;
+import me.alex4386.typhon.engine.save.StateReader;
+import me.alex4386.typhon.engine.save.StateWriter;
 
 /**
  * Elastic ground deformation: a {@link Mogi} source for the pressurised chamber plus one
@@ -30,7 +34,7 @@ import me.alex4386.typhon.engine.world.BlockState;
  * lowers terrain columns — rate-limited and compare-and-set against the surface.
  */
 public final class DeformationModel implements Subsystem {
-    static final int STEP_TICKS = 20;
+    static final double STEP_SECONDS = 1.0;
     private static final BlockId WATER = BlockId.minecraft("water");
 
     private final DeformationConfig config;
@@ -40,6 +44,7 @@ public final class DeformationModel implements Subsystem {
 
     /** Whole blocks of uplift already applied per column (packed x/z key); absent = 0. */
     private final Map<Long, Integer> applied = new HashMap<>();
+    private double lastTime;
 
     /**
      * @param dikes current dike sources (e.g. {@code DikePropagation::geometries}); may be {@code null}
@@ -60,17 +65,22 @@ public final class DeformationModel implements Subsystem {
     }
 
     @Override
-    public int interval() {
-        return STEP_TICKS;
+    public double periodSeconds() {
+        return STEP_SECONDS;
+    }
+
+    @Override
+    public DeformationEvents.DeformationSample snapshot() {
+        return sample(lastTime);
     }
 
     @Override
     public void step(StepContext context) {
-        long tick = context.tick();
-        if (Math.floorMod(tick, config.sampleIntervalTicks) == 0) {
-            context.outbox().emit(sample(tick));
+        lastTime = context.time();
+        if (context.crossed(config.samplePeriodSeconds)) {
+            context.outbox().emit(sample(context.time()));
         }
-        if (config.applyToTerrain && terrain != null && Math.floorMod(tick, config.terrainIntervalTicks) == 0) {
+        if (config.applyToTerrain && terrain != null && context.crossed(config.terrainPeriodSeconds)) {
             adjustTerrain(context);
         }
     }
@@ -110,10 +120,10 @@ public final class DeformationModel implements Subsystem {
         return new StationReading(station.name(), displacementAt(x, z), tiltEast * 1e6, tiltNorth * 1e6);
     }
 
-    public DeformationEvents.DeformationSample sample(long tick) {
+    public DeformationEvents.DeformationSample sample(double time) {
         List<StationReading> readings = new ArrayList<>(config.stations.size());
         for (GeodeticStation station : config.stations) readings.add(read(station));
-        return new DeformationEvents.DeformationSample(tick, config.volcanoId, chamberVolumeChange(),
+        return new DeformationEvents.DeformationSample(time, config.volcanoId, chamberVolumeChange(),
                 upliftAt(config.centerX, config.centerZ), readings);
     }
 
@@ -161,7 +171,7 @@ public final class DeformationModel implements Subsystem {
             }
         }
         if (changes > 0) {
-            context.outbox().emit(new DeformationEvents.GroundDeformed(context.tick(), config.volcanoId, raised, lowered));
+            context.outbox().emit(new DeformationEvents.GroundDeformed(context.time(), config.volcanoId, raised, lowered));
         }
     }
 
@@ -170,6 +180,7 @@ public final class DeformationModel implements Subsystem {
         return applied.getOrDefault(key(x, z), 0);
     }
 
+    @Override
     public DeformationConfig config() {
         return config;
     }
@@ -181,25 +192,36 @@ public final class DeformationModel implements Subsystem {
     // ── Persistence ──
 
     @Override
-    public void saveState(JsonObject out) {
-        List<Long> keys = new ArrayList<>(applied.keySet());
-        keys.sort(null);
-        JsonArray array = new JsonArray();
-        for (long k : keys) {
-            JsonArray entry = new JsonArray();
-            entry.add(k);
-            entry.add(applied.get(k));
-            array.add(entry);
+    public void saveState(StateWriter writer) {
+        writer.json().addProperty("lastTime", lastTime);
+        // Applied whole-block uplift per column, one 16×16 int array per chunk.
+        Map<Long, int[]> chunks = new TreeMap<>();
+        for (Map.Entry<Long, Integer> e : applied.entrySet()) {
+            int x = (int) (e.getKey() >> 32);
+            int z = (int) (long) e.getKey();
+            long chunkKey = ((long) (x >> 4) << 32) | ((z >> 4) & 0xffffffffL);
+            chunks.computeIfAbsent(chunkKey, k -> new int[256])[((z & 15) << 4) | (x & 15)] = e.getValue();
         }
-        out.add("applied", array);
+        StateWriter.Field field = writer.field("appliedUplift", 1);
+        for (Map.Entry<Long, int[]> e : chunks.entrySet()) {
+            field.put((int) (e.getKey() >> 32), (int) (long) e.getKey(), new FieldChunk().ints("blocks", e.getValue()));
+        }
     }
 
     @Override
-    public void loadState(JsonObject in) {
+    public void loadState(StateReader reader) {
+        lastTime = reader.json().get("lastTime").getAsDouble();
         applied.clear();
-        for (JsonElement e : in.getAsJsonArray("applied")) {
-            JsonArray entry = e.getAsJsonArray();
-            applied.put(entry.get(0).getAsLong(), entry.get(1).getAsInt());
+        StateReader.Field field = reader.field("appliedUplift");
+        if (field == null) return;
+        for (StateReader.Entry entry : field.chunks()) {
+            int[] blocks = entry.data().ints("blocks");
+            for (int i = 0; i < blocks.length; i++) {
+                if (blocks[i] == 0) continue;
+                int x = (entry.chunkX() << 4) | (i & 15);
+                int z = (entry.chunkZ() << 4) | (i >> 4);
+                applied.put(((long) x << 32) | (z & 0xffffffffL), blocks[i]);
+            }
         }
     }
 }

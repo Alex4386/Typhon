@@ -25,6 +25,8 @@ import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
+import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 class DikePropagationTest {
     private static final int LONG = 20 * 3600;
@@ -211,10 +213,10 @@ class DikePropagationTest {
         first.engine().submit(new DikeCommands.ForceDike("v"));
         run(first.engine(), before);
         assertTrue(first.dikes().dikes().get(0).propagating(), "save point should be mid-propagation");
-        String saved = first.engine().saveState().toString();
+        InMemorySaveStore saved = Saves.save(first.engine());
 
         DikeTestWorld.World second = world(12, basalt(14).build(), fastConfig(), cone(),
-                JsonParser.parseString(saved).getAsJsonObject());
+                saved);
         List<EngineFrame> resumed = run(second.engine(), after);
         assertEquals(expected.subList(before, before + after), resumed);
     }

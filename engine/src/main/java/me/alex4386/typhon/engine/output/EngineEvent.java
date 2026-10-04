@@ -7,6 +7,6 @@ package me.alex4386.typhon.engine.output;
  * fidelity available per viewer (vanilla effects, server-side extras, or a client mod).
  */
 public interface EngineEvent {
-    /** Engine tick at which the event occurred. */
-    long tick();
+    /** Simulation time at which the event occurred, in seconds. */
+    double time();
 }

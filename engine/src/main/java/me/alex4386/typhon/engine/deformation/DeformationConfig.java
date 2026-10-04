@@ -23,15 +23,15 @@ public final class DeformationConfig {
     public double metersPerBlock = VolcanoScaling.DEFAULT.metersPerBlock();
 
     public List<GeodeticStation> stations = new ArrayList<>();
-    /** Ticks between {@link DeformationEvents.DeformationSample}s (multiple of 20). */
-    public int sampleIntervalTicks = 200;
+    /** Simulated seconds between {@link DeformationEvents.DeformationSample}s. */
+    public double samplePeriodSeconds = 10;
 
     /** Turn whole blocks of accumulated uplift/subsidence into terrain changes. */
     public boolean applyToTerrain = true;
     /** Columns within this radius of the centre are adjusted (blocks). */
     public int terrainRadiusBlocks = 48;
-    /** Ticks between terrain checks (multiple of 20). */
-    public int terrainIntervalTicks = 600;
+    /** Simulated seconds between terrain checks. */
+    public double terrainPeriodSeconds = 30;
     /** At most this many column changes per check. */
     public int maxTerrainChangesPerCheck = 256;
 
@@ -57,11 +57,11 @@ public final class DeformationConfig {
         if (!(shearModulusPa > 0)) throw new IllegalArgumentException("shearModulusPa must be > 0");
         if (!(poissonRatio > 0 && poissonRatio < 0.5)) throw new IllegalArgumentException("poissonRatio must be in (0, 0.5)");
         if (!(metersPerBlock > 0)) throw new IllegalArgumentException("metersPerBlock must be > 0");
-        if (sampleIntervalTicks < DeformationModel.STEP_TICKS || sampleIntervalTicks % DeformationModel.STEP_TICKS != 0) {
-            throw new IllegalArgumentException("sampleIntervalTicks must be a positive multiple of " + DeformationModel.STEP_TICKS);
+        if (!(samplePeriodSeconds >= DeformationModel.STEP_SECONDS)) {
+            throw new IllegalArgumentException("samplePeriodSeconds must be at least " + DeformationModel.STEP_SECONDS);
         }
-        if (terrainIntervalTicks < DeformationModel.STEP_TICKS || terrainIntervalTicks % DeformationModel.STEP_TICKS != 0) {
-            throw new IllegalArgumentException("terrainIntervalTicks must be a positive multiple of " + DeformationModel.STEP_TICKS);
+        if (!(terrainPeriodSeconds >= DeformationModel.STEP_SECONDS)) {
+            throw new IllegalArgumentException("terrainPeriodSeconds must be at least " + DeformationModel.STEP_SECONDS);
         }
         if (terrainRadiusBlocks < 0) throw new IllegalArgumentException("terrainRadiusBlocks must be >= 0");
         if (maxTerrainChangesPerCheck < 1) throw new IllegalArgumentException("maxTerrainChangesPerCheck must be >= 1");

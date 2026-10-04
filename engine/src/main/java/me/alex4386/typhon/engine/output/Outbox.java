@@ -7,9 +7,9 @@ import java.util.Map;
 import me.alex4386.typhon.engine.world.BlockId;
 
 /**
- * Collects block changes and events emitted during a tick.
+ * Collects block changes and events emitted during a step.
  *
- * <p>Multiple changes to the same position within one tick are coalesced: the final target wins and
+ * <p>Multiple changes to the same position within one step are coalesced: the final target wins and
  * the earliest {@code expected} is kept, so the host performs a single compare-and-set against the
  * state the engine originally observed.
  */
@@ -32,9 +32,9 @@ public final class Outbox {
         return blockChanges.size();
     }
 
-    /** Takes everything collected so far as a frame. Called by the engine at the end of a tick. */
-    public EngineFrame drain(long tick) {
-        EngineFrame frame = new EngineFrame(tick, new ArrayList<>(blockChanges.values()), events);
+    /** Takes everything collected so far as a frame. Called by the engine at the end of a step. */
+    public EngineFrame drain(long step, long timeMicros) {
+        EngineFrame frame = new EngineFrame(step, timeMicros, new ArrayList<>(blockChanges.values()), events);
         blockChanges.clear();
         events.clear();
         return frame;

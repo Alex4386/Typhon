@@ -1,8 +1,16 @@
 package me.alex4386.typhon.engine.terrain;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import me.alex4386.typhon.engine.command.CommandBus;
+import me.alex4386.typhon.engine.save.FieldChunk;
+import me.alex4386.typhon.engine.save.StateReader;
+import me.alex4386.typhon.engine.save.StateWriter;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.world.BlockId;
@@ -14,8 +22,8 @@ import me.alex4386.typhon.engine.world.BlockId;
  * when they change the surface (e.g. lava solidifying raises the ground). Register it before the
  * subsystems that depend on it so snapshots are applied first.
  *
- * <p>Terrain is not persisted with the engine state: after a restart the host re-sends snapshots of
- * the area around each volcano.
+ * <p>Terrain is persisted with the engine state (it is the simulator's source of truth). Hosts may
+ * still send fresh snapshots after a restart to pick up edits made while the engine was stopped.
  */
 public final class TerrainModel implements Subsystem {
     public static final String ID = "terrain";
@@ -28,8 +36,8 @@ public final class TerrainModel implements Subsystem {
     }
 
     @Override
-    public int interval() {
-        return Integer.MAX_VALUE;
+    public double periodSeconds() {
+        return Double.POSITIVE_INFINITY; // command-driven
     }
 
     @Override
@@ -84,6 +92,54 @@ public final class TerrainModel implements Subsystem {
 
     public int chunkCount() {
         return chunks.size();
+    }
+
+    /** Read-only views of every known chunk, in no particular order. */
+    public List<TerrainChunkView> chunks() {
+        return new ArrayList<>(chunks.values());
+    }
+
+    // ── Persistence: one field chunk per terrain chunk; surface ids through a shared palette ──
+
+    private static final int SCHEMA = 1;
+
+    @Override
+    public void saveState(StateWriter out) {
+        StateWriter.Field field = out.field("columns", SCHEMA);
+        Map<BlockId, Integer> palette = new LinkedHashMap<>();
+        List<Long> keys = new ArrayList<>(chunks.keySet());
+        keys.sort(null);
+        for (long key : keys) {
+            TerrainChunk chunk = chunks.get(key);
+            int[] surface = new int[TerrainChunk.AREA];
+            for (int i = 0; i < TerrainChunk.AREA; i++) {
+                surface[i] = palette.computeIfAbsent(chunk.surface[i], id -> palette.size());
+            }
+            field.put(chunk.chunkX(), chunk.chunkZ(), new FieldChunk()
+                    .ints("groundY", chunk.groundY.clone())
+                    .ints("waterY", chunk.waterY.clone())
+                    .ints("surface", surface));
+        }
+        JsonArray ids = new JsonArray();
+        palette.keySet().forEach(id -> ids.add(id.toString()));
+        out.json().add("palette", ids);
+    }
+
+    @Override
+    public void loadState(StateReader in) {
+        chunks.clear();
+        StateReader.Field field = in.field("columns");
+        if (field == null) return;
+        List<BlockId> palette = new ArrayList<>();
+        for (JsonElement e : in.json().getAsJsonArray("palette")) palette.add(BlockId.parse(e.getAsString()));
+        for (StateReader.Entry entry : field.chunks()) {
+            TerrainChunk chunk = new TerrainChunk(entry.chunkX(), entry.chunkZ());
+            System.arraycopy(entry.data().ints("groundY"), 0, chunk.groundY, 0, TerrainChunk.AREA);
+            System.arraycopy(entry.data().ints("waterY"), 0, chunk.waterY, 0, TerrainChunk.AREA);
+            int[] surface = entry.data().ints("surface");
+            for (int i = 0; i < TerrainChunk.AREA; i++) chunk.surface[i] = palette.get(surface[i]);
+            chunks.put(key(entry.chunkX(), entry.chunkZ()), chunk);
+        }
     }
 
     private static long key(int chunkX, int chunkZ) {

@@ -8,11 +8,12 @@ import java.util.List;
 import me.alex4386.typhon.engine.magma.MeltViscosity;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.random.SimRandom;
-import me.alex4386.typhon.engine.sim.SimTime;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.volcano.EruptiveRegime;
 import me.alex4386.typhon.engine.volcano.MagmaState;
+import me.alex4386.typhon.engine.save.StateReader;
+import me.alex4386.typhon.engine.save.StateWriter;
 
 /**
  * Generates volcanic seismicity from the state of a magma system.
@@ -45,19 +46,21 @@ public final class SeismicityModel implements Subsystem {
     private double vtRatePerMinute;
     private double lpRatePerMinute;
     private double explosionRatePerMinute;
-    private long swarmUntilTick = Long.MIN_VALUE;
-    private long tremorUntilTick = Long.MIN_VALUE;
+    /** End of the current swarm / tremor episode (simulated seconds; negative = none). */
+    private double swarmUntil = -1;
+    private double tremorUntil = -1;
     private double tremorMagnitude;
     private double expectedVtRate;
     private double expectedLpRate;
     private double expectedExplosionRate;
-    private long lastTick = -1;
+    private double lastTime = -1;
 
     public SeismicityModel(SeismicConfig config, MagmaState magma) {
         this.config = config;
         this.magma = magma;
     }
 
+    @Override
     public SeismicConfig config() {
         return config;
     }
@@ -68,21 +71,27 @@ public final class SeismicityModel implements Subsystem {
     }
 
     @Override
-    public int interval() {
-        return config.stepIntervalTicks();
+    public double periodSeconds() {
+        return config.stepPeriodSeconds();
+    }
+
+    @Override
+    public RsamSample snapshot() {
+        return new RsamSample(Math.max(0, lastTime), config.volcanoId(), rsam, vtRatePerMinute, lpRatePerMinute,
+                explosionRatePerMinute, tremorActive(), swarmActive());
     }
 
     @Override
     public void step(StepContext context) {
-        long tick = context.tick();
+        double now = context.time();
         double dt = context.dtSeconds();
         SimRandom random = context.random();
-        lastTick = tick;
+        lastTime = now;
 
         boolean erupting = magma.erupting();
         double eruptionRate = Math.max(0, magma.eruptionRate());
 
-        expectedVtRate = vtRate(tick);
+        expectedVtRate = vtRate(now);
         expectedLpRate = Math.min(config.maxEventRate(), config.backgroundLpRate() + config.lpPerEruptionRate() * eruptionRate);
         // Sustained explosive columns crackle with explosion quakes; discrete explosions (Strombolian,
         // Vulcanian, phreatomagmatic) are reported by the surface coupling via queueExplosion.
@@ -94,20 +103,20 @@ public final class SeismicityModel implements Subsystem {
         double transientAmplitude = 0;
         int vtCount = random.nextPoisson(expectedVtRate * dt);
         for (int i = 0; i < vtCount; i++) {
-            boolean swarm = swarmActive(tick);
+            boolean swarm = swarmActive(now);
             double b = swarm ? config.swarmBValue() : config.vtBValue();
             double m = GutenbergRichter.sample(random, b, config.minMagnitude(), config.maxMagnitude());
             BlockPos hypocenter = hypocenter(random, 0, 0.7, 1.0);
-            transientAmplitude += emit(context, SeismicEventType.VT, m, hypocenter, transientTicks(0.5, m), swarm);
+            transientAmplitude += emit(context, SeismicEventType.VT, m, hypocenter, transientSeconds(0.5, m), swarm);
             if (!swarm && random.chance(config.swarmTriggerProbability())) {
-                swarmUntilTick = tick + SimTime.secondsToTicks(random.nextExponential(1 / config.swarmMeanDurationSeconds()));
+                swarmUntil = now + random.nextExponential(1 / config.swarmMeanDurationSeconds());
             }
         }
 
         // Induced VT events (e.g. dike-tip fracturing) at the hypocentres other subsystems reported.
         for (BlockPos hypocenter : induced) {
             double m = GutenbergRichter.sample(random, config.swarmBValue(), config.minMagnitude(), config.maxMagnitude());
-            transientAmplitude += emit(context, SeismicEventType.VT, m, hypocenter, transientTicks(0.5, m), true);
+            transientAmplitude += emit(context, SeismicEventType.VT, m, hypocenter, transientSeconds(0.5, m), true);
         }
         vtCount += induced.size();
         induced.clear();
@@ -116,7 +125,7 @@ public final class SeismicityModel implements Subsystem {
         for (int i = 0; i < lpCount; i++) {
             double m = GutenbergRichter.sample(random, config.lpBValue(), config.minMagnitude(), config.lpMaxMagnitude());
             BlockPos hypocenter = hypocenter(random, 0.6, 1.0, 0.4);
-            transientAmplitude += emit(context, SeismicEventType.LP, m, hypocenter, transientTicks(1.0, m), false);
+            transientAmplitude += emit(context, SeismicEventType.LP, m, hypocenter, transientSeconds(1.0, m), false);
         }
 
         int explosionCount = random.nextPoisson(expectedExplosionRate * dt);
@@ -124,32 +133,32 @@ public final class SeismicityModel implements Subsystem {
             double m = GutenbergRichter.sample(
                     random, config.explosionBValue(), config.explosionMinMagnitude(), config.explosionMaxMagnitude());
             BlockPos hypocenter = config.conduitTop().offset(0, -random.nextInt(0, 10), 0);
-            transientAmplitude += emit(context, SeismicEventType.EXPLOSION, m, hypocenter, transientTicks(1.0, m), false);
+            transientAmplitude += emit(context, SeismicEventType.EXPLOSION, m, hypocenter, transientSeconds(1.0, m), false);
         }
         for (QueuedExplosion q : explosions) {
             transientAmplitude += emit(context, SeismicEventType.EXPLOSION, q.magnitude(), q.hypocenter(),
-                    transientTicks(1.0, q.magnitude()), false);
+                    transientSeconds(1.0, q.magnitude()), false);
         }
         explosionCount += explosions.size();
         explosions.clear();
 
-        if (!erupting && tremorActive(tick)) {
-            tremorUntilTick = tick;
+        if (!erupting && tremorActive(now)) {
+            tremorUntil = now;
         }
-        if (erupting && !tremorActive(tick)) {
+        if (erupting && !tremorActive(now)) {
             double onsetRate = config.tremorEpisodeRate() * Math.sqrt(eruptionRate);
             if (random.chance(1 - Math.exp(-onsetRate * dt))) {
                 double seconds = random.nextExponential(1 / config.tremorMeanDurationSeconds());
-                int durationTicks = (int) Math.max(1, SimTime.secondsToTicks(seconds));
-                tremorUntilTick = tick + durationTicks;
+                double duration = Math.max(0.05, seconds);
+                tremorUntil = now + duration;
                 tremorMagnitude = config.tremorBaseMagnitude() + 0.5 * Math.log10(1 + eruptionRate);
-                emit(context, SeismicEventType.TREMOR, tremorMagnitude, hypocenter(random, 0.8, 1.0, 0.2), durationTicks, false);
+                emit(context, SeismicEventType.TREMOR, tremorMagnitude, hypocenter(random, 0.8, 1.0, 0.2), duration, false);
             }
         }
 
         double rsamDecay = Math.exp(-dt / config.rsamWindowSeconds());
         rsam = rsam * rsamDecay + transientAmplitude / config.rsamWindowSeconds();
-        if (tremorActive(tick)) {
+        if (tremorActive(now)) {
             rsam += Math.pow(10, tremorMagnitude) * (1 - rsamDecay);
         }
 
@@ -159,10 +168,9 @@ public final class SeismicityModel implements Subsystem {
         lpRatePerMinute = lpRatePerMinute * rateDecay + lpCount * perMinute;
         explosionRatePerMinute = explosionRatePerMinute * rateDecay + explosionCount * perMinute;
 
-        int sampleInterval = config.sampleIntervalTicks();
-        if (sampleInterval > 0 && Math.floorDiv(tick, sampleInterval) != Math.floorDiv(tick - interval(), sampleInterval)) {
-            context.outbox().emit(new RsamSample(tick, config.volcanoId(), rsam, vtRatePerMinute, lpRatePerMinute,
-                    explosionRatePerMinute, tremorActive(tick), swarmActive(tick)));
+        if (context.crossed(config.samplePeriodSeconds())) {
+            context.outbox().emit(new RsamSample(now, config.volcanoId(), rsam, vtRatePerMinute, lpRatePerMinute,
+                    explosionRatePerMinute, tremorActive(now), swarmActive(now)));
         }
     }
 
@@ -193,10 +201,10 @@ public final class SeismicityModel implements Subsystem {
     private record QueuedExplosion(BlockPos hypocenter, double magnitude) {}
 
     /** Expected VT rate (events/s) for the current magma state. */
-    private double vtRate(long tick) {
+    private double vtRate(double now) {
         double pressurisation = Math.max(0, magma.overpressureRateMPaPerSecond());
         double rate = config.backgroundVtRate() + config.vtPerMPa() * pressurisation * acceleration();
-        if (swarmActive(tick)) rate *= config.swarmRateMultiplier();
+        if (swarmActive(now)) rate *= config.swarmRateMultiplier();
         return Math.min(config.maxEventRate(), rate);
     }
 
@@ -219,14 +227,14 @@ public final class SeismicityModel implements Subsystem {
         return viscous * wet;
     }
 
-    private double emit(StepContext context, SeismicEventType type, double magnitude, BlockPos hypocenter, int durationTicks, boolean swarm) {
-        SeismicEvent event = new SeismicEvent(context.tick(), config.volcanoId(), type, magnitude, hypocenter, durationTicks, swarm);
+    private double emit(StepContext context, SeismicEventType type, double magnitude, BlockPos hypocenter, double durationSeconds, boolean swarm) {
+        SeismicEvent event = new SeismicEvent(context.time(), config.volcanoId(), type, magnitude, hypocenter, durationSeconds, swarm);
         context.outbox().emit(event);
         return event.amplitude();
     }
 
-    private static int transientTicks(double baseSeconds, double magnitude) {
-        return (int) Math.max(2, SimTime.secondsToTicks(baseSeconds + 0.5 * Math.max(0, magnitude)));
+    private static double transientSeconds(double baseSeconds, double magnitude) {
+        return Math.max(0.1, baseSeconds + 0.5 * Math.max(0, magnitude));
     }
 
     /**
@@ -286,11 +294,11 @@ public final class SeismicityModel implements Subsystem {
     }
 
     public boolean swarmActive() {
-        return swarmActive(lastTick);
+        return swarmActive(lastTime);
     }
 
     public boolean tremorActive() {
-        return tremorActive(lastTick);
+        return tremorActive(lastTime);
     }
 
     /** Equivalent magnitude of the current tremor episode (meaningful while {@link #tremorActive()}). */
@@ -298,29 +306,30 @@ public final class SeismicityModel implements Subsystem {
         return tremorMagnitude;
     }
 
-    private boolean swarmActive(long tick) {
-        return tick < swarmUntilTick;
+    private boolean swarmActive(double now) {
+        return now < swarmUntil;
     }
 
-    private boolean tremorActive(long tick) {
-        return tick < tremorUntilTick;
+    private boolean tremorActive(double now) {
+        return now < tremorUntil;
     }
 
     // ── Persistence ──
 
     @Override
-    public void saveState(JsonObject out) {
+    public void saveState(StateWriter writer) {
+        JsonObject out = writer.json();
         out.addProperty("rsam", rsam);
         out.addProperty("vtRatePerMinute", vtRatePerMinute);
         out.addProperty("lpRatePerMinute", lpRatePerMinute);
         out.addProperty("explosionRatePerMinute", explosionRatePerMinute);
-        out.addProperty("swarmUntilTick", swarmUntilTick);
-        out.addProperty("tremorUntilTick", tremorUntilTick);
+        out.addProperty("swarmUntil", swarmUntil);
+        out.addProperty("tremorUntil", tremorUntil);
         out.addProperty("tremorMagnitude", tremorMagnitude);
         out.addProperty("expectedVtRate", expectedVtRate);
         out.addProperty("expectedLpRate", expectedLpRate);
         out.addProperty("expectedExplosionRate", expectedExplosionRate);
-        out.addProperty("lastTick", lastTick);
+        out.addProperty("lastTime", lastTime);
         JsonArray pendingInduced = new JsonArray();
         for (BlockPos p : induced) pendingInduced.add(p.pack());
         out.add("induced", pendingInduced);
@@ -335,18 +344,19 @@ public final class SeismicityModel implements Subsystem {
     }
 
     @Override
-    public void loadState(JsonObject in) {
+    public void loadState(StateReader reader) {
+        JsonObject in = reader.json();
         rsam = in.get("rsam").getAsDouble();
         vtRatePerMinute = in.get("vtRatePerMinute").getAsDouble();
         lpRatePerMinute = in.get("lpRatePerMinute").getAsDouble();
         explosionRatePerMinute = in.get("explosionRatePerMinute").getAsDouble();
-        swarmUntilTick = in.get("swarmUntilTick").getAsLong();
-        tremorUntilTick = in.get("tremorUntilTick").getAsLong();
+        swarmUntil = in.get("swarmUntil").getAsDouble();
+        tremorUntil = in.get("tremorUntil").getAsDouble();
         tremorMagnitude = in.get("tremorMagnitude").getAsDouble();
         expectedVtRate = in.get("expectedVtRate").getAsDouble();
         expectedLpRate = in.get("expectedLpRate").getAsDouble();
         expectedExplosionRate = in.get("expectedExplosionRate").getAsDouble();
-        lastTick = in.get("lastTick").getAsLong();
+        lastTime = in.get("lastTime").getAsDouble();
         induced.clear();
         if (in.has("induced")) {
             for (JsonElement e : in.getAsJsonArray("induced")) induced.add(BlockPos.unpack(e.getAsLong()));

@@ -17,6 +17,8 @@ import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.VentSite;
+import me.alex4386.typhon.engine.save.StateReader;
+import me.alex4386.typhon.engine.save.StateWriter;
 
 /**
  * Dike nucleation and propagation from a magma chamber.
@@ -79,8 +81,8 @@ public final class DikePropagation implements Subsystem {
     }
 
     @Override
-    public int interval() {
-        return config.stepIntervalTicks;
+    public double periodSeconds() {
+        return config.stepPeriodSeconds;
     }
 
     @Override
@@ -140,10 +142,10 @@ public final class DikePropagation implements Subsystem {
         double x = center.x() + 0.5 + radius * StrictMath.cos(angle);
         double z = center.z() + 0.5 + radius * StrictMath.sin(angle);
         int surface = surfaceY(x, z, center.y() + 64);
-        Dike dike = new Dike(nextId++, context.tick(), x, z, Math.max(surface, center.y() + 1), center.y(),
+        Dike dike = new Dike(nextId++, context.time(), x, z, Math.max(surface, center.y() + 1), center.y(),
                 magma.chamberDepthM());
         dikes.add(dike);
-        context.outbox().emit(new DikeEvents.DikeStarted(context.tick(), volcanoId, dike.id, dike.origin(),
+        context.outbox().emit(new DikeEvents.DikeStarted(context.time(), volcanoId, dike.id, dike.origin(),
                 magma.overpressureMPa()));
     }
 
@@ -231,7 +233,7 @@ public final class DikePropagation implements Subsystem {
         dike.tipY = worldY(dike, dike.x, dike.z, dike.depth);
         if (travelled > 0) {
             if (hypocenterListener != null && !hypocenters.isEmpty()) hypocenterListener.accept(hypocenters);
-            context.outbox().emit(new DikeEvents.DikeAdvanced(context.tick(), volcanoId, dike.id, dike.tip(), dike.depth,
+            context.outbox().emit(new DikeEvents.DikeAdvanced(context.time(), volcanoId, dike.id, dike.tip(), dike.depth,
                     dike.speed, dike.opening, dike.volume, hypocenters));
         }
 
@@ -239,7 +241,7 @@ public final class DikePropagation implements Subsystem {
             openFissure(dike, context);
         } else if (stall != null) {
             dike.status = DikeStatus.STALLED;
-            context.outbox().emit(new DikeEvents.DikeStalled(context.tick(), volcanoId, dike.id, dike.tip(), dike.depth,
+            context.outbox().emit(new DikeEvents.DikeStalled(context.time(), volcanoId, dike.id, dike.tip(), dike.depth,
                     dike.volume, stall));
         }
     }
@@ -254,7 +256,7 @@ public final class DikePropagation implements Subsystem {
         dike.fissure = VentSite.fissure(volcanoId + "-dike-" + dike.id, new BlockPos(x, y, z), angle, length);
         dike.status = DikeStatus.ERUPTED;
         dike.tipY = y;
-        context.outbox().emit(new DikeEvents.FissureOpened(context.tick(), volcanoId, dike.id, dike.fissure, dike.volume));
+        context.outbox().emit(new DikeEvents.FissureOpened(context.time(), volcanoId, dike.id, dike.fissure, dike.volume));
     }
 
     /**
@@ -321,6 +323,7 @@ public final class DikePropagation implements Subsystem {
 
     // ── Queries ──
 
+    @Override
     public DikeConfig config() {
         return config;
     }
@@ -355,7 +358,8 @@ public final class DikePropagation implements Subsystem {
     // ── Persistence ──
 
     @Override
-    public void saveState(JsonObject out) {
+    public void saveState(StateWriter writer) {
+        JsonObject out = writer.json();
         out.addProperty("nextId", nextId);
         out.addProperty("forcedPending", forcedPending);
         JsonArray array = new JsonArray();
@@ -364,7 +368,8 @@ public final class DikePropagation implements Subsystem {
     }
 
     @Override
-    public void loadState(JsonObject in) {
+    public void loadState(StateReader reader) {
+        JsonObject in = reader.json();
         nextId = in.get("nextId").getAsInt();
         forcedPending = in.get("forcedPending").getAsInt();
         dikes.clear();

@@ -23,7 +23,6 @@ import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
-import me.alex4386.typhon.engine.sim.SimTime;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.tephra.Ballistics;
@@ -36,6 +35,8 @@ import me.alex4386.typhon.engine.volcano.EruptiveRegime;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.save.StateReader;
+import me.alex4386.typhon.engine.save.StateWriter;
 
 /**
  * Turns the magma chamber's eruption into surface activity.
@@ -58,7 +59,7 @@ import me.alex4386.typhon.engine.world.BlockId;
  * <p>Physics stays in real units: lava, tephra and mass flows all take real rates (m³/s, kg/s) and
  * map them onto the block world themselves (the lava grid is {@link VolcanoScaling#metersPerBlock()}
  * wide per column, set by {@link VolcanoSystem}). Register after the chamber, dikes and seismicity
- * and before the lava, tephra and mass-flow subsystems so changes apply in the same tick.
+ * and before the lava, tephra and mass-flow subsystems so changes apply in the same step.
  */
 public final class VolcanoCoupler implements Subsystem {
     /** Relative change in explosive rate that restarts the explosive phase with new parameters. */
@@ -85,8 +86,8 @@ public final class VolcanoCoupler implements Subsystem {
     static final double JET_INTERVAL_SECONDS = 20;
     /** Fine-ash-rich grain size of phreatomagmatic fragmentation. */
     static final GrainSizeDistribution PHREATOMAGMATIC_GRAIN = GrainSizeDistribution.of(0.10, 0.20, 0.35, 0.35);
-    /** Ticks between steam telemetry events. */
-    static final int STEAM_EVENT_TICKS = 400;
+    /** Simulated seconds between steam telemetry events. */
+    static final double STEAM_EVENT_SECONDS = 20;
     /**
      * Partition of phreatomagmatic ejecta: wet jet/surge fallout building the tuff ring near the vent,
      * ballistic blocks in the cock's-tail jets, and the remainder lofted as fine ash in the column.
@@ -121,10 +122,11 @@ public final class VolcanoCoupler implements Subsystem {
     private double explosiveRate;
     private boolean explosivePhreatomagmatic;
     private String collapseSource;
-    private long burstPhaseUntil = -1;
+    /** Simulation time (s) at which the current ash puff ends; negative = none. */
+    private double burstPhaseUntil = -1;
     private boolean phreatomagmatic;
     private double waterDepthM;
-    private long nextSteamEventTick;
+    private double nextSteamEventTime;
     /** Fractional tuff thickness (blocks) waiting to become whole blocks, keyed by packed x/z. */
     private final TreeMap<Long, Double> tuffDebt = new TreeMap<>();
 
@@ -152,8 +154,8 @@ public final class VolcanoCoupler implements Subsystem {
     }
 
     @Override
-    public int interval() {
-        return 20;
+    public double periodSeconds() {
+        return 1.0;
     }
 
     @Override
@@ -165,7 +167,7 @@ public final class VolcanoCoupler implements Subsystem {
         if (rate <= 0) {
             stopLava();
             stopExplosive();
-            endBurstPhaseIfDue(context.tick(), true);
+            endBurstPhaseIfDue(context.time(), true);
             setPhreatomagmatic(context, false, null);
             if (!flankPending) eruptionVents.clear();
             return;
@@ -194,14 +196,14 @@ public final class VolcanoCoupler implements Subsystem {
         if (phreatomagmatic) {
             fireJets(context, main, rate);
             buildTuffRing(context, main, rate);
-            if (context.tick() >= nextSteamEventTick) {
+            if (context.time() >= nextSteamEventTime) {
                 double steam = rate * ExplosivePhase.DRE_DENSITY * WATER_MAGMA_RATIO;
                 context.outbox().emit(new SurfaceEvents.PhreatomagmaticSteam(
-                        context.tick(), volcanoId, main.position(), steam, waterDepthM));
-                nextSteamEventTick = context.tick() + STEAM_EVENT_TICKS;
+                        context.time(), volcanoId, main.position(), steam, waterDepthM));
+                nextSteamEventTime = context.time() + STEAM_EVENT_SECONDS;
             }
         }
-        endBurstPhaseIfDue(context.tick(), sustained);
+        endBurstPhaseIfDue(context.time(), sustained);
     }
 
     /** Picks up fissures opened by dikes since the last step. */
@@ -344,12 +346,12 @@ public final class VolcanoCoupler implements Subsystem {
                 burst.silicaWt(), strombolian ? 40 : 120);
         if (!sustained) {
             GrainSizeDistribution grain = strombolian ? GrainSizeDistribution.STROMBOLIAN : GrainSizeDistribution.VULCANIAN;
-            startAshPuff(context.tick(), vent, burst.ejectaMassKg() * (1 - ballisticShare), burst.durationSeconds(),
+            startAshPuff(context.time(), vent, burst.ejectaMassKg() * (1 - ballisticShare), burst.durationSeconds(),
                     burst.gasMassFraction(), burst.overpressureMPa(), burst.temperatureC(), burst.silicaWt(), grain);
         }
         double energy = 0.5 * burst.ejectaMassKg() * speed * speed;
         if (seismicity != null) seismicity.queueExplosion(vent.position().offset(0, -2, 0), energy);
-        context.outbox().emit(new SurfaceEvents.ExplosiveBurst(context.tick(), volcanoId,
+        context.outbox().emit(new SurfaceEvents.ExplosiveBurst(context.time(), volcanoId,
                 strombolian ? BurstKind.STROMBOLIAN : BurstKind.VULCANIAN, vent.position(), burst.ejectaMassKg(),
                 burst.gasMassKg(), speed, energy));
     }
@@ -359,7 +361,7 @@ public final class VolcanoCoupler implements Subsystem {
         SimRandom random = context.random();
         // Jets are timed in physical time; the chamber's rate is per (compressed) simulated second.
         double compression = scaling.eruptiveTimeCompression();
-        double physicalSeconds = SimTime.ticksToSeconds(interval()) * compression;
+        double physicalSeconds = context.dtSeconds() * compression;
         int jets = Math.min(5, random.nextPoisson(physicalSeconds / JET_INTERVAL_SECONDS));
         double mass = rate / compression * ExplosivePhase.DRE_DENSITY * JET_INTERVAL_SECONDS * JET_BALLISTIC_SHARE;
         for (int i = 0; i < jets; i++) {
@@ -367,21 +369,21 @@ public final class VolcanoCoupler implements Subsystem {
             tephra.launchSalvo(vent, mass, speed, 40, 15, chamber.silicaWt(), 30);
             double energy = 0.5 * mass * speed * speed;
             if (seismicity != null) seismicity.queueExplosion(vent.position(), energy);
-            context.outbox().emit(new SurfaceEvents.ExplosiveBurst(context.tick(), volcanoId, BurstKind.SURTSEYAN_JET,
+            context.outbox().emit(new SurfaceEvents.ExplosiveBurst(context.time(), volcanoId, BurstKind.SURTSEYAN_JET,
                     vent.position(), mass, mass * WATER_MAGMA_RATIO, speed, energy));
         }
     }
 
-    private void startAshPuff(long tick, VentSite vent, double ashMassKg, double durationSeconds, double gasFraction,
+    private void startAshPuff(double now, VentSite vent, double ashMassKg, double durationSeconds, double gasFraction,
             double overpressureMPa, double temperatureC, double silicaWt, GrainSizeDistribution grain) {
         double gameSeconds = durationSeconds / scaling.eruptiveTimeCompression();
         tephra.startPhase(new ExplosivePhase(vent, ashMassKg / durationSeconds, Math.min(1, gasFraction), overpressureMPa,
                 temperatureC, silicaWt, 0, grain));
-        burstPhaseUntil = Math.max(burstPhaseUntil, tick + Math.max(1, SimTime.secondsToTicks(gameSeconds)));
+        burstPhaseUntil = Math.max(burstPhaseUntil, now + gameSeconds);
     }
 
-    private void endBurstPhaseIfDue(long tick, boolean sustained) {
-        if (burstPhaseUntil < 0 || tick < burstPhaseUntil) return;
+    private void endBurstPhaseIfDue(double now, boolean sustained) {
+        if (burstPhaseUntil < 0 || now < burstPhaseUntil) return;
         if (!sustained) tephra.stopPhase();
         burstPhaseUntil = -1;
     }
@@ -439,7 +441,7 @@ public final class VolcanoCoupler implements Subsystem {
     private void buildTuffRing(StepContext context, VentSite vent, double rate) {
         if (terrain == null) return;
         // rate is per simulated second, so the volume erupted this step is rate × step length.
-        double bulkBlocks = rate * SimTime.ticksToSeconds(interval()) * ExplosivePhase.DRE_DENSITY
+        double bulkBlocks = rate * context.dtSeconds() * ExplosivePhase.DRE_DENSITY
                 * NEAR_VENT_FALLOUT_SHARE / TUFF_BULK_DENSITY * scaling.volumeScale();
         int crater = Math.max(1, vent.craterRadius());
         int outer = crater + TUFF_RING_WIDTH;
@@ -483,7 +485,7 @@ public final class VolcanoCoupler implements Subsystem {
         if (active == phreatomagmatic) return;
         phreatomagmatic = active;
         BlockPos at = vent != null ? vent.position() : baseVents.get(0).position();
-        context.outbox().emit(new SurfaceEvents.PhreatomagmaticChanged(context.tick(), volcanoId, active, at, waterDepthM));
+        context.outbox().emit(new SurfaceEvents.PhreatomagmaticChanged(context.time(), volcanoId, active, at, waterDepthM));
     }
 
     private String sourceId(VentSite vent) {
@@ -509,7 +511,8 @@ public final class VolcanoCoupler implements Subsystem {
     }
 
     @Override
-    public void saveState(JsonObject out) {
+    public void saveState(StateWriter writer) {
+        JsonObject out = writer.json();
         JsonArray sources = new JsonArray();
         activeLavaSources.forEach(sources::add);
         out.add("lavaSources", sources);
@@ -524,14 +527,15 @@ public final class VolcanoCoupler implements Subsystem {
         out.addProperty("burstPhaseUntil", burstPhaseUntil);
         out.addProperty("phreatomagmatic", phreatomagmatic);
         out.addProperty("waterDepthM", waterDepthM);
-        out.addProperty("nextSteamEventTick", nextSteamEventTick);
+        out.addProperty("nextSteamEventTime", nextSteamEventTime);
         JsonObject debt = new JsonObject();
         for (Map.Entry<Long, Double> e : tuffDebt.entrySet()) debt.addProperty(Long.toString(e.getKey()), e.getValue());
         out.add("tuffDebt", debt);
     }
 
     @Override
-    public void loadState(JsonObject in) {
+    public void loadState(StateReader reader) {
+        JsonObject in = reader.json();
         activeLavaSources.clear();
         for (JsonElement e : in.getAsJsonArray("lavaSources")) activeLavaSources.add(e.getAsString());
         eruptionVents.clear();
@@ -543,10 +547,10 @@ public final class VolcanoCoupler implements Subsystem {
         explosiveRate = in.get("explosiveRate").getAsDouble();
         explosivePhreatomagmatic = in.has("explosivePhreatomagmatic") && in.get("explosivePhreatomagmatic").getAsBoolean();
         collapseSource = in.has("collapseSource") ? in.get("collapseSource").getAsString() : null;
-        burstPhaseUntil = in.has("burstPhaseUntil") ? in.get("burstPhaseUntil").getAsLong() : -1;
+        burstPhaseUntil = in.get("burstPhaseUntil").getAsDouble();
         phreatomagmatic = in.has("phreatomagmatic") && in.get("phreatomagmatic").getAsBoolean();
         waterDepthM = in.has("waterDepthM") ? in.get("waterDepthM").getAsDouble() : 0;
-        nextSteamEventTick = in.has("nextSteamEventTick") ? in.get("nextSteamEventTick").getAsLong() : 0;
+        nextSteamEventTime = in.get("nextSteamEventTime").getAsDouble();
         tuffDebt.clear();
         if (in.has("tuffDebt")) {
             for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("tuffDebt").entrySet()) {

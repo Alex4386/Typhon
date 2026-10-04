@@ -3,6 +3,7 @@ package me.alex4386.typhon.engine.massflow;
 import java.util.List;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.EngineEvent;
+import me.alex4386.typhon.engine.output.HistoricalEvent;
 
 /** Events emitted by {@link PyroclasticFlows} and {@link Lahars}. */
 public final class MassFlowEvents {
@@ -30,14 +31,14 @@ public final class MassFlowEvents {
     public record FlowCell(BlockPos pos, double depthM, double speed, double temperatureC, double sedimentFraction) {}
 
     /** A pyroclastic density current started (instantaneous {@code volumeM3} and/or a sustained rate). */
-    public record PdcStarted(long tick, String flowId, Trigger trigger, BlockPos position, double volumeM3,
-            double rateM3PerS, double temperatureC) implements EngineEvent {}
+    public record PdcStarted(double time, String flowId, Trigger trigger, BlockPos position, double volumeM3,
+            double rateM3PerS, double temperatureC) implements HistoricalEvent {}
 
     /**
      * Periodic PDC telemetry. {@code cells} lists the flowing columns farthest from the release
      * points first, capped by {@link MassFlowConfig#maxReportedCells}.
      */
-    public record PdcFront(long tick, String flowId, BlockPos front, double runoutM, int activeCells, double volumeM3,
+    public record PdcFront(double time, String flowId, BlockPos front, double runoutM, int activeCells, double volumeM3,
             double maxSpeed, double maxTemperatureC, List<FlowCell> cells) implements EngineEvent {
         public PdcFront {
             cells = List.copyOf(cells);
@@ -45,17 +46,17 @@ public final class MassFlowEvents {
     }
 
     /** PDC material deposited during one step (ignimbrite). */
-    public record PdcDeposit(long tick, String flowId, int cells, double volumeM3, int blocks) implements EngineEvent {}
+    public record PdcDeposit(double time, String flowId, int cells, double volumeM3, int blocks) implements EngineEvent {}
 
     /** A PDC running over water flashes it to steam (and loses mass). */
-    public record PdcSteam(long tick, String flowId, BlockPos position, double volumeM3) implements EngineEvent {}
+    public record PdcSteam(double time, String flowId, BlockPos position, double volumeM3) implements EngineEvent {}
 
     /** A lahar started. */
-    public record LaharStarted(long tick, String flowId, Trigger trigger, BlockPos position, double volumeM3,
-            double rateM3PerS) implements EngineEvent {}
+    public record LaharStarted(double time, String flowId, Trigger trigger, BlockPos position, double volumeM3,
+            double rateM3PerS) implements HistoricalEvent {}
 
     /** Periodic lahar telemetry; same layout as {@link PdcFront}. */
-    public record LaharFront(long tick, String flowId, BlockPos front, double runoutM, int activeCells, double volumeM3,
+    public record LaharFront(double time, String flowId, BlockPos front, double runoutM, int activeCells, double volumeM3,
             double maxSpeed, double meanSedimentFraction, List<FlowCell> cells) implements EngineEvent {
         public LaharFront {
             cells = List.copyOf(cells);
@@ -63,10 +64,10 @@ public final class MassFlowEvents {
     }
 
     /** Lahar material deposited during one step. */
-    public record LaharDeposit(long tick, String flowId, int cells, double volumeM3, int blocks) implements EngineEvent {}
+    public record LaharDeposit(double time, String flowId, int cells, double volumeM3, int blocks) implements EngineEvent {}
 
     /** The flow reached chunks the host has not sent terrain for; they act as walls until it does. */
-    public record TerrainNeeded(long tick, String flowId, List<ChunkCoord> chunks) implements EngineEvent {
+    public record TerrainNeeded(double time, String flowId, List<ChunkCoord> chunks) implements EngineEvent {
         public TerrainNeeded {
             chunks = List.copyOf(chunks);
         }

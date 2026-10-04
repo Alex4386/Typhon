@@ -2,10 +2,11 @@ package me.alex4386.typhon.engine.alert;
 
 import com.google.gson.JsonObject;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
-import me.alex4386.typhon.engine.sim.SimTime;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.volcano.MagmaState;
+import me.alex4386.typhon.engine.save.StateReader;
+import me.alex4386.typhon.engine.save.StateWriter;
 
 /**
  * Derives the volcano's status from monitoring observables, the way an observatory sets its alert
@@ -26,7 +27,8 @@ public final class AlertLevelEstimator implements Subsystem {
 
     private AlertLevel level;
     private EruptionStyle style;
-    private long downgradeSinceTick = -1;
+    /** Simulated time at which a downgrade became possible (negative = not pending). */
+    private double downgradeSince = -1;
 
     /** @param seismicity seismic observables, or {@code null} to rely on overpressure alone */
     public AlertLevelEstimator(AlertConfig config, MagmaState magma, SeismicityModel seismicity) {
@@ -41,34 +43,47 @@ public final class AlertLevelEstimator implements Subsystem {
     }
 
     @Override
-    public int interval() {
-        return config.stepIntervalTicks();
+    public double periodSeconds() {
+        return config.stepPeriodSeconds();
+    }
+
+    @Override
+    public Object config() {
+        return config;
+    }
+
+    /** Current level and suggested style for dashboards. */
+    public record Snapshot(AlertLevel level, EruptionStyle style) {}
+
+    @Override
+    public Snapshot snapshot() {
+        return new Snapshot(level, style);
     }
 
     @Override
     public void step(StepContext context) {
-        long tick = context.tick();
+        double now = context.time();
         double pressureRatio = magma.overpressureMPa() / config.failureOverpressureMPa();
         double vtRate = seismicity == null ? 0 : seismicity.vtRatePerMinute();
         double rsam = seismicity == null ? 0 : seismicity.rsam();
 
-        AlertLevel next = nextLevel(tick, pressureRatio, vtRate, rsam);
+        AlertLevel next = nextLevel(now, pressureRatio, vtRate, rsam);
         if (next != level) {
             context.outbox().emit(new AlertEvents.AlertLevelChanged(
-                    tick, config.volcanoId(), level, next, pressureRatio, vtRate, rsam));
+                    now, config.volcanoId(), level, next, pressureRatio, vtRate, rsam));
             level = next;
         }
 
         EruptionStyle suggested = EruptionStyleClassifier.classify(magma);
         if (suggested != style) {
-            context.outbox().emit(new AlertEvents.EruptionStyleSuggested(tick, config.volcanoId(), style, suggested));
+            context.outbox().emit(new AlertEvents.EruptionStyleSuggested(now, config.volcanoId(), style, suggested));
             style = suggested;
         }
     }
 
-    private AlertLevel nextLevel(long tick, double pressureRatio, double vtRate, double rsam) {
+    private AlertLevel nextLevel(double now, double pressureRatio, double vtRate, double rsam) {
         if (magma.erupting()) {
-            downgradeSinceTick = -1;
+            downgradeSince = -1;
             return AlertLevel.ERUPTING;
         }
 
@@ -77,23 +92,22 @@ public final class AlertLevelEstimator implements Subsystem {
             return raw;
         }
         if (raw.isAbove(level)) {
-            downgradeSinceTick = -1;
+            downgradeSince = -1;
             return raw;
         }
 
         AlertLevel sustained = indicated(pressureRatio, vtRate, rsam, config.downgradeFactor());
         if (!level.isAbove(sustained)) {
-            downgradeSinceTick = -1;
+            downgradeSince = -1;
             return level;
         }
-        if (downgradeSinceTick < 0) {
-            downgradeSinceTick = tick;
+        if (downgradeSince < 0) {
+            downgradeSince = now;
         }
-        double dwellTicks = config.downgradeDwellSeconds() * SimTime.TICKS_PER_SECOND;
-        if (tick - downgradeSinceTick < dwellTicks) {
+        if (now - downgradeSince < config.downgradeDwellSeconds()) {
             return level;
         }
-        downgradeSinceTick = tick; // dwell again before the next step down
+        downgradeSince = now; // dwell again before the next step down
         return AlertLevel.max(sustained, level.lower());
     }
 
@@ -128,16 +142,18 @@ public final class AlertLevelEstimator implements Subsystem {
     }
 
     @Override
-    public void saveState(JsonObject out) {
+    public void saveState(StateWriter writer) {
+        JsonObject out = writer.json();
         if (level != null) out.addProperty("level", level.name());
         if (style != null) out.addProperty("style", style.name());
-        out.addProperty("downgradeSinceTick", downgradeSinceTick);
+        out.addProperty("downgradeSince", downgradeSince);
     }
 
     @Override
-    public void loadState(JsonObject in) {
+    public void loadState(StateReader reader) {
+        JsonObject in = reader.json();
         level = in.has("level") ? AlertLevel.valueOf(in.get("level").getAsString()) : null;
         style = in.has("style") ? EruptionStyle.valueOf(in.get("style").getAsString()) : null;
-        downgradeSinceTick = in.get("downgradeSinceTick").getAsLong();
+        downgradeSince = in.get("downgradeSince").getAsDouble();
     }
 }

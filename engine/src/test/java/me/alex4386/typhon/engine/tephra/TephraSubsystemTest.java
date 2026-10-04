@@ -23,6 +23,9 @@ import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.MagmaState;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
+import me.alex4386.typhon.engine.save.InMemorySaveStore;
+import me.alex4386.typhon.engine.save.SaveStore;
 
 class TephraSubsystemTest {
     private static final int TERRAIN_RADIUS = 20;
@@ -38,7 +41,7 @@ class TephraSubsystemTest {
         final TerrainModel terrain = new TerrainModel();
         final TephraSubsystem tephra = new TephraSubsystem("tephra:test", terrain, config());
 
-        Engine engine(long seed, JsonObject restore) {
+        Engine engine(long seed, SaveStore restore) {
             Engine.Builder builder = Engine.builder(seed).add(terrain).add(tephra);
             if (restore != null) builder.restore(restore);
             return builder.build();
@@ -59,7 +62,7 @@ class TephraSubsystemTest {
         List<EngineFrame> frames = new ArrayList<>();
         for (int t = from; t < to; t++) {
             script(engine, t);
-            frames.add(engine.tick());
+            frames.add(engine.step());
         }
         return frames;
     }
@@ -105,10 +108,10 @@ class TephraSubsystemTest {
         Engine engine = before.engine(7, null);
         run(engine, 0, 300);
         assertTrue(before.tephra.inFlightBombs() > 0, "need bombs in flight at save time");
-        String saved = engine.saveState().toString();
+        InMemorySaveStore saved = Saves.save(engine);
 
         Rig after = new Rig();
-        Engine resumed = after.engine(7, JsonParser.parseString(saved).getAsJsonObject());
+        Engine resumed = after.engine(7, saved);
         // The host re-sends the (engine-modified) terrain after a restart.
         resumed.submit(TephraTestSupport.resample(before.terrain, TERRAIN_RADIUS));
         assertEquals(before.tephra.inFlightBombs(), after.tephra.inFlightBombs());
@@ -122,7 +125,7 @@ class TephraSubsystemTest {
         Rig rig = new Rig();
         Engine engine = rig.engine(1, null);
         engine.submit(new StartExplosivePhase("tephra:elsewhere", ExplosivePhase.strombolian(VENT, 4000)));
-        engine.tick();
+        engine.step();
         assertNull(rig.tephra.activePhase());
     }
 
@@ -154,7 +157,7 @@ class TephraSubsystemTest {
         WindField b = new WindField(1, 1, 0);
         b.set(10, 0, 1, 0.3, 1.1);
         assertEquals(a.at(12345), b.at(12345));
-        Vec3d t0 = a.at(0), t1 = a.at(20);
+        Vec3d t0 = a.at(0), t1 = a.at(1.0);
         assertTrue(t0.subtract(t1).length() < 0.5, "wind changes slowly");
         assertEquals(0, new WindField(0, 0, 0.5).at(100).length());
         assertEquals(10, new WindField(10, 0, 0).at(999).length(), 1e-12);

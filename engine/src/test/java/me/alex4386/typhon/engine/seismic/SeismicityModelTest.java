@@ -13,6 +13,8 @@ import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.testing.StubMagmaState;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
+import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 class SeismicityModelTest {
     private static final BlockPos VENT = new BlockPos(0, 100, 0);
@@ -24,7 +26,7 @@ class SeismicityModelTest {
     private static List<SeismicEvent> run(Engine engine, int seconds) {
         List<SeismicEvent> events = new ArrayList<>();
         for (int i = 0; i < seconds * 20; i++) {
-            for (EngineEvent event : engine.tick().events()) {
+            for (EngineEvent event : engine.step().events()) {
                 if (event instanceof SeismicEvent s) events.add(s);
             }
         }
@@ -33,7 +35,7 @@ class SeismicityModelTest {
 
     /** Advances exactly one model step (the model steps every 10 ticks). */
     private static void stepOnce(Engine engine) {
-        for (int i = 0; i < 10; i++) engine.tick();
+        for (int i = 0; i < 10; i++) engine.step();
     }
 
     private static long count(List<SeismicEvent> events, SeismicEventType type) {
@@ -126,7 +128,7 @@ class SeismicityModelTest {
         assertEquals(0, count(events, SeismicEventType.EXPLOSION), "fluid basalt does not explode");
         assertTrue(model.rsam() > 2);
         events.stream().filter(e -> e.type() == SeismicEventType.TREMOR)
-                .forEach(e -> assertTrue(e.durationTicks() > 0));
+                .forEach(e -> assertTrue(e.durationSeconds() > 0));
 
         magma.eruptionRate = 0;
         run(engine, 30);
@@ -204,27 +206,27 @@ class SeismicityModelTest {
 
         Engine a = Engine.builder(10).add(new SeismicityModel(config().build(), magma)).build();
         Engine b = Engine.builder(10).add(new SeismicityModel(config().build(), magma)).build();
-        for (int i = 0; i < 20 * 300; i++) assertEquals(a.tick(), b.tick());
+        for (int i = 0; i < 20 * 300; i++) assertEquals(a.step(), b.step());
 
-        String saved = a.saveState().toString();
+        InMemorySaveStore saved = Saves.save(a);
         Engine resumed = Engine.builder(10).add(new SeismicityModel(config().build(), magma))
-                .restore(JsonParser.parseString(saved).getAsJsonObject()).build();
+                .restore(saved).build();
         List<EngineFrame> expected = new ArrayList<>();
         List<EngineFrame> actual = new ArrayList<>();
         for (int i = 0; i < 20 * 300; i++) {
-            expected.add(a.tick());
-            actual.add(resumed.tick());
+            expected.add(a.step());
+            actual.add(resumed.step());
         }
         assertEquals(expected, actual);
     }
 
     @Test
     void emitsPeriodicRsamSamples() {
-        SeismicityModel model = new SeismicityModel(config().sampleIntervalTicks(100).build(), StubMagmaState.basalt());
+        SeismicityModel model = new SeismicityModel(config().samplePeriodSeconds(5).build(), StubMagmaState.basalt());
         Engine engine = Engine.builder(11).add(model).build();
         int samples = 0;
         for (int i = 0; i < 1000; i++) {
-            for (EngineEvent e : engine.tick().events()) if (e instanceof RsamSample) samples++;
+            for (EngineEvent e : engine.step().events()) if (e instanceof RsamSample) samples++;
         }
         assertEquals(10, samples);
     }

@@ -1,6 +1,7 @@
 package me.alex4386.typhon.engine.magma;
 
 import me.alex4386.typhon.engine.output.EngineEvent;
+import me.alex4386.typhon.engine.output.HistoricalEvent;
 import me.alex4386.typhon.engine.volcano.EruptiveRegime;
 
 /** Events emitted by {@link MagmaChamber}. */
@@ -16,19 +17,19 @@ public final class MagmaEvents {
         DIKE
     }
 
-    public record EruptionStarted(long tick, String volcanoId, double overpressureMPa, Cause cause)
-            implements EngineEvent {}
+    public record EruptionStarted(double time, String volcanoId, double overpressureMPa, Cause cause)
+            implements HistoricalEvent {}
 
     /**
      * @param eruptedVolume dense-rock-equivalent volume erupted (m³)
-     * @param durationTicks engine ticks between start and end
+     * @param durationSeconds simulated seconds between start and end
      */
-    public record EruptionEnded(long tick, String volcanoId, double eruptedVolume, long durationTicks, Cause cause)
-            implements EngineEvent {}
+    public record EruptionEnded(double time, String volcanoId, double eruptedVolume, double durationSeconds, Cause cause)
+            implements HistoricalEvent {}
 
     /** Periodic telemetry snapshot of the chamber (for dashboards and logging). */
     public record ChamberSample(
-            long tick,
+            double time,
             String volcanoId,
             double overpressureMPa,
             double overpressureRateMPaPerSecond,
@@ -53,6 +54,6 @@ public final class MagmaEvents {
      * @param ascentVelocity mean magma ascent speed in the conduit (m/s)
      * @param ventWaterWt dissolved H₂O reaching the fragmentation level (wt%)
      */
-    public record EruptiveRegimeChanged(long tick, String volcanoId, EruptiveRegime previous, EruptiveRegime current,
-            double ascentVelocity, double ventWaterWt) implements EngineEvent {}
+    public record EruptiveRegimeChanged(double time, String volcanoId, EruptiveRegime previous, EruptiveRegime current,
+            double ascentVelocity, double ventWaterWt) implements HistoricalEvent {}
 }

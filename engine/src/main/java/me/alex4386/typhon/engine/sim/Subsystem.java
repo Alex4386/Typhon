@@ -1,27 +1,32 @@
 package me.alex4386.typhon.engine.sim;
 
-import com.google.gson.JsonObject;
 import me.alex4386.typhon.engine.command.CommandBus;
+import me.alex4386.typhon.engine.save.StateReader;
+import me.alex4386.typhon.engine.save.StateWriter;
 
 /**
  * A simulation component stepped by the {@link Engine} at its own rate.
  *
- * <p>Subsystems run at different resolutions in time: a magma chamber may step every few seconds
- * while lava flow steps every tick. A subsystem with {@code interval() == n} and
- * {@code phase() == p} steps on ticks {@code p, p + n, p + 2n, ...}; staggering phases spreads
- * expensive subsystems across ticks.
+ * <p>Subsystems run at different resolutions in time: a magma chamber may step every second while
+ * lava flow steps every base step. The engine rounds {@link #periodSeconds()} and {@link
+ * #phaseSeconds()} to whole base steps (minimum one step), so a subsystem whose physics needs a
+ * finer step than the engine's base step must sub-step internally. Staggering phases spreads
+ * expensive subsystems across steps.
  */
 public interface Subsystem {
     /** Stable identifier; also seeds this subsystem's random stream, so do not rename casually. */
     String id();
 
-    /** Step interval in ticks (at least 1). */
-    default int interval() {
-        return 1;
+    /**
+     * Step period in simulated seconds. {@code 0} (the default) steps every base step;
+     * {@link Double#POSITIVE_INFINITY} never steps (command-driven subsystems).
+     */
+    default double periodSeconds() {
+        return 0;
     }
 
-    /** Step offset in ticks, in {@code [0, interval())}. */
-    default int phase() {
+    /** Offset of the first step in simulated seconds, in {@code [0, periodSeconds())}. */
+    default double phaseSeconds() {
         return 0;
     }
 
@@ -31,11 +36,29 @@ public interface Subsystem {
     void step(StepContext context);
 
     /**
-     * Writes this subsystem's persistent state. Together with the engine tick and random states this
-     * must be enough to resume the simulation bit-for-bit after {@link #loadState}.
+     * The configuration this subsystem was built with. It is stored in save files and hashed; a
+     * restore with a different configuration is rejected unless explicitly allowed. Return a record
+     * or plain data object Gson can serialise, or {@code null} if there is nothing to check.
      */
-    default void saveState(JsonObject out) {}
+    default Object config() {
+        return null;
+    }
+
+    /**
+     * Writes this subsystem's persistent state: small values to {@link StateWriter#json()}, spatial
+     * arrays to {@link StateWriter#field}. Together with the engine time and random states this must
+     * be enough to resume the simulation bit-for-bit after {@link #loadState}.
+     */
+    default void saveState(StateWriter out) {}
 
     /** Restores state written by {@link #saveState}. Called once while building, before any step. */
-    default void loadState(JsonObject in) {}
+    default void loadState(StateReader in) {}
+
+    /**
+     * Cheap immutable summary for UIs (gauges, dashboards), or {@code null}. Called on the engine
+     * thread between steps; must not expose mutable internals.
+     */
+    default Object snapshot() {
+        return null;
+    }
 }

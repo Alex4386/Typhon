@@ -1,6 +1,7 @@
 package me.alex4386.typhon.engine.lava;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -23,6 +24,11 @@ import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
 import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.BlockState;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
+import me.alex4386.typhon.engine.save.InMemorySaveStore;
+import me.alex4386.typhon.engine.save.SubsystemState;
+import me.alex4386.typhon.engine.save.StateReader;
+import me.alex4386.typhon.engine.save.FieldChunk;
 
 /** Crust growth, insulated (tube-fed) flow, drained lava tubes and ocean entries. */
 class LavaCrustTubeTest {
@@ -204,14 +210,14 @@ class LavaCrustTubeTest {
 
         TubeRun before = pondThenBreach(config, 9, 1500);
         assertTrue(before.lava().crustedCellCount() > 0 || !before.lava().tubes().isEmpty(), "save point has crust");
-        String saved = before.engine().saveState().toString();
+        InMemorySaveStore saved = Saves.save(before.engine());
 
         TerrainModel resent = before.world().copyTerrain();
         LavaFlow after = new LavaFlow(resent, config);
         Engine afterEngine = Engine.builder(9).add(resent).add(after)
-                .restore(JsonParser.parseString(saved).getAsJsonObject()).build();
+                .restore(saved).build();
         List<EngineFrame> resumed = new ArrayList<>();
-        for (int i = 0; i < 1500; i++) resumed.add(afterEngine.tick());
+        for (int i = 0; i < 1500; i++) resumed.add(afterEngine.step());
 
         assertEquals(reference.world().frames.subList(referenceFrames.size(), referenceFrames.size() + 1500), resumed);
         assertEquals(reference.lava().tubes(), after.tubes());
@@ -220,40 +226,31 @@ class LavaCrustTubeTest {
     }
 
     @Test
-    void loadsFormatOneState() {
-        // A pre-crust (format 1) save: one chunk with 2 m of lava in column (0, 0), rendered as 2 blocks.
-        LavaTestWorld world = new LavaTestWorld(-1, -1, 0, 0, (x, z) -> x == 0 && z == 0 ? 60 : 100);
-        ByteBuffer buf = ByteBuffer.allocate(256 * (5 * Double.BYTES + Integer.BYTES + Short.BYTES + Byte.BYTES));
-        for (int i = 0; i < 256; i++) {
-            boolean lava = i == 0;
-            buf.putDouble(lava ? 2 : 0).putDouble(lava ? BASALT_T : 0).putDouble(lava ? BASALT_SI : 0)
-                    .putDouble(lava ? 0.1 : 0).putDouble(0)
-                    .putInt(lava ? 61 : 0).putShort((short) (lava ? 2 : 0)).put((byte) (lava ? 1 << 3 : 0));
+    void lavaStateRoundTripsThroughRegionFields() {
+        LavaTestWorld world = new LavaTestWorld(-1, -1, 1, 1, (x, z) -> 80 - x);
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(10));
+        Engine engine = world.engine(lava, 4);
+        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
+        world.run(engine, 300);
+
+        SubsystemState saved = new SubsystemState();
+        lava.saveState(saved);
+        assertNotNull(saved.field("cells"), "lava cells are stored as a region field");
+        assertEquals(4, saved.json().get("format").getAsInt());
+
+        LavaFlow copy = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(10));
+        copy.loadState(saved);
+        assertEquals(lava.totalLavaVolume(), copy.totalLavaVolume());
+        assertEquals(lava.activeCellCount(), copy.activeCellCount());
+        SubsystemState resaved = new SubsystemState();
+        copy.saveState(resaved);
+        assertEquals(saved.json(), resaved.json());
+        for (StateReader.Entry entry : saved.field("cells").chunks()) {
+            FieldChunk again = resaved.field("cells").get(entry.chunkX(), entry.chunkZ());
+            assertNotNull(again);
+            assertArrayEquals(entry.data().doubles("thickness"), again.doubles("thickness"));
+            assertArrayEquals(entry.data().doubles("temperature"), again.doubles("temperature"));
         }
-        JsonObject chunk = new JsonObject();
-        chunk.addProperty("x", 0);
-        chunk.addProperty("z", 0);
-        chunk.addProperty("data", Base64.getEncoder().encodeToString(buf.array()));
-        JsonArray chunks = new JsonArray();
-        chunks.add(chunk);
-        JsonObject state = new JsonObject();
-        state.addProperty("emitted", 2.0);
-        state.addProperty("solidified", 0.0);
-        state.add("sources", new JsonArray());
-        state.add("origins", new JsonArray());
-        state.add("requestedTerrain", new JsonArray());
-        state.add("chunks", chunks);
-
-        LavaFlow lava = new LavaFlow(world.terrain);
-        lava.loadState(state);
-        assertEquals(2, lava.thickness(0, 0));
-        assertEquals(BASALT_T, lava.temperatureC(0, 0));
-        assertEquals(0, lava.crustThickness(0, 0));
-        assertEquals(1, lava.activeCellCount());
-
-        JsonObject resaved = new JsonObject();
-        lava.saveState(resaved);
-        assertEquals(3, resaved.get("format").getAsInt()); // re-saved in the current format
     }
 
     // ── Ocean entry ──

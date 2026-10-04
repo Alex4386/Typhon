@@ -20,7 +20,7 @@ import java.util.Objects;
  * @param downgradeFactor fraction of a threshold that must be undercut before stepping down
  * @param downgradeDwellSeconds time indicators must stay low before each one-level step down
  * @param extinctCrystalFraction crystal fraction above which a quiet system counts as EXTINCT
- * @param stepIntervalTicks how often the estimator runs
+ * @param stepPeriodSeconds how often the estimator runs (simulated seconds)
  */
 public record AlertConfig(
         String volcanoId,
@@ -37,7 +37,7 @@ public record AlertConfig(
         double downgradeFactor,
         double downgradeDwellSeconds,
         double extinctCrystalFraction,
-        int stepIntervalTicks) {
+        double stepPeriodSeconds) {
 
     public AlertConfig {
         Objects.requireNonNull(volcanoId, "volcanoId");
@@ -53,22 +53,22 @@ public record AlertConfig(
         }
         if (!(downgradeFactor > 0 && downgradeFactor <= 1)) throw new IllegalArgumentException("downgradeFactor must be in (0, 1]");
         if (downgradeDwellSeconds < 0) throw new IllegalArgumentException("downgradeDwellSeconds must be >= 0");
-        if (stepIntervalTicks < 1) throw new IllegalArgumentException("stepIntervalTicks must be >= 1");
+        if (!(stepPeriodSeconds > 0)) throw new IllegalArgumentException("stepPeriodSeconds must be > 0");
     }
 
     public static AlertConfig defaults(String volcanoId) {
-        return new AlertConfig(volcanoId, 15, 0.3, 0.6, 0.9, 0.5, 3, 10, 2, 10, 50, 0.7, 120, 0.55, 20);
+        return new AlertConfig(volcanoId, 15, 0.3, 0.6, 0.9, 0.5, 3, 10, 2, 10, 50, 0.7, 120, 0.55, 1.0);
     }
 
     public AlertConfig withFailureOverpressure(double mpa) {
         return new AlertConfig(volcanoId, mpa, minorPressureRatio, majorPressureRatio, imminentPressureRatio,
                 minorVtPerMinute, majorVtPerMinute, imminentVtPerMinute, minorRsam, majorRsam, imminentRsam,
-                downgradeFactor, downgradeDwellSeconds, extinctCrystalFraction, stepIntervalTicks);
+                downgradeFactor, downgradeDwellSeconds, extinctCrystalFraction, stepPeriodSeconds);
     }
 
     public AlertConfig withDowngradeDwellSeconds(double seconds) {
         return new AlertConfig(volcanoId, failureOverpressureMPa, minorPressureRatio, majorPressureRatio,
                 imminentPressureRatio, minorVtPerMinute, majorVtPerMinute, imminentVtPerMinute, minorRsam, majorRsam,
-                imminentRsam, downgradeFactor, seconds, extinctCrystalFraction, stepIntervalTicks);
+                imminentRsam, downgradeFactor, seconds, extinctCrystalFraction, stepPeriodSeconds);
     }
 }

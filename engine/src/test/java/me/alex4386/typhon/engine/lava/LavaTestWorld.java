@@ -80,7 +80,7 @@ final class LavaTestWorld {
     }
 
     void run(Engine engine, int ticks) {
-        for (int i = 0; i < ticks; i++) frames.add(engine.tick());
+        for (int i = 0; i < ticks; i++) frames.add(engine.step());
     }
 
     /** Final block state per position after applying all frames in order. */

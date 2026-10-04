@@ -72,7 +72,7 @@ class BallisticsTest {
 
     private static List<EngineFrame> run(Engine engine, int ticks) {
         List<EngineFrame> frames = new ArrayList<>();
-        for (int i = 0; i < ticks; i++) frames.add(engine.tick());
+        for (int i = 0; i < ticks; i++) frames.add(engine.step());
         return frames;
     }
 
@@ -95,8 +95,9 @@ class BallisticsTest {
         assertEquals((int) Math.floor(analyticX), landed.position().x());
         assertEquals(63, landed.position().y());
         double flightSeconds = 2 * c / G;
-        assertEquals(flightSeconds * 20, launched.expectedFlightTicks(), 1.0);
-        assertEquals(launched.tick() + launched.expectedFlightTicks() - 1, landed.tick());
+        assertEquals(flightSeconds, launched.expectedFlightSeconds(), 0.05);
+        // landed during the step that started expectedFlight − one step after launch
+        assertEquals(launched.time() + launched.expectedFlightSeconds() - 0.05, landed.time(), 1e-9);
         assertEquals(v, landed.impactSpeed(), 0.05);
         assertEquals(0, tephra.inFlightBombs());
     }

@@ -112,10 +112,11 @@ class LavaScalingTest {
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 400);
 
-        int interval = lava.config().eventIntervalTicks();
+        double period = lava.config().eventPeriodSeconds();
+        int interval = (int) Math.round(period * 20);
         List<LavaEvents.LavaSolidified> solid = world.events(LavaEvents.LavaSolidified.class);
         assertTrue(!solid.isEmpty() && solid.size() <= 400 / interval + 1, "solidified events: " + solid.size());
-        assertTrue(solid.stream().allMatch(e -> e.tick() % interval == 0));
+        assertTrue(solid.stream().allMatch(e -> Math.abs(e.time() / period - Math.rint(e.time() / period)) < 1e-9));
 
         List<LavaEvents.LavaOceanEntry> entries = world.events(LavaEvents.LavaOceanEntry.class);
         assertTrue(!entries.isEmpty(), "ocean entry should be reported");

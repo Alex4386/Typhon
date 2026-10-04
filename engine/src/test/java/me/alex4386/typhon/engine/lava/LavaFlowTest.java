@@ -21,6 +21,8 @@ import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.BlockState;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
+import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 class LavaFlowTest {
     private static final double BASALT_T = 1150;
@@ -240,17 +242,17 @@ class LavaFlowTest {
         Engine beforeEngine = before.engine(beforeLava, 99);
         beforeLava.addSource(source);
         before.run(beforeEngine, 120);
-        String saved = beforeEngine.saveState().toString();
+        InMemorySaveStore saved = Saves.save(beforeEngine);
 
         TerrainModel resentTerrain = before.copyTerrain();
         LavaFlow afterLava = new LavaFlow(resentTerrain, config);
         Engine afterEngine = Engine.builder(99)
                 .add(resentTerrain)
                 .add(afterLava)
-                .restore(JsonParser.parseString(saved).getAsJsonObject())
+                .restore(saved)
                 .build();
         List<EngineFrame> resumed = new ArrayList<>();
-        for (int i = 0; i < 180; i++) resumed.add(afterEngine.tick());
+        for (int i = 0; i < 180; i++) resumed.add(afterEngine.step());
 
         assertEquals(reference.frames.subList(120, 300), resumed);
         assertEquals(refLava.emittedVolume(), afterLava.emittedVolume());

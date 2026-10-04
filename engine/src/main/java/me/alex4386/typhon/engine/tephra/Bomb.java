@@ -12,20 +12,21 @@ final class Bomb {
     final double silicaWt;
     /** Ground y assumed where the terrain model has no data (the launch column's ground). */
     final int fallbackGroundY;
-    final long launchTick;
+    /** Simulation time (s) of launch. */
+    final double launchTime;
 
-    Bomb(long id, double[] s, double diameter, double dragFactor, double silicaWt, int fallbackGroundY, long launchTick) {
+    Bomb(long id, double[] s, double diameter, double dragFactor, double silicaWt, int fallbackGroundY, double launchTime) {
         this.id = id;
         this.s = s;
         this.diameter = diameter;
         this.dragFactor = dragFactor;
         this.silicaWt = silicaWt;
         this.fallbackGroundY = fallbackGroundY;
-        this.launchTick = launchTick;
+        this.launchTime = launchTime;
     }
 
     Bomb copy() {
-        return new Bomb(id, s.clone(), diameter, dragFactor, silicaWt, fallbackGroundY, launchTick);
+        return new Bomb(id, s.clone(), diameter, dragFactor, silicaWt, fallbackGroundY, launchTime);
     }
 
     Vec3d position() {
@@ -46,7 +47,7 @@ final class Bomb {
         out.addProperty("dragFactor", dragFactor);
         out.addProperty("silica", silicaWt);
         out.addProperty("fallbackGroundY", fallbackGroundY);
-        out.addProperty("launchTick", launchTick);
+        out.addProperty("launchTime", launchTime);
         return out;
     }
 
@@ -61,6 +62,6 @@ final class Bomb {
                 in.get("dragFactor").getAsDouble(),
                 in.get("silica").getAsDouble(),
                 in.get("fallbackGroundY").getAsInt(),
-                in.get("launchTick").getAsLong());
+                in.get("launchTime").getAsDouble());
     }
 }

@@ -21,6 +21,8 @@ import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.world.BlockState;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
+import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 class MassFlowTest {
     private static final IntBinaryOperator RAMP = MassFlowTestWorld.rampToPlain(0.4, 60, 64);
@@ -395,7 +397,7 @@ class MassFlowTest {
         firstFlow.addSource(FlowSource.at("feed", new BlockPos(5, 0, 30), 15, 600, 0), Trigger.COLUMN_COLLAPSE);
         first.run(firstEngine, before);
         assertTrue(firstFlow.activeCellCount() > 0, "save mid-flow");
-        String saved = firstEngine.saveState().toString();
+        InMemorySaveStore saved = Saves.save(firstEngine);
 
         MassFlowTestWorld second = rampWorld();
         second.terrain.apply(first.resample()); // host re-sends live terrain after restart
@@ -403,7 +405,7 @@ class MassFlowTest {
         Engine secondEngine = Engine.builder(7)
                 .add(second.terrain)
                 .add(secondFlow)
-                .restore(JsonParser.parseString(saved).getAsJsonObject())
+                .restore(saved)
                 .build();
         second.run(secondEngine, after);
 

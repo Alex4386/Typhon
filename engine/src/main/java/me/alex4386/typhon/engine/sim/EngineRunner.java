@@ -1,43 +1,132 @@
 package me.alex4386.typhon.engine.sim;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Queue;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import me.alex4386.typhon.engine.command.EngineCommand;
+import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 
 /**
- * Runs an {@link Engine} on its own thread at a fixed tick rate, decoupled from the host's game loop.
+ * Runs an {@link Engine} on its own thread, decoupled from whoever consumes its output.
  *
- * <p>When the runner falls behind it catches up by running several ticks back to back, bounded by
- * {@code maxCatchUpTicks} so a long stall cannot spiral; ticks beyond that bound are dropped (the
- * simulation slows down instead of freezing the thread). Non-empty frames are queued for the host,
- * which drains them on its own thread and applies them within its budget.
+ * <h2>Modes</h2>
+ * <ul>
+ *   <li>{@link Mode#REALTIME}: simulation time advances at {@link #speed()} × wall-clock time
+ *       (adjustable while running, e.g. 0.1×–1000×). When the engine cannot keep up it catches up
+ *       at most {@code maxCatchUpSteps} steps at once and then lets simulation time slip.
+ *   <li>{@link Mode#UNBOUNDED}: as many steps as the CPU allows.
+ *   <li>{@link Mode#PAUSED}: no steps, except those requested with {@link #step(int)}.
+ * </ul>
+ * The mode only changes how simulation time maps onto wall-clock time; the simulation itself
+ * (frames, state) is identical whatever the mode or speed.
+ *
+ * <h2>Output</h2>
+ * <ul>
+ *   <li><b>Frames</b> (optional, {@code frameCapacity > 0}): every non-empty {@link EngineFrame},
+ *       in order, never dropped. Hosts that must apply every block change use this; when the queue
+ *       is full the engine thread waits (back-pressure) instead of discarding anything.
+ *   <li><b>Events</b>: a bounded ring for UIs. When a consumer falls behind, the oldest events are
+ *       discarded and counted in {@link #droppedEvents()}.
+ *   <li><b>Snapshot</b>: the latest {@link EngineSnapshot}, refreshed at most every
+ *       {@code snapshotIntervalMillis} of wall time and whenever the runner pauses.
+ * </ul>
+ * Work that must happen between steps (saving, hashing, inspecting subsystems) goes through
+ * {@link #onEngineThread}.
  */
 public final class EngineRunner implements AutoCloseable {
+    public enum Mode { REALTIME, UNBOUNDED, PAUSED }
+
+    /**
+     * @param mode initial mode
+     * @param speed initial real-time multiplier
+     * @param frameCapacity capacity of the lossless frame queue; 0 disables frame delivery
+     * @param eventCapacity capacity of the lossy event ring
+     * @param snapshotIntervalMillis minimum wall time between published snapshots
+     * @param maxCatchUpSteps steps run back to back in REALTIME before letting time slip
+     */
+    public record Options(Mode mode, double speed, int frameCapacity, int eventCapacity, long snapshotIntervalMillis,
+            int maxCatchUpSteps) {
+        public Options {
+            if (!(speed > 0)) throw new IllegalArgumentException("speed must be positive");
+            if (frameCapacity < 0 || eventCapacity < 1) throw new IllegalArgumentException("bad capacities");
+            if (maxCatchUpSteps < 1) throw new IllegalArgumentException("maxCatchUpSteps must be at least 1");
+        }
+
+        public static Options defaults() {
+            return new Options(Mode.REALTIME, 1.0, 0, 4096, 33, 200);
+        }
+
+        public Options withMode(Mode mode) {
+            return new Options(mode, speed, frameCapacity, eventCapacity, snapshotIntervalMillis, maxCatchUpSteps);
+        }
+
+        public Options withSpeed(double speed) {
+            return new Options(mode, speed, frameCapacity, eventCapacity, snapshotIntervalMillis, maxCatchUpSteps);
+        }
+
+        public Options withFrames(int capacity) {
+            return new Options(mode, speed, capacity, eventCapacity, snapshotIntervalMillis, maxCatchUpSteps);
+        }
+
+        public Options withEvents(int capacity) {
+            return new Options(mode, speed, frameCapacity, capacity, snapshotIntervalMillis, maxCatchUpSteps);
+        }
+    }
+
     private final Engine engine;
-    private final long tickNanos;
-    private final int maxCatchUpTicks;
-    private final Queue<EngineFrame> frames = new ConcurrentLinkedQueue<>();
+    private final Options options;
     private final Consumer<Throwable> errorHandler;
     private final Thread thread;
-    private volatile boolean running;
+    private final BlockingQueue<EngineFrame> frames;
+    private final EngineEvent[] ring;
+    private final Object ringLock = new Object();
+    private final Queue<Runnable> tasks = new ConcurrentLinkedQueue<>();
 
-    public EngineRunner(Engine engine, double ticksPerSecond, int maxCatchUpTicks, Consumer<Throwable> errorHandler) {
-        if (ticksPerSecond <= 0) throw new IllegalArgumentException("ticksPerSecond must be positive");
-        if (maxCatchUpTicks < 1) throw new IllegalArgumentException("maxCatchUpTicks must be at least 1");
+    private int ringHead;
+    private int ringSize;
+    private long droppedEvents;
+
+    private volatile Mode mode;
+    private volatile double speed;
+    private volatile boolean running;
+    private final AtomicLong pendingSteps = new AtomicLong();
+    private volatile boolean idle;
+    private volatile long pauseAtStep = Long.MAX_VALUE;
+    private volatile EngineSnapshot snapshot;
+    private volatile long completedStep;
+
+    // REALTIME pacing anchor (engine thread only)
+    private long anchorNanos;
+    private long anchorMicros;
+    private boolean reanchor = true;
+    private long lastSnapshotNanos;
+
+    public EngineRunner(Engine engine, Options options, Consumer<Throwable> errorHandler) {
         this.engine = engine;
-        this.tickNanos = (long) (TimeUnit.SECONDS.toNanos(1) / ticksPerSecond);
-        this.maxCatchUpTicks = maxCatchUpTicks;
+        this.options = options;
         this.errorHandler = errorHandler;
+        this.mode = options.mode();
+        this.speed = options.speed();
+        this.frames = options.frameCapacity() > 0 ? new ArrayBlockingQueue<>(options.frameCapacity()) : null;
+        this.ring = new EngineEvent[options.eventCapacity()];
         this.thread = new Thread(this::loop, "typhon-engine");
         this.thread.setDaemon(true);
+        this.snapshot = engine.snapshot();
+        this.completedStep = engine.currentStep();
     }
 
     public EngineRunner(Engine engine, Consumer<Throwable> errorHandler) {
-        this(engine, SimTime.TICKS_PER_SECOND, SimTime.TICKS_PER_SECOND, errorHandler);
+        this(engine, Options.defaults(), errorHandler);
     }
 
     public void start() {
@@ -49,51 +138,270 @@ public final class EngineRunner implements AutoCloseable {
         return running;
     }
 
-    public void submit(EngineCommand command) {
-        engine.submit(command);
+    // ── Control ──
+
+    public Mode mode() {
+        return mode;
     }
 
-    /** Returns the oldest pending frame, or {@code null}. Called from the host thread. */
+    public double speed() {
+        return speed;
+    }
+
+    public void realtime(double speed) {
+        if (!(speed > 0)) throw new IllegalArgumentException("speed must be positive");
+        this.speed = speed;
+        this.mode = Mode.REALTIME;
+        this.reanchor = true;
+        wake();
+    }
+
+    public void unbounded() {
+        this.mode = Mode.UNBOUNDED;
+        wake();
+    }
+
+    public void pause() {
+        this.mode = Mode.PAUSED;
+        wake();
+    }
+
+    /** Runs {@code n} more steps while paused (pauses first if needed). */
+    public void step(int n) {
+        if (n < 0) throw new IllegalArgumentException("n must be non-negative");
+        this.mode = Mode.PAUSED;
+        this.pendingSteps.addAndGet(n);
+        wake();
+    }
+
+    /** Pauses automatically before simulating step {@code step} (i.e. once {@code step} steps ran). */
+    public void pauseAtStep(long step) {
+        this.pauseAtStep = step;
+        wake();
+    }
+
+    /** Pauses automatically once simulation time reaches {@code seconds}. */
+    public void pauseAtTime(double seconds) {
+        pauseAtStep(Math.ceilDiv(SimTime.micros(seconds), engine.baseStepMicros()));
+    }
+
+    /** Number of steps completed so far. */
+    public long completedStep() {
+        return completedStep;
+    }
+
+    /** Waits until the runner is paused with no requested steps outstanding. */
+    public boolean awaitPaused(long timeout, TimeUnit unit) throws InterruptedException {
+        long deadline = System.nanoTime() + unit.toNanos(timeout);
+        while (!(mode == Mode.PAUSED && pendingSteps.get() == 0 && idle)) {
+            if (!running || System.nanoTime() > deadline) return false;
+            Thread.sleep(1);
+        }
+        return true;
+    }
+
+    public void submit(EngineCommand command) {
+        engine.submit(command);
+        wake();
+    }
+
+    /**
+     * Runs {@code task} on the engine thread between steps (e.g. {@code Engine::save},
+     * {@code Engine::stateHash}) and completes the future with its result.
+     */
+    public <T> CompletableFuture<T> onEngineThread(Function<Engine, T> task) {
+        CompletableFuture<T> future = new CompletableFuture<>();
+        tasks.add(() -> {
+            try {
+                future.complete(task.apply(engine));
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
+        });
+        wake();
+        return future;
+    }
+
+    // ── Output ──
+
+    /** Next frame in order, or {@code null} if none is waiting (frame delivery must be enabled). */
     public EngineFrame pollFrame() {
+        requireFrames();
         return frames.poll();
     }
 
+    /** Waits up to {@code timeout} for the next frame. */
+    public EngineFrame pollFrame(long timeout, TimeUnit unit) throws InterruptedException {
+        requireFrames();
+        return frames.poll(timeout, unit);
+    }
+
     public int pendingFrames() {
-        return frames.size();
+        return frames == null ? 0 : frames.size();
+    }
+
+    private void requireFrames() {
+        if (frames == null) throw new IllegalStateException("Frame delivery is disabled (frameCapacity = 0)");
+    }
+
+    /** Moves all buffered events (oldest first) into {@code out}; returns how many were moved. */
+    public int drainEvents(List<EngineEvent> out) {
+        synchronized (ringLock) {
+            int n = ringSize;
+            for (int i = 0; i < n; i++) {
+                int idx = (ringHead + i) % ring.length;
+                out.add(ring[idx]);
+                ring[idx] = null;
+            }
+            ringHead = 0;
+            ringSize = 0;
+            return n;
+        }
+    }
+
+    /** Events discarded because the ring was full. */
+    public long droppedEvents() {
+        synchronized (ringLock) {
+            return droppedEvents;
+        }
+    }
+
+    /** The latest published snapshot. */
+    public EngineSnapshot snapshot() {
+        return snapshot;
     }
 
     @Override
     public void close() throws InterruptedException {
         running = false;
-        LockSupport.unpark(thread);
+        wake();
+        thread.interrupt();
         thread.join();
     }
 
+    // ── Engine thread ──
+
+    private void wake() {
+        LockSupport.unpark(thread);
+    }
+
     private void loop() {
-        long nextTickAt = System.nanoTime();
         try {
             while (running) {
-                long now = System.nanoTime();
-                if (now < nextTickAt) {
-                    LockSupport.parkNanos(nextTickAt - now);
-                    continue;
+                runTasks();
+                if (engine.currentStep() >= pauseAtStep && mode != Mode.PAUSED) {
+                    mode = Mode.PAUSED;
+                    pendingSteps.set(0);
                 }
-
-                int ran = 0;
-                while (running && nextTickAt <= now && ran < maxCatchUpTicks) {
-                    EngineFrame frame = engine.tick();
-                    if (!frame.isEmpty()) frames.add(frame);
-                    nextTickAt += tickNanos;
-                    ran++;
+                switch (mode) {
+                    case PAUSED -> {
+                        if (pendingSteps.get() > 0 && engine.currentStep() < pauseAtStep) {
+                            idle = false;
+                            doStep();
+                            pendingSteps.decrementAndGet();
+                        } else {
+                            pendingSteps.set(0);
+                            publishSnapshot(true);
+                            idle = true;
+                            reanchor = true;
+                            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
+                        }
+                    }
+                    case UNBOUNDED -> {
+                        idle = false;
+                        doStep();
+                        reanchor = true;
+                    }
+                    case REALTIME -> {
+                        idle = false;
+                        realtimeSlice();
+                    }
                 }
-                if (nextTickAt <= now) {
-                    // Still behind after the catch-up budget: drop the backlog.
-                    nextTickAt = now + tickNanos;
-                }
+                publishSnapshot(false);
             }
+        } catch (InterruptedException e) {
+            // closing
         } catch (Throwable t) {
             running = false;
             errorHandler.accept(t);
+        } finally {
+            idle = true;
+        }
+    }
+
+    private void realtimeSlice() throws InterruptedException {
+        long now = System.nanoTime();
+        if (reanchor) {
+            anchorNanos = now;
+            anchorMicros = engine.timeMicros();
+            reanchor = false;
+        }
+        double elapsedSimMicros = (now - anchorNanos) / 1000.0 * speed;
+        long targetMicros = anchorMicros + (long) elapsedSimMicros;
+        long base = engine.baseStepMicros();
+
+        int ran = 0;
+        while (running && mode == Mode.REALTIME && engine.timeMicros() + base <= targetMicros
+                && ran < options.maxCatchUpSteps() && engine.currentStep() < pauseAtStep) {
+            doStep();
+            ran++;
+        }
+        if (ran >= options.maxCatchUpSteps() && engine.timeMicros() + base <= targetMicros) {
+            reanchor = true; // fell behind: let simulation time slip instead of spiralling
+            return;
+        }
+        if (ran == 0) {
+            long nextMicros = engine.timeMicros() + base - anchorMicros;
+            long wakeAt = anchorNanos + (long) (nextMicros * 1000.0 / speed);
+            long sleep = Math.min(wakeAt - System.nanoTime(), TimeUnit.MILLISECONDS.toNanos(10));
+            if (sleep > 0) LockSupport.parkNanos(sleep);
+        }
+    }
+
+    private void doStep() throws InterruptedException {
+        EngineFrame frame = engine.step();
+        completedStep = engine.currentStep();
+        if (frame.isEmpty()) return;
+        if (!frame.events().isEmpty()) {
+            synchronized (ringLock) {
+                for (EngineEvent event : frame.events()) {
+                    if (ringSize == ring.length) {
+                        ring[ringHead] = null;
+                        ringHead = (ringHead + 1) % ring.length;
+                        ringSize--;
+                        droppedEvents++;
+                    }
+                    ring[(ringHead + ringSize) % ring.length] = event;
+                    ringSize++;
+                }
+            }
+        }
+        if (frames != null) {
+            while (running && !frames.offer(frame, 10, TimeUnit.MILLISECONDS)) {
+                runTasks(); // keep serving saves/inspection while the consumer catches up
+            }
+        }
+    }
+
+    private void runTasks() {
+        Runnable task;
+        while ((task = tasks.poll()) != null) task.run();
+    }
+
+    private void publishSnapshot(boolean force) {
+        long now = System.nanoTime();
+        if (!force && now - lastSnapshotNanos < TimeUnit.MILLISECONDS.toNanos(options.snapshotIntervalMillis())) return;
+        if (force && snapshot != null && snapshot.step() == engine.currentStep()) return;
+        snapshot = engine.snapshot();
+        lastSnapshotNanos = now;
+    }
+
+    /** Copies the buffered events without removing them (for diagnostics). */
+    List<EngineEvent> peekEvents() {
+        synchronized (ringLock) {
+            List<EngineEvent> out = new ArrayList<>(ringSize);
+            for (int i = 0; i < ringSize; i++) out.add(ring[(ringHead + i) % ring.length]);
+            return out;
         }
     }
 }

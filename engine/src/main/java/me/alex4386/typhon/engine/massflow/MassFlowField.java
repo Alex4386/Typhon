@@ -6,7 +6,6 @@ import com.google.gson.JsonObject;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -30,6 +29,9 @@ import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.BlockState;
+import me.alex4386.typhon.engine.save.FieldChunk;
+import me.alex4386.typhon.engine.save.StateReader;
+import me.alex4386.typhon.engine.save.StateWriter;
 
 /**
  * Depth-averaged gravity current over the {@link TerrainModel} columns, shared by
@@ -121,8 +123,8 @@ public abstract class MassFlowField implements Subsystem {
     }
 
     @Override
-    public int interval() {
-        return config.stepIntervalTicks;
+    public double periodSeconds() {
+        return config.stepPeriodSeconds;
     }
 
     @Override
@@ -147,6 +149,7 @@ public abstract class MassFlowField implements Subsystem {
         return kind;
     }
 
+    @Override
     public MassFlowConfig config() {
         return config.copy();
     }
@@ -267,7 +270,7 @@ public abstract class MassFlowField implements Subsystem {
     protected abstract double friction(MassFlowChunk c, int i);
 
     /** Cooling, sedimentation, erosion, losses for one column after transport. */
-    protected abstract void process(MassFlowChunk c, int i, double dt, Outbox outbox, long tick);
+    protected abstract void process(MassFlowChunk c, int i, double dt, Outbox outbox, double time);
 
     /** Block laid down for one whole block of deposit, from the partial deposit's averages. */
     protected abstract BlockState depositBlock(MassFlowChunk c, int i, double meanTemperatureC, double meanSpeed);
@@ -278,15 +281,15 @@ public abstract class MassFlowField implements Subsystem {
     /** Lets a kind react to a block it just laid (e.g. compacting the block below). */
     protected void afterBlockPlaced(MassFlowChunk c, int i, BlockId previousSurface, int y, Outbox outbox) {}
 
-    protected abstract EngineEvent startedEvent(long tick, PendingStart start);
+    protected abstract EngineEvent startedEvent(double time, PendingStart start);
 
-    protected abstract EngineEvent frontEvent(long tick, BlockPos front, double runoutM, int cells, double volume,
+    protected abstract EngineEvent frontEvent(double time, BlockPos front, double runoutM, int cells, double volume,
             double maxSpeed, double tracer, List<FlowCell> reported);
 
-    protected abstract EngineEvent depositEvent(long tick, int cells, double volume, int blocks);
+    protected abstract EngineEvent depositEvent(double time, int cells, double volume, int blocks);
 
     /** Called once per step before transport (e.g. rain mobilising loose deposit). */
-    protected void beforeTransport(double dt, long tick, Outbox outbox) {}
+    protected void beforeTransport(double dt, double time, Outbox outbox) {}
 
     protected void saveExtra(JsonObject out) {}
 
@@ -296,8 +299,8 @@ public abstract class MassFlowField implements Subsystem {
 
     @Override
     public void step(StepContext context) {
-        long tick = context.tick();
-        stamp = tick;
+        double time = context.time();
+        stamp = context.step();
         double dt = context.dtSeconds() * config.timeScale;
         Outbox outbox = context.outbox();
         stats.reset();
@@ -314,9 +317,9 @@ public abstract class MassFlowField implements Subsystem {
                 }
             }
         }
-        beforeTransport(dt, tick, outbox);
+        beforeTransport(dt, time, outbox);
 
-        for (PendingStart start : pendingStarts) outbox.emit(startedEvent(tick, start));
+        for (PendingStart start : pendingStarts) outbox.emit(startedEvent(time, start));
         pendingStarts.clear();
 
         int substeps = substeps(dt);
@@ -328,7 +331,7 @@ public abstract class MassFlowField implements Subsystem {
             for (MassFlowChunk c : chunks.values()) {
                 if (c.flowCells == 0) continue;
                 for (int i = 0; i < AREA; i++) {
-                    if (c.depth[i] > 0) process(c, i, h, outbox, tick);
+                    if (c.depth[i] > 0) process(c, i, h, outbox, time);
                 }
                 c.recount();
             }
@@ -336,14 +339,14 @@ public abstract class MassFlowField implements Subsystem {
 
         renderVeneers(outbox);
 
-        if (stats.cells() > 0) outbox.emit(depositEvent(tick, stats.cells(), stats.volume, stats.blocks));
-        if (config.frontEventInterval > 0 && tick % config.frontEventInterval == 0) emitFront(tick, outbox);
+        if (stats.cells() > 0) outbox.emit(depositEvent(time, stats.cells(), stats.volume, stats.blocks));
+        if (context.crossed(config.frontEventPeriodSeconds)) emitFront(time, outbox);
         if (!neededTerrain.isEmpty()) {
             List<ChunkCoord> fresh = new ArrayList<>();
             for (long key : neededTerrain) {
                 if (requestedTerrain.add(key)) fresh.add(new ChunkCoord((int) (key >> 32), (int) key));
             }
-            if (!fresh.isEmpty()) outbox.emit(new MassFlowEvents.TerrainNeeded(tick, id, fresh));
+            if (!fresh.isEmpty()) outbox.emit(new MassFlowEvents.TerrainNeeded(time, id, fresh));
             neededTerrain.clear();
         }
         chunks.values().removeIf(c -> !c.hasPersistentState());
@@ -674,7 +677,7 @@ public abstract class MassFlowField implements Subsystem {
 
     // ── Telemetry ──
 
-    private void emitFront(long tick, Outbox outbox) {
+    private void emitFront(double time, Outbox outbox) {
         if (!anyFlow()) return;
         record Candidate(FlowCell cell, double distance, long key) {}
         List<Candidate> candidates = new ArrayList<>();
@@ -712,7 +715,7 @@ public abstract class MassFlowField implements Subsystem {
         for (int n = 0; n < Math.min(config.maxReportedCells, candidates.size()); n++) reported.add(candidates.get(n).cell);
         Candidate front = candidates.get(0);
         double tracer = kind == MassFlowKind.PDC ? tracerMax : (volume > 0 ? sedimentSum / volume : 0);
-        outbox.emit(frontEvent(tick, front.cell.pos(), Math.sqrt(front.distance) * dx, cells, volume, maxSpeed, tracer,
+        outbox.emit(frontEvent(time, front.cell.pos(), Math.sqrt(front.distance) * dx, cells, volume, maxSpeed, tracer,
                 reported));
     }
 
@@ -817,10 +820,12 @@ public abstract class MassFlowField implements Subsystem {
 
     // ── Persistence ──
 
-    private static final int CELL_DOUBLES = 11;
+    /** Schema of the per-chunk {@code cells} field. */
+    private static final int CELLS_SCHEMA = 1;
 
     @Override
-    public void saveState(JsonObject out) {
+    public void saveState(StateWriter writer) {
+        JsonObject out = writer.json();
         out.addProperty("released", released);
         out.addProperty("entrained", entrained);
         out.addProperty("deposited", deposited);
@@ -855,28 +860,29 @@ public abstract class MassFlowField implements Subsystem {
         for (long key : requestedTerrain) requested.add(key);
         out.add("requestedTerrain", requested);
 
-        JsonArray chunkArray = new JsonArray();
+        StateWriter.Field cells = writer.field("cells", CELLS_SCHEMA);
         for (MassFlowChunk c : chunks.values()) {
             if (!c.hasPersistentState()) continue;
-            ByteBuffer buf = ByteBuffer.allocate(AREA * (CELL_DOUBLES * Double.BYTES + 1));
-            for (int i = 0; i < AREA; i++) {
-                buf.putDouble(c.depth[i]).putDouble(c.vx[i]).putDouble(c.vz[i]).putDouble(c.temperature[i])
-                        .putDouble(c.sediment[i]).putDouble(c.deposit[i]).putDouble(c.depositHeat[i])
-                        .putDouble(c.depositSpeed[i]).putDouble(c.depositTotal[i]).putDouble(c.erodible[i])
-                        .putDouble(c.soak[i]).put(c.veneer[i]);
-            }
-            JsonObject o = new JsonObject();
-            o.addProperty("x", c.cx);
-            o.addProperty("z", c.cz);
-            o.addProperty("data", Base64.getEncoder().encodeToString(buf.array()));
-            chunkArray.add(o);
+            cells.put(c.cx, c.cz, new FieldChunk()
+                    .doubles("depth", c.depth.clone())
+                    .doubles("vx", c.vx.clone())
+                    .doubles("vz", c.vz.clone())
+                    .doubles("temperature", c.temperature.clone())
+                    .doubles("sediment", c.sediment.clone())
+                    .doubles("deposit", c.deposit.clone())
+                    .doubles("depositHeat", c.depositHeat.clone())
+                    .doubles("depositSpeed", c.depositSpeed.clone())
+                    .doubles("depositTotal", c.depositTotal.clone())
+                    .doubles("erodible", c.erodible.clone())
+                    .doubles("soak", c.soak.clone())
+                    .bytes("veneer", c.veneer.clone()));
         }
-        out.add("chunks", chunkArray);
         saveExtra(out);
     }
 
     @Override
-    public void loadState(JsonObject in) {
+    public void loadState(StateReader reader) {
+        JsonObject in = reader.json();
         chunks.clear();
         sources.clear();
         origins.clear();
@@ -902,26 +908,29 @@ public abstract class MassFlowField implements Subsystem {
         }
         for (JsonElement e : in.getAsJsonArray("requestedTerrain")) requestedTerrain.add(e.getAsLong());
 
-        for (JsonElement e : in.getAsJsonArray("chunks")) {
-            JsonObject o = e.getAsJsonObject();
-            MassFlowChunk c = new MassFlowChunk(o.get("x").getAsInt(), o.get("z").getAsInt());
-            ByteBuffer buf = ByteBuffer.wrap(Base64.getDecoder().decode(o.get("data").getAsString()));
-            for (int i = 0; i < AREA; i++) {
-                c.depth[i] = buf.getDouble();
-                c.vx[i] = buf.getDouble();
-                c.vz[i] = buf.getDouble();
-                c.temperature[i] = buf.getDouble();
-                c.sediment[i] = buf.getDouble();
-                c.deposit[i] = buf.getDouble();
-                c.depositHeat[i] = buf.getDouble();
-                c.depositSpeed[i] = buf.getDouble();
-                c.depositTotal[i] = buf.getDouble();
-                c.erodible[i] = buf.getDouble();
-                c.soak[i] = buf.getDouble();
-                c.veneer[i] = buf.get();
+        StateReader.Field cells = reader.field("cells");
+        if (cells != null) {
+            if (cells.schemaVersion() != CELLS_SCHEMA) {
+                throw new IllegalArgumentException("Unsupported mass-flow cell schema: " + cells.schemaVersion());
             }
-            c.recount();
-            chunks.put(c.key, c);
+            for (StateReader.Entry entry : cells.chunks()) {
+                FieldChunk f = entry.data();
+                MassFlowChunk c = new MassFlowChunk(entry.chunkX(), entry.chunkZ());
+                System.arraycopy(f.doubles("depth"), 0, c.depth, 0, AREA);
+                System.arraycopy(f.doubles("vx"), 0, c.vx, 0, AREA);
+                System.arraycopy(f.doubles("vz"), 0, c.vz, 0, AREA);
+                System.arraycopy(f.doubles("temperature"), 0, c.temperature, 0, AREA);
+                System.arraycopy(f.doubles("sediment"), 0, c.sediment, 0, AREA);
+                System.arraycopy(f.doubles("deposit"), 0, c.deposit, 0, AREA);
+                System.arraycopy(f.doubles("depositHeat"), 0, c.depositHeat, 0, AREA);
+                System.arraycopy(f.doubles("depositSpeed"), 0, c.depositSpeed, 0, AREA);
+                System.arraycopy(f.doubles("depositTotal"), 0, c.depositTotal, 0, AREA);
+                System.arraycopy(f.doubles("erodible"), 0, c.erodible, 0, AREA);
+                System.arraycopy(f.doubles("soak"), 0, c.soak, 0, AREA);
+                System.arraycopy(f.bytes("veneer"), 0, c.veneer, 0, AREA);
+                c.recount();
+                chunks.put(c.key, c);
+            }
         }
         loadExtra(in);
     }

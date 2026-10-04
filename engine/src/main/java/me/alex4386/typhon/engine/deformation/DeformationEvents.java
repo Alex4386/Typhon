@@ -12,7 +12,7 @@ public final class DeformationEvents {
      * @param chamberVolumeChangeM3 Mogi source volume change relative to zero overpressure
      * @param summitUpliftM vertical displacement above the chamber (m)
      */
-    public record DeformationSample(long tick, String volcanoId, double chamberVolumeChangeM3, double summitUpliftM,
+    public record DeformationSample(double time, String volcanoId, double chamberVolumeChangeM3, double summitUpliftM,
             List<StationReading> stations) implements EngineEvent {
         public DeformationSample {
             stations = List.copyOf(stations);
@@ -20,6 +20,6 @@ public final class DeformationEvents {
     }
 
     /** Accumulated uplift/subsidence crossed whole blocks and the model terrain was adjusted. */
-    public record GroundDeformed(long tick, String volcanoId, int columnsRaised, int columnsLowered)
+    public record GroundDeformed(double time, String volcanoId, int columnsRaised, int columnsLowered)
             implements EngineEvent {}
 }

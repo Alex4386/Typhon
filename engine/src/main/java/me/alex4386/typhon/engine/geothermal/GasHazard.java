@@ -13,5 +13,5 @@ import me.alex4386.typhon.engine.output.EngineEvent;
  * @param concentrationPpm peak concentration in the zone (0 = cleared)
  */
 public record GasHazard(
-        long tick, BlockPos center, double radius, GasSpecies species, double concentrationPpm, double durationSeconds)
+        double time, BlockPos center, double radius, GasSpecies species, double concentrationPpm, double durationSeconds)
         implements EngineEvent {}

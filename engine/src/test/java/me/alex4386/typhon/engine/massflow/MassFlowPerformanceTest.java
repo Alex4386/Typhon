@@ -23,20 +23,21 @@ class MassFlowPerformanceTest {
         field.release(new BlockPos(60, 0, 64), 56, 10_000, 15, 0.2, Trigger.MANUAL);
         world.run(engine, 20); // warm-up
 
-        int steps = 100; // engine ticks; the field steps every config.stepIntervalTicks
+        int steps = 100; // engine steps; the field steps every config.stepPeriodSeconds
+        int every = (int) Math.round(config.stepPeriodSeconds * 20);
         long start = System.nanoTime();
         long cellSteps = 0;
         long cellSubsteps = 0;
         for (int i = 0; i < steps; i++) {
             int cells = field.activeCellCount();
-            engine.tick();
-            if (i % config.stepIntervalTicks == 0) {
+            engine.step();
+            if (i % every == 0) {
                 cellSteps += cells;
                 cellSubsteps += (long) cells * field.lastSubsteps();
             }
         }
         double seconds = (System.nanoTime() - start) / 1e9;
-        int fieldSteps = steps / config.stepIntervalTicks;
+        int fieldSteps = steps / every;
         System.out.printf("massflow perf: %.2f M cell-substeps/s, %.2f ms/field-step (avg %d cells, %.1f substeps)%n",
                 cellSubsteps / seconds / 1e6, seconds * 1000 / fieldSteps, cellSteps / fieldSteps,
                 (double) cellSubsteps / cellSteps);

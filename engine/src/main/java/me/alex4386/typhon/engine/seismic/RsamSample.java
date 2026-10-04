@@ -13,7 +13,7 @@ import me.alex4386.typhon.engine.output.EngineEvent;
  * @param swarmActive whether an earthquake swarm is in progress
  */
 public record RsamSample(
-        long tick,
+        double time,
         String volcanoId,
         double rsam,
         double vtRatePerMinute,

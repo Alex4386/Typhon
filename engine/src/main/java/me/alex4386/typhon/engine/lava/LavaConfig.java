@@ -23,7 +23,7 @@ package me.alex4386.typhon.engine.lava;
  * @param renderMinThickness films thinner than this fraction of a block are not shown as blocks
  * @param quenchRateKPerS physical cooling rate above which lava counts as quenched (glassy)
  * @param columnarMinThickness flows at least this thick that cool slowly form columnar joints
- * @param frontEventInterval ticks between {@link LavaEvents.LavaFlowFront} events
+ * @param frontEventPeriodSeconds simulated seconds between {@link LavaEvents.LavaFlowFront} events
  * @param maxWaterEventsPerStep cap on {@link LavaEvents.LavaOceanEntry} events per interval
  * @param crustEnabled whether quiet flows grow an insulating crust (lava tubes need it)
  * @param crustConductivityWMK thermal conductivity of the (vesicular) crust
@@ -41,7 +41,7 @@ package me.alex4386.typhon.engine.lava;
  * @param metersPerBlock real metres per block (grid cell width and solid-block thickness)
  * @param waterEntryMinVolumeM3 submerged molten columns holding less lava than this are ignored by
  *     {@link LavaEvents.LavaOceanEntry} (quench films)
- * @param eventIntervalTicks ticks between aggregated {@link LavaEvents.LavaOceanEntry} and
+ * @param eventPeriodSeconds simulated seconds between aggregated {@link LavaEvents.LavaOceanEntry} and
  *     {@link LavaEvents.LavaSolidified} events
  */
 public record LavaConfig(
@@ -61,7 +61,7 @@ public record LavaConfig(
         double renderMinThickness,
         double quenchRateKPerS,
         double columnarMinThickness,
-        int frontEventInterval,
+        double frontEventPeriodSeconds,
         int maxWaterEventsPerStep,
         boolean crustEnabled,
         double crustConductivityWMK,
@@ -74,23 +74,23 @@ public record LavaConfig(
         double littoralExplosionFluxM3s,
         double metersPerBlock,
         double waterEntryMinVolumeM3,
-        int eventIntervalTicks) {
+        double eventPeriodSeconds) {
 
     public LavaConfig {
         if (!(metersPerBlock > 0)) throw new IllegalArgumentException("metersPerBlock must be > 0");
-        if (eventIntervalTicks < 1) throw new IllegalArgumentException("eventIntervalTicks must be >= 1");
+        if (!(eventPeriodSeconds > 0)) throw new IllegalArgumentException("eventPeriodSeconds must be > 0");
     }
 
     /** Flow-only configuration (crust, tube and coast parameters at their defaults). */
     public LavaConfig(double timeScale, double coolingScale, double densityKgM3, double specificHeatJKgK,
             double latentHeatJKg, double emissivity, double ambientC, double waterC, double waterHeatTransferWM2K,
             double groundConductivityWMK, double groundBoundaryLayerM, double minFlowThickness, double relaxation,
-            double renderMinThickness, double quenchRateKPerS, double columnarMinThickness, int frontEventInterval,
+            double renderMinThickness, double quenchRateKPerS, double columnarMinThickness, double frontEventPeriodSeconds,
             int maxWaterEventsPerStep) {
         this(timeScale, coolingScale, densityKgM3, specificHeatJKgK, latentHeatJKg, emissivity, ambientC, waterC,
                 waterHeatTransferWM2K, groundConductivityWMK, groundBoundaryLayerM, minFlowThickness, relaxation,
-                renderMinThickness, quenchRateKPerS, columnarMinThickness, frontEventInterval, maxWaterEventsPerStep,
-                true, 1.0, 0.3, 1.0, 0.25, 1.0, 0.05, 0.5, 1.0, 1.0, 0.01, 20);
+                renderMinThickness, quenchRateKPerS, columnarMinThickness, frontEventPeriodSeconds, maxWaterEventsPerStep,
+                true, 1.0, 0.3, 1.0, 0.25, 1.0, 0.05, 0.5, 1.0, 1.0, 0.01, 1.0);
     }
 
     /**
@@ -106,7 +106,7 @@ public record LavaConfig(
                 2.0, 0.5,
                 1e-3, 0.2, 0.02,
                 1.0, 2.0,
-                20, 32);
+                1.0, 32);
     }
 
     public Builder toBuilder() {
@@ -144,12 +144,13 @@ public record LavaConfig(
         private double timeScale, coolingScale, densityKgM3, specificHeatJKgK, latentHeatJKg, emissivity;
         private double ambientC, waterC, waterHeatTransferWM2K, groundConductivityWMK, groundBoundaryLayerM;
         private double minFlowThickness, relaxation, renderMinThickness, quenchRateKPerS, columnarMinThickness;
-        private int frontEventInterval, maxWaterEventsPerStep;
+        private double frontEventPeriodSeconds;
+        private int maxWaterEventsPerStep;
         private boolean crustEnabled;
         private double crustConductivityWMK, crustMinThickness, crustDisruptionVelocity, crustRenderThickness;
         private double tubeMinRoofThickness, tubeDrainThickness, hyaloclastiteFraction, littoralExplosionFluxM3s;
         private double metersPerBlock, waterEntryMinVolumeM3;
-        private int eventIntervalTicks;
+        private double eventPeriodSeconds;
 
         private Builder(LavaConfig c) {
             timeScale = c.timeScale;
@@ -168,7 +169,7 @@ public record LavaConfig(
             renderMinThickness = c.renderMinThickness;
             quenchRateKPerS = c.quenchRateKPerS;
             columnarMinThickness = c.columnarMinThickness;
-            frontEventInterval = c.frontEventInterval;
+            frontEventPeriodSeconds = c.frontEventPeriodSeconds;
             maxWaterEventsPerStep = c.maxWaterEventsPerStep;
             crustEnabled = c.crustEnabled;
             crustConductivityWMK = c.crustConductivityWMK;
@@ -181,7 +182,7 @@ public record LavaConfig(
             littoralExplosionFluxM3s = c.littoralExplosionFluxM3s;
             metersPerBlock = c.metersPerBlock;
             waterEntryMinVolumeM3 = c.waterEntryMinVolumeM3;
-            eventIntervalTicks = c.eventIntervalTicks;
+            eventPeriodSeconds = c.eventPeriodSeconds;
         }
 
         public Builder timeScale(double v) { timeScale = v; return this; }
@@ -200,16 +201,16 @@ public record LavaConfig(
         public Builder relaxation(double v) { relaxation = v; return this; }
         public Builder metersPerBlock(double v) { metersPerBlock = v; return this; }
         public Builder waterEntryMinVolumeM3(double v) { waterEntryMinVolumeM3 = v; return this; }
-        public Builder eventIntervalTicks(int v) { eventIntervalTicks = v; return this; }
+        public Builder eventPeriodSeconds(double v) { eventPeriodSeconds = v; return this; }
 
         public LavaConfig build() {
             return new LavaConfig(timeScale, coolingScale, densityKgM3, specificHeatJKgK, latentHeatJKg, emissivity,
                     ambientC, waterC, waterHeatTransferWM2K, groundConductivityWMK, groundBoundaryLayerM,
                     minFlowThickness, relaxation, renderMinThickness, quenchRateKPerS, columnarMinThickness,
-                    frontEventInterval, maxWaterEventsPerStep, crustEnabled, crustConductivityWMK, crustMinThickness,
+                    frontEventPeriodSeconds, maxWaterEventsPerStep, crustEnabled, crustConductivityWMK, crustMinThickness,
                     crustDisruptionVelocity, crustRenderThickness, tubeMinRoofThickness, tubeDrainThickness,
                     hyaloclastiteFraction, littoralExplosionFluxM3s, metersPerBlock, waterEntryMinVolumeM3,
-                    eventIntervalTicks);
+                    eventPeriodSeconds);
         }
     }
 }

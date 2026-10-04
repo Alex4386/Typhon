@@ -4,7 +4,7 @@ package me.alex4386.typhon.engine.magma;
  * A discrete gas-driven explosion at the top of the conduit, produced by the chamber's conduit model
  * and turned into ballistics, ash and an explosion quake by the surface coupling.
  *
- * @param tick engine tick at which the burst happened
+ * @param time simulation time (s) at which the burst happened
  * @param kind mechanism
  * @param gasMassKg gas released (kg)
  * @param ejectaMassKg pyroclasts ejected (kg, real)
@@ -14,7 +14,7 @@ package me.alex4386.typhon.engine.magma;
  * @param durationSeconds physical duration of the burst
  */
 public record ConduitBurst(
-        long tick,
+        double time,
         Kind kind,
         double gasMassKg,
         double ejectaMassKg,

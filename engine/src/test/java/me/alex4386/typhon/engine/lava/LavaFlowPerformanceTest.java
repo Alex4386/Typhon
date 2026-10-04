@@ -33,7 +33,7 @@ class LavaFlowPerformanceTest {
             long cellSteps = 0;
             for (int i = 0; i < steps; i++) {
                 cellSteps += lava.activeCellCount();
-                engine.tick();
+                engine.step();
             }
             double s = (System.nanoTime() - start) / 1e9;
             seconds += s;

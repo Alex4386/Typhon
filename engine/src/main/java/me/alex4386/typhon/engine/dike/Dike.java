@@ -13,7 +13,7 @@ import me.alex4386.typhon.engine.volcano.VentSite;
  */
 public final class Dike {
     final int id;
-    final long startTick;
+    final double startTime;
     final double startX;
     final double startZ;
     /** Surface y above the nucleation point; maps real depth to world y. */
@@ -40,9 +40,9 @@ public final class Dike {
     int tipY;
     VentSite fissure;
 
-    Dike(int id, long startTick, double x, double z, int surfaceStartY, int chamberY, double chamberDepth) {
+    Dike(int id, double startTime, double x, double z, int surfaceStartY, int chamberY, double chamberDepth) {
         this.id = id;
-        this.startTick = startTick;
+        this.startTime = startTime;
         this.startX = x;
         this.startZ = z;
         this.x = x;
@@ -55,7 +55,8 @@ public final class Dike {
     }
 
     public int id() { return id; }
-    public long startTick() { return startTick; }
+    /** Simulation time (s) at which the dike nucleated. */
+    public double startTime() { return startTime; }
     public DikeStatus status() { return status; }
     public boolean propagating() { return status == DikeStatus.PROPAGATING; }
     /** Real depth of the upper tip below the surface (m). */
@@ -88,7 +89,7 @@ public final class Dike {
     JsonObject save() {
         JsonObject o = new JsonObject();
         o.addProperty("id", id);
-        o.addProperty("startTick", startTick);
+        o.addProperty("startTime", startTime);
         o.addProperty("startX", startX);
         o.addProperty("startZ", startZ);
         o.addProperty("surfaceStartY", surfaceStartY);
@@ -123,7 +124,7 @@ public final class Dike {
     static Dike load(JsonObject o) {
         Dike d = new Dike(
                 o.get("id").getAsInt(),
-                o.get("startTick").getAsLong(),
+                o.get("startTime").getAsDouble(),
                 o.get("startX").getAsDouble(),
                 o.get("startZ").getAsDouble(),
                 o.get("surfaceStartY").getAsInt(),

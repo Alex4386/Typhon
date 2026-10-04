@@ -19,6 +19,8 @@ import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.volcano.EruptiveRegime;
 import me.alex4386.typhon.engine.volcano.MagmaState;
+import me.alex4386.typhon.engine.save.StateReader;
+import me.alex4386.typhon.engine.save.StateWriter;
 
 /**
  * Lumped (0-D) magma chamber.
@@ -82,7 +84,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private double bulkWater;
     private double supplyRate;
     private boolean erupting;
-    private long eruptionStartTick;
+    private double eruptionStartTime;
+    private double lastTime;
     private double eruptedVolume;
     private double eruptionRate;
     private double overpressureRate;
@@ -109,6 +112,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         this.conduitOpenness = config.conduit().initialOpenness();
     }
 
+    @Override
     public MagmaChamberConfig config() {
         return config;
     }
@@ -119,8 +123,13 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     }
 
     @Override
-    public int interval() {
-        return config.stepIntervalTicks();
+    public double periodSeconds() {
+        return config.stepPeriodSeconds();
+    }
+
+    @Override
+    public MagmaEvents.ChamberSample snapshot() {
+        return sample(lastTime);
     }
 
     @Override
@@ -152,7 +161,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     @Override
     public void step(StepContext context) {
-        long tick = context.tick();
+        lastTime = context.time();
         double dt = context.dtSeconds();
 
         applyOverrides(context);
@@ -200,9 +209,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         eruptionRate = erupting ? erupted / dt : 0;
         overpressureRate = (overpressure - previous) / dt;
 
-        int sampleInterval = config.sampleIntervalTicks();
-        if (sampleInterval > 0 && Math.floorDiv(tick, sampleInterval) != Math.floorDiv(tick - interval(), sampleInterval)) {
-            context.outbox().emit(sample(tick));
+        if (context.crossed(config.samplePeriodSeconds())) {
+            context.outbox().emit(sample(context.time()));
         }
     }
 
@@ -246,12 +254,12 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         ascentVelocity = ConduitFlow.ascentVelocity(onsetRate, config.conduitRadius());
         ventWater = ConduitFlow.retainedWaterWt(config, waterWt(), onsetRate);
         erupting = true;
-        eruptionStartTick = context.tick();
+        eruptionStartTime = context.time();
         eruptedVolume = 0;
         slugGas = 0;
         plugGas = 0;
         resealRemaining = 0;
-        context.outbox().emit(new MagmaEvents.EruptionStarted(context.tick(), config.volcanoId(), overpressure, cause));
+        context.outbox().emit(new MagmaEvents.EruptionStarted(context.time(), config.volcanoId(), overpressure, cause));
         setRegime(context, onset);
     }
 
@@ -260,7 +268,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         eruptionRate = 0;
         conduitOpenness = 1;
         context.outbox().emit(new MagmaEvents.EruptionEnded(
-                context.tick(), config.volcanoId(), eruptedVolume, context.tick() - eruptionStartTick, cause));
+                context.time(), config.volcanoId(), eruptedVolume, context.time() - eruptionStartTime, cause));
         setRegime(context, EruptiveRegime.QUIESCENT);
     }
 
@@ -345,7 +353,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             resealRemaining = 0;
         }
         context.outbox().emit(new MagmaEvents.EruptiveRegimeChanged(
-                context.tick(), config.volcanoId(), previous, next, ascentVelocity, ventWaterWt()));
+                context.time(), config.volcanoId(), previous, next, ascentVelocity, ventWaterWt()));
     }
 
     // ── Conduit gas: Strombolian slugs and Vulcanian plugs ──
@@ -360,7 +368,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             for (int n = 0; slugGas >= nextSlugMass && n < 8; n++) {
                 double gas = nextSlugMass;
                 slugGas -= gas;
-                queueBurst(new ConduitBurst(context.tick(), ConduitBurst.Kind.STROMBOLIAN, gas,
+                queueBurst(new ConduitBurst(context.time(), ConduitBurst.Kind.STROMBOLIAN, gas,
                         gas * (1 / c.strombolianGasMassFraction() - 1), c.slugOverpressureMPa(), temperature, silicaWt(),
                         c.strombolianDurationSeconds()));
                 nextSlugMass = sampleSlugMass(random);
@@ -373,7 +381,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             }
             if (plugPressureMPa() >= c.plugStrengthMPa()) {
                 double gas = plugGas;
-                queueBurst(new ConduitBurst(context.tick(), ConduitBurst.Kind.VULCANIAN, gas,
+                queueBurst(new ConduitBurst(context.time(), ConduitBurst.Kind.VULCANIAN, gas,
                         gas * (1 / c.vulcanianGasMassFraction() - 1), plugPressureMPa(), temperature, silicaWt(),
                         c.vulcanianDurationSeconds()));
                 plugGas = 0;
@@ -429,8 +437,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         bulkWater += f * (waterWt - bulkWater);
     }
 
-    private MagmaEvents.ChamberSample sample(long tick) {
-        return new MagmaEvents.ChamberSample(tick, config.volcanoId(), overpressure, overpressureRate, temperature,
+    private MagmaEvents.ChamberSample sample(double time) {
+        return new MagmaEvents.ChamberSample(time, config.volcanoId(), overpressure, overpressureRate, temperature,
                 silicaWt(), waterWt(), exsolvedWaterWt(), crystalFraction(), viscosityLog10(), supplyRate,
                 eruptionRate, eruptedVolume, erupting, regime, ventWaterWt(), conduitOpenness);
     }
@@ -608,7 +616,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     // ── Persistence ──
 
     @Override
-    public void saveState(JsonObject out) {
+    public void saveState(StateWriter writer) {
+        JsonObject out = writer.json();
         out.addProperty("pendingStart", pendingStart);
         out.addProperty("pendingStop", pendingStop);
         out.addProperty("pendingFlank", pendingFlank);
@@ -618,7 +627,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         out.addProperty("bulkWater", bulkWater);
         out.addProperty("supplyRate", supplyRate);
         out.addProperty("erupting", erupting);
-        out.addProperty("eruptionStartTick", eruptionStartTick);
+        out.addProperty("eruptionStartTime", eruptionStartTime);
+        out.addProperty("lastTime", lastTime);
         out.addProperty("eruptedVolume", eruptedVolume);
         out.addProperty("eruptionRate", eruptionRate);
         out.addProperty("overpressureRate", overpressureRate);
@@ -633,7 +643,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         JsonArray queued = new JsonArray();
         for (ConduitBurst b : bursts) {
             JsonObject o = new JsonObject();
-            o.addProperty("tick", b.tick());
+            o.addProperty("time", b.time());
             o.addProperty("kind", b.kind().name());
             o.addProperty("gas", b.gasMassKg());
             o.addProperty("ejecta", b.ejectaMassKg());
@@ -647,7 +657,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     }
 
     @Override
-    public void loadState(JsonObject in) {
+    public void loadState(StateReader reader) {
+        JsonObject in = reader.json();
         pendingStart = in.has("pendingStart") && in.get("pendingStart").getAsBoolean();
         pendingStop = in.has("pendingStop") && in.get("pendingStop").getAsBoolean();
         pendingFlank = in.has("pendingFlank") && in.get("pendingFlank").getAsBoolean();
@@ -657,7 +668,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         bulkWater = in.get("bulkWater").getAsDouble();
         supplyRate = in.get("supplyRate").getAsDouble();
         erupting = in.get("erupting").getAsBoolean();
-        eruptionStartTick = in.get("eruptionStartTick").getAsLong();
+        eruptionStartTime = in.get("eruptionStartTime").getAsDouble();
+        lastTime = in.get("lastTime").getAsDouble();
         eruptedVolume = in.get("eruptedVolume").getAsDouble();
         eruptionRate = in.get("eruptionRate").getAsDouble();
         overpressureRate = in.get("overpressureRate").getAsDouble();
@@ -674,7 +686,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         if (in.has("bursts")) {
             for (JsonElement e : in.getAsJsonArray("bursts")) {
                 JsonObject o = e.getAsJsonObject();
-                bursts.addLast(new ConduitBurst(o.get("tick").getAsLong(), ConduitBurst.Kind.valueOf(o.get("kind").getAsString()),
+                bursts.addLast(new ConduitBurst(o.get("time").getAsDouble(), ConduitBurst.Kind.valueOf(o.get("kind").getAsString()),
                         o.get("gas").getAsDouble(), o.get("ejecta").getAsDouble(), o.get("overpressure").getAsDouble(),
                         o.get("temperature").getAsDouble(), o.get("silica").getAsDouble(), o.get("duration").getAsDouble()));
             }

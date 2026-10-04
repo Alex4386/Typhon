@@ -82,7 +82,7 @@ class SurfaceDynamicsTest {
 
     static List<EngineFrame> run(Engine engine, int ticks) {
         List<EngineFrame> frames = new ArrayList<>();
-        for (int i = 0; i < ticks; i++) frames.add(engine.tick());
+        for (int i = 0; i < ticks; i++) frames.add(engine.step());
         return frames;
     }
 
@@ -128,7 +128,7 @@ class SurfaceDynamicsTest {
         List<SeismicEvent> quakes = events(frames, SeismicEvent.class).stream()
                 .filter(e -> e.type() == SeismicEventType.EXPLOSION).toList();
         for (ExplosiveBurst burst : bursts) {
-            assertTrue(quakes.stream().anyMatch(q -> q.tick() >= burst.tick() && q.tick() <= burst.tick() + 40),
+            assertTrue(quakes.stream().anyMatch(q -> q.time() >= burst.time() && q.time() <= burst.time() + 2),
                     "every burst has an explosion quake right after it");
         }
         assertEquals(bursts.size(), quakes.size(), "explosion quakes only come from bursts in an open vent");
@@ -148,10 +148,10 @@ class SurfaceDynamicsTest {
         assertTrue(events(frames, ExplosiveBurst.class).stream().anyMatch(b -> b.kind() == BurstKind.SURTSEYAN_JET));
         assertFalse(events(frames, SurfaceEvents.PhreatomagmaticSteam.class).isEmpty());
 
-        long sealedAt = changes.stream().filter(c -> !c.active()).mapToLong(PhreatomagmaticChanged::tick).findFirst()
+        double sealedAt = changes.stream().filter(c -> !c.active()).mapToDouble(PhreatomagmaticChanged::time).findFirst()
                 .orElseThrow(() -> new AssertionError("the tuff ring should isolate the vent"));
         // No lava while the vent is phreatomagmatic; effusion once it is sealed off.
-        long lavaBefore = frames.stream().filter(f -> f.tick() < sealedAt)
+        long lavaBefore = frames.stream().filter(f -> f.time() < sealedAt)
                 .flatMap(f -> f.blockChanges().stream()).filter(c -> c.to().id().path().equals("lava")).count();
         assertEquals(0, lavaBefore);
         assertTrue(w.volcano().coupler().effusing());

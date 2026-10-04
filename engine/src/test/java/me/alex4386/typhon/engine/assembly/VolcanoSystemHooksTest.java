@@ -36,7 +36,7 @@ class VolcanoSystemHooksTest {
 
         volcano.setWind(16, 2.0, 0);
         Engine engine = volcano.addTo(Engine.builder(1)).build();
-        engine.tick();
+        engine.step();
         assertEquals(16 / Math.sqrt(4), volcano.tephra().wind().baseSpeed(), 1e-12);
         assertEquals(2.0, volcano.tephra().wind().baseDirectionRad());
     }

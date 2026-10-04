@@ -30,6 +30,9 @@ import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import me.alex4386.typhon.engine.world.BlockId;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
+import me.alex4386.typhon.engine.save.InMemorySaveStore;
+import me.alex4386.typhon.engine.save.SaveStore;
 
 /** End-to-end: chamber → seismicity → alert → coupler → lava / tephra / geothermal on a cone. */
 class VolcanoSystemTest {
@@ -37,7 +40,7 @@ class VolcanoSystemTest {
     private static final BlockId LAVA = BlockId.minecraft("lava");
     private static final int CHUNK_RADIUS = 8;
     private static final int SUMMIT_Y = 120;
-    private static final VentSite CRATER = VentSite.crater("summit", new BlockPos(0, SUMMIT_Y - 3, 0), 4);
+    static final VentSite CRATER = VentSite.crater("summit", new BlockPos(0, SUMMIT_Y - 3, 0), 4);
 
     /** Cone rising from y=64 to a summit crater, sampled the way a host would send it. */
     static TerrainSnapshot cone() {
@@ -78,12 +81,12 @@ class VolcanoSystemTest {
 
     record World(Engine engine, TerrainModel terrain, LavaFlow lava, VolcanoSystem volcano) {}
 
-    static World world(long seed, MagmaChamberConfig chamber, JsonObject restore) {
+    static World world(long seed, MagmaChamberConfig chamber, SaveStore restore) {
         return world(seed, chamber, restore, false);
     }
 
     /** Dikes are off by default so the summit scenarios stay focused; see {@link #dikeOpensAFlankEruption}. */
-    static World world(long seed, MagmaChamberConfig chamber, JsonObject restore, boolean dikes) {
+    static World world(long seed, MagmaChamberConfig chamber, SaveStore restore, boolean dikes) {
         TerrainModel terrain = new TerrainModel();
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder("test", List.of(CRATER), terrain, lava)
@@ -126,7 +129,7 @@ class VolcanoSystemTest {
 
     static List<EngineFrame> run(Engine engine, int ticks) {
         List<EngineFrame> frames = new ArrayList<>();
-        for (int i = 0; i < ticks; i++) frames.add(engine.tick());
+        for (int i = 0; i < ticks; i++) frames.add(engine.step());
         return frames;
     }
 
@@ -191,10 +194,10 @@ class VolcanoSystemTest {
         World first = world(9, basalt(), null);
         run(first.engine(), before);
         assertTrue(first.volcano().chamber().erupting(), "save point should be mid-eruption");
-        String saved = first.engine().saveState().toString();
+        InMemorySaveStore saved = Saves.save(first.engine());
         TerrainSnapshot terrain = resample(first.terrain());
 
-        World second = world(9, basalt(), JsonParser.parseString(saved).getAsJsonObject());
+        World second = world(9, basalt(), saved);
         second.engine().submit(terrain); // host re-sends the live terrain after the cone it submitted at boot
         List<EngineFrame> resumed = run(second.engine(), after);
 
@@ -208,7 +211,7 @@ class VolcanoSystemTest {
                 .supplyVariability(0)
                 .build();
         World w = world(3, chamber, null, true);
-        w.engine().tick();
+        w.engine().step();
         w.volcano().dikes().forceDike();
         List<EngineFrame> frames = run(w.engine(), 20 * 60 * 10);
 
@@ -217,7 +220,7 @@ class VolcanoSystemTest {
         List<EruptionStarted> starts = events(frames, EruptionStarted.class);
         assertFalse(starts.isEmpty(), "a flank eruption should follow");
         assertEquals(MagmaEvents.Cause.DIKE, starts.get(0).cause());
-        assertTrue(fissures.get(0).tick() < starts.get(0).tick());
+        assertTrue(fissures.get(0).time() < starts.get(0).time());
 
         String fissureId = fissures.get(0).vent().id();
         assertTrue(w.volcano().coupler().activeVents().stream().anyMatch(v -> v.id().equals(fissureId)),
@@ -225,7 +228,7 @@ class VolcanoSystemTest {
         assertTrue(w.volcano().coupler().activeVents().stream().noneMatch(v -> v.id().equals(CRATER.id())),
                 "the summit stays quiet during a flank eruption");
         long swarmEvents = events(frames, SeismicEvent.class).stream()
-                .filter(e -> e.swarm() && e.tick() <= fissures.get(0).tick()).count();
+                .filter(e -> e.swarm() && e.time() <= fissures.get(0).time()).count();
         assertTrue(swarmEvents > 0, "the rising dike should cause a VT swarm");
     }
 }

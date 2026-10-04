@@ -11,6 +11,8 @@ import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.testing.StubMagmaState;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
+import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 class ExplosionQuakeTest {
     static SeismicityModel model() {
@@ -20,7 +22,7 @@ class ExplosionQuakeTest {
     static List<SeismicEvent> explosions(Engine engine, int ticks) {
         List<SeismicEvent> out = new ArrayList<>();
         for (int i = 0; i < ticks; i++) {
-            for (EngineEvent e : engine.tick().events()) {
+            for (EngineEvent e : engine.step().events()) {
                 if (e instanceof SeismicEvent s && s.type() == SeismicEventType.EXPLOSION) out.add(s);
             }
         }
@@ -44,12 +46,12 @@ class ExplosionQuakeTest {
     void queuedExplosionsSurviveSaveAndRestore() {
         SeismicityModel model = model();
         Engine engine = Engine.builder(0).add(model).build();
-        engine.tick(); // step at tick 0 consumes nothing; the next step is later
+        engine.step(); // step at tick 0 consumes nothing; the next step is later
         model.queueExplosion(new BlockPos(0, 98, 0), 1e11);
-        String saved = engine.saveState().toString();
+        InMemorySaveStore saved = Saves.save(engine);
 
         SeismicityModel restored = model();
-        Engine resumed = Engine.builder(0).add(restored).restore(JsonParser.parseString(saved).getAsJsonObject()).build();
+        Engine resumed = Engine.builder(0).add(restored).restore(saved).build();
         assertEquals(explosions(engine, 60), explosions(resumed, 60));
     }
 }

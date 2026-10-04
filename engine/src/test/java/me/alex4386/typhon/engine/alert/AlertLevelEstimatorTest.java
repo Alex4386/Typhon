@@ -14,6 +14,7 @@ import me.alex4386.typhon.engine.seismic.SeismicityModel;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.testing.StubMagmaState;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
 
 class AlertLevelEstimatorTest {
     private static final double STRENGTH = 15;
@@ -21,7 +22,7 @@ class AlertLevelEstimatorTest {
     private static List<AlertLevelChanged> advance(Engine engine, double seconds) {
         List<AlertLevelChanged> changes = new ArrayList<>();
         for (int i = 0; i < Math.round(seconds * 20); i++) {
-            for (EngineEvent e : engine.tick().events()) {
+            for (EngineEvent e : engine.step().events()) {
                 if (e instanceof AlertLevelChanged c) changes.add(c);
             }
         }
@@ -163,7 +164,7 @@ class AlertLevelEstimatorTest {
         List<AlertEvents.EruptionStyleSuggested> styles = new ArrayList<>();
         for (int i = 0; i < 40; i++) {
             if (i == 20) magma.water = 3.0;
-            for (EngineEvent e : engine.tick().events()) {
+            for (EngineEvent e : engine.step().events()) {
                 if (e instanceof AlertEvents.EruptionStyleSuggested s) styles.add(s);
             }
         }
@@ -185,9 +186,9 @@ class AlertLevelEstimatorTest {
 
         AlertLevelEstimator restored = new AlertLevelEstimator(AlertConfig.defaults("v"), magma, null);
         Engine resumed = Engine.builder(0).add(restored)
-                .restore(JsonParser.parseString(engine.saveState().toString()).getAsJsonObject()).build();
+                .restore(Saves.save(engine)).build();
         assertEquals(AlertLevel.MAJOR_ACTIVITY, restored.level());
-        for (int i = 0; i < 20 * 300; i++) assertEquals(engine.tick(), resumed.tick());
+        for (int i = 0; i < 20 * 300; i++) assertEquals(engine.step(), resumed.step());
         assertEquals(original.level(), restored.level());
     }
 }

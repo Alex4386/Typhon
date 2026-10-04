@@ -27,6 +27,9 @@ import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.BlockState;
+import me.alex4386.typhon.engine.save.FieldChunk;
+import me.alex4386.typhon.engine.save.StateReader;
+import me.alex4386.typhon.engine.save.StateWriter;
 
 /**
  * Geothermal and hydrothermal activity around one volcano.
@@ -77,9 +80,9 @@ public final class Geothermal implements Subsystem {
     private final Map<HydrothermalFeature, Integer> counts = new EnumMap<>(HydrothermalFeature.class);
     private double hazardClock;
     private boolean prewarmed;
-    /** Last announced fumarole intensity and tick, by column key. */
+    /** Last announced fumarole intensity and time (s), by column key. */
     private final TreeMap<Long, double[]> fumaroleReports = new TreeMap<>();
-    /** Last announced hazard concentration and tick, by {@code zone · species count + species}. */
+    /** Last announced hazard concentration and time (s), by {@code zone · species count + species}. */
     private final TreeMap<Long, double[]> hazardReports = new TreeMap<>();
 
     // Derived each step from the terrain (not persisted).
@@ -126,8 +129,13 @@ public final class Geothermal implements Subsystem {
     }
 
     @Override
-    public int interval() {
-        return config.intervalTicks();
+    public double periodSeconds() {
+        return config.stepSeconds;
+    }
+
+    @Override
+    public Object config() {
+        return config;
     }
 
     @Override
@@ -544,7 +552,7 @@ public final class Geothermal implements Subsystem {
         }
 
         BlockPos anchor = new BlockPos(x, potentY, z);
-        context.outbox().emit(new GeyserFormed(context.tick(), anchor, waterBlocks));
+        context.outbox().emit(new GeyserFormed(context.time(), anchor, waterBlocks));
         formed(context, HydrothermalFeature.GEYSER, anchor);
         return true;
     }
@@ -794,7 +802,6 @@ public final class Geothermal implements Subsystem {
      * intensity 0 when it dies down. Hosts keep rendering the last announced state.
      */
     private void emitFumaroleActivity(StepContext context) {
-        long refreshTicks = Math.max(1, Math.round(config.fumaroleRefreshSeconds * 20));
         for (PlacedFeature fumarole : features(HydrothermalFeature.FUMAROLE)) {
             long key = PlacedFeature.key(fumarole.x(), fumarole.z());
             double temperature = temperatureAt(fumarole.x(), fumarole.z());
@@ -806,12 +813,12 @@ public final class Geothermal implements Subsystem {
             } else {
                 report = last == null
                         || Math.abs(intensity - last[0]) >= config.fumaroleReportDelta
-                        || context.tick() - (long) last[1] >= refreshTicks;
+                        || context.time() - last[1] >= config.fumaroleRefreshSeconds;
             }
             if (!report) continue;
-            fumaroleReports.put(key, new double[] {intensity, context.tick()});
+            fumaroleReports.put(key, new double[] {intensity, context.time()});
             context.outbox().emit(new FumaroleActivity(
-                    context.tick(),
+                    context.time(),
                     new BlockPos(fumarole.x(), fumarole.y() + 1, fumarole.z()),
                     intensity,
                     GasComposition.atTemperature(temperature)));
@@ -829,7 +836,6 @@ public final class Geothermal implements Subsystem {
         int zonesX = (grid.sizeX() + zoneCells - 1) / zoneCells;
         int zonesZ = (grid.sizeZ() + zoneCells - 1) / zoneCells;
         GasSpecies[] speciesList = GasSpecies.values();
-        long refreshTicks = Math.max(1, Math.round(config.hazardRefreshSeconds * 20));
         double radius = zoneCells * config.cellSize * Math.sqrt(0.5);
         double validFor = config.hazardRefreshSeconds + config.hazardIntervalSeconds;
 
@@ -864,16 +870,16 @@ public final class Geothermal implements Subsystem {
                     if (ppm == 0) {
                         if (last == null) continue;
                         hazardReports.remove(key);
-                        context.outbox().emit(new GasHazard(context.tick(), zoneCenter(zi, zj, zoneCells), radius,
+                        context.outbox().emit(new GasHazard(context.time(), zoneCenter(zi, zj, zoneCells), radius,
                                 speciesList[s], 0, 0));
                         continue;
                     }
                     boolean report = last == null
                             || Math.abs(ppm - last[0]) >= config.hazardChangeFraction * last[0]
-                            || context.tick() - (long) last[1] >= refreshTicks;
+                            || context.time() - last[1] >= config.hazardRefreshSeconds;
                     if (!report) continue;
-                    hazardReports.put(key, new double[] {ppm, context.tick()});
-                    context.outbox().emit(new GasHazard(context.tick(), zoneCenter(zi, zj, zoneCells), radius,
+                    hazardReports.put(key, new double[] {ppm, context.time()});
+                    context.outbox().emit(new GasHazard(context.time(), zoneCenter(zi, zj, zoneCells), radius,
                             speciesList[s], ppm, validFor));
                 }
             }
@@ -893,7 +899,7 @@ public final class Geothermal implements Subsystem {
     }
 
     private void formed(StepContext context, HydrothermalFeature kind, BlockPos pos) {
-        context.outbox().emit(new HydrothermalFeatureFormed(context.tick(), kind, pos));
+        context.outbox().emit(new HydrothermalFeatureFormed(context.time(), kind, pos));
     }
 
     // ── Helpers ──
@@ -986,14 +992,16 @@ public final class Geothermal implements Subsystem {
     // ── Persistence ──
 
     @Override
-    public void saveState(JsonObject out) {
+    public void saveState(StateWriter writer) {
+        JsonObject out = writer.json();
         out.addProperty("minX", grid.minX());
         out.addProperty("minZ", grid.minZ());
         out.addProperty("sizeX", grid.sizeX());
         out.addProperty("sizeZ", grid.sizeZ());
         out.addProperty("cellSize", grid.cellSize());
-        out.addProperty("excess", encode(grid.excess));
-        out.addProperty("water", encode(grid.water));
+        writer.field("grid", 1).put(0, 0, new FieldChunk()
+                .doubles("excess", grid.excess.clone())
+                .doubles("water", grid.water.clone()));
         out.addProperty("hazardClock", hazardClock);
         JsonArray list = new JsonArray();
         for (PlacedFeature feature : features.values()) {
@@ -1017,7 +1025,7 @@ public final class Geothermal implements Subsystem {
             JsonArray entry = new JsonArray();
             entry.add(e.getKey());
             entry.add(Double.doubleToRawLongBits(e.getValue()[0]));
-            entry.add((long) e.getValue()[1]);
+            entry.add(Double.doubleToRawLongBits(e.getValue()[1]));
             list.add(entry);
         }
         return list;
@@ -1029,12 +1037,13 @@ public final class Geothermal implements Subsystem {
         for (JsonElement element : in.getAsJsonArray(name)) {
             JsonArray entry = element.getAsJsonArray();
             target.put(entry.get(0).getAsLong(), new double[] {
-                Double.longBitsToDouble(entry.get(1).getAsLong()), entry.get(2).getAsLong()});
+                Double.longBitsToDouble(entry.get(1).getAsLong()), Double.longBitsToDouble(entry.get(2).getAsLong())});
         }
     }
 
     @Override
-    public void loadState(JsonObject in) {
+    public void loadState(StateReader reader) {
+        JsonObject in = reader.json();
         if (in.get("minX").getAsInt() != grid.minX()
                 || in.get("minZ").getAsInt() != grid.minZ()
                 || in.get("sizeX").getAsInt() != grid.sizeX()
@@ -1042,8 +1051,9 @@ public final class Geothermal implements Subsystem {
                 || in.get("cellSize").getAsInt() != grid.cellSize()) {
             throw new IllegalArgumentException("Saved geothermal grid does not match the configured grid for " + id);
         }
-        decode(in.get("excess").getAsString(), grid.excess);
-        decode(in.get("water").getAsString(), grid.water);
+        FieldChunk saved = reader.field("grid").get(0, 0);
+        copyField(saved.doubles("excess"), grid.excess);
+        copyField(saved.doubles("water"), grid.water);
         hazardClock = in.get("hazardClock").getAsDouble();
         features.clear();
         counts.clear();
@@ -1061,17 +1071,10 @@ public final class Geothermal implements Subsystem {
         loadReports(in, "hazardReports", hazardReports);
     }
 
-    private static String encode(double[] values) {
-        ByteBuffer buffer = ByteBuffer.allocate(values.length * Double.BYTES);
-        for (double v : values) buffer.putLong(Double.doubleToRawLongBits(v));
-        return Base64.getEncoder().encodeToString(buffer.array());
-    }
-
-    private static void decode(String encoded, double[] target) {
-        ByteBuffer buffer = ByteBuffer.wrap(Base64.getDecoder().decode(encoded));
-        if (buffer.remaining() != target.length * Double.BYTES) {
+    private static void copyField(double[] saved, double[] target) {
+        if (saved == null || saved.length != target.length) {
             throw new IllegalArgumentException("Saved field has wrong length");
         }
-        for (int i = 0; i < target.length; i++) target[i] = Double.longBitsToDouble(buffer.getLong());
+        System.arraycopy(saved, 0, target, 0, target.length);
     }
 }

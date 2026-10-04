@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.Outbox;
+import me.alex4386.typhon.engine.save.FieldChunk;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.world.BlockId;
@@ -332,15 +333,20 @@ final class AshGrid {
         out.addProperty("deposited", deposited);
         out.addProperty("exported", exported);
         out.addProperty("discarded", discarded);
-        for (GrainClass c : GrainClass.values()) {
-            out.addProperty("airborne." + c.name().toLowerCase(), StateCodec.encodeSparse(airborne[c.ordinal()]));
-        }
-        out.addProperty("deposit", StateCodec.encodeSparse(deposit));
-        out.addProperty("applied", StateCodec.encodeSparse(applied));
-        out.addProperty("depositionRate", StateCodec.encodeSparse(depositionRate));
     }
 
-    static AshGrid load(JsonObject in) {
+    /** The grid's arrays, for a spatial save field. */
+    FieldChunk arrays() {
+        FieldChunk chunk = new FieldChunk();
+        for (GrainClass c : GrainClass.values()) {
+            chunk.doubles("airborne." + c.name().toLowerCase(), airborne[c.ordinal()].clone());
+        }
+        return chunk.doubles("deposit", deposit.clone())
+                .doubles("applied", applied.clone())
+                .doubles("depositionRate", depositionRate.clone());
+    }
+
+    static AshGrid load(JsonObject in, FieldChunk arrays) {
         AshGrid grid = new AshGrid(
                 in.get("originX").getAsInt(),
                 in.get("originZ").getAsInt(),
@@ -352,11 +358,18 @@ final class AshGrid {
         grid.exported = in.get("exported").getAsDouble();
         grid.discarded = in.get("discarded").getAsDouble();
         for (GrainClass c : GrainClass.values()) {
-            StateCodec.decodeSparse(in.get("airborne." + c.name().toLowerCase()).getAsString(), grid.airborne[c.ordinal()]);
+            copy(arrays.doubles("airborne." + c.name().toLowerCase()), grid.airborne[c.ordinal()]);
         }
-        StateCodec.decodeSparse(in.get("deposit").getAsString(), grid.deposit);
-        StateCodec.decodeSparse(in.get("applied").getAsString(), grid.applied);
-        StateCodec.decodeSparse(in.get("depositionRate").getAsString(), grid.depositionRate);
+        copy(arrays.doubles("deposit"), grid.deposit);
+        copy(arrays.doubles("applied"), grid.applied);
+        copy(arrays.doubles("depositionRate"), grid.depositionRate);
         return grid;
+    }
+
+    private static void copy(double[] saved, double[] target) {
+        if (saved == null || saved.length != target.length) {
+            throw new IllegalArgumentException("Saved ash array has the wrong size");
+        }
+        System.arraycopy(saved, 0, target, 0, target.length);
     }
 }

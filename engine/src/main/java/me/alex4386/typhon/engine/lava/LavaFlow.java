@@ -6,7 +6,6 @@ import com.google.gson.JsonObject;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -22,13 +21,15 @@ import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.random.SimRandom;
-import me.alex4386.typhon.engine.sim.SimTime;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.terrain.TerrainChunkView;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.world.BlockState;
+import me.alex4386.typhon.engine.save.FieldChunk;
+import me.alex4386.typhon.engine.save.StateReader;
+import me.alex4386.typhon.engine.save.StateWriter;
 
 /**
  * Lava flow as a 2.5D cellular automaton over surface columns (after MAGFLOW / SCIARA).
@@ -93,7 +94,7 @@ import me.alex4386.typhon.engine.world.BlockState;
 public final class LavaFlow implements Subsystem {
     public static final String ID = "lava";
 
-    private static final int STATE_FORMAT = 3;
+    private static final int STATE_FORMAT = 4;
     private static final double SIGMA = 5.670374419e-8;
     private static final double G = 9.81;
     private static final double KELVIN = 273.15;
@@ -163,6 +164,7 @@ public final class LavaFlow implements Subsystem {
 
     // ── Public API ──
 
+    @Override
     public LavaConfig config() {
         return config;
     }
@@ -276,6 +278,14 @@ public final class LavaFlow implements Subsystem {
     }
 
     /** Molten volume (real m³). Emitted = molten + crust + solidified. */
+    /** Lava field totals for dashboards. Volumes in real m³. */
+    public record Snapshot(double moltenVolumeM3, int activeCells, double emittedM3, double solidifiedM3, int tubes) {}
+
+    @Override
+    public Snapshot snapshot() {
+        return new Snapshot(totalLavaVolume(), activeCellCount(), emittedVolume(), solidifiedVolume(), tubes.size());
+    }
+
     public double totalLavaVolume() {
         double sum = 0;
         for (LavaChunk c : sortedChunks(chunks.values())) {
@@ -324,8 +334,8 @@ public final class LavaFlow implements Subsystem {
 
     @Override
     public void step(StepContext context) {
-        long tick = context.tick();
-        stamp = tick;
+        double now = context.time();
+        stamp = context.step();
         double dt = context.dtSeconds() * config.timeScale();
         Outbox outbox = context.outbox();
         neededTerrain.clear();
@@ -376,27 +386,27 @@ public final class LavaFlow implements Subsystem {
         for (LavaChunk c : update) render(c, outbox);
 
         // 5. events & cleanup
-        int interval = config.eventIntervalTicks();
-        if (tick % interval == 0) {
+        double interval = config.eventPeriodSeconds();
+        if (context.crossed(interval)) {
             if (stats.cells > 0) {
-                outbox.emit(new LavaEvents.LavaSolidified(tick, interval, stats.cells, stats.volume, stats.blocks));
+                outbox.emit(new LavaEvents.LavaSolidified(now, interval, stats.cells, stats.volume, stats.blocks));
             }
             stats.clear();
-            emitOceanEntries(tick, interval, outbox);
+            emitOceanEntries(now, interval, outbox);
         }
         if (!formed.isEmpty()) {
             tubes.addAll(formed);
-            outbox.emit(new LavaEvents.LavaTubesFormed(tick, formed));
+            outbox.emit(new LavaEvents.LavaTubesFormed(now, formed));
         }
-        if (config.frontEventInterval() > 0 && tick % config.frontEventInterval() == 0) {
-            emitFront(tick, update, outbox);
+        if (context.crossed(config.frontEventPeriodSeconds())) {
+            emitFront(now, update, outbox);
         }
         if (!neededTerrain.isEmpty()) {
             List<ChunkCoord> fresh = new ArrayList<>();
             for (long key : neededTerrain) {
                 if (requestedTerrain.add(key)) fresh.add(new ChunkCoord((int) (key >> 32), (int) key));
             }
-            if (!fresh.isEmpty()) outbox.emit(new LavaEvents.TerrainNeeded(tick, fresh));
+            if (!fresh.isEmpty()) outbox.emit(new LavaEvents.TerrainNeeded(now, fresh));
         }
         for (LavaChunk c : update) {
             if (!c.hasPersistentState()) chunks.remove(c.key);
@@ -568,9 +578,9 @@ public final class LavaFlow implements Subsystem {
     }
 
     /** One {@link LavaEvents.LavaOceanEntry} per zone with molten lava in water, then resets. */
-    private void emitOceanEntries(long tick, int interval, Outbox outbox) {
+    private void emitOceanEntries(double now, double interval, Outbox outbox) {
         if (oceanEntries.isEmpty()) return;
-        double seconds = SimTime.ticksToSeconds(interval) * config.timeScale();
+        double seconds = interval * config.timeScale();
         double minVolume = config.waterEntryMinVolumeM3();
         int emitted = 0;
         for (Map.Entry<Long, OceanEntry> entry : oceanEntries.entrySet()) {
@@ -597,7 +607,7 @@ public final class LavaFlow implements Subsystem {
             double powerW = seconds > 0 ? e.heatJ / seconds : 0;
             double steam = powerW / (WATER_HEAT_CAPACITY * Math.max(0, 100 - config.waterC()) + WATER_LATENT_HEAT);
             BlockPos pos = BlockPos.unpack(e.maxFluxM3s >= 0 ? e.maxPos : largest);
-            outbox.emit(new LavaEvents.LavaOceanEntry(tick, interval, pos, columns, molten,
+            outbox.emit(new LavaEvents.LavaOceanEntry(now, interval, pos, columns, molten,
                     seconds > 0 ? e.inflowM3 / seconds : 0, powerW / 1e6, steam, e.explosive));
         }
         oceanEntries.clear();
@@ -994,7 +1004,7 @@ public final class LavaFlow implements Subsystem {
         return LavaPalette.roof(roofKind);
     }
 
-    private void emitFront(long tick, List<LavaChunk> update, Outbox outbox) {
+    private void emitFront(double now, List<LavaChunk> update, Outbox outbox) {
         if (origins.isEmpty()) return;
         double best = -1;
         BlockPos front = null;
@@ -1022,7 +1032,7 @@ public final class LavaFlow implements Subsystem {
             }
         }
         if (front != null) {
-            outbox.emit(new LavaEvents.LavaFlowFront(tick, front, Math.sqrt(best) * metersPerBlock, cells, volume));
+            outbox.emit(new LavaEvents.LavaFlowFront(now, front, Math.sqrt(best) * metersPerBlock, cells, volume));
         }
     }
 
@@ -1128,11 +1138,12 @@ public final class LavaFlow implements Subsystem {
 
     // ── Persistence ──
 
-    private static final int CELL_BYTES_V1 = 5 * Double.BYTES + Integer.BYTES + Short.BYTES + Byte.BYTES;
-    private static final int CELL_BYTES_V2 = 7 * Double.BYTES + Integer.BYTES + 3 * Short.BYTES + 3 * Byte.BYTES;
+    /** Schema of the per-chunk {@code cells} field. */
+    private static final int CELLS_SCHEMA = 1;
 
     @Override
-    public void saveState(JsonObject out) {
+    public void saveState(StateWriter writer) {
+        JsonObject out = writer.json();
         out.addProperty("format", STATE_FORMAT);
         out.addProperty("metersPerBlock", metersPerBlock);
         out.addProperty("emitted", emittedVolume);
@@ -1185,38 +1196,50 @@ public final class LavaFlow implements Subsystem {
         }
         out.add("tubes", tubeArray);
 
-        JsonArray chunkArray = new JsonArray();
+        StateWriter.Field cells = writer.field("cells", CELLS_SCHEMA);
         for (LavaChunk c : sortedChunks(chunks.values())) {
             if (!c.hasPersistentState()) continue;
-            ByteBuffer buf = ByteBuffer.allocate(AREA * CELL_BYTES_V2);
-            for (int i = 0; i < AREA; i++) {
-                buf.putDouble(c.thickness[i]).putDouble(c.temperature[i]).putDouble(c.silica[i])
-                        .putDouble(c.water[i]).putDouble(c.solid[i]).putDouble(c.crust[i]).putDouble(c.roofTop[i])
-                        .putInt(c.renderBottom[i])
-                        .putShort(c.renderMelt[i]).putShort(c.renderGap[i]).putShort(c.renderRoof[i])
-                        .put(c.renderTop[i]).put(c.renderRoofKind[i]).put(c.crustKind[i]);
-            }
-            JsonObject o = new JsonObject();
-            o.addProperty("x", c.cx);
-            o.addProperty("z", c.cz);
-            o.addProperty("data", Base64.getEncoder().encodeToString(buf.array()));
-            chunkArray.add(o);
+            cells.put(c.cx, c.cz, new FieldChunk()
+                    .doubles("thickness", c.thickness.clone())
+                    .doubles("temperature", c.temperature.clone())
+                    .doubles("silica", c.silica.clone())
+                    .doubles("water", c.water.clone())
+                    .doubles("solid", c.solid.clone())
+                    .doubles("crust", c.crust.clone())
+                    .doubles("roofTop", c.roofTop.clone())
+                    .ints("renderBottom", c.renderBottom.clone())
+                    .ints("renderMelt", widen(c.renderMelt))
+                    .ints("renderGap", widen(c.renderGap))
+                    .ints("renderRoof", widen(c.renderRoof))
+                    .bytes("renderTop", c.renderTop.clone())
+                    .bytes("renderRoofKind", c.renderRoofKind.clone())
+                    .bytes("crustKind", c.crustKind.clone()));
         }
-        out.add("chunks", chunkArray);
+    }
+
+    private static int[] widen(short[] values) {
+        int[] out = new int[values.length];
+        for (int i = 0; i < values.length; i++) out[i] = values[i];
+        return out;
+    }
+
+    private static void narrow(int[] values, short[] target) {
+        for (int i = 0; i < target.length; i++) target[i] = (short) values[i];
     }
 
     @Override
-    public void loadState(JsonObject in) {
+    public void loadState(StateReader reader) {
+        JsonObject in = reader.json();
         chunks.clear();
         sources.clear();
         origins.clear();
         requestedTerrain.clear();
         tubes.clear();
-        int format = in.has("format") ? in.get("format").getAsInt() : 1;
-        if (format < 1 || format > STATE_FORMAT) {
+        int format = in.get("format").getAsInt();
+        if (format != STATE_FORMAT) {
             throw new IllegalArgumentException("Unsupported lava state format: " + format);
         }
-        double savedScale = format >= 3 ? in.get("metersPerBlock").getAsDouble() : 1.0;
+        double savedScale = in.get("metersPerBlock").getAsDouble();
         if (savedScale != metersPerBlock) {
             throw new IllegalArgumentException(
                     "Lava state was saved at " + savedScale + " m/block, but the field is at " + metersPerBlock);
@@ -1226,7 +1249,7 @@ public final class LavaFlow implements Subsystem {
         solidAcc.clear();
         oceanEntries.clear();
         oceanGeneration++;
-        if (format >= 3) {
+        {
             JsonArray acc = in.getAsJsonArray("solidAcc");
             solidAcc.cells = acc.get(0).getAsInt();
             solidAcc.blocks = acc.get(1).getAsInt();
@@ -1259,33 +1282,28 @@ public final class LavaFlow implements Subsystem {
             }
         }
 
-        for (JsonElement e : in.getAsJsonArray("chunks")) {
-            JsonObject o = e.getAsJsonObject();
-            LavaChunk c = new LavaChunk(o.get("x").getAsInt(), o.get("z").getAsInt());
-            ByteBuffer buf = ByteBuffer.wrap(Base64.getDecoder().decode(o.get("data").getAsString()));
-            for (int i = 0; i < AREA; i++) {
-                c.thickness[i] = buf.getDouble();
-                c.temperature[i] = buf.getDouble();
-                c.silica[i] = buf.getDouble();
-                c.water[i] = buf.getDouble();
-                c.solid[i] = buf.getDouble();
-                if (format >= 2) {
-                    c.crust[i] = buf.getDouble();
-                    c.roofTop[i] = buf.getDouble();
-                    c.renderBottom[i] = buf.getInt();
-                    c.renderMelt[i] = buf.getShort();
-                    c.renderGap[i] = buf.getShort();
-                    c.renderRoof[i] = buf.getShort();
-                    c.renderTop[i] = buf.get();
-                    c.renderRoofKind[i] = buf.get();
-                    c.crustKind[i] = buf.get();
-                } else {
-                    // v1: a uniform lava column; no crust yet
-                    c.renderBottom[i] = buf.getInt();
-                    c.renderMelt[i] = buf.getShort();
-                    c.renderTop[i] = buf.get();
-                }
-            }
+        StateReader.Field cells = reader.field("cells");
+        if (cells == null) return;
+        if (cells.schemaVersion() != CELLS_SCHEMA) {
+            throw new IllegalArgumentException("Unsupported lava cell schema: " + cells.schemaVersion());
+        }
+        for (StateReader.Entry entry : cells.chunks()) {
+            FieldChunk f = entry.data();
+            LavaChunk c = new LavaChunk(entry.chunkX(), entry.chunkZ());
+            System.arraycopy(f.doubles("thickness"), 0, c.thickness, 0, AREA);
+            System.arraycopy(f.doubles("temperature"), 0, c.temperature, 0, AREA);
+            System.arraycopy(f.doubles("silica"), 0, c.silica, 0, AREA);
+            System.arraycopy(f.doubles("water"), 0, c.water, 0, AREA);
+            System.arraycopy(f.doubles("solid"), 0, c.solid, 0, AREA);
+            System.arraycopy(f.doubles("crust"), 0, c.crust, 0, AREA);
+            System.arraycopy(f.doubles("roofTop"), 0, c.roofTop, 0, AREA);
+            System.arraycopy(f.ints("renderBottom"), 0, c.renderBottom, 0, AREA);
+            narrow(f.ints("renderMelt"), c.renderMelt);
+            narrow(f.ints("renderGap"), c.renderGap);
+            narrow(f.ints("renderRoof"), c.renderRoof);
+            System.arraycopy(f.bytes("renderTop"), 0, c.renderTop, 0, AREA);
+            System.arraycopy(f.bytes("renderRoofKind"), 0, c.renderRoofKind, 0, AREA);
+            System.arraycopy(f.bytes("crustKind"), 0, c.crustKind, 0, AREA);
             c.recount();
             chunks.put(c.key, c);
         }

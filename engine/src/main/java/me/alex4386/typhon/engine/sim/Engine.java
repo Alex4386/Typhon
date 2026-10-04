@@ -1,44 +1,66 @@
 package me.alex4386.typhon.engine.sim;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.command.EngineCommand;
+import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
+import me.alex4386.typhon.engine.output.HistoricalEvent;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.random.SimRandom;
+import me.alex4386.typhon.engine.save.InMemorySaveStore;
+import me.alex4386.typhon.engine.save.SaveFormat;
+import me.alex4386.typhon.engine.save.SaveStore;
+import me.alex4386.typhon.engine.save.SubsystemState;
 
 /**
  * Deterministic, fixed-step simulation loop.
  *
- * <p>Each {@link #tick()} applies queued commands in submission order, steps every subsystem that is
+ * <p>Time advances in base steps of {@link #baseStepMicros()} (default 50 ms, a simulator setting).
+ * Each {@link #step()} applies queued commands in submission order, steps every subsystem that is
  * due (in registration order) and returns the resulting {@link EngineFrame}. Given the same seed,
- * subsystems and command sequence, the frames are identical across runs.
+ * base step, subsystems and command sequence, the frames are identical across runs.
  *
- * <p>{@link #saveState()} captures the tick, every subsystem's random state and its own state, so a
- * run restored with {@link Builder#restore} continues exactly as if it had never stopped. Commands
- * still queued at save time are not persisted.
+ * <p>{@link #save(SaveStore)} captures the time, every subsystem's configuration hash, random state
+ * and own state, still-queued commands, and appends new {@link HistoricalEvent}s to the history log,
+ * so a run restored with {@link Builder#restore} continues exactly as if it had never stopped.
  *
  * <p>The engine is confined to a single thread; only {@link #submit} may be called from others.
  */
 public final class Engine {
-    public static final int STATE_FORMAT = 1;
+    public static final int STATE_FORMAT = 2;
+    public static final String ENGINE_VERSION = "1.0.0-SNAPSHOT";
+    public static final long DEFAULT_BASE_STEP_MICROS = 50_000;
 
     private final long seed;
+    private final long baseStepMicros;
     private final List<Registered> subsystems;
     private final CommandBus commandBus;
     private final Queue<EngineCommand> pendingCommands = new ConcurrentLinkedQueue<>();
     private final Outbox outbox = new Outbox();
-    private long currentTick;
+    private final List<HistoricalEvent> history = new ArrayList<>();
+    private long currentStep;
 
-    private Engine(long seed, long startTick, List<Registered> subsystems, CommandBus commandBus) {
+    private Engine(long seed, long baseStepMicros, long startStep, List<Registered> subsystems, CommandBus commandBus) {
         this.seed = seed;
-        this.currentTick = startTick;
+        this.baseStepMicros = baseStepMicros;
+        this.currentStep = startStep;
         this.subsystems = subsystems;
         this.commandBus = commandBus;
     }
@@ -51,18 +73,33 @@ public final class Engine {
         return seed;
     }
 
-    /** The tick that the next call to {@link #tick()} will simulate. */
-    public long currentTick() {
-        return currentTick;
+    public long baseStepMicros() {
+        return baseStepMicros;
     }
 
-    /** Queues a command for the next tick. Safe to call from any thread. */
+    /** The step index that the next call to {@link #step()} will simulate. */
+    public long currentStep() {
+        return currentStep;
+    }
+
+    /** Simulation time at the start of the next step, in microseconds. */
+    public long timeMicros() {
+        return currentStep * baseStepMicros;
+    }
+
+    /** Simulation time at the start of the next step, in seconds. */
+    public double time() {
+        return SimTime.seconds(timeMicros());
+    }
+
+    /** Queues a command for the next step. Safe to call from any thread. */
     public void submit(EngineCommand command) {
         pendingCommands.add(command);
     }
 
-    public EngineFrame tick() {
-        long tick = currentTick;
+    public EngineFrame step() {
+        long step = currentStep;
+        long time = step * baseStepMicros;
 
         EngineCommand command;
         while ((command = pendingCommands.poll()) != null) {
@@ -70,37 +107,146 @@ public final class Engine {
         }
 
         for (Registered registered : subsystems) {
-            if (registered.isDue(tick)) {
-                registered.subsystem.step(new StepContext(tick, registered.dtSeconds, registered.random, outbox));
+            if (registered.isDue(step)) {
+                registered.subsystem.step(new StepContext(step, time, registered.dtMicros, registered.random, outbox));
             }
         }
 
-        currentTick++;
-        return outbox.drain(tick);
+        currentStep++;
+        EngineFrame frame = outbox.drain(step, time);
+        for (EngineEvent event : frame.events()) {
+            if (event instanceof HistoricalEvent historical) history.add(historical);
+        }
+        return frame;
     }
 
-    public JsonObject saveState() {
-        JsonObject root = new JsonObject();
-        root.addProperty("format", STATE_FORMAT);
-        root.addProperty("seed", seed);
-        root.addProperty("tick", currentTick);
+    /** Steps until simulation time reaches at least {@code seconds}; returns the frames produced. */
+    public List<EngineFrame> runFor(double seconds) {
+        long end = timeMicros() + SimTime.micros(seconds);
+        List<EngineFrame> frames = new ArrayList<>();
+        while (timeMicros() < end) frames.add(step());
+        return frames;
+    }
 
-        JsonObject subsystemStates = new JsonObject();
+    /** Snapshots of every subsystem that provides one (see {@link Subsystem#snapshot()}). */
+    public EngineSnapshot snapshot() {
+        Map<String, Object> snapshots = new LinkedHashMap<>();
+        for (Registered registered : subsystems) {
+            Object s = registered.subsystem.snapshot();
+            if (s != null) snapshots.put(registered.subsystem.id(), s);
+        }
+        return new EngineSnapshot(currentStep, timeMicros(), snapshots);
+    }
+
+    // ── Persistence ──
+
+    /**
+     * Saves the complete state to {@code store} (see {@link SaveFormat} for the layout). Call it
+     * between steps. Region files that did not change are not rewritten. Historical events produced
+     * since the previous save are appended to the history log.
+     */
+    public void save(SaveStore store) {
+        writeState(store);
+        StringBuilder lines = new StringBuilder();
+        for (HistoricalEvent event : history) {
+            JsonObject line = new JsonObject();
+            line.addProperty("type", event.getClass().getSimpleName());
+            line.add("event", SaveFormat.gson().toJsonTree(event));
+            lines.append(SaveFormat.gson().toJson(line)).append('\n');
+        }
+        if (!lines.isEmpty()) store.append(SaveFormat.HISTORY, lines.toString().getBytes(StandardCharsets.UTF_8));
+        history.clear();
+    }
+
+    /** Historical events produced since the last {@link #save}, oldest first. */
+    public List<HistoricalEvent> unsavedHistory() {
+        return List.copyOf(history);
+    }
+
+    /**
+     * SHA-256 over the complete saved state (excluding the history log). Two engines with equal
+     * hashes will produce identical futures.
+     */
+    public String stateHash() {
+        InMemorySaveStore store = new InMemorySaveStore();
+        writeState(store);
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            for (Map.Entry<String, byte[]> file : store.files().entrySet()) {
+                digest.update(file.getKey().getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) 0);
+                digest.update(file.getValue());
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private void writeState(SaveStore store) {
+        JsonObject meta = new JsonObject();
+        meta.addProperty("format", STATE_FORMAT);
+        meta.addProperty("engineVersion", ENGINE_VERSION);
+        meta.addProperty("seed", seed);
+        meta.addProperty("step", currentStep);
+        meta.addProperty("timeMicros", timeMicros());
+        meta.addProperty("baseStepMicros", baseStepMicros);
+
+        JsonArray list = new JsonArray();
         for (Registered registered : subsystems) {
             JsonObject entry = new JsonObject();
-            entry.addProperty("random", registered.random.state());
-            JsonObject data = new JsonObject();
-            registered.subsystem.saveState(data);
-            entry.add("data", data);
-            subsystemStates.add(registered.subsystem.id(), entry);
+            entry.addProperty("id", registered.subsystem.id());
+            entry.addProperty("configHash", registered.configHash);
+            entry.add("config", registered.configJson);
+            list.add(entry);
+
+            SubsystemState state = new SubsystemState();
+            registered.subsystem.saveState(state);
+            SaveFormat.writeSubsystem(store, registered.subsystem.id(), registered.random.state(), state);
         }
-        root.add("subsystems", subsystemStates);
-        return root;
+        meta.add("subsystems", list);
+
+        JsonArray commands = new JsonArray();
+        for (EngineCommand command : pendingCommands) {
+            JsonObject entry = new JsonObject();
+            entry.addProperty("type", command.getClass().getName());
+            try {
+                entry.add("data", SaveFormat.gson().toJsonTree(command));
+            } catch (RuntimeException e) {
+                throw new IllegalStateException("Queued command " + command.getClass().getName()
+                        + " cannot be saved; save between steps after it has been applied", e);
+            }
+            commands.add(entry);
+        }
+        meta.add("pendingCommands", commands);
+        store.write(SaveFormat.META, SaveFormat.jsonBytes(meta));
     }
 
-    private record Registered(Subsystem subsystem, int interval, int phase, double dtSeconds, SimRandom random) {
-        boolean isDue(long tick) {
-            return tick >= phase && (tick - phase) % interval == 0;
+    private static JsonElement configJson(Subsystem subsystem) {
+        Object config = subsystem.config();
+        if (config == null) return JsonNull.INSTANCE;
+        try {
+            return SaveFormat.gson().toJsonTree(config);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("Config of subsystem " + subsystem.id() + " ("
+                    + config.getClass().getName() + ") cannot be serialised: " + e.getMessage(), e);
+        }
+    }
+
+    private static String hash(JsonElement json) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(SaveFormat.gson().toJson(json).getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private record Registered(Subsystem subsystem, long periodSteps, long phaseSteps, long dtMicros, SimRandom random,
+            JsonElement configJson, String configHash) {
+        boolean isDue(long step) {
+            return periodSteps > 0 && step >= phaseSteps && (step - phaseSteps) % periodSteps == 0;
         }
     }
 
@@ -108,7 +254,9 @@ public final class Engine {
         private final long seed;
         private final SimRandom root;
         private final List<Subsystem> subsystems = new ArrayList<>();
-        private JsonObject restoreFrom;
+        private long baseStepMicros = DEFAULT_BASE_STEP_MICROS;
+        private SaveStore restoreFrom;
+        private boolean allowConfigChanges;
 
         private Builder(long seed) {
             this.seed = seed;
@@ -120,57 +268,118 @@ public final class Engine {
             return this;
         }
 
+        /** Simulation base step. Subsystem periods are rounded to multiples of it. */
+        public Builder baseStepMicros(long micros) {
+            if (micros <= 0) throw new IllegalArgumentException("base step must be positive");
+            this.baseStepMicros = micros;
+            return this;
+        }
+
+        public Builder baseStep(Duration step) {
+            return baseStepMicros(step.toNanos() / 1000);
+        }
+
         /**
-         * Resumes from a {@link Engine#saveState()} snapshot. Subsystems missing from the snapshot
-         * start fresh; snapshot entries without a matching subsystem are ignored.
+         * Resumes from a save. Subsystems missing from the save start fresh; saved subsystems
+         * without a matching registration are ignored. The seed and base step must match, and so
+         * must each subsystem's configuration hash unless {@link #allowConfigChanges()} is set.
          */
-        public Builder restore(JsonObject state) {
-            int format = state.get("format").getAsInt();
-            if (format != STATE_FORMAT) {
-                throw new IllegalArgumentException("Unsupported engine state format: " + format);
-            }
-            long savedSeed = state.get("seed").getAsLong();
-            if (savedSeed != seed) {
-                throw new IllegalArgumentException("State was saved with seed " + savedSeed + ", not " + seed);
-            }
-            this.restoreFrom = state;
+        public Builder restore(SaveStore store) {
+            this.restoreFrom = store;
+            return this;
+        }
+
+        /** Accept a save whose subsystem configurations differ from the ones being registered. */
+        public Builder allowConfigChanges() {
+            this.allowConfigChanges = true;
             return this;
         }
 
         public Engine build() {
+            JsonObject meta = null;
+            Map<String, String> savedHashes = new LinkedHashMap<>();
+            if (restoreFrom != null) {
+                byte[] bytes = restoreFrom.read(SaveFormat.META);
+                if (bytes == null) throw new IllegalArgumentException("Save has no " + SaveFormat.META);
+                meta = SaveFormat.parse(bytes);
+                int format = meta.get("format").getAsInt();
+                if (format != STATE_FORMAT) {
+                    throw new IllegalArgumentException("Unsupported engine state format: " + format);
+                }
+                long savedSeed = meta.get("seed").getAsLong();
+                if (savedSeed != seed) {
+                    throw new IllegalArgumentException("State was saved with seed " + savedSeed + ", not " + seed);
+                }
+                long savedStep = meta.get("baseStepMicros").getAsLong();
+                if (savedStep != baseStepMicros) {
+                    throw new IllegalArgumentException("State was saved with a base step of " + savedStep
+                            + " µs; build the engine with the same base step (not " + baseStepMicros + " µs)");
+                }
+                for (JsonElement e : meta.getAsJsonArray("subsystems")) {
+                    JsonObject entry = e.getAsJsonObject();
+                    savedHashes.put(entry.get("id").getAsString(), entry.get("configHash").getAsString());
+                }
+            }
+
             CommandBus bus = new CommandBus();
             Set<String> ids = new HashSet<>();
             List<Registered> registered = new ArrayList<>();
-            JsonObject savedSubsystems = restoreFrom == null ? null : restoreFrom.getAsJsonObject("subsystems");
 
             for (Subsystem subsystem : subsystems) {
                 String id = subsystem.id();
                 if (!ids.add(id)) {
                     throw new IllegalArgumentException("Duplicate subsystem id: " + id);
                 }
-                int interval = subsystem.interval();
-                int phase = subsystem.phase();
-                if (interval < 1) {
-                    throw new IllegalArgumentException("Subsystem " + id + " has interval < 1: " + interval);
-                }
-                if (phase < 0 || phase >= interval) {
+                double period = subsystem.periodSeconds();
+                double phase = subsystem.phaseSeconds();
+                if (!(period >= 0)) throw new IllegalArgumentException("Subsystem " + id + " has a negative period");
+                long periodSteps = Double.isInfinite(period)
+                        ? 0
+                        : Math.max(1, Math.round(SimTime.micros(period) / (double) baseStepMicros));
+                long phaseSteps = Math.round(SimTime.micros(phase) / (double) baseStepMicros);
+                if (phaseSteps < 0 || (periodSteps > 0 && phaseSteps >= periodSteps)) {
                     throw new IllegalArgumentException(
-                            "Subsystem " + id + " phase must be in [0, " + interval + "): " + phase);
+                            "Subsystem " + id + " phase must be in [0, period): " + phase + " s vs " + period + " s");
                 }
                 subsystem.registerCommands(bus);
 
+                JsonElement configJson = configJson(subsystem);
+                String configHash = hash(configJson);
                 SimRandom random = root.fork("subsystem:" + id);
-                if (savedSubsystems != null && savedSubsystems.has(id)) {
-                    JsonObject entry = savedSubsystems.getAsJsonObject(id);
-                    random.restore(entry.get("random").getAsLong());
-                    subsystem.loadState(entry.getAsJsonObject("data"));
+
+                if (restoreFrom != null && savedHashes.containsKey(id)) {
+                    if (!allowConfigChanges && !savedHashes.get(id).equals(configHash)) {
+                        throw new IllegalStateException("Configuration of subsystem " + id
+                                + " differs from the save (hash " + savedHashes.get(id).substring(0, 12) + "… vs "
+                                + configHash.substring(0, 12) + "…); rebuild it with the saved configuration or call"
+                                + " allowConfigChanges()");
+                    }
+                    SaveFormat.LoadedSubsystem loaded = SaveFormat.readSubsystem(restoreFrom, id);
+                    if (loaded != null) {
+                        random.restore(loaded.randomState());
+                        subsystem.loadState(loaded.state());
+                    }
                 }
 
-                registered.add(new Registered(subsystem, interval, phase, SimTime.ticksToSeconds(interval), random));
+                long dt = (periodSteps == 0 ? 1 : periodSteps) * baseStepMicros;
+                registered.add(new Registered(subsystem, periodSteps, phaseSteps, dt, random, configJson, configHash));
             }
 
-            long startTick = restoreFrom == null ? 0 : restoreFrom.get("tick").getAsLong();
-            return new Engine(seed, startTick, List.copyOf(registered), bus);
+            long startStep = meta == null ? 0 : meta.get("step").getAsLong();
+            Engine engine = new Engine(seed, baseStepMicros, startStep, List.copyOf(registered), bus);
+            if (meta != null) {
+                for (JsonElement e : meta.getAsJsonArray("pendingCommands")) {
+                    JsonObject entry = e.getAsJsonObject();
+                    String type = entry.get("type").getAsString();
+                    try {
+                        Class<?> cls = Class.forName(type, true, Thread.currentThread().getContextClassLoader());
+                        engine.submit((EngineCommand) SaveFormat.gson().fromJson(entry.get("data"), cls));
+                    } catch (ClassNotFoundException | RuntimeException ex) {
+                        throw new IllegalStateException("Cannot restore queued command " + type, ex);
+                    }
+                }
+            }
+            return engine;
         }
     }
 }

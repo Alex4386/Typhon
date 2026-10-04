@@ -2,6 +2,7 @@ package me.alex4386.typhon.engine.assembly;
 
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.EngineEvent;
+import me.alex4386.typhon.engine.output.HistoricalEvent;
 
 /** Events emitted by {@link VolcanoCoupler} about what happens at the vents. */
 public final class SurfaceEvents {
@@ -25,7 +26,7 @@ public final class SurfaceEvents {
      * @param exitSpeed real exit speed (m/s)
      * @param energyJ kinetic energy of the ejecta (J)
      */
-    public record ExplosiveBurst(long tick, String volcanoId, BurstKind kind, BlockPos vent, double ejectaMassKg,
+    public record ExplosiveBurst(double time, String volcanoId, BurstKind kind, BlockPos vent, double ejectaMassKg,
             double gasMassKg, double exitSpeed, double energyJ) implements EngineEvent {}
 
     /**
@@ -34,14 +35,14 @@ public final class SurfaceEvents {
      *
      * @param waterDepthM mean real water depth over the vent area (m)
      */
-    public record PhreatomagmaticChanged(long tick, String volcanoId, boolean active, BlockPos vent, double waterDepthM)
-            implements EngineEvent {}
+    public record PhreatomagmaticChanged(double time, String volcanoId, boolean active, BlockPos vent, double waterDepthM)
+            implements HistoricalEvent {}
 
     /**
      * Periodic steam output of a phreatomagmatic vent (for steam clouds, fog, sounds).
      *
      * @param steamKgPerS real steam production (kg/s)
      */
-    public record PhreatomagmaticSteam(long tick, String volcanoId, BlockPos vent, double steamKgPerS, double waterDepthM)
+    public record PhreatomagmaticSteam(double time, String volcanoId, BlockPos vent, double steamKgPerS, double waterDepthM)
             implements EngineEvent {}
 }

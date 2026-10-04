@@ -2,7 +2,6 @@ package me.alex4386.typhon.engine.tephra;
 
 import com.google.gson.JsonObject;
 import me.alex4386.typhon.engine.random.SimRandom;
-import me.alex4386.typhon.engine.sim.SimTime;
 
 /**
  * Horizontal wind, uniform in space, varying slowly and deterministically in time.
@@ -52,10 +51,9 @@ public final class WindField {
         return variability;
     }
 
-    /** Wind velocity (m/s, y = 0) at the given tick. */
-    public Vec3d at(long tick) {
+    /** Wind velocity (m/s, y = 0) at simulation time {@code t} (seconds). */
+    public Vec3d at(double t) {
         if (speed == 0) return Vec3d.ZERO;
-        double t = SimTime.ticksToSeconds(tick);
         double direction = directionRad;
         double s = speed;
         if (variability > 0) {

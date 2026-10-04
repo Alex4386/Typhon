@@ -18,6 +18,7 @@ import me.alex4386.typhon.engine.seismic.SeismicEventType;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
 import me.alex4386.typhon.engine.sim.Engine;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Saves;
 
 /** Chamber, seismicity and alert estimation coupled with default parameters. */
 class VolcanoLifecycleTest {
@@ -43,7 +44,7 @@ class VolcanoLifecycleTest {
         EruptionStarted started = null;
 
         for (int i = 0; i < 20 * 3600 * 2 && started == null; i++) {
-            for (EngineEvent e : volcano.engine().tick().events()) {
+            for (EngineEvent e : volcano.engine().step().events()) {
                 if (e instanceof AlertLevelChanged c) changes.add(c);
                 else if (e instanceof SeismicEvent s) quakes.add(s);
                 else if (e instanceof EruptionStarted s) started = s;
@@ -57,28 +58,28 @@ class VolcanoLifecycleTest {
         assertTrue(path.contains(AlertLevel.MAJOR_ACTIVITY));
         assertTrue(path.indexOf(AlertLevel.MAJOR_ACTIVITY) < path.indexOf(AlertLevel.ERUPTION_IMMINENT));
 
-        long eruptionTick = started.tick();
-        long window = 20 * 600;
-        long early = quakes.stream().filter(q -> q.type() == SeismicEventType.VT && q.tick() < window).count();
-        long late = quakes.stream().filter(q -> q.type() == SeismicEventType.VT && q.tick() >= eruptionTick - window).count();
+        double eruptionTime = started.time();
+        double window = 600;
+        long early = quakes.stream().filter(q -> q.type() == SeismicEventType.VT && q.time() < window).count();
+        long late = quakes.stream().filter(q -> q.type() == SeismicEventType.VT && q.time() >= eruptionTime - window).count();
         assertTrue(late > early * 3, "VT seismicity accelerates before failure (early=" + early + ", late=" + late + ")");
     }
 
     @Test
     void wholeSystemResumesBitForBitAcrossAnEruption() {
         Volcano reference = build(42);
-        for (int i = 0; i < 20 * 3000; i++) reference.engine().tick();
+        for (int i = 0; i < 20 * 3000; i++) reference.engine().step();
 
         Volcano resumed = build(42);
         Engine restored = Engine.builder(42)
                 .add(resumed.chamber())
                 .add(resumed.seismic())
                 .add(resumed.alert())
-                .restore(JsonParser.parseString(reference.engine().saveState().toString()).getAsJsonObject())
+                .restore(Saves.save(reference.engine()))
                 .build();
 
         for (int i = 0; i < 20 * 1800; i++) {
-            assertEquals(reference.engine().tick(), restored.tick());
+            assertEquals(reference.engine().step(), restored.step());
         }
         assertTrue(reference.chamber().erupting() || reference.chamber().eruptedVolume() > 0, "window covers an eruption");
         assertEquals(reference.alert().level(), resumed.alert().level());
