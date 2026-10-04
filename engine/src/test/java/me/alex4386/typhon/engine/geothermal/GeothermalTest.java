@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.google.gson.JsonParser;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -19,6 +20,8 @@ import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
+import me.alex4386.typhon.engine.subsurface.Subsurface;
+import me.alex4386.typhon.engine.subsurface.SubsurfaceConfig;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.MagmaState;
@@ -83,33 +86,59 @@ class GeothermalTest {
         return config;
     }
 
+    static final Map<GeothermalConfig, Double> FROZEN_WATER = new IdentityHashMap<>();
+
     /**
-     * Config for a frozen, uniform thermal state: no diffusion, no loss, no boiling buffer, no
-     * sources, water pinned at {@code water}, and two simulated hours per step.
+     * Config for a pinned, uniform hydrothermal state ({@link #frozen}): reservoir saturation
+     * {@code water}, two simulated hours per step.
      */
     static GeothermalConfig frozenConfig(double water) {
         GeothermalConfig config = smallConfig();
-        config.diffusivity = 0;
-        config.surfaceLossPerSecond = 0;
-        config.boilOffPerSecond = 0;
-        config.boilingBufferPerSecond = 0;
-        config.lakeSaturationBonus = 0;
-        config.baseSaturation = water;
-        config.elevationSaturationPerBlock = 0;
         config.timeScale = 3600;
+        FROZEN_WATER.put(config, water);
         return config;
     }
 
+    /** Geothermal over a {@link StubField} pinned at {@code temperatureC} and the config's saturation. */
     static Geothermal frozen(GeothermalConfig config, TerrainModel terrain, BlockPalette palette, double temperatureC) {
-        Geothermal geothermal = new Geothermal(
-                "test", config, CENTER, new StubMagma(0), terrain, palette, List.of());
-        geothermal.grid().fillExcess(temperatureC - config.ambientC);
-        geothermal.grid().fillWater(config.baseSaturation);
+        StubField field = new StubField(terrain, config.reservoirDepthM, temperatureC,
+                FROZEN_WATER.getOrDefault(config, 0.5));
+        return new Geothermal("test", config, CENTER, new StubMagma(0), terrain, palette, List.of(), field);
+    }
+
+    static StubField stub(Geothermal geothermal) {
+        return (StubField) geothermal.field();
+    }
+
+    /** Subsurface settings for live tests: heat and groundwater compressed so systems develop in a test. */
+    static SubsurfaceConfig liveSubsurface() {
+        SubsurfaceConfig c = new SubsurfaceConfig();
+        c.timeScale = 30000;
+        return c;
+    }
+
+    /** Geothermal heating a real {@link Subsurface} on the terrain's world model. */
+    static Geothermal live(GeothermalConfig config, TerrainModel terrain, MagmaState magma, List<VentSite> vents,
+            SubsurfaceConfig subsurfaceConfig) {
+        // A chamber 64 blocks (m) below a 1 m-block surface would bake the whole test area; put it at
+        // a realistic depth so the vents' heat pipes dominate the shallow system.
+        if (magma instanceof StubMagma stub) stub.chamber = new BlockPos(0, -3000, 0);
+        Subsurface subsurface = new Subsurface(terrain.world(), subsurfaceConfig);
+        Geothermal geothermal = new Geothermal("test", config, CENTER, magma, terrain, BlockPalette.unrestricted(),
+                vents, subsurface);
+        subsurface.setHeatSources("test", geothermal);
         return geothermal;
     }
 
+    /** Engine with the geothermal subsystem (and its live subsurface, if any). */
+    static Engine.Builder engine(Geothermal geothermal, long seed) {
+        Engine.Builder builder = Engine.builder(seed);
+        if (geothermal.field() instanceof Subsurface subsurface) builder.add(subsurface);
+        return builder.add(geothermal);
+    }
+
     static List<EngineFrame> run(Geothermal geothermal, long seed, int steps) {
-        Engine engine = Engine.builder(seed).add(geothermal).build();
+        Engine engine = engine(geothermal, seed).build();
         return run(engine, geothermal, steps);
     }
 
@@ -138,47 +167,56 @@ class GeothermalTest {
         return events(frames, HydrothermalFeatureFormed.class).stream().filter(e -> e.feature() == kind).count();
     }
 
-    // ── Heat field ──
+    // ── Heat supplied to and sampled from the subsurface ──
+
+    private static final double DAY = 86400;
 
     @Test
-    void activeVolcanoHeatsGroundAroundVentAndReachesBoundedSteadyState() {
+    void activeVolcanoHeatsGroundAroundVent() {
         GeothermalConfig config = smallConfig();
         config.radius = 64;
         TerrainModel terrain = flatTerrain(72, ANDESITE);
-        Geothermal geothermal = new Geothermal("test", config, CENTER, new StubMagma(1100), terrain,
-                BlockPalette.unrestricted(), List.of(VentSite.crater("main", CENTER, 3)));
-
-        geothermal.equilibrate(50 * 3600);
-        double peak = geothermal.grid().maxExcess();
-        geothermal.equilibrate(50 * 3600);
-        double later = geothermal.grid().maxExcess();
-
-        double bound = (config.ventHeatRate + config.chamberHeatRate) * geothermal.activity() / config.surfaceLossPerSecond;
-        assertTrue(later > 50, "vent should get hot, was " + later);
-        assertTrue(later <= bound, later + " exceeds analytic bound " + bound);
-        assertEquals(peak, later, peak * 0.01, "should have converged");
+        Geothermal geothermal = live(config, terrain, new StubMagma(1100), List.of(VentSite.crater("main", CENTER, 3)),
+                liveSubsurface());
+        geothermal.equilibrate(30 * DAY);
 
         double atVent = geothermal.temperatureAt(0, 0);
         double near = geothermal.temperatureAt(24, 0);
         double far = geothermal.temperatureAt(56, 0);
+        assertTrue(atVent > 60, "vent should get hot, was " + atVent);
         assertTrue(atVent > near && near > far, atVent + " > " + near + " > " + far);
     }
 
     @Test
-    void coldChamberProducesNoHeat() {
-        TerrainModel terrain = flatTerrain(40, ANDESITE);
-        Geothermal geothermal = new Geothermal("test", smallConfig(), CENTER, new StubMagma(500), terrain,
-                BlockPalette.unrestricted(), List.of(VentSite.crater("main", CENTER, 3)));
+    void coldChamberDrivesNoVentHeat() {
+        Geothermal geothermal = frozen(smallConfig(), flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 15);
         assertEquals(0, geothermal.activity());
-        geothermal.equilibrate(10 * 3600);
-        assertEquals(0, geothermal.grid().maxExcess());
+        assertTrue(geothermal.vents().isEmpty());
+    }
+
+    @Test
+    void chamberAndVentsAreReportedAsHeatSources() {
+        StubMagma magma = new StubMagma(1100);
+        TerrainModel terrain = flatTerrain(40, ANDESITE);
+        Geothermal geothermal = new Geothermal("test", smallConfig(), CENTER, magma, terrain,
+                BlockPalette.unrestricted(), List.of(VentSite.crater("main", CENTER, 3)),
+                new StubField(terrain, 10, 15, 0.5));
+        List<me.alex4386.typhon.engine.subsurface.HeatSources.Chamber> chambers = geothermal.chambers();
+        assertEquals(1, chambers.size());
+        var chamber = chambers.get(0);
+        double depth = chamber.surfaceElevation() - chamber.centerElevation();
+        assertTrue(depth > 0 && chamber.radiusM() <= depth / 2 + 1e-9);
+        assertEquals(1100, chamber.temperatureC());
+        assertEquals(1, geothermal.vents().size());
+        assertEquals(geothermal.activity() * new GeothermalConfig().ventHeatPowerW, geothermal.vents().get(0).powerW(), 1e-6);
     }
 
     @Test
     void eruptionAndOverpressureRaiseActivity() {
         StubMagma magma = new StubMagma(1100);
-        Geothermal geothermal = new Geothermal("test", smallConfig(), CENTER, magma, flatTerrain(40, ANDESITE),
-                BlockPalette.unrestricted(), List.of());
+        TerrainModel terrain = flatTerrain(40, ANDESITE);
+        Geothermal geothermal = new Geothermal("test", smallConfig(), CENTER, magma, terrain,
+                BlockPalette.unrestricted(), List.of(), new StubField(terrain, 10, 15, 0.5));
         double quiet = geothermal.activity();
         magma.overpressure = 10;
         double pressurised = geothermal.activity();
@@ -188,38 +226,12 @@ class GeothermalTest {
     }
 
     @Test
-    void lavaHeatWarmsTheCell() {
-        Geothermal geothermal = new Geothermal("test", smallConfig(), CENTER, new StubMagma(0), flatTerrain(40, ANDESITE),
-                BlockPalette.unrestricted(), List.of());
-        double before = geothermal.temperatureAt(5, 5);
-        geothermal.addLavaHeat(5, 5, 1150, 2);
-        assertTrue(geothermal.temperatureAt(5, 5) > before + 5);
-        assertEquals(before, geothermal.temperatureAt(-20, -20));
-    }
-
-    @Test
-    void hotGroundDriesOut() {
-        GeothermalConfig config = frozenConfig(0.8);
-        config.boilOffPerSecond = 1.0 / 3600;
-        Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 300);
-        geothermal.equilibrate(20 * 3600);
-        assertTrue(geothermal.waterAt(0, 0) < 0.4, "water " + geothermal.waterAt(0, 0));
-    }
-
-    @Test
-    void lowGroundIsWetterThanHighGround() {
+    void lavaHeatFlowsIntoTheGround() {
         GeothermalConfig config = smallConfig();
-        TerrainModel terrain = new TerrainModel();
-        for (int x = -40; x < 40; x++) {
-            for (int z = -40; z < 40; z++) {
-                terrain.setColumn(x, z, TerrainColumn.dry(SURFACE_Y + x / 4, ANDESITE)); // slope rising to +x
-            }
-        }
-        Geothermal geothermal = new Geothermal("test", config, CENTER, new StubMagma(0), terrain,
-                BlockPalette.unrestricted(), List.of());
-        geothermal.equilibrate(20 * 3600);
-        // On a uniform slope the local mean equals the cell height, except at the grid edges.
-        assertTrue(geothermal.waterAt(-31, 0) > geothermal.waterAt(31, 0));
+        Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 15);
+        geothermal.addLavaHeat(5, 5, 1150, 2);
+        double expected = config.lavaConductivity * (1150 - 15) / 1.0; // W/m² through 1 m (half the flow), 1 m², 1 s
+        assertEquals(expected, stub(geothermal).surfaceHeat, 1e-9);
     }
 
     // ── Fumaroles ──
@@ -235,10 +247,13 @@ class GeothermalTest {
     private static long fumaroleEvents(double chamberC) {
         GeothermalConfig config = smallConfig();
         config.timeScale = 600;
+        config.ventHeatPowerW = 2e6; // a modest hydrothermal area, so the response is not saturated
+        config.ventPipeDepthM = 20;
+        config.maxFumaroles = 1000;
         TerrainModel terrain = flatTerrain(40, ANDESITE);
-        Geothermal geothermal = new Geothermal("test", config, CENTER, new StubMagma(chamberC), terrain,
-                BlockPalette.unrestricted(), List.of(VentSite.crater("main", CENTER, 3)));
-        geothermal.equilibrate(30 * 3600);
+        Geothermal geothermal = live(config, terrain, new StubMagma(chamberC), List.of(VentSite.crater("main", CENTER, 3)),
+                liveSubsurface());
+        geothermal.equilibrate(30 * DAY);
         List<EngineFrame> frames = run(geothermal, 42, 100);
         return events(frames, FumaroleActivity.class).size();
     }
@@ -510,9 +525,10 @@ class GeothermalTest {
     static Geothermal activeVolcano(TerrainModel terrain) {
         GeothermalConfig config = smallConfig();
         config.timeScale = 900;
-        Geothermal geothermal = new Geothermal("test", config, CENTER, new StubMagma(1150), terrain,
-                BlockPalette.unrestricted(), List.of(VentSite.crater("main", CENTER, 3), VentSite.fissure("rift", new BlockPos(12, 64, 0), 0.5, 20)));
-        geothermal.equilibrate(20 * 3600);
+        Geothermal geothermal = live(config, terrain, new StubMagma(1150),
+                List.of(VentSite.crater("main", CENTER, 3), VentSite.fissure("rift", new BlockPos(12, 64, 0), 0.5, 20)),
+                liveSubsurface());
+        geothermal.equilibrate(30 * DAY);
         return geothermal;
     }
 
@@ -533,15 +549,16 @@ class GeothermalTest {
         // The terrain stands in for the live world; the host re-sends it after a restart.
         TerrainModel world = flatTerrain(40, ANDESITE);
         Geothermal first = activeVolcano(world);
-        Engine before = Engine.builder(5).add(first).build();
+        Engine before = engine(first, 5).build();
         List<EngineFrame> resumed = new ArrayList<>(run(before, first, half));
         InMemorySaveStore saved = Saves.save(before);
 
         GeothermalConfig config = smallConfig();
         config.timeScale = 900;
-        Geothermal second = new Geothermal("test", config, CENTER, new StubMagma(1150), world,
-                BlockPalette.unrestricted(), List.of(VentSite.crater("main", CENTER, 3), VentSite.fissure("rift", new BlockPos(12, 64, 0), 0.5, 20)));
-        Engine after = Engine.builder(5).add(second).restore(saved).build();
+        Geothermal second = live(config, world, new StubMagma(1150),
+                List.of(VentSite.crater("main", CENTER, 3), VentSite.fissure("rift", new BlockPos(12, 64, 0), 0.5, 20)),
+                liveSubsurface());
+        Engine after = engine(second, 5).restore(saved).build();
         resumed.addAll(run(after, second, half));
 
         assertEquals(reference, resumed);
@@ -551,28 +568,24 @@ class GeothermalTest {
     }
 
     @Test
-    void restoreRejectsMismatchedGrid() {
+    void restoreRejectsChangedConfig() {
         Geothermal geothermal = activeVolcano(flatTerrain(40, ANDESITE));
-        Engine engine = Engine.builder(1).add(geothermal).build();
+        Engine engine = engine(geothermal, 1).build();
         InMemorySaveStore saved = Saves.save(engine);
 
         GeothermalConfig other = smallConfig();
         other.cellSize = 8;
-        Geothermal mismatched = new Geothermal("test", other, CENTER, new StubMagma(1150), flatTerrain(40, ANDESITE),
-                BlockPalette.unrestricted(), List.of());
-        // The configuration hash catches the change first ...
-        assertThrows(IllegalStateException.class, () -> Engine.builder(1).add(mismatched).restore(saved).build());
-        // ... and the grid check still guards a forced restore.
-        assertThrows(IllegalArgumentException.class, () -> Engine.builder(1).add(mismatched)
-                .restore(saved).allowConfigChanges().build());
+        Geothermal mismatched = live(other, flatTerrain(40, ANDESITE), new StubMagma(1150), List.of(), liveSubsurface());
+        assertThrows(IllegalStateException.class, () -> engine(mismatched, 1).restore(saved).build());
     }
 
     @Test
     void stepsAtConfiguredInterval() {
         GeothermalConfig config = smallConfig();
         config.stepSeconds = 5;
-        Geothermal geothermal = new Geothermal("v1", config, CENTER, new StubMagma(0), flatTerrain(40, ANDESITE),
-                BlockPalette.unrestricted(), List.of());
+        TerrainModel terrain = flatTerrain(40, ANDESITE);
+        Geothermal geothermal = new Geothermal("v1", config, CENTER, new StubMagma(0), terrain,
+                BlockPalette.unrestricted(), List.of(), new StubField(terrain, 10, 15, 0.5));
         assertEquals(5.0, geothermal.periodSeconds());
         assertEquals("geothermal:v1", geothermal.id());
         assertTrue(BlockState.parse("minecraft:sulfur_spike[thickness=tip,vertical_direction=up]")

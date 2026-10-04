@@ -22,7 +22,11 @@ import java.util.Map;
  *       uses an apparent heat capacity between solidus and liquidus.
  *   <li><b>Boiling</b>: a saturated cell above the boiling point at its depth below the water table
  *       ({@code T_bp = 100 + 3·d^0.7}, fit to Haas 1971) converts the excess sensible heat into
- *       steam, which leaves the column (fumarole steam flux) and lowers the water table.
+ *       steam, which leaves the column (fumarole steam flux) and is taken from the aquifer's storage
+ *       (the water table drops). Where the aquifer resupplies the boiled water the zone stays at
+ *       the boiling point (liquid-dominated); where it cannot, the table falls below the heated
+ *       zone, which then dries out and heats up (vapour-dominated). The steam fraction records the
+ *       share of pore water flashed per step and decays once boiling stops.
  * </ol>
  *
  * <p>Cells inside a chamber sphere are held at the chamber temperature.
@@ -39,6 +43,9 @@ final class SubsurfaceHeat {
         this.grid = grid;
         this.config = config;
     }
+
+    /** Critical temperature of pure water (°C); above it there is no liquid–vapour transition. */
+    static final double CRITICAL_TEMPERATURE_C = 374;
 
     /** Boiling point (°C) at {@code depth} metres below the water table (hydrostatic, pure water). */
     static double boilingPoint(double depth) {
@@ -408,18 +415,23 @@ final class SubsurfaceHeat {
             double depth = ch.head[c] - elevation;
             double tbp = boilingPoint(depth);
             double t = ch.temperature[i];
-            if (t <= tbp) {
+            // No boiling beyond water's critical point (supercritical fluid) or in (partly) molten rock.
+            boolean noPhaseChange = tbp >= CRITICAL_TEMPERATURE_C
+                    || (!Double.isNaN(ch.solidus[i]) && t >= ch.solidus[i]);
+            if (t <= tbp || noPhaseChange) {
                 ch.steam[i] *= collapse;
                 continue;
             }
             double volume = area * grid.thickness(k);
             double cap = capacity(ch, c, k, volume);
             double excess = cap * (t - tbp); // J
-            double water = ch.porosity[i] * (1 - ch.steam[i]) * volume * SubsurfaceGrid.WATER_DENSITY; // kg
+            // Below the water table the pores are refilled by the aquifer (the boiled water is taken
+            // from its storage, lowering the table), so a whole pore volume can flash per step.
+            double water = ch.porosity[i] * volume * SubsurfaceGrid.WATER_DENSITY; // kg
             double mass = Math.min(water, excess / config.latentHeatVaporJkg);
             if (mass <= 0) continue;
             ch.temperature[i] = t - mass * config.latentHeatVaporJkg / cap;
-            ch.steam[i] = Math.min(1, ch.steam[i] + mass / (ch.porosity[i] * volume * SubsurfaceGrid.WATER_DENSITY));
+            ch.steam[i] = Math.max(ch.steam[i] * collapse, mass / water);
             steamMass += mass;
         }
         ch.steamFlux[c] = steamMass / dt;

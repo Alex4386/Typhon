@@ -14,7 +14,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.gson.JsonParser;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,10 +23,8 @@ import me.alex4386.typhon.engine.geothermal.GeothermalTest.StubMagma;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.VentSite;
-import me.alex4386.typhon.engine.world.BlockId;
 import org.junit.jupiter.api.Test;
 import me.alex4386.typhon.engine.testing.Saves;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
@@ -37,25 +34,22 @@ class GeothermalHydrologyTest {
     private static final VentSite WET_VENT = VentSite.crater("wet", new BlockPos(-12, SURFACE_Y, 0), 2);
     private static final VentSite DRY_VENT = VentSite.crater("dry", new BlockPos(16, SURFACE_Y, 0), 2);
 
-    /** Flat arid ground with a lake along the west edge (x < -20). */
-    static TerrainModel lakeside() {
-        TerrainModel terrain = new TerrainModel();
-        for (int x = -40; x < 40; x++) {
-            for (int z = -40; z < 40; z++) {
-                terrain.setColumn(x, z, x < -20
-                        ? new TerrainColumn(SURFACE_Y - 2, SURFACE_Y, BlockId.minecraft("sand"))
-                        : TerrainColumn.dry(SURFACE_Y, ANDESITE));
-            }
-        }
-        return terrain;
+    /** Flat ground: well watered west of x = −4, poorly watered east of x = 4. */
+    static TerrainModel basin() {
+        return flatTerrain(40, ANDESITE);
     }
 
+    /**
+     * A pinned hydrothermal state: the wet vent's ground is liquid-dominated near boiling (140 °C,
+     * saturation 0.9), the dry vent's ground vapour-dominated and hot (300 °C, saturation 0.2).
+     */
     static Geothermal lakesideVolcano(GeothermalConfig config) {
-        config.baseSaturation = 0.25;  // arid ground away from the lake
-        config.lakeSaturationBonus = 1.0;
-        config.lakeInfluenceBlocks = 16;
-        return new Geothermal("test", config, CENTER, new StubMagma(1150), lakeside(),
-                BlockPalette.unrestricted(), List.of(WET_VENT, DRY_VENT));
+        TerrainModel terrain = basin();
+        StubField field = new StubField(terrain, config.reservoirDepthM, 15, 0.5);
+        field.temperature = (x, z) -> x < -4 ? 140 : (x > 4 ? 300 : 15);
+        field.water = (x, z) -> x < -4 ? 0.9 : 0.2;
+        return new Geothermal("test", config, CENTER, new StubMagma(1150), terrain, BlockPalette.unrestricted(),
+                List.of(WET_VENT, DRY_VENT), field);
     }
 
     @Test
@@ -66,18 +60,33 @@ class GeothermalHydrologyTest {
         assertEquals(200, Geothermal.boilingPointAtDepth(150), 3);
     }
 
+    /**
+     * The liquid-/vapour-dominated dichotomy emerges from the subsurface model: with a shallow water
+     * table the heated reservoir is held near its boiling point and stays wet, with a deep one the
+     * same heat boils it dry and heats it far above boiling.
+     */
     @Test
-    void wetGroundStaysNearBoilingWhileDryGroundBecomesVapourDominated() {
-        Geothermal geothermal = lakesideVolcano(smallConfig());
-        geothermal.equilibrate(30 * 3600);
-
-        double wetT = geothermal.temperatureAt(-12, 0);
-        double dryT = geothermal.temperatureAt(16, 0);
+    void shallowWaterTableStaysNearBoilingDeepOneBecomesVapourDominated() {
+        Geothermal wet = heatedGround(1.0);
+        Geothermal dry = heatedGround(40.0);
+        double wetT = wet.temperatureAt(0, 0);
+        double dryT = dry.temperatureAt(0, 0);
         assertTrue(wetT >= 100 && wetT <= 150, "liquid-dominated ground is held near boiling, was " + wetT);
-        assertTrue(geothermal.waterAt(-12, 0) >= 0.6, "and stays wet: " + geothermal.waterAt(-12, 0));
-        assertFalse(geothermal.vapourDominatedAt(-12, 0));
+        assertFalse(wet.vapourDominatedAt(0, 0), "and stays wet: " + wet.waterAt(0, 0));
         assertTrue(dryT > 150, "poorly watered ground heats up: " + dryT);
-        assertTrue(geothermal.vapourDominatedAt(16, 0), "and boils dry: " + geothermal.waterAt(16, 0));
+        assertTrue(dry.vapourDominatedAt(0, 0), "and is vapour-dominated: " + dry.waterAt(0, 0));
+    }
+
+    private static Geothermal heatedGround(double waterTableDepth) {
+        me.alex4386.typhon.engine.subsurface.SubsurfaceConfig sc = GeothermalTest.liveSubsurface();
+        sc.initialWaterTableDepthM = waterTableDepth;
+        GeothermalConfig config = smallConfig();
+        config.ventHeatPowerW = 2e6; // ≈ 0.9 kg/s of steam: within what the aquifer can resupply
+        config.ventPipeDepthM = 20;
+        Geothermal geothermal = GeothermalTest.live(config, flatTerrain(40, ANDESITE), new StubMagma(1150),
+                List.of(VentSite.crater("main", CENTER, 3)), sc);
+        geothermal.equilibrate(60 * 86400);
+        return geothermal;
     }
 
     @Test
@@ -88,7 +97,6 @@ class GeothermalHydrologyTest {
         config.hotSpringFormationPerHour = 0;
         config.mudPotFormationPerHour = 0;
         Geothermal geothermal = lakesideVolcano(config);
-        geothermal.equilibrate(30 * 3600);
         List<EngineFrame> frames = run(geothermal, 5, 300);
 
         List<GeyserFormed> geysers = events(frames, GeyserFormed.class);
@@ -147,14 +155,14 @@ class GeothermalHydrologyTest {
         config.fumaroleFormationPerHour = 0;
         config.acidAlterationPerHour = 0;
         Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 300);
-        Engine engine = Engine.builder(1).add(geothermal).build();
+        Engine engine = GeothermalTest.engine(geothermal, 1).build();
 
         List<GasHazard> active = events(run(engine, geothermal, 100), GasHazard.class); // 200 s, 20 evaluations
         int zonesPerSide = (geothermal.grid().sizeX() + config.hazardZoneCells - 1) / config.hazardZoneCells;
         int zoneSpecies = zonesPerSide * zonesPerSide * GasSpecies.values().length;
         assertEquals(zoneSpecies, active.size(), "steady hazards are announced once per zone and species");
 
-        geothermal.grid().fillExcess(0);
+        GeothermalTest.stub(geothermal).setTemperature(15);
         List<GasHazard> cleared = events(run(engine, geothermal, 10), GasHazard.class);
         assertEquals(zoneSpecies, cleared.size());
         assertTrue(cleared.stream().allMatch(h -> h.concentrationPpm() == 0));
@@ -183,26 +191,31 @@ class GeothermalHydrologyTest {
     @Test
     void prewarmMatchesManualEquilibrationAndHappensOnce() {
         GeothermalConfig prewarmConfig = smallConfig();
-        prewarmConfig.prewarmSeconds = 10 * 3600;
-        Geothermal prewarmed = lakesideVolcano(prewarmConfig);
-        Engine engine = Engine.builder(3).add(prewarmed).build();
-        engine.step();
+        prewarmConfig.prewarmSeconds = 30 * 86400;
+        Geothermal prewarmed = liveVolcano(prewarmConfig);
+        Engine engine = GeothermalTest.engine(prewarmed, 3).build();
+        engine.runFor(prewarmConfig.stepSeconds);
 
-        Geothermal manual = lakesideVolcano(smallConfig());
-        manual.equilibrate(10 * 3600);
-        Engine manualEngine = Engine.builder(3).add(manual).build();
-        manualEngine.step();
+        Geothermal manual = liveVolcano(smallConfig());
+        manual.equilibrate(30 * 86400);
+        Engine manualEngine = GeothermalTest.engine(manual, 3).build();
+        manualEngine.runFor(prewarmConfig.stepSeconds);
         assertArrayEquals(manual.grid().excess, prewarmed.grid().excess);
+        assertTrue(prewarmed.grid().maxExcess() > 0);
 
         // A restored engine must not prewarm again.
         InMemorySaveStore saved = Saves.save(engine);
         List<EngineFrame> reference = run(engine, prewarmed, 20);
         GeothermalConfig again = smallConfig();
-        again.prewarmSeconds = 10 * 3600;
-        Geothermal restored = lakesideVolcano(again);
-        Engine restoredEngine = Engine.builder(3).add(restored)
-                .restore(saved).build();
+        again.prewarmSeconds = 30 * 86400;
+        Geothermal restored = liveVolcano(again);
+        Engine restoredEngine = GeothermalTest.engine(restored, 3).restore(saved).build();
         assertEquals(reference, run(restoredEngine, restored, 20));
         assertArrayEquals(prewarmed.grid().excess, restored.grid().excess);
+    }
+
+    private static Geothermal liveVolcano(GeothermalConfig config) {
+        return GeothermalTest.live(config, flatTerrain(40, ANDESITE), new StubMagma(1150),
+                List.of(WET_VENT, DRY_VENT), GeothermalTest.liveSubsurface());
     }
 }

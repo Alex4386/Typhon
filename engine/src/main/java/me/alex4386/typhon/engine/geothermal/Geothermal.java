@@ -48,9 +48,9 @@ import me.alex4386.typhon.engine.save.StateWriter;
  *       overpressure, eruption rate);
  *   <li>samples it every step on a coarse feature grid ({@link GeothermalGrid}): the temperature of
  *       the shallow reservoir at {@code reservoirDepthM}, and its liquid saturation
- *       {@code w = clamp(½ + (R − d)/(2R)) · (1 − steam)} from the water-table depth {@code d} and
- *       the steam fraction (a water table at the surface gives 1, at the reservoir depth ½, at
- *       twice that depth 0);
+ *       {@code w = clamp(½ + (R − d)/(2R))} from the water-table depth {@code d}
+ *       (a water table at the surface gives 1, at the reservoir depth ½, at twice that depth 0;
+ *       boiling lowers the table where the aquifer cannot resupply the steam);
  *   <li>decides manifestations from those fields: per cell and feature, a Poisson number of
  *       formation attempts with mean {@code rate × strength × dt/3600} is drawn; each attempt picks
  *       a random column of the cell and builds the feature if local conditions allow (surface
@@ -350,7 +350,7 @@ public final class Geothermal implements Subsystem, HeatSources {
             double temperature = field.temperatureC(x, z, r);
             grid.setExcess(idx, Math.max(0, temperature - config.ambientC));
             double depth = field.waterTableDepthM(x, z);
-            double liquid = clamp(0.5 + (r - depth) / (2 * r), 0, 1) * (1 - field.steamFraction(x, z, r));
+            double liquid = clamp(0.5 + (r - depth) / (2 * r), 0, 1);
             grid.setWater(idx, submerged[idx] ? 1 : liquid);
         }
     }
