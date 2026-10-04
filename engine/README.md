@@ -83,8 +83,26 @@ porosity, welding, a sub-cell void fraction and flags (`LOOSE`, `FRACTURED`, `AL
   removed per material), `carve` (cavities: lava tubes, tunnels; digging from the surface opens a
   pit), `fill`, `addWater` (held for the surface-water model), `newUnit`.
 
+Imported columns are built bottom-up from the world spec: the basement layer cake
+(`geology.basement`), country rock (`geology.edificeMaterial`) and a surface cover. Where a volcano
+defines an edifice (`edifice: {material, radius, baseZ}` in its YAML, a `world.Edifice` centred on its
+primary vent), the rock above `baseZ` (the pre-volcano surface; default: the top of the basement cake)
+is the volcano's material instead, recorded as that volcano's `EDIFICE` unit. Overlapping edifices go
+to the volcano the column lies deepest in (distance / radius).
+
+`world.yaml` also holds the initial conditions the subsurface solvers start from (consumed from M4
+on; nothing integrates them yet):
+
+- `geotherm: {surfaceTemperatureC, gradientCPerKm, lapseRateCPerKm}` →
+  `WorldDefinition.Geotherm.initialTemperature(surfaceZ, depth)` = surface T − lapse·max(0, zs)/1000 +
+  gradient·depth/1000.
+- `aquifer: {waterTableDepth, specificYield, topographyFactor, baseLevel, rechargeFraction}` →
+  `WorldDefinition.Aquifer.initialWaterTable(surfaceZ, base)` = base + f·(zs − depth − base), capped at
+  the surface; `base` is `baseLevel`, else sea level, else the domain's lowest surface. `f = 1` keeps
+  the table a fixed depth below ground, `f = 0` makes it flat (real tables: ~0.3–0.8).
+
 `terrain.TerrainModel` is the block-level bridge over it: host `TerrainSnapshot`s import columns
-(built from the world spec's basement cake, edifice and cover materials) or reconcile known ones,
+(built as above) or reconcile known ones,
 and every ground change made through it deposits or erodes in the stacks. Blocks are cubes of
 `WorldSpec.metersPerColumn()`; ground block `y` has its top at `(y + 1)·L` metres.
 
