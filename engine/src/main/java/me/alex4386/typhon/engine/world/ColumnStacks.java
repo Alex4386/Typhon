@@ -186,6 +186,35 @@ public final class ColumnStacks {
         return tiles.size();
     }
 
+    /** Keys of all tiles, sorted (decode with {@link #keyTileX}/{@link #keyTileZ}). */
+    public long[] tileKeys() {
+        long[] keys = new long[tiles.size()];
+        int i = 0;
+        for (long k : tiles.keySet()) keys[i++] = k;
+        Arrays.sort(keys);
+        return keys;
+    }
+
+    public static int keyTileX(long key) {
+        return (int) (key >> 32);
+    }
+
+    public static int keyTileZ(long key) {
+        return (int) key;
+    }
+
+    /**
+     * Sum of the edit counters of every column in a tile (0 if absent): changes whenever any column
+     * of the tile is edited, so derived caches can be refreshed per tile.
+     */
+    public long tileVersion(int tileX, int tileZ) {
+        Tile t = tiles.get(key(tileX, tileZ));
+        if (t == null) return 0;
+        long sum = t.size();
+        for (int v : t.version) sum += v;
+        return sum;
+    }
+
     static byte quantize(double fraction) {
         return (byte) Math.round(Math.max(0, Math.min(1, fraction)) * 255);
     }
