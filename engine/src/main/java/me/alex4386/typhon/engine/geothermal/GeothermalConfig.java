@@ -1,6 +1,5 @@
 package me.alex4386.typhon.engine.geothermal;
 
-import java.util.HashSet;
 import java.util.Set;
 import me.alex4386.typhon.engine.world.BlockId;
 
@@ -187,7 +186,7 @@ public final class GeothermalConfig {
     public double minHazardPpm = 1.0;
 
     /** Surface blocks hydrothermal processes may replace. */
-    public Set<BlockId> alterableSurfaces = new HashSet<>(GeothermalBlocks.DEFAULT_ALTERABLE);
+    public Set<BlockId> alterableSurfaces = BlockId.sortedSet(GeothermalBlocks.DEFAULT_ALTERABLE);
 
     public void validate() {
         if (radius < 1) throw new IllegalArgumentException("radius must be >= 1");

@@ -10,6 +10,19 @@ import java.util.regex.Pattern;
  * registries (Bukkit {@code Material}, Fabric {@code Registries.BLOCK}, ...).
  */
 public record BlockId(String namespace, String path) {
+    /** Orders ids by their {@code namespace:path} text. */
+    public static final java.util.Comparator<BlockId> BY_NAME = java.util.Comparator.comparing(BlockId::toString);
+
+    /**
+     * A mutable set with deterministic (sorted) iteration — use it for block sets in configuration
+     * objects, whose serialised form is hashed.
+     */
+    public static java.util.SortedSet<BlockId> sortedSet(java.util.Collection<BlockId> ids) {
+        java.util.TreeSet<BlockId> set = new java.util.TreeSet<>(BY_NAME);
+        set.addAll(ids);
+        return set;
+    }
+
     private static final Pattern NAMESPACE = Pattern.compile("[a-z0-9_.-]+");
     private static final Pattern PATH = Pattern.compile("[a-z0-9_./-]+");
 

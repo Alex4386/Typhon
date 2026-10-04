@@ -10,7 +10,6 @@ import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -216,8 +215,11 @@ public final class ConfigBinder {
         if (type instanceof ParameterizedType p) {
             if (!(raw instanceof List<?> list)) throw node.error(key, "expected a list");
             Class<?> rawType = (Class<?>) p.getRawType();
-            Collection result = Set.class.isAssignableFrom(rawType) ? new HashSet<>() : new ArrayList<>();
             boolean blocks = p.getActualTypeArguments()[0] == BlockId.class;
+            // Sorted sets: configuration objects are hashed through their serialised form.
+            Collection result = Set.class.isAssignableFrom(rawType)
+                    ? (blocks ? new java.util.TreeSet<>(BlockId.BY_NAME) : new TreeSet<>())
+                    : new ArrayList<>();
             for (Object item : list) {
                 if (!(item instanceof String s)) throw node.error(key, "expected a list of strings");
                 try {
