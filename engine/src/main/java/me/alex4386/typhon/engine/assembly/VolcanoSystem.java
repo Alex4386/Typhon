@@ -119,7 +119,8 @@ public final class VolcanoSystem {
             this.subsurface = b.subsurface;
             this.ownsSubsurface = false;
         } else if (b.geothermal) {
-            this.subsurface = new Subsurface(b.terrain.world(), defaultSubsurfaceConfig(scaling));
+            this.subsurface = new Subsurface(b.terrain.world(),
+                    b.subsurfaceConfig != null ? b.subsurfaceConfig.copy() : defaultSubsurfaceConfig(scaling));
             this.ownsSubsurface = true;
         } else {
             this.subsurface = null;
@@ -283,6 +284,7 @@ public final class VolcanoSystem {
         private BlockPos geothermalCenter;
         private double geothermalPrewarmSeconds = -1;
         private Subsurface subsurface;
+        private SubsurfaceConfig subsurfaceConfig;
 
         private Builder(String volcanoId, List<VentSite> vents, TerrainModel terrain, LavaFlow lava) {
             this.volcanoId = Objects.requireNonNull(volcanoId, "volcanoId");
@@ -335,6 +337,8 @@ public final class VolcanoSystem {
          * geothermal activity creates and registers its own.
          */
         public Builder subsurface(Subsurface subsurface) { this.subsurface = subsurface; return this; }
+        /** Parameters of the subsurface model this volcano creates when no shared one is given. */
+        public Builder subsurfaceConfig(SubsurfaceConfig config) { this.subsurfaceConfig = config; return this; }
         public Builder dikesEnabled(boolean enabled) { this.dikes = enabled; return this; }
         public Builder massFlowsEnabled(boolean enabled) { this.massFlows = enabled; return this; }
         public Builder deformationEnabled(boolean enabled) { this.deformation = enabled; return this; }

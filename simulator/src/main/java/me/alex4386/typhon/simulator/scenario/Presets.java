@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.function.LongFunction;
 import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.geothermal.GeothermalConfig;
+import me.alex4386.typhon.engine.subsurface.SubsurfaceConfig;
 import me.alex4386.typhon.engine.magma.ConduitConfig;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.math.BlockPos;
@@ -341,14 +342,21 @@ public final class Presets {
                     GeothermalConfig geothermal = new GeothermalConfig();
                     geothermal.radius = 192;
                     geothermal.timeScale = 30;
-                    geothermal.ventHeatRate = 0.1;
-                    geothermal.baseSaturation = 0.55; // wet plateau (~500–1500 mm/yr) of porous rhyolite and sinter
+                    // ~5 GW of hydrothermal heat over the caldera (Fournier 1989); at the chamber's 820 °C the
+                    // activity is ~0.44, so each of the four basins discharges ~4·10⁸ W.
+                    geothermal.ventHeatPowerW = 1e9;
+                    geothermal.ventPipeDepthM = 500;
                     geothermal.maxGeysers = 20;       // > 500 geysers in reality; the densest field on Earth
+                    // Wet plateau (~500–1500 mm/yr) of porous rhyolite and sinter: a shallow water table.
+                    SubsurfaceConfig subsurface = VolcanoSystem.defaultSubsurfaceConfig(scaling);
+                    subsurface.initialWaterTableDepthM = 3;
+                    subsurface.rainfallMmPerHour = 0.1;
                     VolcanoSystem volcano = VolcanoSystem.builder("yellowstone", basins, b.terrain(), b.lava())
                             .chamber(chamber)
                             .scaling(scaling)
                             .geothermal(geothermal)
-                            .geothermalPrewarm(6 * 3600)
+                            .subsurfaceConfig(subsurface)
+                            .geothermalPrewarm(5 * 365.25 * 86400) // physical spin-up of the hydrothermal system
                             .build();
                     return b.volcano(volcano);
                 });
