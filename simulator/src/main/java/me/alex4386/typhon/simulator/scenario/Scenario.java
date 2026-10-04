@@ -10,6 +10,9 @@ import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.save.SaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
+import me.alex4386.typhon.engine.world.Edifice;
+import me.alex4386.typhon.engine.world.WorldModel;
+import me.alex4386.typhon.engine.world.WorldSpec;
 import me.alex4386.typhon.engine.worlds.World;
 import me.alex4386.typhon.simulator.terrain.ColumnGrid;
 import me.alex4386.typhon.simulator.world.VoxelWorld;
@@ -148,17 +151,37 @@ public final class Scenario {
         private final String presetName;
         private final long seed;
         private final ColumnGrid terrainGrid;
-        private final TerrainModel terrain = new TerrainModel();
+        private final TerrainModel terrain;
         private final LavaFlow lava;
         private final List<VolcanoSystem> volcanoes = new ArrayList<>();
         private final List<Consumer<Scenario>> afterFirstTick = new ArrayList<>();
         private Options options = Options.DEFAULT;
 
         public Builder(String presetName, long seed, ColumnGrid terrainGrid, LavaConfig lavaConfig) {
+            this(presetName, seed, terrainGrid, lavaConfig, new TerrainModel());
+        }
+
+        /**
+         * A scenario on a world model with explicit geology ({@code spec}, its metres per column must
+         * match the volcanoes' scaling) and volcano edifices applied to imported columns.
+         */
+        public Builder(String presetName, long seed, ColumnGrid terrainGrid, WorldSpec spec, List<Edifice> edifices) {
+            this(presetName, seed, terrainGrid, LavaConfig.defaults(), worldTerrain(spec, edifices));
+        }
+
+        private Builder(String presetName, long seed, ColumnGrid terrainGrid, LavaConfig lavaConfig,
+                TerrainModel terrain) {
             this.presetName = Objects.requireNonNull(presetName);
             this.seed = seed;
             this.terrainGrid = Objects.requireNonNull(terrainGrid);
+            this.terrain = terrain;
             this.lava = new LavaFlow(terrain, lavaConfig);
+        }
+
+        private static TerrainModel worldTerrain(WorldSpec spec, List<Edifice> edifices) {
+            WorldModel world = new WorldModel(spec);
+            world.setEdifices(edifices);
+            return new TerrainModel(world);
         }
 
         public Builder(String presetName, long seed, ColumnGrid terrainGrid) {

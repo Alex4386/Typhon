@@ -25,11 +25,15 @@ class PresetsTest {
 
     @Test
     void presetsAreDocumented() {
-        assertEquals(6, Presets.all().size());
+        assertEquals(12, Presets.all().size(), "six compact presets and their six real-scale counterparts");
         for (Preset p : Presets.all()) {
             assertFalse(p.description().isBlank(), p.name());
             assertTrue(p.references().size() >= 3, p.name() + " should cite reference values");
             assertTrue(p.defaultHours() > 0);
+            if (p.name().endsWith("-real")) {
+                assertTrue(p.realSetting() != null, p.name() + " should describe its real setting");
+                assertFalse(p.referenceValues().isEmpty(), p.name() + " should list reference values for the report");
+            }
         }
     }
 

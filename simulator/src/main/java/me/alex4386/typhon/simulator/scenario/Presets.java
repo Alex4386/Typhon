@@ -34,6 +34,7 @@ public final class Presets {
         register(pinatubo());
         register(surtsey());
         register(yellowstone());
+        for (Preset real : RealPresets.all()) register(real);
     }
 
     private Presets() {}

@@ -19,6 +19,16 @@ public interface Preset {
     /** Simulated hours that show the scenario's main behaviour. */
     double defaultHours();
 
+    /** Real-world setting of a real-scale preset, or {@code null} for compact (Minecraft-sized) ones. */
+    default RealSetting realSetting() {
+        return null;
+    }
+
+    /** Published values the run is compared with in the report ("reference vs model"). */
+    default List<ReferenceValue> referenceValues() {
+        return List.of();
+    }
+
     /** The preset's own synthetic terrain. */
     ColumnGrid terrain(long seed);
 
