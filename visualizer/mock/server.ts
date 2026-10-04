@@ -4,7 +4,7 @@
 
 import { WebSocketServer, type WebSocket } from 'ws';
 import { FIELD_NAMES, type FieldId } from '../src/protocol/fields';
-import { encodeSectionFrame } from '../src/protocol/frames';
+import { encodeSectionFrame, encodeValues } from '../src/protocol/frames';
 import {
   PROTOCOL_VERSION,
   TILE_WINDOW,
@@ -69,7 +69,7 @@ class Session {
     }
     let want = this.mode === 'UNBOUNDED' ? UNBOUNDED_RATE * wallSeconds : this.speed * wallSeconds;
     if (this.pauseAt !== null) want = Math.max(0, Math.min(want, this.pauseAt - this.world.time));
-    const done = this.world.advance(want, WALL_TICK_MS * 0.7);
+    const done = this.world.advance(want, WALL_TICK_MS * (this.mode === 'UNBOUNDED' ? 0.45 : 0.7));
     this.step++;
     this.rate = done / wallSeconds;
     if (this.pauseAt !== null && this.world.time >= this.pauseAt - 1e-9) {
@@ -114,12 +114,13 @@ class Session {
         for (let tx = 0; tx < TILES; tx++) {
           const key = `${field}:${tx}:${ty}`;
           const cur = this.versions.get(key);
-          const frame = encodeTile(this.world, field, tx, ty, (cur?.version ?? 0) + 1);
-          // hash the payload only (skip the header, which carries version and time)
-          const h = hashBytes(frame.subarray(44));
+          // hash the quantised (uncompressed) payload; compress only tiles that changed
+          const values = this.world.tileValues(field, tx, ty);
+          const h = hashBytes(encodeValues(values, CODEC_FOR[field], { min: 0, max: 1 }).bytes);
           if (!cur || cur.hash !== h) {
-            this.versions.set(key, { version: (cur?.version ?? 0) + 1, hash: h });
-            this.frames.set(key, frame);
+            const version = (cur?.version ?? 0) + 1;
+            this.versions.set(key, { version, hash: h });
+            this.frames.set(key, encodeTile(this.world, field, tx, ty, version));
           }
         }
       }

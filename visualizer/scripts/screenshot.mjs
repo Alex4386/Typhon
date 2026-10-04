@@ -71,6 +71,38 @@ await page.evaluate(() => window.__typhon.getState().set({ colorMode: 'topUnit' 
 await page.waitForTimeout(8000);
 await shot('06-deformation-units');
 
+// two-way coupling demo: pour water and dig a pit, then show the water table
+await page.evaluate(() => window.__typhon.getState().set({ colorMode: 'waterTable', tool: 'water', waterVolume: 400000 }));
+await page.mouse.click(box.x + box.width * 0.42, box.y + box.height * 0.7);
+await page.evaluate(() => window.__typhon.getState().set({ tool: 'dig', digRadius: 120, digDepth: 60 }));
+await page.mouse.click(box.x + box.width * 0.55, box.y + box.height * 0.72);
+await page.evaluate(() => window.__typhon.getState().set({ tool: 'orbit' }));
+await click('alerts');
+await page.waitForTimeout(10000);
+await shot('07-water-table-alerts');
+
+// replay: enter, seek to a third of the recorded range
+await click('replay');
+await page.waitForTimeout(3000);
+const info = await page.evaluate(() => window.__typhon.getState().replayInfo);
+if (info) {
+  await page.evaluate((t) => {
+    // same message the timeline sends on release
+    window.__typhon.getState(); // keep store warm
+    return t;
+  }, info.start + (info.end - info.start) / 3);
+  const slider = page.locator('.timeline input');
+  await slider.evaluate((el, t) => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(el, String(t));
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+  }, info.start + (info.end - info.start) / 3);
+}
+await page.waitForTimeout(12000);
+await shot('08-replay');
+await click('back to live');
+
 const renderer = await page.locator('header .muted').last().textContent();
 console.log('renderer:', renderer);
 console.log(logs.length ? logs.slice(0, 20).join('\n') : 'no console errors');
