@@ -172,7 +172,7 @@ final class RealPresets {
                                 "Poland et al. 2014; Neal et al. 2019", Metric.PEAK_ERUPTION_RATE_M3S),
                         ReferenceValue.category("Eruption style", "HAWAIIAN", "basaltic, H₂O < 0.5 wt%",
                                 Metric.ANY_STYLE),
-                        ReferenceValue.range("VEI", 0, 1, "", "Global Volcanism Program", Metric.MAX_VEI),
+                        ReferenceValue.range("VEI", 0, 2, "", "Global Volcanism Program (Kīlauea Iki 1959: VEI 2)", Metric.MAX_VEI),
                         ReferenceValue.range("Longest lava flow", 100, 10000, "m",
                                 "Hawaiian flows: hundreds of m to km per day (Neal et al. 2019)", Metric.LONGEST_FLOW_M)
                                 .informative("the summit eruption first ponds in Halema'uma'u; flow length over"
@@ -264,7 +264,7 @@ final class RealPresets {
                     Scenario.Builder b = builder("stromboli-real", seed, terrain, setting);
                     VentSite vent = vent("crater-terrace", terrain, L, craterX, craterZ, 60);
                     MagmaChamberConfig chamber = MagmaChamberConfig.builder("stromboli-real", chamberAt(vent, -3000, L))
-                            .volume(5e7).lithostaticDepth(3000).conduitRadius(0.8).tensileStrengthMPa(8)
+                            .volume(5e7).lithostaticDepth(3000).conduitRadius(1.5).tensileStrengthMPa(8)
                             .eruptionEndOverpressureMPa(0.5).supplyRate(0.002).supplyVariability(0.4)
                             .initialSilicaWt(50).rechargeSilicaWt(50).initialWaterWt(2.7).rechargeWaterWt(2.7)
                             .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
@@ -275,7 +275,7 @@ final class RealPresets {
                             .chamber(chamber)
                             .subsurfaceConfig(subsurface(setting, L))
                             .stations(List.of(Stations.at("STR-N", vent, 0, 1200, L), Stations.at("STR-E", vent, 1500, 0, L),
-                                    Stations.at("STR-S", vent, 0, -1500, L))).scaling(scaling(L)).tephra(tephra())
+                                    Stations.at("STR-S", vent, 0, -1500, L))).scaling(new VolcanoScaling(L, L, 1, 1)) // persistently active: nothing to fast-forward.tephra(tephra())
                             .wind(8, 1.2, Presets.WIND_VARIABILITY).build());
                 });
     }
@@ -394,7 +394,7 @@ final class RealPresets {
                     Scenario.Builder b = builder("pinatubo-real", seed, terrain, setting);
                     VentSite vent = vent("summit", terrain, L, 0, 0, 240);
                     MagmaChamberConfig chamber = MagmaChamberConfig.builder("pinatubo-real", chamberAt(vent, -5300, L))
-                            .volume(4e10).lithostaticDepth(7000).conduitRadius(60).tensileStrengthMPa(15)
+                            .volume(4e10).lithostaticDepth(7000).conduitRadius(90).tensileStrengthMPa(15)
                             .eruptionEndOverpressureMPa(2).supplyRate(2).supplyVariability(0.1)
                             .initialSilicaWt(64.5).rechargeSilicaWt(64.5).initialWaterWt(6.2).rechargeWaterWt(6.2)
                             .initialTemperatureC(780).rechargeTemperatureC(800).initialOverpressureMPa(15.1)
