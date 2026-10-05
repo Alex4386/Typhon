@@ -145,7 +145,12 @@ final class EventTranslator {
             case MassFlowEvents.PdcFront e -> front("PDC", e.time(), e.flowId(), e.cells(), e.maxSpeed(),
                     e.maxTemperatureC());
             case MassFlowEvents.LaharFront e -> front("LAHAR", e.time(), e.flowId(), e.cells(), e.maxSpeed(), 15);
-            case HydrothermalFeatureFormed e -> feature(e.time(), e.feature().name(), e.pos());
+            // Alteration, sinter and cinnabar are diffuse surface changes (hundreds of blocks), not point
+            // features: they show up through the TopUnit field instead of as markers.
+            case HydrothermalFeatureFormed e -> switch (e.feature()) {
+                case ACID_ALTERATION, SINTER, CINNABAR -> null;
+                default -> feature(e.time(), e.feature().name(), e.pos());
+            };
             case GeyserFormed e -> feature(e.time(), HydrothermalFeature.GEYSER.name(), e.potentSulfur());
             case LavaEvents.LavaOceanEntry e -> {
                 JsonObject o = new JsonObject();

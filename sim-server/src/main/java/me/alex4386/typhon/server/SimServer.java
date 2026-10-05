@@ -41,6 +41,8 @@ public final class SimServer implements AutoCloseable {
     private static final long PUMP_MILLIS = 50;
     private static final long STATE_MILLIS = 250;
     private static final long REPLAY_INFO_MILLIS = 2000;
+    /** Events are batched: every message re-renders the client's event-driven views. */
+    private static final long EVENTS_MILLIS = 250;
 
     /** Server settings. */
     public record Config(String host, int port, Path worldsDir, Path uiDir, String defaultPreset, long defaultSeed,
@@ -499,13 +501,16 @@ public final class SimServer implements AutoCloseable {
     /** Visible for tests: one pump cycle for one session. */
     void pump(Session s) throws Exception {
         long now = System.nanoTime();
-        long[] times = pumpTimes.computeIfAbsent(s.id, k -> new long[] {0, 0});
+        long[] times = pumpTimes.computeIfAbsent(s.id, k -> new long[] {0, 0, 0});
         List<ClientConnection> watchers = clientsOf(s);
         s.updateRate();
         s.maybeKeyframe();
 
-        JsonObject events = s.pumpEvents();
-        if (events != null) for (ClientConnection c : watchers) c.send(events);
+        if ((now - times[2]) / 1_000_000 >= EVENTS_MILLIS) {
+            times[2] = now;
+            JsonObject events = s.pumpEvents();
+            if (events != null) for (ClientConnection c : watchers) c.send(events);
+        }
 
         if (watchers.isEmpty()) return;
 
