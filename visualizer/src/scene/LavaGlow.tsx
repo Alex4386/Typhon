@@ -32,9 +32,10 @@ export function LavaGlow({ world }: { world: WorldInfo }) {
         const z = displayZ(world, vent.at[0], vent.at[1], vExag, dExag);
         light.position.set(vent.at[0], z + 60 * vExag, -vent.at[1]);
         const flicker = 0.85 + 0.15 * Math.sin(wall * 7.3 + n) * Math.sin(wall * 3.1 + 2 * n);
-        const base = Math.min(6, 1.2 + Math.log10(1 + rate) * 1.6);
+        // a local glow on the crater and nearby flows, not a floodlight on the whole edifice
+        const base = Math.min(1.4, 0.35 + Math.log10(1 + rate) * 0.35);
         light.intensity = base * flicker * (explosive ? 0.5 : 1);
-        light.distance = 2500 + Math.log10(1 + rate) * 1500;
+        light.distance = 700 + Math.log10(1 + rate) * 300;
         light.visible = st.showAtmosphere;
       }
     }

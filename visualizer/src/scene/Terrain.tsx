@@ -107,6 +107,34 @@ function gridGeometry(t: number): THREE.BufferGeometry {
   return geo;
 }
 
+/**
+ * Rewrites an overlay's index buffer to the triangles whose three vertices are all "wet" (lava,
+ * water, flow present). Mixed wet/dry triangles would otherwise slant from the surface down into
+ * the ground and show as spikes along shorelines. Unused slots become degenerate triangles.
+ */
+function compactIndex(geo: THREE.BufferGeometry, wet: Uint8Array, n: number): void {
+  const index = geo.getIndex()!;
+  const idx = index.array as Uint32Array;
+  let o = 0;
+  const tri = (p: number, q: number, r: number) => {
+    if (wet[p] && wet[q] && wet[r]) {
+      idx[o++] = p;
+      idx[o++] = q;
+      idx[o++] = r;
+    }
+  };
+  for (let b = 0; b < n - 1; b++) {
+    for (let a = 0; a < n - 1; a++) {
+      const v = b * n + a;
+      tri(v, v + 1, v + n);
+      tri(v + 1, v + n + 1, v + n);
+    }
+  }
+  idx.fill(0, o);
+  index.needsUpdate = true;
+  geo.setDrawRange(0, o);
+}
+
 interface TileProps {
   world: WorldInfo;
   tx: number;
@@ -186,6 +214,9 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       let anyLava = false;
       let anyWater = false;
       let anyFlow = false;
+      const wetL = new Uint8Array(n * n);
+      const wetW = new Uint8Array(n * n);
+      const wetF = new Uint8Array(n * n);
       let maxUplift = 1e-6;
       if (mode === 'uplift') for (let b = 0; b < n; b++) for (let a = 0; a < n; a++) maxUplift = Math.max(maxUplift, Math.abs(upR(a, b)));
       const maxI = (world.tiles.maxTx + 1) * t - 1;
@@ -211,6 +242,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           const ld = lavaR(a, b);
           if (ld > 0.02) {
             anyLava = true;
+            wetL[v] = 1;
             lp.setXYZ(v, x, z + (ld + 0.3) * vExag, -y);
             ramp(BLACKBODY, lavaT(a, b), c);
             lc.setXYZ(v, lin(c[0]), lin(c[1]), lin(c[2]));
@@ -223,6 +255,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           // ignore thin sheet flow (rain films); show ponded and flowing water
           if (wd > 0.25) {
             anyWater = true;
+            wetW[v] = 1;
             wp.setXYZ(v, x, z + wd * vExag, -y);
             // shallow turquoise → deep navy (Beer–Lambert-ish with depth)
             const deep = 1 - Math.exp(-wd / 25);
@@ -236,6 +269,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           const lah = laharR(a, b);
           if (pdc > 0.05 || lah > 0.05) {
             anyFlow = true;
+            wetF[v] = 1;
             fp.setXYZ(v, x, z + Math.max(pdc, lah) * vExag + 1, -y);
             if (pdc >= lah) fc.setXYZ(v, lin(0.62), lin(0.55), lin(0.5));
             else fc.setXYZ(v, lin(0.45), lin(0.33), lin(0.2));
@@ -246,6 +280,9 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
         }
       }
       gn.needsUpdate = true;
+      if (anyLava) compactIndex(lava, wetL, n);
+      if (anyWater) compactIndex(water, wetW, n);
+      if (anyFlow) compactIndex(flow, wetF, n);
       ground.computeBoundingSphere();
       ground.computeBoundingBox();
       for (const [geo, any] of [
