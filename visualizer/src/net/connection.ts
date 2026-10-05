@@ -28,7 +28,9 @@ export const SUBSCRIBED_FIELDS: FieldId[] = [
 
 /** Per-type message counters (debugging aid, exposed as window.__typhonMessages in dev). */
 export const messageCounts: Record<string, number> = {};
-if (import.meta.env.DEV) (window as unknown as { __typhonMessages: typeof messageCounts }).__typhonMessages = messageCounts;
+if (import.meta.env.DEV || new URLSearchParams(window.location.search).has("debug")) {
+  (window as unknown as { __typhonMessages: typeof messageCounts }).__typhonMessages = messageCounts;
+}
 
 let ws: WebSocket | null = null;
 let retry: number | undefined;

@@ -37,6 +37,9 @@ export function Viewer({ world }: { world: WorldInfo }) {
   const cx = (ext.minX + ext.maxX) / 2;
   const cy = (ext.minY + ext.maxY) / 2;
   const span = Math.max(ext.maxX - ext.minX, ext.maxY - ext.minY);
+  // Look at the middle of the terrain's elevation range, not the datum: real terrain can sit
+  // hundreds of metres above z = 0 (the initial exaggeration is good enough for framing).
+  const cz = ((world.elevationRange[0] + world.elevationRange[1]) / 2) * useStore.getState().verticalExaggeration;
 
   const onPick = useCallback((xy: XY) => {
     const s = useStore.getState();
@@ -58,7 +61,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
   return (
     <Canvas
       gl={createRenderer as never}
-      camera={{ position: [cx + span * 0.12, span * 0.8, -(cy - span * 1.2)], fov: 38, near: 5, far: span * 20 }}
+      camera={{ position: [cx + span * 0.12, cz + span * 0.8, -(cy - span * 1.2)], fov: 38, near: 5, far: span * 20 }}
       style={{ cursor: tool === 'orbit' ? 'grab' : 'crosshair' }}
     >
       <color attach="background" args={['#0d1117']} />
@@ -69,7 +72,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
       <Markers world={world} />
       {showHypo && <Hypocentres />}
       <Atmosphere world={world} />
-      <OrbitControls makeDefault target={[cx, 0, -cy]} maxPolarAngle={Math.PI * 0.495} minDistance={200} maxDistance={span * 4} />
+      <OrbitControls makeDefault target={[cx, cz, -cy]} maxPolarAngle={Math.PI * 0.495} minDistance={200} maxDistance={span * 4} />
     </Canvas>
   );
 }

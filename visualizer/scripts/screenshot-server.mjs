@@ -1,4 +1,4 @@
-// Screenshots of the visualizer (Vite dev server, which exposes debug hooks) against a real
+// Screenshots of the visualizer (production build served by the sim-server, with ?debug hooks) against a real
 // sim-server (M6), e.g. one started with
 //   sim-server --preset kilauea --ui visualizer/dist
 // Usage: node scripts/screenshot-server.mjs [outDir] [url]
@@ -7,7 +7,7 @@ import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const out = process.argv[2] ?? 'screenshots-server';
-const url = process.argv[3] ?? 'http://localhost:5180/?renderer=webgl&server=ws://localhost:8787/ws';
+const url = process.argv[3] ?? 'http://localhost:8787/?renderer=webgl&debug';
 mkdirSync(out, { recursive: true });
 
 const browser = await chromium.launch({
@@ -15,7 +15,7 @@ const browser = await chromium.launch({
   // /dev/shm-backed IPC crashed headless Chromium on long WebGL sessions in our CI-like environment
   args: ['--no-sandbox', '--disable-dev-shm-usage'],
 });
-const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+const page = await browser.newPage({ viewport: { width: Number(process.env.W ?? 1280), height: Number(process.env.H ?? 800) }, deviceScaleFactor: 1 });
 page.setDefaultTimeout(120000);
 const logs = [];
 page.on('console', (m) => (m.type() === 'error' || m.type() === 'warning') && logs.push(`${m.type()}: ${m.text()}`));
@@ -25,7 +25,16 @@ const shot = async (name) => {
   await page.screenshot({ path: `${out}/${name}.png` });
   console.log('saved', `${out}/${name}.png`);
 };
-const click = (text) => page.getByRole('button', { name: text, exact: false }).first().dispatchEvent('click');
+// Click by text inside the page (no Playwright actionability waits, which time out on slow pages).
+const click = (text, exact = false) =>
+  page.evaluate(([t, ex]) => {
+    const b = [...document.querySelectorAll('button')].find((x) => {
+      const s = (x.textContent ?? "").trim().toLowerCase();
+      return ex ? s === t.toLowerCase() : s.includes(t.toLowerCase());
+    });
+    b?.click();
+    return Boolean(b);
+  }, [text, exact]);
 
 // Software-rendered headless pages are slow to respond; poll rather than relying on
 // actionability/selector checks.
@@ -51,13 +60,19 @@ const line = await page.evaluate(() => {
   return [[v[0] - half, v[1]], [v[0] + half, v[1]]];
 });
 await page.evaluate((l) => window.__typhon.getState().set({ sectionPolyline: l }), line);
+// The Cut button enables only after React re-renders with the new polyline.
+for (let i = 0; i < 30; i++) {
+  await page.waitForTimeout(1000);
+  const enabled = await page.evaluate(() => [...document.querySelectorAll('button')].some((b) => b.textContent?.includes('Cut') && !b.disabled));
+  if (enabled) break;
+}
 await click('Cut');
 await page.waitForFunction(() => window.__typhon?.getState().section !== null, null, { timeout: 60000 });
 await page.waitForTimeout(3000);
 await shot('03-section');
 
 for (const tab of ['magma', 'deformation', 'alerts']) {
-  await click(tab);
+  await click(tab, true);
   await page.waitForTimeout(1500);
   await shot(`04-observatory-${tab}`);
 }

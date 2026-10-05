@@ -49,7 +49,15 @@ export function Markers({ world }: { world: WorldInfo }) {
     return [...latest.values()];
   }, [events]);
 
-  const features = useMemo(() => events.filter((e): e is Extract<SimEvent, { kind: 'geothermalFeature' }> => e.kind === 'geothermalFeature').slice(-300), [events]);
+  // One marker per (feature, spot): a real server reports the same fumarole or deposit repeatedly as it grows.
+  const features = useMemo(() => {
+    const byKey = new Map<string, Extract<SimEvent, { kind: 'geothermalFeature' }>>();
+    for (const e of events) {
+      if (e.kind !== 'geothermalFeature') continue;
+      byKey.set(`${e.feature}:${Math.round(e.at[0] / 20)}:${Math.round(e.at[1] / 20)}`, e);
+    }
+    return [...byKey.values()].slice(-150);
+  }, [events]);
   const fissures = useMemo(() => events.filter((e): e is Extract<SimEvent, { kind: 'fissureOpened' }> => e.kind === 'fissureOpened'), [events]);
 
   const sectionPts = useMemo(() => (polyline.length > 0 ? drape(world, polyline.length === 1 ? [polyline[0], polyline[0]] : polyline, vExag, dExag, 6 * vExag, world.cellSize * 2) : []), [world, polyline, vExag, dExag, rev]);

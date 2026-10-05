@@ -97,6 +97,13 @@ final class SectionBuilder {
                 int u = raster.unit()[src];
                 int f = 0;
                 double t = 0;
+                if (m.materialClass() == MaterialClass.AIR && Double.isFinite(ground) && z < world.spec().datumZ()
+                        && world.layerCount(cx, cz) > 0) {
+                    // Below the model datum: extend the deepest layer (basement) downwards.
+                    var bottom = world.layer(cx, cz, 0);
+                    m = MaterialTable.get(bottom.material());
+                    u = bottom.unit();
+                }
                 if (m.materialClass() == MaterialClass.AIR) {
                     if (Double.isFinite(ground) && z <= ground + uplift + lavaH && lavaH > 0 && z > ground + uplift) {
                         f |= FLAG_MAGMA;
