@@ -1,18 +1,20 @@
-import { Canvas } from '@react-three/fiber';
+import { Canvas, type ThreeEvent } from '@react-three/fiber';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu';
 import { CameraRig } from '../camera/CameraRig';
 import { useCamera } from '../camera/cameraStore';
 import { command } from '../net/connection';
-import type { WorldInfo, XY } from '../protocol/messages';
+import type { SimEvent, WorldInfo, XY } from '../protocol/messages';
 import { QUALITY, useStore } from '../store/store';
 import { worldExtent } from '../util/world';
 import { Atmosphere } from './Atmosphere';
 import { Hypocentres } from './Hypocentres';
 import { LavaGlow } from './LavaGlow';
 import { LavaHalo } from './LavaHalo';
+import { EntityMarkers, type PickData } from './EntityMarkers';
 import { Markers } from './Markers';
+import { nearestSurfaceEntity, pickRadius } from './picking';
 import { Terrain } from './Terrain';
 
 const FORCE_WEBGL = new URLSearchParams(window.location.search).get('renderer') === 'webgl';
@@ -112,9 +114,21 @@ export function Viewer({ world }: { world: WorldInfo }) {
   const cy = (ext.minY + ext.maxY) / 2;
   const hiZ = world.elevationRange[1] * useStore.getState().verticalExaggeration;
 
-  const onPick = useCallback((xy: XY) => {
+  const onPick = useCallback((xy: XY, e: ThreeEvent<MouseEvent>) => {
     const s = useStore.getState();
     switch (s.tool) {
+      case 'orbit': {
+        // x-ray markers (dikes, quakes) drawn over the ground win; then a marker next to the click; else the ground
+        for (const hit of e.intersections) {
+          const data = hit.object.userData.pickData as PickData | undefined;
+          if (data?.xray) return s.select(data.pick);
+          const quakes = hit.object.userData.quakes as { current: Extract<SimEvent, { kind: 'seismic' }>[] } | undefined;
+          if (quakes && hit.instanceId !== undefined && quakes.current[hit.instanceId]) return s.select({ type: 'quake', event: quakes.current[hit.instanceId] });
+        }
+        const near = nearestSurfaceEntity(s.entities, xy, pickRadius(e.distance) / Math.max(1, s.verticalExaggeration * 0.5));
+        s.select(near ? { type: 'entity', id: near.id } : { type: 'point', at: xy });
+        return;
+      }
       case 'section':
         s.set({ sectionPolyline: [...s.sectionPolyline, xy] });
         return;
@@ -139,7 +153,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
       shadows={q.shadows}
       dpr={q.dpr}
       camera={{ position, fov: 38, near: 5, far: span * 20 }}
-      style={{ cursor: tool !== 'orbit' ? 'crosshair' : camMode === 'fly' || camMode === 'walk' ? 'crosshair' : 'grab', touchAction: 'none' }}
+      style={{ cursor: tool !== 'orbit' ? 'crosshair' : camMode === 'fly' || camMode === 'walk' ? 'crosshair' : 'default', touchAction: 'none' }}
     >
       <fog attach="fog" args={[HORIZON, span * 0.9, span * 3.2]} />
       <hemisphereLight args={['#c9d6e8', '#4a3a2c', 0.75]} />
@@ -156,6 +170,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
       <LavaGlow world={world} />
       <LavaHalo world={world} />
       <Markers world={world} />
+      <EntityMarkers world={world} />
       {showHypo && <Hypocentres />}
       <Atmosphere world={world} />
       <CameraRig world={world} />

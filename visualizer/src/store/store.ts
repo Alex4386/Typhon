@@ -1,9 +1,12 @@
+import { toast as sonner } from 'sonner';
 import { create } from 'zustand';
 import type { FieldId } from '../protocol/fields';
 import type { SectionFrame, TileFrame } from '../protocol/frames';
 import type {
   CatalogMessage,
   ClockMessage,
+  EntitiesMessage,
+  InspectionMessage,
   ReplayInfoMessage,
   SchemaMessage,
   ServerInfo,
@@ -15,15 +18,23 @@ import type {
   WorldInfo,
   XY,
 } from '../protocol/messages';
+import { applyEntities, pruneEntities, type EntityMap, type EntityView, type Selection } from './entities';
 
 /** Side drawer pages; only one is open at a time (progressive disclosure). */
-export type DrawerTab = 'sims' | 'monitor' | 'events' | 'section' | 'view' | 'tune';
+export type DrawerTab = 'sims' | 'entities' | 'monitor' | 'events' | 'section' | 'view' | 'tune';
 
-export interface Toast {
-  id: number;
-  text: string;
-  tone: 'info' | 'warn' | 'alert';
-  time: number;
+export type ToastTone = 'info' | 'warn' | 'alert';
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
+/** What the pointer is over in the 3D view (label shown next to the cursor). */
+export interface Hover {
+  label: string;
+  detail?: string;
+  x: number;
+  y: number;
 }
 
 export type Tool = 'orbit' | 'section' | 'water' | 'dig';
@@ -86,12 +97,23 @@ interface Store {
   /** Open drawer page, or null when the drawer is closed. */
   drawer: DrawerTab | null;
   drawerWidth: number;
-  toasts: Toast[];
+  /** Things in the world with a lifetime (vents, dikes, hot springs, …), by id (§4.8). */
+  entities: EntityMap;
+  /** What the user selected in the view or the Entities panel. */
+  selection: Selection | null;
+  /** Latest column inspection for the selection (§3.7). */
+  inspection: InspectionMessage | null;
+  inspectPending: number | null;
+  hover: Hover | null;
+  /** Entity under the pointer (3D view or Entities panel), highlighted in both. */
+  hoverId: string | null;
   /** Show the minimap (off by default to keep the view clean). */
   showMinimap: boolean;
   /** Show the full camera toolbar (follow, tour, bookmarks, framing). */
   showCameraTools: boolean;
   guideOpen: boolean;
+  /** Command palette (Ctrl+K). */
+  paletteOpen: boolean;
   /** Tunable parameters and command fields of the attached session. */
   schema: SchemaMessage | null;
   world: WorldInfo | null;
@@ -148,8 +170,10 @@ interface Store {
   /** Forgets everything about the attached session (switching worlds). */
   resetSession: () => void;
   openDrawer: (tab: DrawerTab | null) => void;
-  toast: (text: string, tone?: Toast['tone']) => void;
-  dismissToast: (id: number) => void;
+  toast: (text: string, tone?: ToastTone, action?: ToastAction) => void;
+  /** Applies an entity delta; returns the entities that appeared. */
+  applyEntities: (m: EntitiesMessage) => EntityView[];
+  select: (sel: Selection | null) => void;
 }
 
 export const useStore = create<Store>((set, get) => ({
@@ -162,10 +186,16 @@ export const useStore = create<Store>((set, get) => ({
   sessionId: null,
   drawer: null,
   drawerWidth: initialDrawerWidth(),
-  toasts: [],
+  entities: {},
+  selection: null,
+  inspection: null,
+  inspectPending: null,
+  hover: null,
+  hoverId: null,
   showMinimap: false,
   showCameraTools: false,
   guideOpen: !guideSeen(),
+  paletteOpen: false,
   schema: null,
   world: null,
   clock: null,
@@ -295,22 +325,50 @@ export const useStore = create<Store>((set, get) => ({
       units: {},
       selectedVolcano: null,
       tool: 'orbit',
+      entities: {},
+      selection: null,
+      inspection: null,
+      inspectPending: null,
+      hover: null,
     });
   },
 
   openDrawer: (tab) => set({ drawer: get().drawer === tab ? null : tab }),
 
-  toast: (text, tone = 'info') => {
-    const id = ++toastSeq;
-    const toasts = [...get().toasts.filter((t) => t.text !== text), { id, text, tone, time: Date.now() }].slice(-4);
-    set({ toasts });
-    window.setTimeout(() => get().dismissToast(id), tone === 'alert' ? 9000 : 6000);
+  toast: (text, tone = 'info', action) => {
+    const opts = { id: text, duration: tone === 'alert' ? 9000 : 6000, ...(action ? { action } : {}) };
+    if (tone === 'alert') sonner.error(text, opts);
+    else if (tone === 'warn') sonner.warning(text, opts);
+    else sonner(text, opts);
   },
 
-  dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
+  applyEntities: (m) => {
+    const u = applyEntities(get().entities, m, performance.now());
+    const sel = get().selection;
+    // a selected entity that disappears for good leaves the selection at its last place
+    const lost = sel?.type === 'entity' && !u.entities[sel.id];
+    set({ entities: u.entities, ...(lost ? { selection: null } : {}) });
+    return u.added;
+  },
+
+  select: (selection) => set({ selection, inspection: selection && sameSelection(selection, get().selection) ? get().inspection : null }),
 }));
 
-let toastSeq = 0;
+function sameSelection(a: Selection, b: Selection | null): boolean {
+  if (!b || a.type !== b.type) return false;
+  if (a.type === 'entity' && b.type === 'entity') return a.id === b.id;
+  if (a.type === 'point' && b.type === 'point') return a.at[0] === b.at[0] && a.at[1] === b.at[1];
+  return a.type === 'quake' && b.type === 'quake' && a.event === b.event;
+}
+
+/** Finished fade-outs are dropped every few seconds. */
+if (typeof window !== 'undefined') {
+  window.setInterval(() => {
+    const s = useStore.getState();
+    const next = pruneEntities(s.entities, performance.now());
+    if (next !== s.entities) s.set({ entities: next });
+  }, 1000);
+}
 
 const GUIDE_KEY = 'typhon.guideSeen';
 const DRAWER_KEY = 'typhon.drawerWidth';

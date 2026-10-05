@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import './camera.css';
+import { Bookmark, CircleHelp, Crosshair, Grid2x2, MoveUp, Plus, Settings, SplitSquareVertical, Trash2, X } from 'lucide-react';
+import { SimpleSelect, SliderRow, SwitchRow } from '@/components/fields';
+import { Tip } from '@/components/tip';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Kbd } from '@/components/ui/kbd';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
+import { OVERLAY } from '../panels/Overlay';
 import { Field } from '../protocol/fields';
 import type { WorldInfo } from '../protocol/messages';
 import { useStore } from '../store/store';
@@ -39,7 +51,7 @@ function sceneInfo(world: WorldInfo): SceneInfo {
   };
 }
 
-/** Camera toolbar: modes, follow target, framing, bookmarks, settings and help. */
+/** Camera toolbar: modes, follow target, framing, bookmarks, settings and help (bottom right). */
 export function CameraBar({ world }: { world: WorldInfo }) {
   const mode = useCamera((c) => c.mode);
   const followTarget = useCamera((c) => c.followTarget);
@@ -52,174 +64,217 @@ export function CameraBar({ world }: { world: WorldInfo }) {
   const req = useCamera((c) => c.requestCamera);
   const hasPlume = useStore((s) => Object.values(s.state?.volcanoes ?? {}).some((v) => !!v.plume && v.plume.topZ > 0));
   const hasSection = useStore((s) => s.sectionPolyline.length >= 2);
-  const [menu, setMenu] = useState(false);
+  const hasSelection = useStore((s) => s.selection !== null);
+  const [saving, setSaving] = useState(false);
+  const [name, setName] = useState('');
   const full = useStore((s) => s.showCameraTools);
   const modes = full ? CAMERA_MODES : CAMERA_MODES.filter((m) => m === 'orbit' || m === 'fly' || m === 'walk' || m === mode);
 
   const builtins = builtinBookmarks(sceneInfo(world));
-  const savePose = () => {
-    const r = useCamera.getState().readout;
-    if (!r) return;
-    const name = window.prompt('Bookmark name', `View ${bookmarks.length + 1}`);
-    if (!name) return;
-    const url = new URL(window.location.href).searchParams.get('cam');
-    const pose = decodePose(url);
-    if (!pose) return;
-    const list = [...bookmarks.filter((b) => b.name !== name), { name, pose }];
+  const savePose = (label: string) => {
+    const pose = decodePose(new URL(window.location.href).searchParams.get('cam'));
+    if (!label || !pose) return;
+    const list = [...bookmarks.filter((b) => b.name !== label), { name: label, pose }];
     set({ bookmarks: list });
     saveBookmarks(world.name, list);
   };
-  const removeBookmark = (name: string) => {
-    const list = bookmarks.filter((b) => b.name !== name);
+  const removeBookmark = (label: string) => {
+    const list = bookmarks.filter((b) => b.name !== label);
     set({ bookmarks: list });
     saveBookmarks(world.name, list);
   };
 
   return (
-    <div className={`panel camerabar${full ? '' : ' compact'}`}>
-      <div className="row" role="toolbar" aria-label="Camera">
+    <div className={cn(OVERLAY, 'absolute right-3 bottom-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-col gap-1 p-1.5')}>
+      <div className="flex flex-wrap items-center justify-end gap-1" role="toolbar" aria-label="Camera">
         {modes.map((m) => (
-          <button key={m} className={mode === m ? 'on' : ''} title={`${MODE_LABEL[m].title} [${MODE_LABEL[m].key}]`} onClick={() => req({ kind: 'mode', mode: m })}>
-            {MODE_LABEL[m].label}
-          </button>
+          <Tip key={m} content={`${MODE_LABEL[m].title} [${MODE_LABEL[m].key}]`} side="top">
+            <Button size="xs" variant={mode === m ? 'default' : 'ghost'} aria-pressed={mode === m} onClick={() => req({ kind: 'mode', mode: m })}>
+              {MODE_LABEL[m].label}
+            </Button>
+          </Tip>
         ))}
         {mode === 'follow' && (
-          <select value={followTarget} onChange={(e) => set({ followTarget: e.target.value as FollowTarget })} title="Follow target">
-            {FOLLOW_TARGETS.map((t) => (
-              <option key={t} value={t}>
-                {FOLLOW_LABEL[t]}
-              </option>
-            ))}
-          </select>
+          <SimpleSelect label="Follow target" value={followTarget} onChange={(v) => set({ followTarget: v })} options={FOLLOW_TARGETS.map((t) => [t, FOLLOW_LABEL[t]] as const)} />
         )}
-        <span className="sep" />
-        <button title="Frame the selected volcano [F]" onClick={() => req({ kind: 'frame', what: 'volcano' })}>
-          ⌖ volcano
-        </button>
+        <span className="mx-0.5 h-5 w-px bg-border" />
+        <Tip content={hasSelection ? 'Frame the selection [F] (Shift+F: the volcano)' : 'Frame the selected volcano [F]'} side="top">
+          <Button size="xs" variant="ghost" onClick={() => req(hasSelection ? { kind: 'frameSelection' } : { kind: 'frame', what: 'volcano' })}>
+            <Crosshair /> {hasSelection ? 'selection' : 'volcano'}
+          </Button>
+        </Tip>
         {full && (
-        <>
-        <button title="Fit the eruption column [P]" disabled={!hasPlume} onClick={() => req({ kind: 'frame', what: 'plume' })}>
-          ⇡ plume
-        </button>
-        <button title="Whole world [O]" onClick={() => req({ kind: 'frame', what: 'overview' })}>
-          ▦ overview
-        </button>
-        <button title="Look across the cross-section line" disabled={!hasSection} onClick={() => req({ kind: 'frame', what: 'section' })}>
-          ⟂ section
-        </button>
-        <span className="sep" />
-        <select
-          value=""
-          title="Camera bookmarks"
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v === '+') savePose();
-            else if (v.startsWith('-')) removeBookmark(v.slice(1));
-            else {
-              const b = [...builtins, ...bookmarks].find((x) => x.name === v);
-              if (b) req({ kind: 'pose', pose: b.pose });
-            }
-          }}
-        >
-          <option value="">★ views</option>
-          <optgroup label="Built in">
-            {builtins.map((b) => (
-              <option key={`b-${b.name}`} value={b.name}>
-                {b.name}
-              </option>
-            ))}
-          </optgroup>
-          {bookmarks.length > 0 && (
-            <optgroup label="Saved">
-              {bookmarks.map((b) => (
-                <option key={`u-${b.name}`} value={b.name}>
-                  {b.name}
-                </option>
-              ))}
-            </optgroup>
-          )}
-          <option value="+">＋ save current view…</option>
-          {bookmarks.length > 0 && (
-            <optgroup label="Delete">
-              {bookmarks.map((b) => (
-                <option key={`d-${b.name}`} value={`-${b.name}`}>
-                  ✕ {b.name}
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
-        <button className={menu ? 'on' : ''} title="Camera settings: fly speed, ground clearance, underground" onClick={() => setMenu(!menu)}>
-          ⚙ settings
-        </button>
-        </>
+          <>
+            <Tip content="Fit the eruption column [P]" side="top">
+              <Button size="xs" variant="ghost" disabled={!hasPlume} onClick={() => req({ kind: 'frame', what: 'plume' })}>
+                <MoveUp /> plume
+              </Button>
+            </Tip>
+            <Tip content="Whole world [O]" side="top">
+              <Button size="xs" variant="ghost" onClick={() => req({ kind: 'frame', what: 'overview' })}>
+                <Grid2x2 /> overview
+              </Button>
+            </Tip>
+            <Tip content="Look across the cross-section line" side="top">
+              <Button size="xs" variant="ghost" disabled={!hasSection} onClick={() => req({ kind: 'frame', what: 'section' })}>
+                <SplitSquareVertical /> section
+              </Button>
+            </Tip>
+            <span className="mx-0.5 h-5 w-px bg-border" />
+            <DropdownMenu>
+              <Tip content="Camera bookmarks" side="top">
+                <DropdownMenuTrigger render={<Button size="xs" variant="ghost" />}>
+                  <Bookmark /> views
+                </DropdownMenuTrigger>
+              </Tip>
+              <DropdownMenuContent side="top" align="end" className="w-auto min-w-56">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Built in</DropdownMenuLabel>
+                  {builtins.map((b) => (
+                    <DropdownMenuItem key={`b-${b.name}`} onClick={() => req({ kind: 'pose', pose: b.pose })}>
+                      {b.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+                {bookmarks.length > 0 && (
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Saved</DropdownMenuLabel>
+                    {bookmarks.map((b) => (
+                      <DropdownMenuItem key={`u-${b.name}`} onClick={() => req({ kind: 'pose', pose: b.pose })}>
+                        <span className="flex-1">{b.name}</span>
+                        <Button
+                          size="icon-xs"
+                          variant="ghost"
+                          aria-label={`Delete ${b.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeBookmark(b.name);
+                          }}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuGroup>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    setName(`View ${bookmarks.length + 1}`);
+                    setSaving(true);
+                  }}
+                >
+                  <Plus /> Save current view…
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Popover>
+              <Tip content="Camera settings: fly speed, ground clearance, underground" side="top">
+                <PopoverTrigger render={<Button size="xs" variant="ghost" />}>
+                  <Settings /> settings
+                </PopoverTrigger>
+              </Tip>
+              <PopoverContent side="top" align="end" className="flex w-72 flex-col gap-3">
+                <SliderRow
+                  label="Fly speed"
+                  help="Fly speed multiplier (wheel or [ ] while flying)"
+                  value={Math.log2(speed)}
+                  display={`×${speed.toFixed(2)}`}
+                  min={-3}
+                  max={3}
+                  step={0.1}
+                  onChange={(v) => set({ speedMultiplier: 2 ** v })}
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="cam-clearance" className="font-normal">
+                    Ground clearance (m)
+                  </Label>
+                  <Input id="cam-clearance" type="number" className="h-7 w-20" min={0} max={500} step={1} value={clearance} onChange={(e) => set({ clearance: Math.max(0, Number(e.target.value) || 0) })} />
+                </div>
+                <SwitchRow id="cam-underground" label="Fly underground [G]" help="Allow flying below the surface to look at the chamber and subsurface" checked={underground} onChange={(v) => set({ allowUnderground: v })} />
+              </PopoverContent>
+            </Popover>
+          </>
         )}
-        <button title="Keyboard and mouse controls [?]" aria-label="Camera controls help" onClick={() => set({ helpOpen: true })}>
-          ?
-        </button>
-        <button
-          className="more"
-          title={full ? 'Hide the extra camera tools' : 'More camera tools: follow, tour, plume/overview framing, saved views, settings'}
-          aria-expanded={full}
-          onClick={() => useStore.getState().set({ showCameraTools: !full })}
-        >
-          {full ? 'Less' : 'More…'}
-        </button>
+        <Tip content="Keyboard and mouse controls [?]" side="top">
+          <Button size="icon-xs" variant="ghost" aria-label="Camera controls help" onClick={() => set({ helpOpen: true })}>
+            <CircleHelp />
+          </Button>
+        </Tip>
+        <Tip content={full ? 'Hide the extra camera tools' : 'More camera tools: follow, tour, plume/overview framing, saved views, settings'} side="top">
+          <Button size="xs" variant="ghost" aria-expanded={full} onClick={() => useStore.getState().set({ showCameraTools: !full })}>
+            {full ? 'Less' : 'More…'}
+          </Button>
+        </Tip>
       </div>
-      {full && menu && (
-        <div className="row">
-          <label title="Fly speed multiplier (wheel or [ ] while flying)">
-            speed ×
-            <input type="range" min={-3} max={3} step={0.1} value={Math.log2(speed)} onChange={(e) => set({ speedMultiplier: 2 ** Number(e.target.value) })} />
-            <span className="num">{speed.toFixed(2)}</span>
-          </label>
-          <label title="Minimum height above the ground while flying (m)">
-            clearance
-            <input type="number" min={0} max={500} step={1} value={clearance} onChange={(e) => set({ clearance: Math.max(0, Number(e.target.value) || 0) })} style={{ width: 64 }} />
-            m
-          </label>
-          <label title="Allow flying below the surface to look at the chamber and subsurface [G]">
-            <input type="checkbox" checked={underground} onChange={(e) => set({ allowUnderground: e.target.checked })} />
-            underground
-          </label>
-        </div>
-      )}
       {(mode === 'fly' || mode === 'walk') && (
-        <div className="camera-hint">
+        <div className="pointer-events-none truncate px-1 text-[11px] text-muted-foreground">
           {locked ? 'Esc releases the mouse · ' : 'Click the view to capture the mouse (or drag to look) · '}
           WASD move{mode === 'fly' ? ' · Q/E down/up · Shift fast · Ctrl/Alt slow · wheel speed' : ' · Space jump · Shift run'}
         </div>
       )}
+      <Dialog open={saving} onOpenChange={setSaving}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Save this view</DialogTitle>
+            <DialogDescription>It appears under “views” for this world.</DialogDescription>
+          </DialogHeader>
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              savePose(name.trim());
+              setSaving(false);
+            }}
+          >
+            <Input autoFocus aria-label="View name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Button type="submit" disabled={!name.trim()}>
+              Save
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-/** Compass rose and position readout. */
+/** Compass rose and position readout (bottom centre). */
 export function CameraReadoutPanel() {
   const r = useCamera((c) => c.readout);
   const mode = useCamera((c) => c.mode);
   if (!r) return null;
   const deg = (r.heading * 180) / Math.PI;
   return (
-    <div className="panel compass" title="Camera position (world metres)">
-      <div className="rose" onClick={() => useCamera.getState().requestCamera({ kind: 'frame', what: 'volcano' })} title="Heading (click: frame volcano)">
-        <div className="needle" style={{ transform: `rotate(${-deg}deg)` }}>
-          <span className="n">N</span>
+    <Tip content="Camera position (world metres)" side="top">
+      <div className={cn(OVERLAY, 'absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 py-1.5 pr-3 pl-1.5 text-[11px] tabular-nums max-lg:bottom-16')}>
+        <button
+          type="button"
+          className="relative size-11 shrink-0 rounded-full border bg-[radial-gradient(circle,#24303d_0%,#161b22_70%)]"
+          onClick={() => useCamera.getState().requestCamera({ kind: 'frame', what: 'volcano' })}
+          aria-label="Heading (click: frame volcano)"
+        >
+          <svg viewBox="-22 -22 44 44" className="absolute inset-0" style={{ transform: `rotate(${-deg}deg)` }} aria-hidden>
+            <polygon points="0,-13 -5,0 5,0" className="fill-primary" />
+            <polygon points="0,13 -5,0 5,0" fill="#6b7785" />
+            <text x="0" y="-15" textAnchor="middle" fontSize="8" fontWeight="700" className="fill-foreground">
+              N
+            </text>
+          </svg>
+        </button>
+        <div className="leading-snug">
+          <div>
+            <b>{compassPoint(r.heading)}</b> {deg.toFixed(0)}° · pitch {((r.pitch * 180) / Math.PI).toFixed(0)}° · <span className="text-muted-foreground">{mode}</span>
+          </div>
+          <div>
+            E {fmtM(r.x)} · N {fmtM(r.y)}
+          </div>
+          <div>
+            alt {fmtM(r.altitude)} · AGL {fmtM(r.aboveGround)}
+            {r.speed > 0 ? ` · ${fmtSpeed(r.speed)}` : ''}
+          </div>
         </div>
       </div>
-      <div className="readout">
-        <div>
-          <b>{compassPoint(r.heading)}</b> {deg.toFixed(0)}° · pitch {((r.pitch * 180) / Math.PI).toFixed(0)}° · <span className="muted">{mode}</span>
-        </div>
-        <div>
-          E {fmtM(r.x)} · N {fmtM(r.y)}
-        </div>
-        <div>
-          alt {fmtM(r.altitude)} · AGL {fmtM(r.aboveGround)}
-          {r.speed > 0 ? ` · ${fmtSpeed(r.speed)}` : ''}
-        </div>
-      </div>
-    </div>
+    </Tip>
   );
 }
 
@@ -358,10 +413,11 @@ export function Minimap({ world }: { world: WorldInfo }) {
 
   if (!open) return null;
   return (
-    <div className="panel minimap" title="Click to fly there">
-      <div className="minimap-canvas" style={{ width: MAP_PX, height: MAP_PX }}>
-        <canvas ref={base} width={MAP_PX} height={MAP_PX} />
+    <div className={cn(OVERLAY, 'absolute right-3 bottom-14 z-10 p-1')} title="Click to fly there">
+      <div className="relative" style={{ width: MAP_PX, height: MAP_PX }}>
+        <canvas ref={base} width={MAP_PX} height={MAP_PX} className="absolute inset-0 rounded-md" />
         <canvas
+          className="absolute inset-0 cursor-crosshair rounded-md"
           ref={overlay}
           width={MAP_PX}
           height={MAP_PX}
@@ -373,16 +429,17 @@ export function Minimap({ world }: { world: WorldInfo }) {
           }}
         />
       </div>
-      <button className="minimap-close" title="Hide minimap" onClick={() => setOpen(false)}>
-        ×
-      </button>
+      <Button size="icon-xs" variant="secondary" className="absolute top-2 right-2 opacity-80" aria-label="Hide minimap" onClick={() => setOpen(false)}>
+        <X />
+      </Button>
     </div>
   );
 }
 
 const HELP: [string, string][] = [
   ['1 – 5', 'Orbit · Fly · Walk · Follow · Tour'],
-  ['F / Shift+F', 'Frame the selected volcano'],
+  ['Click', 'Select a vent, dike, spring, quake, station or the ground'],
+  ['F / Shift+F', 'Frame the selection / the volcano'],
   ['P', 'Fit the eruption column (plume)'],
   ['O', 'Overview of the whole world'],
   ['Double-click', 'Focus on a point of the terrain'],
@@ -401,29 +458,26 @@ const HELP: [string, string][] = [
 
 export function CameraHelp() {
   const open = useCamera((c) => c.helpOpen);
-  if (!open) return null;
   return (
-    <div className="help-overlay" onClick={() => useCamera.getState().set({ helpOpen: false })}>
-      <div className="panel help" onClick={(e) => e.stopPropagation()}>
-        <div className="row">
-          <b>Camera controls</b>
-          <span className="spacer" />
-          <button onClick={() => useCamera.getState().set({ helpOpen: false })}>×</button>
-        </div>
-        <table>
-          <tbody>
+    <Dialog open={open} onOpenChange={(o) => useCamera.getState().set({ helpOpen: o })}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Camera controls</DialogTitle>
+          <DialogDescription>The view is kept in the URL (?cam=…), so copying the address shares exactly this view.</DialogDescription>
+        </DialogHeader>
+        <Table>
+          <TableBody>
             {HELP.map(([k, v]) => (
-              <tr key={k}>
-                <td>
-                  <kbd>{k}</kbd>
-                </td>
-                <td>{v}</td>
-              </tr>
+              <TableRow key={k}>
+                <TableCell className="w-36 align-top">
+                  <Kbd>{k}</Kbd>
+                </TableCell>
+                <TableCell className="whitespace-normal">{v}</TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-        <div className="muted">The view is kept in the URL (?cam=…), so copying the address shares exactly this view.</div>
-      </div>
-    </div>
+          </TableBody>
+        </Table>
+      </DialogContent>
+    </Dialog>
   );
 }

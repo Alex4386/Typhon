@@ -34,6 +34,7 @@ import {
   ventPoint,
   type SceneInfo,
 } from './targets';
+import { frameDistance, SURFACE_KINDS, selectionAnchor } from '../scene/picking';
 
 type OrbitControlsImpl = ComponentRef<typeof OrbitControls>;
 
@@ -200,7 +201,8 @@ export function CameraRig({ world }: { world: WorldInfo }) {
           break;
         case 'f':
         case 'F':
-          if (!freeLook() || e.shiftKey) req({ kind: 'frame', what: 'volcano' });
+          if (useStore.getState().selection && !e.shiftKey) req({ kind: 'frameSelection' });
+          else if (!freeLook() || e.shiftKey) req({ kind: 'frame', what: 'volcano' });
           break;
         case 'p':
         case 'P':
@@ -391,6 +393,23 @@ export function CameraRig({ world }: { world: WorldInfo }) {
             anglesOf(-off.x, -off.y, -off.z, tmp.current.ang);
             startTransition({ mode: s.mode === 'tour' ? 'orbit' : s.mode, position: pos, heading: tmp.current.ang[0], pitch: tmp.current.ang[1], target: tgt }, false);
           }
+          break;
+        }
+        case 'frameSelection': {
+          const st = useStore.getState();
+          const sel = st.selection;
+          const a = selectionAnchor(sel, st.entities, (xy) => groundAt(si, xy[0], xy[1]) / si.vExag);
+          if (!a || !sel) break;
+          const onGround = sel.type === 'point' || (sel.type === 'entity' && SURFACE_KINDS.has(st.entities[sel.id]?.kind ?? ''));
+          const tgt: [number, number, number] = [a[0], onGround ? groundAt(si, a[0], a[1]) : a[2] * si.vExag, -a[1]];
+          const dist = frameDistance(sel, st.entities);
+          // keep the current compass direction and look down at it
+          readAngles();
+          const heading = s.heading;
+          const pitch = -0.6;
+          const dir = directionOf(heading, pitch, [0, 0, 0]);
+          const pos: [number, number, number] = [tgt[0] - dir[0] * dist, tgt[1] - dir[1] * dist, tgt[2] - dir[2] * dist];
+          startTransition({ mode: 'orbit', position: pos, heading, pitch, target: tgt }, false);
           break;
         }
         case 'focus': {

@@ -1,9 +1,20 @@
-import { useFrame } from '@react-three/fiber';
+import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { SimEvent } from '../protocol/messages';
 import { simNow, useStore } from '../store/store';
 import { sceneProbe } from './Terrain';
+
+type Quake = Extract<SimEvent, { kind: 'seismic' }>;
+
+/** The quake drawn as instance `id` (set while laying out). */
+function quakeOf(drawn: Quake[], e: ThreeEvent<PointerEvent | MouseEvent>): Quake | undefined {
+  return e.instanceId === undefined ? undefined : drawn[e.instanceId];
+}
+
+function quakeLabel(q: Quake): { label: string; detail: string } {
+  return { label: `M ${q.magnitude.toFixed(1)} ${q.type} earthquake`, detail: `${Math.round(-q.hypocenter[2])} m below sea level` };
+}
 
 const MAX = 3000;
 /** How long (simulated seconds) hypocentres stay visible. */
@@ -35,8 +46,9 @@ export function Hypocentres() {
   const events = useStore((s) => s.events);
   const ref = useRef<THREE.InstancedMesh>(null);
   const material = useMemo(() => new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.6, depthTest: false, depthWrite: false }), []);
-  const quakes = useMemo(() => events.filter((e): e is Extract<SimEvent, { kind: 'seismic' }> => e.kind === 'seismic').slice(-MAX), [events]);
+  const quakes = useMemo(() => events.filter((e): e is Quake => e.kind === 'seismic').slice(-MAX), [events]);
   const last = useRef({ at: 0, quakes: null as unknown, vExag: 0 });
+  const drawn = useRef<Quake[]>([]);
   const m = useMemo(() => new THREE.Matrix4(), []);
   const c = useMemo(() => new THREE.Color(), []);
   const p = useMemo(() => new THREE.Vector3(), []);
@@ -57,6 +69,7 @@ export function Hypocentres() {
 
     const now = simNow();
     let n = 0;
+    drawn.current = [];
     for (const q of quakes) {
       const age = now - q.time;
       if (age > WINDOW) continue;
@@ -69,6 +82,7 @@ export function Hypocentres() {
       const fade = 1 - Math.max(0, age) / WINDOW;
       c.copy(TYPE_COLOR[q.type] ?? TYPE_COLOR.VT).multiplyScalar(0.35 + 0.65 * fade);
       mesh.setColorAt(n, c);
+      drawn.current[n] = q;
       n++;
     }
     mesh.count = n;
@@ -77,7 +91,28 @@ export function Hypocentres() {
   });
 
   return (
-    <instancedMesh ref={ref} args={[undefined, material, MAX]} renderOrder={11} frustumCulled={false}>
+    <instancedMesh
+      ref={ref}
+      args={[undefined, material, MAX]}
+      renderOrder={11}
+      frustumCulled={false}
+      userData={{ quakes: drawn }}
+      onClick={(e) => {
+        const q = quakeOf(drawn.current, e);
+        if (!q || e.delta > 4 || useStore.getState().tool !== 'orbit') return;
+        e.stopPropagation();
+        useStore.getState().select({ type: 'quake', event: q });
+      }}
+      onPointerMove={(e) => {
+        const q = quakeOf(drawn.current, e);
+        if (!q || useStore.getState().tool !== 'orbit') return;
+        useStore.getState().set({ hover: { ...quakeLabel(q), x: e.nativeEvent.clientX, y: e.nativeEvent.clientY }, hoverId: null });
+      }}
+      onPointerOut={() => {
+        const h = useStore.getState().hover;
+        if (h && / earthquake$/.test(h.label)) useStore.getState().set({ hover: null });
+      }}
+    >
       <icosahedronGeometry args={[1, 1]} />
     </instancedMesh>
   );

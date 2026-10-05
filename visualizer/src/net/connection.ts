@@ -14,6 +14,8 @@ import {
   type XY,
 } from '../protocol/messages';
 import { rememberSession, rememberedSession, useStore } from '../store/store';
+import { formatPlace, KIND_LABEL, type EntityView } from '../store/entities';
+import { useCamera } from '../camera/cameraStore';
 import { describeEvent, toastTone } from '../panels/events';
 
 /** Fields the visualizer subscribes to. */
@@ -205,6 +207,48 @@ export function requestSection(polyline: XY[], zMin: number, zMax: number, nu: n
   send({ type: 'section', requestId, polyline, zMin, zMax, nu, nz, ...(datum === 'surface' ? { datum } : {}) });
 }
 
+/** Asks the server about the column at (x, y); the reply lands in `inspection`. */
+export function inspect(x: number, y: number): void {
+  const requestId = requestSeq++;
+  useStore.getState().set({ inspectPending: requestId });
+  send({ type: 'inspect', requestId, x, y });
+}
+
+/** Selects an entity and flies the camera to it. */
+export function showEntity(id: string): void {
+  const s = useStore.getState();
+  const e = s.entities[id];
+  if (!e) return;
+  s.select({ type: 'entity', id });
+  useCamera.getState().requestCamera({ kind: 'frameSelection' });
+}
+
+/** Kinds worth a notification when they appear while watching. */
+const ANNOUNCED = new Set(['vent', 'fissure', 'dike', 'feature', 'pdc', 'lahar', 'lavaFront']);
+
+/** “New hot spring at E … N …” with a button that shows it; several at once are summarised. */
+function announce(added: EntityView[]): void {
+  if (performance.now() < toastsQuietUntil) return;
+  const s = useStore.getState();
+  const news = added.filter((e) => ANNOUNCED.has(e.kind) && !e.hidden);
+  if (news.length === 0) return;
+  if (news.length > 2) {
+    const kinds = [...new Set(news.map((e) => (e.kind === 'feature' ? e.label.toLowerCase() : KIND_LABEL[e.kind]?.toLowerCase() ?? e.kind)))];
+    s.toast(`${news.length} new: ${kinds.slice(0, 3).join(', ')}${kinds.length > 3 ? '…' : ''}`, 'info', {
+      label: 'List',
+      onClick: () => useStore.getState().set({ drawer: 'entities' }),
+    });
+    return;
+  }
+  for (const e of news) {
+    const what = e.kind === 'feature' ? e.label : e.label || KIND_LABEL[e.kind] || e.kind;
+    s.toast(`New ${what.charAt(0).toLowerCase() + what.slice(1)} at ${formatPlace(e.at)}`, e.kind === 'fissure' || e.kind === 'pdc' ? 'warn' : 'info', {
+      label: 'Show',
+      onClick: () => showEntity(e.id),
+    });
+  }
+}
+
 /** Datum of each outstanding section request (replies from older servers carry no `datum`). */
 const sectionDatum = new Map<number, SectionDatum>();
 
@@ -275,7 +319,14 @@ function onText(m: ServerMessage): void {
     case 'schema':
       if (m.sessionId === s.sessionId) s.set({ schema: m });
       return;
+    case 'entities':
+      announce(s.applyEntities(m));
+      return;
+    case 'inspection':
+      if (s.inspectPending === null || (m.requestId ?? 0) >= s.inspectPending) s.set({ inspection: m, inspectPending: null });
+      return;
     case 'error':
+      if (m.requestId !== undefined && m.requestId === s.inspectPending) s.set({ inspectPending: null });
       s.pushError(`${m.code}: ${m.message}`);
       return;
   }

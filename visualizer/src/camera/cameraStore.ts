@@ -8,7 +8,9 @@ export type CameraRequest =
   | { kind: 'pose'; pose: CameraPose; instant?: boolean }
   | { kind: 'frame'; what: 'volcano' | 'plume' | 'overview' | 'section' }
   | { kind: 'flyTo'; at: XY }
-  | { kind: 'focus'; point: [number, number, number] };
+  | { kind: 'focus'; point: [number, number, number] }
+  /** Orbit around the current selection at a distance that fits it. */
+  | { kind: 'frameSelection' };
 
 /** Live camera readout for the HUD (scene → world metres), updated a few times a second. */
 export interface CameraReadout {

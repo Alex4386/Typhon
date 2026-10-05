@@ -3,8 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { useCamera } from './camera/cameraStore';
 import { getTile, useStore } from './store/store';
-import './styles.css';
-import './layout.css';
+import './index.css';
+import './app.css';
 
 // Debug hooks for scripts/screenshot*.mjs: always in dev, and in production builds with ?debug.
 if (import.meta.env.DEV || new URLSearchParams(window.location.search).has("debug")) {

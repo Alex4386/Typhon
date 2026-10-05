@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Eraser, Pencil, Scissors } from 'lucide-react';
+import { SimpleSelect } from '@/components/fields';
+import { Tip } from '@/components/tip';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { SectionFlag, type SectionFrame } from '../protocol/frames';
 import type { SectionDatum, WorldInfo } from '../protocol/messages';
 import { requestSection } from '../net/connection';
@@ -127,42 +133,41 @@ export function SectionPanel({ world }: { world: WorldInfo }) {
   };
 
   return (
-    <div className="panel section-panel">
-      <div className="panel-head">
-        <button className={tool === 'section' ? 'on' : ''} onClick={() => set({ tool: tool === 'section' ? 'orbit' : 'section' })}>
-          ✎ Draw line on map
-        </button>
-        <button disabled={polyline.length < 2} onClick={cut}>
-          ✂ Cut{pending !== null ? ' …' : ''}
-        </button>
-        <button onClick={() => set({ sectionPolyline: [], section: null })}>Clear</button>
-        <select value={mode} onChange={(e) => setMode(e.target.value as SectionMode)}>
-          {MODES.map(([m, label]) => (
-            <option key={m} value={m}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <label title="km views show absolute elevation; 'top N m' follows the ground so thin deposits keep their true thickness">
-          view
-          <select value={viewIndex} onChange={(e) => setViewIndex(Number(e.target.value))}>
-            {VIEWS.map((v, i) => (
-              <option key={v.label} value={i}>
-                {v.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {!relative && (
-          <label title={`Adds a strip with the top ${INSET_DEPTH} m below ground at true thickness`}>
-            <input type="checkbox" checked={inset} onChange={(e) => setInset(e.target.checked)} /> shallow inset
-          </label>
-        )}
-        <span className="muted">{polyline.length} point{polyline.length === 1 ? '' : 's'}</span>
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Tip content="Click two or more points on the map to draw the section line">
+          <Button size="sm" variant={tool === 'section' ? 'default' : 'secondary'} onClick={() => set({ tool: tool === 'section' ? 'orbit' : 'section' })}>
+            <Pencil /> Draw line
+          </Button>
+        </Tip>
+        <Button size="sm" variant="secondary" disabled={polyline.length < 2} onClick={cut}>
+          <Scissors /> Cut{pending !== null ? ' …' : ''}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => set({ sectionPolyline: [], section: null })}>
+          <Eraser /> Clear
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          {polyline.length} point{polyline.length === 1 ? '' : 's'}
+        </span>
       </div>
-      <canvas ref={canvasRef} className="section-canvas" onMouseMove={onMove} onMouseLeave={() => setHover('')} />
-      <div className="section-foot">
-        <span className="muted">{hover || (section ? `t = ${section.time.toFixed(0)} s` : '')}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <SimpleSelect label="Colour by" value={mode} onChange={setMode} options={MODES} />
+        <Tip content="km views show absolute elevation; 'top N m' follows the ground so thin deposits keep their true thickness">
+          <span>
+            <SimpleSelect label="View depth" value={String(viewIndex)} onChange={(v) => setViewIndex(Number(v))} options={VIEWS.map((v, i) => [String(i), v.label] as const)} />
+          </span>
+        </Tip>
+        {!relative && (
+          <Tip content={`Adds a strip with the top ${INSET_DEPTH} m below ground at true thickness`}>
+            <Label className="font-normal">
+              <Switch size="sm" checked={inset} onCheckedChange={(v) => setInset(v)} /> shallow inset
+            </Label>
+          </Tip>
+        )}
+      </div>
+      <canvas ref={canvasRef} className="section-canvas min-h-64 w-full flex-1 rounded-md bg-black/30" onMouseMove={onMove} onMouseLeave={() => setHover('')} />
+      <div className="flex flex-col gap-1.5">
+        <span className="min-h-4 text-xs text-muted-foreground tabular-nums">{hover || (section ? `t = ${section.time.toFixed(0)} s` : '')}</span>
         {section && <UnitLegend section={section} world={world} mode={mode} />}
       </div>
     </div>
@@ -181,30 +186,30 @@ function UnitLegend({ section, world, mode }: { section: SectionFrame; world: Wo
   const hasTable = useMemo(() => section.waterTableZ.some((z) => !Number.isNaN(z)), [section]);
   const hasSteam = useMemo(() => section.steam.some((s) => s > 0.2), [section]);
   return (
-    <span className="legend">
+    <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
       {mode === 'strata' &&
         items.map((u) => (
-          <span key={u.id} className="legend-item" title={u.time != null ? `emplaced at t = ${u.time.toFixed(0)} s` : 'pre-existing geology'}>
-            <i style={{ background: rgbCss(unitColour(world, u.id, u.depositType, u.time != null)) }} />
+          <span key={u.id} className="flex items-center gap-1" title={u.time != null ? `emplaced at t = ${u.time.toFixed(0)} s` : 'pre-existing geology'}>
+            <i className="size-2.5 rounded-[2px]" style={{ background: rgbCss(unitColour(world, u.id, u.depositType, u.time != null)) }} />
             {u.label}
           </span>
         ))}
       {mode !== 'temperature' &&
         ISOTHERMS.map(([t, col]) => (
-          <span key={t} className="legend-item" title={`${t} °C isotherm`}>
-            <i className="dots" style={{ color: col }} />
+          <span key={t} className="flex items-center gap-1" title={`${t} °C isotherm`}>
+            <i className="w-3 border-t-2 border-dotted" style={{ borderColor: col }} />
             {t} °C
           </span>
         ))}
       {hasTable && (
-        <span className="legend-item" title="groundwater table">
-          <i className="dash" style={{ borderColor: '#4cc9f0' }} />
+        <span className="flex items-center gap-1" title="groundwater table">
+          <i className="w-3 border-t-2 border-dashed" style={{ borderColor: '#4cc9f0' }} />
           water table
         </span>
       )}
       {hasSteam && mode === 'strata' && (
-        <span className="legend-item" title="steam fraction > 20 %">
-          <i className="hatch" />
+        <span className="flex items-center gap-1" title="steam fraction > 20 %">
+          <i className="size-2.5 rounded-[2px] bg-[repeating-linear-gradient(45deg,#ffffffaa_0_2px,transparent_2px_4px)]" />
           steam
         </span>
       )}

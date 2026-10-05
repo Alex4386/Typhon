@@ -129,3 +129,33 @@ export function formatPlace(at: XY | [number, number, number]): string {
 
 /** What a selection points at. */
 export type Selection = { type: 'entity'; id: string } | { type: 'point'; at: XY } | { type: 'quake'; event: Extract<SimEvent, { kind: 'seismic' }> };
+
+/** Marker colour of an entity (features by type). */
+export function entityColor(e: Pick<Entity, 'kind' | 'props'>, featureColors: Record<string, string>): string {
+  switch (e.kind) {
+    case 'feature':
+      return featureColors[String(e.props.feature)] ?? '#ffffff';
+    case 'vent':
+      return e.props.erupting ? '#ff5a1f' : '#ffb347';
+    case 'fissure':
+      return e.props.erupting ? '#ff3b1f' : '#ff8c42';
+    case 'dike':
+      return e.props.status === 'PROPAGATING' ? '#ff3b6b' : e.props.status === 'ERUPTED' ? '#ff8c42' : '#b05a7a';
+    case 'chamber':
+      return '#ff7b39';
+    case 'plume':
+      return '#c8c8d0';
+    case 'station':
+      return '#e6e6ff';
+    case 'quake':
+      return '#ffd166';
+    case 'lavaFront':
+      return '#ff6a00';
+    case 'pdc':
+      return '#d7a86e';
+    case 'lahar':
+      return '#8a6a48';
+    default:
+      return '#ffffff';
+  }
+}

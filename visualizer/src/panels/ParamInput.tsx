@@ -1,4 +1,9 @@
 import { useEffect, useState } from 'react';
+import { SimpleSelect } from '@/components/fields';
+import { Input } from '@/components/ui/input';
+import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
+import { cn } from '@/lib/utils';
 import type { ParamSpec, ParamValue } from '../protocol/messages';
 import { fromSlider, toSlider } from './inject';
 
@@ -13,7 +18,7 @@ export function formatParam(v: ParamValue | null | undefined, spec?: ParamSpec):
 }
 
 /**
- * One parameter editor: a slider (when bounded) plus an exact number box, a checkbox or a choice.
+ * One parameter editor: a slider (when bounded) plus an exact number box, a switch or a choice.
  * `onChange` fires on every edit; the caller decides when to apply.
  */
 export function ParamInput({ spec, value, onChange, invalid }: { spec: ParamSpec; value: ParamValue | undefined; onChange: (v: ParamValue) => void; invalid?: boolean }) {
@@ -24,39 +29,31 @@ export function ParamInput({ spec, value, onChange, invalid }: { spec: ParamSpec
   }, [value]);
   const id = `p-${spec.id}`;
   if (spec.type === 'boolean') {
-    return <input id={id} type="checkbox" checked={value === true} onChange={(e) => onChange(e.target.checked)} />;
+    return <Switch id={id} checked={value === true} onCheckedChange={(v) => onChange(v)} />;
   }
   if (spec.type === 'choice') {
-    return (
-      <select id={id} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
-        {(spec.choices ?? []).map((c) => (
-          <option key={c} value={c}>
-            {c}
-          </option>
-        ))}
-      </select>
-    );
+    return <SimpleSelect id={id} label={spec.label} value={String(value ?? '')} onChange={onChange} options={(spec.choices ?? []).map((c) => [c, c] as const)} />;
   }
   const bounded = spec.min !== undefined && spec.max !== undefined;
   const num = typeof value === 'number' ? value : Number(value);
   return (
-    <span className="param-input">
+    <span className="flex w-full items-center gap-2">
       {bounded && (
-        <input
-          type="range"
+        <Slider
+          className="min-w-20 flex-1"
           min={0}
           max={1}
           step={0.001}
           aria-label={spec.label}
-          value={Number.isFinite(num) ? Math.min(1, Math.max(0, toSlider(spec, num))) : 0}
-          onChange={(e) => onChange(fromSlider(spec, Number(e.target.value)))}
+          value={[Number.isFinite(num) ? Math.min(1, Math.max(0, toSlider(spec, num))) : 0]}
+          onValueChange={(v) => onChange(fromSlider(spec, Array.isArray(v) ? (v as number[])[0] : (v as number)))}
         />
       )}
-      <input
+      <Input
         id={id}
         type="text"
         inputMode="decimal"
-        className={invalid ? 'invalid' : ''}
+        className={cn('h-7 w-24 text-right tabular-nums', !bounded && 'flex-1')}
         aria-invalid={invalid}
         value={text}
         onChange={(e) => {
@@ -65,7 +62,7 @@ export function ParamInput({ spec, value, onChange, invalid }: { spec: ParamSpec
           onChange(e.target.value.trim() === '' ? NaN : v);
         }}
       />
-      {spec.unit && <span className="unit">{spec.unit}</span>}
+      {spec.unit && <span className="min-w-8 text-xs text-muted-foreground">{spec.unit}</span>}
     </span>
   );
 }

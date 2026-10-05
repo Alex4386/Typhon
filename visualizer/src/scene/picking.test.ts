@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { Entity } from '../protocol/messages';
 import type { EntityMap, EntityView } from '../store/entities';
 import { frameDistance, nearestSurfaceEntity, pickRadius, sceneToWorld, sectionThrough, selectionAnchor, toScene } from './picking';
 
-function view(id: string, kind: string, at: [number, number, number], extra: Partial<Entity> = {}): EntityView {
+function view(id: string, kind: string, at: [number, number, number], extra: Partial<EntityView> = {}): EntityView {
   return { id, kind, label: id, at, props: {}, createdAt: 0, updatedAt: 0, seenAt: 0, fresh: false, ...extra };
 }
 

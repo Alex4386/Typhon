@@ -1,4 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ArrowUpFromDot, ChevronDown, ChevronUp, Droplets, Pickaxe, Plus, Ruler, Square, Triangle, Wrench } from 'lucide-react';
+import { SimpleSelect } from '@/components/fields';
+import { Tip } from '@/components/tip';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { command } from '../net/connection';
 import type { ParamSpec, ParamValue, SimCommand, VolcanoState, WorldInfo } from '../protocol/messages';
 import { useStore, type Tool } from '../store/store';
@@ -16,11 +26,24 @@ function useVolcano(world: WorldInfo): { id: string | undefined; name: string; v
   return { id, name, vs: id ? state?.volcanoes[id] : undefined };
 }
 
+/** Overlay card style over the 3D view. */
+export const OVERLAY = 'pointer-events-auto rounded-xl border bg-card/90 shadow-lg backdrop-blur';
+
+function StatRow({ label, help, children }: { label: string; help: string; children: ReactNode }) {
+  return (
+    <>
+      <Tip content={help} side="right">
+        <dt className="text-muted-foreground">{label}</dt>
+      </Tip>
+      <dd className="text-right tabular-nums">{children}</dd>
+    </>
+  );
+}
+
 /** Compact summary of the selected volcano, top-left over the 3D view. */
 export function StatusCard({ world }: { world: WorldInfo }) {
   const { id, name, vs } = useVolcano(world);
   const set = useStore((s) => s.set);
-  const openDrawer = useStore((s) => s.openDrawer);
   const [collapsed, setCollapsed] = useState(false);
   if (!id) return null;
   const level = vs?.alert.level ?? 'DORMANT';
@@ -28,30 +51,26 @@ export function StatusCard({ world }: { world: WorldInfo }) {
   const pressure = vs && vs.chamber.tensileStrengthMPa > 0 ? vs.chamber.overpressureMPa / vs.chamber.tensileStrengthMPa : null;
   const tc = vs?.timeCompression;
   return (
-    <section className="panel status-card" aria-label="Volcano status">
-      <div className="sc-head">
+    <section className={`${OVERLAY} absolute top-3 left-3 z-10 w-72 p-3 text-sm`} aria-label="Volcano status">
+      <div className="flex items-center gap-2">
         {world.volcanoes.length > 1 ? (
-          <select aria-label="Volcano" value={id} onChange={(e) => set({ selectedVolcano: e.target.value })}>
-            {world.volcanoes.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
+          <SimpleSelect label="Volcano" value={id} onChange={(v) => set({ selectedVolcano: v })} options={world.volcanoes.map((v) => [v.id, v.name] as const)} />
         ) : (
-          <strong>{name}</strong>
+          <strong className="truncate">{name}</strong>
         )}
-        <span className="alert-badge" style={{ background: ALERT_COLORS[level] ?? '#444' }}>
+        <Badge className="text-white" style={{ background: ALERT_COLORS[level] ?? '#444' }}>
           {ALERT_LABEL[level] ?? level}
-        </span>
-        <span className="spacer" />
-        <button className="icon" aria-label={collapsed ? 'Expand status' : 'Collapse status'} aria-expanded={!collapsed} title={collapsed ? 'Show details' : 'Hide details'} onClick={() => setCollapsed(!collapsed)}>
-          {collapsed ? '▸' : '▾'}
-        </button>
+        </Badge>
+        <span className="flex-1" />
+        <Tip content={collapsed ? 'Show details' : 'Hide details'}>
+          <Button variant="ghost" size="icon-xs" aria-label={collapsed ? 'Expand status' : 'Collapse status'} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>
+            {collapsed ? <ChevronDown /> : <ChevronUp />}
+          </Button>
+        </Tip>
       </div>
       {!collapsed && vs && (
         <>
-          <div className="sc-what">
+          <p className="mt-2 font-medium">
             {erupting
               ? vs.alert.style
                 ? `${STYLE_LABEL[vs.alert.style]?.split(' (')[0] ?? vs.alert.style} eruption — ${REGIME_LABEL[vs.chamber.regime] ?? vs.chamber.regime}`
@@ -61,48 +80,50 @@ export function StatusCard({ world }: { world: WorldInfo }) {
                 : vs.seismic.tremor
                   ? 'Volcanic tremor: magma or gas on the move'
                   : 'No eruption'}
-          </div>
-          <dl className="sc-stats">
+          </p>
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
             {erupting && (
-              <>
-                <dt title="Dense-rock-equivalent volume of magma leaving the vent">Lava output</dt>
-                <dd>{vs.chamber.eruptionRate >= 10 ? vs.chamber.eruptionRate.toFixed(0) : vs.chamber.eruptionRate.toFixed(1)} m³/s</dd>
-              </>
+              <StatRow label="Lava output" help="Dense-rock-equivalent volume of magma leaving the vent">
+                {vs.chamber.eruptionRate >= 10 ? vs.chamber.eruptionRate.toFixed(0) : vs.chamber.eruptionRate.toFixed(1)} m³/s
+              </StatRow>
             )}
             {vs.plume && vs.plume.topZ > 0 && (
-              <>
-                <dt title="Height of the eruption column above sea level">Ash column</dt>
-                <dd>{(vs.plume.topZ / 1000).toFixed(1)} km</dd>
-              </>
+              <StatRow label="Ash column" help="Height of the eruption column above sea level">
+                {(vs.plume.topZ / 1000).toFixed(1)} km
+              </StatRow>
             )}
             {pressure !== null && (
-              <>
-                <dt title="Magma pressure as a share of what the rock around the chamber can hold before it cracks open">Chamber pressure</dt>
-                <dd>
-                  <span className="meter" aria-hidden>
-                    <i style={{ width: `${Math.min(100, Math.max(0, pressure * 100))}%`, background: pressure > 0.9 ? '#f85149' : pressure > 0.6 ? '#d29922' : '#3fb950' }} />
+              <StatRow label="Chamber pressure" help="Magma pressure as a share of what the rock around the chamber can hold before it cracks open">
+                <span className="flex items-center justify-end gap-2">
+                  <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted" aria-hidden>
+                    <i className="block h-full" style={{ width: `${Math.min(100, Math.max(0, pressure * 100))}%`, background: pressure > 0.9 ? '#f85149' : pressure > 0.6 ? '#d29922' : '#3fb950' }} />
                   </span>
                   {Math.round(pressure * 100)}% of limit
-                </dd>
-              </>
+                </span>
+              </StatRow>
             )}
-            <dt title="Rock-breaking (VT) earthquakes per minute">Quakes</dt>
-            <dd>{vs.seismic.vtPerMinute.toFixed(1)} / min</dd>
-            <dt title="Largest ground uplift measured by the GPS stations">Ground uplift</dt>
-            <dd>{(vs.deformation.maxUpliftM * 100).toFixed(1)} cm</dd>
+            <StatRow label="Quakes" help="Rock-breaking (VT) earthquakes per minute">
+              {vs.seismic.vtPerMinute.toFixed(1)} / min
+            </StatRow>
+            <StatRow label="Ground uplift" help="Largest ground uplift measured by the GPS stations">
+              {(vs.deformation.maxUpliftM * 100).toFixed(1)} cm
+            </StatRow>
             {tc && (
-              <>
-                <dt title={`Volcano time runs ${formatFactor(tc.dormant)} faster than simulated time while quiet and ${formatFactor(tc.eruptive)} while erupting.`}>Time scale</dt>
-                <dd>
-                  {formatFactor(tc.current)}
-                  {vs.physicalTime !== undefined && <span className="muted"> · ≈ {formatDuration(vs.physicalTime)} passed</span>}
-                </dd>
-              </>
+              <StatRow label="Time scale" help={`Volcano time runs ${formatFactor(tc.dormant)} faster than simulated time while quiet and ${formatFactor(tc.eruptive)} while erupting.`}>
+                {formatFactor(tc.current)}
+                {vs.physicalTime !== undefined && <span className="text-muted-foreground"> · ≈ {formatDuration(vs.physicalTime)}</span>}
+              </StatRow>
             )}
           </dl>
-          <button className="link" onClick={() => openDrawer('monitor')}>
-            Instruments →
-          </button>
+          <div className="mt-2 flex gap-1">
+            <Button variant="link" size="xs" className="h-auto p-0" onClick={() => set({ drawer: 'monitor' })}>
+              Instruments →
+            </Button>
+            <span className="flex-1" />
+            <Button variant="link" size="xs" className="h-auto p-0" onClick={() => useStore.getState().select({ type: 'entity', id: `chamber:${id}` })}>
+              Inspect chamber
+            </Button>
+          </div>
         </>
       )}
     </section>
@@ -110,7 +131,7 @@ export function StatusCard({ world }: { world: WorldInfo }) {
 }
 
 /** Magma injection: volume, temperature and composition (fields come from the server schema). */
-export function InjectDialog({ world, onClose }: { world: WorldInfo; onClose: () => void }) {
+export function InjectDialog({ world, open, onOpenChange }: { world: WorldInfo; open: boolean; onOpenChange: (o: boolean) => void }) {
   const { id, name, vs } = useVolcano(world);
   const schema = useStore((s) => s.schema);
   const fields: ParamSpec[] = schema?.commands.injectMagma ?? FALLBACK_INJECT_FIELDS;
@@ -122,10 +143,6 @@ export function InjectDialog({ world, onClose }: { world: WorldInfo; onClose: ()
   }, [fields]);
   const [values, setValues] = useState<Record<string, ParamValue>>(defaults);
   useEffect(() => setValues((v) => ({ ...defaults, ...v })), [defaults]);
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    ref.current?.showModal?.();
-  }, []);
   const has = (k: string) => fields.some((f) => f.id === k);
   const errors = Object.fromEntries(fields.map((f) => [f.id, fieldError(f, values[f.id])]));
   const ok = Object.values(errors).every((e) => e === null) && !!id;
@@ -142,105 +159,116 @@ export function InjectDialog({ world, onClose }: { world: WorldInfo; onClose: ()
     }
     command(c as unknown as SimCommand);
     useStore.getState().toast(`Injecting ${formatVolume(Number(values.volumeM3))} of magma into ${name}`, 'info');
-    onClose();
+    onOpenChange(false);
   };
   return (
-    <dialog ref={ref} className="panel dialog inject" aria-labelledby="inject-title" onClose={onClose} onCancel={onClose}>
-      <form
-        method="dialog"
-        onSubmit={(e) => {
-          e.preventDefault();
-          inject();
-        }}
-      >
-        <h2 id="inject-title">Add magma to {name}</h2>
-        <p className="muted small">A new batch of magma rises into the chamber and mixes with what is there. More pressure means more quakes, swelling and eventually an eruption.</p>
-        {has('temperatureC') && (
-          <div className="presets" role="group" aria-label="Magma type">
-            {vs && (
-              <button type="button" title="Same temperature and composition as the magma in the chamber now" onClick={() => setValues({ ...values, temperatureC: Math.round(vs.chamber.temperatureC), silicaWt: Number(vs.chamber.silicaWt.toFixed(1)), waterWt: Number(vs.chamber.waterWt.toFixed(1)) })}>
-                Like the chamber
-              </button>
-            )}
-            {MAGMA_PRESETS.map((p) => (
-              <button type="button" key={p.name} title={p.help} onClick={() => setValues({ ...values, ...Object.fromEntries(Object.entries(p.values).filter(([k]) => has(k))) })}>
-                {p.name}
-              </button>
-            ))}
-          </div>
-        )}
-        {groups.map((g) => (
-          <fieldset key={g}>
-            {groups.length > 1 && <legend>{g}</legend>}
-            {fields
-              .filter((f) => f.group === g)
-              .map((f) => (
-                <div className="field" key={f.id}>
-                  <label htmlFor={`p-${f.id}`} title={f.help}>
-                    {f.label}
-                  </label>
-                  <ParamInput spec={f} value={values[f.id]} invalid={!!errors[f.id]} onChange={(v) => setValues({ ...values, [f.id]: v })} />
-                  {errors[f.id] ? <span className="field-error">{errors[f.id]}</span> : f.help ? <span className="muted small">{f.help}</span> : null}
-                </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            inject();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Add magma to {name}</DialogTitle>
+            <DialogDescription>A new batch of magma rises into the chamber and mixes with what is there. More pressure means more quakes, swelling and eventually an eruption.</DialogDescription>
+          </DialogHeader>
+          {has('temperatureC') && (
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Magma type">
+              {vs && (
+                <Tip content="Same temperature and composition as the magma in the chamber now">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setValues({ ...values, temperatureC: Math.round(vs.chamber.temperatureC), silicaWt: Number(vs.chamber.silicaWt.toFixed(1)), waterWt: Number(vs.chamber.waterWt.toFixed(1)) })}
+                  >
+                    Like the chamber
+                  </Button>
+                </Tip>
+              )}
+              {MAGMA_PRESETS.map((p) => (
+                <Tip key={p.name} content={p.help}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setValues({ ...values, ...Object.fromEntries(Object.entries(p.values).filter(([k]) => has(k))) })}>
+                    {p.name}
+                  </Button>
+                </Tip>
               ))}
-          </fieldset>
-        ))}
-        {preview && vs && (
-          <div className="mix" aria-live="polite">
-            <b>After mixing</b> <span className="muted small">(new magma is {(preview.fraction * 100).toPrecision(2)}% of the chamber; rough estimate)</span>
-            <table>
-              <thead>
-                <tr>
-                  <th />
-                  <th>now</th>
-                  <th>after</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Temperature</td>
-                  <td>{vs.chamber.temperatureC.toFixed(0)} °C</td>
-                  <td>{preview.temperatureC.toFixed(0)} °C</td>
-                </tr>
-                <tr>
-                  <td>Silica</td>
-                  <td>{vs.chamber.silicaWt.toFixed(1)} wt%</td>
-                  <td>{preview.silicaWt.toFixed(1)} wt%</td>
-                </tr>
-                <tr>
-                  <td>Water</td>
-                  <td>{vs.chamber.waterWt.toFixed(2)} wt%</td>
-                  <td>{preview.waterWt.toFixed(2)} wt%</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
-        {warnings.length > 0 && (
-          <ul className="warnings">
-            {warnings.map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-          </ul>
-        )}
-        {!has('temperatureC') && <p className="muted small">This server only accepts a volume; temperature and composition use the volcano's configured recharge magma.</p>}
-        <div className="dialog-actions">
-          <button type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="primary" disabled={!ok}>
-            Inject {Number.isFinite(Number(values.volumeM3)) ? formatVolume(Number(values.volumeM3)) : ''}
-          </button>
-        </div>
-      </form>
-    </dialog>
+            </div>
+          )}
+          {groups.map((g) => (
+            <fieldset key={g} className="flex flex-col gap-3">
+              {groups.length > 1 && <legend className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{g}</legend>}
+              {fields
+                .filter((f) => f.group === g)
+                .map((f) => (
+                  <div className="flex flex-col gap-1.5" key={f.id}>
+                    <Label htmlFor={`p-${f.id}`}>{f.label}</Label>
+                    <ParamInput spec={f} value={values[f.id]} invalid={!!errors[f.id]} onChange={(v) => setValues({ ...values, [f.id]: v })} />
+                    {errors[f.id] ? <p className="text-xs text-destructive">{errors[f.id]}</p> : f.help ? <p className="text-xs text-muted-foreground">{f.help}</p> : null}
+                  </div>
+                ))}
+            </fieldset>
+          ))}
+          {preview && vs && (
+            <div aria-live="polite" className="rounded-lg border p-2">
+              <p className="px-2 text-sm">
+                <b>After mixing</b> <span className="text-xs text-muted-foreground">(new magma is {(preview.fraction * 100).toPrecision(2)}% of the chamber; rough estimate)</span>
+              </p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead />
+                    <TableHead className="text-right">now</TableHead>
+                    <TableHead className="text-right">after</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="tabular-nums">
+                  <TableRow>
+                    <TableCell>Temperature</TableCell>
+                    <TableCell className="text-right">{vs.chamber.temperatureC.toFixed(0)} °C</TableCell>
+                    <TableCell className="text-right">{preview.temperatureC.toFixed(0)} °C</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Silica</TableCell>
+                    <TableCell className="text-right">{vs.chamber.silicaWt.toFixed(1)} wt%</TableCell>
+                    <TableCell className="text-right">{preview.silicaWt.toFixed(1)} wt%</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Water</TableCell>
+                    <TableCell className="text-right">{vs.chamber.waterWt.toFixed(2)} wt%</TableCell>
+                    <TableCell className="text-right">{preview.waterWt.toFixed(2)} wt%</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          )}
+          {warnings.length > 0 && (
+            <ul className="list-disc rounded-lg border border-amber-500/40 bg-amber-500/10 py-2 pr-3 pl-7 text-sm text-amber-200">
+              {warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          )}
+          {!has('temperatureC') && <p className="text-xs text-muted-foreground">This server only accepts a volume; temperature and composition use the volcano's configured recharge magma.</p>}
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+            <Button type="submit" disabled={!ok}>
+              Inject {Number.isFinite(Number(values.volumeM3)) ? formatVolume(Number(values.volumeM3)) : ''}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 const TOOL_HINT: Partial<Record<Tool, string>> = {
   water: 'Click the map to pour water there.',
   dig: 'Click the map to dig a pit there.',
-  section: 'Click points on the map to draw a cross-section line, then open “Cross-section” and press Cut.',
+  section: 'Click points on the map to draw a cross-section line, then open “Section” and press Cut.',
 };
 
 /** Volcano actions and map tools, bottom-left over the 3D view. */
@@ -253,83 +281,77 @@ export function ActionBar({ world }: { world: WorldInfo }) {
   const set = useStore((s) => s.set);
   const replay = useStore((s) => s.clock?.replay ?? false);
   const [injecting, setInjecting] = useState(false);
-  const [more, setMore] = useState(false);
   const erupting = (vs?.chamber.eruptionRate ?? 0) > 0 || vs?.alert.level === 'ERUPTING';
-  const pick = (t: Tool) => {
-    set({ tool: tool === t ? 'orbit' : t });
-    setMore(false);
-  };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && useStore.getState().tool !== 'orbit') set({ tool: 'orbit' });
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [set]);
+  const pick = (t: Tool) => set({ tool: tool === t ? 'orbit' : t });
   if (!id) return null;
   return (
     <>
-      <div className="panel action-bar" role="toolbar" aria-label="Volcano actions">
+      <div className={`${OVERLAY} absolute bottom-3 left-3 z-10 flex gap-1.5 p-1.5`} role="toolbar" aria-label="Volcano actions">
         {erupting ? (
-          <button disabled={replay} title="End the eruption now" onClick={() => command({ kind: 'stopEruption', volcanoId: id })}>
-            ■ Stop eruption
-          </button>
+          <Tip content="End the eruption now" side="top">
+            <Button variant="destructive" size="sm" disabled={replay} onClick={() => command({ kind: 'stopEruption', volcanoId: id })}>
+              <Square /> Stop eruption
+            </Button>
+          </Tip>
         ) : (
-          <button disabled={replay} title="Open a vent and start an eruption now, whatever the pressure" onClick={() => command({ kind: 'startEruption', volcanoId: id })}>
-            ▲ Start eruption
-          </button>
+          <Tip content="Open a vent and start an eruption now, whatever the pressure" side="top">
+            <Button size="sm" disabled={replay} onClick={() => command({ kind: 'startEruption', volcanoId: id })}>
+              <Triangle /> Start eruption
+            </Button>
+          </Tip>
         )}
-        <button disabled={replay} title="Add a batch of magma with chosen temperature and composition" onClick={() => setInjecting(true)}>
-          ＋ Add magma…
-        </button>
-        <div className="more-menu">
-          <button aria-haspopup="menu" aria-expanded={more} title="More actions and map tools" onClick={() => setMore(!more)}>
-            Tools ▾
-          </button>
-          {more && (
-            <div className="menu up" role="menu" onMouseLeave={() => setMore(false)}>
-              <button role="menuitem" disabled={replay} title="Force magma to crack a path upwards (a dike)" onClick={() => {
-                command({ kind: 'forceDike', volcanoId: id });
-                setMore(false);
-              }}>
-                ⤴ Push magma up (dike)
-              </button>
-              <button role="menuitem" className={tool === 'water' ? 'on' : ''} disabled={replay} onClick={() => pick('water')}>
-                💧 Pour water
-              </button>
-              <button role="menuitem" className={tool === 'dig' ? 'on' : ''} disabled={replay} onClick={() => pick('dig')}>
-                ⛏ Dig a pit
-              </button>
-              <button role="menuitem" className={tool === 'section' ? 'on' : ''} onClick={() => pick('section')}>
-                ✎ Draw a cross-section line
-              </button>
-            </div>
-          )}
-        </div>
+        <Tip content="Add a batch of magma with chosen temperature and composition" side="top">
+          <Button variant="secondary" size="sm" disabled={replay} onClick={() => setInjecting(true)}>
+            <Plus /> Add magma…
+          </Button>
+        </Tip>
+        <DropdownMenu>
+          <Tip content="More actions and map tools" side="top">
+            <DropdownMenuTrigger render={<Button variant="secondary" size="sm" />}>
+              <Wrench /> Tools <ChevronUp data-icon="inline-end" />
+            </DropdownMenuTrigger>
+          </Tip>
+          <DropdownMenuContent side="top" className="w-auto min-w-60">
+            <DropdownMenuItem disabled={replay} onClick={() => command({ kind: 'forceDike', volcanoId: id })}>
+              <ArrowUpFromDot /> Push magma up (dike)
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem checked={tool === 'water'} disabled={replay} onClick={() => pick('water')}>
+              <Droplets /> Pour water
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={tool === 'dig'} disabled={replay} onClick={() => pick('dig')}>
+              <Pickaxe /> Dig a pit
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={tool === 'section'} onClick={() => pick('section')}>
+              <Ruler /> Draw a cross-section line
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {tool !== 'orbit' && (
-        <div className="panel tool-hint" role="status">
+        <div className={`${OVERLAY} absolute bottom-16 left-3 z-10 flex flex-wrap items-center gap-2 px-3 py-2 text-sm`} role="status">
           <span>{TOOL_HINT[tool]}</span>
           {tool === 'water' && (
-            <label>
-              Volume <input type="number" value={waterVolume} min={100} step={1000} onChange={(e) => set({ waterVolume: Number(e.target.value) })} /> m³
-            </label>
+            <Label className="font-normal">
+              Volume <Input className="h-7 w-24" type="number" value={waterVolume} min={100} step={1000} onChange={(e) => set({ waterVolume: Number(e.target.value) })} /> m³
+            </Label>
           )}
           {tool === 'dig' && (
             <>
-              <label>
-                Radius <input type="number" value={digRadius} min={5} step={5} onChange={(e) => set({ digRadius: Number(e.target.value) })} /> m
-              </label>
-              <label>
-                Depth <input type="number" value={digDepth} min={1} step={5} onChange={(e) => set({ digDepth: Number(e.target.value) })} /> m
-              </label>
+              <Label className="font-normal">
+                Radius <Input className="h-7 w-16" type="number" value={digRadius} min={5} step={5} onChange={(e) => set({ digRadius: Number(e.target.value) })} /> m
+              </Label>
+              <Label className="font-normal">
+                Depth <Input className="h-7 w-16" type="number" value={digDepth} min={1} step={5} onChange={(e) => set({ digDepth: Number(e.target.value) })} /> m
+              </Label>
             </>
           )}
-          <button onClick={() => set({ tool: 'orbit' })}>Done [Esc]</button>
+          <Button size="sm" variant="outline" onClick={() => set({ tool: 'orbit' })}>
+            Done <kbd className="text-xs text-muted-foreground">Esc</kbd>
+          </Button>
         </div>
       )}
-      {injecting && <InjectDialog world={world} onClose={() => setInjecting(false)} />}
+      <InjectDialog world={world} open={injecting} onOpenChange={setInjecting} />
     </>
   );
 }
-

@@ -1,8 +1,15 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
+import { X } from 'lucide-react';
+import { Tip } from '@/components/tip';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Kbd } from '@/components/ui/kbd';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { useCamera } from '../camera/cameraStore';
 import { send } from '../net/connection';
 import type { WorldInfo } from '../protocol/messages';
-import { rememberDrawerWidth, rememberGuideSeen, useStore } from '../store/store';
+import { rememberGuideSeen, useStore } from '../store/store';
+import { EntitiesPanel } from './EntitiesPanel';
 import { EventLog } from './EventLog';
 import { DRAWER_TABS } from './Header';
 import { Observatory } from './Observatory';
@@ -11,53 +18,32 @@ import { SectionPanel } from './SectionPanel';
 import { SessionManager } from './SessionManager';
 import { ViewSettings } from './ViewSettings';
 
-/** The single side drawer: one page at a time, resizable by its left edge. */
-export function Drawer({ world }: { world: WorldInfo | null }) {
+/** The side panel: one page at a time (the header buttons pick it); resized by its left edge. */
+export function SidePanel({ world }: { world: WorldInfo | null }) {
   const drawer = useStore((s) => s.drawer);
-  const width = useStore((s) => s.drawerWidth);
   const set = useStore((s) => s.set);
-  const drag = useRef<{ x: number; w: number } | null>(null);
   if (!drawer) return null;
   const tab = DRAWER_TABS.find((d) => d.tab === drawer);
   const needsWorld = drawer !== 'sims' && drawer !== 'view';
-  const resize = (w: number) => set({ drawerWidth: Math.min(Math.max(300, w), Math.max(320, window.innerWidth - 240)) });
   return (
-    <aside className="drawer" style={{ width }} aria-label={tab?.label}>
-      <div
-        className="drawer-grip"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize panel"
-        tabIndex={0}
-        title="Drag to resize"
-        onPointerDown={(e) => {
-          drag.current = { x: e.clientX, w: width };
-          (e.target as HTMLElement).setPointerCapture(e.pointerId);
-        }}
-        onPointerMove={(e) => {
-          if (drag.current) resize(drag.current.w + drag.current.x - e.clientX);
-        }}
-        onPointerUp={() => {
-          drag.current = null;
-          rememberDrawerWidth(useStore.getState().drawerWidth);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowLeft') resize(width + 40);
-          if (e.key === 'ArrowRight') resize(width - 40);
-          rememberDrawerWidth(useStore.getState().drawerWidth);
-        }}
-      />
-      <div className="drawer-head">
-        <h2>{tab?.label}</h2>
-        <span className="muted small grow">{tab?.title}</span>
-        <button className="icon" aria-label="Close panel" title="Close [Esc]" onClick={() => set({ drawer: null })}>
-          ×
-        </button>
+    <aside className="flex h-full flex-col bg-card" aria-label={tab?.label}>
+      <div className="flex items-start gap-2 border-b px-4 py-3">
+        {tab && <tab.icon className="mt-0.5 size-4 text-muted-foreground" />}
+        <div className="min-w-0 flex-1">
+          <h2 className="font-semibold">{tab?.label}</h2>
+          <p className="text-xs text-muted-foreground">{tab?.title}</p>
+        </div>
+        <Tip content={<span>Close <Kbd>Esc</Kbd></span>}>
+          <Button variant="ghost" size="icon-sm" aria-label="Close panel" onClick={() => set({ drawer: null })}>
+            <X />
+          </Button>
+        </Tip>
       </div>
-      <div className={`drawer-body drawer-${drawer}`}>
-        {needsWorld && !world && <p className="muted">Open a world first (Worlds).</p>}
+      <div className={`@container min-h-0 flex-1 overflow-y-auto p-4 drawer-${drawer}`}>
+        {needsWorld && !world && <p className="text-sm text-muted-foreground">Open a world first (Worlds).</p>}
         {drawer === 'sims' && <SessionManager />}
         {drawer === 'view' && <ViewSettings />}
+        {world && drawer === 'entities' && <EntitiesPanel world={world} />}
         {world && drawer === 'monitor' && <Observatory world={world} />}
         {world && drawer === 'events' && <EventLog />}
         {world && drawer === 'section' && <SectionPanel world={world} />}
@@ -67,103 +53,82 @@ export function Drawer({ world }: { world: WorldInfo | null }) {
   );
 }
 
-/** Pop-up notifications (eruptions, big quakes, errors), top centre. */
-export function Toasts() {
-  const toasts = useStore((s) => s.toasts);
-  const dismiss = useStore((s) => s.dismissToast);
-  const openDrawer = useStore((s) => s.openDrawer);
-  return (
-    <div className="toasts" role="log" aria-live="polite">
-      {toasts.map((t) => (
-        <div key={t.id} className={`toast toast-${t.tone}`}>
-          <span className="grow">{t.text}</span>
-          {t.tone !== 'info' && (
-            <button className="link" onClick={() => useStore.getState().drawer !== 'events' && openDrawer('events')}>
-              Events
-            </button>
-          )}
-          <button className="icon" aria-label="Dismiss" onClick={() => dismiss(t.id)}>
-            ×
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 const SHORTCUTS: [string, string][] = [
   ['K', 'Play / pause'],
   ['.', 'Step forward once (while paused)'],
-  ['Esc', 'Stop the current map tool, close the panel'],
+  ['Click', 'Select what is under the pointer and see its properties'],
+  ['F', 'Frame the selection (or the volcano)'],
+  ['Esc', 'Stop the map tool, clear the selection, close the panel'],
+  ['E', 'Entities list'],
+  ['Ctrl K', 'Find anything (command palette)'],
   ['?', 'Camera keys and mouse controls'],
   ['1 / 2 / 3', 'Camera: orbit, fly, walk'],
-  ['F', 'Look at the volcano'],
 ];
 
-/** First-run guide; reopened from the header's “?”. */
+/** First-run guide; reopened from the header's help button. */
 export function Guide() {
   const open = useStore((s) => s.guideOpen);
   const set = useStore((s) => s.set);
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    if (open) ref.current?.showModal?.();
-  }, [open]);
-  if (!open) return null;
   const close = () => {
     rememberGuideSeen();
     set({ guideOpen: false });
   };
   return (
-    <dialog ref={ref} className="panel dialog guide" aria-labelledby="guide-title" onClose={close} onCancel={close}>
-      <h2 id="guide-title">Welcome to Typhon</h2>
-      <p>A volcano simulator: magma, earthquakes, lava, ash and groundwater, computed live.</p>
-      <ol>
-        <li>
-          <b>Look around</b>: drag to rotate, right-drag to pan, scroll to zoom. Double-click the ground to focus there.
-        </li>
-        <li>
-          <b>Play</b> the simulation with ▶ and choose how fast to watch it. <i>Speed</i> only changes how fast you watch; the physics stays the same.
-        </li>
-        <li>
-          <b>The card at the top left</b> tells you what the volcano is doing. Big events pop up at the top.
-        </li>
-        <li>
-          <b>Make things happen</b> with the buttons at the bottom left: start an eruption or add magma of your choosing.
-        </li>
-        <li>
-          <b>More</b> lives behind the buttons at the top right: Worlds (run several), Monitor (instruments), Events (click one to replay it), Cross-section, Parameters and View.
-        </li>
-      </ol>
-      <p className="muted small">
-        <b>Time:</b> the clock shows <i>simulated time</i>. Volcanoes are slow, so volcano processes run faster than that (time compression, e.g. ×5 000 while quiet); the clock's second line
-        estimates the volcano time that has passed.
-      </p>
-      <table className="shortcuts">
-        <tbody>
-          {SHORTCUTS.map(([k, v]) => (
-            <tr key={k}>
-              <td>
-                <kbd>{k}</kbd>
-              </td>
-              <td>{v}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="dialog-actions">
-        <button
-          onClick={() => {
-            close();
-            useCamera.getState().set({ helpOpen: true });
-          }}
-        >
-          All camera controls
-        </button>
-        <button className="primary" autoFocus onClick={close}>
-          Got it
-        </button>
-      </div>
-    </dialog>
+    <Dialog open={open} onOpenChange={(o) => !o && close()}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Welcome to Typhon</DialogTitle>
+          <DialogDescription>A volcano simulator: magma, earthquakes, lava, ash and groundwater, computed live.</DialogDescription>
+        </DialogHeader>
+        <ol className="flex list-decimal flex-col gap-1.5 pl-5 text-sm">
+          <li>
+            <b>Look around</b>: drag to rotate, right-drag to pan, scroll to zoom. Double-click the ground to focus there.
+          </li>
+          <li>
+            <b>Select</b> anything — a vent, a dike, a hot spring, a quake or just the ground — by clicking it. The inspector on the right shows what it is, live.
+          </li>
+          <li>
+            <b>Play</b> the simulation and choose how fast to watch it. <i>Speed</i> only changes how fast you watch; the physics stays the same.
+          </li>
+          <li>
+            <b>Make things happen</b> with the buttons at the bottom left: start an eruption, add magma, or push up a dike.
+          </li>
+          <li>
+            <b>Entities</b> (top right) lists everything that appears and disappears: new springs, dikes, fissures and flows. New ones also pop up as notifications you can click.
+          </li>
+        </ol>
+        <p className="text-xs text-muted-foreground">
+          <b>Time:</b> the clock shows <i>simulated time</i>. Volcanoes are slow, so volcano processes run faster than that (time compression, e.g. ×5 000 while quiet); the clock's second line
+          estimates the volcano time that has passed.
+        </p>
+        <Table>
+          <TableBody>
+            {SHORTCUTS.map(([k, v]) => (
+              <TableRow key={k}>
+                <TableCell className="w-24">
+                  <Kbd>{k}</Kbd>
+                </TableCell>
+                <TableCell>{v}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              close();
+              useCamera.getState().set({ helpOpen: true });
+            }}
+          >
+            All camera controls
+          </Button>
+          <Button autoFocus onClick={close}>
+            Got it
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -173,16 +138,28 @@ export function useGlobalKeys(): void {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const s = useStore.getState();
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        s.set({ paletteOpen: !s.paletteOpen });
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // dialogs and menus handle their own Escape
+      if (document.querySelector('[role="dialog"], [role="menu"], [role="listbox"][data-open]')) return;
       const clock = s.clock;
       if (e.key === 'k' || e.key === 'K') {
         if (!clock || clock.replay) return;
         send(clock.mode === 'PAUSED' ? { type: 'transport', mode: 'REALTIME', speed: clock.speed } : { type: 'transport', mode: 'PAUSED' });
       } else if (e.key === '.') {
         if (clock && !clock.replay) send({ type: 'step', steps: 1 });
+      } else if (e.key === 'e' || e.key === 'E') {
+        if (s.world && useCamera.getState().mode === 'orbit') s.openDrawer('entities');
       } else if (e.key === 'Escape') {
-        if (s.tool === 'orbit' && s.drawer && !useCamera.getState().helpOpen && !document.pointerLockElement) s.set({ drawer: null });
+        if (useCamera.getState().helpOpen || document.pointerLockElement) return;
+        if (s.tool !== 'orbit') s.set({ tool: 'orbit' });
+        else if (s.selection) s.select(null);
+        else if (s.drawer) s.set({ drawer: null });
       }
     };
     window.addEventListener('keydown', onKey);
