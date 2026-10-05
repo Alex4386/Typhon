@@ -181,7 +181,7 @@ final class Session implements AutoCloseable {
         ColumnGrid grid = scenario.initialTerrain();
         double cell = scenario.terrain().world().spec().metersPerColumn();
         int size = grid.size();
-        int tile = size % 32 == 0 ? 32 : 16;
+        int tile = size % 64 == 0 ? 64 : size % 32 == 0 ? 32 : 16; // fewer, larger tiles render cheaper in the client
         long base = tiles == null ? 0 : tiles.maxVersion();
         this.map = new GridMapping(cell, tile, grid.minX(), grid.minZ(), grid.maxX(), grid.maxZ());
         this.tiles = new TileStore(map, base);
