@@ -2,10 +2,12 @@ import { useMemo, useState } from 'react';
 import type { SimEvent } from '../protocol/messages';
 import { useStore } from '../store/store';
 import { formatSimTime } from '../util/world';
+import { collapse, isImportant } from './events';
 
 const FILTERS: [string, (e: SimEvent) => boolean][] = [
-  ['important', (e) => e.kind !== 'seismic' && e.kind !== 'bombLaunched' && e.kind !== 'dikeAdvanced' && e.kind !== 'plume' && e.kind !== 'lightning' && e.kind !== 'massFlowFront' && e.kind !== 'oceanEntry'],
+  ['important', isImportant],
   ['seismic', (e) => e.kind === 'seismic'],
+  ['features', (e) => e.kind === 'geothermalFeature' || e.kind === 'oceanEntry'],
   ['all', () => true],
 ];
 
@@ -34,7 +36,7 @@ function describe(e: SimEvent): string {
     case 'massFlowFront':
       return `${e.flow} front (${e.cells.length} cells, ${e.speed.toFixed(0)} m/s)`;
     case 'geothermalFeature':
-      return `New ${e.feature.toLowerCase().replace('_', ' ')}`;
+      return `New ${e.feature.toLowerCase().replaceAll('_', ' ')}`;
     case 'oceanEntry':
       return `Ocean entry ${e.powerMW.toFixed(0)} MW${e.littoralExplosion ? ' — littoral explosion' : ''}`;
     case 'message':
@@ -48,7 +50,7 @@ export function EventLog() {
   const events = useStore((s) => s.events);
   const dropped = useStore((s) => s.droppedEvents);
   const [filter, setFilter] = useState(0);
-  const shown = useMemo(() => events.filter(FILTERS[filter][1]).slice(-200).reverse(), [events, filter]);
+  const rows = useMemo(() => collapse(events.filter(FILTERS[filter][1]), 200), [events, filter]);
   return (
     <div className="panel eventlog">
       <div className="panel-head">
@@ -63,11 +65,19 @@ export function EventLog() {
         {dropped > 0 && <span className="muted">{dropped} dropped</span>}
       </div>
       <ul>
-        {shown.map((e, k) => (
-          <li key={k} className={`ev-${e.kind}`}>
+        {rows.length === 0 && <li className="muted">No events yet</li>}
+        {rows.map(({ event: e, count, firstTime }, k) => (
+          <li
+            key={k}
+            className={`ev-${e.kind}`}
+            title={count > 1 ? `${count} events from ${formatSimTime(firstTime)} to ${formatSimTime(e.time)}` : undefined}
+          >
             <time>{formatSimTime(e.time)}</time>
             {'volcanoId' in e && <b>{e.volcanoId}</b>}
-            <span>{describe(e)}</span>
+            <span>
+              {describe(e)}
+              {count > 1 && <em className="count"> ×{count}</em>}
+            </span>
           </li>
         ))}
       </ul>

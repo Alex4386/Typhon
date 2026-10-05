@@ -438,6 +438,17 @@ main {
   color: #ffb38a;
 }
 
+.ev-fissureOpened span,
+.ev-regimeChanged span {
+  color: #f0c674;
+}
+
+.eventlog .count {
+  color: var(--muted);
+  font-style: normal;
+  font-family: ui-monospace, monospace;
+}
+
 .section-panel {
   height: 100%;
 }
