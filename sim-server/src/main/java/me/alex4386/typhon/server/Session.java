@@ -1,6 +1,7 @@
 package me.alex4386.typhon.server;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -119,6 +120,22 @@ final class Session implements AutoCloseable {
     private long rateWallNanos;
     private double rateSimTime;
 
+    /** Cheap per-volcano status for the session list (refreshed by {@link #refreshSummary}). */
+    record VolcanoSummary(String id, String alert, boolean erupting, double dormantCompression,
+            double eruptiveCompression) {
+        double currentCompression() {
+            return erupting ? eruptiveCompression : dormantCompression;
+        }
+    }
+
+    private volatile List<VolcanoSummary> summary = List.of();
+    private long lastSummaryNanos;
+    /**
+     * Approximate physical (volcano) time elapsed per volcano since this session started:
+     * simulated time × that volcano's current time compression, integrated by the pump.
+     */
+    private final Map<String, Double> physicalTime = new ConcurrentHashMap<>();
+
     private Session(String id, double initialSpeed) {
         this.id = id;
         this.initialSpeed = initialSpeed;
@@ -231,6 +248,8 @@ final class Session implements AutoCloseable {
         rateSimTime = scenario.engine().time();
         rate = 0;
         droppedSeen = 0;
+        physicalTime.clear();
+        summary = summarize(scenario);
 
         Thread drain = new Thread(() -> drainLoop(r, scenario), "typhon-frames-" + id);
         drain.setDaemon(true);
@@ -360,7 +379,35 @@ final class Session implements AutoCloseable {
         o.add("speed", Json.num(replay ? speedBeforeReplay : r.speed()));
         o.add("rate", Json.num(replay ? 0 : rate));
         o.addProperty("replay", replay);
+        List<VolcanoSummary> sum = summary;
+        if (!sum.isEmpty()) {
+            VolcanoSummary primary = sum.get(0);
+            o.add("compression", Json.num(primary.currentCompression()));
+            o.add("physicalTime", Json.num(physicalTime.getOrDefault(primary.id(), 0.0)));
+        }
         return o;
+    }
+
+    private static List<VolcanoSummary> summarize(Scenario s) {
+        List<VolcanoSummary> out = new ArrayList<>();
+        for (VolcanoSystem v : s.volcanoes()) {
+            out.add(new VolcanoSummary(v.volcanoId(), v.alert().level().name(), v.chamber().erupting(),
+                    v.scaling().dormantTimeCompression(), v.scaling().eruptiveTimeCompression()));
+        }
+        return List.copyOf(out);
+    }
+
+    /** Refreshes the per-volcano summary at most once a second (asynchronously, on the engine thread). */
+    void refreshSummary() {
+        long now = System.nanoTime();
+        if (replay || (now - lastSummaryNanos) / 1_000_000 < 1000) return;
+        lastSummaryNanos = now;
+        Scenario s = live;
+        runner.onEngineThread(e -> summarize(s)).thenAccept(list -> summary = list);
+    }
+
+    List<VolcanoSummary> summary() {
+        return summary;
     }
 
     void updateRate() {
@@ -370,6 +417,8 @@ final class Session implements AutoCloseable {
         if (wall < 0.5) return;
         double measured = Math.max(0, t - rateSimTime) / wall;
         rate = rate == 0 ? measured : 0.5 * rate + 0.5 * measured;
+        double dt = Math.max(0, t - rateSimTime);
+        for (VolcanoSummary v : summary) physicalTime.merge(v.id(), dt * v.currentCompression(), Double::sum);
         rateWallNanos = now;
         rateSimTime = t;
     }
@@ -402,6 +451,16 @@ final class Session implements AutoCloseable {
         wind.add("bearingDeg", Json.num(windBearingDeg));
         world.add("wind", wind);
         o.add("world", world);
+        for (VolcanoSummary v : summary) {
+            JsonElement e = res.volcanoes().get(v.id());
+            if (e == null || !e.isJsonObject()) continue;
+            JsonObject tc = new JsonObject();
+            tc.add("dormant", Json.num(v.dormantCompression()));
+            tc.add("eruptive", Json.num(v.eruptiveCompression()));
+            tc.add("current", Json.num(v.currentCompression()));
+            e.getAsJsonObject().add("timeCompression", tc);
+            e.getAsJsonObject().add("physicalTime", Json.num(physicalTime.getOrDefault(v.id(), 0.0)));
+        }
         o.add("volcanoes", res.volcanoes());
         return o;
     }
@@ -967,12 +1026,38 @@ final class Session implements AutoCloseable {
         viewExec.shutdownNow();
     }
 
+    /** Directory of a world session ({@code null} for in-memory preset sessions). */
+    Path worldDir() {
+        Source src = source;
+        return src.kind() == Kind.WORLD ? src.worldDir() : null;
+    }
+
     JsonObject info() {
         JsonObject o = new JsonObject();
         o.addProperty("id", id);
         o.addProperty("name", name);
         if (source.preset() != null) o.addProperty("preset", source.preset());
+        Path dir = worldDir();
+        if (dir != null) o.addProperty("world", dir.getFileName().toString());
         o.add("time", Json.num(live.engine().time()));
+        EngineRunner r = runner;
+        o.addProperty("mode", replay ? "PAUSED" : r.mode().name());
+        o.add("speed", Json.num(r.speed()));
+        o.add("rate", Json.num(replay ? 0 : rate));
+        o.addProperty("replay", replay);
+        JsonArray volcanoes = new JsonArray();
+        for (VolcanoSummary v : summary) {
+            JsonObject j = new JsonObject();
+            j.addProperty("id", v.id());
+            j.addProperty("alert", v.alert());
+            j.addProperty("erupting", v.erupting());
+            JsonObject tc = new JsonObject();
+            tc.add("dormant", Json.num(v.dormantCompression()));
+            tc.add("eruptive", Json.num(v.eruptiveCompression()));
+            j.add("timeCompression", tc);
+            volcanoes.add(j);
+        }
+        o.add("volcanoes", volcanoes);
         return o;
     }
 }

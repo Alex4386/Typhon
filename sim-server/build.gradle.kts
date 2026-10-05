@@ -24,7 +24,8 @@ tasks.withType<JavaCompile>().configureEach {
 
 application {
     mainClass = "me.alex4386.typhon.server.Main"
-    applicationDefaultJvmArgs = listOf("-Xmx3g")
+    // Several worlds run side by side in one server; real-scale worlds take a few hundred MB each.
+    applicationDefaultJvmArgs = listOf("-Xmx6g")
 }
 
 tasks.named<JavaExec>("run") {

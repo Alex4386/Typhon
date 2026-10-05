@@ -26,6 +26,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import me.alex4386.typhon.engine.worlds.World;
 import me.alex4386.typhon.server.protocol.Field;
+import me.alex4386.typhon.simulator.scenario.Preset;
+import me.alex4386.typhon.simulator.scenario.Presets;
 import me.alex4386.typhon.simulator.scenario.Scenario;
 
 /**
@@ -46,7 +48,18 @@ public final class SimServer implements AutoCloseable {
 
     /** Server settings. */
     public record Config(String host, int port, Path worldsDir, Path uiDir, String defaultPreset, long defaultSeed,
-            long baseStepMicros, double initialSpeed) {}
+            long baseStepMicros, double initialSpeed, int maxSessions) {
+        public Config(String host, int port, Path worldsDir, Path uiDir, String defaultPreset, long defaultSeed,
+                long baseStepMicros, double initialSpeed) {
+            this(host, port, worldsDir, uiDir, defaultPreset, defaultSeed, baseStepMicros, initialSpeed, DEFAULT_MAX_SESSIONS);
+        }
+    }
+
+    /** Sessions one server keeps loaded at once (each holds a full engine in memory). */
+    public static final int DEFAULT_MAX_SESSIONS = 8;
+    /** How often every client gets the session list (status, time, mode of every loaded world). */
+    private static final long SESSIONS_MILLIS = 2000;
+    private long lastSessionsNanos;
 
     private final Config config;
     private final Map<String, Session> sessions = new LinkedHashMap<>();
@@ -67,22 +80,130 @@ public final class SimServer implements AutoCloseable {
 
     // ── Sessions ──
 
-    /** Creates a session from a preset (and registers it). */
+    /** Creates an in-memory session from a preset (and registers it). Nothing is written to disk. */
     public synchronized Session createPreset(String preset, long seed) {
+        checkCapacity();
         String id = "s" + sessionSeq.incrementAndGet();
         Session s = Session.preset(id, preset, seed, config.baseStepMicros(), config.initialSpeed());
         sessions.put(id, s);
         LOG.info("Session " + id + ": preset " + preset + " (seed " + seed + ")");
+        sessionsChanged();
         return s;
     }
 
-    /** Creates a session from a world directory (and registers it). */
+    /**
+     * Creates a session from a world directory (and registers it). A world that is already loaded is
+     * not opened twice (two engines would write the same {@code state/}): its session is returned.
+     */
     public synchronized Session createWorld(Path dir) {
+        return createWorld(dir, null, null);
+    }
+
+    /** As {@link #createWorld(Path)}, first overriding the world's time compression (a hot change). */
+    public synchronized Session createWorld(Path dir, Double dormantCompression, Double eruptiveCompression) {
+        Session open = sessionForWorld(dir);
+        if (open != null) {
+            if (dormantCompression != null || eruptiveCompression != null) {
+                throw new IllegalStateException("World " + dir.getFileName() + " is already running as session " + open.id
+                        + "; close it before changing its time compression");
+            }
+            return open;
+        }
+        checkCapacity();
+        WorldFiles.setCompression(dir, dormantCompression, eruptiveCompression);
         String id = "s" + sessionSeq.incrementAndGet();
         Session s = Session.world(id, dir, World.ChangePolicy.REJECT, config.initialSpeed());
         sessions.put(id, s);
         LOG.info("Session " + id + ": world " + dir);
+        sessionsChanged();
         return s;
+    }
+
+    /**
+     * Writes a new world directory {@code <worlds-dir>/<name>} from a preset (with an optional
+     * time-compression override) and runs it. Unlike {@link #createPreset} the result is a world on
+     * disk: it is saved, can be closed and reopened, and shows up in the catalog.
+     */
+    public synchronized Session createPresetWorld(String presetName, long seed, String name, Double dormantCompression,
+            Double eruptiveCompression) {
+        checkCapacity();
+        Preset preset = Presets.get(presetName);
+        if (name != null && !WorldFiles.validName(name)) {
+            throw new IllegalArgumentException("World names may use letters, digits, '.', '_' and '-' (max 64)");
+        }
+        String dirName = name != null ? name : WorldFiles.uniqueName(config.worldsDir(), preset.name());
+        Path dir = config.worldsDir().resolve(dirName);
+        if (Files.exists(dir)) throw new IllegalArgumentException("A world named '" + dirName + "' already exists");
+        try {
+            Files.createDirectories(config.worldsDir());
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+        WorldFiles.writePresetWorld(preset, seed, dir, config.baseStepMicros() / 1000.0, dormantCompression,
+                eruptiveCompression);
+        return createWorld(dir);
+    }
+
+    /** Saves (worlds) and unloads a session; attached clients are detached. */
+    public void closeSession(String id, boolean save) {
+        Session s;
+        synchronized (this) {
+            s = sessions.remove(id);
+        }
+        if (s == null) throw new IllegalArgumentException("No session " + id);
+        for (ClientConnection c : clientsOf(s)) {
+            c.session = null;
+            c.subscribe(Set.of(), null);
+            JsonObject d = Json.obj("detached");
+            d.addProperty("sessionId", id);
+            d.addProperty("reason", "closed");
+            c.send(d);
+        }
+        if (save && s.worldDir() != null && !s.replay()) {
+            try {
+                s.save(config.worldsDir(), null);
+            } catch (Exception e) {
+                LOG.log(Level.WARNING, "Saving session " + id + " on close failed", e);
+            }
+        }
+        s.close();
+        pumpTimes.remove(id);
+        LOG.info("Session " + id + " closed");
+        sessionsChanged();
+    }
+
+    /** Deletes a world directory under the worlds dir (it must not be loaded). */
+    public synchronized void deleteWorld(String name) throws java.io.IOException {
+        if (!WorldFiles.validName(name)) throw new IllegalArgumentException("Bad world name");
+        Path dir = config.worldsDir().resolve(name).normalize();
+        if (!dir.startsWith(config.worldsDir().normalize()) || !Files.isRegularFile(dir.resolve("world.yaml"))) {
+            throw new IllegalArgumentException("No world '" + name + "' under " + config.worldsDir());
+        }
+        if (sessionForWorld(dir) != null) throw new IllegalStateException("Close the world's session before deleting it");
+        WorldFiles.delete(dir);
+        LOG.info("World " + dir + " deleted");
+        sessionsChanged();
+    }
+
+    private Session sessionForWorld(Path dir) {
+        Path want = dir.toAbsolutePath().normalize();
+        for (Session s : sessions.values()) {
+            Path d = s.worldDir();
+            if (d != null && d.toAbsolutePath().normalize().equals(want)) return s;
+        }
+        return null;
+    }
+
+    private void checkCapacity() {
+        if (sessions.size() >= config.maxSessions()) {
+            throw new IllegalStateException("This server keeps at most " + config.maxSessions()
+                    + " worlds loaded; close one first");
+        }
+    }
+
+    /** Tells every client about a changed session list (next pump). */
+    private void sessionsChanged() {
+        lastSessionsNanos = 0;
     }
 
     synchronized List<Session> sessions() {
@@ -187,7 +308,14 @@ public final class SimServer implements AutoCloseable {
             switch (type == null ? "" : type) {
                 case "hello" -> hello(c, msg);
                 case "listSessions" -> c.send(sessionsMessage());
-                case "createSession" -> createSession(c, msg);
+                case "listCatalog" -> c.send(catalogMessage());
+                case "createSession" -> createSession(c, msg, requestId);
+                case "sessionControl" -> sessionControl(c, msg, requestId);
+                case "deleteWorld" -> {
+                    deleteWorld(Json.str(msg, "name"));
+                    ack(c, requestId, true, "Deleted " + Json.str(msg, "name"));
+                    c.send(catalogMessage());
+                }
                 case "attach" -> {
                     Session s = session(Json.str(msg, "sessionId"));
                     if (s == null) c.send(Json.error("noSession", "No session " + Json.str(msg, "sessionId"), null));
@@ -200,10 +328,24 @@ public final class SimServer implements AutoCloseable {
                     Session s = c.session;
                     if (s != null) c.pumpTiles(s.tiles(), s.tileOrder());
                 }
-                case "transport" -> withSession(c, requestId, s -> {
-                    String err = s.transport(String.valueOf(Json.str(msg, "mode")), Json.dbl(msg, "speed"));
-                    afterTransport(c, s, err, requestId);
-                });
+                case "transport" -> {
+                    // Optional sessionId: control a loaded world the client is not watching.
+                    String target = Json.str(msg, "sessionId");
+                    Session other = target == null ? null : session(target);
+                    if (target != null && other == null) {
+                        c.send(Json.error("noSession", "No session " + target, requestId));
+                    } else if (other != null) {
+                        String err = other.transport(String.valueOf(Json.str(msg, "mode")), Json.dbl(msg, "speed"));
+                        afterTransport(c, other, err, requestId);
+                        sessionsChanged();
+                    } else {
+                        withSession(c, requestId, s -> {
+                            String err = s.transport(String.valueOf(Json.str(msg, "mode")), Json.dbl(msg, "speed"));
+                            afterTransport(c, s, err, requestId);
+                            sessionsChanged();
+                        });
+                    }
+                }
                 case "step" -> withSession(c, requestId, s -> afterTransport(c, s,
                         s.step(Json.lng(msg, "steps"), Json.dbl(msg, "seconds")), requestId));
                 case "pauseAt" -> withSession(c, requestId, s -> afterTransport(c, s, s.pauseAt(Json.dbl(msg, "time")),
@@ -261,28 +403,138 @@ public final class SimServer implements AutoCloseable {
     private JsonObject sessionsMessage() {
         JsonObject o = Json.obj("sessions");
         JsonArray arr = new JsonArray();
-        for (Session s : sessions()) arr.add(s.info());
+        for (Session s : sessions()) {
+            JsonObject info = s.info();
+            info.addProperty("clients", clientsOf(s).size());
+            arr.add(info);
+        }
         o.add("sessions", arr);
+        o.add("server", serverInfo());
         return o;
     }
 
-    private void createSession(ClientConnection c, JsonObject msg) {
+    private JsonObject serverInfo() {
+        Runtime rt = Runtime.getRuntime();
+        JsonObject server = new JsonObject();
+        server.addProperty("maxSessions", config.maxSessions());
+        server.addProperty("cpus", rt.availableProcessors());
+        server.addProperty("heapUsedMB", (rt.totalMemory() - rt.freeMemory()) >> 20);
+        server.addProperty("heapMaxMB", rt.maxMemory() >> 20);
+        server.addProperty("worldsDir", config.worldsDir().toString());
+        return server;
+    }
+
+    /** Presets and the world directories under {@code --worlds-dir} (§3.1 {@code listCatalog}). */
+    private JsonObject catalogMessage() {
+        JsonObject o = Json.obj("catalog");
+        JsonArray presets = new JsonArray();
+        for (Preset p : Presets.all()) {
+            JsonObject j = new JsonObject();
+            j.addProperty("name", p.name());
+            j.addProperty("title", p.title());
+            j.addProperty("description", p.description());
+            j.addProperty("realScale", p.realSetting() != null);
+            presets.add(j);
+        }
+        o.add("presets", presets);
+        JsonArray worlds = new JsonArray();
+        for (WorldFiles.Listing w : WorldFiles.list(config.worldsDir())) {
+            JsonObject j = new JsonObject();
+            j.addProperty("name", w.name());
+            j.addProperty("title", w.title());
+            j.addProperty("volcanoes", w.volcanoes());
+            j.addProperty("hasState", w.hasState());
+            if (Double.isFinite(w.dormantCompression())) {
+                JsonObject tc = new JsonObject();
+                tc.add("dormant", Json.num(w.dormantCompression()));
+                tc.add("eruptive", Json.num(w.eruptiveCompression()));
+                j.add("timeCompression", tc);
+            }
+            if (w.error() != null) j.addProperty("error", w.error());
+            Session open;
+            synchronized (this) {
+                open = sessionForWorld(w.dir());
+            }
+            if (open != null) j.addProperty("sessionId", open.id);
+            worlds.add(j);
+        }
+        o.add("worlds", worlds);
+        o.add("server", serverInfo());
+        return o;
+    }
+
+    private void createSession(ClientConnection c, JsonObject msg, Long requestId) {
         String preset = Json.str(msg, "preset");
         String world = Json.str(msg, "world");
         Long seed = Json.lng(msg, "seed");
+        String name = Json.str(msg, "name");
+        Double dormant = null;
+        Double eruptive = null;
+        if (msg.has("timeCompression") && msg.get("timeCompression").isJsonObject()) {
+            JsonObject tc = msg.getAsJsonObject("timeCompression");
+            dormant = Json.dbl(tc, "dormant");
+            eruptive = Json.dbl(tc, "eruptive");
+        }
+        boolean paused = msg.has("paused") && msg.get("paused").getAsBoolean();
+        boolean attach = !msg.has("attach") || msg.get("attach").getAsBoolean();
         Session s;
         if (world != null) {
             Path dir = config.worldsDir().resolve(world).normalize();
             if (!dir.startsWith(config.worldsDir().normalize()) || !Files.isDirectory(dir)) {
-                c.send(Json.error("badRequest", "No world '" + world + "' under " + config.worldsDir(), null));
+                c.send(Json.error("badRequest", "No world '" + world + "' under " + config.worldsDir(), requestId));
                 return;
             }
-            s = createWorld(dir);
+            s = createWorld(dir, dormant, eruptive);
         } else {
-            String name = preset == null || preset.equals("default") ? config.defaultPreset() : preset;
-            s = createPreset(name, seed == null ? config.defaultSeed() : seed);
+            String p = preset == null || preset.equals("default") ? config.defaultPreset() : preset;
+            boolean inMemory = msg.has("inMemory") && msg.get("inMemory").getAsBoolean();
+            if (inMemory && (dormant != null || eruptive != null)) {
+                throw new IllegalArgumentException("Time compression options need a world (omit inMemory)");
+            }
+            s = inMemory ? createPreset(p, seed == null ? config.defaultSeed() : seed)
+                    : createPresetWorld(p, seed == null ? config.defaultSeed() : seed, name, dormant, eruptive);
         }
-        attach(c, s);
+        if (paused) s.transport("PAUSED", null);
+        ack(c, requestId, true, "Session " + s.id);
+        if (attach) attach(c, s);
+        broadcastSessions();
+    }
+
+    private void sessionControl(ClientConnection c, JsonObject msg, Long requestId) {
+        String id = Json.str(msg, "sessionId");
+        String action = Json.str(msg, "action");
+        Session s = id == null ? null : session(id);
+        if (s == null) {
+            c.send(Json.error("noSession", "No session " + id, requestId));
+            return;
+        }
+        String err = switch (action == null ? "" : action) {
+            case "pause" -> s.transport("PAUSED", null);
+            case "resume" -> s.transport("REALTIME", null);
+            case "close" -> {
+                closeSession(id, true);
+                yield null;
+            }
+            case "closeWithoutSaving" -> {
+                closeSession(id, false);
+                yield null;
+            }
+            default -> "sessionControl.action must be pause, resume, close or closeWithoutSaving";
+        };
+        if (err != null) {
+            c.send(Json.error("badRequest", err, requestId));
+            return;
+        }
+        ack(c, requestId, true, null);
+        if (!"close".equals(action) && !"closeWithoutSaving".equals(action)) broadcast(s, s.clock());
+        broadcastSessions();
+    }
+
+    /** Sends the session list to every connected client now. */
+    private void broadcastSessions() {
+        JsonObject m = sessionsMessage();
+        for (ClientConnection c : clients.values()) if (c.open() && c.helloDone) c.send(m);
+        lastSessionsNanos = System.nanoTime();
     }
 
     /** Sends the attach burst (§2): attached, units, state, events backlog, replayInfo, clock. */
@@ -497,9 +749,17 @@ public final class SimServer implements AutoCloseable {
     private void pumpAll() {
         for (Session s : sessions()) {
             try {
+                s.refreshSummary();
                 pump(s);
             } catch (Exception e) {
                 LOG.log(Level.WARNING, "Pump of session " + s.id + " failed", e);
+            }
+        }
+        if ((System.nanoTime() - lastSessionsNanos) / 1_000_000 >= SESSIONS_MILLIS) {
+            try {
+                broadcastSessions();
+            } catch (Exception e) {
+                LOG.log(Level.WARNING, "Session list broadcast failed", e);
             }
         }
     }
