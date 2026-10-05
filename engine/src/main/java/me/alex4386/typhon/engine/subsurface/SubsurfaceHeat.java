@@ -12,7 +12,9 @@ import java.util.Map;
  * <ol>
  *   <li><b>Lateral</b> (explicit, sub-stepped for stability, applied to the temperatures): conduction between neighbouring columns at the same level, face
  *       conductance {@code dz·k_h} ({@code k_h} harmonic mean), plus upwind advection by the Darcy
- *       flux {@code q = −K ∂h/∂x} in levels below both water tables. Sub-stepped for stability.
+ *       flux {@code q = −K ∂h/∂x} in levels below both water tables, in advective form (inflow
+ *       mixes in {@code ρ_w c_w q (T_up − T)}; never heats a cell beyond its neighbours). Sub-stepped
+ *       for stability.
  *   <li><b>Vertical</b> (implicit, Thomas algorithm): conduction between levels with conductivity
  *       enhanced by the porous-convection Nusselt number in the saturated permeable zone
  *       ({@code Ra = ρ_w c_w α K ΔT H / λ}, {@code Nu = Ra/Ra_c} above the critical value);
@@ -463,7 +465,8 @@ final class SubsurfaceHeat {
                     double ti = ch.temperature[i];
                     double tj = other.temperature[j];
                     double energy = conductance * (tj - ti) * dt; // conduction into ch
-                    if (headGradient != 0 && belowWaterTable(ch, c, k) && belowWaterTable(other, oc, k)) {
+                    if (headGradient != 0 && belowWaterTable(ch, c, k) && belowWaterTable(other, oc, k)
+                            && ti < config.brittleDuctileC && tj < config.brittleDuctileC) {
                         // Advection: heat carried by groundwater between the columns (+ = ch → other).
                         double kHyd = harmonic(ch.hydraulicK[i], other.hydraulicK[j]);
                         double flow = -kHyd * headGradient * grid.thickness(k) * dx; // m³/s
@@ -474,8 +477,14 @@ final class SubsurfaceHeat {
                                 / (SubsurfaceGrid.WATER_DENSITY * SubsurfaceGrid.WATER_HEAT_CAPACITY * dt);
                         if (flow > limit) flow = limit;
                         else if (flow < -limit) flow = -limit;
-                        double upwind = flow > 0 ? ti : tj;
-                        energy -= SubsurfaceGrid.WATER_DENSITY * SubsurfaceGrid.WATER_HEAT_CAPACITY * flow * upwind * dt;
+                        // Advective (upwind) form: inflowing water mixes in at its temperature and
+                        // displaces water at the cell's own. Dupuit flow converges in every level
+                        // around a depressed water table although only some levels lose water (to
+                        // boiling); carrying ρ·c·T in absolute terms would pile that convergence's
+                        // heat into deep cells (above the magma temperature on long steps).
+                        if (flow < 0) {
+                            energy += SubsurfaceGrid.WATER_DENSITY * SubsurfaceGrid.WATER_HEAT_CAPACITY * -flow * (tj - ti) * dt;
+                        }
                     }
                     mine[i] += energy;
                 }
@@ -591,8 +600,13 @@ final class SubsurfaceHeat {
     private double effectiveConductivity(SolverChunk ch, int c, int k, double nusselt, double waterTableDepth) {
         int i = c * grid.levels() + k;
         double kk = Math.max(1e-3, ch.conductivity[i]);
-        if (nusselt > 1 && grid.centerDepth(k) > waterTableDepth && ch.hydraulicK[i] > 1e-9) kk *= nusselt;
+        if (nusselt > 1 && grid.centerDepth(k) > waterTableDepth && permeable(ch, i)) kk *= nusselt;
         return kk;
+    }
+
+    /** Groundwater can flow through the cell: permeable and below the brittle–ductile transition. */
+    private boolean permeable(SolverChunk ch, int i) {
+        return ch.hydraulicK[i] > 1e-9 && ch.temperature[i] < config.brittleDuctileC;
     }
 
     /** Porous-convection Nusselt number of the saturated permeable zone below the water table. */
@@ -607,7 +621,7 @@ final class SubsurfaceHeat {
         for (int k = 0; k < n; k++) {
             int i = c * n + k;
             if (grid.centerDepth(k) <= wtDepth) continue;
-            if (ch.hydraulicK[i] <= 1e-9) {
+            if (!permeable(ch, i)) {
                 if (top >= 0) break;
                 continue;
             }
@@ -672,11 +686,9 @@ final class SubsurfaceHeat {
             double resupply = SubsurfaceGrid.WATER_DENSITY * ch.hydraulicK[i] * area * dt;
             double mass = Math.min(Math.min(water, resupply), excess / config.latentHeatVaporJkg);
             if (mass <= 0) continue;
-            // The steam leaves with its whole enthalpy: latent heat plus the sensible heat of the
-            // water (c_w·T_bp above 0 °C, the reference of the advected heat). The groundwater that
-            // replaces it brings its own sensible heat in through the lateral advection term, so
-            // leaving the departing water's heat behind would create energy at every boiling cell.
-            ch.temperature[i] = t - mass * (config.latentHeatVaporJkg + SubsurfaceGrid.WATER_HEAT_CAPACITY * tbp) / cap;
+            // The phase change takes the latent heat. The water leaves at the cell's temperature and
+            // the groundwater that replaces it is mixed in by the (advective-form) lateral term.
+            ch.temperature[i] = t - mass * config.latentHeatVaporJkg / cap;
             ch.steam[i] = Math.max(ch.steam[i] * collapse, mass / water);
             steamMass += mass;
         }

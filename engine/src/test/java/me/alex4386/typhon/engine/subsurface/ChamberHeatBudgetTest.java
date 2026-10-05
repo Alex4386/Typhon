@@ -50,6 +50,29 @@ class ChamberHeatBudgetTest {
         assertEquals(0, fixed.boiledM3(), 1e-6, "only conduction out of the chamber can boil water, and it is slow");
     }
 
+    /**
+     * Spin-up takes year-long steps. Groundwater converging on the boiling zone used to carry
+     * ρ·c·T into every level (absolute-form advection), heating magma cells far above the chamber
+     * temperature; nothing may get hotter than the hottest source.
+     */
+    @Test
+    void longStepsHeatNothingAboveTheChamber() {
+        SubsurfaceConfig c = SubsurfaceTestWorld.config();
+        c.initialWaterTableDepthM = 20;
+        WorldModel world = SubsurfaceTestWorld.uniform("basalt", 50, 100, Double.NaN, 24, 24, (x, z) -> 0);
+        Subsurface s = new Subsurface(world, c);
+        s.prepare();
+        HeatSources.Chamber chamber = new HeatSources.Chamber(12, 12, -700, 0, 350, 1150, 5e8);
+        s.setHeatSources("v", new FixedSources(List.of(chamber), List.of(new HeatSources.Vent(12, 12, 5e8, 100, 300, 1150))));
+        double max = 0;
+        for (int y = 0; y < 20; y++) {
+            s.equilibrate(365.25 * DAY);
+            for (int d = 0; d <= 2400; d += 50) max = Math.max(max, s.temperatureC(12, 12, d));
+        }
+        assertTrue(max <= 1150 + 1e-6, "hotter than any source: " + max);
+        assertEquals(0, s.budget().deficit(), 1e-9);
+    }
+
     @Test
     void shareOfTheWallAboveTheGridBottom() {
         HeatSources.Chamber whollyAbove = new HeatSources.Chamber(0, 0, -1000, 0, 500, 1100, 1);
