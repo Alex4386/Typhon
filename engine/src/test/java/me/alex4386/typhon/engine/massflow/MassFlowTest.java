@@ -263,7 +263,9 @@ class MassFlowTest {
         List<LaharStarted> started = w.events(LaharStarted.class);
         assertEquals(1, started.size());
         assertEquals(Trigger.RAIN, started.get(0).trigger());
-        assertEquals(0, l.erodibleThickness(20, 32), "slope deposit failed");
+        // the tephra failed; what is left is the thin lahar deposit the passing flow laid down
+        // (itself loose and erodible), not the 0.2 m fall layer
+        assertTrue(l.erodibleThickness(20, 32) < 0.05, "slope deposit failed: " + l.erodibleThickness(20, 32));
         // the world model stores layer tops as float metres
         assertEquals(0.2, l.erodibleThickness(120, 32), 1e-5, "flat deposit stays");
         assertTrue(l.massBudget().entrained() > 0);

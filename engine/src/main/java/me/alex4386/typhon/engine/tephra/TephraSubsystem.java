@@ -76,7 +76,7 @@ public final class TephraSubsystem implements Subsystem {
 
     private final String id;
     private final TerrainModel terrain;
-    private UnitSource units = UnitSource.UNATTRIBUTED;
+    private UnitSource units;
     private final TephraConfig config;
     private final WindField wind;
     private final List<EngineCommand> pending = new ArrayList<>();
@@ -92,6 +92,7 @@ public final class TephraSubsystem implements Subsystem {
     public TephraSubsystem(String id, TerrainModel terrain, TephraConfig config) {
         this.id = Objects.requireNonNull(id, "id");
         this.terrain = Objects.requireNonNull(terrain, "terrain");
+        this.units = UnitSource.typed(terrain.world());
         this.config = config.copy();
         this.config.validate();
         this.wind = new WindField(this.config.initialWindSpeed, this.config.initialWindDirectionRad,

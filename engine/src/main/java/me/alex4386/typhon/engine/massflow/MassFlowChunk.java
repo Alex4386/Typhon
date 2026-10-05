@@ -19,6 +19,8 @@ final class MassFlowChunk {
     final double[] depositHeat = new double[AREA];  // Σ thickness·temperature of the partial deposit
     final double[] depositSpeed = new double[AREA]; // Σ thickness·speed of the partial deposit
     final double[] depositTotal = new double[AREA]; // all deposit laid down in the column (m)
+    final double[] worldPending = new double[AREA];     // deposit not yet written to the world model (m)
+    final double[] worldPendingHeat = new double[AREA]; // Σ thickness·temperature of that pool
     final double[] soak = new double[AREA];         // rain soaked into the loose material (m of water)
     final byte[] veneer = new byte[AREA];           // rendered veneer tier: 0 none, 1 thin, 2 thick
 
@@ -91,7 +93,7 @@ final class MassFlowChunk {
     boolean hasPersistentState() {
         if (flowCells > 0 || soakedCells > 0) return true;
         for (int i = 0; i < AREA; i++) {
-            if (deposit[i] != 0 || depositTotal[i] != 0 || veneer[i] != 0) return true;
+            if (deposit[i] != 0 || depositTotal[i] != 0 || veneer[i] != 0 || worldPending[i] != 0) return true;
         }
         return false;
     }

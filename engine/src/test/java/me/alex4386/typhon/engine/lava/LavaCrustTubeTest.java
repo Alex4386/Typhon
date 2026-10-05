@@ -189,6 +189,22 @@ class LavaCrustTubeTest {
             }
             assertEquals(0, lava.thickness(tube.x(), tube.z()));
             assertEquals(0, lava.crustThickness(tube.x(), tube.z()));
+
+            // In the world model the tube is a cavity under a roof layer of the same eruption.
+            var world = run.world().terrain.world();
+            int cavity = -1;
+            for (int k = 0; k < world.layerCount(tube.x(), tube.z()); k++) {
+                var layer = world.layer(tube.x(), tube.z(), k);
+                var type = world.unit(layer.unit()).type();
+                if (type == me.alex4386.typhon.engine.world.DepositType.CAVITY) {
+                    assertEquals(me.alex4386.typhon.engine.world.MaterialTable.VOID.id(), layer.material());
+                    assertTrue(!world.isSolid(tube.x(), tube.z(), (layer.bottom() + layer.top()) / 2), "void is open");
+                    cavity = k;
+                } else if (cavity >= 0 && k == cavity + 1) {
+                    assertEquals(me.alex4386.typhon.engine.world.DepositType.TUBE_ROOF, type, "roof right above the void");
+                }
+            }
+            assertTrue(cavity >= 0, "cavity layer at " + tube);
         }
         assertEquals(lava.emittedVolume(), lava.totalLavaVolume() + lava.crustVolume() + lava.solidifiedVolume(),
                 1e-6 * lava.emittedVolume());

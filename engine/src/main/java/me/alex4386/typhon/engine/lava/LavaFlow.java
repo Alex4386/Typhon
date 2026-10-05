@@ -132,7 +132,47 @@ public final class LavaFlow implements Subsystem {
     private double metersPerBlock;
     private boolean scaleLocked;
 
-    private final Map<Long, LavaChunk> chunks = new HashMap<>();
+    private final ChunkMap chunks = new ChunkMap();
+
+    /**
+     * Lava chunks by packed chunk key. {@code Long.hashCode} of the packed {@code (cx << 32 | cz)} key
+     * is {@code cx ^ cz}, so whole diagonals of chunks would share a bucket; keys are spread with the
+     * SplitMix64 finalizer (a bijection) before hashing. Iteration order is not used for results
+     * (callers sort by {@link LavaChunk#key}).
+     */
+    private static final class ChunkMap {
+        private final HashMap<Long, LavaChunk> map = new HashMap<>();
+
+        private static long mix(long z) {
+            z = (z ^ (z >>> 30)) * 0xbf58476d1ce4e5b9L;
+            z = (z ^ (z >>> 27)) * 0x94d049bb133111ebL;
+            return z ^ (z >>> 31);
+        }
+
+        LavaChunk get(long key) {
+            return map.get(mix(key));
+        }
+
+        void put(long key, LavaChunk chunk) {
+            map.put(mix(key), chunk);
+        }
+
+        void remove(long key) {
+            map.remove(mix(key));
+        }
+
+        Collection<LavaChunk> values() {
+            return map.values();
+        }
+
+        boolean isEmpty() {
+            return map.isEmpty();
+        }
+
+        void clear() {
+            map.clear();
+        }
+    }
     private final Map<String, LavaSource> sources = new LinkedHashMap<>();
     private final List<BlockPos> origins = new ArrayList<>();
     private final TreeSet<Long> requestedTerrain = new TreeSet<>();
@@ -149,6 +189,7 @@ public final class LavaFlow implements Subsystem {
     private final TreeSet<Long> neededTerrain = new TreeSet<>();
     private long stamp = Long.MIN_VALUE + 1;
     private double currentTime;
+    private long chunkGeneration = 1; // bumped whenever a lava chunk is created (neighbour-cache validity)
 
     public LavaFlow(TerrainModel terrain) {
         this(terrain, LavaConfig.defaults(), MagflowRheology.INSTANCE);
@@ -1154,6 +1195,7 @@ public final class LavaFlow implements Subsystem {
         requestedTerrain.remove(key);
         c = new LavaChunk(cx, cz);
         chunks.put(key, c);
+        chunkGeneration++;
         return c;
     }
 
@@ -1166,22 +1208,34 @@ public final class LavaFlow implements Subsystem {
         int oz = nz < 0 ? -1 : nz > 15 ? 1 : 0;
         if (c.neighbourStamp != stamp) {
             Arrays.fill(c.neighbours, null);
+            Arrays.fill(c.missingNeighbour, 0);
             c.neighbourStamp = stamp;
         }
         int slot = (oz + 1) * 3 + (ox + 1);
         LavaChunk n = c.neighbours[slot];
         if (n != null) return n;
+        // Absent neighbours are cached too (most edge cells of a flow face empty chunks); the cache
+        // is valid until any chunk is created. Bit 0: absent for lookups, bit 1: absent even when
+        // creating (terrain unknown, already requested).
+        long missing = c.missingNeighbour[slot];
+        if (missing != 0 && (missing >>> 2) == chunkGeneration && (create ? (missing & 2) != 0 : (missing & 1) != 0)) {
+            return null;
+        }
         int ncx = c.cx + ox;
         int ncz = c.cz + oz;
         if (create) {
             n = chunkFor(ncx, ncz);
             if (n == null) {
                 neededTerrain.add(LavaChunk.key(ncx, ncz));
+                c.missingNeighbour[slot] = (chunkGeneration << 2) | 3;
                 return null;
             }
         } else {
             n = chunks.get(LavaChunk.key(ncx, ncz));
-            if (n == null) return null;
+            if (n == null) {
+                c.missingNeighbour[slot] = (chunkGeneration << 2) | 1;
+                return null;
+            }
         }
         ensureFresh(n);
         c.neighbours[slot] = n;

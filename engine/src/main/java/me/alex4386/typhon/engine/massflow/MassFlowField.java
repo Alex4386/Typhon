@@ -100,7 +100,7 @@ public abstract class MassFlowField implements Subsystem {
     protected double entrained;
     protected double deposited;
     protected double lost;
-    protected UnitSource units = UnitSource.UNATTRIBUTED;
+    protected UnitSource units;
     private double currentTime;
 
     // per-step / per-substep scratch
@@ -120,6 +120,7 @@ public abstract class MassFlowField implements Subsystem {
         this.config = config.copy();
         this.dx = config.metersPerBlock;
         this.cellArea = dx * dx;
+        this.units = UnitSource.typed(terrain.world());
     }
 
     @Override
@@ -638,11 +639,34 @@ public abstract class MassFlowField implements Subsystem {
         c.depositHeat[i] += depositThicknessM * temperature;
         c.depositSpeed[i] += depositThicknessM * speed;
         c.depositTotal[i] += depositThicknessM;
-        Material material = depositMaterial(temperature, speed);
-        int unit = units.unit(depositType(), currentTime, temperature);
-        terrain.world().deposit(c.worldX(i), c.worldZ(i), depositThicknessM, material, unit, depositFlags(temperature),
-                material.porosity(), depositWelding(temperature));
+        // The stacks store elevations as floats (≈8 µm resolution near 100 m): sub-millimetre
+        // increments are pooled per column and written once they reach WORLD_COMMIT_M.
+        c.worldPending[i] += depositThicknessM;
+        c.worldPendingHeat[i] += depositThicknessM * temperature;
+        if (c.worldPending[i] >= WORLD_COMMIT_M) commitToWorld(c, i);
         while (c.deposit[i] >= dx - 1e-9) placeBlock(c, i, outbox);
+    }
+
+    /** Smallest deposit increment written to the world model at once (m). */
+    static final double WORLD_COMMIT_M = 1e-3;
+
+    /** Writes a column's pooled deposit into the world model as a layer of the current unit. */
+    private void commitToWorld(MassFlowChunk c, int i) {
+        double thickness = c.worldPending[i];
+        if (!(thickness > 0)) return;
+        double temperature = c.worldPendingHeat[i] / thickness;
+        Material material = depositMaterial(temperature, 0);
+        int unit = units.unit(depositType(), currentTime, temperature);
+        terrain.world().deposit(c.worldX(i), c.worldZ(i), thickness, material, unit, depositFlags(temperature),
+                material.porosity(), depositWelding(temperature));
+        c.worldPending[i] = 0;
+        c.worldPendingHeat[i] = 0;
+    }
+
+    /** Deposit laid down but not yet written to the world model (m), e.g. for exact accounting. */
+    public double pendingWorldDeposit(int x, int z) {
+        MassFlowChunk c = chunks.get(MassFlowChunk.key(x >> 4, z >> 4));
+        return c == null ? 0 : c.worldPending[index(x, z)];
     }
 
     private void placeBlock(MassFlowChunk c, int i, Outbox outbox) {
@@ -899,6 +923,8 @@ public abstract class MassFlowField implements Subsystem {
                     .doubles("depositSpeed", c.depositSpeed.clone())
                     .doubles("depositTotal", c.depositTotal.clone())
                     .doubles("soak", c.soak.clone())
+                    .doubles("worldPending", c.worldPending.clone())
+                    .doubles("worldPendingHeat", c.worldPendingHeat.clone())
                     .bytes("veneer", c.veneer.clone()));
         }
         saveExtra(out);
@@ -950,6 +976,8 @@ public abstract class MassFlowField implements Subsystem {
                 System.arraycopy(f.doubles("depositSpeed"), 0, c.depositSpeed, 0, AREA);
                 System.arraycopy(f.doubles("depositTotal"), 0, c.depositTotal, 0, AREA);
                 System.arraycopy(f.doubles("soak"), 0, c.soak, 0, AREA);
+                System.arraycopy(f.doubles("worldPending"), 0, c.worldPending, 0, AREA);
+                System.arraycopy(f.doubles("worldPendingHeat"), 0, c.worldPendingHeat, 0, AREA);
                 System.arraycopy(f.bytes("veneer"), 0, c.veneer, 0, AREA);
                 c.recount();
                 chunks.put(c.key, c);

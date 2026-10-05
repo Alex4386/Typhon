@@ -14,6 +14,15 @@ public interface UnitSource {
      */
     int unit(DepositType type, double timeSeconds, double emplacementC);
 
-    /** Every deposit unattributed ({@link UnitTable#UNATTRIBUTED}); the default before wiring. */
+    /** Every deposit unattributed ({@link UnitTable#UNATTRIBUTED}, a plain fill). */
     UnitSource UNATTRIBUTED = (type, time, temperature) -> UnitTable.UNATTRIBUTED;
+
+    /**
+     * Deposits typed by process but without a volcano or eruption (one shared unit per type): the
+     * default before a volcano assembly attaches its own source, so a stand-alone field still lays
+     * down recognisable (and, for loose types, erodible) layers.
+     */
+    static UnitSource typed(WorldModel world) {
+        return (type, time, temperature) -> Provenance.unitFor(world, null, -1, type, 0, Double.NaN, Double.NaN);
+    }
 }

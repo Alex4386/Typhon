@@ -80,6 +80,7 @@ public final class DikePropagation implements Subsystem {
         this.magma = Objects.requireNonNull(magma, "magma");
         this.terrain = terrain;
         this.volcanoId = magma.volcanoId();
+        if (terrain != null) this.units = UnitSource.typed(terrain.world());
     }
 
     @Override

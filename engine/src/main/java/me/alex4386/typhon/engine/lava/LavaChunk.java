@@ -48,6 +48,7 @@ final class LavaChunk {
     long bedVersion = Long.MIN_VALUE; // world version sum the bed cache was read at
     final long[] sourceStamp = new long[AREA]; // == step stamp while an effusive source feeds the cell
     final LavaChunk[] neighbours = new LavaChunk[9]; // by chunk offset: (dz + 1) * 3 + (dx + 1)
+    final long[] missingNeighbour = new long[9]; // cached absence: generation << 2 | flags (see neighbourAt)
     TerrainChunkView terrainView; // terrain the ground/waterY caches were read from
     int terrainVersion;
     long freshStamp = Long.MIN_VALUE;
