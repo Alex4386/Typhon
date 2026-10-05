@@ -3,7 +3,7 @@ import { ArrowUpFromDot, Crosshair, Pause, Play, Square, Triangle } from 'lucide
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandShortcut } from '@/components/ui/command';
 import { useCamera } from '../camera/cameraStore';
 import { command, send, showEntity } from '../net/connection';
-import { KIND_LABEL, entityColor, formatPlace } from '../store/entities';
+import { KIND_LABEL, entityColor, formatPlace, isDeposit } from '../store/entities';
 import { useStore } from '../store/store';
 import { FEATURE_COLORS } from '../util/color';
 import { DRAWER_TABS } from './Header';
@@ -20,14 +20,13 @@ export function CommandPalette() {
   const clock = useStore((s) => s.clock);
   const volcanoId = useStore((s) => s.selectedVolcano ?? s.world?.volcanoes[0]?.id ?? null);
   const erupting = useStore((s) => (volcanoId ? (s.state?.volcanoes[volcanoId]?.chamber.eruptionRate ?? 0) > 0 : false));
-  const list = useMemo(
-    () =>
-      Object.values(entities)
-        .filter((e) => !e.hidden && e.removedAt === undefined)
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, MAX_ENTITIES),
-    [entities],
-  );
+  // vents, dikes, springs and flows first; ground deposits (often hundreds) only fill what is left
+  const list = useMemo(() => {
+    const live = Object.values(entities)
+      .filter((e) => !e.hidden && e.removedAt === undefined)
+      .sort((a, b) => b.createdAt - a.createdAt);
+    return [...live.filter((e) => !isDeposit(e)), ...live.filter(isDeposit)].slice(0, MAX_ENTITIES);
+  }, [entities]);
   const close = () => set({ paletteOpen: false });
   const run = (f: () => void) => () => {
     close();

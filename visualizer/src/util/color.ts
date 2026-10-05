@@ -108,4 +108,7 @@ export const FEATURE_COLORS: Record<string, string> = {
   MUD_POT: '#8a6a48',
   SULFUR_DEPOSIT: '#f1e53b',
   SUBMARINE_VENT: '#3a76c9',
+  ACID_ALTERATION: '#c9a15a',
+  SINTER: '#e6dfcc',
+  CINNABAR: '#c0392b',
 };

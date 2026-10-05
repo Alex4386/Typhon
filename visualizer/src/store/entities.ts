@@ -85,10 +85,11 @@ export function pulsePhase(e: Pick<EntityView, 'seenAt' | 'fresh' | 'removedAt'>
 }
 
 /** Display grouping for the Entities panel. */
-export const KIND_GROUPS: { key: string; label: string; kinds: string[] }[] = [
+export const KIND_GROUPS: { key: string; label: string; kinds: string[]; match?: (e: Entity) => boolean }[] = [
   { key: 'vents', label: 'Vents and fissures', kinds: ['vent', 'fissure'] },
   { key: 'dikes', label: 'Dikes', kinds: ['dike'] },
-  { key: 'features', label: 'Hot springs, fumaroles, geysers', kinds: ['feature'] },
+  { key: 'features', label: 'Hot springs, fumaroles, geysers', kinds: ['feature'], match: (e) => !isDeposit(e) },
+  { key: 'deposits', label: 'Ground deposits (sulfur, sinter, alteration)', kinds: ['feature'], match: (e) => isDeposit(e) },
   { key: 'flows', label: 'Lava, pyroclastic flows, lahars', kinds: ['lavaFront', 'pdc', 'lahar'] },
   { key: 'plumes', label: 'Eruption columns', kinds: ['plume'] },
   { key: 'chambers', label: 'Magma chambers', kinds: ['chamber'] },
@@ -112,10 +113,10 @@ export const KIND_LABEL: Record<string, string> = {
 };
 
 /** Visible entities of a group, newest first; filtered by text and volcano. */
-export function listEntities(entities: EntityMap, kinds: string[], opts: { text?: string; volcanoId?: string | null } = {}): EntityView[] {
+export function listEntities(entities: EntityMap, kinds: string[], opts: { text?: string; volcanoId?: string | null; match?: (e: Entity) => boolean } = {}): EntityView[] {
   const text = opts.text?.trim().toLowerCase() ?? '';
   return Object.values(entities)
-    .filter((e) => !e.hidden && kinds.includes(e.kind))
+    .filter((e) => !e.hidden && kinds.includes(e.kind) && (!opts.match || opts.match(e)))
     .filter((e) => !opts.volcanoId || !e.volcanoId || e.volcanoId === opts.volcanoId)
     .filter((e) => !text || e.label.toLowerCase().includes(text) || e.id.toLowerCase().includes(text) || String(e.props.feature ?? '').toLowerCase().includes(text))
     .sort((a, b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id));
@@ -125,6 +126,14 @@ export function listEntities(entities: EntityMap, kinds: string[], opts: { text?
 export function formatPlace(at: XY | [number, number, number]): string {
   const f = (v: number) => Math.round(v).toLocaleString('en-US').replace(/,/g, ' ');
   return `E ${f(at[0])} m · N ${f(at[1])} m`;
+}
+
+/** Features with an opening (springs, vents): drawn as markers. The rest are deposits on the ground. */
+export const VENTING_FEATURES = new Set(['FUMAROLE', 'GEYSER', 'HOT_SPRING', 'SULFUR_SPRING', 'MUD_POT', 'SUBMARINE_VENT']);
+
+/** A ground deposit (sulfur, sinter, alteration, cinnabar) rather than an opening. */
+export function isDeposit(e: Pick<Entity, 'kind' | 'props'>): boolean {
+  return e.kind === 'feature' && !VENTING_FEATURES.has(String(e.props.feature));
 }
 
 /** What a selection points at. */

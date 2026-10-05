@@ -32,7 +32,7 @@ export function EntitiesPanel({ world }: { world: WorldInfo }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const now = performance.now();
   const groups = useMemo(
-    () => KIND_GROUPS.map((g) => ({ ...g, rows: listEntities(entities, g.kinds, { text, volcanoId: volcano === 'all' ? null : volcano }) })),
+    () => KIND_GROUPS.map((g) => ({ ...g, rows: listEntities(entities, g.kinds, { text, volcanoId: volcano === 'all' ? null : volcano, match: g.match }) })),
     [entities, text, volcano],
   );
   const total = groups.reduce((n, g) => n + g.rows.length, 0);
@@ -57,7 +57,7 @@ export function EntitiesPanel({ world }: { world: WorldInfo }) {
           const fresh = g.rows.filter((e) => isNew(e, now)).length;
           const all = expanded[g.key] ?? false;
           return (
-            <Collapsible key={g.key} defaultOpen={g.key !== 'quakes' && g.key !== 'stations'} className="rounded-lg border">
+            <Collapsible key={g.key} defaultOpen={g.key !== 'quakes' && g.key !== 'stations' && g.key !== 'deposits'} className="rounded-lg border">
               <CollapsibleTrigger className="group flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium hover:bg-muted/50">
                 <ChevronRight className="size-4 transition-transform group-data-[panel-open]:rotate-90" />
                 <span className="flex-1">{g.label}</span>

@@ -2,7 +2,7 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { WorldInfo } from '../protocol/messages';
-import { entityColor, entityOpacity, KIND_LABEL, pulsePhase, type EntityView, type Selection } from '../store/entities';
+import { entityColor, entityOpacity, isDeposit, KIND_LABEL, pulsePhase, type EntityView, type Selection } from '../store/entities';
 import { useStore } from '../store/store';
 import { FEATURE_COLORS } from '../util/color';
 import { SURFACE_KINDS, toScene } from './picking';
@@ -94,6 +94,7 @@ function EntityMarker({ e, world, vExag, dExag, selected, hovered }: { e: Entity
   const color = entityColor(e, FEATURE_COLORS);
   const surface = SURFACE_KINDS.has(e.kind);
   const xray = XRAY.has(e.kind);
+  const deposit = isDeposit(e);
   const handlers = useMemo(() => pickHandlers({ pick: { type: 'entity', id: e.id }, label: e.label, detail: detailOf(e), xray: XRAY.has(e.kind) }), [e]);
 
   const pos = useMemo((): [number, number, number] => {
@@ -122,18 +123,19 @@ function EntityMarker({ e, world, vExag, dExag, selected, hovered }: { e: Entity
     const op = entityOpacity(e, now);
     const d = g.position.distanceTo(camera.position);
     // point-like markers keep a readable size on screen
-    const k = e.kind === 'vent' ? Math.max(1, screenScale(d, 0.012, 1) / ventR) : e.kind === 'fissure' || e.kind === 'dike' ? 1 : screenScale(d, 0.009, 4);
+    const k =
+      e.kind === 'vent' ? Math.max(1, screenScale(d, 0.012, 1) / ventR) : e.kind === 'fissure' || e.kind === 'dike' ? 1 : deposit ? screenScale(d, 0.005, 3) : screenScale(d, 0.009, 4);
     const grow = hovered || selected ? 1.35 : 1;
     if (body.current) {
       if (e.kind !== 'dike' && e.kind !== 'fissure' && e.kind !== 'vent') body.current.scale.setScalar(k * grow);
       else if (e.kind === 'vent') body.current.scale.setScalar(k * (hovered || selected ? 1.15 : 1));
       const m = body.current.material as THREE.MeshBasicMaterial;
-      m.opacity = op * (xray ? 0.85 : 1);
+      m.opacity = op * (xray ? 0.85 : deposit && !hovered && !selected ? 0.7 : 1);
       if (hovered || selected) m.color.set(color).lerp(WHITE, 0.35);
       else m.color.set(color);
     }
     const ringScale = e.kind === 'vent' ? ventR * k : e.kind === 'fissure' ? fissureLen / 2 : e.kind === 'dike' ? screenScale(d, 0.02, 30) : k * 2.2;
-    const phase = pulsePhase(e, now);
+    const phase = deposit ? 0 : pulsePhase(e, now);
     if (ring.current) {
       ring.current.visible = phase > 0;
       ring.current.scale.setScalar(ringScale * (1 + phase * 2.2));
@@ -148,7 +150,13 @@ function EntityMarker({ e, world, vExag, dExag, selected, hovered }: { e: Entity
 
   return (
     <group ref={group} position={pos}>
-      {e.kind === 'feature' && (
+      {e.kind === 'feature' && deposit && (
+        <mesh ref={body} rotation={[-Math.PI / 2, 0, 0]} position={[0, 2, 0]} renderOrder={5} {...handlers}>
+          <circleGeometry args={[1, 12]} />
+          <meshBasicMaterial color={color} transparent opacity={0} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+      {e.kind === 'feature' && !deposit && (
         <mesh ref={body} position={[0, 1.2, 0]} renderOrder={6} {...handlers}>
           <octahedronGeometry args={[1, 0]} />
           <meshBasicMaterial color={color} transparent opacity={0} />

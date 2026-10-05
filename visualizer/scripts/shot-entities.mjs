@@ -48,7 +48,7 @@ await shot('02-entities-panel');
 // select the most interesting entity (a feature if any, else a vent) through the panel
 const target = await store(() => {
   const all = Object.values(window.__typhon.getState().entities).filter((e) => !e.hidden);
-  return (all.find((e) => e.kind === 'feature') ?? all.find((e) => e.kind === 'vent') ?? all[0])?.label ?? null;
+  return (all.find((e) => e.kind === 'feature' && ['HOT_SPRING', 'GEYSER', 'FUMAROLE', 'MUD_POT', 'SULFUR_SPRING'].includes(e.props.feature)) ?? all.find((e) => e.kind === 'vent') ?? all[0])?.label ?? null;
 });
 if (target) {
   await page.locator('[role=option] button', { hasText: target }).first().click();
@@ -88,7 +88,7 @@ console.log('clicked selection', JSON.stringify(sel)?.slice(0, 200));
 await shot('06-ground-picked');
 
 await page.keyboard.press('Control+k');
-await page.keyboard.type('spring');
+await page.keyboard.type(process.env.PALETTE_QUERY ?? 'vent');
 await shot('07-command-palette');
 await page.keyboard.press('Escape');
 
