@@ -51,8 +51,24 @@ public final class ConfigChanges {
     static final List<String> HOT_VOLCANO = List.of(
             "name", "active", "timeCompression*", "ballisticFraction",
             "magma.chamber.supplyRate", "magma.chamber.supplyVariability",
+            // properties of magma added from now on (the supply and injections); the chamber's own
+            // magma is state and stays as it is
+            "magma.chamber.recharge*",
             "geothermal.timeScale", "geothermal.prewarmSeconds", "geothermal.max*", "geothermal.*PerHour",
             "tephra.initialWind*", "tephra.max*", "deformation.stations*");
+
+    /**
+     * How a change to the world definition at {@code path} (dotted, as in {@link Change#path()})
+     * would be classified.
+     */
+    public static Kind worldKind(String path) {
+        return classify(path, HOT_WORLD);
+    }
+
+    /** How a change to a volcano definition at {@code path} would be classified. */
+    public static Kind volcanoKind(String path) {
+        return classify(path, HOT_VOLCANO);
+    }
 
     public static final ConfigChanges NONE = new ConfigChanges(List.of());
 

@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -391,7 +392,8 @@ final class Session implements AutoCloseable {
     private static List<VolcanoSummary> summarize(Scenario s) {
         List<VolcanoSummary> out = new ArrayList<>();
         for (VolcanoSystem v : s.volcanoes()) {
-            out.add(new VolcanoSummary(v.volcanoId(), v.alert().level().name(), v.chamber().erupting(),
+            var level = v.alert().level(); // null until the estimator's first sample (fresh or reset volcano)
+            out.add(new VolcanoSummary(v.volcanoId(), level == null ? "DORMANT" : level.name(), v.chamber().erupting(),
                     v.scaling().dormantTimeCompression(), v.scaling().eruptiveTimeCompression()));
         }
         return List.copyOf(out);
@@ -693,11 +695,13 @@ final class Session implements AutoCloseable {
                             r.submit(new DikeCommands.ForceDike(vid));
                         }
                         default -> {
-                            Double vol = Json.dbl(cmd, "volumeM3");
-                            if (vol == null || !(vol > 0)) return done(CommandResult.error("badRequest", "volumeM3 must be > 0"));
-                            MagmaChamberConfig c = v.chamber().config();
-                            r.submit(new MagmaCommands.InjectRecharge(vid, vol, c.rechargeTemperatureC(),
-                                    c.rechargeSilicaWt(), c.rechargeWaterWt()));
+                            MagmaCommands.InjectRecharge inject;
+                            try {
+                                inject = Tuning.injection(vid, cmd, v.chamber().config());
+                            } catch (IllegalArgumentException e) {
+                                return done(CommandResult.error("badRequest", e.getMessage()));
+                            }
+                            r.submit(inject);
                         }
                     }
                     return done(CommandResult.ok(null));
@@ -824,6 +828,49 @@ final class Session implements AutoCloseable {
     private static double normalizeDeg(double deg) {
         double d = deg % 360;
         return d < 0 ? d + 360 : d;
+    }
+
+    /** Chamber configuration of the first volcano (defaults for the injection dialog). */
+    MagmaChamberConfig firstChamberConfig() {
+        List<VolcanoSystem> vs = live.volcanoes();
+        return vs.isEmpty() ? null : vs.get(0).chamber().config();
+    }
+
+    /** Changes the files of a world between saving and reopening it. */
+    interface DefinitionEdit {
+        void apply() throws Exception;
+
+        void revert() throws Exception;
+    }
+
+    /**
+     * Saves this world session, applies {@code edit} to its definition files and reopens it with
+     * {@code policy}, keeping the transport mode and the volcano-time estimate. If the reopen fails
+     * the edit is reverted and the saved world reopened as it was. Clients must be re-attached by
+     * the caller.
+     */
+    synchronized void reopenWorld(World.ChangePolicy policy, DefinitionEdit edit) throws Exception {
+        Source src = source;
+        if (src.kind() != Kind.WORLD) throw new UnsupportedOperationException("Only worlds saved to disk can be changed");
+        if (replay) throw new IllegalStateException("Leave replay mode before changing settings");
+        EngineRunner.Mode mode = runner.mode();
+        double speed = runner.speed();
+        runner.pause();
+        save(null, null);
+        Map<String, Double> phys = new HashMap<>(physicalTime);
+        Scenario scenario;
+        edit.apply();
+        try {
+            scenario = WorldScenarios.open(src.worldDir(), policy);
+        } catch (Exception e) {
+            edit.revert();
+            transport(mode.name(), speed);
+            throw new IllegalArgumentException("The world could not be reopened with these settings: " + e.getMessage(), e);
+        }
+        replace(name, new Source(Kind.WORLD, null, scenario.seed(), scenario.engine().baseStepMicros(), src.worldDir()),
+                scenario);
+        physicalTime.putAll(phys);
+        transport(mode.name(), speed);
     }
 
     // ── Saves (§3.4) ──
@@ -1054,6 +1101,7 @@ final class Session implements AutoCloseable {
             JsonObject tc = new JsonObject();
             tc.add("dormant", Json.num(v.dormantCompression()));
             tc.add("eruptive", Json.num(v.eruptiveCompression()));
+            tc.add("current", Json.num(v.currentCompression()));
             j.add("timeCompression", tc);
             volcanoes.add(j);
         }

@@ -357,6 +357,8 @@ public final class SimServer implements AutoCloseable {
                     ack(c, requestId, true, "Saved to " + where);
                 });
                 case "load" -> load(c, msg, requestId);
+                case "getSchema" -> withSession(c, requestId, s -> c.send(schemaOrError(s)));
+                case "setParams" -> setParams(c, msg, requestId);
                 case "replay" -> replay(c, msg, requestId);
                 case "seek" -> seek(c, msg, requestId);
                 default -> c.send(Json.error("badRequest", "Unknown message type '" + type + "'", requestId));
@@ -556,6 +558,7 @@ public final class SimServer implements AutoCloseable {
             c.send(s.backlog(s.time()));
             c.send(s.replayInfo());
             c.send(s.clock());
+            c.send(schemaOrError(s));
         } catch (Exception e) {
             LOG.log(Level.WARNING, "Attach burst failed", e);
             c.send(Json.error("internal", "Attach failed: " + e.getMessage(), null));
@@ -671,6 +674,72 @@ public final class SimServer implements AutoCloseable {
             other.forgetTiles();
             attach(other, s);
         }
+    }
+
+    /** The session's parameter schema; a broken definition file yields a non-tunable schema saying why. */
+    private JsonObject schemaOrError(Session s) {
+        try {
+            return Tuning.schema(s);
+        } catch (RuntimeException e) {
+            LOG.log(Level.WARNING, "Schema of session " + s.id + " failed", e);
+            JsonObject o = Json.obj("schema");
+            o.addProperty("sessionId", s.id);
+            o.addProperty("tunable", false);
+            o.addProperty("reason", "The world's settings could not be read: " + e.getMessage());
+            o.add("params", new JsonArray());
+            o.add("commands", new JsonObject());
+            o.add("audit", new JsonArray());
+            return o;
+        }
+    }
+
+    /**
+     * Section 3.6: changes world/volcano definition values. Hot changes reopen the world keeping all
+     * state; {@code restart} changes reset the affected volcanoes. Every attached client is
+     * re-attached (fresh tiles and state) and receives the new schema.
+     */
+    private void setParams(ClientConnection c, JsonObject msg, Long requestId) throws Exception {
+        Session s = c.session;
+        if (s == null) {
+            c.send(Json.error("noSession", "Attach to a session first", requestId));
+            return;
+        }
+        Path dir = s.worldDir();
+        if (dir == null) {
+            c.send(Json.error("unsupported", "This world runs in memory only; start it from the Worlds page to change"
+                    + " its settings", requestId));
+            return;
+        }
+        JsonObject values = msg.has("values") && msg.get("values").isJsonObject() ? msg.getAsJsonObject("values") : null;
+        boolean restart = msg.has("restart") && msg.get("restart").getAsBoolean();
+        Tuning.Plan plan = Tuning.plan(dir, values, restart, s.time());
+        if (plan.isEmpty()) {
+            if (requestId != null) ack(c, requestId, true, "No changes");
+            c.send(schemaOrError(s));
+            return;
+        }
+        s.reopenWorld(plan.restart ? World.ChangePolicy.RESET_CHANGED : World.ChangePolicy.ACCEPT,
+                new Session.DefinitionEdit() {
+                    @Override
+                    public void apply() throws Exception {
+                        plan.write();
+                    }
+
+                    @Override
+                    public void revert() throws Exception {
+                        plan.revert();
+                    }
+                });
+        plan.log();
+        if (requestId != null) {
+            ack(c, requestId, true, (plan.restart ? "Restarted with " : "Applied ") + plan.audit.size() + " change"
+                    + (plan.audit.size() == 1 ? "" : "s"));
+        }
+        for (ClientConnection other : clientsOf(s)) {
+            other.forgetTiles();
+            attach(other, s);
+        }
+        sessionsChanged();
     }
 
     private void replay(ClientConnection c, JsonObject msg, Long requestId) throws Exception {

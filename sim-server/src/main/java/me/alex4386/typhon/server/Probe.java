@@ -267,6 +267,7 @@ final class Probe {
             chamber.add("waterWt", Json.num(ch.waterWt()));
             chamber.add("crystalFraction", Json.num(ch.crystalFraction()));
             chamber.add("eruptionRate", Json.num(ch.eruptionRate()));
+            chamber.add("volumeM3", Json.num(ch.volumeM3()));
             String regime = v.coupler().phreatomagmatic() ? "SURTSEYAN" : EventTranslator.regime(ch.eruptiveRegime());
             chamber.addProperty("regime", regime);
             o.add("chamber", chamber);
@@ -281,8 +282,10 @@ final class Probe {
             o.add("seismic", seismic);
 
             JsonObject alert = new JsonObject();
-            alert.addProperty("level", v.alert().level().name());
-            alert.addProperty("style", v.alert().suggestedStyle().name());
+            var level = v.alert().level(); // null until the estimator's first sample (fresh or reset volcano)
+            alert.addProperty("level", level == null ? "DORMANT" : level.name());
+            var style = v.alert().suggestedStyle();
+            alert.addProperty("style", style == null ? "HAWAIIAN" : style.name()); // only shown while erupting
             o.add("alert", alert);
 
             o.add("deformation", deformation(v.deformation(), map));
