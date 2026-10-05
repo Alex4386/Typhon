@@ -48,6 +48,32 @@ class SubsurfaceSaveTest {
     }
 
     @Test
+    void resultsDoNotDependOnThreadCount() {
+        java.util.List<java.util.Map<String, String>> states = new java.util.ArrayList<>();
+        int[] threads = {1, 4};
+        for (int t = 0; t < 2; t++) {
+            WorldModel world = SubsurfaceTestWorld.build(SPEC, 70, 70, (x, z) -> 30 - 0.3 * Math.hypot(x - 35, z - 35));
+            SubsurfaceConfig c = config();
+            c.threads = threads[t];
+            Subsurface s = new Subsurface(world, c);
+            s.setHeatSources("v", new SubsurfaceHeatTest.FixedSources(List.of(),
+                    List.of(new HeatSources.Vent(35, 35, 1e9, 40, 200))));
+            Engine engine = Engine.builder(3).add(new TerrainModel(world)).add(s).build();
+            engine.runFor(600);
+            // The thread count is part of the config (meta.json); compare the state files only.
+            java.util.Map<String, String> state = new java.util.TreeMap<>();
+            Saves.save(engine).files().forEach((path, bytes) -> {
+                if (path.startsWith("fields/") || path.startsWith("subsystems/")) {
+                    state.put(path, java.util.Base64.getEncoder().encodeToString(bytes));
+                }
+            });
+            states.add(state);
+        }
+        assertTrue(states.get(0).keySet().stream().anyMatch(p -> p.contains("subsurface")));
+        assertEquals(states.get(0), states.get(1));
+    }
+
+    @Test
     void saveAndRestoreContinuesBitForBit() {
         Built reference = build(null);
         reference.engine().runFor(300);
