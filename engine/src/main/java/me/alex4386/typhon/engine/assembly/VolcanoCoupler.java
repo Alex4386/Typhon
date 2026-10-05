@@ -200,7 +200,7 @@ public final class VolcanoCoupler implements Subsystem {
             fireJets(context, main, rate);
             buildTuffRing(context, main, rate);
             if (context.time() >= nextSteamEventTime) {
-                double steam = rate * ExplosivePhase.DRE_DENSITY * WATER_MAGMA_RATIO;
+                double steam = rate / scaling.eruptiveTimeCompression() * ExplosivePhase.DRE_DENSITY * WATER_MAGMA_RATIO;
                 context.outbox().emit(new SurfaceEvents.PhreatomagmaticSteam(
                         context.time(), volcanoId, main.position(), steam, waterDepthM));
                 nextSteamEventTime = context.time() + STEAM_EVENT_SECONDS;
@@ -289,26 +289,30 @@ public final class VolcanoCoupler implements Subsystem {
         explosivePhreatomagmatic = phreatomagmatic;
         burstPhaseUntil = -1; // the sustained column takes over any ash puff
 
+        // realRate is per simulated second; the column's physics follows the physical rate.
+        double compression = scaling.eruptiveTimeCompression();
         double mass = realRate * ExplosivePhase.DRE_DENSITY;
         ExplosivePhase phase;
         if (phreatomagmatic) {
             // Steam-driven: fine ash, low column; ballistics come from the cock's-tail jets.
             double lofted = mass * (1 - NEAR_VENT_FALLOUT_SHARE - JET_BALLISTIC_SHARE);
             phase = new ExplosivePhase(vent, lofted, STEAM_DRIVE_FRACTION, STEAM_DRIVE_PRESSURE_MPA,
-                    STEAM_DRIVE_TEMPERATURE_C, chamber.silicaWt(), 0, PHREATOMAGMATIC_GRAIN);
+                    STEAM_DRIVE_TEMPERATURE_C, chamber.silicaWt(), 0, PHREATOMAGMATIC_GRAIN, compression);
         } else {
             phase = ExplosivePhase.fromMagma(vent, chamber, ballisticFraction);
             phase = new ExplosivePhase(phase.vent(), mass, phase.gasFraction(), phase.overpressureMPa(),
-                    phase.temperatureC(), phase.silicaWt(), phase.ballisticFraction(), phase.grainSize());
+                    phase.temperatureC(), phase.silicaWt(), phase.ballisticFraction(), phase.grainSize(), compression);
         }
         double columnMass = phase.massEruptionRate();
-        double collapsing = collapseShare(phase, columnMass);
-        tephra.startPhase(new ExplosivePhase(phase.vent(), columnMass * (1 - collapsing), phase.gasFraction(),
-                phase.overpressureMPa(), phase.temperatureC(), phase.silicaWt(), phase.ballisticFraction(), phase.grainSize()));
+        double collapsing = collapseShare(phase, phase.physicalMassEruptionRate());
+        tephra.startPhase(phase.withMassEruptionRate(columnMass * (1 - collapsing)));
         updateCollapse(vent, columnMass * collapsing, phase.temperatureC());
     }
 
-    /** Share of the column falling back as PDCs: {@link #COLLAPSE_SHARE} if the column is unstable. */
+    /**
+     * Share of the column falling back as PDCs: {@link #COLLAPSE_SHARE} if the column is unstable.
+     * {@code massRate} must be the physical mass eruption rate (Woods 1988 is a steady-jet criterion).
+     */
     private double collapseShare(ExplosivePhase phase, double massRate) {
         if (pdc == null || massRate <= 0) return 0;
         double gas = phase.gasFraction();
@@ -382,9 +386,12 @@ public final class VolcanoCoupler implements Subsystem {
 
     private void startAshPuff(double now, VentSite vent, double ashMassKg, double durationSeconds, double gasFraction,
             double overpressureMPa, double temperatureC, double silicaWt, GrainSizeDistribution grain) {
-        double gameSeconds = durationSeconds / scaling.eruptiveTimeCompression();
-        tephra.startPhase(new ExplosivePhase(vent, ashMassKg / durationSeconds, Math.min(1, gasFraction), overpressureMPa,
-                temperatureC, silicaWt, 0, grain));
+        double compression = scaling.eruptiveTimeCompression();
+        double gameSeconds = durationSeconds / compression;
+        // The puff lasts durationSeconds of physical time, i.e. gameSeconds of simulated time: inject
+        // the whole ash mass over the simulated span, while the column sees the physical rate.
+        tephra.startPhase(new ExplosivePhase(vent, ashMassKg / gameSeconds, Math.min(1, gasFraction), overpressureMPa,
+                temperatureC, silicaWt, 0, grain, compression));
         burstPhaseUntil = Math.max(burstPhaseUntil, now + gameSeconds);
     }
 

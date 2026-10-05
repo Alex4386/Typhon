@@ -223,7 +223,8 @@ public final class TephraSubsystem implements Subsystem {
                 case StartExplosivePhase start -> {
                     phase = start.phase();
                     ensureGrid(phase.vent().position());
-                    context.outbox().emit(new ExplosivePhaseChanged(context.time(), id, true, phase.massEruptionRate()));
+                    context.outbox().emit(new ExplosivePhaseChanged(context.time(), id, true,
+                            phase.physicalMassEruptionRate()));
                 }
                 case StopExplosivePhase stop -> {
                     if (phase != null) {
@@ -501,7 +502,9 @@ public final class TephraSubsystem implements Subsystem {
             grid.parallel = context.parallel();
             // The column rises from the block above the vent, so cap its height at the world top from there.
             BlockPos base = vent.offset(0, 1, 0);
-            double height = PlumeModel.minecraftHeight(phase.massEruptionRate(), base.y(), config);
+            // The column rises with the physical intensity of the eruption; the tephra each step
+            // injects is the simulated (time-compressed) rate × step, so deposits add up correctly.
+            double height = PlumeModel.minecraftHeight(phase.physicalMassEruptionRate(), base.y(), config);
             double sigma = Math.max(config.cellSize * 0.5, 0.25 * height);
             grid.plumeHeight = height;
             grid.inject(
@@ -511,7 +514,8 @@ public final class TephraSubsystem implements Subsystem {
                     vent.z() + 0.5,
                     sigma);
             context.outbox().emit(new PlumeColumn(
-                    context.time(), id, base, base.y() + (int) Math.round(height), 2 * sigma, phase.massEruptionRate()));
+                    context.time(), id, base, base.y() + (int) Math.round(height), 2 * sigma,
+                    phase.physicalMassEruptionRate()));
             lightning(context, base, height, sigma, dt);
         }
         if (grid == null) return;
@@ -537,9 +541,12 @@ public final class TephraSubsystem implements Subsystem {
     }
 
     private void lightning(StepContext context, BlockPos base, double height, double sigma, double dt) {
-        double rate = phase.massEruptionRate();
+        // Flash rate scales with the physical intensity; per simulated second there are
+        // timeCompression times as many physical seconds.
+        double rate = phase.physicalMassEruptionRate();
         if (rate < config.lightningMinMassEruptionRate || height < 1) return;
-        double flashesPerSecond = Math.min(config.maxLightningPerSecond, config.lightningPerMassRate * rate);
+        double flashesPerSecond = Math.min(config.maxLightningPerSecond,
+                config.lightningPerMassRate * rate * phase.timeCompression());
         SimRandom random = context.random();
         int flashes = random.nextPoisson(flashesPerSecond * dt);
         for (int i = 0; i < flashes; i++) {
@@ -697,6 +704,7 @@ public final class TephraSubsystem implements Subsystem {
         vent.addProperty("fissureLength", v.fissureLength());
         out.add("vent", vent);
         out.addProperty("massEruptionRate", p.massEruptionRate());
+        out.addProperty("timeCompression", p.timeCompression());
         out.addProperty("gasFraction", p.gasFraction());
         out.addProperty("overpressure", p.overpressureMPa());
         out.addProperty("temperature", p.temperatureC());
@@ -728,6 +736,7 @@ public final class TephraSubsystem implements Subsystem {
                 in.get("temperature").getAsDouble(),
                 in.get("silica").getAsDouble(),
                 in.get("ballisticFraction").getAsDouble(),
-                new GrainSizeDistribution(fractions));
+                new GrainSizeDistribution(fractions),
+                in.has("timeCompression") ? in.get("timeCompression").getAsDouble() : 1);
     }
 }

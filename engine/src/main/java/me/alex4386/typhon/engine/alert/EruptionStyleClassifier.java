@@ -21,7 +21,7 @@ public final class EruptionStyleClassifier {
             if (fromConduit != null) return fromConduit;
         }
         double viscosity = MeltViscosity.log10(magma.silicaWt(), magma.waterWt(), magma.temperatureC(), magma.crystalFraction());
-        return classify(viscosity, magma.waterWt(), magma.eruptionRate());
+        return classify(viscosity, magma.waterWt(), magma.physicalEruptionRate());
     }
 
     /** Mass eruption rate (kg/s) separating sustained Plinian columns from weaker ash venting. */
@@ -39,7 +39,9 @@ public final class EruptionStyleClassifier {
             case FOUNTAINING -> EruptionStyle.HAWAIIAN;
             case OPEN_VENT -> EruptionStyle.STROMBOLIAN;
             case DOME -> EruptionStyle.LAVA_DOME;
-            case EXPLOSIVE -> magma.eruptionRate() * 2500 >= PLINIAN_MASS_RATE ? EruptionStyle.PLINIAN : EruptionStyle.VULCANIAN;
+            // Physical intensity: a time-compressed eruption is not more Plinian.
+            case EXPLOSIVE -> magma.physicalEruptionRate() * 2500 >= PLINIAN_MASS_RATE
+                    ? EruptionStyle.PLINIAN : EruptionStyle.VULCANIAN;
             case UNKNOWN, QUIESCENT -> null;
         };
     }

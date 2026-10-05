@@ -152,12 +152,15 @@ public final class SeismicityModel implements Subsystem {
             tremorUntil = now;
         }
         if (erupting && !tremorActive(now)) {
-            double onsetRate = config.tremorEpisodeRate() * Math.sqrt(eruptionRate);
+            // Tremor amplitude and how readily it sets in follow the physical magma flux, not the
+            // time-compressed rate (LP counts above do scale with simulated time).
+            double physicalRate = Math.max(0, magma.physicalEruptionRate());
+            double onsetRate = config.tremorEpisodeRate() * Math.sqrt(physicalRate);
             if (random.chance(1 - Math.exp(-onsetRate * dt))) {
                 double seconds = random.nextExponential(1 / config.tremorMeanDurationSeconds());
                 double duration = Math.max(0.05, seconds);
                 tremorUntil = now + duration;
-                tremorMagnitude = config.tremorBaseMagnitude() + 0.5 * Math.log10(1 + eruptionRate);
+                tremorMagnitude = config.tremorBaseMagnitude() + 0.5 * Math.log10(1 + physicalRate);
                 emit(context, SeismicEventType.TREMOR, tremorMagnitude, hypocenter(random, 0.8, 1.0, 0.2), duration, false);
             }
         }
