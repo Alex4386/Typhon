@@ -59,8 +59,23 @@ final class RealPresets {
 
     /** Geometric scaling: blocks (and eruption columns) are L-metre cubes; dormancy ×5000, eruptions real time. */
     static VolcanoScaling scaling(double metersPerColumn) {
-        return new VolcanoScaling(metersPerColumn, metersPerColumn, 5000, 1);
+        return scaling(metersPerColumn, 1);
     }
+
+    /** {@link #scaling(double)} with eruptions compressed {@code eruptive}× (lava, cooling and crust follow it). */
+    static VolcanoScaling scaling(double metersPerColumn, double eruptive) {
+        return new VolcanoScaling(metersPerColumn, metersPerColumn, 5000, eruptive);
+    }
+
+    /**
+     * Kīlauea's effusive eruptions last weeks to months (2018 LERZ: ~3 months, Neal et al. 2019), and
+     * flows and ponds take days to crust and freeze: ×20 lets a play session cover days of effusion
+     * so flows freeze into stratigraphy. The explosive presets keep ×1: their observables
+     * (Strombolian cadence, a Plinian column lasting hours, Surtsey's months-long Surtseyan phase
+     * judged at onset) are minutes-to-hours phenomena, and the eruption column is computed from the
+     * per-engine-second mass rate.
+     */
+    static final double KILAUEA_ERUPTIVE_COMPRESSION = 20;
 
     /**
      * Subsurface of a real-scale preset: the world defaults with the preset's literature geotherm and
@@ -184,7 +199,7 @@ final class RealPresets {
                             .stations(List.of(
                                     // approximate positions of HVO's caldera-rim GNSS sites (Uwekahuna NW, Crater Rim SE)
                                     Stations.at("UWEV", vent, -1400, 1400, L), Stations.at("CRIM", vent, 1800, -1800, L),
-                                    Stations.at("KIL-FLK-S", vent, 0, -4000, L))).scaling(scaling(L)).tephra(tephra())
+                                    Stations.at("KIL-FLK-S", vent, 0, -4000, L))).scaling(scaling(L, KILAUEA_ERUPTIVE_COMPRESSION)).tephra(tephra())
                             .wind(7, 0.6, Presets.WIND_VARIABILITY).build());
                 });
     }
