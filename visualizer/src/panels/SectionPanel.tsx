@@ -129,9 +129,8 @@ export function SectionPanel({ world }: { world: WorldInfo }) {
   return (
     <div className="panel section-panel">
       <div className="panel-head">
-        <strong>Cross-section</strong>
         <button className={tool === 'section' ? 'on' : ''} onClick={() => set({ tool: tool === 'section' ? 'orbit' : 'section' })}>
-          ✎ Draw line
+          ✎ Draw line on map
         </button>
         <button disabled={polyline.length < 2} onClick={cut}>
           ✂ Cut{pending !== null ? ' …' : ''}
@@ -159,7 +158,7 @@ export function SectionPanel({ world }: { world: WorldInfo }) {
             <input type="checkbox" checked={inset} onChange={(e) => setInset(e.target.checked)} /> shallow inset
           </label>
         )}
-        <span className="muted">{polyline.length} pts</span>
+        <span className="muted">{polyline.length} point{polyline.length === 1 ? '' : 's'}</span>
       </div>
       <canvas ref={canvasRef} className="section-canvas" onMouseMove={onMove} onMouseLeave={() => setHover('')} />
       <div className="section-foot">

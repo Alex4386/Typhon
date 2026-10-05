@@ -68,8 +68,12 @@ input[type='range'] {
 
 .app {
   display: grid;
-  grid-template-rows: 44px 1fr 38px;
+  grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
+}
+
+.app.in-replay {
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 header,
@@ -77,11 +81,14 @@ footer {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 12px;
+  padding: 6px 12px;
+  min-height: 48px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
   min-width: 0;
-  overflow: hidden;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 5;
 }
 
 footer {
@@ -108,11 +115,6 @@ footer {
   border-radius: 10px;
 }
 
-.hdr-volcano {
-  cursor: pointer;
-  white-space: nowrap;
-}
-
 .conn-open {
   color: #3fb950;
 }
@@ -131,18 +133,16 @@ footer {
 }
 
 main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 460px;
-  grid-template-rows: minmax(0, 1fr) 300px;
-  grid-template-areas:
-    'view side'
-    'bottom side';
+  display: flex;
   min-height: 0;
+  min-width: 0;
 }
 
 .view {
-  grid-area: view;
+  flex: 1;
+  min-width: 0;
   position: relative;
+  overflow: hidden;
   min-height: 0;
   /* sky behind the transparent 3D canvas; the scene fog fades into the horizon colour */
   background: linear-gradient(to bottom, #0e1726 0%, #24364d 38%, #5c6b7b 62%, #7d8189 72%, #2c2a29 100%);
@@ -151,24 +151,6 @@ main {
 /* below the ground the sky gives way to dark rock, so the subsurface overlays read clearly */
 .view.underground {
   background: radial-gradient(ellipse at 50% 40%, #2a1f19 0%, #16110e 60%, #0b0907 100%);
-}
-
-.toolbox .toggle {
-  min-width: 28px;
-}
-
-.side {
-  grid-area: side;
-  display: grid;
-  grid-template-rows: minmax(0, 1.4fr) minmax(0, 1fr);
-  border-left: 1px solid var(--line);
-  min-height: 0;
-}
-
-.bottom {
-  grid-area: bottom;
-  border-top: 1px solid var(--line);
-  min-height: 0;
 }
 
 .waiting {
@@ -200,62 +182,8 @@ main {
   min-height: 0;
 }
 
-.tabs {
-  display: flex;
-  gap: 4px;
-  margin-left: auto;
-}
-
-.toolbox {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  background: rgba(22, 27, 34, 0.88);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px;
-  gap: 6px;
-  backdrop-filter: blur(4px);
-  max-width: min(560px, calc(100% - 20px));
-}
-
-.toolbox .row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.toolbox label {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-}
-
 .check {
   user-select: none;
-}
-
-.transport {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.sim-time {
-  font: 600 15px ui-monospace, 'SF Mono', monospace;
-  min-width: 96px;
-  text-align: right;
-}
-
-.speed {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.speed input {
-  width: 110px;
 }
 
 .replay {

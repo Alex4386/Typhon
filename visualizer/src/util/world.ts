@@ -41,12 +41,4 @@ export function worldExtent(world: WorldInfo): { minX: number; minY: number; max
   };
 }
 
-export function formatSimTime(seconds: number): string {
-  const s = Math.max(0, Math.floor(seconds));
-  const d = Math.floor(s / 86400);
-  const h = Math.floor((s % 86400) / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  const hms = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-  return d > 0 ? `${d}d ${hms}` : hms;
-}
+export { formatDuration, formatFactor, formatSimTime } from './format';

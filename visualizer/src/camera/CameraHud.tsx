@@ -53,6 +53,8 @@ export function CameraBar({ world }: { world: WorldInfo }) {
   const hasPlume = useStore((s) => Object.values(s.state?.volcanoes ?? {}).some((v) => !!v.plume && v.plume.topZ > 0));
   const hasSection = useStore((s) => s.sectionPolyline.length >= 2);
   const [menu, setMenu] = useState(false);
+  const full = useStore((s) => s.showCameraTools);
+  const modes = full ? CAMERA_MODES : CAMERA_MODES.filter((m) => m === 'orbit' || m === 'fly' || m === 'walk' || m === mode);
 
   const builtins = builtinBookmarks(sceneInfo(world));
   const savePose = () => {
@@ -74,9 +76,9 @@ export function CameraBar({ world }: { world: WorldInfo }) {
   };
 
   return (
-    <div className="panel camerabar">
-      <div className="row">
-        {CAMERA_MODES.map((m) => (
+    <div className={`panel camerabar${full ? '' : ' compact'}`}>
+      <div className="row" role="toolbar" aria-label="Camera">
+        {modes.map((m) => (
           <button key={m} className={mode === m ? 'on' : ''} title={`${MODE_LABEL[m].title} [${MODE_LABEL[m].key}]`} onClick={() => req({ kind: 'mode', mode: m })}>
             {MODE_LABEL[m].label}
           </button>
@@ -94,6 +96,8 @@ export function CameraBar({ world }: { world: WorldInfo }) {
         <button title="Frame the selected volcano [F]" onClick={() => req({ kind: 'frame', what: 'volcano' })}>
           ⌖ volcano
         </button>
+        {full && (
+        <>
         <button title="Fit the eruption column [P]" disabled={!hasPlume} onClick={() => req({ kind: 'frame', what: 'plume' })}>
           ⇡ plume
         </button>
@@ -145,14 +149,24 @@ export function CameraBar({ world }: { world: WorldInfo }) {
             </optgroup>
           )}
         </select>
-        <button className={menu ? 'on' : ''} title="Camera settings" onClick={() => setMenu(!menu)}>
-          ⚙
+        <button className={menu ? 'on' : ''} title="Camera settings: fly speed, ground clearance, underground" onClick={() => setMenu(!menu)}>
+          ⚙ settings
         </button>
-        <button title="Keyboard and mouse controls [?]" onClick={() => set({ helpOpen: true })}>
+        </>
+        )}
+        <button title="Keyboard and mouse controls [?]" aria-label="Camera controls help" onClick={() => set({ helpOpen: true })}>
           ?
         </button>
+        <button
+          className="more"
+          title={full ? 'Hide the extra camera tools' : 'More camera tools: follow, tour, plume/overview framing, saved views, settings'}
+          aria-expanded={full}
+          onClick={() => useStore.getState().set({ showCameraTools: !full })}
+        >
+          {full ? 'Less' : 'More…'}
+        </button>
       </div>
-      {menu && (
+      {full && menu && (
         <div className="row">
           <label title="Fly speed multiplier (wheel or [ ] while flying)">
             speed ×
@@ -227,7 +241,8 @@ export function Minimap({ world }: { world: WorldInfo }) {
   const tileRevision = useStore((s) => s.tileRevision);
   const readout = useCamera((c) => c.readout);
   const section = useStore((s) => s.sectionPolyline);
-  const [open, setOpen] = useState(true);
+  const open = useStore((s) => s.showMinimap);
+  const setOpen = (v: boolean) => useStore.getState().set({ showMinimap: v });
   const lastDraw = useRef(0);
   const pending = useRef<number | null>(null);
   const ext = worldExtent(world);
@@ -341,13 +356,7 @@ export function Minimap({ world }: { world: WorldInfo }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readout, section, open, world]);
 
-  if (!open) {
-    return (
-      <button className="minimap-toggle" title="Show minimap" onClick={() => setOpen(true)}>
-        ▣
-      </button>
-    );
-  }
+  if (!open) return null;
   return (
     <div className="panel minimap" title="Click to fly there">
       <div className="minimap-canvas" style={{ width: MAP_PX, height: MAP_PX }}>

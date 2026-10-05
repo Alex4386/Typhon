@@ -3,10 +3,18 @@ import type uPlot from 'uplot';
 import type { SimEvent, VolcanoState, WorldInfo } from '../protocol/messages';
 import { ALERT_LEVELS, useStore, type HistorySample } from '../store/store';
 import { ALERT_COLORS } from '../util/color';
+import { ALERT_LABEL, REGIME_LABEL, STYLE_LABEL } from './events';
 import { Helicorder } from './Helicorder';
 import { UChart } from './UChart';
 
 type Tab = 'seismic' | 'magma' | 'deformation' | 'alerts';
+
+const TABS: [Tab, string, string][] = [
+  ['seismic', 'Earthquakes', 'Seismograph, shaking energy (RSAM) and quake counts'],
+  ['magma', 'Magma', 'Pressure in the magma chamber, temperature and composition'],
+  ['deformation', 'Ground motion', 'GPS stations: how much the ground swells or sinks'],
+  ['alerts', 'Status history', 'How the alert level changed over time'],
+];
 
 export function Observatory({ world }: { world: WorldInfo }) {
   const [tab, setTab] = useState<Tab>('seismic');
@@ -17,26 +25,27 @@ export function Observatory({ world }: { world: WorldInfo }) {
   const vs = selected ? state?.volcanoes[selected] : undefined;
 
   return (
-    <div className="panel observatory">
-      <div className="panel-head">
-        <strong>Observatory</strong>
-        <select value={selected ?? ''} onChange={(e) => set({ selectedVolcano: e.target.value })}>
+    <div className="observatory">
+      <div className="obs-head">
+        {world.volcanoes.length > 1 && (
+        <select aria-label="Volcano" value={selected ?? ''} onChange={(e) => set({ selectedVolcano: e.target.value })}>
           {world.volcanoes.map((v) => (
             <option key={v.id} value={v.id}>
               {v.name}
             </option>
           ))}
         </select>
+        )}
         {vs && <AlertBadge level={vs.alert.level} style={vs.alert.style} regime={vs.chamber.regime} />}
-        <div className="tabs">
-          {(['seismic', 'magma', 'deformation', 'alerts'] as Tab[]).map((t) => (
-            <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
-              {t}
-            </button>
-          ))}
-        </div>
       </div>
-      <div className="panel-body">
+      <div className="seg" role="tablist" aria-label="Instrument">
+        {TABS.map(([t, label, title]) => (
+          <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} title={title} onClick={() => setTab(t)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="obs-body">
         {tab === 'seismic' && <SeismicTab volcanoId={selected} history={history} />}
         {tab === 'magma' && vs && <MagmaTab vs={vs} history={history} />}
         {tab === 'deformation' && <DeformationTab history={history} vs={vs} />}
@@ -48,10 +57,10 @@ export function Observatory({ world }: { world: WorldInfo }) {
 
 export function AlertBadge({ level, style, regime }: { level: string; style?: string; regime?: string }) {
   return (
-    <span className="alert-badge" style={{ background: ALERT_COLORS[level] ?? '#444' }}>
-      {level.replace('_', ' ')}
-      {level === 'ERUPTING' && style ? ` · ${style}` : ''}
-      {regime && regime !== 'NONE' ? ` · ${regime}` : ''}
+    <span className="alert-badge" title={level === 'ERUPTING' && style ? STYLE_LABEL[style] : undefined} style={{ background: ALERT_COLORS[level] ?? '#444' }}>
+      {ALERT_LABEL[level] ?? level}
+      {level === 'ERUPTING' && style ? ` · ${STYLE_LABEL[style]?.split(' (')[0] ?? style}` : ''}
+      {regime && regime !== 'NONE' ? ` · ${REGIME_LABEL[regime] ?? regime}` : ''}
     </span>
   );
 }

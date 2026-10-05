@@ -183,6 +183,36 @@ function attach(c: Client) {
   send(c, session.world.state());
   send(c, { type: 'events', events: recentEvents(session.eventLog, Infinity), dropped: 0 });
   sendReplayInfo(c);
+  send(c, schema());
+}
+
+/** The mock world is not tunable; it still describes the injection fields. */
+function schema(): ServerMessage {
+  const field = (id: string, label: string, unit: string, min: number, max: number, def: number, log = false) =>
+    ({ id, label, unit, min, max, default: def, log, group: id === 'volumeM3' ? 'Batch' : 'Magma', type: 'number', apply: 'hot' }) as const;
+  return {
+    type: 'schema',
+    sessionId: session.id,
+    tunable: false,
+    reason: 'The mock server has no world files to change.',
+    params: [],
+    commands: {
+      injectMagma: [
+        field('volumeM3', 'Volume', 'm³', 1e3, 1e10, 5e6, true),
+        field('temperatureC', 'Temperature', '°C', 650, 1350, 1150),
+        field('silicaWt', 'Silica (SiO₂)', 'wt%', 42, 78, 50),
+        field('waterWt', 'Water (H₂O)', 'wt%', 0, 8, 0.5),
+      ],
+    },
+    audit: [],
+  };
+}
+
+function sessionsMessage(): ServerMessage {
+  return {
+    type: 'sessions',
+    sessions: [{ id: session.id, name: 'Mock island (MOCK)', preset: 'mock', time: session.world.time, mode: session.mode, speed: session.speed, rate: session.rate, clients: clients.size }],
+  };
 }
 
 function sendReplayInfo(c?: Client) {
@@ -207,7 +237,25 @@ function handle(c: Client, msg: ClientMessage) {
       send(c, { type: 'welcome', protocol: PROTOCOL_VERSION, server: 'typhon-mock/0.1', fields: Object.keys(CODEC_FOR).map(Number) as FieldId[], mock: true });
       return;
     case 'listSessions':
-      send(c, { type: 'sessions', sessions: [{ id: session.id, name: 'Mock island (MOCK)', preset: 'mock', time: session.world.time }] });
+      send(c, sessionsMessage());
+      return;
+    case 'listCatalog':
+      send(c, { type: 'catalog', presets: [{ name: 'mock', title: 'Mock island', description: 'Synthetic data for UI work', realScale: false }], worlds: [] });
+      return;
+    case 'sessionControl':
+      if (msg.action === 'pause' || msg.action === 'resume') {
+        session.mode = msg.action === 'pause' ? 'PAUSED' : 'REALTIME';
+        broadcast(clock());
+        broadcast(sessionsMessage());
+        if (msg.requestId !== undefined) send(c, { type: 'ack', requestId: msg.requestId, ok: true });
+      } else send(c, { type: 'error', code: 'unsupported', message: 'The mock server has one world and cannot close it', requestId: msg.requestId });
+      return;
+    case 'deleteWorld':
+    case 'setParams':
+      send(c, { type: 'error', code: 'unsupported', message: 'The mock server has no world files', requestId: msg.requestId });
+      return;
+    case 'getSchema':
+      send(c, schema());
       return;
     case 'createSession':
       session.reset(msg.seed ?? 1);

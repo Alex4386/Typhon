@@ -4,8 +4,8 @@
   top: 10px;
   right: 10px;
   width: max-content;
-  /* leave room for the toolbox on the left (≈ 410 px) */
-  max-width: max(250px, min(620px, calc(100% - 430px)));
+  /* leave room for the status card on the left (≈ 320 px) */
+  max-width: max(220px, min(620px, calc(100% - 340px)));
   background: rgba(22, 27, 34, 0.88);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -56,7 +56,8 @@
 
 .compass {
   position: absolute;
-  left: 10px;
+  left: 50%;
+  transform: translateX(-50%);
   bottom: 10px;
   display: flex;
   gap: 8px;
@@ -200,4 +201,11 @@
     transform: scale(0.75);
     transform-origin: bottom right;
   }
+}
+
+.camerabar.compact {
+  padding: 4px;
+}
+.camerabar .more {
+  color: var(--muted);
 }

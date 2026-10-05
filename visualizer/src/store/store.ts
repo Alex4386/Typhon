@@ -2,8 +2,12 @@ import { create } from 'zustand';
 import type { FieldId } from '../protocol/fields';
 import type { SectionFrame, TileFrame } from '../protocol/frames';
 import type {
+  CatalogMessage,
   ClockMessage,
   ReplayInfoMessage,
+  SchemaMessage,
+  ServerInfo,
+  SessionInfo,
   SimEvent,
   StateMessage,
   UnitInfo,
@@ -11,6 +15,16 @@ import type {
   WorldInfo,
   XY,
 } from '../protocol/messages';
+
+/** Side drawer pages; only one is open at a time (progressive disclosure). */
+export type DrawerTab = 'sims' | 'monitor' | 'events' | 'section' | 'view' | 'tune';
+
+export interface Toast {
+  id: number;
+  text: string;
+  tone: 'info' | 'warn' | 'alert';
+  time: number;
+}
 
 export type Tool = 'orbit' | 'section' | 'water' | 'dig';
 export type SurfaceColorMode =
@@ -63,6 +77,23 @@ interface Store {
   status: ConnectionStatus;
   serverUrl: string;
   welcome: WelcomeMessage | null;
+  /** Every session loaded on the server (pushed by the server). */
+  sessions: SessionInfo[];
+  serverInfo: ServerInfo | null;
+  catalog: CatalogMessage | null;
+  /** Session this client is attached to. */
+  sessionId: string | null;
+  /** Open drawer page, or null when the drawer is closed. */
+  drawer: DrawerTab | null;
+  drawerWidth: number;
+  toasts: Toast[];
+  /** Show the minimap (off by default to keep the view clean). */
+  showMinimap: boolean;
+  /** Show the full camera toolbar (follow, tour, bookmarks, framing). */
+  showCameraTools: boolean;
+  guideOpen: boolean;
+  /** Tunable parameters and command fields of the attached session. */
+  schema: SchemaMessage | null;
   world: WorldInfo | null;
   clock: (ClockMessage & { receivedAt: number }) | null;
   state: StateMessage | null;
@@ -114,12 +145,28 @@ interface Store {
   addEvents: (events: SimEvent[], dropped: number) => void;
   clearForReplay: (time: number) => void;
   pushError: (msg: string) => void;
+  /** Forgets everything about the attached session (switching worlds). */
+  resetSession: () => void;
+  openDrawer: (tab: DrawerTab | null) => void;
+  toast: (text: string, tone?: Toast['tone']) => void;
+  dismissToast: (id: number) => void;
 }
 
 export const useStore = create<Store>((set, get) => ({
   status: 'connecting',
   serverUrl: defaultServerUrl(),
   welcome: null,
+  sessions: [],
+  serverInfo: null,
+  catalog: null,
+  sessionId: null,
+  drawer: null,
+  drawerWidth: initialDrawerWidth(),
+  toasts: [],
+  showMinimap: false,
+  showCameraTools: false,
+  guideOpen: !guideSeen(),
+  schema: null,
   world: null,
   clock: null,
   state: null,
@@ -223,8 +270,104 @@ export const useStore = create<Store>((set, get) => ({
     set({ history, events: get().events.filter((e) => e.time <= time) });
   },
 
-  pushError: (msg) => set({ errors: [...get().errors.slice(-4), msg] }),
+  pushError: (msg) => {
+    set({ errors: [...get().errors.slice(-4), msg] });
+    get().toast(msg, 'warn');
+  },
+
+  resetSession: () => {
+    tileStore.clear();
+    set({
+      world: null,
+      schema: null,
+      clock: null,
+      state: null,
+      history: {},
+      events: [],
+      droppedEvents: 0,
+      tileRevision: {},
+      section: null,
+      sectionPending: null,
+      sectionShallow: null,
+      sectionShallowPending: null,
+      sectionPolyline: [],
+      replayInfo: null,
+      units: {},
+      selectedVolcano: null,
+      tool: 'orbit',
+    });
+  },
+
+  openDrawer: (tab) => set({ drawer: get().drawer === tab ? null : tab }),
+
+  toast: (text, tone = 'info') => {
+    const id = ++toastSeq;
+    const toasts = [...get().toasts.filter((t) => t.text !== text), { id, text, tone, time: Date.now() }].slice(-4);
+    set({ toasts });
+    window.setTimeout(() => get().dismissToast(id), tone === 'alert' ? 9000 : 6000);
+  },
+
+  dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 }));
+
+let toastSeq = 0;
+
+const GUIDE_KEY = 'typhon.guideSeen';
+const DRAWER_KEY = 'typhon.drawerWidth';
+
+function guideSeen(): boolean {
+  try {
+    return window.localStorage.getItem(GUIDE_KEY) === '1';
+  } catch {
+    return true; // no storage (screenshots, sandboxes): do not nag every load
+  }
+}
+
+/** Remembers that the first-run guide was dismissed. */
+export function rememberGuideSeen(): void {
+  try {
+    window.localStorage.setItem(GUIDE_KEY, '1');
+  } catch {
+    // ignore
+  }
+}
+
+function initialDrawerWidth(): number {
+  try {
+    const w = Number(window.localStorage.getItem(DRAWER_KEY));
+    if (w >= 300 && w <= 1200) return w;
+  } catch {
+    // ignore
+  }
+  return 440;
+}
+
+export function rememberDrawerWidth(w: number): void {
+  try {
+    window.localStorage.setItem(DRAWER_KEY, String(Math.round(w)));
+  } catch {
+    // ignore
+  }
+}
+
+const SESSION_KEY = 'typhon.session';
+
+/** The world/session the user last looked at (reattached after reloads). */
+export function rememberedSession(): string | null {
+  try {
+    return window.localStorage.getItem(SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function rememberSession(key: string): void {
+  try {
+    window.localStorage.setItem(SESSION_KEY, key);
+  } catch {
+    // ignore
+  }
+}
 
 export type Quality = 'low' | 'medium' | 'high';
 

@@ -4,6 +4,7 @@ import { App } from './app/App';
 import { useCamera } from './camera/cameraStore';
 import { getTile, useStore } from './store/store';
 import './styles.css';
+import './layout.css';
 
 // Debug hooks for scripts/screenshot*.mjs: always in dev, and in production builds with ?debug.
 if (import.meta.env.DEV || new URLSearchParams(window.location.search).has("debug")) {

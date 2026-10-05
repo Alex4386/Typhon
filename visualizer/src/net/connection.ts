@@ -4,12 +4,17 @@ import {
   PROTOCOL_VERSION,
   WS_SUBPROTOCOL,
   type ClientMessage,
+  type ParamValue,
   type SectionDatum,
   type ServerMessage,
+  type SessionAction,
+  type SessionInfo,
   type SimCommand,
+  type SimEvent,
   type XY,
 } from '../protocol/messages';
-import { useStore } from '../store/store';
+import { rememberSession, rememberedSession, useStore } from '../store/store';
+import { describeEvent, toastTone } from '../panels/events';
 
 /** Fields the visualizer subscribes to. */
 export const SUBSCRIBED_FIELDS: FieldId[] = [
@@ -76,6 +81,8 @@ export function connect(): void {
   sock.onclose = () => {
     if (ws !== sock) return;
     useStore.getState().setStatus('closed');
+    // The server forgets the attachment with the connection; reattach on reconnect.
+    useStore.getState().set({ sessionId: null });
     retry = window.setTimeout(connect, 2000);
   };
   sock.onerror = () => sock.close();
@@ -91,6 +98,92 @@ export function send(m: ClientMessage): void {
 
 export function command(c: SimCommand): void {
   send({ type: 'command', requestId: requestSeq++, command: c });
+}
+
+/** Switches this client to another loaded world. */
+export function attachSession(sessionId: string): void {
+  if (useStore.getState().sessionId === sessionId) return;
+  userDetached = false;
+  send({ type: 'attach', sessionId });
+}
+
+export interface NewSessionOptions {
+  preset?: string;
+  world?: string;
+  name?: string;
+  seed?: number;
+  dormant?: number;
+  eruptive?: number;
+  paused?: boolean;
+  /** Switch to the new world (default true). */
+  attach?: boolean;
+}
+
+/** Starts a world from a preset (written to the worlds dir) or opens a world directory. */
+export function createSession(o: NewSessionOptions): void {
+  const timeCompression = o.dormant !== undefined || o.eruptive !== undefined ? { dormant: o.dormant, eruptive: o.eruptive } : undefined;
+  send({
+    type: 'createSession',
+    requestId: requestSeq++,
+    preset: o.preset,
+    world: o.world,
+    name: o.name,
+    seed: o.seed,
+    paused: o.paused,
+    attach: o.attach ?? true,
+    ...(timeCompression ? { timeCompression } : {}),
+  });
+}
+
+export function controlSession(sessionId: string, action: SessionAction): void {
+  send({ type: 'sessionControl', requestId: requestSeq++, sessionId, action });
+}
+
+export function deleteWorld(name: string): void {
+  send({ type: 'deleteWorld', requestId: requestSeq++, name });
+}
+
+/** Changes tunable parameters of the attached session (`null` = back to default). */
+export function setParams(values: Record<string, ParamValue | null>, restart = false): void {
+  send({ type: 'setParams', requestId: requestSeq++, values, ...(restart ? { restart } : {}) });
+}
+
+export function refreshCatalog(): void {
+  send({ type: 'listCatalog' });
+}
+
+/** Stable key of a session across server restarts: its world directory, else its name. */
+export function sessionKey(s: SessionInfo): string {
+  return s.world ? `world:${s.world}` : `name:${s.name}`;
+}
+
+/** True once the user chose to leave a world (do not auto-attach somewhere else). */
+let userDetached = false;
+/** Events arriving right after an attach are backlog: no toasts for them. */
+let toastsQuietUntil = 0;
+
+function maybeToast(events: SimEvent[]): void {
+  if (performance.now() < toastsQuietUntil) return;
+  const s = useStore.getState();
+  for (const e of events) {
+    const tone = toastTone(e);
+    if (!tone) continue;
+    const who = 'volcanoId' in e ? s.world?.volcanoes.find((v) => v.id === e.volcanoId)?.name ?? e.volcanoId : null;
+    s.toast(`${who ? who + ': ' : ''}${describeEvent(e)}`, tone);
+  }
+}
+
+/** Picks a session to watch when the client is not attached to one. */
+function autoAttach(sessions: SessionInfo[]): void {
+  const s = useStore.getState();
+  if (s.sessionId || userDetached) return;
+  if (sessions.length === 0) {
+    if (!s.drawer) s.set({ drawer: 'sims' });
+    return;
+  }
+  const remembered = rememberedSession();
+  const pick = sessions.find((x) => sessionKey(x) === remembered) ?? sessions[0];
+  send({ type: 'attach', sessionId: pick.id });
 }
 
 /** Requests a section; `datum: 'surface'` asks for the ground-relative (shallow) companion view. */
@@ -110,16 +203,38 @@ function onText(m: ServerMessage): void {
   switch (m.type) {
     case 'welcome':
       s.set({ welcome: m });
+      send({ type: 'listCatalog' });
       return;
     case 'sessions':
-      if (m.sessions.length > 0) send({ type: 'attach', sessionId: m.sessions[0].id });
-      else send({ type: 'createSession', preset: 'default' });
+      s.set({ sessions: m.sessions, serverInfo: m.server ?? s.serverInfo });
+      if (s.sessionId && !m.sessions.some((x) => x.id === s.sessionId)) {
+        s.resetSession();
+        s.set({ sessionId: null });
+      }
+      autoAttach(m.sessions);
       return;
-    case 'attached':
-      s.set({ world: m.world, section: null, sectionShallow: null, sectionPolyline: [] });
+    case 'catalog':
+      s.set({ catalog: m, serverInfo: m.server ?? s.serverInfo });
+      return;
+    case 'detached':
+      if (s.sessionId === m.sessionId) {
+        s.resetSession();
+        s.set({ sessionId: null });
+        s.toast('The world you were watching was closed. Pick another one.', 'info');
+        send({ type: 'listSessions' });
+      }
+      return;
+    case 'attached': {
+      s.resetSession();
       tilesProcessed = 0;
+      pendingTiles = [];
+      toastsQuietUntil = performance.now() + 2500;
+      s.set({ world: m.world, sessionId: m.sessionId });
+      const info = s.sessions.find((x) => x.id === m.sessionId);
+      rememberSession(info ? sessionKey(info) : `name:${m.world.name}`);
       send({ type: 'subscribe', fields: SUBSCRIBED_FIELDS });
       return;
+    }
     case 'clock':
       s.set({ clock: { ...m, receivedAt: performance.now() } });
       return;
@@ -128,6 +243,7 @@ function onText(m: ServerMessage): void {
       return;
     case 'events':
       s.addEvents(m.events, m.dropped);
+      maybeToast(m.events);
       return;
     case 'replayInfo':
       s.set({ replayInfo: m });
@@ -143,6 +259,10 @@ function onText(m: ServerMessage): void {
     }
     case 'ack':
       if (!m.ok) s.pushError(m.message ?? `Request ${m.requestId} failed`);
+      else if (m.message && /^(Saved|Loaded|Deleted|Applied|Restarted)/.test(m.message)) s.toast(m.message, 'info');
+      return;
+    case 'schema':
+      if (m.sessionId === s.sessionId) s.set({ schema: m });
       return;
     case 'error':
       s.pushError(`${m.code}: ${m.message}`);

@@ -19,7 +19,32 @@ export type TransportMode = 'REALTIME' | 'UNBOUNDED' | 'PAUSED';
 export type ClientMessage =
   | { type: 'hello'; protocol: number; client: string }
   | { type: 'listSessions' }
-  | { type: 'createSession'; preset?: string; world?: string; seed?: number }
+  /** Presets and the world directories under the server's worlds dir. */
+  | { type: 'listCatalog' }
+  /**
+   * Starts (or, for a world that is already loaded, re-uses) a session. From a preset the server
+   * writes a new world directory `name` (default: the preset name, made unique) unless `inMemory`.
+   * `timeCompression` overrides the world's dormant/eruptive compression (a hot change).
+   */
+  | {
+      type: 'createSession';
+      requestId?: number;
+      preset?: string;
+      world?: string;
+      seed?: number;
+      name?: string;
+      timeCompression?: { dormant?: number; eruptive?: number };
+      /** Start paused (default: running at the server's initial speed). */
+      paused?: boolean;
+      /** Attach this client to the new session (default true). */
+      attach?: boolean;
+      /** Preset only: run it in memory without writing a world directory. */
+      inMemory?: boolean;
+    }
+  /** Pause/resume any loaded session, or unload it (`close` saves world sessions first). */
+  | { type: 'sessionControl'; requestId?: number; sessionId: string; action: SessionAction }
+  /** Deletes a world directory under the worlds dir; it must not be loaded. */
+  | { type: 'deleteWorld'; requestId?: number; name: string }
   | { type: 'attach'; sessionId: string }
   | { type: 'subscribe'; fields: FieldId[]; bounds?: TileBounds }
   /**
@@ -27,8 +52,11 @@ export type ClientMessage =
    * subscribed. The server keeps at most `TILE_WINDOW` unacknowledged tile frames in flight.
    */
   | { type: 'flow'; tilesProcessed: number }
-  /** REALTIME runs at `speed` × wall clock (0.1–1000); UNBOUNDED runs as fast as possible. */
-  | { type: 'transport'; mode: TransportMode; speed?: number }
+  /**
+   * REALTIME runs at `speed` × wall clock (0.1–1000); UNBOUNDED runs as fast as possible.
+   * `sessionId` controls another loaded session than the attached one.
+   */
+  | { type: 'transport'; mode: TransportMode; speed?: number; sessionId?: string }
   /** Pause, then advance exactly `steps` engine base steps, or the smallest number of steps covering `seconds`. */
   | { type: 'step'; steps?: number; seconds?: number }
   /** Pause automatically once simulation time reaches `time` (s); null clears it. */
@@ -39,13 +67,27 @@ export type ClientMessage =
   | { type: 'save'; name: string }
   | { type: 'load'; name: string }
   | { type: 'replay'; action: 'enter' | 'exit' }
-  | { type: 'seek'; time: number };
+  | { type: 'seek'; time: number }
+  /** Asks for the attached session's parameter schema (also pushed on attach and after every change). */
+  | { type: 'getSchema' }
+  /**
+   * Changes parameters of the attached session by schema id; `null` resets one to its default.
+   * Values whose spec says `apply: 'restart'` are refused unless `restart` is true (the affected
+   * volcanoes, or the whole world for world-level ones, are rebuilt from their definition).
+   */
+  | { type: 'setParams'; requestId?: number; values: Record<string, ParamValue | null>; restart?: boolean };
+
+export type ParamValue = number | boolean | string;
 
 export type SimCommand =
   | { kind: 'startEruption'; volcanoId: string }
   | { kind: 'stopEruption'; volcanoId: string }
   | { kind: 'forceDike'; volcanoId: string }
-  | { kind: 'injectMagma'; volcanoId: string; volumeM3: number }
+  /**
+   * Adds magma to the chamber. Optional fields set the batch's properties (otherwise the volcano's
+   * configured recharge magma); the server's `schema.commands.injectMagma` lists every accepted field.
+   */
+  | { kind: 'injectMagma'; volcanoId: string; volumeM3: number; temperatureC?: number; silicaWt?: number; waterWt?: number; [field: string]: string | number | undefined }
   /** Rain over the whole world (mm/h); 0 stops. */
   | { kind: 'rain'; mmPerHour: number }
   /** Pour water at a point (m³, released over `seconds`). */
@@ -64,9 +106,15 @@ export interface TileBounds {
 
 // ───────────────────────── Server → client ─────────────────────────
 
+export type SessionAction = 'pause' | 'resume' | 'close' | 'closeWithoutSaving';
+
 export type ServerMessage =
   | WelcomeMessage
-  | { type: 'sessions'; sessions: SessionInfo[] }
+  /** Sent on request and pushed to every client whenever the list changes (and every few seconds). */
+  | { type: 'sessions'; sessions: SessionInfo[]; server?: ServerInfo }
+  | CatalogMessage
+  /** The attached session was closed (by this or another client); attach to another one. */
+  | { type: 'detached'; sessionId: string; reason: string }
   | AttachedMessage
   | ClockMessage
   | StateMessage
@@ -76,7 +124,56 @@ export type ServerMessage =
   | { type: 'replayReset'; time: number }
   /** Stratigraphic unit table: full list on attach (`replace: true`), then appended units. */
   | { type: 'units'; units: UnitInfo[]; replace: boolean }
-  | { type: 'error'; code: ErrorCode; message: string; requestId?: number };
+  | { type: 'error'; code: ErrorCode; message: string; requestId?: number }
+  | SchemaMessage;
+
+/** One tunable value. Ids are dotted paths into the world/volcano definition (see docs/protocol.md). */
+export interface ParamSpec {
+  id: string;
+  label: string;
+  /** Display unit ("°C", "wt%", "m³/s"); values are always in this unit. */
+  unit?: string;
+  help?: string;
+  /** Heading the panel groups it under ("World · Weather", "Kīlauea · Magma"). */
+  group: string;
+  type: 'number' | 'boolean' | 'choice';
+  min?: number;
+  max?: number;
+  step?: number;
+  /** Suggest a logarithmic slider (values spanning decades). */
+  log?: boolean;
+  choices?: string[];
+  default?: ParamValue;
+  value?: ParamValue;
+  /** `hot`: applies to the running simulation; `restart`: rebuilds the volcano (or world). */
+  apply: 'hot' | 'restart';
+  /** Volcano the parameter belongs to (absent for world-level ones). */
+  volcanoId?: string;
+}
+
+export interface ParamChange {
+  /** Wall-clock time (ms since epoch). */
+  at: number;
+  simTime: number;
+  id: string;
+  label: string;
+  from: ParamValue | null;
+  to: ParamValue | null;
+  apply: 'hot' | 'restart';
+}
+
+export interface SchemaMessage {
+  type: 'schema';
+  sessionId: string;
+  /** False for sessions whose definition cannot be changed (in-memory presets); `reason` says why. */
+  tunable: boolean;
+  reason?: string;
+  params: ParamSpec[];
+  /** Fields each command accepts, e.g. `injectMagma`: volume, temperature, composition. */
+  commands: Record<string, ParamSpec[]>;
+  /** Recent changes, newest last. */
+  audit: ParamChange[];
+}
 
 export type ErrorCode =
   | 'protocol'
@@ -96,11 +193,65 @@ export interface WelcomeMessage {
   mock?: boolean;
 }
 
+export interface TimeCompression {
+  /** Physical seconds per simulated second while the volcano is quiet. */
+  dormant: number;
+  /** Physical seconds per simulated second while it erupts. */
+  eruptive: number;
+}
+
 export interface SessionInfo {
   id: string;
   name: string;
   preset?: string;
+  /** World directory name (world sessions). */
+  world?: string;
   time: number;
+  mode?: TransportMode;
+  speed?: number;
+  /** Measured simulated seconds per wall second. */
+  rate?: number;
+  replay?: boolean;
+  /** Clients currently attached. */
+  clients?: number;
+  volcanoes?: { id: string; alert: AlertLevel; erupting: boolean; timeCompression: TimeCompression & { current?: number } }[];
+}
+
+export interface ServerInfo {
+  maxSessions: number;
+  cpus: number;
+  heapUsedMB: number;
+  heapMaxMB: number;
+  worldsDir: string;
+}
+
+export interface PresetInfo {
+  name: string;
+  title: string;
+  description: string;
+  /** Real-volcano scale (km domains) rather than a compact demo. */
+  realScale: boolean;
+}
+
+export interface WorldListing {
+  /** Directory name under the worlds dir (what `createSession.world` takes). */
+  name: string;
+  title: string;
+  volcanoes: number;
+  /** A saved state exists: opening resumes it. */
+  hasState: boolean;
+  timeCompression?: TimeCompression;
+  /** Set when the world is loaded. */
+  sessionId?: string;
+  /** The definition could not be read. */
+  error?: string;
+}
+
+export interface CatalogMessage {
+  type: 'catalog';
+  presets: PresetInfo[];
+  worlds: WorldListing[];
+  server?: ServerInfo;
 }
 
 export interface AttachedMessage {
@@ -171,6 +322,10 @@ export interface ClockMessage {
   /** Measured simulated seconds per wall second. */
   rate: number;
   replay: boolean;
+  /** Current time compression of the first volcano (physical s per simulated s). */
+  compression?: number;
+  /** Approximate physical (volcano) time elapsed for the first volcano since the session started (s). */
+  physicalTime?: number;
 }
 
 export interface StateMessage {
@@ -202,12 +357,18 @@ export interface VolcanoState {
     crystalFraction: number;
     /** DRE m³/s, 0 when not erupting. */
     eruptionRate: number;
+    /** Magma volume in the chamber (m³). */
+    volumeM3?: number;
     regime: EruptiveRegime;
   };
   seismic: { rsam: number; vtPerMinute: number; lpPerMinute: number; tremor: boolean; swarm: boolean };
   alert: { level: AlertLevel; style: EruptionStyle };
   deformation: { maxUpliftM: number; stations: StationReading[] };
   plume?: { topZ: number; massRateKgS: number };
+  /** Time compression now in force (`current`) and its dormant/eruptive settings. */
+  timeCompression?: TimeCompression & { current: number };
+  /** Approximate physical time elapsed for this volcano since the session started (s). */
+  physicalTime?: number;
 }
 
 export interface StationReading {
