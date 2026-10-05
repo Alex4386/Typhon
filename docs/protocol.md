@@ -32,10 +32,11 @@ Java implementation against the visualizer.
 client                                   server
   hello{protocol:1}             ─────▶
                                 ◀─────   welcome{protocol:1, fields, mock?}
-  listSessions                  ─────▶
-                                ◀─────   sessions[…]
-  attach{sessionId}             ─────▶   (or createSession{preset|world, seed})
-                                ◀─────   attached{world}, units{replace:true}, state, events, replayInfo
+  listSessions, listCatalog     ─────▶
+                                ◀─────   sessions[…], catalog{presets, worlds}
+  attach{sessionId}             ─────▶   (or createSession{preset|world, …})
+                                ◀─────   attached{world}, units{replace:true}, state, events, replayInfo,
+                                         clock, schema
   subscribe{fields}             ─────▶
                                 ◀═════   tile frames (binary), throttled by flow control
   flow{tilesProcessed}          ─────▶   (repeatedly)
@@ -47,6 +48,19 @@ If `hello.protocol` differs from the server's, it sends `error{code:"protocol"}`
 session is one engine (a world with N volcanoes) driven by an `EngineRunner`. Several clients may
 attach to the same session; transport and commands from any client affect everyone.
 
+**Many worlds, one server.** A server runs several sessions at once (at most `--max-sessions`,
+default 8). `--preset`/`--world` (comma-separated) only choose the sessions started with the server;
+clients start, open, pause and close the others (§3.1). Each session has its own engine thread; the
+engines share one worker pool per thread count (they take turns on it), so paused sessions cost
+memory but no processor time. A client is attached to one session at a time; `attach` to another
+detaches it from the first. The `sessions` list is pushed to every client whenever it changes and
+every 2 s.
+
+Sessions are of two kinds. *World* sessions live in a directory under `--worlds-dir`
+(`world.yaml`, `volcanoes/*.yaml`, `state/`, `replay/`, `tuning/`); they are saved on close, can be
+reopened later and can be tuned (§3.5). *In-memory* sessions run a preset without files (the
+`--preset` sessions, or `createSession{inMemory:true}`) and are lost when closed.
+
 ## 3. Client → server messages
 
 ### 3.1 Connection and session
@@ -55,8 +69,11 @@ attach to the same session; transport and commands from any client affect everyo
 |---|---|---|
 | `hello` | `protocol: 1`, `client: string` | First message. |
 | `listSessions` | — | Reply: `sessions`. |
-| `createSession` | `preset?: string`, `world?: string`, `seed?: number` | Create and attach to a new session from a simulator preset or a `worlds/<name>` directory. Reply: `attached` (+ the attach burst). |
-| `attach` | `sessionId: string` | Attach to an existing session. Reply: `attached` …, or `error{noSession}`. |
+| `listCatalog` | — | Reply: `catalog` (§4.1): presets and the world directories under `--worlds-dir`. |
+| `createSession` | `requestId?`, `preset?: string`, `world?: string`, `seed?: number`, `name?: string`, `timeCompression?: {dormant?, eruptive?}`, `paused?: boolean`, `attach?: boolean` (default true), `inMemory?: boolean` | `world`: open `<worlds-dir>/<world>` (if it is already loaded, its session is reused). `preset`: write a new world directory `<worlds-dir>/<name>` (default: a free name derived from the preset) from the preset and open it; with `inMemory:true` run the preset without files instead. `timeCompression` overrides the world's dormant/eruptive time compression (not allowed for an already loaded world or in memory). Replies `ack{message:"Session <id>"}`, then the attach burst if `attach`; `error{badRequest}` when the server is full or the name is taken. |
+| `attach` | `sessionId: string` | Attach to an existing session (detaching from the current one). Reply: `attached` …, or `error{noSession}`. |
+| `sessionControl` | `requestId?`, `sessionId`, `action: "pause" \| "resume" \| "close" \| "closeWithoutSaving"` | Pause/resume any session (also one this client does not watch). `close` saves a world session and unloads it; clients attached to it receive `detached`. |
+| `deleteWorld` | `requestId?`, `name` | Delete `<worlds-dir>/<name>` (refused while it is loaded). Reply `ack`, then a fresh `catalog`. |
 | `subscribe` | `fields: FieldId[]`, `bounds?: TileBounds` | Replace the set of streamed tile fields (§5.2). Optional inclusive tile bounds restrict streaming; omitted means all tiles. Resets flow-control counters (§5.4). |
 | `flow` | `tilesProcessed: number` | Cumulative tile frames processed since the last `subscribe` (§5.4). |
 
@@ -66,7 +83,7 @@ Names follow `EngineRunner.Mode`.
 
 | type | fields | server action |
 |---|---|---|
-| `transport` | `mode: "REALTIME" \| "UNBOUNDED" \| "PAUSED"`, `speed?: number` | `REALTIME` → `runner.realtime(speed)`, with `speed` clamped to 0.1–1000 and the current speed kept if omitted. `UNBOUNDED` → `runner.unbounded()`, which also remembers `speed`. `PAUSED` → `runner.pause()`. |
+| `transport` | `mode: "REALTIME" \| "UNBOUNDED" \| "PAUSED"`, `speed?: number`, `sessionId?` (another loaded session; default the attached one) | `REALTIME` → `runner.realtime(speed)`, with `speed` clamped to 0.1–1000 and the current speed kept if omitted. `UNBOUNDED` → `runner.unbounded()`, which also remembers `speed`. `PAUSED` → `runner.pause()`. |
 | `step` | `steps?: number` or `seconds?: number` | Pause, then `runner.step(n)`. `n = steps`, or `ceil(seconds / baseStep)`; at least 1. |
 | `pauseAt` | `time: number \| null` | `runner.pauseAtTime(time)` (seconds); `null` clears it. |
 
@@ -84,7 +101,7 @@ volcano, out of world, …).
 | `startEruption` | `volcanoId` | Forced eruption start (`MagmaCommands.StartEruption`). |
 | `stopEruption` | `volcanoId` | Forced stop. |
 | `forceDike` | `volcanoId` | `DikeCommands.ForceDike`. |
-| `injectMagma` | `volcanoId`, `volumeM3` | Recharge pulse (`MagmaCommands.InjectRecharge`; the server picks the recharge composition). |
+| `injectMagma` | `volcanoId`, `volumeM3` (0–1e12), `temperatureC?` (650–1350), `silicaWt?` (42–78), `waterWt?` (0–8) | Recharge pulse (`MagmaCommands.InjectRecharge`). Omitted properties use the volcano's configured recharge magma; out-of-range values are rejected. The accepted fields, their ranges and defaults are listed in `schema.commands.injectMagma` (§4.7), so clients build their form from it and pick up new fields without changes. |
 | `rain` | `mmPerHour` | World rainfall rate; 0 stops it. |
 | `addWater` | `at: XY`, `volumeM3`, `seconds?` | Pour water at a point, released over `seconds` (default 600). This is surface-water input that can infiltrate to the water table (plan §3-1). |
 | `dig` | `at: XY`, `radius` (m), `depth` (m) | Excavate a pit from the surface (`WorldEdit.carve`/`erode`). |
@@ -100,15 +117,62 @@ volcano, out of world, …).
 | `replay` | `action: "enter" \| "exit"` | Enter or leave replay mode (§7). |
 | `seek` | `time` (s) | In replay mode only: jump to the state at `time` (§7). |
 
+### 3.5 Parameters
+
+| type | fields | reply |
+|---|---|---|
+| `getSchema` | — | `schema` (§4.7) of the attached session. It is also sent at the end of every attach burst. |
+| `setParams` | `requestId?`, `values: {[paramId]: number \| boolean \| null}`, `restart?: boolean` | Changes definition values of the attached world session; `null` restores a parameter's default. |
+
+Parameter ids are dotted paths into the world's definition files: `world.<path>` for `world.yaml`
+(e.g. `world.climate.rainfallMmPerHour`) and `volcano.<id>.<path>` for `volcanoes/<id>.yaml` (e.g.
+`volcano.kilauea.magma.chamber.supplyRate`). Every numeric or boolean value of the definitions is a
+parameter, except volcano identity and geometry (`id`, chamber centre, vents, edifice) and world
+values that would need a new world (grid, geology, seed, terrain generator).
+
+Whether a change can be applied to the running simulation is the rule of the engine's
+`ConfigChanges` (the same one that applies when YAML is edited by hand between runs):
+
+- `apply: "hot"` (climate, time compression, magma supply rate and the properties of supplied
+  magma, feature rates, solver tuning, …): the server saves the session, writes the YAML and reopens
+  the world keeping all state.
+- `apply: "restart"` (chamber size and depth, roof strength, initial magma, conduit and dike
+  parameters, …): refused with `error{badRequest}` unless `restart:true`; then the affected volcanoes
+  restart from their definitions (`World.ChangePolicy.RESET_CHANGED`). Terrain, deposits and other
+  volcanoes are kept.
+
+Values are validated by parsing the new definitions before anything is written; if the world cannot
+be reopened, the files are restored. On success: `ack{ok:true, message:"Applied n changes" |
+"Restarted with n changes"}`, then every client attached to the session gets a full attach burst
+(the engine was rebuilt) ending with the new `schema`. In-memory sessions reply
+`error{unsupported}`.
+
+Defaults are the definitions as they were before the first change (`<world>/tuning/baseline.json`);
+each change is appended to `<world>/tuning/audit.json` (last 200).
+
 ## 4. Server → client JSON messages
 
 ### 4.1 `welcome`, `sessions`, `attached`
 
 ```json
 {"type":"welcome","protocol":1,"server":"typhon-sim-server/1.0","fields":[1,2,3,4,5,6,7,8,9,10,11,12]}
-{"type":"sessions","sessions":[{"id":"s1","name":"Kīlauea","preset":"kilauea","time":3600.0}]}
+{"type":"sessions","sessions":[{"id":"s1","name":"Kīlauea","preset":"kilauea","world":"my-kilauea","time":3600.0,
+  "mode":"REALTIME","speed":20,"rate":19.6,"replay":false,"clients":1,
+  "volcanoes":[{"id":"kilauea","alert":"ERUPTING","erupting":true,
+                "timeCompression":{"dormant":5000,"eruptive":20,"current":20}}]}],
+ "server":{"maxSessions":8,"cpus":16,"heapUsedMB":812,"heapMaxMB":6144,"worldsDir":"/srv/worlds"}}
+{"type":"catalog","presets":[{"name":"kilauea","title":"Kīlauea-like shield","description":"…","realScale":false}],
+ "worlds":[{"name":"my-kilauea","title":"Kīlauea","volcanoes":1,"hasState":true,
+            "timeCompression":{"dormant":5000,"eruptive":20},"sessionId":"s1"}],
+ "server":{ … }}
 {"type":"attached","sessionId":"s1","world":{ …WorldInfo… }}
+{"type":"detached","sessionId":"s1","reason":"closed"}
 ```
+
+In `sessions`, `world` is the world directory name (absent for in-memory sessions); the per-volcano
+summary is refreshed about once a second. In `catalog`, `sessionId` marks worlds that are loaded and
+`error` worlds whose definitions cannot be read. `detached` tells the clients attached to a session
+that it was closed; they should attach elsewhere.
 
 `fields` lists the field ids the server can stream. This is the capability mechanism: a field
 missing from `fields` is not modelled by this server. Servers ignore such ids in `subscribe`;
@@ -153,6 +217,11 @@ refer to these ids.
   second.
 - Send at least twice per second, and immediately after transport changes.
 - Clients extrapolate `time + rate · Δwall` between clocks while not `PAUSED`.
+- `compression` (optional) is the first volcano's current time compression: physical (volcano)
+  seconds per simulated second, its dormant or eruptive value. `physicalTime` (optional) is the
+  approximate physical time elapsed since the session was loaded (simulated time × compression,
+  integrated). Three different rates are in play: simulated time (`time`), volcano time
+  (`time × compression`) and playback (`speed`/`rate`, simulated seconds per wall second).
 
 ### 4.4 `state`
 
@@ -176,6 +245,10 @@ This is a snapshot of 0D state per volcano (from `runner` snapshots), sent ≥ 2
 - `alert.level` is one of the six alert levels; `alert.style` is the suggested eruption style.
 - Station displacements are in metres and tilt in µrad.
 - `plume` is present only while an eruption column exists.
+- `chamber.volumeM3` (optional) is the chamber's magma volume (m³), e.g. for previewing how an
+  injection mixes in.
+- `timeCompression` (optional) is `{dormant, eruptive, current}` for the volcano, and
+  `physicalTime` (optional) its approximate elapsed volcano time (s), as in `clock`.
 
 ### 4.5 `events`
 
@@ -213,6 +286,32 @@ is authoritative.
 | `error` | `code` (`protocol`, `badRequest`, `noSession`, `unknownVolcano`, `unsupported`, `internal`), `message`, `requestId?` |
 | `replayInfo` | `start`, `end` (s): the recorded range; `keyframes`: times (s) of stored keyframes |
 | `replayReset` | `time`: the session jumped to `time` (seek, replay exit or load). Clients drop history newer than `time`; fresh tiles, state and events follow. |
+
+### 4.7 `schema`
+
+The tunable parameters and command fields of a session (§3.5):
+
+```json
+{"type":"schema","sessionId":"s2","tunable":true,
+ "params":[
+  {"id":"volcano.kilauea.magma.chamber.supplyRate","label":"Magma supply rate","unit":"m³/s",
+   "group":"Kīlauea · Magma supply","type":"number","min":0,"max":100,"log":true,
+   "value":0.2,"default":0.15,"apply":"hot","volcanoId":"kilauea",
+   "help":"Magma rising into the chamber from below. Kīlauea ~0.1–0.2 m³/s."},
+  {"id":"volcano.kilauea.magma.chamber.volume","label":"Chamber volume","unit":"m³", …,"apply":"restart"}],
+ "commands":{"injectMagma":[
+  {"id":"volumeM3","label":"Volume","unit":"m³","group":"Batch","type":"number","min":1000,"max":1e10,"log":true,"default":5e6,"apply":"hot"},
+  {"id":"temperatureC","label":"Temperature","unit":"°C","group":"Magma","type":"number","min":650,"max":1350,"default":1150,"apply":"hot"}, …]},
+ "audit":[{"at":1791000000000,"simTime":3600,"id":"volcano.kilauea.magma.chamber.supplyRate",
+           "label":"Kīlauea: Magma supply rate","from":0.15,"to":0.2,"apply":"hot"}]}
+```
+
+| field | meaning |
+|---|---|
+| `tunable` | False for in-memory sessions (`reason` says why); `params` is then empty but `commands` is still filled. |
+| `params[]` | `ParamSpec`: `id`, `label`, `unit?`, `help?`, `group` (heading), `type` (`number`/`boolean`/`choice`), `min?`/`max?` (validated by the server), `step?` (1 for integers), `log?` (slider hint), `choices?`, `value`, `default`, `apply` (`hot`/`restart`), `volcanoId?`. Parameters without curated metadata get a label and unit derived from their name and no range. |
+| `commands` | Fields of commands, as `ParamSpec`s with defaults (`injectMagma`: the volcano's recharge magma). |
+| `audit` | Recent changes, oldest first: `at` (wall ms), `simTime`, `id`, `label`, `from`, `to` (null = back to default), `apply`. |
 
 ## 5. Tile frames (binary, kind 1)
 
