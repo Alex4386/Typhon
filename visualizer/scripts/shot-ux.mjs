@@ -84,6 +84,14 @@ if (await restartInput.count()) {
   await click(page, '.restart-bar button', 'Discard');
   await page.fill('.params-tools input', '');
 }
+// a live change: magma supply rate (saves, reopens the world, toasts "Applied 1 change")
+await page.fill('.params-tools input', 'supply rate');
+await page.waitForTimeout(300);
+await page.locator('.param', { hasText: 'Magma supply rate' }).locator('input[type=text]').fill('0.5');
+await page.waitForSelector('.toast >> text=Applied', { timeout: 120000 }).catch(() => logs.push('no "Applied" toast'));
+await page.waitForTimeout(1500);
+await shot(page, '10b-live-change-applied');
+await page.fill('.params-tools input', '');
 await click(page, '.drawer-head button', '×');
 
 await click(page, '.action-bar button', 'Add magma');

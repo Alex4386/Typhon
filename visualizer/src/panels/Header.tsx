@@ -195,7 +195,7 @@ export function Playback() {
         )}
       </div>
       {clock && mode !== 'PAUSED' && !replay && clock.rate > 0 && Math.abs(clock.rate - speed) / speed > 0.3 && (
-        <span className="muted small" title="The computer cannot keep up with the requested speed">
+        <span className="muted small rate-note" title="The computer cannot keep up with the requested speed">
           (running {clock.rate >= 10 ? clock.rate.toFixed(0) : clock.rate.toFixed(1)}×)
         </span>
       )}

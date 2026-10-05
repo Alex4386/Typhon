@@ -162,12 +162,23 @@ let userDetached = false;
 /** Events arriving right after an attach are backlog: no toasts for them. */
 let toastsQuietUntil = 0;
 
+/** Repeats of the same kind of notification (per volcano) are held back for this long. */
+const TOAST_REPEAT_MS = 120_000;
+const lastToast = new Map<string, number>();
+
 function maybeToast(events: SimEvent[]): void {
-  if (performance.now() < toastsQuietUntil) return;
+  const now = performance.now();
+  if (now < toastsQuietUntil) return;
   const s = useStore.getState();
   for (const e of events) {
     const tone = toastTone(e);
     if (!tone) continue;
+    // eruptions and status changes always show; recurring phenomena (quakes, steam blasts) at most every 2 min
+    if (tone !== 'alert' && e.kind !== 'alertChanged') {
+      const key = `${e.kind}:${'volcanoId' in e ? e.volcanoId : ''}`;
+      if (now - (lastToast.get(key) ?? -Infinity) < TOAST_REPEAT_MS) continue;
+      lastToast.set(key, now);
+    }
     const who = 'volcanoId' in e ? s.world?.volcanoes.find((v) => v.id === e.volcanoId)?.name ?? e.volcanoId : null;
     s.toast(`${who ? who + ': ' : ''}${describeEvent(e)}`, tone);
   }

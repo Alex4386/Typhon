@@ -844,6 +844,14 @@ kbd {
 }
 
 @media (max-width: 600px) {
+  .rate-note {
+    display: none;
+  }
+
+  .playback button {
+    white-space: nowrap;
+  }
+
   .action-bar {
     right: 10px;
     flex-wrap: nowrap;
