@@ -194,9 +194,13 @@ final class RealPresets {
                             .initialTemperatureC(1165).rechargeTemperatureC(1180).initialOverpressureMPa(9.5)
                             .maxEruptionRate(150)
                             .build();
+                    SubsurfaceConfig subsurface = subsurface(setting, L);
+                    // The window sits in the island's basal aquifer, held near 610 m by recharge and
+                    // drainage outside it: its edge keeps that level and resupplies what boils off.
+                    subsurface.regionalBoundary = true;
                     return b.volcano(VolcanoSystem.builder("kilauea-real", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
-                            .subsurfaceConfig(subsurface(setting, L))
+                            .subsurfaceConfig(subsurface)
                             .stations(List.of(
                                     // approximate positions of HVO's caldera-rim GNSS sites (Uwekahuna NW, Crater Rim SE)
                                     Stations.at("UWEV", vent, -1400, 1400, L), Stations.at("CRIM", vent, 1800, -1800, L),
