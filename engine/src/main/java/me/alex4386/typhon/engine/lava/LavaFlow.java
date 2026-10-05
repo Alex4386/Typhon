@@ -21,6 +21,7 @@ import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.random.SimRandom;
+import me.alex4386.typhon.engine.sim.Parallel;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.terrain.TerrainChunkView;
@@ -183,10 +184,7 @@ public final class LavaFlow implements Subsystem {
     private double emittedVolume;
     private double solidifiedVolume;
 
-    // per-step scratch
-    private final double[] flux = new double[DIRS];
-    private final double[] inVolume = new double[DIRS];
-    private final int[] inUnit = new int[DIRS];
+    // per-step state
     private final TreeMap<Long, OceanEntry> oceanEntries = new TreeMap<>();
     private long oceanGeneration; // bumped whenever oceanEntries is cleared (invalidates chunk caches)
     private final SolidStats solidAcc = new SolidStats();
@@ -461,12 +459,24 @@ public final class LavaFlow implements Subsystem {
             }
         }
 
+        // Parallel phases only write their own chunk and read neighbours through the slots prepared
+        // (sequentially) beforehand; anything order-dependent is deferred to a sequential pass in
+        // chunk-key order, so results do not depend on the thread count.
+        Parallel parallel = context.parallel();
+
         // 1. flux
         List<LavaChunk> active = new ArrayList<>();
         for (LavaChunk c : chunks.values()) if (c.lavaCells > 0) active.add(c);
+        active.sort(BY_KEY);
         for (LavaChunk c : active) {
             ensureFresh(c);
-            computeFlux(c, dt);
+            prepareFlux(c);
+        }
+        parallel.forEach(active, c -> computeFlux(c, dt));
+        for (LavaChunk c : active) {
+            for (int slot = 0; slot < 9; slot++) {
+                if ((c.touchOut & (1 << slot)) != 0) c.neighbours[slot].touchedStamp = stamp;
+            }
         }
 
         // 2. gather + swap
@@ -475,23 +485,34 @@ public final class LavaFlow implements Subsystem {
         update.sort(BY_KEY);
         for (LavaChunk c : update) {
             ensureFresh(c);
-            gather(c, dt);
+            prepareNeighbours(c);
         }
-        for (LavaChunk c : update) {
+        parallel.forEach(update, c -> gather(c, dt));
+        for (LavaChunk c : update) foldOceanInflow(c);
+        parallel.forEach(update, c -> {
             c.swapBuffers();
             c.recount();
-        }
+        });
 
-        // 3. cooling, crust, tubes & solidification
+        // 3. cooling, crust, tubes & solidification: heat balance in parallel, then the resulting
+        // solidification / drained-tube actions (world edits, random draws, block changes) in order
         SolidStats stats = solidAcc;
         List<LavaTube> formed = new ArrayList<>();
-        for (LavaChunk c : update) {
-            if (c.isActive()) cool(c, dt, context.random(), outbox, stats, formed);
+        List<LavaChunk> cooling = new ArrayList<>();
+        for (LavaChunk c : update) if (c.isActive()) cooling.add(c);
+        parallel.forEach(cooling, c -> coolHeat(c, dt));
+        for (LavaChunk c : cooling) {
+            applyCoolActions(c, context.random(), outbox, stats, formed);
+            foldOceanHeat(c);
         }
-        for (LavaChunk c : update) c.recount();
+        parallel.forEach(update, LavaChunk::recount);
 
         // 4. rendering
-        for (LavaChunk c : update) render(c, outbox);
+        parallel.forEach(update, this::render);
+        for (LavaChunk c : update) {
+            for (BlockChange change : c.rendered) outbox.setBlock(change);
+            c.rendered.clear();
+        }
 
         // 5. events & cleanup
         double interval = config.eventPeriodSeconds();
@@ -520,7 +541,58 @@ public final class LavaFlow implements Subsystem {
         }
     }
 
+    /**
+     * Sequential: resolves (creating them if terrain is known) the neighbour chunks this chunk's flux
+     * can reach — those next to an edge cell that will try to flow.
+     */
+    private void prepareFlux(LavaChunk c) {
+        double minFlow = config.minFlowThickness();
+        int needed = 0;
+        for (int i = 0; i < AREA; i++) {
+            int lx = i & 15;
+            int lz = i >> 4;
+            if (lx != 0 && lx != 15 && lz != 0 && lz != 15) continue;
+            if (c.thickness[i] < minFlow || c.ground[i] == UNKNOWN) continue;
+            for (int d = 0; d < DIRS; d++) {
+                int nx = lx + DX[d];
+                int nz = lz + DZ[d];
+                if (nx >= 0 && nx <= 15 && nz >= 0 && nz <= 15) continue;
+                needed |= 1 << slot(nx, nz);
+            }
+        }
+        for (int slot = 0; slot < 9; slot++) {
+            if (slot == 4 || (needed & (1 << slot)) == 0) continue;
+            int ox = slot % 3 - 1;
+            int oz = slot / 3 - 1;
+            neighbourAt(c, ox < 0 ? -1 : ox > 0 ? 16 : 0, oz < 0 ? -1 : oz > 0 ? 16 : 0, true);
+        }
+        c.touchOut = 0;
+    }
+
+    /** Sequential: resolves all eight neighbour chunks (without creating any) for read-only phases. */
+    private void prepareNeighbours(LavaChunk c) {
+        for (int slot = 0; slot < 9; slot++) {
+            if (slot == 4) continue;
+            int ox = slot % 3 - 1;
+            int oz = slot / 3 - 1;
+            neighbourAt(c, ox < 0 ? -1 : ox > 0 ? 16 : 0, oz < 0 ? -1 : oz > 0 ? 16 : 0, false);
+        }
+    }
+
+    private static int slot(int nx, int nz) {
+        int ox = nx < 0 ? -1 : nx > 15 ? 1 : 0;
+        int oz = nz < 0 ? -1 : nz > 15 ? 1 : 0;
+        return (oz + 1) * 3 + (ox + 1);
+    }
+
+    /** Parallel-safe neighbour lookup: only the slots resolved by a prepare pass this step. */
+    private LavaChunk peekNeighbour(LavaChunk c, int nx, int nz) {
+        if (c.neighbourStamp != stamp) throw new IllegalStateException("neighbours of chunk not prepared this step");
+        return c.neighbours[slot(nx, nz)];
+    }
+
     private void computeFlux(LavaChunk c, double dt) {
+        double[] flux = new double[DIRS];
         c.fluxStamp = stamp;
         Arrays.fill(c.outflow, 0);
         Arrays.fill(c.speed, 0);
@@ -548,7 +620,7 @@ public final class LavaFlow implements Subsystem {
                 int nz = lz + DZ[d];
                 LavaChunk nc = c;
                 if (nx < 0 || nx > 15 || nz < 0 || nz > 15) {
-                    nc = neighbourAt(c, nx, nz, true);
+                    nc = peekNeighbour(c, nx, nz);
                     if (nc == null) continue;
                 }
                 int j = ((nz & 15) << 4) | (nx & 15);
@@ -587,13 +659,19 @@ public final class LavaFlow implements Subsystem {
                 int nx = lx + DX[d];
                 int nz = lz + DZ[d];
                 if (nx < 0 || nx > 15 || nz < 0 || nz > 15) {
-                    neighbourAt(c, nx, nz, false).touchedStamp = stamp;
+                    c.touchOut |= 1 << slot(nx, nz);
                 }
             }
         }
     }
 
     private void gather(LavaChunk c, double dt) {
+        double[] inVolume = new double[DIRS];
+        int[] inUnit = new int[DIRS];
+        c.oceanInflowSeen = false;
+        c.oceanInflow = 0;
+        c.oceanMaxFlux = -1;
+        c.oceanExplosive = false;
         boolean ownFlux = c.fluxStamp == stamp;
         for (int i = 0; i < AREA; i++) {
             double h = c.thickness[i];
@@ -618,7 +696,7 @@ public final class LavaFlow implements Subsystem {
                 int nz = lz + DZ[d];
                 LavaChunk nc = c;
                 if (nx < 0 || nx > 15 || nz < 0 || nz > 15) {
-                    nc = neighbourAt(c, nx, nz, false);
+                    nc = peekNeighbour(c, nx, nz);
                     if (nc == null) continue;
                 }
                 if (nc.fluxStamp != stamp) continue;
@@ -679,21 +757,40 @@ public final class LavaFlow implements Subsystem {
         return (OceanEntry) c.ocean;
     }
 
-    /** Lava flowing into a submerged column this step. */
+    /** Lava flowing into a submerged column this step (chunk-local; see {@link #foldOceanInflow}). */
     private void recordWaterInflow(LavaChunk c, int i, double volumeM3, double dt) {
-        OceanEntry e = oceanEntry(c);
-        e.inflowM3 += volumeM3;
+        c.oceanInflowSeen = true;
+        c.oceanInflow += volumeM3;
         double flux = dt > 0 ? volumeM3 / dt : 0;
-        if (flux > e.maxFluxM3s) {
-            e.maxFluxM3s = flux;
-            e.maxPos = BlockPos.pack(c.worldX(i), c.ground[i] + 1, c.worldZ(i));
+        if (flux > c.oceanMaxFlux) {
+            c.oceanMaxFlux = flux;
+            c.oceanMaxPos = BlockPos.pack(c.worldX(i), c.ground[i] + 1, c.worldZ(i));
         }
-        if (flux >= config.littoralExplosionFluxM3s()) e.explosive = true;
+        if (flux >= config.littoralExplosionFluxM3s()) c.oceanExplosive = true;
     }
 
-    /** Heat a submerged column released into the water this step. */
+    /** Sequential: adds the chunk's ocean inflow of this step to its zone accumulator. */
+    private void foldOceanInflow(LavaChunk c) {
+        if (!c.oceanInflowSeen) return;
+        OceanEntry e = oceanEntry(c);
+        e.inflowM3 += c.oceanInflow;
+        if (c.oceanMaxFlux > e.maxFluxM3s) {
+            e.maxFluxM3s = c.oceanMaxFlux;
+            e.maxPos = c.oceanMaxPos;
+        }
+        if (c.oceanExplosive) e.explosive = true;
+        c.oceanInflowSeen = false;
+    }
+
+    /** Heat a submerged column released into the water this step (chunk-local). */
     private void recordWaterHeat(LavaChunk c, double heatJ) {
-        if (heatJ > 0) oceanEntry(c).heatJ += heatJ;
+        if (heatJ > 0) c.oceanHeat += heatJ;
+    }
+
+    /** Sequential: adds the chunk's released heat of this step to its zone accumulator. */
+    private void foldOceanHeat(LavaChunk c) {
+        if (c.oceanHeat > 0) oceanEntry(c).heatJ += c.oceanHeat;
+        c.oceanHeat = 0;
     }
 
     /** One {@link LavaEvents.LavaOceanEntry} per zone with molten lava in water, then resets. */
@@ -733,7 +830,41 @@ public final class LavaFlow implements Subsystem {
         oceanGeneration++;
     }
 
-    private void cool(LavaChunk c, double dt, SimRandom random, Outbox outbox, SolidStats stats, List<LavaTube> formed) {
+    private static final int ACT_DRAIN = 1;
+    private static final int ACT_SOLIDIFY = 2;
+    private static final int ACT_SUBMERGED = 4;
+    private static final int ACT_QUENCHED = 8;
+    private static final int ACT_COLUMNAR = 16;
+
+    private static void defer(LavaChunk c, int i, int flags) {
+        c.actions[c.actionCount++] = (i << 5) | flags;
+    }
+
+    /**
+     * Sequential, in cell order: the solidification and drained-column actions {@link #coolHeat}
+     * deferred (they edit the world model, draw random numbers and emit block changes).
+     */
+    private void applyCoolActions(LavaChunk c, SimRandom random, Outbox outbox, SolidStats stats,
+            List<LavaTube> formed) {
+        for (int n = 0; n < c.actionCount; n++) {
+            int a = c.actions[n];
+            int i = a >>> 5;
+            if ((a & ACT_DRAIN) != 0) {
+                resolveDrained(c, i, random, outbox, stats, formed);
+            } else {
+                solidifyColumn(c, i, c.silica[i], (a & ACT_SUBMERGED) != 0, (a & ACT_QUENCHED) != 0,
+                        (a & ACT_COLUMNAR) != 0, random, outbox, stats);
+            }
+        }
+        c.actionCount = 0;
+    }
+
+    /**
+     * Heat balance, crust growth and inflation of every column of the chunk (parallel-safe: writes
+     * only this chunk); columns that freeze or drain are queued for {@link #applyCoolActions}.
+     */
+    private void coolHeat(LavaChunk c, double dt) {
+        c.actionCount = 0;
         double rho = config.densityKgM3();
         double cs = config.coolingScale();
         double ambient = config.ambientC();
@@ -760,7 +891,7 @@ public final class LavaFlow implements Subsystem {
                 }
             }
             if (h <= 0) { // the melt flowed away from under its crust
-                resolveDrained(c, i, random, outbox, stats, formed);
+                defer(c, i, ACT_DRAIN);
                 continue;
             }
 
@@ -816,13 +947,15 @@ public final class LavaFlow implements Subsystem {
 
             if (h <= 0) {
                 // the whole melt froze into the crust
-                solidifyColumn(c, i, si, submerged, false, h + hc >= config.columnarMinThickness(), random, outbox, stats);
+                defer(c, i, ACT_SOLIDIFY | (submerged ? ACT_SUBMERGED : 0)
+                        | (h + hc >= config.columnarMinThickness() ? ACT_COLUMNAR : 0));
             } else if (underVoid && (h < config.tubeDrainThickness() || c.temperature[i] <= solidus)) {
-                resolveDrained(c, i, random, outbox, stats, formed);
+                defer(c, i, ACT_DRAIN);
             } else if (c.temperature[i] <= solidus) {
                 boolean quenched = submerged || rate > config.quenchRateKPerS();
                 boolean columnar = !quenched && h + hc >= config.columnarMinThickness();
-                solidifyColumn(c, i, si, submerged, quenched, columnar, random, outbox, stats);
+                defer(c, i, ACT_SOLIDIFY | (submerged ? ACT_SUBMERGED : 0) | (quenched ? ACT_QUENCHED : 0)
+                        | (columnar ? ACT_COLUMNAR : 0));
             }
         }
     }
@@ -840,7 +973,7 @@ public final class LavaFlow implements Subsystem {
             int nz = lz + DZ[d];
             LavaChunk nc = c;
             if (nx < 0 || nx > 15 || nz < 0 || nz > 15) {
-                nc = neighbourAt(c, nx, nz, false);
+                nc = peekNeighbour(c, nx, nz);
                 if (nc == null) continue;
             }
             if (nc.fluxStamp != stamp) continue;
@@ -1057,7 +1190,9 @@ public final class LavaFlow implements Subsystem {
 
     // ── Rendering ──
 
-    private void render(LavaChunk c, Outbox outbox) {
+    /** Parallel-safe: renders into the chunk's own {@link LavaChunk#rendered} buffer. */
+    private void render(LavaChunk c) {
+        List<BlockChange> outbox = c.rendered;
         double l = metersPerBlock;
         double minThickness = config.renderMinThickness() * l;
         for (int i = 0; i < AREA; i++) {
@@ -1126,13 +1261,13 @@ public final class LavaFlow implements Subsystem {
                 if (next == null) {
                     next = c.waterY[i] != TerrainColumn.NO_WATER && y <= c.waterY[i] ? LavaPalette.WATER : LavaPalette.AIR;
                 }
-                if (!next.equals(old)) outbox.setBlock(BlockChange.replace(new BlockPos(x, y, z), old.id(), next));
+                if (!next.equals(old)) outbox.add(BlockChange.replace(new BlockPos(x, y, z), old.id(), next));
             }
             for (int y = bottom; y < newEnd; y++) {
                 if (y >= oldBottom && y < oldEnd) continue;
                 BlockState next = layoutState(bottom, melt, gap, top, roofKind, y);
                 if (next.equals(BlockState.AIR)) continue;
-                outbox.setBlock(BlockChange.set(new BlockPos(x, y, z), next));
+                outbox.add(BlockChange.set(new BlockPos(x, y, z), next));
             }
             setRender(c, i, bottom, melt, gap, roof, top, roofKind);
         }

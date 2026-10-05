@@ -60,6 +60,18 @@ final class LavaChunk {
     Object ocean; // LavaFlow's ocean-entry accumulator for this chunk (cache)
     long oceanGeneration = -1;
 
+    // Per-step scratch written by this chunk's own (possibly parallel) phase and folded in sequentially.
+    int touchOut; // bit per neighbour slot that received flux this step
+    boolean oceanInflowSeen;
+    double oceanInflow;
+    double oceanMaxFlux = -1;
+    long oceanMaxPos;
+    boolean oceanExplosive;
+    double oceanHeat;
+    int actionCount; // cooling actions deferred to the sequential pass (cell << 4 | kind flags)
+    final int[] actions = new int[AREA];
+    java.util.List<me.alex4386.typhon.engine.output.BlockChange> rendered = new java.util.ArrayList<>();
+
     LavaChunk(int cx, int cz) {
         this.cx = cx;
         this.cz = cz;
