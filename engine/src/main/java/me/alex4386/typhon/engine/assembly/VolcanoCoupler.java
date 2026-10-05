@@ -245,7 +245,9 @@ public final class VolcanoCoupler implements Subsystem {
     // ── Lava ──
 
     private void updateLava(List<VentSite> vents, double realRate) {
-        double perVent = realRate / vents.size();
+        // The chamber reports volume per engine second; lava sources take the physical rate, and the
+        // lava field (on this volcano's clock) re-applies the eruptive compression.
+        double perVent = realRate / chamber.config().eruptiveTimeScale() / vents.size();
         Set<String> wanted = new TreeSet<>();
         for (VentSite vent : vents) {
             String sourceId = sourceId(vent);

@@ -275,7 +275,9 @@ class LavaCrustTubeTest {
     void sustainedOceanEntryBuildsDeltaSeaward() {
         // Coastal slope toward +x; the sea (y = 72) starts at x = 9 and deepens to y = 50.
         LavaTestWorld world = new LavaTestWorld(-1, -1, 3, 0, (x, z) -> Math.max(50, 80 - x), (x, z) -> SEA);
-        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(10).withCoolingScale(5));
+        // Flows now advance at their physical speed even when time-compressed (sub-steps), so lava
+        // reaches deep water as a thick tongue; cooling ×50 lets its front freeze within the test.
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(10).withCoolingScale(50));
         Engine engine = world.engine(lava, 5);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 3, BASALT_T, BASALT_SI, 0.1));
         int shoreBefore = shoreline(world.terrain);

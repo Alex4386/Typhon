@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.DoubleSupplier;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.lava.LavaEvents.ChunkCoord;
 import me.alex4386.typhon.engine.math.BlockPos;
@@ -195,6 +196,14 @@ public final class LavaFlow implements Subsystem {
     private final TreeSet<Long> neededTerrain = new TreeSet<>();
     private long stamp = Long.MIN_VALUE + 1;
     private double currentTime;
+
+    // Time compression: volcano clocks (transient, re-registered when the engine is built) and the
+    // fluidity seen last step, which sizes this step's flow sub-steps (persisted).
+    private final Map<String, DoubleSupplier> clocks = new TreeMap<>();
+    private double lastMaxDiffusivity;
+    private double lastCompression = Double.NaN;
+    private int lastSubsteps = 1;
+    private double eventPhysicalSeconds;
     private long chunkGeneration = 1; // bumped whenever a lava chunk is created (neighbour-cache validity)
 
     public LavaFlow(TerrainModel terrain) {
@@ -440,19 +449,75 @@ public final class LavaFlow implements Subsystem {
 
     // ── Step ──
 
+    /**
+     * Registers the clock of a volcano that feeds this field: {@code compression} returns the
+     * volcano's current time compression (physical seconds per engine second — its eruptive value
+     * while erupting, its dormant value otherwise). Sources whose id starts with {@code id + "/"}
+     * belong to that volcano. Not persisted: register again when building the engine.
+     *
+     * <p>The shared field advances at one compression per step: the largest compression of the
+     * volcanoes whose sources are effusing (their lava is emplaced on their own clock), otherwise
+     * the smallest current compression of all registered volcanoes (no volcano's flows are
+     * fast-forwarded past its own clock while it cools). Each source still injects the volume its
+     * volcano erupted on its own clock, so mass is conserved whatever the rule picks. Without
+     * clocks the field runs at {@link LavaConfig#timeScale()}.
+     */
+    public void registerClock(String id, DoubleSupplier compression) {
+        clocks.put(id, compression);
+    }
+
+    /** Physical seconds the field advanced per engine second in the last step. */
+    public double lastCompression() {
+        return lastCompression;
+    }
+
+    /** Flow sub-steps used in the last step. */
+    public int lastSubsteps() {
+        return lastSubsteps;
+    }
+
+    private DoubleSupplier clockOf(LavaSource source) {
+        if (clocks.isEmpty()) return null;
+        int slash = source.id().indexOf('/');
+        return slash > 0 ? clocks.get(source.id().substring(0, slash)) : null;
+    }
+
+    /** Compression of the field for this step (see {@link #registerClock}), before {@code timeScale}. */
+    private double fieldCompression() {
+        if (clocks.isEmpty()) return 1;
+        double effusing = 0;
+        for (LavaSource source : sources.values()) {
+            if (source.rateM3PerS() <= 0) continue;
+            DoubleSupplier clock = clockOf(source);
+            if (clock != null) effusing = Math.max(effusing, clock.getAsDouble());
+        }
+        if (effusing > 0) return effusing;
+        double quiet = Double.POSITIVE_INFINITY;
+        for (DoubleSupplier clock : clocks.values()) quiet = Math.min(quiet, clock.getAsDouble());
+        return quiet;
+    }
+
+    // ── Step ──
+
     @Override
     public void step(StepContext context) {
         double now = context.time();
         currentTime = now;
         stamp = context.step();
-        double dt = context.dtSeconds() * config.timeScale();
+        double engineDt = context.dtSeconds();
+        double compression = fieldCompression() * config.timeScale();
+        double dt = engineDt * compression; // physical seconds this step
+        lastCompression = compression;
+        eventPhysicalSeconds += dt;
         Outbox outbox = context.outbox();
         neededTerrain.clear();
 
-        // 0. effusion
+        // 0. effusion: each source injects what its volcano erupted on its own clock
         for (LavaSource source : sources.values()) {
             if (source.rateM3PerS() <= 0) continue;
-            double perCell = source.rateM3PerS() * dt / source.cells().size();
+            DoubleSupplier clock = clockOf(source);
+            double sourceDt = clock != null ? engineDt * clock.getAsDouble() * config.timeScale() : dt;
+            double perCell = source.rateM3PerS() * sourceDt / source.cells().size();
             for (BlockPos cell : source.cells()) {
                 if (!addLava(cell.x(), cell.z(), perCell, source.temperatureC(), source.silicaWt(), source.waterWt(),
                         source.unit())) {
@@ -468,38 +533,57 @@ public final class LavaFlow implements Subsystem {
         // chunk-key order, so results do not depend on the thread count.
         Parallel parallel = context.parallel();
 
-        // 1. flux
-        List<LavaChunk> active = new ArrayList<>();
-        for (LavaChunk c : chunks.values()) if (c.lavaCells > 0) active.add(c);
-        active.sort(BY_KEY);
-        for (LavaChunk c : active) {
-            ensureFresh(c);
-            prepareFlux(c);
+        // 1–2. flow sub-steps (flux, gather, swap). The explicit flux is stable for
+        // Δt ≤ relaxation·L²/D, D = ρgh³/3η, for a 1 m flow of the most fluid lava seen last step.
+        int substeps = 1;
+        if (lastMaxDiffusivity > 0) {
+            double stable = config.relaxation() * metersPerBlock * metersPerBlock / lastMaxDiffusivity;
+            substeps = (int) Math.min(config.maxSubsteps(), Math.max(1, Math.ceil(dt / stable)));
         }
-        parallel.forEach(active, CHUNK_GRAIN, c -> computeFlux(c, dt));
-        for (LavaChunk c : active) {
-            for (int slot = 0; slot < 9; slot++) {
-                if ((c.touchOut & (1 << slot)) != 0) c.neighbours[slot].touchedStamp = stamp;
+        lastSubsteps = substeps;
+        double dtSub = dt / substeps;
+        double maxDiffusivity = 0;
+        TreeMap<Long, LavaChunk> touched = new TreeMap<>();
+        for (int sub = 0; sub < substeps; sub++) {
+            List<LavaChunk> active = new ArrayList<>();
+            for (LavaChunk c : chunks.values()) if (c.lavaCells > 0) active.add(c);
+            active.sort(BY_KEY);
+            for (LavaChunk c : active) {
+                ensureFresh(c);
+                prepareFlux(c);
             }
-        }
+            parallel.forEach(active, CHUNK_GRAIN, c -> computeFlux(c, dtSub));
+            for (LavaChunk c : active) {
+                maxDiffusivity = Math.max(maxDiffusivity, c.maxDiffusivity);
+                for (int slot = 0; slot < 9; slot++) {
+                    if ((c.touchOut & (1 << slot)) != 0) c.neighbours[slot].touchedStamp = stamp;
+                }
+            }
 
-        // 2. gather + swap
-        List<LavaChunk> update = new ArrayList<>();
-        for (LavaChunk c : chunks.values()) if (c.isActive() || c.touchedStamp == stamp) update.add(c);
-        update.sort(BY_KEY);
-        for (LavaChunk c : update) {
-            ensureFresh(c);
-            prepareNeighbours(c);
+            List<LavaChunk> update = new ArrayList<>();
+            for (LavaChunk c : chunks.values()) if (c.isActive() || c.touchedStamp == stamp) update.add(c);
+            update.sort(BY_KEY);
+            for (LavaChunk c : update) {
+                ensureFresh(c);
+                prepareNeighbours(c);
+            }
+            parallel.forEach(update, CHUNK_GRAIN, c -> gather(c, dtSub));
+            for (LavaChunk c : update) {
+                foldOceanInflow(c);
+                touched.put(c.key, c);
+            }
+            parallel.forEach(update, CHUNK_GRAIN, c -> {
+                c.swapBuffers();
+                c.recount();
+            });
         }
-        parallel.forEach(update, CHUNK_GRAIN, c -> gather(c, dt));
-        for (LavaChunk c : update) foldOceanInflow(c);
+        lastMaxDiffusivity = maxDiffusivity;
+        List<LavaChunk> update = new ArrayList<>(touched.values());
 
-        // 3. cooling, crust, tubes & solidification: heat balance in parallel (after the chunk's own
-        // swap; it reads neighbours' speeds only, which the swap does not touch), then the resulting
-        // solidification / drained-tube actions (world edits, random draws, block changes) in order
+        // 3. cooling, crust, tubes & solidification over the whole physical step: heat balance in
+        // parallel (it reads neighbours' speeds only), then the resulting solidification /
+        // drained-tube actions (world edits, random draws, block changes) in order
         parallel.forEach(update, CHUNK_GRAIN, c -> {
-            c.swapBuffers();
-            c.recount();
             c.actionCount = 0;
             if (c.isActive()) coolHeat(c, dt);
         });
@@ -600,6 +684,7 @@ public final class LavaFlow implements Subsystem {
     private void computeFlux(LavaChunk c, double dt) {
         double[] flux = new double[DIRS];
         c.fluxStamp = stamp;
+        c.maxDiffusivity = 0;
         Arrays.fill(c.outflow, 0);
         Arrays.fill(c.speed, 0);
         double rhoG = config.densityKgM3() * G;
@@ -637,6 +722,9 @@ public final class LavaFlow implements Subsystem {
                     double t = c.temperature[i];
                     eta = rheology.viscosityPaS(t, c.silica[i], c.water[i]);
                     tau = rheology.yieldStrengthPa(t, c.silica[i]);
+                    // flow diffusivity of a 1 m thick flow of this lava: sizes the sub-steps
+                    double d1 = rhoG / (3 * eta);
+                    if (d1 > c.maxDiffusivity) c.maxDiffusivity = d1;
                 }
                 double run = DIST[d] * cell;
                 double sin = dh / Math.sqrt(dh * dh + run * run);
@@ -802,7 +890,8 @@ public final class LavaFlow implements Subsystem {
     /** One {@link LavaEvents.LavaOceanEntry} per zone with molten lava in water, then resets. */
     private void emitOceanEntries(double now, double interval, Outbox outbox) {
         if (oceanEntries.isEmpty()) return;
-        double seconds = interval * config.timeScale();
+        double seconds = eventPhysicalSeconds;
+        eventPhysicalSeconds = 0;
         double minVolume = config.waterEntryMinVolumeM3();
         int emitted = 0;
         for (Map.Entry<Long, OceanEntry> entry : oceanEntries.entrySet()) {
@@ -835,6 +924,9 @@ public final class LavaFlow implements Subsystem {
         oceanEntries.clear();
         oceanGeneration++;
     }
+
+    /** Upper bound on heat-balance sub-iterations of one column per step. */
+    private static final int MAX_COOL_ITERATIONS = 64;
 
     private static final int ACT_DRAIN = 1;
     private static final int ACT_SOLIDIFY = 2;
@@ -875,11 +967,14 @@ public final class LavaFlow implements Subsystem {
         double cs = config.coolingScale();
         double ambient = config.ambientC();
         double ambientK4 = Math.pow(ambient + KELVIN, 4);
+        double stepK = config.coolingStepK();
         for (int i = 0; i < AREA; i++) {
             double h = c.thickness[i];
             double hc = c.crust[i];
             if (h <= 0 && hc <= 0) continue;
             boolean submerged = submerged(c, i);
+            boolean source = isSource(c, i);
+            double speed = localSpeed(c, i);
 
             if (hc > 0) {
                 double meltTop = c.bed[i] + h;
@@ -888,8 +983,7 @@ public final class LavaFlow implements Subsystem {
                 // A young crust is torn up by fast flow; a roof thick enough to span the flow is
                 // anchored to its levees and lets the melt run beneath it (tube flow).
                 boolean anchored = hc >= config.tubeMinRoofThickness();
-                boolean torn = submerged || isSource(c, i)
-                        || (!anchored && localSpeed(c, i) > config.crustDisruptionVelocity());
+                boolean torn = submerged || source || (!anchored && speed > config.crustDisruptionVelocity());
                 if (torn && h > 0) {
                     remelt(c, i);
                     h = c.thickness[i];
@@ -901,64 +995,86 @@ public final class LavaFlow implements Subsystem {
                 continue;
             }
 
-            double t = c.temperature[i];
             double si = c.silica[i];
             double liquidus = rheology.liquidusC(si);
             double solidus = rheology.solidusC(si);
-            double meltTop = c.bed[i] + h;
-            double gap = hc > 0 ? (c.roofTop[i] - hc) - meltTop : 0;
-            boolean underVoid = hc > 0 && gap > GAP_EPS;
-
-            double tK = t + KELVIN;
-            double qTop;
-            if (submerged) {
-                qTop = config.waterHeatTransferWM2K() * (t - config.waterC());
-            } else if (underVoid) {
-                qTop = 0; // melt under a drained roof faces a hot void, not the sky
-            } else {
-                double radiative = config.emissivity() * SIGMA * (tK * tK * tK * tK - ambientK4);
-                qTop = hc > 0 && t > ambient
-                        ? (t - ambient) / (hc / config.crustConductivityWMK() + (t - ambient) / radiative)
-                        : radiative;
-            }
-            double qBase = config.groundConductivityWMK() * (t - ambient) / config.groundBoundaryLayerM();
-            double cEff = config.specificHeatJKgK();
-            if (t < liquidus && t > solidus) cEff += config.latentHeatJKg() / (liquidus - solidus);
-
-            boolean anchored = hc >= config.tubeMinRoofThickness();
-            boolean quiet = config.crustEnabled() && !submerged && !underVoid && h + hc >= config.crustMinThickness()
-                    && !isSource(c, i) && (anchored || localSpeed(c, i) <= config.crustDisruptionVelocity());
-
-            double rate; // physical core cooling rate, K/s
-            if (quiet && t > solidus && qTop > 0) {
-                // Stefan: the surface loss freezes melt onto the crust base; the core cools through its base.
-                double freezeHeat = rho * (config.latentHeatJKg() + config.specificHeatJKgK() * (t - solidus));
-                double grow = Math.min(h, qTop * cs * dt / freezeHeat);
-                if (hc <= 0) {
-                    c.roofTop[i] = meltTop;
-                    c.crustKind[i] = LavaPalette.crustKind(si);
-                }
-                h -= grow;
-                hc += grow;
-                c.thickness[i] = h;
-                c.crust[i] = hc;
-                rate = qBase / (rho * cEff * Math.max(h, 0.01));
-            } else {
-                rate = (qTop + qBase) / (rho * cEff * Math.max(h, 0.01));
-            }
             double floor = submerged ? config.waterC() : ambient;
-            double cooled = Math.max(t - rate * cs * dt, floor);
-            if (submerged) recordWaterHeat(c, rho * cEff * h * (t - cooled) * area());
-            c.temperature[i] = cooled;
+            double t = c.temperature[i];
+            double maxRate = 0;
+            boolean underVoid = false;
+            // Integrate the heat balance over the (possibly compressed) step in sub-iterations that
+            // each cool the core by at most coolingStepK and grow the crust by a bounded amount.
+            double remaining = dt;
+            for (int iter = 0; remaining > 0 && h > 0; iter++) {
+                double meltTop = c.bed[i] + h;
+                double gap = hc > 0 ? (c.roofTop[i] - hc) - meltTop : 0;
+                underVoid = hc > 0 && gap > GAP_EPS;
+
+                double tK = t + KELVIN;
+                double qTop;
+                if (submerged) {
+                    qTop = config.waterHeatTransferWM2K() * (t - config.waterC());
+                } else if (underVoid) {
+                    qTop = 0; // melt under a drained roof faces a hot void, not the sky
+                } else {
+                    double radiative = config.emissivity() * SIGMA * (tK * tK * tK * tK - ambientK4);
+                    qTop = hc > 0 && t > ambient
+                            ? (t - ambient) / (hc / config.crustConductivityWMK() + (t - ambient) / radiative)
+                            : radiative;
+                }
+                double qBase = config.groundConductivityWMK() * (t - ambient) / config.groundBoundaryLayerM();
+                double cEff = config.specificHeatJKgK();
+                if (t < liquidus && t > solidus) cEff += config.latentHeatJKg() / (liquidus - solidus);
+
+                boolean anchored = hc >= config.tubeMinRoofThickness();
+                boolean quiet = config.crustEnabled() && !submerged && !underVoid
+                        && h + hc >= config.crustMinThickness() && !source
+                        && (anchored || speed <= config.crustDisruptionVelocity());
+                boolean growing = quiet && t > solidus && qTop > 0;
+
+                double rate = growing // physical core cooling rate, K/s
+                        ? qBase / (rho * cEff * Math.max(h, 0.01))
+                        : (qTop + qBase) / (rho * cEff * Math.max(h, 0.01));
+                maxRate = Math.max(maxRate, rate);
+                double step = remaining;
+                if (rate * cs * step > stepK) step = stepK / (rate * cs);
+                double freezeHeat = 0;
+                if (growing) {
+                    freezeHeat = rho * (config.latentHeatJKg() + config.specificHeatJKgK() * (t - solidus));
+                    double maxGrow = Math.max(0.02, 0.2 * hc);
+                    if (qTop * cs * step / freezeHeat > maxGrow) step = maxGrow * freezeHeat / (qTop * cs);
+                }
+                if (iter >= MAX_COOL_ITERATIONS - 1) step = remaining; // bounded work per column
+                step = Math.min(step, remaining);
+
+                if (growing) {
+                    // Stefan: the surface loss freezes melt onto the crust base; the core cools through its base.
+                    double grow = Math.min(h, qTop * cs * step / freezeHeat);
+                    if (hc <= 0) {
+                        c.roofTop[i] = meltTop;
+                        c.crustKind[i] = LavaPalette.crustKind(si);
+                    }
+                    h -= grow;
+                    hc += grow;
+                }
+                double cooled = Math.max(t - rate * cs * step, floor);
+                if (submerged) recordWaterHeat(c, rho * cEff * h * (t - cooled) * area());
+                t = cooled;
+                remaining -= step;
+                if (t <= solidus || (underVoid && h < config.tubeDrainThickness())) break;
+            }
+            c.thickness[i] = h;
+            c.crust[i] = hc;
+            c.temperature[i] = t;
 
             if (h <= 0) {
                 // the whole melt froze into the crust
                 defer(c, i, ACT_SOLIDIFY | (submerged ? ACT_SUBMERGED : 0)
                         | (h + hc >= config.columnarMinThickness() ? ACT_COLUMNAR : 0));
-            } else if (underVoid && (h < config.tubeDrainThickness() || c.temperature[i] <= solidus)) {
+            } else if (underVoid && (h < config.tubeDrainThickness() || t <= solidus)) {
                 defer(c, i, ACT_DRAIN);
-            } else if (c.temperature[i] <= solidus) {
-                boolean quenched = submerged || rate > config.quenchRateKPerS();
+            } else if (t <= solidus) {
+                boolean quenched = submerged || maxRate > config.quenchRateKPerS();
                 boolean columnar = !quenched && h + hc >= config.columnarMinThickness();
                 defer(c, i, ACT_SOLIDIFY | (submerged ? ACT_SUBMERGED : 0) | (quenched ? ACT_QUENCHED : 0)
                         | (columnar ? ACT_COLUMNAR : 0));
@@ -1497,6 +1613,8 @@ public final class LavaFlow implements Subsystem {
         out.addProperty("metersPerBlock", metersPerBlock);
         out.addProperty("emitted", emittedVolume);
         out.addProperty("solidified", solidifiedVolume);
+        out.addProperty("lastMaxDiffusivity", lastMaxDiffusivity);
+        out.addProperty("eventPhysicalSeconds", eventPhysicalSeconds);
         JsonArray solidAccArray = new JsonArray();
         solidAccArray.add(solidAcc.cells);
         solidAccArray.add(solidAcc.blocks);
@@ -1596,6 +1714,8 @@ public final class LavaFlow implements Subsystem {
         }
         emittedVolume = in.get("emitted").getAsDouble();
         solidifiedVolume = in.get("solidified").getAsDouble();
+        lastMaxDiffusivity = in.has("lastMaxDiffusivity") ? in.get("lastMaxDiffusivity").getAsDouble() : 0;
+        eventPhysicalSeconds = in.has("eventPhysicalSeconds") ? in.get("eventPhysicalSeconds").getAsDouble() : 0;
         solidAcc.clear();
         oceanEntries.clear();
         oceanGeneration++;

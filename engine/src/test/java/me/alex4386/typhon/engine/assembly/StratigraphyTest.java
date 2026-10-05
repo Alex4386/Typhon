@@ -28,10 +28,10 @@ import org.junit.jupiter.api.Test;
 /** Every deposit becomes a layer of the world model attributed to its volcano and eruption. */
 class StratigraphyTest {
     /**
-     * Lava cooling accelerated ×2000 so flows freeze within simulated minutes (the physics would
-     * take days for a crater-filling pond); the attribution being tested does not depend on it.
+     * Physical cooling: the lava field runs on the volcano's clock (eruptive ×20, then dormant ×5000
+     * under the default scaling), so after a stop flows freeze within engine minutes on their own.
      */
-    private static final LavaConfig FAST_COOLING = LavaConfig.defaults().withCoolingScale(2000);
+    private static final LavaConfig FAST_COOLING = LavaConfig.defaults();
 
     /** Units of the volcanic layers of a column, bottom to top (consecutive duplicates collapsed). */
     static List<UnitRecord> volcanicUnits(WorldModel world, int x, int z) {
@@ -45,6 +45,19 @@ class StratigraphyTest {
             previous = layer.unit();
         }
         return out;
+    }
+
+    /** Total thickness (m) of the column's layers with this {@code TYPE#eruption} label. */
+    static double thickness(WorldModel world, int x, int z, String label) {
+        double total = 0;
+        double bottom = Double.NaN;
+        for (int k = 0; k < world.layerCount(x, z); k++) {
+            LayerView layer = world.layer(x, z, k);
+            UnitRecord u = world.unit(layer.unit());
+            if (k > 0 && (u.type() + "#" + u.eruptionId()).equals(label)) total += layer.top() - bottom;
+            bottom = layer.top();
+        }
+        return total;
     }
 
     static List<String> labels(List<UnitRecord> units) {
@@ -97,6 +110,7 @@ class StratigraphyTest {
         int both = 0;
         int x = Integer.MIN_VALUE;
         int z = 0;
+        double best = 0;
         for (int cx = -50; cx <= 50; cx++) {
             for (int cz = -50; cz <= 50; cz++) {
                 List<UnitRecord> units = volcanicUnits(world, cx, cz);
@@ -111,7 +125,12 @@ class StratigraphyTest {
                 // layers, so the two may interleave above that.)
                 assertTrue(lava1 < column.indexOf("LAVA#2"), "older lava first at " + cx + "," + cz + ": " + column);
                 int fall = column.subList(lava1, lava2).indexOf("FALL#1");
-                if (fall > 0 && x == Integer.MIN_VALUE) {
+                // the section check below needs layers it can resolve: take the column whose
+                // thinnest of the three layers is thickest
+                double thinnest = Math.min(thickness(world, cx, cz, "LAVA#1"),
+                        Math.min(thickness(world, cx, cz, "FALL#1"), thickness(world, cx, cz, "LAVA#2")));
+                if (fall > 0 && thinnest > best) {
+                    best = thinnest;
                     x = cx;
                     z = cz;
                 }
@@ -123,7 +142,7 @@ class StratigraphyTest {
         // The section through the column shows the same order, read from the top down.
         double surface = world.surfaceZ(x, z);
         SectionRaster section = world.section(new double[] {x + 0.5, z - 0.5, x + 0.5, z + 1.5},
-                surface - 60, surface + 1, 1, 610);
+                surface - 400, surface + 1, 1, 4010); // flows emplaced at ×20 are tens of metres thick
         List<String> rows = new ArrayList<>();
         for (int iz = 0; iz < section.nz(); iz++) {
             int unit = section.unit()[section.index(0, iz)];

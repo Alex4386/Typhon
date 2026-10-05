@@ -89,6 +89,12 @@ public final class VolcanoSystem {
             throw new IllegalArgumentException("Chamber config is for volcano " + chamberConfig.volcanoId());
         }
         this.chamber = new MagmaChamber(chamberConfig);
+        // The lava this volcano erupts lives on the volcano's clock: emplaced at the eruptive time
+        // compression, cooling on afterwards at the dormant one.
+        MagmaChamber clockChamber = chamber;
+        double eruptive = chamberConfig.eruptiveTimeScale();
+        double dormant = chamberConfig.dormantTimeScale();
+        b.lava.registerClock(volcanoId, () -> clockChamber.erupting() ? eruptive : dormant);
 
         double failure = chamberConfig.tensileStrengthMPa();
         SeismicConfig seismicConfig = SeismicConfig.builder(volcanoId, primary).failureOverpressureMPa(failure).build();

@@ -62,6 +62,7 @@ final class LavaChunk {
 
     // Per-step scratch written by this chunk's own (possibly parallel) phase and folded in sequentially.
     int touchOut; // bit per neighbour slot that received flux this step
+    double maxDiffusivity; // largest 1 m flow diffusivity ρg/3η of a flowing cell this sub-step (m²/s)
     boolean oceanInflowSeen;
     double oceanInflow;
     double oceanMaxFlux = -1;
