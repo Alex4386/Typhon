@@ -521,7 +521,17 @@ public final class TephraSubsystem implements Subsystem {
             if (phase == null && grid.airborneTotal() < config.minAirborneMass) grid.discardAirborne();
         }
         grid.applyDeposits(terrain, context.outbox(), config,
-                units.unit(DepositType.FALL, context.time(), Double.NaN));
+                units.unit(DepositType.FALL, context.time(), Double.NaN), molten);
+    }
+
+    private java.util.function.BiPredicate<Integer, Integer> molten = (x, z) -> false;
+
+    /**
+     * Tells the ash fall which columns are covered by molten lava (e.g. {@code (x, z) ->
+     * lava.thickness(x, z) > 0}): ash landing there joins the flow instead of forming a layer under it.
+     */
+    public void setMoltenSurface(java.util.function.BiPredicate<Integer, Integer> molten) {
+        this.molten = molten;
     }
 
     private void lightning(StepContext context, BlockPos base, double height, double sigma, double dt) {

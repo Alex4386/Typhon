@@ -112,6 +112,8 @@ public final class LavaFlow implements Subsystem {
     private static final double G = 9.81;
     private static final double KELVIN = 273.15;
     private static final double GAP_EPS = 1e-6;
+    /** Share of a cell's melt a newer unit must contribute to take the cell over (see gather). */
+    private static final double UNIT_SHARE = 0.1;
     private static final double WATER_HEAT_CAPACITY = 4186;
     private static final double WATER_LATENT_HEAT = 2.26e6;
     private static final int DIRS = LavaChunk.DIRECTIONS;
@@ -311,7 +313,7 @@ public final class LavaFlow implements Subsystem {
         double h0 = c.thickness[i];
         double added = volumeM3 / area();
         double h = h0 + added;
-        if (added >= h0) c.unit[i] = unit;
+        if (h0 <= 0 || (added >= UNIT_SHARE * h && unit > c.unit[i])) c.unit[i] = unit;
         c.temperature[i] = (c.temperature[i] * h0 + temperatureC * added) / h;
         c.silica[i] = (c.silica[i] * h0 + silicaWt * added) / h;
         c.water[i] = (c.water[i] * h0 + waterWt * added) / h;
@@ -600,9 +602,10 @@ public final class LavaFlow implements Subsystem {
             double heat = keep * c.temperature[i];
             double silica = keep * c.silica[i];
             double water = keep * c.water[i];
-            // the cell's unit follows its largest contribution (own melt first, then inflows in order)
-            int unit = c.unit[i];
-            double unitVolume = keep;
+            // The cell's unit: the newest unit (units are numbered in creation order) contributing at
+            // least UNIT_SHARE of the melt — a new eruption's lava mixing into an older pond turns it
+            // into the new flow unit, instead of flickering between the two.
+            int unit = keep > 0 ? c.unit[i] : -1;
 
             int lx = i & 15;
             int lz = i >> 4;
@@ -623,15 +626,27 @@ public final class LavaFlow implements Subsystem {
                 heat += in * nc.temperature[k];
                 silica += in * nc.silica[k];
                 water += in * nc.water[k];
-                if (in > unitVolume) {
-                    unitVolume = in;
-                    unit = nc.unit[k];
-                }
             }
             volume += inflow;
+            if (inflow > 0) {
+                double threshold = UNIT_SHARE * volume;
+                for (int d = 0; d < DIRS; d++) {
+                    int nx = lx + DX[d];
+                    int nz = lz + DZ[d];
+                    LavaChunk nc = c;
+                    if (nx < 0 || nx > 15 || nz < 0 || nz > 15) {
+                        nc = neighbourAt(c, nx, nz, false);
+                        if (nc == null) continue;
+                    }
+                    if (nc.fluxStamp != stamp) continue;
+                    int k = ((nz & 15) << 4) | (nx & 15);
+                    double in = nc.outflow[(d ^ 1) * AREA + k];
+                    if (in >= threshold && nc.unit[k] > unit) unit = nc.unit[k];
+                }
+            }
 
             c.nextThickness[i] = volume;
-            c.nextUnit[i] = unit;
+            c.nextUnit[i] = unit < 0 ? c.unit[i] : unit;
             if (volume > 0) {
                 c.nextTemperature[i] = heat / volume;
                 c.nextSilica[i] = silica / volume;

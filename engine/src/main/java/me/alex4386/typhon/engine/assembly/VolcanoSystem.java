@@ -150,6 +150,7 @@ public final class VolcanoSystem {
         this.units = new VolcanoUnits(b.terrain.world(), volcanoId, chamber);
         coupler.setUnits(units);
         tephra.setUnits(units);
+        tephra.setMoltenSurface((x, z) -> b.lava.thickness(x, z) > 0 || b.lava.crustThickness(x, z) > 0);
         if (dikes != null) dikes.setUnits(units);
         if (pdc != null) {
             pdc.setUnits(units);

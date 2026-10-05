@@ -261,6 +261,15 @@ final class AshGrid {
     }
 
     void applyDeposits(TerrainModel terrain, Outbox outbox, TephraConfig config, int unit) {
+        applyDeposits(terrain, outbox, config, unit, (x, z) -> false);
+    }
+
+    /**
+     * @param molten columns currently covered by molten lava: ash falling there is taken up by the
+     *     flow (it becomes part of the lava's surface) instead of forming a layer beneath it
+     */
+    void applyDeposits(TerrainModel terrain, Outbox outbox, TephraConfig config, int unit,
+            java.util.function.BiPredicate<Integer, Integer> molten) {
         AshPalette palette = config.palette;
         double minVisible = palette.minimumVisibleThickness();
         double jitter = config.depositJitter;
@@ -280,6 +289,7 @@ final class AshGrid {
                 for (int z = z0; z < z0 + cellSize; z++) {
                     for (int x = x0; x < x0 + cellSize; x++) {
                         double f = 1 + jitter * columnNoise(x, z);
+                        if (molten.test(x, z)) continue;
                         // the world model records every millimetre as a loose fall layer (real m)
                         world.deposit(x, z, (t1 - t0) * f * metersPerBlock, MaterialTable.ASH, unit);
                         if (visible) applyColumn(terrain, outbox, palette, x, z, t0 * f, t1 * f);
