@@ -88,22 +88,41 @@ final class Probe {
         for (VentSite vent : v.coupler().allVents()) vents.add(vt.vent(vent));
         o.add("vents", vents);
         JsonObject chamber = new JsonObject();
-        double[] c = map.point(v.chamber().chamberCenter());
+        double[] c = chamberCenter(v, map, world);
         chamber.add("center", Json.xyz(c));
         chamber.add("radius", Json.num(displayChamberRadius(v, map, world)));
         o.add("chamber", chamber);
         return o;
     }
 
+    /** Elevation (m) of the ground above the chamber, falling back to the primary vent's floor. */
+    static double groundAboveChamber(VolcanoSystem v, GridMapping map, WorldModel world) {
+        BlockPos c = v.chamber().chamberCenter();
+        double s = world.surfaceZ(c.x(), c.z());
+        return Double.isFinite(s) ? s : (v.vents().get(0).position().y() + 1) * map.cell;
+    }
+
+    /**
+     * Chamber centre in protocol coordinates at its <em>physical</em> depth below the ground
+     * ({@code MagmaState.physicalDepthM()}). The engine compresses chamber depth into the block
+     * world; the visualizer shows the real geometry. Falls back to the block position when the
+     * physical depth is unknown.
+     */
+    static double[] chamberCenter(VolcanoSystem v, GridMapping map, WorldModel world) {
+        BlockPos b = v.chamber().chamberCenter();
+        double[] c = {map.x(b.x()), map.y(b.z()), (b.y() + 0.5) * map.cell};
+        double depth = v.chamber().physicalDepthM();
+        if (Double.isFinite(depth) && depth > 0) c[2] = groundAboveChamber(v, map, world) - depth;
+        return c;
+    }
+
     /**
      * Radius drawn for the chamber: the real equivalent-sphere radius, capped so the chamber stays
-     * below the vent (the engine compresses chamber depth into the block world, not its volume).
+     * below the ground above it.
      */
     static double displayChamberRadius(VolcanoSystem v, GridMapping map, WorldModel world) {
         double real = Math.cbrt(3 * v.chamber().config().volume() / (4 * Math.PI));
-        BlockPos c = v.chamber().chamberCenter();
-        double ventZ = (v.vents().get(0).position().y() + 1) * map.cell;
-        double depth = ventZ - (c.y() + 0.5) * map.cell;
+        double depth = groundAboveChamber(v, map, world) - chamberCenter(v, map, world)[2];
         return Math.max(map.cell * 2, Math.min(real, 0.6 * depth));
     }
 

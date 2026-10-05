@@ -72,6 +72,30 @@ public final class Subsurface implements Subsystem, HydrothermalField {
     private double deficit;
     private double initialGroundwater;
     private double removed;
+    /** Runtime rainfall set by {@link SetRainfall} (mm/h); NaN = use the configured climate. */
+    private double rainfallOverride = Double.NaN;
+
+    /** Host → engine: sets the rainfall rate (mm/h) at runtime, e.g. a storm; persisted with the state. */
+    public record SetRainfall(double mmPerHour) implements me.alex4386.typhon.engine.command.EngineCommand {
+        public SetRainfall {
+            if (!(mmPerHour >= 0)) throw new IllegalArgumentException("mmPerHour must be >= 0");
+        }
+    }
+
+    /** Rainfall currently applied (mm/h): the runtime override, else the configured climate. */
+    public double rainfallMmPerHour() {
+        return Double.isFinite(rainfallOverride) ? rainfallOverride : config.rainfallMmPerHour;
+    }
+
+    public void setRainfall(double mmPerHour) {
+        if (!(mmPerHour >= 0)) throw new IllegalArgumentException("mmPerHour must be >= 0");
+        rainfallOverride = mmPerHour;
+    }
+
+    @Override
+    public void registerCommands(me.alex4386.typhon.engine.command.CommandBus bus) {
+        bus.register(SetRainfall.class, c -> setRainfall(c.mmPerHour()));
+    }
 
     public Subsurface(WorldModel world, SubsurfaceConfig config) {
         config.validate();
@@ -233,7 +257,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
     }
 
     private void applyRain(double dt) {
-        double rate = config.rainfallMmPerHour / 1000.0 / 3600.0; // m/s
+        double rate = rainfallMmPerHour() / 1000.0 / 3600.0; // m/s
         if (rate <= 0) return;
         double area = grid.area();
         int n = grid.levels();
@@ -638,6 +662,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
         JsonObject json = out.json();
         json.addProperty("macroClock", macroClock);
         json.addProperty("macroSteps", macroSteps);
+        if (Double.isFinite(rainfallOverride)) json.addProperty("rainfallOverride", rainfallOverride);
         JsonObject b = new JsonObject();
         b.addProperty("rain", rain);
         b.addProperty("boiled", boiled);
@@ -706,6 +731,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
         if (!json.has("macroClock")) return;
         macroClock = json.get("macroClock").getAsDouble();
         macroSteps = json.get("macroSteps").getAsLong();
+        rainfallOverride = json.has("rainfallOverride") ? json.get("rainfallOverride").getAsDouble() : Double.NaN;
         JsonObject b = json.getAsJsonObject("budget");
         rain = b.get("rain").getAsDouble();
         boiled = b.get("boiled").getAsDouble();

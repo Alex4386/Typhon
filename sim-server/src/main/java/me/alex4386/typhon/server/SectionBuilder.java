@@ -10,6 +10,7 @@ import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.geothermal.Geothermal;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.subsurface.Subsurface;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.world.Material;
 import me.alex4386.typhon.engine.world.MaterialClass;
@@ -23,10 +24,10 @@ import me.alex4386.typhon.simulator.scenario.Scenario;
  * Builds a section frame (docs/protocol.md §6) from {@link WorldModel#section}. Runs on the engine
  * thread.
  *
- * <p>Temperature is a placeholder until the subsurface heat model (M4): a conductive geotherm below
- * the surface, warmed by the geothermal grid near the surface, molten lava on top and the chamber's
- * temperature inside its overlay. Saturation, steam and the water table are not modelled yet (0 /
- * NaN).
+ * <p>Temperature, saturation, steam fraction and the water table come from the shared subsurface
+ * model where it covers the column; elsewhere temperature falls back to a conductive geotherm warmed
+ * near hot ground. Molten lava and the chamber interior carry their own temperatures. The chamber,
+ * conduits and dikes are drawn at their physical depth (see {@link GridMapping#stretchZ}).
  */
 final class SectionBuilder {
     static final double GEOTHERM_C_PER_M = 0.03;
@@ -43,6 +44,7 @@ final class SectionBuilder {
             Set<String> activeDikes, double time) {
         WorldModel world = s.terrain().world();
         LavaFlow lava = s.lava();
+        Subsurface sub = FieldSampler.subsurface(s);
         int nu = req.nu();
         int nz = req.nz();
 
@@ -86,9 +88,17 @@ final class SectionBuilder {
                 Geothermal g = v.geothermal();
                 if (g != null) surfaceT = Math.max(surfaceT, g.temperatureAt(cx, cz));
             }
+            boolean modelled = sub != null && sub.known(cx, cz);
             double waterZ = world.waterZ(cx, cz);
+            double flowing = sub != null ? sub.surfaceWaterDepthM(cx, cz) : 0;
+            if (Double.isFinite(ground) && Double.isFinite(flowing) && flowing > 0.01) {
+                double top = ground + uplift + flowing;
+                waterZ = Double.isFinite(waterZ) ? Math.max(waterZ, top) : top;
+            }
+            double tableZ = modelled ? sub.waterTableZ(cx, cz) : Double.NaN;
+            double vadose = modelled ? sub.vadoseM(cx, cz) : 0;
             surface[i] = Double.isFinite(ground) ? (float) (ground + uplift + lavaH) : Float.NaN;
-            waterTable[i] = Float.NaN;
+            waterTable[i] = (float) tableZ;
             for (int k = 0; k < nz; k++) {
                 double z = req.zMin() + (k + 0.5) * dzRow;
                 int src = (nz - 1 - k) * nu + i; // engine row 0 = top
@@ -117,12 +127,28 @@ final class SectionBuilder {
                     }
                 } else {
                     double depth = Math.max(0, ground - z);
-                    double warm = (surfaceT - FieldSampler.AMBIENT_C) * Math.exp(-depth / 50);
-                    t = FieldSampler.AMBIENT_C + warm + GEOTHERM_C_PER_M * depth;
+                    if (modelled) {
+                        t = sub.temperatureC(cx, cz, depth);
+                        steam[dst] = (float) sub.steamFraction(cx, cz, depth);
+                        if (Double.isFinite(tableZ) && z <= tableZ) {
+                            saturation[dst] = 1;
+                        } else if (Double.isFinite(tableZ) && ground > tableZ) {
+                            // Vadose water spread over the unsaturated column's pore space.
+                            double pores = Math.max(0.01, m.porosity() * (ground - tableZ));
+                            saturation[dst] = (float) Math.min(1, vadose / pores);
+                        }
+                    } else {
+                        // Outside the subsurface model: a conductive geotherm warmed near hot ground.
+                        double warm = (surfaceT - FieldSampler.AMBIENT_C) * Math.exp(-depth / 50);
+                        t = FieldSampler.AMBIENT_C + warm + GEOTHERM_C_PER_M * depth;
+                    }
                     if (m.materialClass() == MaterialClass.VOID || Byte.toUnsignedInt(raster.voidFraction()[src]) > 127) {
                         f |= FLAG_VOID;
                     }
-                    if (m.materialClass() == MaterialClass.WATER) f |= FLAG_WATER;
+                    if (m.materialClass() == MaterialClass.WATER) {
+                        f |= FLAG_WATER;
+                        saturation[dst] = 1;
+                    }
                 }
                 material[dst] = (byte) m.id();
                 unit[dst] = u < 0 ? 0 : u + 1;
@@ -175,7 +201,7 @@ final class SectionBuilder {
         JsonArray out = new JsonArray();
         WorldModel world = s.terrain().world();
         for (VolcanoSystem v : s.volcanoes()) {
-            double[] c = map.point(v.chamber().chamberCenter());
+            double[] c = Probe.chamberCenter(v, map, world);
             double r = Probe.displayChamberRadius(v, map, world);
             double[] proj = project(req.polyline(), cum, c[0], c[1]);
             if (proj[1] <= 2 * r) {

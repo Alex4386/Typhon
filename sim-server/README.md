@@ -39,12 +39,10 @@ a replay keyframe is viewed on a separate executor.
 | hello / welcome / listSessions / createSession (preset, world) / attach | implemented |
 | transport (REALTIME×speed, UNBOUNDED, PAUSED), step, pauseAt | implemented |
 | clock, state (chamber, seismic, alert, deformation stations, plume), events, units | implemented |
-| Tile fields 1–8, 10, 11 (elevation, lava depth/T, water, PDC, lahar, ash, surface T, top unit, uplift) | implemented; surface T comes from the geothermal grid and lava |
-| Tile fields 9 (water-table depth), 12 (steam fraction) | **unavailable** until the subsurface model (M4); not advertised in `welcome.fields` |
+| Tile fields 1–12 | implemented. Water depth combines standing water and the subsurface model's surface water; surface T is the subsurface top cell (1 m) raised by geothermal heat and lava; water-table depth and steam (max over 2–80 m) come from the subsurface model (NaN / 0 outside it) |
 | Credit-window flow control, change-detected versions, version floor across loads | implemented |
-| section (materials, units, flags, overlays) | implemented; temperature is a placeholder geotherm, saturation/steam/water table unmodelled |
-| commands: startEruption, stopEruption, forceDike, injectMagma, setWind, rain, dig | implemented (`rain` needs lahars; `dig` lowers whole blocks) |
-| command addWater | accepted and stored in the world model; it only flows/infiltrates once the surface-water model (M4) exists |
+| section (materials, units, flags, overlays) | implemented; temperature, saturation, steam and water table from the subsurface model (conductive geotherm fallback outside it); chamber, conduits, dikes and hypocentres drawn at physical depth (see `GridMapping.stretchZ`) |
+| commands: startEruption, stopEruption, forceDike, injectMagma, setWind, rain, dig, addWater | implemented. `rain` sets lahar rainfall and the subsurface rainfall (`Subsurface.SetRainfall`, persisted); `addWater` pours into the surface-water model, which spreads, infiltrates and recharges the water table; `dig` lowers whole blocks |
 | save / load | implemented (`worlds-dir/<name>/state`; world sessions save into their own directory) |
 | replay enter / seek / exit | keyframe-only (every 5 simulated min, in memory) for preset sessions; world sessions refuse `seek` |
 

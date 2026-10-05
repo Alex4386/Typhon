@@ -34,6 +34,7 @@ import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.save.DirectorySaveStore;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.sim.EngineRunner;
+import me.alex4386.typhon.engine.subsurface.Subsurface;
 import me.alex4386.typhon.engine.tephra.TephraCommands;
 import me.alex4386.typhon.engine.tephra.WindField;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
@@ -184,6 +185,7 @@ final class Session implements AutoCloseable {
         int tile = size % 64 == 0 ? 64 : size % 32 == 0 ? 32 : 16; // fewer, larger tiles render cheaper in the client
         long base = tiles == null ? 0 : tiles.maxVersion();
         this.map = new GridMapping(cell, tile, grid.minX(), grid.minZ(), grid.maxX(), grid.maxZ());
+        installDepthStretch(map, scenario);
         this.tiles = new TileStore(map, base);
         this.tileOrder = order(map, scenario);
         lastRefreshNanos.clear();
@@ -253,6 +255,37 @@ final class Session implements AutoCloseable {
                 for (BlockChange c : f.blockChanges()) scenario.world().apply(c);
             }
         }
+    }
+
+    /**
+     * Samples a coarse ground-elevation grid and the first volcano's depth compression so that
+     * subsurface points (chamber, hypocentres, dikes) are drawn at their physical depth. Runs while
+     * the engine is not stepping.
+     */
+    static void installDepthStretch(GridMapping map, Scenario scenario) {
+        var world = scenario.terrain().world();
+        int step = 8;
+        int w = (map.maxX - map.minX) / step + 1;
+        int h = (map.maxZ - map.minZ) / step + 1;
+        float[] ground = new float[w * h];
+        for (int j = 0; j < h; j++) {
+            for (int i = 0; i < w; i++) {
+                double s = world.surfaceZ(map.minX + i * step, map.minZ + j * step);
+                ground[j * w + i] = (float) (Double.isFinite(s) ? s : world.spec().datumZ());
+            }
+        }
+        double scale = 1;
+        for (VolcanoSystem v : scenario.volcanoes()) {
+            double physical = v.chamber().physicalDepthM();
+            var c = v.chamber().chamberCenter();
+            double g = world.surfaceZ(c.x(), c.z());
+            double blockDepth = g - (c.y() + 0.5) * map.cell - 2 * map.cell;
+            if (Double.isFinite(physical) && Double.isFinite(g) && blockDepth > 0) {
+                scale = Math.max(1, (physical - 2 * map.cell) / blockDepth);
+                break;
+            }
+        }
+        map.setDepthStretch(ground, step, w, h, scale);
     }
 
     private static int[] order(GridMapping map, Scenario scenario) {
@@ -608,7 +641,15 @@ final class Session implements AutoCloseable {
                         r.submit(new MassFlowCommands.SetRainfall(v.lahars().id(), mm));
                         any = true;
                     }
-                    if (!any) return done(CommandResult.error("unsupported", "No volcano simulates lahars, so rain has no effect"));
+                    // Surface water, infiltration and the water table (shared subsurface model).
+                    if (FieldSampler.subsurface(s) != null) {
+                        r.submit(new Subsurface.SetRainfall(mm));
+                        any = true;
+                    }
+                    if (!any) {
+                        return done(CommandResult.error("unsupported",
+                                "Neither lahars nor a subsurface model are simulated, so rain has no effect"));
+                    }
                     rainMmPerHour = mm;
                     return done(CommandResult.ok(null));
                 }
@@ -638,9 +679,11 @@ final class Session implements AutoCloseable {
                     int cx = m.columnAtX(at[0]);
                     int cz = m.columnAtY(at[1]);
                     if (!m.inside(cx, cz)) return done(CommandResult.error("badRequest", "Point is outside the world"));
+                    boolean flows = FieldSampler.subsurface(s) != null;
                     return r.onEngineThread(e -> {
                         s.terrain().world().addWater(cx, cz, vol);
-                        return CommandResult.ok("Water stored; it flows and infiltrates once the surface-water model (M4) is in the engine");
+                        return CommandResult.ok(flows ? null
+                                : "Water stored; this scenario has no surface-water model, so it does not flow");
                     });
                 }
                 case "dig" -> {

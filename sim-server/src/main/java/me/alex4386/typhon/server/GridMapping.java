@@ -86,11 +86,59 @@ public final class GridMapping {
 
     /** World coordinates (m) of the centre of block {@code p}. */
     public double[] point(BlockPos p) {
-        return new double[] {x(p.x()), y(p.z()), (p.y() + 0.5) * cell};
+        double z = (p.y() + 0.5) * cell;
+        return new double[] {x(p.x()), y(p.z()), stretchZ(p.x() + 0.5, p.z() + 0.5, z)};
     }
 
     /** World coordinates of an engine-space point given in fractional block units. */
     public double[] point(double bx, double by, double bz) {
-        return new double[] {bx * cell, -bz * cell, by * cell};
+        return new double[] {bx * cell, -bz * cell, stretchZ(bx, bz, by * cell)};
+    }
+
+    // ── Subsurface depth stretch ──
+    // The engine compresses the magma system's depth into the block world (a chamber 4 km deep sits a
+    // few hundred metres under the vent) while lengths at the surface are real. Points below the
+    // ground are drawn at their physical depth: depth below the local ground × depthScale.
+
+    private float[] ground;
+    private int groundStep = 1;
+    private int groundW;
+    private int groundH;
+    private double depthScale = 1;
+
+    /**
+     * Enables the depth stretch: {@code ground} holds surface elevations (m) sampled every
+     * {@code step} columns from (minX, minZ), row-major over z; {@code scale} ≥ 1 multiplies depths
+     * below it.
+     */
+    public void setDepthStretch(float[] ground, int step, int width, int height, double scale) {
+        this.ground = ground;
+        this.groundStep = step;
+        this.groundW = width;
+        this.groundH = height;
+        this.depthScale = Math.max(1, scale);
+    }
+
+    public double depthScale() {
+        return depthScale;
+    }
+
+    /** Surface elevation (m) near column ({@code cx}, {@code cz}), or NaN without a stretch. */
+    public double groundAt(double cx, double cz) {
+        if (ground == null) return Double.NaN;
+        int i = Math.max(0, Math.min(groundW - 1, (int) Math.floor((cx - minX) / groundStep)));
+        int j = Math.max(0, Math.min(groundH - 1, (int) Math.floor((cz - minZ) / groundStep)));
+        return ground[j * groundW + i];
+    }
+
+    /** Elevation {@code z} (m) at column ({@code cx}, {@code cz}) with depth below ground stretched. */
+    public double stretchZ(double cx, double cz, double z) {
+        if (depthScale == 1 || ground == null) return z;
+        double g = groundAt(cx, cz);
+        if (!Double.isFinite(g) || z >= g) return z;
+        // Keep the first couple of blocks unstretched so surface features stay on the ground.
+        double d = g - z;
+        double near = 2 * cell;
+        return d <= near ? z : g - (near + (d - near) * depthScale);
     }
 }

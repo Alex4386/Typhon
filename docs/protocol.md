@@ -111,10 +111,11 @@ volcano, out of world, …).
 ```
 
 `fields` lists the field ids the server can stream. This is the capability mechanism: a field
-missing from `fields` is not modelled by this server (e.g. `WaterTableDepth` and `SteamFraction`
-before the subsurface model exists). Servers ignore such ids in `subscribe`; clients should treat
-them as unavailable rather than as zero. Section pixels for unmodelled quantities are 0 (saturation,
-steam) or `NaN` (water table). `WorldInfo`:
+missing from `fields` is not modelled by this server. Servers ignore such ids in `subscribe`;
+clients should treat them as unavailable rather than as zero. Within an advertised field, columns a
+session does not model (e.g. outside its subsurface model) carry `NaN` for `WaterTableDepth` and 0
+for `SteamFraction`; section pixels for unmodelled quantities are 0 (saturation, steam) or `NaN`
+(water table). `WorldInfo`:
 
 | field | type | meaning |
 |---|---|---|

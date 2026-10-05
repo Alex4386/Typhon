@@ -58,7 +58,7 @@ class ProtocolTest {
             Set<Integer> fields = new HashSet<>();
             for (JsonElement e : welcome.getAsJsonArray("fields")) fields.add(e.getAsInt());
             assertTrue(fields.contains(1) && fields.contains(2) && fields.contains(10));
-            assertFalse(fields.contains(9), "water table needs the subsurface model");
+            assertTrue(fields.contains(9) && fields.contains(12), "water table and steam come from the subsurface model");
             c.send("{\"type\":\"listSessions\"}");
             JsonArray sessions = c.awaitType("sessions", 5).json().getAsJsonArray("sessions");
             assertEquals("s1", sessions.get(0).getAsJsonObject().get("id").getAsString());
@@ -171,6 +171,20 @@ class ProtocolTest {
             assertEquals(64, air);
             assertEquals(64, solid);
             for (float z : s.surfaceZ()) assertTrue(Float.isFinite(z));
+            // Subsurface model: a water table under the ground and rock warming with depth.
+            int tables = 0;
+            for (int i = 0; i < 64; i++) {
+                float table = s.waterTableZ()[i];
+                if (Float.isFinite(table)) {
+                    tables++;
+                    assertTrue(table <= s.surfaceZ()[i] + 50, "water table near or below ground");
+                }
+            }
+            assertTrue(tables > 0, "the section reports the water table");
+            int edge = 2; // away from the vent's heat pipe; row 0 is the bottom
+            assertTrue(Byte.toUnsignedInt(s.temperatureU8()[edge]) >= Byte.toUnsignedInt(s.temperatureU8()[64 + edge]),
+                    "deeper rock is at least as warm as shallower rock");
+            assertTrue(Byte.toUnsignedInt(s.saturationU8()[edge]) > 0, "rock at the bottom is below the water table");
 
             c.send("{\"type\":\"section\",\"requestId\":8,\"polyline\":[[0,0]],\"zMin\":0,\"zMax\":1,\"nu\":8,\"nz\":8}");
             JsonObject err = c.awaitType("error", 5).json();
@@ -201,6 +215,13 @@ class ProtocolTest {
                     + server.session("s1").map().y(server.session("s1").map().minZ + 5) + "],\"radius\":20,\"depth\":10}}");
             JsonObject dig = c.await(m -> m.type().equals("ack") && m.json().get("requestId").getAsLong() == 14, 10).json();
             assertTrue(dig.get("ok").getAsBoolean(), dig.toString());
+            c.send("{\"type\":\"command\",\"requestId\":15,\"command\":{\"kind\":\"rain\",\"mmPerHour\":20}}");
+            JsonObject rain = c.await(m -> m.type().equals("ack") && m.json().get("requestId").getAsLong() == 15, 10).json();
+            assertTrue(rain.get("ok").getAsBoolean(), rain.toString());
+            c.await(m -> m.type().equals("state")
+                    && m.json().getAsJsonObject("world").get("rainMmPerHour").getAsDouble() == 20, 10);
+            c.send("{\"type\":\"command\",\"requestId\":16,\"command\":{\"kind\":\"rain\",\"mmPerHour\":0}}");
+            c.await(m -> m.type().equals("ack") && m.json().get("requestId").getAsLong() == 16, 10);
         }
     }
 
