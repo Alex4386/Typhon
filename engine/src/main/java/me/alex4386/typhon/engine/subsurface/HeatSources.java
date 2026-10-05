@@ -33,9 +33,15 @@ public interface HeatSources {
     /**
      * Heat carried up a vent's conduit and hydrothermal plumbing (magmatic gas, convecting
      * hydrothermal fluid): {@code powerW} spread with a Gaussian footprint of {@code sigmaM} and
-     * uniformly over the top {@code pipeDepthM} of the ground.
+     * uniformly over the top {@code pipeDepthM} of the ground. The fluids are no hotter than
+     * {@code temperatureC} (the magma's), so no cell is heated above it; {@code NaN} = no limit.
      */
-    record Vent(double x, double z, double powerW, double sigmaM, double pipeDepthM) {}
+    record Vent(double x, double z, double powerW, double sigmaM, double pipeDepthM, double temperatureC) {
+        /** A vent whose heat is not temperature-limited. */
+        public Vent(double x, double z, double powerW, double sigmaM, double pipeDepthM) {
+            this(x, z, powerW, sigmaM, pipeDepthM, Double.NaN);
+        }
+    }
 
     List<Chamber> chambers();
 

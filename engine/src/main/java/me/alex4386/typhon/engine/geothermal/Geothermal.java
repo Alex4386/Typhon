@@ -223,7 +223,7 @@ public final class Geothermal implements Subsystem, HeatSources {
                 0,
                 1.5);
         double pressure = 1 + clamp(magma.overpressureMPa() / config.overpressureFullMPa, 0, 1);
-        double eruption = magma.erupting() ? 1 + Math.min(1, magma.eruptionRate() / config.eruptionRateFull) : 1;
+        double eruption = magma.erupting() ? 1 + Math.min(1, magma.physicalEruptionRate() / config.eruptionRateFull) : 1;
         return thermal * pressure * eruption;
     }
 
@@ -306,8 +306,9 @@ public final class Geothermal implements Subsystem, HeatSources {
             BlockPos p = vent.position();
             double sigma = (Math.max(config.cellSize, vent.craterRadius()) + config.ventHaloBlocks) * l;
             double extent = vent.kind() == VentKind.FISSURE ? vent.fissureLength() * l / 2 : 0;
+            // Gas and fluid rising from the magma cannot heat the rock above the magma's temperature.
             list.add(new Vent(p.x() + 0.5, p.z() + 0.5, activity * config.ventHeatPowerW,
-                    Math.sqrt(sigma * sigma + extent * extent), config.ventPipeDepthM));
+                    Math.sqrt(sigma * sigma + extent * extent), config.ventPipeDepthM, magma.temperatureC()));
         }
         return list;
     }

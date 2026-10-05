@@ -75,6 +75,20 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
     private double boiled;
     /** Heat the magma chambers have given to the grid (J). */
     private double chamberHeat;
+    /** Heat that entered through the grid bottom (J), not persisted (diagnostic). */
+    private double bottomHeat;
+    /** Heat from vents, lava, PDCs and dikes (J), not persisted (diagnostic). */
+    private double sourceHeat;
+
+    /** Sensible heat stored in the grid above 0 °C (J, diagnostic). */
+    public double heatContentJ() {
+        return heat.heatContent();
+    }
+
+    /** Heat added by vents, lava, PDCs and dikes since this model was built (J, diagnostic). */
+    public double sourceHeatJ() {
+        return sourceHeat;
+    }
     private double seaGroundwater;
     private double deficit;
     private double initialGroundwater;
@@ -186,6 +200,7 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
         if (ch.sea[c]) head = sea;
         head = Math.max(head, groundwater.floor(ch, c));
         ch.head[c] = head;
+        heat.capToBoilingCurve(ch, c, chambers);
         ch.vadose[c] = 0;
         if (!ch.sea[c]) initialGroundwater += config.specificYield * grid.area() * (head - groundwater.floor(ch, c));
         ch.activity = SolverChunk.Activity.HOT; // evaluate on the next macro step
@@ -271,6 +286,10 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
         applyRain(dtPhysical);
         Map<SolverChunk, Double> steps = activityAndSteps(dtPhysical, levelOfDetail);
         Map<SolverChunk, double[]> energy = sourceEnergy(dtPhysical, steps);
+        for (SolverChunk ch : steps.keySet()) {
+            double[] e = energy.get(ch);
+            if (e != null) for (double v : e) sourceHeat += v;
+        }
         long t1 = System.nanoTime();
         heat.step(steps, energy, chambers, groundwater, (ch, c) -> {
             int x = ch.outletX[c];
@@ -279,11 +298,24 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
         });
         boiled += heat.boiledTotal;
         for (double e : heat.chamberDelivered) chamberHeat += e;
+        bottomHeat += heat.bottomInflow;
         long t2 = System.nanoTime();
-        groundwater.step(dtPhysical, heat.boiledVolume,
-                (ch, c, v) -> discharge(ch, c, v, SurfaceWater.Source.SPRING));
-        seaGroundwater += groundwater.seaExchange;
-        deficit += groundwater.deficitVolume;
+        int substeps = Math.max(1, (int) Math.ceil(dtPhysical / config.maxGroundwaterStepSeconds - 1e-9));
+        Map<SolverChunk, double[]> boiledShare = heat.boiledVolume;
+        if (substeps > 1) {
+            boiledShare = new java.util.IdentityHashMap<>();
+            for (Map.Entry<SolverChunk, double[]> e : heat.boiledVolume.entrySet()) {
+                double[] v = e.getValue().clone();
+                for (int i = 0; i < v.length; i++) v[i] /= substeps;
+                boiledShare.put(e.getKey(), v);
+            }
+        }
+        for (int s = 0; s < substeps; s++) {
+            groundwater.step(dtPhysical / substeps, boiledShare,
+                    (ch, c, v) -> discharge(ch, c, v, SurfaceWater.Source.SPRING));
+            seaGroundwater += groundwater.seaExchange;
+            deficit += groundwater.deficitVolume;
+        }
         long t3 = System.nanoTime();
         lastTimings[0] = t1 - t0;
         lastTimings[1] = t2 - t1;
@@ -293,6 +325,11 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
     /** Heat the magma chambers have given to the grid so far (J). */
     public double chamberHeatJ() {
         return chamberHeat;
+    }
+
+    /** Heat that entered through the grid bottom since this model was built (J, diagnostic). */
+    public double bottomHeatJ() {
+        return bottomHeat;
     }
 
     /** Water boiled off by subsurface heat so far (m³). */
@@ -439,13 +476,26 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
                 }
                 if (sum <= 0) continue;
                 double total = v.powerW() * dt;
+                double[] column = new double[n];
                 for (double[] t : targets) {
                     SolverChunk ch = grid.chunkOf((int) t[0], (int) t[1]);
                     if (!steps.containsKey(ch)) continue; // dormant chunks receive nothing
                     int c = SolverChunk.column((int) t[0], (int) t[1]);
                     double[] e = energy.computeIfAbsent(ch, k -> new double[SolverChunk.AREA * n]);
                     double share = total * t[2] / sum;
-                    distributeOverDepth(e, c, share, v.pipeDepthM());
+                    java.util.Arrays.fill(column, 0);
+                    distributeOverDepth(column, 0, share, v.pipeDepthM());
+                    for (int k = 0; k < n; k++) {
+                        double add = column[k];
+                        if (!Double.isNaN(v.temperatureC())) {
+                            // No hotter than the fluids that carry the heat (energy already given
+                            // to the cell this step counts towards the limit).
+                            double room = heat.capacityOf(ch, c, k)
+                                    * (v.temperatureC() - ch.temperature[c * n + k]) - e[c * n + k];
+                            add = Math.max(0, Math.min(add, room));
+                        }
+                        e[c * n + k] += add;
+                    }
                 }
             }
         }

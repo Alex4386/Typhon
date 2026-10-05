@@ -84,6 +84,12 @@ public final class SubsurfaceConfig {
     public double surfaceWaterCfl = 0.7;
     /** Iterations of the red-black SOR groundwater solve per macro step. */
     public int groundwaterIterations = 60;
+    /**
+     * Longest groundwater step (physical s); longer macro steps (spin-up) are split. With a fixed
+     * SOR iteration count, very long steps leave the implicit solve unconverged, and the flux update
+     * then overshoots heads below the floor and above the ground (creating water from nothing).
+     */
+    public double maxGroundwaterStepSeconds = 30 * 86400;
     /** SOR over-relaxation factor. */
     public double sorOmega = 1.7;
     /** Latent heat of vaporisation of water (J/kg). */
@@ -127,7 +133,7 @@ public final class SubsurfaceConfig {
         if (!(manningN > 0) || !(surfaceWaterCfl > 0 && surfaceWaterCfl <= 1)) {
             throw new IllegalArgumentException("bad surface-water parameters");
         }
-        if (groundwaterIterations < 1 || !(sorOmega > 0 && sorOmega < 2)) {
+        if (groundwaterIterations < 1 || !(sorOmega > 0 && sorOmega < 2) || !(maxGroundwaterStepSeconds > 0)) {
             throw new IllegalArgumentException("bad groundwater solver parameters");
         }
         if (warmEvery < 1 || demoteAfter < 0) throw new IllegalArgumentException("bad LOD parameters");

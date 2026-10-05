@@ -145,6 +145,29 @@ final class SubsurfaceHeat {
     }
 
     /**
+     * Caps a freshly initialised column's water-saturated rock at the boiling point for its depth
+     * below the water table. Liquid water cannot exist above that curve: a conductive halo laid
+     * straight under a shallow water table would otherwise store superheated pore water that all
+     * flashes on the first step. Liquid-dominated geothermal reservoirs follow this
+     * boiling-point-for-depth profile (Grant &amp; Bixley 2011, Geothermal Reservoir Engineering, ch. 2).
+     * Magma cells and dry rock above the water table keep their halo temperature.
+     */
+    void capToBoilingCurve(SolverChunk ch, int c, List<HeatSources.Chamber> chambers) {
+        int n = grid.levels();
+        double l = grid.world().spec().metersPerColumn();
+        double x = centreX(ch, c);
+        double z = centreZ(ch, c);
+        for (int k = 0; k < n; k++) {
+            int i = c * n + k;
+            double elevation = grid.cellElevation(ch, c, k);
+            if (elevation >= ch.head[c] || ch.porosity[i] <= 0) continue;
+            if (chamberAt(chambers, l, x, z, ch.surfaceZ[c] - grid.centerDepth(k)) != null) continue;
+            double cap = Math.min(CRITICAL_TEMPERATURE_C, boilingPoint(ch.head[c] - elevation));
+            if (ch.temperature[i] > cap) ch.temperature[i] = cap;
+        }
+    }
+
+    /**
      * Bottom boundary temperature: the chamber temperature where the column's base lies in a
      * fixed-temperature chamber, {@code NaN} (insulated; the chamber's bounded heat enters the bottom
      * cell instead) where it lies in a chamber with a wall power, else geotherm plus halo.
@@ -210,14 +233,19 @@ final class SubsurfaceHeat {
         Map<SolverChunk, double[]> allSources = chamberHeat(chunks, steps, sources, chambers);
         currentChambers = chambers;
         // Vertical conduction and sources: one implicit step per column.
+        double[] bottomPerChunk = new double[chunks.size()];
         forEach(chunks, (idx, ch) -> {
             double[] src = allSources.get(ch);
             double dt = steps.get(ch);
+            double bottom = 0;
             for (int c = 0; c < SolverChunk.AREA; c++) {
                 if (!ch.exists[c]) continue;
-                vertical(ch, c, dt, null, src, 1.0, chambers, waterDepth.depth(ch, c));
+                bottom += vertical(ch, c, dt, null, src, 1.0, chambers, waterDepth.depth(ch, c));
             }
+            bottomPerChunk[idx] = bottom;
         });
+        bottomInflow = 0;
+        for (double v : bottomPerChunk) bottomInflow += v;
         long t3 = System.nanoTime();
         double[][] boiledPerChunk = new double[chunks.size()][];
         forEach(chunks, (idx, ch) -> {
@@ -242,6 +270,30 @@ final class SubsurfaceHeat {
         timings[2] = t3 - t2;
         timings[3] = t4 - t3;
     }
+
+    /** Heat capacity of a whole cell (J/K), including pore water and latent heat of melting. */
+    double capacityOf(SolverChunk ch, int c, int k) {
+        return capacity(ch, c, k, grid.area() * grid.thickness(k));
+    }
+
+    /** Sensible heat stored in the grid above 0 °C (J), for energy-budget diagnostics. */
+    double heatContent() {
+        double total = 0;
+        int n = grid.levels();
+        double area = grid.area();
+        for (SolverChunk ch : grid.chunks()) {
+            for (int c = 0; c < SolverChunk.AREA; c++) {
+                if (!ch.exists[c]) continue;
+                for (int k = 0; k < n; k++) {
+                    total += capacity(ch, c, k, area * grid.thickness(k)) * ch.temperature[c * n + k];
+                }
+            }
+        }
+        return total;
+    }
+
+    /** Heat that entered through the bottom boundary during the last step (J; negative = lost). */
+    double bottomInflow;
 
     /** Chambers of the current step (boiling skips their cells). */
     private List<HeatSources.Chamber> currentChambers = List.of();
@@ -453,7 +505,7 @@ final class SubsurfaceHeat {
     }
 
     /** Implicit vertical conduction of one column (Thomas algorithm). */
-    private void vertical(SolverChunk ch, int c, double dt, double[] lateral, double[] sources, double sourceShare,
+    private double vertical(SolverChunk ch, int c, double dt, double[] lateral, double[] sources, double sourceShare,
             List<HeatSources.Chamber> chambers, double waterDepth) {
         int n = grid.levels();
         double area = grid.area();
@@ -479,7 +531,9 @@ final class SubsurfaceHeat {
         double exchange = waterDepth > 0.05 || ch.sea[c] ? config.waterExchangeWm2K : config.surfaceExchangeWm2K;
         double k0 = effectiveConductivity(ch, c, 0, nusselt, waterTableDepth);
         double gTop = area / (grid.thickness(0) / (2 * k0) + 1 / exchange);
-        double kn = effectiveConductivity(ch, c, n - 1, nusselt, waterTableDepth);
+        // The base conducts into unmodelled deep rock: plain conductivity, no convective boost (a
+        // Nusselt-enhanced link to a fixed-temperature reservoir is an unbounded heat source).
+        double kn = Math.max(1e-3, ch.conductivity[c * n + n - 1]);
         double gBottom = area / (grid.thickness(n - 1) / (2 * kn));
         double tBottom = bottomTemperature(ch, c, chambers);
         double l = grid.world().spec().metersPerColumn();
@@ -530,6 +584,8 @@ final class SubsurfaceHeat {
         for (int k = n - 2; k >= 0; k--) {
             ch.temperature[base + k] = (rhs[k] - upper[k] * ch.temperature[base + k + 1]) / diag[k];
         }
+        // Heat that entered through the bottom boundary during the (implicit) step.
+        return Double.isNaN(tBottom) ? 0 : dt * gBottom * (tBottom - ch.temperature[base + n - 1]);
     }
 
     private double effectiveConductivity(SolverChunk ch, int c, int k, double nusselt, double waterTableDepth) {
@@ -616,7 +672,11 @@ final class SubsurfaceHeat {
             double resupply = SubsurfaceGrid.WATER_DENSITY * ch.hydraulicK[i] * area * dt;
             double mass = Math.min(Math.min(water, resupply), excess / config.latentHeatVaporJkg);
             if (mass <= 0) continue;
-            ch.temperature[i] = t - mass * config.latentHeatVaporJkg / cap;
+            // The steam leaves with its whole enthalpy: latent heat plus the sensible heat of the
+            // water (c_w·T_bp above 0 °C, the reference of the advected heat). The groundwater that
+            // replaces it brings its own sensible heat in through the lateral advection term, so
+            // leaving the departing water's heat behind would create energy at every boiling cell.
+            ch.temperature[i] = t - mass * (config.latentHeatVaporJkg + SubsurfaceGrid.WATER_HEAT_CAPACITY * tbp) / cap;
             ch.steam[i] = Math.max(ch.steam[i] * collapse, mass / water);
             steamMass += mass;
         }
