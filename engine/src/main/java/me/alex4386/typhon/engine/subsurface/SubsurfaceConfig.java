@@ -21,7 +21,7 @@ public final class SubsurfaceConfig {
 
     // ── Time ──
     /** Simulated seconds between heat/groundwater steps (macro step). */
-    public double macroStepSeconds = 60;
+    public double macroStepSeconds = 120;
     /** Simulated seconds between surface-water steps (sub-stepped internally for stability). */
     public double surfaceWaterStepSeconds = 1;
     /** Time compression of heat and groundwater: a macro step advances them by {@code dt × timeScale}. */

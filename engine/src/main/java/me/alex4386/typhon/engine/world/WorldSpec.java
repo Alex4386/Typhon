@@ -61,7 +61,7 @@ public record WorldSpec(double metersPerColumn, double solverSpacing, double dat
 
     /** {@link #defaults()} with columns (and blocks) {@code metersPerBlock} wide. */
     public static WorldSpec blocks(double metersPerBlock) {
-        return new WorldSpec(metersPerBlock, 4 * metersPerBlock, -2000, Double.NaN,
+        return new WorldSpec(metersPerBlock, 8 * metersPerBlock, -2000, Double.NaN,
                 List.of(new GeologyLayer("granite", -500, 0.01)), "andesite", "soil", metersPerBlock);
     }
 

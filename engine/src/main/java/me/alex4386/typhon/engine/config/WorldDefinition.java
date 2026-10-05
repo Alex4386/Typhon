@@ -20,7 +20,7 @@ import me.alex4386.typhon.engine.world.WorldSpec;
  * baseStepMs: 50
  * grid:
  *   metersPerColumn: 8        # dxS: surface resolution = Minecraft block size (m)
- *   solverSpacing: 32         # dxG: heat/groundwater solver resolution (m)
+ *   solverSpacing: 64         # dxG: heat/groundwater solver resolution (m)
  * scaling:
  *   plumeMetersPerBlock: 100
  *   dormantTimeCompression: 5000
@@ -185,7 +185,7 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
 
         ConfigNode grid = root.child("grid");
         double dxS = grid.number("metersPerColumn", VolcanoScaling.DEFAULT.metersPerBlock());
-        double dxG = grid.number("solverSpacing", 4 * dxS);
+        double dxG = grid.number("solverSpacing", 8 * dxS);
         grid.finish();
 
         ConfigNode scalingNode = root.child("scaling");
