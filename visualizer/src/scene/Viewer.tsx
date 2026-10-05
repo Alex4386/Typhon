@@ -1,8 +1,9 @@
-import { OrbitControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu';
+import { CameraRig } from '../camera/CameraRig';
+import { useCamera } from '../camera/cameraStore';
 import { command } from '../net/connection';
 import type { WorldInfo, XY } from '../protocol/messages';
 import { QUALITY, useStore } from '../store/store';
@@ -45,7 +46,10 @@ const createRenderer: RendererFactory = async (props) => {
   return r as unknown as THREE.WebGLRenderer;
 };
 
-/** Initial camera: an oblique view of the first volcano's summit from the south-south-east. */
+/**
+ * Placeholder camera before the rig applies its initial pose (URL, last session or summit view):
+ * an oblique view of the first volcano from the south-south-west.
+ */
 function framing(world: WorldInfo, vExag: number) {
   const ext = worldExtent(world);
   const span = Math.max(ext.maxX - ext.minX, ext.maxY - ext.minY);
@@ -54,14 +58,13 @@ function framing(world: WorldInfo, vExag: number) {
   const summit = (lo + 0.85 * (hi - lo)) * vExag;
   const dist = span * 0.42;
   const elevAngle = (32 * Math.PI) / 180;
-  const azimuth = (200 * Math.PI) / 180; // camera sits SSE of the vent, looking NNW
-  const target: [number, number, number] = [vent[0], summit, -vent[1]];
+  const azimuth = (200 * Math.PI) / 180;
   const position: [number, number, number] = [
     vent[0] + Math.sin(azimuth) * Math.cos(elevAngle) * dist,
     summit + Math.sin(elevAngle) * dist,
     -(vent[1] + Math.cos(azimuth) * Math.cos(elevAngle) * dist),
   ];
-  return { span, target, position };
+  return { span, position };
 }
 
 /** Key light with its target in the scene graph (so the shadow camera follows it). */
@@ -101,7 +104,8 @@ export function Viewer({ world }: { world: WorldInfo }) {
   const showHypo = useStore((s) => s.showHypocentres);
   const quality = useStore((s) => s.quality);
   const q = QUALITY[quality];
-  const { span, target, position } = framing(world, useStore.getState().verticalExaggeration);
+  const { span, position } = framing(world, useStore.getState().verticalExaggeration);
+  const camMode = useCamera((c) => c.mode);
   const ext = worldExtent(world);
   const cx = (ext.minX + ext.maxX) / 2;
   const cy = (ext.minY + ext.maxY) / 2;
@@ -134,28 +138,25 @@ export function Viewer({ world }: { world: WorldInfo }) {
       shadows={q.shadows}
       dpr={q.dpr}
       camera={{ position, fov: 38, near: 5, far: span * 20 }}
-      style={{ cursor: tool === 'orbit' ? 'grab' : 'crosshair' }}
+      style={{ cursor: tool !== 'orbit' ? 'crosshair' : camMode === 'fly' || camMode === 'walk' ? 'crosshair' : 'grab', touchAction: 'none' }}
     >
       <fog attach="fog" args={[HORIZON, span * 0.9, span * 3.2]} />
       <hemisphereLight args={['#c9d6e8', '#4a3a2c', 0.75]} />
       <ambientLight intensity={0.12} />
       <Sun position={sun} target={[cx, 0, -cy]} span={span} shadows={q.shadows} />
-      <Terrain world={world} onPick={onPick} />
+      <group
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          useCamera.getState().requestCamera({ kind: 'focus', point: [e.point.x, e.point.y, e.point.z] });
+        }}
+      >
+        <Terrain world={world} onPick={onPick} />
+      </group>
       <LavaGlow world={world} />
       <Markers world={world} />
       {showHypo && <Hypocentres />}
       <Atmosphere world={world} />
-      <OrbitControls
-        makeDefault
-        target={target}
-        maxPolarAngle={Math.PI * 0.49}
-        minDistance={150}
-        maxDistance={span * 3}
-        enableDamping
-        dampingFactor={0.12}
-        zoomSpeed={1.2}
-        screenSpacePanning={false}
-      />
+      <CameraRig world={world} />
     </Canvas>
   );
 }
