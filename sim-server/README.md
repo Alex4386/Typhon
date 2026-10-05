@@ -44,7 +44,7 @@ a replay keyframe is viewed on a separate executor.
 | section (materials, units, flags, overlays) | implemented; temperature, saturation, steam and water table from the subsurface model (conductive geotherm fallback outside it); chamber, conduits, dikes and hypocentres drawn at physical depth (see `GridMapping.stretchZ`) |
 | commands: startEruption, stopEruption, forceDike, injectMagma, setWind, rain, dig, addWater | implemented. `rain` sets lahar rainfall and the subsurface rainfall (`Subsurface.SetRainfall`, persisted); `addWater` pours into the surface-water model, which spreads, infiltrates and recharges the water table; `dig` lowers whole blocks |
 | save / load | implemented (`worlds-dir/<name>/state`; world sessions save into their own directory) |
-| replay enter / seek / exit | keyframe-only (every 5 simulated min, in memory) for preset sessions; world sessions refuse `seek` |
+| replay enter / seek / exit | keyframe-only, every 5 simulated min. Preset sessions keep keyframes in memory; world sessions write them to `<world>/replay/k-<micros>/` (reloaded on start; keyframes newer than the resumed state are deleted) |
 
 ## Tests
 

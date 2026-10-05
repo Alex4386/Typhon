@@ -33,6 +33,9 @@ import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.save.DirectorySaveStore;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
+import me.alex4386.typhon.engine.save.SaveStore;
+import me.alex4386.typhon.engine.config.WorldDefinition;
+import me.alex4386.typhon.engine.worlds.WorldDirectory;
 import me.alex4386.typhon.engine.sim.EngineRunner;
 import me.alex4386.typhon.engine.subsurface.Subsurface;
 import me.alex4386.typhon.engine.tephra.TephraCommands;
@@ -68,7 +71,11 @@ final class Session implements AutoCloseable {
     /** How to rebuild the scenario (for replay keyframes and saves). */
     record Source(Kind kind, String preset, long seed, long baseStepMicros, Path worldDir) {}
 
-    record Keyframe(double time, InMemorySaveStore store) {}
+    /** A replay keyframe: an engine + host save (in memory for presets, on disk for worlds). */
+    record Keyframe(double time, SaveStore store) {}
+
+    /** Directory of a world's persisted replay keyframes ({@code <world>/replay/k-<micros>}). */
+    static final String REPLAY_DIR = "replay";
 
     final String id;
     private final double initialSpeed;
@@ -203,6 +210,9 @@ final class Session implements AutoCloseable {
         }
         keyframes.clear();
         lastKeyframeTime = Double.NEGATIVE_INFINITY;
+        if (newSource.kind() == Kind.WORLD && newSource.worldDir() != null) {
+            loadWorldKeyframes(newSource.worldDir(), scenario.engine().time());
+        }
 
         // Initial weather as configured in the scenario.
         VolcanoSystem first = scenario.volcanoes().get(0);
@@ -793,17 +803,22 @@ final class Session implements AutoCloseable {
 
     // ── Replay (§7) ──
 
-    /** Records a keyframe when due (preset sessions; worlds save into their own directory instead). */
+    /**
+     * Records a keyframe when due. Preset sessions keep them in memory; world sessions write them to
+     * {@code <world>/replay/k-<micros>} so a world's history survives server restarts.
+     */
     void maybeKeyframe() {
-        if (replay || source.kind() != Kind.PRESET) return;
+        if (replay) return;
         double t = live.engine().time();
         if (t - lastKeyframeTime < KEYFRAME_SECONDS) return;
         lastKeyframeTime = t;
         EngineRunner r = runner;
         Scenario s = live;
+        Path worldDir = source.kind() == Kind.WORLD ? source.worldDir() : null;
         r.onEngineThread(e -> {
-            InMemorySaveStore store = new InMemorySaveStore();
             drainFramesNow(r, s);
+            SaveStore store = worldDir == null ? new InMemorySaveStore()
+                    : new DirectorySaveStore(worldDir.resolve(REPLAY_DIR).resolve(keyframeName(e.timeMicros())));
             s.save(store);
             return new Keyframe(e.time(), store);
         }).thenAccept(k -> {
@@ -811,10 +826,66 @@ final class Session implements AutoCloseable {
                 keyframes.add(k);
                 if (keyframes.size() > MAX_KEYFRAMES) {
                     // Thin out the older half so the whole run stays reachable.
-                    for (int i = 1; i < keyframes.size() / 2; i++) keyframes.remove(i);
+                    for (int i = 1; i < keyframes.size() / 2; i++) discard(keyframes.remove(i));
                 }
             }
         });
+    }
+
+    static String keyframeName(long timeMicros) {
+        return String.format(java.util.Locale.ROOT, "k-%016d", timeMicros);
+    }
+
+    /** Deletes a world keyframe's directory (no-op for in-memory ones). */
+    private static void discard(Keyframe k) {
+        if (k.store() instanceof DirectorySaveStore d) deleteTree(d.root());
+    }
+
+    private static void deleteTree(Path dir) {
+        if (!Files.exists(dir)) return;
+        try (var paths = Files.walk(dir)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException e) {
+                    LOG.log(Level.FINE, "could not delete " + p, e);
+                }
+            });
+        } catch (IOException e) {
+            LOG.log(Level.WARNING, "could not delete keyframe " + dir, e);
+        }
+    }
+
+    /**
+     * Picks up a world's persisted keyframes. Keyframes newer than the resumed state belong to a run
+     * that was never saved and are deleted, so the timeline never shows a future that did not happen.
+     */
+    private void loadWorldKeyframes(Path worldDir, double now) {
+        Path root = worldDir.resolve(REPLAY_DIR);
+        if (!Files.isDirectory(root)) return;
+        List<Path> dirs = new ArrayList<>();
+        try (var list = Files.list(root)) {
+            list.filter(p -> p.getFileName().toString().startsWith("k-")).forEach(dirs::add);
+        } catch (IOException e) {
+            LOG.log(Level.WARNING, "could not list " + root, e);
+            return;
+        }
+        dirs.sort(Comparator.comparing(p -> p.getFileName().toString()));
+        for (Path d : dirs) {
+            long micros;
+            try {
+                micros = Long.parseLong(d.getFileName().toString().substring(2));
+            } catch (NumberFormatException e) {
+                continue;
+            }
+            double t = micros / 1e6;
+            if (t > now + 1e-6) {
+                deleteTree(d);
+                continue;
+            }
+            keyframes.add(new Keyframe(t, new DirectorySaveStore(d)));
+            lastKeyframeTime = Math.max(lastKeyframeTime, t);
+        }
     }
 
     void enterReplay() {
@@ -830,9 +901,6 @@ final class Session implements AutoCloseable {
     /** Jumps to the latest keyframe at or before {@code time}; returns the time landed on. */
     double seek(double time) {
         if (!replay) throw new IllegalStateException("Enter replay mode before seeking");
-        if (source.kind() != Kind.PRESET) {
-            throw new UnsupportedOperationException("Replay is only recorded for preset sessions so far");
-        }
         Keyframe best = null;
         synchronized (keyframes) {
             for (Keyframe k : keyframes) {
@@ -841,9 +909,21 @@ final class Session implements AutoCloseable {
             if (best == null && !keyframes.isEmpty()) best = keyframes.get(0);
         }
         if (best == null) throw new UnsupportedOperationException("No keyframes recorded yet");
-        Preset preset = Presets.get(source.preset());
-        Scenario restored = preset.build(source.seed(), preset.terrain(source.seed()), Scenario.Options.DEFAULT
-                .withBaseStepMicros(source.baseStepMicros()).withRestore(best.store()));
+        Scenario restored;
+        if (source.kind() == Kind.WORLD) {
+            // A detached world on the keyframe's state; its history goes to memory so viewing a
+            // keyframe never touches the world's own history logs.
+            WorldDirectory dir = new WorldDirectory(source.worldDir());
+            WorldDefinition definition = dir.readWorld();
+            World world = World.reopen(definition, dir.readVolcanoes(), best.store(), new InMemorySaveStore(),
+                    World.ChangePolicy.ACCEPT);
+            restored = Scenario.fromWorld(definition.name(), world, WorldScenarios.terrain(definition, source.worldDir()),
+                    true);
+        } else {
+            Preset preset = Presets.get(source.preset());
+            restored = preset.build(source.seed(), preset.terrain(source.seed()), Scenario.Options.DEFAULT
+                    .withBaseStepMicros(source.baseStepMicros()).withRestore(best.store()));
+        }
         replayScenario = restored;
         replayTime = restored.engine().time();
         forceAllTiles();

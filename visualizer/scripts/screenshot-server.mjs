@@ -16,7 +16,7 @@ const browser = await chromium.launch({
   args: ['--no-sandbox', '--disable-dev-shm-usage'],
 });
 const page = await browser.newPage({ viewport: { width: Number(process.env.W ?? 1280), height: Number(process.env.H ?? 800) }, deviceScaleFactor: 1 });
-page.setDefaultTimeout(120000);
+page.setDefaultTimeout(Number(process.env.TIMEOUT_MS ?? 600000));
 const logs = [];
 page.on('console', (m) => (m.type() === 'error' || m.type() === 'warning') && logs.push(`${m.type()}: ${m.text()}`));
 page.on('pageerror', (e) => logs.push(`pageerror: ${e.message}`));
@@ -48,7 +48,8 @@ await page.waitForTimeout(6000);
 await shot('01-initial');
 
 await click('erupt');
-await click('max');
+// MAX=1 runs the session unbounded first (heavy on slow, software-rendered machines)
+if (process.env.MAX === '1') await click('max');
 await page.waitForTimeout(15000);
 await shot('02-erupting');
 
