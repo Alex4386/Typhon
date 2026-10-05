@@ -104,6 +104,8 @@ final class Session implements AutoCloseable {
     private final Set<Field> forceRefresh = new HashSet<>();
 
     private volatile EventTranslator translator;
+    /** Selectable things in the world (§4.8). */
+    private volatile EntityTracker entities;
     private final Deque<JsonObject> eventLog = new ArrayDeque<>();
     final Map<String, List<String>> activeVents = new ConcurrentHashMap<>();
     private final JsonArray units = new JsonArray();
@@ -218,6 +220,9 @@ final class Session implements AutoCloseable {
         forceRefresh.clear();
 
         this.translator = new EventTranslator(map, scenario.volcanoes(), v -> activeVents.getOrDefault(v, List.of()));
+        List<String> volcanoIds = new ArrayList<>();
+        for (VolcanoSystem v : scenario.volcanoes()) volcanoIds.add(v.volcanoId());
+        this.entities = new EntityTracker(map, volcanoIds);
         synchronized (eventLog) {
             eventLog.clear();
         }
@@ -503,7 +508,9 @@ final class Session implements AutoCloseable {
         droppedSeen = dropped;
         JsonArray out = new JsonArray();
         EventTranslator t = translator;
+        EntityTracker tracker = entities;
         for (EngineEvent e : raw) {
+            if (tracker != null) tracker.observe(e);
             JsonObject j = t.translate(e);
             if (j == null) continue;
             out.add(j);
@@ -540,6 +547,45 @@ final class Session implements AutoCloseable {
         msg.add("events", arr);
         msg.addProperty("dropped", 0);
         return msg;
+    }
+
+    // ── Entities and inspection (§4.8, §3.7) ──
+
+    private Map<String, JsonObject> entitySnapshot() throws Exception {
+        GridMapping m = map;
+        Map<String, List<String>> vents = Map.copyOf(activeVents);
+        return call(s -> EntityTracker.snapshot(s, m, vents)).get(30, TimeUnit.SECONDS);
+    }
+
+    /** Entity changes since the last call, or {@code null} (broadcast to every watcher). */
+    JsonObject entitiesDelta() throws Exception {
+        EntityTracker t = entities;
+        return t == null ? null : t.delta(entitySnapshot(), time(), false);
+    }
+
+    /** Every entity, for a client that is (re)attaching. */
+    JsonObject entitiesFull() throws Exception {
+        EntityTracker t = entities;
+        if (t == null) {
+            JsonObject empty = Json.obj("entities");
+            empty.addProperty("replace", true);
+            empty.add("upsert", new com.google.gson.JsonArray());
+            empty.add("remove", new com.google.gson.JsonArray());
+            return empty;
+        }
+        return t.full(entitySnapshot(), time());
+    }
+
+    /** Forgets what clients hold (replay jump): the next full message re-creates everything. */
+    void resetEntities() {
+        EntityTracker t = entities;
+        if (t != null) t.reset();
+    }
+
+    /** Everything known about the column under world point (x, y) metres. */
+    JsonObject inspect(double x, double y) throws Exception {
+        GridMapping m = map;
+        return call(s -> Inspector.inspect(s, m, x, y)).get(30, TimeUnit.SECONDS);
     }
 
     JsonObject worldInfo() throws Exception {

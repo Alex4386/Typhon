@@ -280,4 +280,33 @@ class ProtocolTest {
             assertNotNull(c.awaitType("attached", 30));
         }
     }
+
+    @Test
+    void entitiesAndInspection() throws Exception {
+        try (TestClient c = attached()) {
+            JsonObject full = c.awaitType("entities", 30).json();
+            assertTrue(full.get("replace").getAsBoolean());
+            Set<String> kinds = new HashSet<>();
+            JsonObject vent = null;
+            for (JsonElement e : full.getAsJsonArray("upsert")) {
+                JsonObject o = e.getAsJsonObject();
+                kinds.add(o.get("kind").getAsString());
+                assertTrue(o.has("createdAt") && o.has("at") && o.has("props"), o.toString());
+                if (o.get("kind").getAsString().equals("vent")) vent = o;
+            }
+            assertTrue(kinds.contains("chamber") && kinds.contains("vent"), kinds.toString());
+
+            JsonArray at = vent.getAsJsonArray("at");
+            c.send("{\"type\":\"inspect\",\"requestId\":31,\"x\":" + at.get(0) + ",\"y\":" + at.get(1) + "}");
+            JsonObject ins = c.awaitType("inspection", 30).json();
+            assertEquals(31, ins.get("requestId").getAsLong());
+            assertTrue(ins.get("inside").getAsBoolean());
+            assertTrue(ins.get("surfaceZ").isJsonPrimitive());
+            assertTrue(ins.getAsJsonArray("layers").size() >= 1, ins.toString());
+            assertTrue(ins.has("temperatureProfile"), "subsurface temperature with depth");
+
+            c.send("{\"type\":\"inspect\",\"requestId\":32,\"x\":1e9,\"y\":1e9}");
+            assertFalse(c.awaitType("inspection", 30).json().get("inside").getAsBoolean());
+        }
+    }
 }

@@ -45,6 +45,8 @@ public final class SimServer implements AutoCloseable {
     private static final long REPLAY_INFO_MILLIS = 2000;
     /** Events are batched: every message re-renders the client's event-driven views. */
     private static final long EVENTS_MILLIS = 250;
+    /** Entity registry deltas (§4.8). */
+    private static final long ENTITIES_MILLIS = 1000;
 
     /** Server settings. */
     public record Config(String host, int port, Path worldsDir, Path uiDir, String defaultPreset, long defaultSeed,
@@ -358,6 +360,17 @@ public final class SimServer implements AutoCloseable {
                 });
                 case "load" -> load(c, msg, requestId);
                 case "getSchema" -> withSession(c, requestId, s -> c.send(schemaOrError(s)));
+                case "inspect" -> withSession(c, requestId, s -> {
+                    Double x = Json.dbl(msg, "x");
+                    Double y = Json.dbl(msg, "y");
+                    if (x == null || y == null) {
+                        c.send(Json.error("badRequest", "inspect needs x and y (metres)", requestId));
+                        return;
+                    }
+                    JsonObject r = s.inspect(x, y);
+                    if (requestId != null) r.addProperty("requestId", requestId);
+                    c.send(r);
+                });
                 case "setParams" -> setParams(c, msg, requestId);
                 case "replay" -> replay(c, msg, requestId);
                 case "seek" -> seek(c, msg, requestId);
@@ -556,6 +569,7 @@ public final class SimServer implements AutoCloseable {
             c.send(units);
             c.send(state);
             c.send(s.backlog(s.time()));
+            c.send(s.entitiesFull());
             c.send(s.replayInfo());
             c.send(s.clock());
             c.send(schemaOrError(s));
@@ -785,11 +799,14 @@ public final class SimServer implements AutoCloseable {
         JsonObject reset = Json.obj("replayReset");
         reset.add("time", Json.num(time));
         JsonObject state = s.state(new JsonArray());
+        s.resetEntities();
+        JsonObject entities = s.entitiesFull();
         for (ClientConnection c : clientsOf(s)) {
             c.forgetTiles();
             c.send(reset);
             c.send(state);
             c.send(s.backlog(time));
+            c.send(entities);
             c.send(s.clock());
         }
     }
@@ -836,7 +853,7 @@ public final class SimServer implements AutoCloseable {
     /** Visible for tests: one pump cycle for one session. */
     void pump(Session s) throws Exception {
         long now = System.nanoTime();
-        long[] times = pumpTimes.computeIfAbsent(s.id, k -> new long[] {0, 0, 0});
+        long[] times = pumpTimes.computeIfAbsent(s.id, k -> new long[] {0, 0, 0, 0});
         List<ClientConnection> watchers = clientsOf(s);
         s.updateRate();
         s.maybeKeyframe();
@@ -864,6 +881,11 @@ public final class SimServer implements AutoCloseable {
                 c.send(clock);
                 c.send(state);
             }
+        }
+        if ((now - times[3]) / 1_000_000 >= ENTITIES_MILLIS) {
+            times[3] = now;
+            JsonObject delta = s.entitiesDelta();
+            if (delta != null) for (ClientConnection c : watchers) c.send(delta);
         }
         if ((now - times[1]) / 1_000_000 >= REPLAY_INFO_MILLIS) {
             times[1] = now;
