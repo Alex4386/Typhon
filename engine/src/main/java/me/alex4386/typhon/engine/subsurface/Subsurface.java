@@ -76,6 +76,8 @@ public final class Subsurface implements Subsystem, HydrothermalField {
     private double seaGroundwater;
     private double deficit;
     private double initialGroundwater;
+    /** Resolved base level of the initial water table (NaN until first needed); persisted. */
+    private double waterTableBase = Double.NaN;
     private double removed;
     /** Runtime rainfall set by {@link SetRainfall} (mm/h); NaN = use the configured climate. */
     private double rainfallOverride = Double.NaN;
@@ -176,7 +178,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
 
     private void initializeColumn(SolverChunk ch, int c, List<HeatSources.Chamber> chambers) {
         heat.initialize(ch, c, chambers);
-        double head = ch.surfaceZ[c] - config.initialWaterTableDepthM;
+        double head = initialHead(ch.surfaceZ[c]);
         if (!Double.isNaN(ch.lakeZ[c])) head = Math.max(head, Math.min(ch.lakeZ[c], ch.surfaceZ[c]));
         double sea = world.spec().seaLevelZ();
         if (ch.sea[c]) head = sea;
@@ -185,6 +187,44 @@ public final class Subsurface implements Subsystem, HydrothermalField {
         ch.vadose[c] = 0;
         if (!ch.sea[c]) initialGroundwater += config.specificYield * grid.area() * (head - groundwater.floor(ch, c));
         ch.activity = SolverChunk.Activity.HOT; // evaluate on the next macro step
+    }
+
+    /**
+     * Initial water-table elevation under ground at {@code surfaceZ}:
+     * {@code base + f·(surfaceZ − depth − base)}, never above the ground, with {@code f} the
+     * topography factor (1 = constant depth below ground).
+     */
+    double initialHead(double surfaceZ) {
+        double following = surfaceZ - config.initialWaterTableDepthM;
+        double f = config.waterTableTopographyFactor;
+        if (f >= 1) return following;
+        double base = waterTableBase();
+        return Math.min(surfaceZ, base + f * (following - base));
+    }
+
+    private double waterTableBase() {
+        if (Double.isNaN(waterTableBase)) {
+            if (Double.isFinite(config.waterTableBaseLevelM)) {
+                waterTableBase = config.waterTableBaseLevelM;
+            } else if (Double.isFinite(world.spec().seaLevelZ())) {
+                waterTableBase = world.spec().seaLevelZ();
+            } else {
+                double lowest = Double.POSITIVE_INFINITY;
+                for (long key : world.stacks().tileKeys()) {
+                    int tx = me.alex4386.typhon.engine.world.ColumnStacks.keyTileX(key);
+                    int tz = me.alex4386.typhon.engine.world.ColumnStacks.keyTileZ(key);
+                    int size = me.alex4386.typhon.engine.world.ColumnStacks.TILE;
+                    for (int dz = 0; dz < size; dz++) {
+                        for (int dx = 0; dx < size; dx++) {
+                            double zs = world.surfaceZ(tx * size + dx, tz * size + dz);
+                            if (Double.isFinite(zs)) lowest = Math.min(lowest, zs);
+                        }
+                    }
+                }
+                waterTableBase = Double.isFinite(lowest) ? lowest : 0;
+            }
+        }
+        return waterTableBase;
     }
 
     private List<HeatSources.Chamber> chambers() {
@@ -281,7 +321,9 @@ public final class Subsurface implements Subsystem, HydrothermalField {
                 boolean saturated = ch.head[c] >= ch.surfaceZ[c] - 0.01;
                 double capacity = saturated ? 0 : ch.hydraulicK[c * n];
                 double infiltrated = Math.min(rate, capacity) * dt * area;
-                ch.vadose[c] += infiltrated / area;
+                double recharge = infiltrated * config.rechargeFraction;
+                ch.vadose[c] += recharge / area;
+                surface.evaporated += infiltrated - recharge; // evapotranspired from the soil
                 double runoff = total - infiltrated;
                 if (runoff > 0 && !discharge(ch, c, runoff, SurfaceWater.Source.RUNOFF)) {
                     rain -= runoff; // fell outside the known world
@@ -677,6 +719,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
         b.addProperty("seaGroundwater", seaGroundwater);
         b.addProperty("deficit", deficit);
         b.addProperty("initialGroundwater", initialGroundwater);
+        if (Double.isFinite(waterTableBase)) b.addProperty("waterTableBase", waterTableBase);
         b.addProperty("removed", removed);
         b.addProperty("poured", surface.poured);
         b.addProperty("runoff", surface.runoff);
@@ -746,6 +789,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
         seaGroundwater = b.get("seaGroundwater").getAsDouble();
         deficit = b.get("deficit").getAsDouble();
         initialGroundwater = b.get("initialGroundwater").getAsDouble();
+        waterTableBase = b.has("waterTableBase") ? b.get("waterTableBase").getAsDouble() : Double.NaN;
         removed = b.get("removed").getAsDouble();
         surface.poured = b.get("poured").getAsDouble();
         surface.runoff = b.get("runoff").getAsDouble();

@@ -159,17 +159,15 @@ public final class WorldScenarios {
         VolcanoScaling scaling = scenario.volcano().scaling();
         // The preset's subsurface parameters (its own model, when a volcano created one) become the
         // world's climate, geotherm, aquifer and subsurface sections. Real-scale presets keep their
-        // literature-only extras (lapse rate, water-table shape), which the subsurface does not read yet.
+        // lapse rate, which the subsurface does not read yet.
         Subsurface subsurface = scenario.volcano().subsurface();
         SubsurfaceConfig sc = subsurface != null ? subsurface.configuration().copy()
                 : VolcanoSystem.defaultSubsurfaceConfig(scaling);
         WorldDefinition.Geotherm geotherm = real != null
                 ? new WorldDefinition.Geotherm(sc.surfaceTemperatureC, sc.gradientCPerKm, real.geotherm().lapseRateCPerKm())
                 : new WorldDefinition.Geotherm(sc.surfaceTemperatureC, sc.gradientCPerKm);
-        WorldDefinition.Aquifer aquifer = real != null
-                ? new WorldDefinition.Aquifer(sc.initialWaterTableDepthM, sc.specificYield,
-                        real.aquifer().topographyFactor(), real.aquifer().baseLevel(), real.aquifer().rechargeFraction())
-                : new WorldDefinition.Aquifer(sc.initialWaterTableDepthM, sc.specificYield);
+        WorldDefinition.Aquifer aquifer = new WorldDefinition.Aquifer(sc.initialWaterTableDepthM, sc.specificYield,
+                sc.waterTableTopographyFactor, sc.waterTableBaseLevelM, sc.rechargeFraction);
         WorldDefinition world = new WorldDefinition(preset.name(), seed, 50, scenario.terrain().world().spec(), scaling,
                 new WorldDefinition.Climate(sc.rainfallMmPerHour, sc.evaporationMmPerHour, Double.NaN, 0, 0.3),
                 geotherm, aquifer, terrain, scenario.lava().config(), sc);

@@ -57,6 +57,17 @@ public final class SubsurfaceConfig {
     public double initialWaterTableDepthM = 20;
     /** Specific yield (drainable porosity) of the aquifer. */
     public double specificYield = 0.1;
+    /**
+     * How closely the initial water table follows the topography: 1 keeps it
+     * {@link #initialWaterTableDepthM} below the ground everywhere, 0 makes it flat at the base level
+     * (very permeable ground such as young basalt). Real water tables are subdued replicas of the
+     * topography (≈0.3–0.8; Haitjema &amp; Mitchell-Bruker 2005).
+     */
+    public double waterTableTopographyFactor = 1.0;
+    /** Base level (m) the initial water table relaxes to; {@code NaN} = sea level, or the lowest ground. */
+    public double waterTableBaseLevelM = Double.NaN;
+    /** Fraction of infiltrating rain that reaches the water table (the rest is evapotranspired). */
+    public double rechargeFraction = 1.0;
     /** e-folding time (s) of drainage from the vadose zone to the water table. */
     public double vadoseLagSeconds = 86400;
     /** Manning roughness of the ground for surface water (s/m^⅓). */
@@ -106,6 +117,12 @@ public final class SubsurfaceConfig {
         }
         if (rainfallMmPerHour < 0 || evaporationMmPerHour < 0) throw new IllegalArgumentException("negative rates");
         if (!(specificYield > 0 && specificYield <= 1)) throw new IllegalArgumentException("specificYield must be in (0, 1]");
+        if (!(waterTableTopographyFactor >= 0 && waterTableTopographyFactor <= 1)) {
+            throw new IllegalArgumentException("waterTableTopographyFactor must be in [0, 1]");
+        }
+        if (!(rechargeFraction >= 0 && rechargeFraction <= 1)) {
+            throw new IllegalArgumentException("rechargeFraction must be in [0, 1]");
+        }
         if (!(vadoseLagSeconds > 0)) throw new IllegalArgumentException("vadoseLagSeconds must be > 0");
         if (!(manningN > 0) || !(surfaceWaterCfl > 0 && surfaceWaterCfl <= 1)) {
             throw new IllegalArgumentException("bad surface-water parameters");

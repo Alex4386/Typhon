@@ -62,6 +62,15 @@ final class RealPresets {
         return new VolcanoScaling(metersPerColumn, metersPerColumn, 5000, 1);
     }
 
+    /**
+     * Subsurface of a real-scale preset: the world defaults with the preset's literature geotherm and
+     * aquifer (water-table shape, recharge) applied, exactly as a world written from it would derive.
+     */
+    static SubsurfaceConfig subsurface(RealSetting setting, double metersPerColumn) {
+        return WorldDefinition.applyGeothermAquifer(VolcanoSystem.defaultSubsurfaceConfig(scaling(metersPerColumn)),
+                setting.geotherm(), setting.aquifer());
+    }
+
     /** Tephra with the column cap raised to the top of the engine's coordinate range. */
     static TephraConfig tephra() {
         TephraConfig t = new TephraConfig();
@@ -171,6 +180,7 @@ final class RealPresets {
                             .build();
                     return b.volcano(VolcanoSystem.builder("kilauea-real", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
+                            .subsurfaceConfig(subsurface(setting, L))
                             .stations(List.of(
                                     // approximate positions of HVO's caldera-rim GNSS sites (Uwekahuna NW, Crater Rim SE)
                                     Stations.at("UWEV", vent, -1400, 1400, L), Stations.at("CRIM", vent, 1800, -1800, L),
@@ -237,6 +247,7 @@ final class RealPresets {
                             .build();
                     return b.volcano(VolcanoSystem.builder("stromboli-real", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
+                            .subsurfaceConfig(subsurface(setting, L))
                             .stations(List.of(Stations.at("STR-N", vent, 0, 1200, L), Stations.at("STR-E", vent, 1500, 0, L),
                                     Stations.at("STR-S", vent, 0, -1500, L))).scaling(scaling(L)).tephra(tephra()).ballisticFraction(0.3)
                             .wind(8, 1.2, Presets.WIND_VARIABILITY).build());
@@ -300,6 +311,7 @@ final class RealPresets {
                             .build();
                     return b.volcano(VolcanoSystem.builder("st-helens-real", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
+                            .subsurfaceConfig(subsurface(setting, L))
                             .stations(List.of(Stations.at("MSH-N", vent, 0, 3000, L), Stations.at("MSH-E", vent, 3000, 0, L),
                                     Stations.at("MSH-S", vent, 0, -3000, L))).scaling(scaling(L)).tephra(tephra()).ballisticFraction(0.02)
                             .wind(15, 0.0, Presets.WIND_VARIABILITY).build());
@@ -365,6 +377,7 @@ final class RealPresets {
                             .build();
                     return b.volcano(VolcanoSystem.builder("pinatubo-real", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
+                            .subsurfaceConfig(subsurface(setting, L))
                             .stations(List.of(Stations.at("PIN-N", vent, 0, 4000, L), Stations.at("PIN-E", vent, 4000, 0, L),
                                     Stations.at("PIN-W", vent, -4000, 0, L))).scaling(scaling(L)).tephra(tephra()).ballisticFraction(0.005)
                             .wind(20, Math.PI, Presets.WIND_VARIABILITY).build());
@@ -431,7 +444,8 @@ final class RealPresets {
                             .maxEruptionRate(100)
                             .build();
                     return b.volcano(VolcanoSystem.builder("surtsey-real", List.of(vent), b.terrain(), b.lava())
-                            .chamber(chamber).scaling(scaling(L)).tephra(tephra())
+                            .chamber(chamber)
+                            .subsurfaceConfig(subsurface(setting, L)).scaling(scaling(L)).tephra(tephra())
                             .wind(10, 0.8, Presets.WIND_VARIABILITY).build());
                 });
     }
@@ -509,7 +523,7 @@ final class RealPresets {
                     geothermal.ventHaloBlocks = 60 / L;
                     geothermal.ventPipeDepthM = 300;
                     geothermal.maxGeysers = 20;
-                    SubsurfaceConfig subsurface = VolcanoSystem.defaultSubsurfaceConfig(scaling(L));
+                    SubsurfaceConfig subsurface = subsurface(setting, L);
                     subsurface.initialWaterTableDepthM = 3;
                     subsurface.rainfallMmPerHour = 0.1;
                     subsurface.gradientCPerKm = 100; // caldera heat flow ~30–40× the continental average

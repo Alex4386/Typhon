@@ -147,7 +147,8 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
 
     /** {@link SubsurfaceConfig} fields set from the climate, geotherm and aquifer sections. */
     static final Set<String> SUBSURFACE_DERIVED = Set.of("rainfallMmPerHour", "evaporationMmPerHour",
-            "surfaceTemperatureC", "gradientCPerKm", "initialWaterTableDepthM", "specificYield");
+            "surfaceTemperatureC", "gradientCPerKm", "initialWaterTableDepthM", "specificYield",
+            "waterTableTopographyFactor", "waterTableBaseLevelM", "rechargeFraction");
 
     static SubsurfaceConfig defaultSubsurface(VolcanoScaling scaling) {
         SubsurfaceConfig c = new SubsurfaceConfig();
@@ -160,10 +161,22 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
         SubsurfaceConfig c = base.copy();
         c.rainfallMmPerHour = climate.rainfallMmPerHour();
         c.evaporationMmPerHour = climate.evaporationMmPerHour();
+        return applyGeothermAquifer(c, geotherm, aquifer);
+    }
+
+    /**
+     * Sets the subsurface fields that come from a geotherm and an aquifer section (in place; returns
+     * {@code c}). Scenarios that build a subsurface outside a world use this to stay consistent with
+     * the world they would write.
+     */
+    public static SubsurfaceConfig applyGeothermAquifer(SubsurfaceConfig c, Geotherm geotherm, Aquifer aquifer) {
         c.surfaceTemperatureC = geotherm.surfaceTemperatureC();
         c.gradientCPerKm = geotherm.gradientCPerKm();
         c.initialWaterTableDepthM = aquifer.waterTableDepth();
         c.specificYield = aquifer.specificYield();
+        c.waterTableTopographyFactor = aquifer.topographyFactor();
+        c.waterTableBaseLevelM = aquifer.baseLevel();
+        c.rechargeFraction = aquifer.rechargeFraction();
         return c;
     }
 
