@@ -112,7 +112,7 @@ public final class Presets {
                     MagmaChamberConfig chamber = MagmaChamberConfig.builder("kilauea", chamberBelow(vent, 40))
                             .volume(1e9)
                             .lithostaticDepth(1500)
-                            .conduitRadius(2.0)
+                            .conduitRadius(1.5) // feeder ~3 m across (Wilson & Head 1981); peak effusion within 1-100 m3/s
                             .tensileStrengthMPa(10)
                             .eruptionEndOverpressureMPa(1)
                             .supplyRate(3)
@@ -232,7 +232,7 @@ public final class Presets {
                         + " broad downwind ash blanket.",
                 List.of(
                         "Dacite, SiO2 ~64-65 wt%, T ~780 C, H2O ~6-6.5 wt% (1991 pumice)",
-                        "Reservoir > 6 km depth; climactic phase 15 June 1991, MER of order 1e9 kg/s",
+                        "Reservoir > 6 km depth; climactic phase 15 June 1991, ~0.7-1.5e5 m3/s DRE (Mastin et al. 2009)",
                         "Column 35-40 km; ~3.7-5.3 km3 DRE erupted",
                         "Pre-1991 summit ~1745 m"),
                 1,
@@ -252,7 +252,7 @@ public final class Presets {
                             .initialWaterWt(6.2).rechargeWaterWt(6.2)
                             .initialTemperatureC(780).rechargeTemperatureC(800)
                             .initialOverpressureMPa(15.1)
-                            .maxEruptionRate(4e5)
+                            .maxEruptionRate(1.5e5) // 0.8-1.6 km3 DRE in ~3 h (Mastin et al. 2009, Table 1)
                             .build();
                     VolcanoSystem volcano = VolcanoSystem.builder("pinatubo", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)

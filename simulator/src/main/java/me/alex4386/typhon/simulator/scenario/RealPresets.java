@@ -161,7 +161,9 @@ final class RealPresets {
                     Scenario.Builder b = builder("kilauea-real", seed, terrain, setting);
                     VentSite vent = vent("halemaumau", terrain, L, 0, 0, 140);
                     MagmaChamberConfig chamber = MagmaChamberConfig.builder("kilauea-real", chamberAt(vent, -400, L))
-                            .volume(1e9).lithostaticDepth(1500).conduitRadius(2.0).tensileStrengthMPa(10)
+                            // feeder ~3 m across, the scale of basaltic feeder dikes/conduits (Wilson & Head 1981);
+                            // Poiseuille flow (Q ∝ r⁴) then peaks within the observed 1-100 m3/s (Neal et al. 2019)
+                            .volume(1e9).lithostaticDepth(1500).conduitRadius(1.5).tensileStrengthMPa(10)
                             .eruptionEndOverpressureMPa(1).supplyRate(3).supplyVariability(0.2)
                             .initialSilicaWt(50).rechargeSilicaWt(50).initialWaterWt(0.4).rechargeWaterWt(0.4)
                             .initialTemperatureC(1165).rechargeTemperatureC(1180).initialOverpressureMPa(9.5)
@@ -328,7 +330,8 @@ final class RealPresets {
                         "Pre-1991 summit 1745 m (Newhall & Punongbayan 1996)",
                         "Dacite SiO2 64-65 wt%, ~780 C, H2O 6-6.5 wt% (Rutherford & Devine 1996)",
                         "Reservoir > 6 km depth (Pallister et al. 1996)",
-                        "15 June 1991 climactic column 35-40 km (Holasek et al. 1996), MER ~1e9 kg/s",
+                        "15 June 1991 climactic column 35-40 km (Holasek et al. 1996)",
+                        "0.8-1.6 km3 DRE in ~3 h, MER 2-4e8 kg/s, i.e. ~0.7-1.5e5 m3/s DRE (Mastin et al. 2009, Table 1)",
                         "3.7-5.3 km3 DRE erupted (Scott et al. 1996)"),
                 1,
                 setting,
@@ -337,9 +340,11 @@ final class RealPresets {
                                 "Newhall & Punongbayan 1996", Metric.SUMMIT_ELEVATION_M),
                         ReferenceValue.range("Plinian column top", 35, 40, "km a.s.l.", "Holasek et al. 1996",
                                 Metric.PLUME_TOP_KM),
-                        ReferenceValue.range("Peak eruption rate (DRE)", 2e5, 6e5, "m³/s",
-                                "~1e9 kg/s / 2500 kg/m³", Metric.PEAK_ERUPTION_RATE_M3S),
-                        ReferenceValue.range("Ash deposit downwind / upwind", 3, Double.NaN, "",
+                        ReferenceValue.range("Peak eruption rate (DRE)", 7e4, 2e5, "m³/s",
+                                "0.8-1.6 km³ DRE in ~3 h (Mastin et al. 2009, Table 1)", Metric.PEAK_ERUPTION_RATE_M3S),
+                        // qualitative: the fall deposit is skewed downwind; a 15 km window sees mostly the
+                        // near-vent umbrella, not the distal lobe, so only the direction of the skew is checked
+                        ReferenceValue.range("Ash deposit downwind / upwind", 1.5, Double.NaN, "",
                                 "fall deposit elongated downwind (WSW, Typhoon Yunya) (Paladio-Melosantos et al. 1996)",
                                 Metric.ASH_DOWNWIND_RATIO)),
                 seed -> RealTerrain.build(L, half, seed, (xm, zm) -> {
@@ -354,7 +359,9 @@ final class RealPresets {
                             .eruptionEndOverpressureMPa(2).supplyRate(2).supplyVariability(0.1)
                             .initialSilicaWt(64.5).rechargeSilicaWt(64.5).initialWaterWt(6.2).rechargeWaterWt(6.2)
                             .initialTemperatureC(780).rechargeTemperatureC(800).initialOverpressureMPa(15.1)
-                            .maxEruptionRate(4e5)
+                            // climactic DRE rate ~0.7-1.5e5 m3/s (Mastin et al. 2009, Table 1); with the Mastin
+                            // plume fit this gives the observed 35-40 km column
+                            .maxEruptionRate(1.5e5)
                             .build();
                     return b.volcano(VolcanoSystem.builder("pinatubo-real", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
