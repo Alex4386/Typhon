@@ -23,6 +23,7 @@ import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.Outbox;
+import me.alex4386.typhon.engine.sim.Parallel;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
@@ -105,10 +106,9 @@ public abstract class MassFlowField implements Subsystem {
 
     // per-step / per-substep scratch
     private final TreeSet<Long> neededTerrain = new TreeSet<>();
-    private final double[] faceSpeed = new double[4];
-    private final double[] faceVolume = new double[4];
     private long stamp = Long.MIN_VALUE + 1;
     private long epoch = Long.MIN_VALUE + 1;
+    private Parallel parallel = Parallel.sequential();
     private int lastSubsteps;
     protected final StepStats stats = new StepStats();
 
@@ -321,6 +321,7 @@ public abstract class MassFlowField implements Subsystem {
 
     @Override
     public void step(StepContext context) {
+        parallel = context.parallel();
         double time = context.time();
         currentTime = time;
         stamp = context.step();
@@ -400,14 +401,22 @@ public abstract class MassFlowField implements Subsystem {
 
     // ── Transport ──
 
+    /**
+     * One transport sub-step. Neighbour chunks are resolved (and created) sequentially; faces and the
+     * gather then run per chunk in parallel, each writing only its own chunk; touched flags and the
+     * rounding residue are folded back in chunk-key order.
+     */
     private void transport(double dt) {
         epoch++;
-        // Snapshot: computing faces may create neighbouring chunks.
-        for (MassFlowChunk c : new ArrayList<>(chunks.values())) {
-            if (c.flowCells > 0) {
-                ensureFresh(c);
-                computeFaces(c, dt);
-            }
+        List<MassFlowChunk> active = new ArrayList<>();
+        for (MassFlowChunk c : chunks.values()) if (c.flowCells > 0) active.add(c);
+        for (MassFlowChunk c : active) {
+            ensureFresh(c);
+            prepareFaces(c);
+        }
+        parallel.forEach(active, c -> computeFaces(c, dt));
+        for (MassFlowChunk c : active) {
+            for (int d = 0; d < 4; d++) if ((c.touchOut & (1 << d)) != 0) c.neighbours[d].touchedStamp = epoch;
         }
         List<MassFlowChunk> update = new ArrayList<>();
         for (MassFlowChunk c : chunks.values()) {
@@ -415,15 +424,48 @@ public abstract class MassFlowField implements Subsystem {
         }
         for (MassFlowChunk c : update) {
             ensureFresh(c);
-            gather(c);
+            for (int d = 0; d < 4; d++) neighbour(c, d, false);
         }
-        for (MassFlowChunk c : update) {
+        parallel.forEach(update, this::gather); // reads neighbours' current buffers: swap only afterwards
+        parallel.forEach(update, c -> {
             c.swapBuffers();
             c.recount();
+        });
+        for (MassFlowChunk c : update) {
+            lost += c.lostResidue;
+            c.lostResidue = 0;
         }
     }
 
+    /** Sequential: resolves/creates the neighbour chunks an edge cell of {@code c} may flow into. */
+    private void prepareFaces(MassFlowChunk c) {
+        c.touchOut = 0;
+        int needed = 0;
+        for (int i = 0; i < AREA; i++) {
+            int lx = i & 15;
+            int lz = i >> 4;
+            if (lx != 0 && lx != 15 && lz != 0 && lz != 15) continue;
+            if (c.depth[i] <= 0 || c.ground[i] == UNKNOWN) continue;
+            for (int d = 0; d < 4; d++) {
+                int nx = lx + DX[d];
+                int nz = lz + DZ[d];
+                if (nx < 0 || nx > 15 || nz < 0 || nz > 15) needed |= 1 << d;
+            }
+        }
+        for (int d = 0; d < 4; d++) {
+            if ((needed & (1 << d)) != 0) neighbour(c, d, true);
+        }
+    }
+
+    /** Parallel-safe neighbour lookup: only what a prepare pass resolved this step. */
+    private MassFlowChunk peekNeighbour(MassFlowChunk c, int d) {
+        if (c.neighbourStamp != stamp) throw new IllegalStateException("neighbours of chunk not prepared this step");
+        return c.neighbours[d];
+    }
+
     private void computeFaces(MassFlowChunk c, double dt) {
+        double[] faceSpeed = new double[4];
+        double[] faceVolume = new double[4];
         c.fluxStamp = epoch;
         Arrays.fill(c.outVolume, 0);
         Arrays.fill(c.outSpeed, 0);
@@ -450,7 +492,7 @@ public abstract class MassFlowField implements Subsystem {
                 int nz = lz + DZ[d];
                 MassFlowChunk nc = c;
                 if (nx < 0 || nx > 15 || nz < 0 || nz > 15) {
-                    nc = neighbour(c, d, true);
+                    nc = peekNeighbour(c, d);
                     if (nc == null) continue;
                 }
                 int j = ((nz & 15) << 4) | (nx & 15);
@@ -485,7 +527,7 @@ public abstract class MassFlowField implements Subsystem {
                 c.outSpeed[d * AREA + i] = faceSpeed[d] * scale;
                 int nx = lx + DX[d];
                 int nz = lz + DZ[d];
-                if (nx < 0 || nx > 15 || nz < 0 || nz > 15) c.neighbours[d].touchedStamp = epoch;
+                if (nx < 0 || nx > 15 || nz < 0 || nz > 15) c.touchOut |= 1 << d;
             }
         }
     }
@@ -524,7 +566,7 @@ public abstract class MassFlowField implements Subsystem {
                 int nz = lz + DZ[d];
                 MassFlowChunk nc = c;
                 if (nx < 0 || nx > 15 || nz < 0 || nz > 15) {
-                    nc = neighbour(c, d, false);
+                    nc = peekNeighbour(c, d);
                     if (nc == null) continue;
                 }
                 if (nc.fluxStamp != epoch) continue;
@@ -547,7 +589,7 @@ public abstract class MassFlowField implements Subsystem {
                 c.nextTemperature[i] = heat / volume;
                 c.nextSediment[i] = sed / volume;
             } else {
-                if (volume > 0) lost += volume; // rounding residue
+                if (volume > 0) c.lostResidue += volume; // rounding residue (folded in chunk order)
                 c.nextDepth[i] = 0;
                 c.nextVx[i] = 0;
                 c.nextVz[i] = 0;

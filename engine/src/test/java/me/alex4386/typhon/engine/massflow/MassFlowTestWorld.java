@@ -81,6 +81,10 @@ final class MassFlowTestWorld {
         return Engine.builder(seed).add(terrain).add(field).build();
     }
 
+    Engine engine(MassFlowField field, long seed, int threads) {
+        return Engine.builder(seed).threads(threads).add(terrain).add(field).build();
+    }
+
     void run(Engine engine, int ticks) {
         for (int i = 0; i < ticks; i++) frames.add(engine.step());
     }

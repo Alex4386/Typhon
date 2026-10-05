@@ -39,6 +39,8 @@ final class MassFlowChunk {
     long fluxStamp = Long.MIN_VALUE;
     long neighbourStamp = Long.MIN_VALUE;
     long touchedStamp = Long.MIN_VALUE;
+    int touchOut; // per-step scratch: neighbour directions that received flow (folded sequentially)
+    double lostResidue; // per-step scratch: rounding residue dropped by gather (folded sequentially)
     long depositStamp = Long.MIN_VALUE;
     int flowCells;
     int soakedCells;
