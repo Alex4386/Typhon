@@ -109,7 +109,20 @@ beyond the world from altitude).
 
 - **Navigate.** See [Camera](#camera); the 🖐 tool must be active for mouse look in fly/walk mode.
 - **Cross-section.** Use ✎ in the toolbox or "Draw line" in the section panel. Click two or more
-  points on the map, then **Cut**. The section refreshes every 3 s while shown.
+  points on the map, then **Cut**. The section refreshes every 3 s while shown. The **view** menu
+  switches between absolute km-scale views (elevation, with chamber, conduits and dikes) and
+  ground-relative **top 5 / 20 / 100 m** views, which follow the surface so deposits a few metres
+  thick keep their true thickness whatever the relief. Km views also show a **shallow inset** with
+  the top 30 m along the same line. Eruption units are labelled where they are thickest; bands too
+  thin for text get a ▸ pointer label. `VE ×N` is the vertical exaggeration of the plot.
+- **Underground.** Below the ground (fly with underground on, G) the surface turns translucent
+  ("x-ray underground" in the toolbox) and the groundwater table appears as a cyan sheet; the water
+  table can also be shown from above ("water table"). Camera clearance and walking follow the
+  smoothed surface that is drawn.
+- **Markers.** Hypocentres fade as the camera nears the ground from above and stay small close up;
+  geothermal feature markers shrink and hide next to the camera.
+- **Glow.** On medium/high quality, incandescent lava carries additive halo sprites (temperature
+  coloured) for a bloom-like glow; vents also light their surroundings.
 - **Pour water / dig.** Use 💧 / ⛏, then click the map. Volume, radius and depth are in the toolbox.
   These demonstrate two-way coupling: a pit below the water table fills up, and poured water infiltrates.
 - **Surface colouring.** Natural, ground temperature, water-table depth, surface unit, deformation,

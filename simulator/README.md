@@ -104,6 +104,9 @@ writes a real-DEM world for a real-scale preset.
 | `timeseries.csv` | Primary volcano and world state every `--sample-seconds` |
 | `events.ndjson` | One JSON object per engine event (`type` = record name) |
 | `map-*.png` | Elevation, change, lava, ash and geothermal maps (north up, +X right) |
+| `section-ew.png` | West–east cross-section through the main vent at true elevation (deposits by type, darker = later eruptions) |
+| `section-ew-shallow.png` | The same line flattened to the present surface: the top 2–200 m (auto-sized to the thickest deposit) at true thickness, cropped to the deposits, units labelled; deposits under 2 px are drawn 2 px and marked ▸ |
+| `section-columns.png` | Stratigraphic column logs at the vent and a distal point (log-scaled heights, true thickness in the labels) |
 | `report.html` | Self-contained summary, timeline, SVG charts and embedded maps |
 
 Columns in `timeseries.csv` include overpressure, eruption rate, RSAM, VT/LP rates, alert level and style, plus lava, plume, tephra and geothermal state.
