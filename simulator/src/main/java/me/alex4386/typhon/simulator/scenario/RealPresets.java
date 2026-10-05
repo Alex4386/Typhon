@@ -72,8 +72,9 @@ final class RealPresets {
      * flows and ponds take days to crust and freeze: ×20 lets a play session cover days of effusion
      * so flows freeze into stratigraphy. The explosive presets keep ×1: their observables
      * (Strombolian cadence, a Plinian column lasting hours, Surtsey's months-long Surtseyan phase
-     * judged at onset) are minutes-to-hours phenomena, and the eruption column is computed from the
-     * per-engine-second mass rate.
+     * judged at onset) are minutes-to-hours phenomena that play out in real time. Compression no
+     * longer distorts their intensity (column height, collapse, style and tremor follow the physical
+     * mass rate), but it would run a Plinian phase or a Strombolian cadence C× faster than observed.
      */
     static final double KILAUEA_ERUPTIVE_COMPRESSION = 20;
 
@@ -200,7 +201,10 @@ final class RealPresets {
                                     // approximate positions of HVO's caldera-rim GNSS sites (Uwekahuna NW, Crater Rim SE)
                                     Stations.at("UWEV", vent, -1400, 1400, L), Stations.at("CRIM", vent, 1800, -1800, L),
                                     Stations.at("KIL-FLK-S", vent, 0, -4000, L))).scaling(scaling(L, KILAUEA_ERUPTIVE_COMPRESSION)).tephra(tephra())
-                            .wind(7, 0.6, Presets.WIND_VARIABILITY).build());
+                            .wind(7, 0.6, Presets.WIND_VARIABILITY)
+                            // a century of spin-up: the summit's hydrothermal system has had the chamber's heat
+                            // for far longer, so play starts from it, not from a halo mined by boiling
+                            .geothermalPrewarm(100 * 365.25 * 86400).build());
                 });
     }
 
