@@ -104,7 +104,30 @@ on; nothing integrates them yet):
 `terrain.TerrainModel` is the block-level bridge over it: host `TerrainSnapshot`s import columns
 (built as above) or reconcile known ones,
 and every ground change made through it deposits or erodes in the stacks. Blocks are cubes of
-`WorldSpec.metersPerColumn()`; ground block `y` has its top at `(y + 1)·L` metres.
+`WorldSpec.metersPerColumn()`; ground block `y` has its top at `(y + 1)·L` metres. A re-sent column
+whose ground block did not move keeps the stacks' exact (sub-block) surface.
+
+### Stratigraphy (who deposits what)
+
+Volcanic subsystems write their physical deposits straight into the world model, at their exact
+thickness, as layers of a unit attributed to the producing volcano's current eruption (a
+`UnitSource`; `assembly.VolcanoUnits` uses `MagmaChamber.eruptionCount()`). Blocks only render
+those layers: subsystems update the block cache with `TerrainModel.updateBlockCache`, never through
+the bridge (which would deposit unattributed fill a second time).
+
+| Producer | Deposit type, material | Flags |
+|---|---|---|
+| `LavaFlow` (flows on `surfaceZ + uplift`) | `LAVA` basalt/andesite/dacite/rhyolite/obsidian; `HYALOCLASTITE` under water; tube = `CAVITY` (void) under `TUBE_ROOF` | columnar flows `FRACTURED` |
+| `PyroclasticFlows` | `PDC` tuff, welded at/above the welding temperature | non-welded `LOOSE` |
+| `Lahars` | `LAHAR` lahar deposit | `LOOSE` |
+| `TephraSubsystem` | `FALL` ash (every mm; none on molten lava, where it joins the flow); bombs: their real volume as `FALL` rock | ash `LOOSE` |
+| `DikePropagation` | `INTRUSION` gabbro/andesite/granite from chamber depth to the tip, along the path | |
+| `VolcanoCoupler` | tuff rings (`FALL`) | |
+
+Lahars entrain loose `FALL`/`PDC`/`LAHAR` layers out of the stacks (rain failure, bulking), so fresh
+tephra and ignimbrite are lahar source material without any wiring. Without a volcano assembly the
+subsystems use `UnitSource.typed(world)` (typed but unattributed units). Lava melt carries a unit
+too; the newest unit contributing ≥ 10 % of a cell's melt takes it over.
 
 ## World definitions and worlds
 
