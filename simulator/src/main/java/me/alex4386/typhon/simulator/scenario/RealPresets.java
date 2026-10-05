@@ -146,7 +146,11 @@ final class RealPresets {
                         ReferenceValue.range("Effusion rate (peak)", 1, 100, "m³/s",
                                 "Poland et al. 2014; Neal et al. 2019", Metric.PEAK_ERUPTION_RATE_M3S),
                         ReferenceValue.category("Eruption style", "HAWAIIAN", "basaltic, H₂O < 0.5 wt%",
-                                Metric.ANY_STYLE)),
+                                Metric.ANY_STYLE),
+                        ReferenceValue.range("Longest lava flow", 100, 10000, "m",
+                                "Hawaiian flows: hundreds of m to km per day (Neal et al. 2019)", Metric.LONGEST_FLOW_M)
+                                .informative("the summit eruption first ponds in Halema'uma'u; flow length over"
+                                        + " a few hours is not a calibrated quantity")),
                 seed -> RealTerrain.build(L, half, seed, (xm, zm) -> {
                     double d = RealTerrain.dist(xm, zm, 0, 0);
                     double shield = 1247 - Math.tan(Math.toRadians(4)) * Math.max(0, d - 1900);
@@ -268,7 +272,10 @@ final class RealPresets {
                         ReferenceValue.range("Peak eruption rate (DRE)", 2000, 8000, "m³/s",
                                 "1-2e7 kg/s / 2500 kg/m³ (Carey & Sigurdsson 1985)", Metric.PEAK_ERUPTION_RATE_M3S),
                         ReferenceValue.category("Later style", "LAVA_DOME", "2004-2008 (Schilling et al. 2008)",
-                                Metric.ANY_STYLE)),
+                                Metric.ANY_STYLE),
+                        ReferenceValue.range("Explosions during dome growth", 1, Double.NaN, "",
+                                "Vulcanian explosions through the dome, 1980-86 and 2004-08 (Swanson & Holcomb 1990;"
+                                        + " Scott et al. 2008)", Metric.EXPLOSIONS_AFTER_DOME)),
                 seed -> RealTerrain.build(L, half, seed, (xm, zm) -> {
                     // pre-1980: a symmetric cone topped by a small summit dome, no crater
                     return RealTerrain.cone(RealTerrain.dist(xm, zm, 0, 0), 2950, 1200, 6000, 1.6);
@@ -323,7 +330,10 @@ final class RealPresets {
                         ReferenceValue.range("Plinian column top", 35, 40, "km a.s.l.", "Holasek et al. 1996",
                                 Metric.PLUME_TOP_KM),
                         ReferenceValue.range("Peak eruption rate (DRE)", 2e5, 6e5, "m³/s",
-                                "~1e9 kg/s / 2500 kg/m³", Metric.PEAK_ERUPTION_RATE_M3S)),
+                                "~1e9 kg/s / 2500 kg/m³", Metric.PEAK_ERUPTION_RATE_M3S),
+                        ReferenceValue.range("Ash deposit downwind / upwind", 3, Double.NaN, "",
+                                "fall deposit elongated downwind (WSW, Typhoon Yunya) (Paladio-Melosantos et al. 1996)",
+                                Metric.ASH_DOWNWIND_RATIO)),
                 seed -> RealTerrain.build(L, half, seed, (xm, zm) -> {
                     // pre-1991: a dissected cone topped by a dome complex, no open crater
                     return RealTerrain.cone(RealTerrain.dist(xm, zm, 0, 0), 1745, 400, 7000, 1.8);
@@ -376,7 +386,14 @@ final class RealPresets {
                         ReferenceValue.range("Final highest point", 0, 173, "m a.s.l.",
                                 "island emerges; 173 m by 1967 (Jakobsson et al. 2000)", Metric.FINAL_MAX_ELEVATION_M),
                         ReferenceValue.category("Eruption style", "HAWAIIAN", "effusive once sealed (1964-67)",
-                                Metric.ANY_STYLE)),
+                                Metric.ANY_STYLE),
+                        ReferenceValue.category("Vent-water sequence", "SURTSEYAN→EFFUSIVE",
+                                "explosive while sea water reached the vent, effusive once the tephra ring sealed it"
+                                        + " (Thorarinsson 1967; Jakobsson et al. 2000)", Metric.PHREATOMAGMATIC_SEQUENCE),
+                        ReferenceValue.value("Surtseyan phase duration", 3400, "h",
+                                "14 Nov 1963 to 4 Apr 1964, ~142 days (Thorarinsson 1967)", Metric.PHREATOMAGMATIC_HOURS)
+                                .informative("the scenario starts with the vent at 15 m depth and runs for hours;"
+                                        + " months of tephra-ring growth are not reproduced")),
                 seed -> RealTerrain.build(L, half, seed, (xm, zm) -> {
                     double d = RealTerrain.dist(xm, zm, 0, 0);
                     double cone = RealTerrain.cone(d, -15, -130, 500, 1.3);
@@ -433,7 +450,11 @@ final class RealPresets {
                         ReferenceValue.range("Plateau / rim elevation", 2300, 2700, "m", "Christiansen 2001",
                                 Metric.SUMMIT_ELEVATION_M),
                         ReferenceValue.range("Geysers formed", 1, Double.NaN, "", "> 500 in reality (preset cap 20)",
-                                Metric.GEYSERS)),
+                                Metric.GEYSERS),
+                        ReferenceValue.range("Hot / sulfur springs formed", 1, Double.NaN, "",
+                                "thousands of hot springs (Fournier 1989)", Metric.SPRINGS),
+                        ReferenceValue.range("Eruptions", 0, 0, "", "no eruption in the last ~70 kyr (Christiansen 2001)",
+                                Metric.ERUPTIONS)),
                 seed -> {
                     ColumnGrid grid = RealTerrain.build(L, half, seed, (xm, zm) -> {
                         double plateau = 2400 + 250 * smoothStep(-4000, -6500, xm); // caldera rim to the west

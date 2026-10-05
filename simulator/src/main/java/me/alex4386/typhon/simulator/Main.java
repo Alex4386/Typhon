@@ -24,6 +24,7 @@ import me.alex4386.typhon.simulator.run.ReferenceComparison;
 import me.alex4386.typhon.simulator.run.RunSummary;
 import me.alex4386.typhon.simulator.run.Sample;
 import me.alex4386.typhon.simulator.run.Simulation;
+import me.alex4386.typhon.simulator.run.Validation;
 import me.alex4386.typhon.simulator.scenario.Preset;
 import me.alex4386.typhon.simulator.scenario.Presets;
 import me.alex4386.typhon.simulator.scenario.Scenario;
@@ -56,7 +57,7 @@ public final class Main {
     static final Set<String> DEFAULT_SKIPPED_EVENTS = Set.of();
 
     /** Options that take no value. */
-    static final Set<String> FLAGS = Set.of("quiet", "accept-config-change", "reset-changed", "no-save");
+    static final Set<String> FLAGS = Set.of("quiet", "accept-config-change", "reset-changed", "no-save", "no-reports");
 
     private Main() {}
 
@@ -91,6 +92,9 @@ public final class Main {
             }
             case "dem-info" -> {
                 return demInfo(parse(args), out, err);
+            }
+            case "validate" -> {
+                return validate(parse(args), out, err);
             }
             default -> {
                 err.println("Unknown command: " + args[0]);
@@ -303,6 +307,33 @@ public final class Main {
         return 0;
     }
 
+    /**
+     * Runs the validation suite and writes {@code validation.{json,md,html}} plus one report per preset.
+     * Exit code 0 when every non-informative check passes, 2 otherwise.
+     */
+    static int validate(Map<String, String> options, PrintStream out, PrintStream err) throws IOException {
+        List<Preset> presets;
+        if (options.containsKey("presets")) {
+            presets = new java.util.ArrayList<>();
+            for (String name : options.get("presets").split(",")) presets.add(Presets.get(name.trim()));
+        } else {
+            presets = Validation.realPresets();
+        }
+        long seed = Long.parseLong(options.getOrDefault("seed", "1"));
+        double hours = options.containsKey("hours") ? Double.parseDouble(options.get("hours")) : Double.NaN;
+        Path dir = Path.of(options.getOrDefault("out", "sim-out/validation"));
+        boolean reports = !options.containsKey("no-reports");
+        List<Validation.PresetResult> results = new java.util.ArrayList<>();
+        for (Preset preset : presets) {
+            results.add(Validation.run(preset, seed, hours, reports ? dir.resolve(preset.name()) : null, out::println));
+        }
+        Validation.writeAll(dir, results);
+        long failures = results.stream().mapToLong(Validation.PresetResult::failures).sum();
+        out.println((failures == 0 ? "Validation passed" : "Validation: " + failures + " check(s) failed") + " → "
+                + dir.resolve("validation.html"));
+        return failures == 0 ? 0 : 2;
+    }
+
     static int demInfo(Map<String, String> options, PrintStream out, PrintStream err) {
         String name = options.get("preset");
         Preset preset = name == null ? null : Presets.get(name);
@@ -346,6 +377,9 @@ public final class Main {
         out.println("      [--accept-config-change | --reset-changed] [--no-save] [--quiet]");
         out.println("  init-world (--preset NAME [--seed N] [--dem FILE] | --example twin) --out DIR");
         out.println("  dem-info --preset NAME-real   where to download a real DEM for a real-scale preset");
+        out.println("  validate [--presets a,b] [--seed N] [--hours H] [--out DIR] [--no-reports]");
+        out.println("      run real-scale presets for their reference horizon and judge them against literature");
+        out.println("      values (validation.json/.md/.html); exit 2 if any non-informative check fails");
         out.println("  events.ndjson omits " + DEFAULT_SKIPPED_EVENTS + " unless --skip-events is given.");
     }
 

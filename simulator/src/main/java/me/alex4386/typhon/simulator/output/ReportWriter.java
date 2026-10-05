@@ -134,6 +134,7 @@ public final class ReportWriter {
                 ReferenceValue ref = row.reference();
                 h.append("<tr><td>").append(esc(ref.quantity())).append("</td><td>").append(esc(ref.referenceText()))
                         .append("</td><td>").append(esc(row.modelText())).append("</td><td>").append(verdict(row.verdict()))
+                        .append(ref.informative() ? " <small class=\"muted\">(context only: " + esc(ref.note()) + ")</small>" : "")
                         .append("</td><td><small>").append(esc(ref.source())).append("</small></td></tr>");
             }
             h.append("</table><p class=\"muted\">A sanity check of magnitudes and behaviour over this run's horizon,"

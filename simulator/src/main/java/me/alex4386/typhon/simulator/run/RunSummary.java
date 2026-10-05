@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import me.alex4386.typhon.engine.assembly.SurfaceEvents.PhreatomagmaticChanged;
 import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.alert.AlertEvents.AlertLevelChanged;
 import me.alex4386.typhon.engine.alert.AlertEvents.EruptionStyleSuggested;
@@ -57,6 +58,13 @@ public final class RunSummary {
     public final List<Double> explosionTimes = new ArrayList<>();
     /** First time each eruption style was suggested (s). */
     public final Map<String, Double> firstStyleSeconds = new TreeMap<>();
+    /** Start and end (s) of the first phreatomagmatic phase; {@code NaN} if not seen. */
+    public double phreatomagmaticStartSeconds = Double.NaN;
+    public double phreatomagmaticEndSeconds = Double.NaN;
+    /** First lava flow-front report (s), {@code NaN} if lava never flowed. */
+    public double firstLavaFlowSeconds = Double.NaN;
+    /** First lava flow-front report after the first phreatomagmatic phase ended (s). */
+    public double lavaAfterPhreatomagmaticSeconds = Double.NaN;
 
     public final Map<String, Long> eventCounts = new TreeMap<>();
     public final List<Milestone> milestones = new ArrayList<>();
@@ -126,7 +134,24 @@ public final class RunSummary {
                 maxPlumeTopY = Math.max(maxPlumeTopY, e.topY());
                 maxPlumeMassRate = Math.max(maxPlumeMassRate, e.massEruptionRate());
             }
-            case LavaFlowFront e -> maxFlowLengthM = Math.max(maxFlowLengthM, e.lengthM());
+            case LavaFlowFront e -> {
+                maxFlowLengthM = Math.max(maxFlowLengthM, e.lengthM());
+                if (Double.isNaN(firstLavaFlowSeconds)) firstLavaFlowSeconds = t;
+                if (!Double.isNaN(phreatomagmaticEndSeconds) && Double.isNaN(lavaAfterPhreatomagmaticSeconds)) {
+                    lavaAfterPhreatomagmaticSeconds = t;
+                }
+            }
+            case PhreatomagmaticChanged e -> {
+                if (e.active() && Double.isNaN(phreatomagmaticStartSeconds)) {
+                    phreatomagmaticStartSeconds = t;
+                    milestones.add(new Milestone(t, String.format("Phreatomagmatic (Surtseyan) phase began at %.0f m water depth",
+                            e.waterDepthM())));
+                } else if (!e.active() && !Double.isNaN(phreatomagmaticStartSeconds)
+                        && Double.isNaN(phreatomagmaticEndSeconds)) {
+                    phreatomagmaticEndSeconds = t;
+                    milestones.add(new Milestone(t, "Phreatomagmatic phase ended (vent sealed from the water)"));
+                }
+            }
             case BombLaunched e -> bombsLaunched++;
             case BombLanded e -> {
                 bombsLanded++;

@@ -24,6 +24,11 @@ public interface Preset {
         return null;
     }
 
+    /** Simulated hours the validation suite runs this preset for (its reference horizon). */
+    default double validationHours() {
+        return defaultHours();
+    }
+
     /** Published values the run is compared with in the report ("reference vs model"). */
     default List<ReferenceValue> referenceValues() {
         return List.of();

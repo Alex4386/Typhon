@@ -18,9 +18,12 @@ import java.util.Locale;
  * @param unit unit of the numeric value
  * @param source literature source of the reference
  * @param metric the run metric compared against it
+ * @param informative {@code true} for rows shown for context only: the run cannot be expected to
+ *     reproduce them (e.g. a horizon far shorter than the real phase), so they never fail validation
+ * @param note why a row is informative, or other caveats ({@code ""} if none)
  */
 public record ReferenceValue(String quantity, double low, double high, String expected, String unit, String source,
-        Metric metric) {
+        Metric metric, boolean informative, String note) {
 
     /** Quantities measured on a run (see {@code ReportWriter} for how each is computed). */
     public enum Metric {
@@ -45,20 +48,37 @@ public record ReferenceValue(String quantity, double low, double high, String ex
         /** Eruption style at the end of the run. */
         FINAL_STYLE,
         /** Eruption style seen at any sample during the run (matches if any equals {@code expected}). */
-        ANY_STYLE
+        ANY_STYLE,
+        /** Eruptions started during the run. */
+        ERUPTIONS,
+        /** Hot and sulfur springs formed. */
+        SPRINGS,
+        /** Explosion quakes after the first LAVA_DOME style (e.g. Vulcanian explosions through a dome). */
+        EXPLOSIONS_AFTER_DOME,
+        /** Ash deposit downwind of the main vent divided by the deposit upwind (base wind direction). */
+        ASH_DOWNWIND_RATIO,
+        /** The run's vent-water sequence: {@code SURTSEYAN→EFFUSIVE}, {@code SURTSEYAN} or {@code EFFUSIVE}. */
+        PHREATOMAGMATIC_SEQUENCE,
+        /** Hours from the start to the end of the first phreatomagmatic (Surtseyan) phase. */
+        PHREATOMAGMATIC_HOURS
     }
 
     public static ReferenceValue range(String quantity, double low, double high, String unit, String source,
             Metric metric) {
-        return new ReferenceValue(quantity, low, high, null, unit, source, metric);
+        return new ReferenceValue(quantity, low, high, null, unit, source, metric, false, "");
     }
 
     public static ReferenceValue value(String quantity, double value, String unit, String source, Metric metric) {
-        return new ReferenceValue(quantity, value, value, null, unit, source, metric);
+        return new ReferenceValue(quantity, value, value, null, unit, source, metric, false, "");
     }
 
     public static ReferenceValue category(String quantity, String expected, String source, Metric metric) {
-        return new ReferenceValue(quantity, Double.NaN, Double.NaN, expected, "", source, metric);
+        return new ReferenceValue(quantity, Double.NaN, Double.NaN, expected, "", source, metric, false, "");
+    }
+
+    /** This row for context only: shown with {@code why}, never failing validation. */
+    public ReferenceValue informative(String why) {
+        return new ReferenceValue(quantity, low, high, expected, unit, source, metric, true, why);
     }
 
     public boolean categorical() {

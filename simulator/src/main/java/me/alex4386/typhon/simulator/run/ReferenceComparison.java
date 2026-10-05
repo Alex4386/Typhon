@@ -2,6 +2,7 @@ package me.alex4386.typhon.simulator.run;
 
 import java.util.ArrayList;
 import java.util.List;
+import me.alex4386.typhon.engine.geothermal.HydrothermalFeature;
 import me.alex4386.typhon.engine.seismic.SeismicEventType;
 import me.alex4386.typhon.engine.terrain.TerrainChunkView;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
@@ -45,8 +46,42 @@ public final class ReferenceComparison {
                 }
                 yield last;
             }
+            case PHREATOMAGMATIC_SEQUENCE -> {
+                RunSummary s = result.summary();
+                boolean wet = !Double.isNaN(s.phreatomagmaticStartSeconds);
+                if (wet && !Double.isNaN(s.lavaAfterPhreatomagmaticSeconds)) yield "SURTSEYAN→EFFUSIVE";
+                if (wet) yield "SURTSEYAN";
+                yield Double.isNaN(s.firstLavaFlowSeconds) ? null : "EFFUSIVE";
+            }
             default -> throw new IllegalArgumentException(ref.metric() + " is numeric");
         };
+    }
+
+    /**
+     * Ash deposited downwind of the main vent (half-plane along the base wind direction) divided by the
+     * deposit upwind; {@code NaN} without any deposit, capped at 1000 when nothing fell upwind.
+     */
+    static double ashDownwindRatio(Scenario scenario) {
+        var tephra = scenario.volcano().tephra();
+        if (tephra == null) return Double.NaN;
+        double dir = tephra.wind().baseDirectionRad();
+        double wx = Math.cos(dir);
+        double wz = Math.sin(dir);
+        var vent = scenario.volcano().vents().get(0).position();
+        int half = scenario.initialTerrain().size() / 2;
+        double down = 0;
+        double up = 0;
+        for (int z = -half; z < half; z += 4) {
+            for (int x = -half; x < half; x += 4) {
+                double t = tephra.depositThickness(x, z);
+                if (!(t > 0)) continue;
+                double along = (x - vent.x()) * wx + (z - vent.z()) * wz;
+                if (along > 0) down += t;
+                else if (along < 0) up += t;
+            }
+        }
+        if (down + up <= 0) return Double.NaN;
+        return up > 0 ? Math.min(1000, down / up) : 1000;
     }
 
     /** The measured value of a numeric metric (real units), {@code NaN} if not observed. */
@@ -75,7 +110,22 @@ public final class ReferenceComparison {
                     : Double.NaN;
             case MAX_BALLISTIC_RANGE_M -> s.bombsLanded > 0 ? s.maxBombDistance * L : Double.NaN;
             case GEYSERS -> s.geysers;
-            case FINAL_STYLE, ANY_STYLE -> throw new IllegalArgumentException(metric + " is categorical");
+            case ERUPTIONS -> s.eruptions;
+            case SPRINGS -> s.featuresFormed.getOrDefault(HydrothermalFeature.HOT_SPRING, 0L)
+                    + s.featuresFormed.getOrDefault(HydrothermalFeature.SULFUR_SPRING, 0L);
+            case EXPLOSIONS_AFTER_DOME -> {
+                Double dome = s.firstStyleSeconds.get("LAVA_DOME");
+                if (dome == null) yield Double.NaN;
+                long n = 0;
+                for (double t : s.explosionTimes) if (t > dome) n++;
+                yield n;
+            }
+            case ASH_DOWNWIND_RATIO -> ashDownwindRatio(scenario);
+            case PHREATOMAGMATIC_HOURS -> Double.isNaN(s.phreatomagmaticStartSeconds) ? Double.NaN
+                    : ((Double.isNaN(s.phreatomagmaticEndSeconds) ? result.simulatedSeconds() : s.phreatomagmaticEndSeconds)
+                            - s.phreatomagmaticStartSeconds) / 3600;
+            case FINAL_STYLE, ANY_STYLE, PHREATOMAGMATIC_SEQUENCE ->
+                    throw new IllegalArgumentException(metric + " is categorical");
         };
     }
 

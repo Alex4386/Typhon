@@ -31,7 +31,7 @@ tasks.named<JavaExec>("run") {
 
 tasks.test {
     useJUnitPlatform {
-        excludeTags("perf", "slow")
+        excludeTags("perf", "slow", "validation")
     }
     maxHeapSize = "1g"
     // Test classes run concurrently (classes.default) and preset scenarios within PresetsTest /
@@ -50,5 +50,20 @@ val slowTest by tasks.registering(Test::class) {
     useJUnitPlatform {
         includeTags("perf", "slow")
     }
+    testLogging.showStandardStreams = true
+}
+
+// Validation against observations (real-scale presets at their reference horizons, ~20 min):
+// ./gradlew :simulator:validationTest   (report in simulator/build/validation)
+val validationTest by tasks.registering(Test::class) {
+    description = "Runs the validation suite (tagged 'validation') against literature reference values."
+    group = "verification"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform {
+        includeTags("validation")
+    }
+    maxHeapSize = "3g"
+    systemProperty("typhon.validation.out", layout.buildDirectory.dir("validation").get().asFile.absolutePath)
     testLogging.showStandardStreams = true
 }
