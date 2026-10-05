@@ -33,6 +33,19 @@ public interface MagmaState {
     /** Current dense-rock-equivalent eruption rate (m³/s); 0 when not erupting. */
     double eruptionRate();
 
+    /**
+     * Real depth (m) of the chamber centre below the surface, which may differ from the world
+     * position of {@link #chamberCenter()} when the vertical scale is compressed; {@code NaN} if unknown.
+     */
+    default double physicalDepthM() {
+        return Double.NaN;
+    }
+
+    /** Chamber volume (m³), {@code NaN} if unknown. */
+    default double volumeM3() {
+        return Double.NaN;
+    }
+
     default boolean erupting() {
         return eruptionRate() > 0;
     }

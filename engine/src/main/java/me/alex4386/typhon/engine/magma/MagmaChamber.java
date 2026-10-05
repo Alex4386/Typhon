@@ -548,6 +548,16 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     // ── MagmaState ──
 
     @Override
+    public double physicalDepthM() {
+        return config.lithostaticDepth();
+    }
+
+    @Override
+    public double volumeM3() {
+        return config.volume();
+    }
+
+    @Override
     public BlockPos chamberCenter() {
         return config.center();
     }

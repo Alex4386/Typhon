@@ -35,7 +35,10 @@ public final class GeothermalConfig {
     public double ventPipeDepthM = 300.0;
     /** Extra Gaussian halo (blocks) added to a vent's radius for its heat footprint. */
     public double ventHaloBlocks = 8.0;
-    /** Radius (m) of the magma chamber sphere whose conductive halo heats the ground (≤ half its depth). */
+    /**
+     * Radius (m) of the magma chamber sphere whose conductive halo heats the ground, when the magma
+     * model does not report a volume (always ≤ half its depth).
+     */
     public double chamberRadiusM = 1000.0;
     /** Thermal conductivity (W/m·K) of lava resting on the ground, for {@link Geothermal#addLavaHeat}. */
     public double lavaConductivity = 1.5;

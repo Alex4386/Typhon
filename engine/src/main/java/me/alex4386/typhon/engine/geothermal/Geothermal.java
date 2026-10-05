@@ -280,10 +280,15 @@ public final class Geothermal implements Subsystem, HeatSources {
         double l = terrain.world().spec().metersPerColumn();
         double surface = terrain.world().isKnown(c.x(), c.z())
                 ? terrain.world().surfaceZ(c.x(), c.z()) : terrain.world().spec().blockTop(referenceY);
-        double centre = (c.y() + 0.5) * l;
-        double depth = surface - centre;
+        // Real chamber depth when the magma model knows it (the world's vertical scale is often
+        // compressed); otherwise the depth of its world position.
+        double physical = magma.physicalDepthM();
+        double depth = physical > 0 ? physical : surface - (c.y() + 0.5) * l;
         if (!(depth > 0)) return List.of();
-        double radius = Math.min(config.chamberRadiusM, 0.5 * depth);
+        double centre = surface - depth;
+        double volume = magma.volumeM3();
+        double fromVolume = volume > 0 ? Math.cbrt(3 * volume / (4 * Math.PI)) : config.chamberRadiusM;
+        double radius = Math.min(fromVolume, 0.5 * depth);
         return List.of(new Chamber(c.x() + 0.5, c.z() + 0.5, centre, surface, radius, t));
     }
 

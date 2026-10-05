@@ -181,7 +181,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
     void macroStep(double dtPhysical, double dtSim, boolean withSurface) {
         macroSteps++;
         List<HeatSources.Chamber> chambers = chambers();
-        if (withSurface) applyRain(dtPhysical);
+        applyRain(dtPhysical);
         Map<SolverChunk, Double> steps = activityAndSteps(dtPhysical);
         Map<SolverChunk, double[]> energy = sourceEnergy(dtPhysical, steps);
         heat.step(steps, energy, chambers, groundwater, (ch, c) -> {
@@ -365,7 +365,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
     // ── Spin-up ──
 
     /**
-     * Runs heat and groundwater only (no surface water, rain or randomness) for {@code seconds} of
+     * Runs heat, groundwater and rain recharge (no surface-water flow or randomness; runoff waits in the surface field) for {@code seconds} of
      * physical time in steps of at most {@code maxStep} seconds — e.g. to develop a hydrothermal
      * system around a new volcano before play starts.
      */
@@ -380,7 +380,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
     }
 
     public void equilibrate(double seconds) {
-        equilibrate(seconds, Math.max(config.macroStepSeconds, Math.min(seconds / 50, 30 * 86400.0)));
+        equilibrate(seconds, Math.max(config.macroStepSeconds, Math.min(seconds / 100, 365.25 * 86400.0)));
     }
 
     // ── Hooks ──

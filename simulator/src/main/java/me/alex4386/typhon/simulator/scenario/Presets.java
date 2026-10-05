@@ -342,21 +342,22 @@ public final class Presets {
                     GeothermalConfig geothermal = new GeothermalConfig();
                     geothermal.radius = 192;
                     geothermal.timeScale = 30;
-                    // ~5 GW of hydrothermal heat over the caldera (Fournier 1989); at the chamber's 820 °C the
-                    // activity is ~0.44, so each of the four basins discharges ~4·10⁸ W.
-                    geothermal.ventHeatPowerW = 1e9;
-                    geothermal.ventPipeDepthM = 500;
+                    // Basin heat flux of a few hundred W/m² (Upper Geyser Basin–Norris order; the caldera as a whole
+                    // discharges ~5 GW, Fournier 1989): at 820 °C the activity is ~0.44, so ~1.3·10⁷ W per basin.
+                    geothermal.ventHeatPowerW = 3e7;
+                    geothermal.ventPipeDepthM = 300;
                     geothermal.maxGeysers = 20;       // > 500 geysers in reality; the densest field on Earth
                     // Wet plateau (~500–1500 mm/yr) of porous rhyolite and sinter: a shallow water table.
                     SubsurfaceConfig subsurface = VolcanoSystem.defaultSubsurfaceConfig(scaling);
                     subsurface.initialWaterTableDepthM = 3;
                     subsurface.rainfallMmPerHour = 0.1;
+                    subsurface.gradientCPerKm = 100; // caldera heat flow ~30–40× the continental average
                     VolcanoSystem volcano = VolcanoSystem.builder("yellowstone", basins, b.terrain(), b.lava())
                             .chamber(chamber)
                             .scaling(scaling)
                             .geothermal(geothermal)
                             .subsurfaceConfig(subsurface)
-                            .geothermalPrewarm(5 * 365.25 * 86400) // physical spin-up of the hydrothermal system
+                            .geothermalPrewarm(300 * 365.25 * 86400) // centuries of spin-up: a developed hydrothermal system
                             .build();
                     return b.volcano(volcano);
                 });
