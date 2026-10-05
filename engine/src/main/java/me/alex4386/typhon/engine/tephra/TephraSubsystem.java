@@ -498,6 +498,7 @@ public final class TephraSubsystem implements Subsystem {
         if (phase != null) {
             BlockPos vent = phase.vent().position();
             ensureGrid(vent);
+            grid.parallel = context.parallel();
             // The column rises from the block above the vent, so cap its height at the world top from there.
             BlockPos base = vent.offset(0, 1, 0);
             double height = PlumeModel.minecraftHeight(phase.massEruptionRate(), base.y(), config);
@@ -514,6 +515,7 @@ public final class TephraSubsystem implements Subsystem {
             lightning(context, base, height, sigma, dt);
         }
         if (grid == null) return;
+        grid.parallel = context.parallel();
 
         if (grid.airborneTotal() > 0) {
             grid.transport(dt, wind.at(context.time()), config.diffusivity);

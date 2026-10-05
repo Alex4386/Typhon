@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.tephra;
 
+import me.alex4386.typhon.engine.sim.Parallel;
 import com.google.gson.JsonObject;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.BlockChange;
@@ -57,6 +58,9 @@ final class AshGrid {
     double discarded;
 
     private final double[] scratch;
+    private final double[] rowScratch;
+    /** Executor for the per-row transport/settling loops (set by the owning subsystem each step). */
+    Parallel parallel = Parallel.sequential();
 
     AshGrid(int originX, int originZ, int cellSize, int cells) {
         this.originX = originX;
@@ -69,6 +73,7 @@ final class AshGrid {
         this.applied = new double[area];
         this.depositionRate = new double[area];
         this.scratch = new double[area];
+        this.rowScratch = new double[cells];
     }
 
     static AshGrid centeredOn(BlockPos center, int cellSize, int cells) {
@@ -98,7 +103,13 @@ final class AshGrid {
 
     double airborneTotal() {
         double total = 0;
-        for (double[] layer : airborne) for (double m : layer) total += m;
+        for (double[] layer : airborne) {
+            total += parallel.sum(cells, j -> {
+                double s = 0;
+                for (int cell = j * cells, end = cell + cells; cell < end; cell++) s += layer[cell];
+                return s;
+            });
+        }
         return total;
     }
 
@@ -122,41 +133,57 @@ final class AshGrid {
         int j1 = Math.min(cells - 1, (int) Math.floor((cz + reach - originZ) / cellSize));
 
         // Normalise against the full (unclipped) kernel so mass outside the grid counts as exported.
-        double fullWeight = 0;
+        // The Gaussian is separable: exp(-(x²+z²)/2σ²) = ex(i)·ez(j), so one exp per row and column.
         int fi0 = (int) Math.floor((cx - reach - originX) / cellSize);
         int fi1 = (int) Math.floor((cx + reach - originX) / cellSize);
         int fj0 = (int) Math.floor((cz - reach - originZ) / cellSize);
         int fj1 = (int) Math.floor((cz + reach - originZ) / cellSize);
+        double[] ex = new double[fi1 - fi0 + 1];
+        double[] dxs = new double[ex.length];
+        double[] ez = new double[fj1 - fj0 + 1];
+        double[] dzs = new double[ez.length];
+        double twoSigma2 = 2 * sigma * sigma;
+        for (int i = fi0; i <= fi1; i++) {
+            double x = originX + (i + 0.5) * cellSize - cx;
+            dxs[i - fi0] = x * x;
+            ex[i - fi0] = StrictMath.exp(-x * x / twoSigma2);
+        }
         for (int j = fj0; j <= fj1; j++) {
-            for (int i = fi0; i <= fi1; i++) fullWeight += kernel(i, j, cx, cz, sigma);
+            double z = originZ + (j + 0.5) * cellSize - cz;
+            dzs[j - fj0] = z * z;
+            ez[j - fj0] = StrictMath.exp(-z * z / twoSigma2);
+        }
+        double cutoff = 9 * sigma * sigma;
+        double fullWeight = 0;
+        for (int j = fj0; j <= fj1; j++) {
+            for (int i = fi0; i <= fi1; i++) {
+                if (dxs[i - fi0] + dzs[j - fj0] <= cutoff) fullWeight += ex[i - fi0] * ez[j - fj0];
+            }
         }
         if (fullWeight <= 0) {
             exported += mass;
             return;
         }
 
-        double placed = 0;
-        for (int j = j0; j <= j1; j++) {
+        double norm = fullWeight;
+        int rows = j1 - j0 + 1;
+        double placed = rows <= 0 ? 0 : parallel.sum(rows, r -> {
+            int j = j0 + r;
+            double rowPlaced = 0;
             for (int i = i0; i <= i1; i++) {
-                double w = kernel(i, j, cx, cz, sigma) / fullWeight;
+                if (dxs[i - fi0] + dzs[j - fj0] > cutoff) continue;
+                double w = ex[i - fi0] * ez[j - fj0] / norm;
                 if (w <= 0) continue;
                 int cell = index(i, j);
                 for (int c = 0; c < GrainClass.COUNT; c++) {
                     double m = mass * w * fractions[c];
                     airborne[c][cell] += m;
-                    placed += m;
+                    rowPlaced += m;
                 }
             }
-        }
+            return rowPlaced;
+        });
         exported += Math.max(0, mass - placed);
-    }
-
-    private double kernel(int i, int j, double cx, double cz, double sigma) {
-        double x = originX + (i + 0.5) * cellSize - cx;
-        double z = originZ + (j + 0.5) * cellSize - cz;
-        double r2 = x * x + z * z;
-        if (r2 > 9 * sigma * sigma) return 0;
-        return StrictMath.exp(-r2 / (2 * sigma * sigma));
     }
 
     /** Advection + diffusion for {@code dt} seconds. */
@@ -176,57 +203,79 @@ final class AshGrid {
         }
     }
 
+    /**
+     * One conservative upwind + diffusion sub-step, written as a gather (each cell sums what it keeps
+     * and what its neighbours send it) so rows can be computed in parallel; mass leaving the grid is
+     * summed per row and added in row order.
+     */
     private void transportLayer(double[] layer, double cx, double cz, double d) {
         double[] next = scratch;
-        System.arraycopy(layer, 0, next, 0, layer.length);
+        double[] rowExport = rowScratch;
         double ax = Math.abs(cx), az = Math.abs(cz);
         int stepX = cx >= 0 ? 1 : -1;
         int stepZ = cz >= 0 ? 1 : -1;
+        int n = cells;
 
-        for (int j = 0; j < cells; j++) {
-            for (int i = 0; i < cells; i++) {
-                int cell = index(i, j);
+        parallel.forEach(n, 4, j -> {
+            double export = 0;
+            int row = j * n;
+            for (int i = 0; i < n; i++) {
+                int cell = row + i;
                 double m = layer[cell];
-                if (m == 0) continue;
-                double toX = m * ax, toZ = m * az, toEach = m * d;
-                next[cell] -= toX + toZ + 4 * toEach;
-                give(next, i + stepX, j, toX);
-                give(next, i, j + stepZ, toZ);
-                give(next, i + 1, j, toEach);
-                give(next, i - 1, j, toEach);
-                give(next, i, j + 1, toEach);
-                give(next, i, j - 1, toEach);
+                double v = m;
+                if (m != 0) {
+                    double toX = m * ax, toZ = m * az, toEach = m * d;
+                    v -= toX + toZ + 4 * toEach;
+                    int tx = i + stepX;
+                    int tz = j + stepZ;
+                    if (tx < 0 || tx >= n) export += toX;
+                    if (tz < 0 || tz >= n) export += toZ;
+                    if (i == n - 1) export += toEach;
+                    if (i == 0) export += toEach;
+                    if (j == n - 1) export += toEach;
+                    if (j == 0) export += toEach;
+                }
+                int ux = i - stepX; // upwind neighbours send their advected share here
+                if (ux >= 0 && ux < n) v += layer[row + ux] * ax;
+                int uz = j - stepZ;
+                if (uz >= 0 && uz < n) v += layer[uz * n + i] * az;
+                if (i + 1 < n) v += layer[cell + 1] * d;
+                if (i > 0) v += layer[cell - 1] * d;
+                if (j + 1 < n) v += layer[cell + n] * d;
+                if (j > 0) v += layer[cell - n] * d;
+                next[cell] = v;
             }
-        }
+            rowExport[j] = export;
+        });
+        for (int j = 0; j < n; j++) exported += rowExport[j];
         System.arraycopy(next, 0, layer, 0, layer.length);
-    }
-
-    private void give(double[] next, int i, int j, double m) {
-        if (m == 0) return;
-        if (i < 0 || j < 0 || i >= cells || j >= cells) {
-            exported += m;
-        } else {
-            next[index(i, j)] += m;
-        }
     }
 
     /** First-order fallout for {@code dt} seconds from a plume of height {@code height} blocks. */
     void settle(double dt, double[] settlingVelocities, double height) {
         double h = Math.max(1, height);
-        java.util.Arrays.fill(depositionRate, 0);
-        for (int c = 0; c < GrainClass.COUNT; c++) {
-            double fraction = 1 - StrictMath.exp(-settlingVelocities[c] * dt / h);
-            double[] layer = airborne[c];
-            for (int cell = 0; cell < layer.length; cell++) {
-                double m = layer[cell];
-                if (m == 0) continue;
-                double fall = m * fraction;
-                layer[cell] = m - fall;
-                deposit[cell] += fall;
-                depositionRate[cell] += fall / dt;
-                deposited += fall;
+        double[] fraction = new double[GrainClass.COUNT];
+        for (int c = 0; c < GrainClass.COUNT; c++) fraction[c] = 1 - StrictMath.exp(-settlingVelocities[c] * dt / h);
+        double[] rowFall = rowScratch;
+        int n = cells;
+        parallel.forEach(n, 4, j -> {
+            double rowSum = 0;
+            for (int cell = j * n, end = cell + n; cell < end; cell++) {
+                double rate = 0;
+                for (int c = 0; c < GrainClass.COUNT; c++) {
+                    double m = airborne[c][cell];
+                    if (m == 0) continue;
+                    double fall = m * fraction[c];
+                    airborne[c][cell] = m - fall;
+                    deposit[cell] += fall;
+                    rate += fall / dt;
+                    rowSum += fall;
+                }
+                depositionRate[cell] = rate;
             }
-        }
+            rowFall[j] = rowSum;
+        });
+        for (int j = 0; j < n; j++) deposited += rowFall[j];
     }
 
     /** Drops all suspended mass (used once a finished phase has thinned out). */
