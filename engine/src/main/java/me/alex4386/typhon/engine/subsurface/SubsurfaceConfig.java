@@ -47,12 +47,6 @@ public final class SubsurfaceConfig {
     public double waterExpansivity = 7e-4;
     /** Upper limit of the convective Nusselt enhancement of conductivity. */
     public double maxNusselt = 200;
-    /**
-     * Brittle–ductile transition (°C): hotter rock creeps shut its fractures, so groundwater neither
-     * convects nor flows through it (≈360–400 °C; Fournier 1999, Hayba &amp; Ingebritsen 1997). Heat
-     * crosses it by conduction only, which bounds what a hydrothermal system draws from magma.
-     */
-    public double brittleDuctileC = 400;
 
     // ── Water ──
     /** Rainfall (mm/h) over the whole world. */

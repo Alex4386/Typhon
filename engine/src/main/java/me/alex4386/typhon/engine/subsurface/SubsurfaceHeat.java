@@ -195,6 +195,7 @@ final class SubsurfaceHeat {
             Groundwater groundwater, ColumnWater waterDepth) {
         boiledVolume.clear();
         boiledTotal = 0;
+        currentChambers = chambers;
         if (steps.isEmpty()) return;
         int n = grid.levels();
         List<SolverChunk> chunks = new ArrayList<>(steps.keySet()); // key order
@@ -213,13 +214,18 @@ final class SubsurfaceHeat {
         lastSubsteps = substeps;
         Map<SolverChunk, double[]> lateral = new IdentityHashMap<>();
         for (SolverChunk ch : chunks) lateral.put(ch, new double[SolverChunk.AREA * n]);
+        // Net groundwater volume each cell receives laterally over the step (m³); the vertical solve
+        // routes it up or down its column.
+        Map<SolverChunk, double[]> converging = new IdentityHashMap<>();
+        for (SolverChunk ch : chunks) converging.put(ch, new double[SolverChunk.AREA * n]);
         // Lateral transport: explicit sub-steps, applied directly to the temperatures. Each column
         // gathers the energy through its own four faces (computed antisymmetrically, so heat is
         // conserved exactly), which makes chunks independent and safe to process in parallel.
         double area = grid.area();
         for (int s = 0; s < substeps; s++) {
             int sub = substeps;
-            forEach(chunks, (idx, ch) -> lateralEnergy(ch, steps.get(ch) / sub, steps, lateral.get(ch)));
+            forEach(chunks, (idx, ch) -> lateralEnergy(ch, steps.get(ch) / sub, steps, lateral.get(ch),
+                    converging.get(ch)));
             forEach(chunks, (idx, ch) -> {
                 double[] lat = lateral.get(ch);
                 for (int c = 0; c < SolverChunk.AREA; c++) {
@@ -233,16 +239,16 @@ final class SubsurfaceHeat {
         }
         long t2 = System.nanoTime();
         Map<SolverChunk, double[]> allSources = chamberHeat(chunks, steps, sources, chambers);
-        currentChambers = chambers;
         // Vertical conduction and sources: one implicit step per column.
         double[] bottomPerChunk = new double[chunks.size()];
         forEach(chunks, (idx, ch) -> {
             double[] src = allSources.get(ch);
+            double[] net = converging.get(ch);
             double dt = steps.get(ch);
             double bottom = 0;
             for (int c = 0; c < SolverChunk.AREA; c++) {
                 if (!ch.exists[c]) continue;
-                bottom += vertical(ch, c, dt, null, src, 1.0, chambers, waterDepth.depth(ch, c));
+                bottom += vertical(ch, c, dt, net, src, 1.0, chambers, waterDepth.depth(ch, c));
             }
             bottomPerChunk[idx] = bottom;
         });
@@ -438,7 +444,8 @@ final class SubsurfaceHeat {
      * Lateral conduction + Darcy advection energy (J) over {@code dt} into each column of a chunk,
      * gathered through its four faces.
      */
-    private void lateralEnergy(SolverChunk ch, double dt, Map<SolverChunk, Double> stepped, double[] mine) {
+    private void lateralEnergy(SolverChunk ch, double dt, Map<SolverChunk, Double> stepped, double[] mine,
+            double[] converging) {
         java.util.Arrays.fill(mine, 0);
         int n = grid.levels();
         double dx = grid.dx();
@@ -466,7 +473,7 @@ final class SubsurfaceHeat {
                     double tj = other.temperature[j];
                     double energy = conductance * (tj - ti) * dt; // conduction into ch
                     if (headGradient != 0 && belowWaterTable(ch, c, k) && belowWaterTable(other, oc, k)
-                            && ti < config.brittleDuctileC && tj < config.brittleDuctileC) {
+                            && !magma(ch, c, k) && !magma(other, oc, k)) {
                         // Advection: heat carried by groundwater between the columns (+ = ch → other).
                         double kHyd = harmonic(ch.hydraulicK[i], other.hydraulicK[j]);
                         double flow = -kHyd * headGradient * grid.thickness(k) * dx; // m³/s
@@ -478,13 +485,13 @@ final class SubsurfaceHeat {
                         if (flow > limit) flow = limit;
                         else if (flow < -limit) flow = -limit;
                         // Advective (upwind) form: inflowing water mixes in at its temperature and
-                        // displaces water at the cell's own. Dupuit flow converges in every level
-                        // around a depressed water table although only some levels lose water (to
-                        // boiling); carrying ρ·c·T in absolute terms would pile that convergence's
-                        // heat into deep cells (above the magma temperature on long steps).
+                        // displaces water at the cell's own. Where the flow converges (or diverges)
+                        // the displaced water rises (sinks) through the column: vertical() carries
+                        // it, so heat is conserved and no cell is heated beyond its neighbours.
                         if (flow < 0) {
                             energy += SubsurfaceGrid.WATER_DENSITY * SubsurfaceGrid.WATER_HEAT_CAPACITY * -flow * (tj - ti) * dt;
                         }
+                        converging[i] -= flow * dt;
                     }
                     mine[i] += energy;
                 }
@@ -513,8 +520,13 @@ final class SubsurfaceHeat {
         return a + b > 0 ? 2 * a * b / (a + b) : 0;
     }
 
-    /** Implicit vertical conduction of one column (Thomas algorithm). */
-    private double vertical(SolverChunk ch, int c, double dt, double[] lateral, double[] sources, double sourceShare,
+    /**
+     * Implicit vertical conduction of one column (Thomas algorithm), with upwind advection of the
+     * groundwater that converged on ({@code converging} > 0) or diverged from its saturated levels:
+     * it rises (sinks) to the top of each contiguous flowing segment, where it leaves (the water
+     * table, springs, boiling) or is resupplied at that cell's temperature.
+     */
+    private double vertical(SolverChunk ch, int c, double dt, double[] converging, double[] sources, double sourceShare,
             List<HeatSources.Chamber> chambers, double waterDepth) {
         int n = grid.levels();
         double area = grid.area();
@@ -552,8 +564,7 @@ final class SubsurfaceHeat {
             int i = c * n + k;
             double cap = capacity(ch, c, k, area * grid.thickness(k));
             double d = cap;
-            double r = cap * ch.temperature[i] + (lateral != null ? lateral[i] : 0)
-                    + (sources != null ? sources[i] * sourceShare : 0);
+            double r = cap * ch.temperature[i] + (sources != null ? sources[i] * sourceShare : 0);
             if (k > 0) {
                 d += dt * g[k - 1];
                 lower[k] = -dt * g[k - 1];
@@ -582,6 +593,7 @@ final class SubsurfaceHeat {
             diag[k] = d;
             rhs[k] = r;
         }
+        if (converging != null) advectVertically(ch, c, converging, diag, lower, upper);
         // Thomas algorithm
         for (int k = 1; k < n; k++) {
             double m = lower[k] / diag[k - 1];
@@ -597,16 +609,67 @@ final class SubsurfaceHeat {
         return Double.isNaN(tBottom) ? 0 : dt * gBottom * (tBottom - ch.temperature[base + n - 1]);
     }
 
+    /**
+     * Adds the column's vertical groundwater advection to the tridiagonal system. {@code flux} is
+     * the volume crossing the top face of a level upwards over the step (negative = downwards):
+     * the sum of what converged on the flowing levels below it. Upwind: the water carries the
+     * temperature of the level it leaves. A level also loses the {@code ρc·V·T} that the advective
+     * lateral form left out of its convergence, so per level only inflows at other temperatures
+     * change it (bounded, conservative).
+     */
+    private void advectVertically(SolverChunk ch, int c, double[] converging, double[] diag, double[] lower,
+            double[] upper) {
+        int n = grid.levels();
+        double rc = SubsurfaceGrid.WATER_DENSITY * SubsurfaceGrid.WATER_HEAT_CAPACITY;
+        double flux = 0;
+        for (int k = n - 1; k >= 0; k--) {
+            int i = c * n + k;
+            boolean flowing = belowWaterTable(ch, c, k) && !magma(ch, c, k);
+            if (!flowing) {
+                flux = 0;
+                continue;
+            }
+            double v = converging[i];
+            flux += v;
+            diag[k] -= rc * v;
+            boolean aboveFlows = k > 0 && belowWaterTable(ch, c, k - 1) && !magma(ch, c, k - 1);
+            if (!aboveFlows) {
+                // Top of the segment: up-flow leaves at this level's temperature; down-flow is
+                // resupplied at it. Either way: diag += ρc·flux.
+                diag[k] += rc * flux;
+                flux = 0;
+            } else if (flux > 0) {
+                diag[k] += rc * flux;      // leaves k ...
+                upper[k - 1] -= rc * flux; // ... into k−1 at T_k
+            } else if (flux < 0) {
+                diag[k - 1] -= rc * flux;  // leaves k−1 ...
+                lower[k] += rc * flux;     // ... into k at T_{k−1}
+            }
+        }
+    }
+
     private double effectiveConductivity(SolverChunk ch, int c, int k, double nusselt, double waterTableDepth) {
         int i = c * grid.levels() + k;
         double kk = Math.max(1e-3, ch.conductivity[i]);
-        if (nusselt > 1 && grid.centerDepth(k) > waterTableDepth && permeable(ch, i)) kk *= nusselt;
+        if (nusselt > 1 && grid.centerDepth(k) > waterTableDepth && permeable(ch, c, k)) kk *= nusselt;
         return kk;
     }
 
-    /** Groundwater can flow through the cell: permeable and below the brittle–ductile transition. */
-    private boolean permeable(SolverChunk ch, int i) {
-        return ch.hydraulicK[i] > 1e-9 && ch.temperature[i] < config.brittleDuctileC;
+    /** Groundwater can flow through the cell: permeable rock, not magma. */
+    private boolean permeable(SolverChunk ch, int c, int k) {
+        return ch.hydraulicK[c * grid.levels() + k] > 1e-9 && !magma(ch, c, k);
+    }
+
+    /**
+     * The cell lies in a chamber. Magma (and its ductile, > ~400 °C margin; Fournier 1999) holds no
+     * circulating groundwater: hydrothermal convection cools a chamber across its roof by conduction
+     * and must not reach into it, or it quenches the grid's magma faster than the chamber supplies.
+     */
+    private boolean magma(SolverChunk ch, int c, int k) {
+        if (currentChambers.isEmpty()) return false;
+        double l = grid.world().spec().metersPerColumn();
+        return !Double.isNaN(insideChamber(currentChambers, l, centreX(ch, c), centreZ(ch, c),
+                ch.surfaceZ[c] - grid.centerDepth(k)));
     }
 
     /** Porous-convection Nusselt number of the saturated permeable zone below the water table. */
@@ -621,7 +684,7 @@ final class SubsurfaceHeat {
         for (int k = 0; k < n; k++) {
             int i = c * n + k;
             if (grid.centerDepth(k) <= wtDepth) continue;
-            if (!permeable(ch, i)) {
+            if (!permeable(ch, c, k)) {
                 if (top >= 0) break;
                 continue;
             }
