@@ -116,7 +116,8 @@ export function overviewPose(info: SceneInfo): CameraPose {
   const cx = (ext.minX + ext.maxX) / 2;
   const cy = (ext.minY + ext.maxY) / 2;
   const mid = ((info.world.elevationRange[0] + info.world.elevationRange[1]) / 2) * info.vExag;
-  const d = frameDistance(span * 0.6, info.fov, info.aspect, 1.05);
+  // a square seen from 58° is foreshortened; half the span fits it with a small margin
+  const d = frameDistance(span * 0.5, info.fov, info.aspect, 1.0);
   return orbitPose([cx, mid, -cy], d, 0, (58 * Math.PI) / 180);
 }
 

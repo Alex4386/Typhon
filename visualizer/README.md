@@ -55,6 +55,8 @@ Debug helpers: `npx tsx mock/bench.ts` (cost of the synthetic world), `npx tsx m
 src/protocol/   protocol v1: field/codec ids, JSON message types, binary frame encode/decode (+ tests)
 src/net/        WebSocket client: handshake, subscription, tile batching + flow control, commands
 src/store/      zustand store (world, clock, 0D history, events, UI state) + tile store
+src/camera/     camera rig (orbit / fly / walk / follow / tour, transitions, clearance, clip planes,
+                URL + bookmarks), HUD (camera bar, compass readout, minimap, help), pure math (+ tests)
 src/scene/      3D view (react-three-fiber)
   Terrain       tiled terrain: hillshade/hypsometric or data colour modes, lava (emissive by
                 temperature), water, PDC/lahar overlays, vertical + deformation exaggeration
@@ -71,9 +73,41 @@ mock/           mock sim-server (MOCK)
 scripts/        headless screenshot and debug probes (Playwright, installed ad hoc)
 ```
 
+## Camera
+
+The camera bar (top right) switches modes, frames targets and holds bookmarks; the compass (bottom
+left) shows heading, world position (E/N metres), altitude and height above ground (AGL); the minimap
+(bottom right) shows vents, the section line and the camera frustum. Press **?** for the controls
+overlay.
+
+| Mode (key) | What it does |
+|---|---|
+| Orbit (1) | Rotate around a pivot: drag rotates, right-drag / two fingers pan, wheel / pinch zooms towards the cursor. Never flips below the horizon or into the ground. |
+| Fly (2) | Free flight. WASD moves along the view, Q/E (or Space) down/up, mouse look after clicking the view (pointer lock; Esc releases; dragging also looks), arrow keys look without a mouse. Speed scales with height above ground; Shift ×4, Ctrl/Alt ×0.2, wheel or `[` `]` change the base speed. Stays `clearance` metres above the terrain unless **underground** is on (G), which lets you fly below the surface to the chamber. |
+| Walk (3) | First person at eye height (1.7 m) on the terrain with gravity: WASD, Shift runs, Space jumps; slopes steeper than 42° block you. Good for standing on a crater rim. |
+| Follow (4) | Tracks the vent, the lava flow front, the plume top or the volcano with damped motion while you orbit around it as usual (target selector appears in the bar). |
+| Tour (5) | Slow automatic fly-around of the selected volcano; any input stops it. |
+
+| Key / action | |
+|---|---|
+| F (Shift+F while flying) | Frame the selected volcano |
+| P | Fit the eruption column — a 20 km Plinian column fits the view |
+| O | Overview of the whole world |
+| Double-click terrain | Focus the orbit pivot there (fly mode: fly towards it) |
+| Minimap click | Fly to that place, keeping height and heading |
+| ★ views | Built-in bookmarks (Summit, Overview, Plume, Section line) and saved views per world (stored in the browser) |
+| ⚙ | Fly speed, ground clearance, underground |
+| Gamepad | Left stick move, right stick look, triggers down/up, A boost (walk: B jumps) |
+
+The current view is kept in the URL as `?cam=mode,x,y,z,heading,pitch[,tx,ty,tz]` (scene metres,
+radians), so copying the address shares exactly that view; the last view of each world is also
+restored on the next visit. `prefers-reduced-motion` makes transitions instant and the tour slower.
+Clip planes follow the height above ground (near plane down to 0.2 m at a crater rim, far plane
+beyond the world from altitude).
+
 ## Using it
 
-- **Navigate.** Orbit/zoom with the mouse (🖐 tool).
+- **Navigate.** See [Camera](#camera); the 🖐 tool must be active for mouse look in fly/walk mode.
 - **Cross-section.** Use ✎ in the toolbox or "Draw line" in the section panel. Click two or more
   points on the map, then **Cut**. The section refreshes every 3 s while shown.
 - **Pour water / dig.** Use 💧 / ⛏, then click the map. Volume, radius and depth are in the toolbox.

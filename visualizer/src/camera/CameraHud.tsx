@@ -171,7 +171,7 @@ export function CameraBar({ world }: { world: WorldInfo }) {
         </div>
       )}
       {(mode === 'fly' || mode === 'walk') && (
-        <div className="row hint muted">
+        <div className="camera-hint">
           {locked ? 'Esc releases the mouse · ' : 'Click the view to capture the mouse (or drag to look) · '}
           WASD move{mode === 'fly' ? ' · Q/E down/up · Shift fast · Ctrl/Alt slow · wheel speed' : ' · Space jump · Shift run'}
         </div>

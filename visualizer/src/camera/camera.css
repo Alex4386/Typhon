@@ -3,7 +3,8 @@
   position: absolute;
   top: 10px;
   right: 10px;
-  max-width: calc(100% - 20px);
+  width: max-content;
+  max-width: min(620px, 56%);
   background: rgba(22, 27, 34, 0.88);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -36,8 +37,20 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.camerabar .hint {
+.camera-hint {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  max-width: 70vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11px;
+  color: var(--text);
+  background: rgba(13, 17, 23, 0.7);
+  border-radius: 6px;
+  padding: 2px 8px;
+  pointer-events: none;
 }
 
 .compass {
