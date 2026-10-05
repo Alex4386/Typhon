@@ -1540,6 +1540,7 @@ public final class LavaFlow implements Subsystem {
             }
             c.terrainView = null;
             c.bedVersion = Long.MIN_VALUE;
+            c.seenEdits = Long.MIN_VALUE;
             return;
         }
         boolean terrainChanged = view != c.terrainView || view.version() != c.terrainVersion;
@@ -1550,6 +1551,9 @@ public final class LavaFlow implements Subsystem {
             c.terrainVersion = view.version();
         }
         WorldModel world = world();
+        long edits = world.stacks().editCount();
+        if (!terrainChanged && edits == c.seenEdits) return; // nothing in the world changed since
+        c.seenEdits = edits;
         int x0 = c.cx << 4;
         int z0 = c.cz << 4;
         long version = world.stacks().versionSum(x0, z0, 16, 16);

@@ -46,6 +46,7 @@ final class LavaChunk {
     /** World-model ground surface + uplift (real m), NaN where unknown: the bed the lava flows on. */
     final double[] bed = new double[AREA];
     long bedVersion = Long.MIN_VALUE; // world version sum the bed cache was read at
+    long seenEdits = Long.MIN_VALUE; // world edit counter at the last bed check (transient)
     final long[] sourceStamp = new long[AREA]; // == step stamp while an effusive source feeds the cell
     final LavaChunk[] neighbours = new LavaChunk[9]; // by chunk offset: (dz + 1) * 3 + (dx + 1)
     final long[] missingNeighbour = new long[9]; // cached absence: generation << 2 | flags (see neighbourAt)
