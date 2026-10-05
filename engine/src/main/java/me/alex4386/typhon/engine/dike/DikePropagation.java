@@ -74,6 +74,15 @@ public final class DikePropagation implements Subsystem {
      *     at the chamber's assumed surface)
      */
     private Consumer<List<BlockPos>> hypocenterListener;
+    private me.alex4386.typhon.engine.volcano.GroundCoupling ground = me.alex4386.typhon.engine.volcano.GroundCoupling.NONE;
+
+    /**
+     * The ground model intruded sheets heat (transient: re-attach when the engine is built).
+     * Default {@link me.alex4386.typhon.engine.volcano.GroundCoupling#NONE}.
+     */
+    public void setGround(me.alex4386.typhon.engine.volcano.GroundCoupling ground) {
+        this.ground = ground == null ? me.alex4386.typhon.engine.volcano.GroundCoupling.NONE : ground;
+    }
     private UnitSource units = UnitSource.UNATTRIBUTED;
 
     public DikePropagation(DikeConfig config, DikeMagmaSource magma, TerrainModel terrain) {
@@ -224,6 +233,9 @@ public final class DikePropagation implements Subsystem {
 
             double newHeight = dike.chamberDepth - dike.depth;
             dike.strikeLength = Math.min(newHeight, config.maxStrikeLength);
+            // The newly opened sheet (rise × strike, opening thick) cools into its host rock.
+            ground.addIntrusionHeat(dike.x, dike.z, 0.5 * (depthBefore + dike.depth), rise * dike.strikeLength,
+                    opening, magma.temperatureC());
             double target = opening * dike.strikeLength * newHeight;
             if (target > dike.volume) {
                 magma.withdraw(target - dike.volume);

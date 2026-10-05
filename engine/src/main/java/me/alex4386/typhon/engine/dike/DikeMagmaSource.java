@@ -33,6 +33,11 @@ public interface DikeMagmaSource {
     /** Removes {@code volume} m³ from the chamber; returns the overpressure drop (MPa). */
     double withdraw(double volume);
 
+    /** Magma temperature (°C) at intrusion; basaltic by default. */
+    default double temperatureC() {
+        return 1150;
+    }
+
     static DikeMagmaSource of(MagmaChamber chamber) {
         Objects.requireNonNull(chamber, "chamber");
         return new DikeMagmaSource() {
@@ -45,6 +50,7 @@ public interface DikeMagmaSource {
             @Override public double silicaWt() { return chamber.silicaWt(); }
             @Override public boolean erupting() { return chamber.erupting(); }
             @Override public double withdraw(double volume) { return chamber.withdraw(volume); }
+            @Override public double temperatureC() { return chamber.temperatureC(); }
         };
     }
 }

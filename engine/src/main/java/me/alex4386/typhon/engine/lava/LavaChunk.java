@@ -43,6 +43,15 @@ final class LavaChunk {
     final double[] speed = new double[AREA]; // physical mean flow speed q/h this step (m/s)
     final int[] ground = new int[AREA];
     final int[] waterY = new int[AREA];
+    /** Standing water (m) on each column from the ground model, refreshed at the start of a step (transient). */
+    final float[] surfaceWater = new float[AREA];
+    boolean surfaceWaterSet; // surfaceWater holds values from a refresh (cleared when the chunk goes quiet)
+    /**
+     * Heat (J) this step's cooling sent into standing water per column, and into the ground per
+     * ground-model heat cell within the chunk (indexed as LavaFlow lays them out; transient).
+     */
+    final double[] boilHeat = new double[AREA];
+    final double[] groundHeat = new double[AREA];
     /** World-model ground surface + uplift (real m), NaN where unknown: the bed the lava flows on. */
     final double[] bed = new double[AREA];
     long bedVersion = Long.MIN_VALUE; // world version sum the bed cache was read at

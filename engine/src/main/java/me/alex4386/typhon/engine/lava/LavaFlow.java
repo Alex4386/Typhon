@@ -28,6 +28,7 @@ import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.terrain.TerrainChunkView;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
+import me.alex4386.typhon.engine.volcano.GroundCoupling;
 import me.alex4386.typhon.engine.world.BlockState;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerFlags;
@@ -200,6 +201,8 @@ public final class LavaFlow implements Subsystem {
     // Time compression: volcano clocks (transient, re-registered when the engine is built) and the
     // fluidity seen last step, which sizes this step's flow sub-steps (persisted).
     private final Map<String, DoubleSupplier> clocks = new TreeMap<>();
+    private GroundCoupling ground = GroundCoupling.NONE; // transient
+    private int heatCell = 1; // columns per side of the blocks heat is summed over
     private double lastMaxDiffusivity;
     private double lastCompression = Double.NaN;
     private int lastSubsteps = 1;
@@ -466,6 +469,32 @@ public final class LavaFlow implements Subsystem {
         clocks.put(id, compression);
     }
 
+    /**
+     * The ground model the field exchanges heat and water with (transient: re-attach when the engine
+     * is built). Cooling lava conducts its base loss into the ground; lava in standing water (lakes,
+     * ponds, the sea) is quenched and boils the water off; columns under such water count as
+     * submerged. Default {@link GroundCoupling#NONE}.
+     */
+    public void setGround(GroundCoupling ground) {
+        this.ground = ground == null ? GroundCoupling.NONE : ground;
+        // Heat is summed over aligned blocks of the ground model's cell width (a power of two that
+        // divides a chunk; wider cells take one block per chunk, handed over at its centre).
+        int width = Math.max(1, this.ground.heatCellColumns());
+        int cell = 1;
+        while (cell * 2 <= Math.min(16, width)) cell *= 2;
+        this.heatCell = cell;
+    }
+
+    /** Index of column {@code i}'s heat cell within its chunk. */
+    private int heatCellOf(int i) {
+        int per = 16 / heatCell;
+        return ((i >> 4) / heatCell) * per + (i & 15) / heatCell;
+    }
+
+    public GroundCoupling ground() {
+        return ground;
+    }
+
     /** Physical seconds the field advanced per engine second in the last step. */
     public double lastCompression() {
         return lastCompression;
@@ -527,6 +556,8 @@ public final class LavaFlow implements Subsystem {
                 chunks.get(LavaChunk.key(cell.x() >> 4, cell.z() >> 4)).sourceStamp[index(cell.x(), cell.z())] = stamp;
             }
         }
+
+        refreshSurfaceWater();
 
         // Parallel phases only write their own chunk and read neighbours through the slots prepared
         // (sequentially) beforehand; anything order-dependent is deferred to a sequential pass in
@@ -593,6 +624,7 @@ public final class LavaFlow implements Subsystem {
         for (LavaChunk c : update) {
             applyCoolActions(c, context.random(), outbox, stats, formed);
             foldOceanHeat(c);
+            flushGroundExchange(c);
         }
 
         // 4. rendering
@@ -974,6 +1006,7 @@ public final class LavaFlow implements Subsystem {
         double ambient = config.ambientC();
         double ambientK4 = Math.pow(ambient + KELVIN, 4);
         double stepK = config.coolingStepK();
+        boolean track = ground != GroundCoupling.NONE;
         for (int i = 0; i < AREA; i++) {
             double h = c.thickness[i];
             double hc = c.crust[i];
@@ -981,6 +1014,7 @@ public final class LavaFlow implements Subsystem {
             boolean submerged = submerged(c, i);
             boolean source = isSource(c, i);
             double speed = Double.NaN; // neighbourhood flow speed, read only when a crust decision needs it
+            int quadrant = heatCellOf(i);
 
             if (hc > 0) {
                 double meltTop = c.bed[i] + h;
@@ -1069,6 +1103,13 @@ public final class LavaFlow implements Subsystem {
                 }
                 double cooled = Math.max(t - rate * cs * step, floor);
                 if (submerged) recordWaterHeat(c, rho * cEff * h * (t - cooled) * area());
+                if (track) {
+                    // Physical energy (J) of this sub-iteration: the base conduction goes into the
+                    // ground, the surface loss of a column standing in water goes into the water.
+                    double seconds = cs * step * area();
+                    c.groundHeat[quadrant] += Math.max(0, qBase) * seconds;
+                    if (c.surfaceWater[i] >= SUBMERGED_WATER_M) c.boilHeat[i] += Math.max(0, qTop) * seconds;
+                }
                 t = cooled;
                 remaining -= step;
                 if (t <= solidus || (underVoid && h < config.tubeDrainThickness())) break;
@@ -1588,9 +1629,61 @@ public final class LavaFlow implements Subsystem {
         return c.sourceStamp[i] == stamp;
     }
 
+    /** Standing water at least this deep (m) on a column quenches the lava there like the sea does. */
+    static final double SUBMERGED_WATER_M = 0.1;
+
     private static boolean submerged(LavaChunk c, int i) {
         int w = c.waterY[i];
-        return w != TerrainColumn.NO_WATER && w > c.ground[i];
+        return (w != TerrainColumn.NO_WATER && w > c.ground[i]) || c.surfaceWater[i] >= SUBMERGED_WATER_M;
+    }
+
+    /**
+     * Sequential, at the start of a step: standing water on the columns of every chunk with lava,
+     * from the ground model; quiet chunks are cleared so stale values never decide anything.
+     */
+    private void refreshSurfaceWater() {
+        if (ground == GroundCoupling.NONE) return;
+        for (LavaChunk c : sortedChunks(chunks.values())) {
+            if (c.isActive()) {
+                int x0 = c.cx << 4;
+                int z0 = c.cz << 4;
+                for (int i = 0; i < AREA; i++) {
+                    c.surfaceWater[i] = c.thickness[i] > 0 || c.crust[i] > 0
+                            ? (float) ground.surfaceWaterDepthM(x0 + (i & 15), z0 + (i >> 4)) : 0f;
+                }
+                c.surfaceWaterSet = true;
+            } else if (c.surfaceWaterSet) {
+                Arrays.fill(c.surfaceWater, 0f);
+                c.surfaceWaterSet = false;
+            }
+        }
+    }
+
+    /**
+     * Sequential, after cooling: hands the step's heat to the ground model — the base conduction of
+     * each 8×8 quadrant into the ground, and the quench heat of submerged columns as boiled-off
+     * water ({@code E / (ρ_w (c_w ΔT + L_v))}).
+     */
+    private void flushGroundExchange(LavaChunk c) {
+        if (ground == GroundCoupling.NONE) return;
+        int x0 = c.cx << 4;
+        int z0 = c.cz << 4;
+        int per = 16 / heatCell; // heat cells per chunk side
+        for (int q = 0; q < per * per; q++) {
+            if (c.groundHeat[q] > 0) {
+                int lx = (q % per) * heatCell + heatCell / 2;
+                int lz = (q / per) * heatCell + heatCell / 2;
+                ground.addGroundHeat(x0 + lx, z0 + lz, c.groundHeat[q]);
+            }
+            c.groundHeat[q] = 0;
+        }
+        double perM3 = 1000 * (WATER_HEAT_CAPACITY * Math.max(0, 100 - config.waterC()) + WATER_LATENT_HEAT);
+        for (int i = 0; i < AREA; i++) {
+            double e = c.boilHeat[i];
+            if (e <= 0) continue;
+            c.boilHeat[i] = 0;
+            ground.removeSurfaceWater(x0 + (i & 15), z0 + (i >> 4), e / perM3);
+        }
     }
 
     private static int index(int x, int z) {

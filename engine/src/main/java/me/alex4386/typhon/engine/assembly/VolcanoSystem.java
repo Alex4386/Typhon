@@ -182,6 +182,17 @@ public final class VolcanoSystem {
             pdc.setUnits(units);
             lahars.setUnits(units);
         }
+
+        // Surface processes exchange heat and water with the ground model (when there is one):
+        // cooling lava and hot deposits heat it, dikes heat it at depth, lava boils standing water.
+        if (subsurface != null) {
+            b.lava.setGround(subsurface);
+            if (dikes != null) dikes.setGround(subsurface);
+            if (pdc != null) {
+                pdc.setGround(subsurface);
+                lahars.setGround(subsurface);
+            }
+        }
     }
 
     /**

@@ -28,6 +28,7 @@ import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
+import me.alex4386.typhon.engine.volcano.GroundCoupling;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerFlags;
 import me.alex4386.typhon.engine.world.Material;
@@ -102,6 +103,7 @@ public abstract class MassFlowField implements Subsystem {
     protected double deposited;
     protected double lost;
     protected UnitSource units;
+    protected GroundCoupling ground = GroundCoupling.NONE; // transient
     private double currentTime;
 
     // per-step / per-substep scratch
@@ -167,6 +169,14 @@ public abstract class MassFlowField implements Subsystem {
      */
     public void setUnits(UnitSource units) {
         this.units = units;
+    }
+
+    /**
+     * The ground model hot deposits hand their heat to (transient: re-attach when the engine is
+     * built). Default {@link GroundCoupling#NONE}.
+     */
+    public void setGround(GroundCoupling ground) {
+        this.ground = ground == null ? GroundCoupling.NONE : ground;
     }
 
     /**
@@ -701,6 +711,13 @@ public abstract class MassFlowField implements Subsystem {
         int unit = units.unit(depositType(), currentTime, temperature);
         terrain.world().deposit(c.worldX(i), c.worldZ(i), thickness, material, unit, depositFlags(temperature),
                 material.porosity(), depositWelding(temperature));
+        // The deposit's sensible heat above ambient becomes ground heat (it is now part of the ground).
+        double excess = temperature - config.ambientC;
+        if (excess > 0) {
+            double bulkDensity = material.densityKgM3() * (1 - material.porosity());
+            ground.addGroundHeat(c.worldX(i), c.worldZ(i),
+                    bulkDensity * material.heatCapacityJkgK() * excess * thickness * cellArea);
+        }
         c.worldPending[i] = 0;
         c.worldPendingHeat[i] = 0;
     }

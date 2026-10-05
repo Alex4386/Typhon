@@ -44,7 +44,7 @@ import me.alex4386.typhon.engine.world.WorldModel;
  *
  * <p>References: Haas (1971), Econ. Geol. 66:940-946 (boiling point for depth); Bates et al. (2010), J. Hydrol. 387:33-45 (local-inertial shallow water). See {@code docs/references.md}.
  */
-public final class Subsurface implements Subsystem, HydrothermalField {
+public final class Subsurface implements Subsystem, HydrothermalField, me.alex4386.typhon.engine.volcano.GroundCoupling {
     public static final String ID = "subsurface";
     private static final int SOLVER_SCHEMA = 1;
     private static final int WATER_SCHEMA = 1;
@@ -537,6 +537,38 @@ public final class Subsurface implements Subsystem, HydrothermalField {
             double joules = rho * (c * dT + config.latentHeatMeltJkg) * widthM * s.lengthM() * grid.dx();
             pendingHeat.computeIfAbsent(SubsurfaceGrid.key(gx, gz), key -> new double[grid.levels()])[k] += joules;
         }
+    }
+
+    // ── GroundCoupling (lava, pyroclastic flows, dikes) ──
+
+    @Override
+    public double removeSurfaceWater(int x, int z, double volumeM3) {
+        return removeWater(x, z, volumeM3);
+    }
+
+    @Override
+    public void addGroundHeat(int x, int z, double joules) {
+        addSurfaceHeat(x, z, joules);
+    }
+
+    @Override
+    public int heatCellColumns() {
+        return Math.max(1, grid.ratio());
+    }
+
+    @Override
+    public void addIntrusionHeat(double x, double z, double depthM, double areaM2, double widthM,
+            double temperatureC) {
+        if (!(areaM2 > 0) || !(widthM > 0)) return;
+        int gx = grid.solverCoord((int) Math.floor(x));
+        int gz = grid.solverCoord((int) Math.floor(z));
+        SolverChunk ch = grid.chunkOf(gx, gz);
+        if (ch == null) return;
+        int col = SolverChunk.column(gx, gz);
+        if (!ch.exists[col]) return;
+        // addSheetHeat releases ρ(cΔT+L)·width·length·dx: pass the area as a dx-wide strip
+        addSheetHeat(List.of(new SheetSample(x, z, ch.surfaceZ[col] - depthM, areaM2 / grid.dx())), widthM,
+                temperatureC);
     }
 
     /** Adds water at a column (a player's bucket, a host). */
