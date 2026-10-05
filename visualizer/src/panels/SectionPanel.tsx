@@ -117,22 +117,51 @@ export function SectionPanel({ world }: { world: WorldInfo }) {
       <canvas ref={canvasRef} className="section-canvas" onMouseMove={onMove} onMouseLeave={() => setHover('')} />
       <div className="section-foot">
         <span className="muted">{hover || (section ? `t = ${section.time.toFixed(0)} s` : '')}</span>
-        {section && <UnitLegend section={section} world={world} />}
+        {section && <UnitLegend section={section} world={world} mode={mode} />}
       </div>
     </div>
   );
 }
 
-function UnitLegend({ section, world }: { section: SectionFrame; world: WorldInfo }) {
-  const items = useMemo(() => section.meta.units.slice(-8), [section]);
+const ISOTHERMS: [number, string][] = [
+  [100, '#ffd166'],
+  [300, '#f78c6b'],
+  [700, '#ef476f'],
+];
+
+function UnitLegend({ section, world, mode }: { section: SectionFrame; world: WorldInfo; mode: SectionMode }) {
+  // youngest units first (they are the interesting ones), then the background geology
+  const items = useMemo(() => [...section.meta.units].sort((a, b) => (b.time ?? -1) - (a.time ?? -1)).slice(0, 8), [section]);
+  const hasTable = useMemo(() => section.waterTableZ.some((z) => !Number.isNaN(z)), [section]);
+  const hasSteam = useMemo(() => section.steam.some((s) => s > 0.2), [section]);
   return (
     <span className="legend">
-      {items.map((u) => (
-        <span key={u.id} className="legend-item">
-          <i style={{ background: rgbCss(unitColour(world, u.id, u.depositType, u.time !== null)) }} />
-          {u.label}
+      {mode === 'strata' &&
+        items.map((u) => (
+          <span key={u.id} className="legend-item" title={u.time !== null ? `emplaced at t = ${u.time.toFixed(0)} s` : 'pre-existing geology'}>
+            <i style={{ background: rgbCss(unitColour(world, u.id, u.depositType, u.time !== null)) }} />
+            {u.label}
+          </span>
+        ))}
+      {mode !== 'temperature' &&
+        ISOTHERMS.map(([t, col]) => (
+          <span key={t} className="legend-item" title={`${t} °C isotherm`}>
+            <i className="dots" style={{ color: col }} />
+            {t} °C
+          </span>
+        ))}
+      {hasTable && (
+        <span className="legend-item" title="groundwater table">
+          <i className="dash" style={{ borderColor: '#4cc9f0' }} />
+          water table
         </span>
-      ))}
+      )}
+      {hasSteam && mode === 'strata' && (
+        <span className="legend-item" title="steam fraction > 20 %">
+          <i className="hatch" />
+          steam
+        </span>
+      )}
     </span>
   );
 }
@@ -224,11 +253,7 @@ function drawSection(g: CanvasRenderingContext2D, W: number, H: number, s: Secti
 
   // isotherms (100, 300, 700 °C): mark vertical crossings
   if (mode !== 'temperature') {
-    for (const [iso, col] of [
-      [100, '#ffd166'],
-      [300, '#f78c6b'],
-      [700, '#ef476f'],
-    ] as const) {
+    for (const [iso, col] of ISOTHERMS) {
       g.fillStyle = col;
       for (let i = 0; i < s.nu; i += 1) {
         for (let k = 1; k < s.nz; k++) {

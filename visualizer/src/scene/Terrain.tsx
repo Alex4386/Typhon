@@ -220,7 +220,8 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           }
 
           const wd = waterR(a, b);
-          if (wd > 0.03) {
+          // ignore thin sheet flow (rain films); show ponded and flowing water
+          if (wd > 0.25) {
             anyWater = true;
             wp.setXYZ(v, x, z + wd * vExag, -y);
             // shallow turquoise → deep navy (Beer–Lambert-ish with depth)
@@ -387,13 +388,19 @@ function colourGround(
         c[1] += (d[1] - c[1]) * 0.8;
         c[2] += (d[2] - c[2]) * 0.8;
       }
-      // hot ground glows faintly
+      // steaming ground (> ~boiling) bleaches to ochre; only incandescent rock (> 450 °C) glows red
       const st = f.temp(i, j);
-      if (st > 60) {
-        const k = Math.min(0.7, (st - 60) / 400);
+      if (st > 95) {
+        const k = Math.min(0.45, (st - 95) / 300);
+        c[0] += (0.78 - c[0]) * k;
+        c[1] += (0.66 - c[1]) * k;
+        c[2] += (0.38 - c[2]) * k;
+      }
+      if (st > 450) {
+        const k = Math.min(0.8, (st - 450) / 500);
         c[0] += (0.95 - c[0]) * k;
-        c[1] += (0.35 - c[1]) * k;
-        c[2] += (0.1 - c[2]) * k;
+        c[1] += (0.3 - c[1]) * k;
+        c[2] += (0.08 - c[2]) * k;
       }
       return;
     }
