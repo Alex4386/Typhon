@@ -4,6 +4,7 @@ import {
   PROTOCOL_VERSION,
   WS_SUBPROTOCOL,
   type ClientMessage,
+  type SectionDatum,
   type ServerMessage,
   type SimCommand,
   type XY,
@@ -92,11 +93,16 @@ export function command(c: SimCommand): void {
   send({ type: 'command', requestId: requestSeq++, command: c });
 }
 
-export function requestSection(polyline: XY[], zMin: number, zMax: number, nu: number, nz: number): void {
+/** Requests a section; `datum: 'surface'` asks for the ground-relative (shallow) companion view. */
+export function requestSection(polyline: XY[], zMin: number, zMax: number, nu: number, nz: number, datum: SectionDatum = 'absolute'): void {
   const requestId = requestSeq++;
-  useStore.getState().set({ sectionPending: requestId });
-  send({ type: 'section', requestId, polyline, zMin, zMax, nu, nz });
+  sectionDatum.set(requestId, datum);
+  useStore.getState().set(datum === 'surface' ? { sectionShallowPending: requestId } : { sectionPending: requestId });
+  send({ type: 'section', requestId, polyline, zMin, zMax, nu, nz, ...(datum === 'surface' ? { datum } : {}) });
 }
+
+/** Datum of each outstanding section request (replies from older servers carry no `datum`). */
+const sectionDatum = new Map<number, SectionDatum>();
 
 function onText(m: ServerMessage): void {
   const s = useStore.getState();
@@ -110,7 +116,7 @@ function onText(m: ServerMessage): void {
       else send({ type: 'createSession', preset: 'default' });
       return;
     case 'attached':
-      s.set({ world: m.world, section: null, sectionPolyline: [] });
+      s.set({ world: m.world, section: null, sectionShallow: null, sectionPolyline: [] });
       tilesProcessed = 0;
       send({ type: 'subscribe', fields: SUBSCRIBED_FIELDS });
       return;
@@ -154,7 +160,11 @@ function onBinary(buf: Uint8Array): void {
     case FrameKind.Section: {
       messageCounts.section = (messageCounts.section ?? 0) + 1;
       const sec = decodeSectionFrame(buf);
-      if (s.sectionPending === null || sec.meta.requestId >= s.sectionPending) s.set({ section: sec, sectionPending: null });
+      const datum = sec.meta.datum ?? sectionDatum.get(sec.meta.requestId) ?? 'absolute';
+      sectionDatum.delete(sec.meta.requestId);
+      if (datum === 'surface') {
+        if (s.sectionShallowPending === null || sec.meta.requestId >= s.sectionShallowPending) s.set({ sectionShallow: sec, sectionShallowPending: null });
+      } else if (s.sectionPending === null || sec.meta.requestId >= s.sectionPending) s.set({ section: sec, sectionPending: null });
       return;
     }
     default:

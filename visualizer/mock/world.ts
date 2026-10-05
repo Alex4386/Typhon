@@ -10,6 +10,7 @@ import type {
   EruptiveRegime,
   MaterialInfo,
   DepositTypeInfo,
+  SectionDatum,
   SectionMeta,
   SectionOverlay,
   SimEvent,
@@ -841,7 +842,9 @@ export class MockWorld {
   }
 
   /** Samples a vertical cross-section along a polyline. */
-  section(requestId: number, polyline: XY[], zMin: number, zMax: number, nu: number, nz: number) {
+  section(requestId: number, polyline: XY[], zMin: number, zMax: number, nu: number, nz: number, datum: SectionDatum = 'absolute') {
+    const relative = datum === 'surface';
+    const offsets = new Float32Array(nu);
     const segLen: number[] = [];
     let length = 0;
     for (let s = 1; s < polyline.length; s++) {
@@ -882,6 +885,8 @@ export class MockWorld {
       const jj = Math.min(N - 1, Math.max(0, cj));
       const k = this.idx(ii, jj);
       const ground = g[Field.SurfaceElevation][k];
+      const off = relative ? ground : 0;
+      offsets[i] = off;
       surfaceZ[i] = ground + g[Field.LavaDepth][k];
       const wtd = g[Field.WaterTableDepth][k];
       waterTableZ[i] = ground - wtd;
@@ -889,7 +894,7 @@ export class MockWorld {
       const lavaTop = base + this.lavaThick[k];
       const water = g[Field.WaterDepth][k];
       for (let kz = 0; kz < nz; kz++) {
-        const z = zMin + ((kz + 0.5) / nz) * (zMax - zMin);
+        const z = zMin + ((kz + 0.5) / nz) * (zMax - zMin) + off;
         const q = kz * nu + i;
         // temperature: geotherm + chamber halo + surface temperature near top
         let T = g[Field.SurfaceTemperature][k] + Math.max(0, ground - z) * 0.03;
@@ -945,7 +950,7 @@ export class MockWorld {
       const d = Math.abs(p[1] - 0) < 300 && p[0] > 600 && p[0] < 1800;
       if (!d) continue;
       for (let kz = 0; kz < nz; kz++) {
-        const z = zMin + ((kz + 0.5) / nz) * (zMax - zMin);
+        const z = zMin + ((kz + 0.5) / nz) * (zMax - zMin) + offsets[i];
         const q = kz * nu + i;
         if (z < surfaceZ[i] - 8 && z > surfaceZ[i] - 18) {
           flags[q] |= SectionFlag.Void;
@@ -953,8 +958,14 @@ export class MockWorld {
         }
       }
     }
-    // overlays: chambers and conduits projected onto the section
-    for (const v of this.volcanoes) {
+    if (relative) {
+      for (let i = 0; i < nu; i++) {
+        surfaceZ[i] -= offsets[i];
+        waterTableZ[i] -= offsets[i];
+      }
+    }
+    // overlays: chambers and conduits projected onto the section (none in a surface window)
+    for (const v of relative ? [] : this.volcanoes) {
       const c = v.info.chamber.center;
       let bestU = -1;
       let bestD = Infinity;
@@ -987,7 +998,7 @@ export class MockWorld {
       }
     }
     const usedUnits = new Set<number>(unit);
-    const meta: SectionMeta = { requestId, length, zMin, zMax, units: this.units.filter((u) => usedUnits.has(u.id)), overlays };
+    const meta: SectionMeta = { requestId, length, zMin, zMax, datum, units: this.units.filter((u) => usedUnits.has(u.id)), overlays };
     return { meta, nu, nz, time: this.time, surfaceZ, waterTableZ, material, unit, temperatureC, saturation, steam, flags };
   }
 

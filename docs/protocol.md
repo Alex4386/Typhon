@@ -94,7 +94,7 @@ volcano, out of world, …).
 
 | type | fields | reply |
 |---|---|---|
-| `section` | `requestId`, `polyline: XY[]` (≥ 2 points), `zMin`, `zMax` (m), `nu` (8–1024), `nz` (8–512) | A binary section frame (§6) with the same `requestId`, or `error{badRequest, requestId}`. |
+| `section` | `requestId`, `polyline: XY[]` (≥ 2 points), `zMin`, `zMax` (m), `nu` (8–1024), `nz` (8–512), optional `datum: "absolute" \| "surface"` (default absolute) | A binary section frame (§6) with the same `requestId`, or `error{badRequest, requestId}`. |
 | `save` | `name` | `ack` or `error`. Saves the session to `worlds/<world>/state` (plan §3-3). |
 | `load` | `name` | Re-attaches all clients to the loaded state (full attach burst). |
 | `replay` | `action: "enter" \| "exit"` | Enter or leave replay mode (§7). |
@@ -345,6 +345,11 @@ Body (after decompression), in order:
    {"kind":"dike","points":[[4400,-3500],[4300,-1200]],"active":true}]}
 ```
 
+- `datum` echoes the request (`"absolute"` when omitted). With `"surface"`, `zMin`/`zMax`, row
+  elevations, `surfaceZ` and `waterTableZ` are metres relative to each column's own ground (negative
+  below ground; `surfaceZ` is then the molten-lava thickness, ≥ 0), so a shallow window such as
+  −20…+3 m shows deposits of a few metres at true thickness whatever the relief. Overlays are empty
+  in that mode.
 - `units` lists the units that appear in the section.
 - Overlays use `u`, the distance along the polyline (m), and `z`. They are projections of 3D
   objects within a reasonable distance of the line: chambers within ~2 radii and dikes within ~1.5 km.

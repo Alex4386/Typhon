@@ -292,7 +292,7 @@ function handle(c: Client, msg: ClientMessage) {
         send(c, { type: 'error', code: 'badRequest', message: 'Section needs at least two points', requestId: msg.requestId });
         return;
       }
-      const frame = encodeSectionFrame(session.world.section(msg.requestId, msg.polyline, msg.zMin, msg.zMax, nu, nz));
+      const frame = encodeSectionFrame(session.world.section(msg.requestId, msg.polyline, msg.zMin, msg.zMax, nu, nz, msg.datum ?? 'absolute'));
       if (process.env.MOCK_DEBUG) console.log('[MOCK] section frame', frame.length, 'bytes; buffered', c.ws.bufferedAmount, 'clients', clients.size);
       c.ws.send(frame, (err) => err && console.log('[MOCK] section send failed', err));
       return;

@@ -34,7 +34,8 @@ export type ClientMessage =
   /** Pause automatically once simulation time reaches `time` (s); null clears it. */
   | { type: 'pauseAt'; time: number | null }
   | { type: 'command'; requestId?: number; command: SimCommand }
-  | { type: 'section'; requestId: number; polyline: XY[]; zMin: number; zMax: number; nu: number; nz: number }
+  /** `datum: 'surface'` makes zMin/zMax and every z in the reply relative to each column's ground. */
+  | { type: 'section'; requestId: number; polyline: XY[]; zMin: number; zMax: number; nu: number; nz: number; datum?: SectionDatum }
   | { type: 'save'; name: string }
   | { type: 'load'; name: string }
   | { type: 'replay'; action: 'enter' | 'exit' }
@@ -255,8 +256,13 @@ export interface ReplayInfoMessage {
 }
 
 /** Section metadata, carried as JSON inside the binary section frame (see frames.ts). */
+/** Vertical reference of a section: absolute elevation, or metres relative to the local ground. */
+export type SectionDatum = 'absolute' | 'surface';
+
 export interface SectionMeta {
   requestId: number;
+  /** Absent from older servers: absolute. */
+  datum?: SectionDatum;
   /** Horizontal distance along the polyline (m) of column 0 and the last column. */
   length: number;
   zMin: number;

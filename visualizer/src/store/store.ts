@@ -73,6 +73,9 @@ interface Store {
   tileRevision: Record<string, number>;
   section: SectionFrame | null;
   sectionPending: number | null;
+  /** Surface-datum companion of `section`: the top metres along the same line. */
+  sectionShallow: SectionFrame | null;
+  sectionShallowPending: number | null;
   replayInfo: ReplayInfoMessage | null;
   units: Record<number, UnitInfo>;
   errors: string[];
@@ -120,6 +123,8 @@ export const useStore = create<Store>((set, get) => ({
   tileRevision: {},
   section: null,
   sectionPending: null,
+  sectionShallow: null,
+  sectionShallowPending: null,
   replayInfo: null,
   units: {},
   errors: [],
