@@ -129,6 +129,45 @@ tephra and ignimbrite are lahar source material without any wiring. Without a vo
 subsystems use `UnitSource.typed(world)` (typed but unattributed units). Lava melt carries a unit
 too; the newest unit contributing ≥ 10 % of a cell's melt takes it over.
 
+## Subsurface: heat, groundwater, surface water
+
+`subsurface.Subsurface` is one world-level subsystem shared by every volcano (`World` registers it
+after the terrain; a stand-alone `VolcanoSystem` with geothermal activity creates its own). It works
+on the world model:
+
+- **Solver grid** (`SubsurfaceGrid`): columns `solverSpacing` wide (`r` surface columns per side),
+  24 terrain-following levels (1 m at the top, ×1.32 per level, ≈ 2.4 km deep). Cell properties
+  come from the stratigraphic layer at the cell centre, recomputed when a world-model tile changes;
+  cavities insulate and carry no water. Level of detail per 16×16 chunk: HOT (anomaly > 2 °C, a
+  vent, or pending heat, or next to such a chunk), WARM (within two chunks: every 10th macro step),
+  DORMANT (not stepped). Heat crosses faces only between chunks stepped together.
+- **Heat** (`SubsurfaceHeat`, every `macroStepSeconds × timeScale`): explicit lateral conduction and
+  Darcy advection (sub-stepped), then implicit vertical conduction (Thomas) with porous-convection
+  Nusselt enhancement (`Ra > 40`), latent heat of melting, a Robin surface boundary (ground or
+  water) and a bottom boundary from the background geotherm plus each chamber's steady conductive
+  halo (sphere below an isothermal surface, method of images). Saturated cells above the boiling
+  point at their depth below the water table (`100 + 3·d^0.7`, Haas 1971; not beyond the critical
+  point, not in molten rock) flash pore water to steam, taken from the aquifer.
+- **Groundwater** (`Groundwater`): Dupuit water table per solver column,
+  `S_y ∂h/∂t = ∇·(T∇h) + R − Q`, transmissivity integrated from layer K; red-black SOR, then a
+  conservative update from face fluxes. Vadose bucket with lag τ; springs where the table reaches
+  the ground; sea columns are fixed heads.
+- **Surface water** (`SurfaceWater`, every `surfaceWaterStepSeconds`): local-inertial shallow
+  water with Manning friction on the surface columns; imported water bodies touching the edge of
+  the known world (and anything below sea level) are open water at a fixed level, enclosed ones are
+  lakes. Infiltration where the table is below the ground, evaporation.
+- **Water budget** (`WaterBudget`): rain, poured water, imported lakes, initial groundwater, sea
+  exchange, evaporation and boiling are all accounted; the imbalance stays at rounding level.
+- **Hooks**: `HeatSources` (chambers, vent heat pipes — `Geothermal` implements it per volcano),
+  `addSurfaceHeat`/`addSurfaceHeatFlux` (lava, PDCs resting on the ground), `addSheetHeat` (dikes,
+  sills), `addWater`/`removeWater` and `WorldModel.addWater` (buckets, hosts), queries through
+  `HydrothermalField` (temperature at depth, water-table depth, steam fraction and flux, surface
+  water depth). `equilibrate` spins the system up (heat, groundwater, rain; no randomness).
+
+`geothermal.Geothermal` no longer models heat or water itself: it supplies its volcano's heat and
+samples the reservoir temperature and water-table depth on a coarse feature grid to decide where
+fumaroles, geysers, springs, mud pots, sinter, alteration and cinnabar form.
+
 ## World definitions and worlds
 
 A world is a directory:
@@ -136,7 +175,7 @@ A world is a directory:
 ```
 worlds/<world>/
   world.yaml                     grid, scaling, sea level, climate, geology, geotherm, aquifer,
-                                 terrain source (host-interpreted), lava parameters
+                                 terrain source (host-interpreted), lava and subsurface parameters
   volcanoes/<id>.yaml            vents, magma chamber + conduit, dikes, geothermal, mass flows,
                                  deformation, tephra, time-compression overrides, active flag
   state/                         engine save (above) + world.json (definitions it ran with,
@@ -191,7 +230,8 @@ Tests assert physical relationships (basalt runs farther than dacite), not tuned
 | `deformation` | `DeformationModel` (Mogi chamber source + dike dislocation, virtual GNSS/tilt stations) |
 | `massflow` | `PyroclasticFlows`, `Lahars` (Voellmy–Salm depth-averaged flows), `ColumnCollapse` (Woods 1988) |
 | `tephra` | `TephraSubsystem` (drag ballistics, Mastin plume, ash advection–diffusion and fall) |
-| `geothermal` | `Geothermal` (heat/groundwater grid, fumaroles, sulfur, geysers, springs, alteration) |
+| `subsurface` | `Subsurface` (world-level heat conduction, Dupuit groundwater, boiling, surface water, water budget), `HydrothermalField`, `HeatSources` |
+| `geothermal` | `Geothermal` (supplies volcano heat to the subsurface; fumaroles, sulfur, geysers, springs, alteration from its fields) |
 | `assembly` | `VolcanoSystem` (wires one volcano together), `VolcanoCoupler` (vent selection, eruption → lava/tephra/PDC) |
 
 Build and test: `./gradlew :engine:test` (performance smoke tests: `./gradlew :engine:perfTest`).
