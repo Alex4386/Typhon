@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { command, send } from '../net/connection';
 import type { WorldInfo } from '../protocol/messages';
-import { simNow, useStore, type SurfaceColorMode, type Tool } from '../store/store';
+import { rememberQuality, simNow, useStore, type Quality, type SurfaceColorMode, type Tool } from '../store/store';
 import { formatSimTime } from '../util/world';
 
 /** Speed slider position (0..1) ↔ multiplier 0.1..1000 on a log scale. */
@@ -168,7 +168,13 @@ export function Toolbox({ world }: { world: WorldInfo }) {
         <button onClick={() => volcano && command({ kind: 'stopEruption', volcanoId: volcano })}>⏹ stop</button>
         <button onClick={() => volcano && command({ kind: 'forceDike', volcanoId: volcano })}>⤴ dike</button>
         <button onClick={() => volcano && command({ kind: 'injectMagma', volcanoId: volcano, volumeM3: 5e6 })}>＋ magma</button>
+        <span className="spacer" />
+        <button className="toggle" title={s.toolboxOpen ? 'Fewer controls' : 'More controls'} onClick={() => s.set({ toolboxOpen: !s.toolboxOpen })}>
+          {s.toolboxOpen ? '▴' : '▾'}
+        </button>
       </div>
+      {s.toolboxOpen && (
+      <>
       <div className="row">
         <span className="muted">rain</span>
         <input type="range" min={0} max={100} value={rain} onChange={(e) => setRain(Number(e.target.value))} onPointerUp={() => command({ kind: 'rain', mmPerHour: rain })} />
@@ -214,6 +220,27 @@ export function Toolbox({ world }: { world: WorldInfo }) {
           </label>
         ))}
       </div>
+      <div className="row">
+        <span className="muted">quality</span>
+        <select
+          value={s.quality}
+          onChange={(e) => {
+            const q = e.target.value as Quality;
+            rememberQuality(q);
+            s.set({ quality: q });
+          }}
+        >
+          <option value="low">low (integrated GPU)</option>
+          <option value="medium">medium</option>
+          <option value="high">high (shadows)</option>
+        </select>
+        <label className="check" title="smooth the block-stepped elevations for display">
+          <input type="checkbox" checked={s.smoothTerrain} onChange={(e) => s.set({ smoothTerrain: e.target.checked })} />
+          smooth terrain
+        </label>
+      </div>
+      </>
+      )}
     </div>
   );
 }

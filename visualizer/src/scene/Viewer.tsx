@@ -1,45 +1,111 @@
 import { OrbitControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu';
 import { command } from '../net/connection';
 import type { WorldInfo, XY } from '../protocol/messages';
-import { useStore } from '../store/store';
+import { QUALITY, useStore } from '../store/store';
 import { worldExtent } from '../util/world';
 import { Atmosphere } from './Atmosphere';
 import { Hypocentres } from './Hypocentres';
+import { LavaGlow } from './LavaGlow';
 import { Markers } from './Markers';
 import { Terrain } from './Terrain';
 
 const FORCE_WEBGL = new URLSearchParams(window.location.search).get('renderer') === 'webgl';
 
+/** Horizon colour of the CSS sky behind the canvas; the fog fades distant terrain into it. */
+export const HORIZON = '#6e7680';
+
 type RendererFactory = (props: { canvas: HTMLCanvasElement | OffscreenCanvas }) => Promise<THREE.WebGLRenderer>;
+
+function configure(r: { toneMapping: THREE.ToneMapping; toneMappingExposure: number; outputColorSpace: string }) {
+  r.toneMapping = THREE.ACESFilmicToneMapping;
+  r.toneMappingExposure = 1.05;
+  r.outputColorSpace = THREE.SRGBColorSpace;
+}
 
 /** WebGPURenderer (which itself falls back to a WebGL2 backend), or classic WebGL with ?renderer=webgl. */
 const createRenderer: RendererFactory = async (props) => {
   const setName = (renderer: string) => useStore.getState().set({ renderer });
+  // Transparent canvas: the sky is a CSS gradient behind it (cheap, identical on both backends).
   if (FORCE_WEBGL) {
     setName('WebGL2 (classic)');
-    return new THREE.WebGLRenderer({ canvas: props.canvas as HTMLCanvasElement, antialias: true, logarithmicDepthBuffer: true });
+    const r = new THREE.WebGLRenderer({ canvas: props.canvas as HTMLCanvasElement, antialias: true, alpha: true, logarithmicDepthBuffer: true });
+    configure(r);
+    r.shadowMap.type = THREE.PCFSoftShadowMap;
+    return r;
   }
-  const r = new WebGPURenderer({ canvas: props.canvas as HTMLCanvasElement, antialias: true, logarithmicDepthBuffer: true });
+  const r = new WebGPURenderer({ canvas: props.canvas as HTMLCanvasElement, antialias: true, alpha: true, logarithmicDepthBuffer: true });
   await r.init();
+  configure(r as unknown as THREE.WebGLRenderer);
   const backend = r.backend as unknown as { isWebGPUBackend?: boolean };
   setName(backend.isWebGPUBackend ? 'WebGPU' : 'WebGL2 (WebGPU fallback)');
   return r as unknown as THREE.WebGLRenderer;
 };
 
+/** Initial camera: an oblique view of the first volcano's summit from the south-south-east. */
+function framing(world: WorldInfo, vExag: number) {
+  const ext = worldExtent(world);
+  const span = Math.max(ext.maxX - ext.minX, ext.maxY - ext.minY);
+  const vent = world.volcanoes[0]?.vents[0]?.at ?? [(ext.minX + ext.maxX) / 2, (ext.minY + ext.maxY) / 2];
+  const [lo, hi] = world.elevationRange;
+  const summit = (lo + 0.85 * (hi - lo)) * vExag;
+  const dist = span * 0.42;
+  const elevAngle = (32 * Math.PI) / 180;
+  const azimuth = (200 * Math.PI) / 180; // camera sits SSE of the vent, looking NNW
+  const target: [number, number, number] = [vent[0], summit, -vent[1]];
+  const position: [number, number, number] = [
+    vent[0] + Math.sin(azimuth) * Math.cos(elevAngle) * dist,
+    summit + Math.sin(elevAngle) * dist,
+    -(vent[1] + Math.cos(azimuth) * Math.cos(elevAngle) * dist),
+  ];
+  return { span, target, position };
+}
+
+/** Key light with its target in the scene graph (so the shadow camera follows it). */
+function Sun({ position, target, span, shadows }: { position: [number, number, number]; target: [number, number, number]; span: number; shadows: boolean }) {
+  const light = useRef<THREE.DirectionalLight>(null);
+  const tgt = useMemo(() => new THREE.Object3D(), []);
+  useEffect(() => {
+    tgt.position.set(...target);
+    tgt.updateMatrixWorld();
+    if (light.current) light.current.target = tgt;
+  }, [tgt, target]);
+  return (
+    <>
+      <primitive object={tgt} />
+      <directionalLight
+        ref={light}
+        position={position}
+        intensity={2.2}
+        color="#fff1dc"
+        castShadow={shadows}
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0004}
+        shadow-normalBias={2}
+        shadow-camera-left={-span * 0.6}
+        shadow-camera-right={span * 0.6}
+        shadow-camera-top={span * 0.6}
+        shadow-camera-bottom={-span * 0.6}
+        shadow-camera-near={1}
+        shadow-camera-far={span * 3}
+      />
+    </>
+  );
+}
+
 export function Viewer({ world }: { world: WorldInfo }) {
   const tool = useStore((s) => s.tool);
   const showHypo = useStore((s) => s.showHypocentres);
+  const quality = useStore((s) => s.quality);
+  const q = QUALITY[quality];
+  const { span, target, position } = framing(world, useStore.getState().verticalExaggeration);
   const ext = worldExtent(world);
   const cx = (ext.minX + ext.maxX) / 2;
   const cy = (ext.minY + ext.maxY) / 2;
-  const span = Math.max(ext.maxX - ext.minX, ext.maxY - ext.minY);
-  // Look at the middle of the terrain's elevation range, not the datum: real terrain can sit
-  // hundreds of metres above z = 0 (the initial exaggeration is good enough for framing).
-  const cz = ((world.elevationRange[0] + world.elevationRange[1]) / 2) * useStore.getState().verticalExaggeration;
+  const hiZ = world.elevationRange[1] * useStore.getState().verticalExaggeration;
 
   const onPick = useCallback((xy: XY) => {
     const s = useStore.getState();
@@ -58,21 +124,38 @@ export function Viewer({ world }: { world: WorldInfo }) {
     }
   }, []);
 
+  // Low sun from the north-west: long relief shadows read well on volcanic slopes.
+  const sun: [number, number, number] = [cx - span * 0.6, hiZ + span * 0.55, -(cy + span * 0.45)];
+
   return (
     <Canvas
+      key={quality /* the renderer's shadow map is fixed at creation */}
       gl={createRenderer as never}
-      camera={{ position: [cx + span * 0.12, cz + span * 0.8, -(cy - span * 1.2)], fov: 38, near: 5, far: span * 20 }}
+      shadows={q.shadows}
+      dpr={q.dpr}
+      camera={{ position, fov: 38, near: 5, far: span * 20 }}
       style={{ cursor: tool === 'orbit' ? 'grab' : 'crosshair' }}
     >
-      <color attach="background" args={['#0d1117']} />
-      <fog attach="fog" args={['#0d1117', span * 1.2, span * 4]} />
-      <hemisphereLight args={['#cfd8e6', '#3a3028', 0.9]} />
-      <directionalLight position={[-span, span * 0.7, span * 0.4]} intensity={1.4} />
+      <fog attach="fog" args={[HORIZON, span * 0.9, span * 3.2]} />
+      <hemisphereLight args={['#c9d6e8', '#4a3a2c', 0.75]} />
+      <ambientLight intensity={0.12} />
+      <Sun position={sun} target={[cx, 0, -cy]} span={span} shadows={q.shadows} />
       <Terrain world={world} onPick={onPick} />
+      <LavaGlow world={world} />
       <Markers world={world} />
       {showHypo && <Hypocentres />}
       <Atmosphere world={world} />
-      <OrbitControls makeDefault target={[cx, cz, -cy]} maxPolarAngle={Math.PI * 0.495} minDistance={200} maxDistance={span * 4} />
+      <OrbitControls
+        makeDefault
+        target={target}
+        maxPolarAngle={Math.PI * 0.49}
+        minDistance={150}
+        maxDistance={span * 3}
+        enableDamping
+        dampingFactor={0.12}
+        zoomSpeed={1.2}
+        screenSpacePanning={false}
+      />
     </Canvas>
   );
 }

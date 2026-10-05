@@ -144,6 +144,12 @@ main {
   grid-area: view;
   position: relative;
   min-height: 0;
+  /* sky behind the transparent 3D canvas; the scene fog fades into the horizon colour */
+  background: linear-gradient(to bottom, #0e1726 0%, #24364d 38%, #5c6b7b 62%, #7d8189 72%, #2c2a29 100%);
+}
+
+.toolbox .toggle {
+  min-width: 28px;
 }
 
 .side {

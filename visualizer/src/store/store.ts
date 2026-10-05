@@ -92,6 +92,11 @@ interface Store {
   waterVolume: number;
   digRadius: number;
   digDepth: number;
+  /** Rendering quality: shadows, smoothing radius, particle counts. */
+  quality: Quality;
+  /** Smooth block-quantised elevations for display (terrace removal). */
+  smoothTerrain: boolean;
+  toolboxOpen: boolean;
 
   set: (partial: Partial<Store>) => void;
   setStatus: (s: ConnectionStatus) => void;
@@ -133,6 +138,9 @@ export const useStore = create<Store>((set, get) => ({
   waterVolume: 50000,
   digRadius: 40,
   digDepth: 30,
+  quality: initialQuality(),
+  smoothTerrain: true,
+  toolboxOpen: false,
 
   set: (partial) => set(partial),
   setStatus: (status) => set({ status }),
@@ -204,10 +212,48 @@ export const useStore = create<Store>((set, get) => ({
   pushError: (msg) => set({ errors: [...get().errors.slice(-4), msg] }),
 }));
 
+export type Quality = 'low' | 'medium' | 'high';
+
+const QUALITY_KEY = 'typhon.quality';
+
+function initialQuality(): Quality {
+  const q = new URLSearchParams(window.location.search).get('quality');
+  if (q === 'low' || q === 'medium' || q === 'high') return q;
+  try {
+    const saved = window.localStorage.getItem(QUALITY_KEY);
+    if (saved === 'low' || saved === 'medium' || saved === 'high') return saved;
+  } catch {
+    // storage unavailable (private mode, sandbox): fall through
+  }
+  return 'medium';
+}
+
+/** Persists the quality choice for the next visit (best effort). */
+export function rememberQuality(q: Quality): void {
+  try {
+    window.localStorage.setItem(QUALITY_KEY, q);
+  } catch {
+    // ignore
+  }
+}
+
+/** Per-quality rendering settings. */
+export const QUALITY: Record<Quality, { smoothRadius: number; shadows: boolean; plume: number; ash: number; dpr: [number, number] }> = {
+  low: { smoothRadius: 2, shadows: false, plume: 500, ash: 300, dpr: [1, 1] },
+  medium: { smoothRadius: 4, shadows: false, plume: 1200, ash: 800, dpr: [1, 1.5] },
+  high: { smoothRadius: 5, shadows: true, plume: 2400, ash: 1600, dpr: [1, 2] },
+};
+
 function defaultServerUrl(): string {
   const q = new URLSearchParams(window.location.search).get('server');
   if (q) return q;
-  return `ws://${window.location.hostname || 'localhost'}:8787/ws`;
+  const { protocol, hostname, host, port } = window.location;
+  // Served by the sim-server itself (--ui): talk to the same origin. The Vite dev server (5180) and
+  // file:// pages default to a local sim-server on 8787.
+  if ((protocol === 'http:' || protocol === 'https:') && port !== '5180' && host) {
+    return `${protocol === 'https:' ? 'wss' : 'ws'}://${host}/ws`;
+  }
+  return `ws://${hostname || 'localhost'}:8787/ws`;
 }
 
 /** Simulation time "now", extrapolated from the last clock message while playing. */

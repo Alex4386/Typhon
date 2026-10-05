@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { Field, type FieldId } from '../protocol/fields';
 import type { WorldInfo, XY } from '../protocol/messages';
-import { getTile, tileKey, useStore, type SurfaceColorMode } from '../store/store';
+import { QUALITY, getTile, tileKey, useStore, type SurfaceColorMode } from '../store/store';
 import { BATHY, BLACKBODY, DIVERGING, HYPSO, THERMAL, hexToRgb, ramp, shadeFor, type RGB } from '../util/color';
 import { sampleColumn } from '../util/world';
 
@@ -27,6 +27,53 @@ function reader(field: FieldId, tx: number, ty: number, t: number, fallback: num
     const ca = Math.min(t - 1, Math.max(0, a));
     const cb = Math.min(t - 1, Math.max(0, b));
     return own[cb * t + ca];
+  };
+}
+
+/**
+ * Display elevations for vertices (a, b) ∈ [−1, n]²: the field smoothed with a separable Gaussian
+ * (σ = r columns, radius 2r). The engine's ground is stepped in whole blocks, which renders as
+ * terraces on gentle slopes; smoothing over neighbouring tiles keeps tile seams continuous.
+ */
+export function smoothedReader(raw: Reader, n: number, r: number): Reader {
+  if (r <= 0) return raw;
+  const K = 2 * r;
+  const lo = -1 - K;
+  const m = n + 2 + 2 * K; // samples a ∈ [lo, n + K]
+  const w: number[] = [];
+  let wsum = 0;
+  for (let k = -K; k <= K; k++) {
+    const v = Math.exp(-(k * k) / (2 * r * r));
+    w.push(v);
+    wsum += v;
+  }
+  for (let k = 0; k < w.length; k++) w[k] /= wsum;
+  const src = new Float32Array(m * m);
+  for (let b = 0; b < m; b++) for (let a = 0; a < m; a++) src[b * m + a] = raw(a + lo, b + lo);
+  // horizontal pass over all rows, columns [K, m − K)
+  const tmp = new Float32Array(m * m);
+  for (let b = 0; b < m; b++) {
+    for (let a = K; a < m - K; a++) {
+      let s = 0;
+      for (let k = -K; k <= K; k++) s += w[k + K] * src[b * m + a + k];
+      tmp[b * m + a] = s;
+    }
+  }
+  const outN = n + 2; // vertices −1 … n
+  const out = new Float32Array(outN * outN);
+  for (let b = 0; b < outN; b++) {
+    const sb = b + K; // row in src/tmp
+    for (let a = 0; a < outN; a++) {
+      const sa = a + K;
+      let s = 0;
+      for (let k = -K; k <= K; k++) s += w[k + K] * tmp[(sb + k) * m + sa];
+      out[b * outN + a] = s;
+    }
+  }
+  return (a, b) => {
+    const ca = Math.min(outN - 1, Math.max(0, a + 1));
+    const cb = Math.min(outN - 1, Math.max(0, b + 1));
+    return out[cb * outN + ca];
   };
 }
 
@@ -98,6 +145,8 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
   const dExag = useStore((s) => s.deformationExaggeration);
   const mode = useStore((s) => s.colorMode);
   const units = useStore((s) => s.units);
+  const smoothR = useStore((s) => (s.smoothTerrain ? QUALITY[s.quality].smoothRadius : 0));
+  const shadows = useStore((s) => QUALITY[s.quality].shadows);
 
   useEffect(() => {
     const key = tileKey(tx, ty);
@@ -108,7 +157,8 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       if (!loaded) return;
       const [eLo, eHi] = world.elevationRange;
       const R = (f: FieldId, fb = 0) => reader(f, tx, ty, t, fb);
-      const elevR = R(Field.SurfaceElevation, 0);
+      const rawElev = R(Field.SurfaceElevation, 0);
+      const elevR = smoothedReader(rawElev, n, smoothR);
       const upR = R(Field.Uplift);
       const lavaR = R(Field.LavaDepth);
       const lavaT = R(Field.LavaTemperature);
@@ -173,8 +223,9 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           if (wd > 0.03) {
             anyWater = true;
             wp.setXYZ(v, x, z + wd * vExag, -y);
-            const deep = Math.min(1, wd / 60);
-            wc.setXYZ(v, lin(0.18 - deep * 0.1), lin(0.45 - deep * 0.2), lin(0.65 - deep * 0.2));
+            // shallow turquoise → deep navy (Beer–Lambert-ish with depth)
+            const deep = 1 - Math.exp(-wd / 25);
+            wc.setXYZ(v, lin(0.22 - deep * 0.18), lin(0.52 - deep * 0.36), lin(0.6 - deep * 0.3));
           } else {
             wp.setXYZ(v, x, z - 2, -y);
             wc.setXYZ(v, 0.2, 0.45, 0.65);
@@ -215,7 +266,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       if (waterMesh.current) waterMesh.current.visible = anyWater;
       if (flowMesh.current) flowMesh.current.visible = anyFlow;
     });
-  }, [rev, vExag, dExag, mode, units, world, tx, ty, t, n, ground, lava, water, flow]);
+  }, [rev, vExag, dExag, mode, units, world, tx, ty, t, n, ground, lava, water, flow, smoothR]);
 
   useEffect(() => () => void rebuildQueue.delete(tileKey(tx, ty)), [tx, ty]);
 
@@ -225,7 +276,8 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
         ref={groundMesh}
         visible={false}
         geometry={ground}
-        receiveShadow
+        castShadow={shadows}
+        receiveShadow={shadows}
         onClick={(e) => {
           if (e.delta > 4) return;
           e.stopPropagation();
@@ -234,8 +286,8 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       >
         <meshStandardMaterial vertexColors roughness={0.95} metalness={0} />
       </mesh>
-      <mesh ref={waterMesh} geometry={water} visible={false} renderOrder={2}>
-        <meshStandardMaterial vertexColors transparent opacity={0.78} roughness={0.15} metalness={0.1} depthWrite={false} />
+      <mesh ref={waterMesh} geometry={water} visible={false} renderOrder={2} receiveShadow={shadows}>
+        <meshStandardMaterial vertexColors transparent opacity={0.82} roughness={0.06} metalness={0.35} depthWrite={false} />
       </mesh>
       <mesh ref={lavaMesh} geometry={lava} visible={false} renderOrder={1}>
         <meshBasicMaterial vertexColors toneMapped={false} />
