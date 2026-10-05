@@ -1,17 +1,28 @@
 package me.alex4386.typhon.engine.alert;
 
-/** Eruption styles, from effusive to most explosive (plus dome extrusion). */
+/**
+ * Named eruption styles, as an observer would call what a volcano is doing. Estimated from the
+ * simulated eruption ({@link EruptionClassifier}); never configured and never fed back into it.
+ */
 public enum EruptionStyle {
-    /** Fluid, gas-poor basalt: lava fountains and long flows. */
+    /** Fluid lava fountains and flows. */
     HAWAIIAN,
-    /** Fluid to intermediate magma with gas slugs: rhythmic bursts of spatter and bombs. */
+    /** Discrete bursts of gas slugs throwing out bombs and spatter. */
     STROMBOLIAN,
-    /** Viscous magma under a plug: short, violent cannon-like explosions. */
+    /** Discrete cannon-like explosions of a stiff, viscous plug. */
     VULCANIAN,
-    /** Viscous, gas-rich dome magma: dome collapse and pyroclastic flows. */
+    /** Collapsing column or dome feeding pyroclastic density currents from a low eruption. */
     PELEAN,
-    /** Viscous, very gas-rich magma at high rate: sustained eruption column. */
+    /** Sustained column above about 20 km. */
     PLINIAN,
-    /** Viscous, degassed magma: slow extrusion of a lava dome. */
-    LAVA_DOME
+    /** Slow extrusion of viscous lava piling up over the vent. */
+    LAVA_DOME,
+    /** Sustained column of about 10–20 km. */
+    SUBPLINIAN,
+    /** Magma–water explosions: cock's-tail jets, wet ash, tuff rings. */
+    SURTSEYAN,
+    /** Steam explosions driven by heated ground water without fresh magma. */
+    PHREATIC,
+    /** No single style dominates. */
+    MIXED
 }

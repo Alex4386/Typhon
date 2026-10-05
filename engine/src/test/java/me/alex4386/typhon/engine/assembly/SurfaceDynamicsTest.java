@@ -98,18 +98,19 @@ class SurfaceDynamicsTest {
         MagmaChamberConfig chamber = MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
                 .volume(5e7).lithostaticDepth(3000).conduitRadius(0.8)
                 .tensileStrengthMPa(8).eruptionEndOverpressureMPa(0.5)
-                .supplyRate(0.4).supplyVariability(0)
+                .supplyRate(0.002).supplyVariability(0)
                 .initialSilicaWt(50).rechargeSilicaWt(50)
                 .initialWaterWt(2.7).rechargeWaterWt(2.7)
+                .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
                 .initialTemperatureC(1140).rechargeTemperatureC(1150)
-                .initialOverpressureMPa(1.5)
+                .initialOverpressureMPa(0)
                 .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
                 .build();
         TerrainModel terrain = new TerrainModel();
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder("test", List.of(vent), terrain, lava)
                 .chamber(chamber)
-                .scaling(VolcanoScaling.DEFAULT.withTimeCompression(5000, 1))
+                .scaling(VolcanoScaling.DEFAULT.withTimeCompression(1, 1))
                 .dikesEnabled(false)
                 .build();
         Engine.Builder builder = Engine.builder(11).add(terrain);
@@ -118,8 +119,9 @@ class SurfaceDynamicsTest {
         engine.submit(VolcanoSystemTest.cone());
         List<EngineFrame> frames = run(engine, 20 * 60 * 30);
 
-        assertEquals(EruptionStyle.STROMBOLIAN, volcano.alert().suggestedStyle());
-        assertTrue(volcano.coupler().effusing(), "open vents also pour a little lava");
+        assertEquals(EruptionStyle.STROMBOLIAN, volcano.alert().suggestedStyle(), "estimated from what the vent does");
+        assertFalse(volcano.classifier().isForecast(), "explosions are activity, not a forecast");
+        assertFalse(volcano.chamber().erupting(), "chamber gas rising through the open conduit: no lava");
         assertFalse(volcano.coupler().explosive(), "no sustained column");
         List<ExplosiveBurst> bursts = events(frames, ExplosiveBurst.class);
         assertTrue(bursts.size() >= 3, "explosions in half an hour: " + bursts.size());
@@ -150,10 +152,14 @@ class SurfaceDynamicsTest {
 
         double sealedAt = changes.stream().filter(c -> !c.active()).mapToDouble(PhreatomagmaticChanged::time).findFirst()
                 .orElseThrow(() -> new AssertionError("the tuff ring should isolate the vent"));
-        // No lava while the vent is phreatomagmatic; effusion once it is sealed off.
-        long lavaBefore = frames.stream().filter(f -> f.time() < sealedAt)
-                .flatMap(f -> f.blockChanges().stream()).filter(c -> c.to().id().path().equals("lava")).count();
-        assertEquals(0, lavaBefore);
+        // Little lava while the sea floods the vent (clasts and lava are quenched); effusion once it is sealed off.
+        double lavaBefore = frames.stream().filter(f -> f.time() < sealedAt)
+                .flatMap(f -> f.blockChanges().stream()).filter(c -> c.to().id().path().equals("lava")).count() / sealedAt;
+        double end = frames.get(frames.size() - 1).time();
+        double lavaAfter = frames.stream().filter(f -> f.time() >= sealedAt)
+                .flatMap(f -> f.blockChanges().stream()).filter(c -> c.to().id().path().equals("lava")).count()
+                / (end - sealedAt);
+        assertTrue(lavaBefore < 0.3 * lavaAfter, "lava block changes per second " + lavaBefore + " → " + lavaAfter);
         assertTrue(w.volcano().coupler().effusing());
         assertTrue(w.lava().emittedVolume() > 0);
 
@@ -176,7 +182,8 @@ class SurfaceDynamicsTest {
 
         assertTrue(events(frames, PhreatomagmaticChanged.class).isEmpty(),
                 "160 m of water suppresses explosive steam expansion");
-        assertTrue(events(frames, ExplosiveBurst.class).isEmpty());
+        assertEquals(0, w.volcano().coupler().partition().waterFragmentedMassFlux(), "no magma–water fragmentation");
+        assertTrue(events(frames, ExplosiveBurst.class).stream().noneMatch(b -> b.kind() == BurstKind.SURTSEYAN_JET));
         assertTrue(w.volcano().coupler().effusing());
         assertTrue(w.lava().emittedVolume() > 0);
     }

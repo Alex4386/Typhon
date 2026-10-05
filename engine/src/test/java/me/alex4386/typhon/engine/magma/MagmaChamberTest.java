@@ -10,6 +10,7 @@ import com.google.gson.JsonParser;
 import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.magma.MagmaCommands.InjectRecharge;
+import me.alex4386.typhon.engine.magma.MagmaCommands.SetSupplyMagma;
 import me.alex4386.typhon.engine.magma.MagmaCommands.SetSupplyRate;
 import me.alex4386.typhon.engine.magma.MagmaCommands.StartEruption;
 import me.alex4386.typhon.engine.magma.MagmaCommands.StopEruption;
@@ -86,19 +87,15 @@ class MagmaChamberTest {
     }
 
     @Test
-    void eruptionRateFollowsPoiseuilleAndWanes() {
+    void eruptionRateFollowsTheConduitFlowAndWanes() {
         MagmaChamberConfig config = steady().initialOverpressureMPa(15).build();
         MagmaChamber chamber = new MagmaChamber(config);
         Engine engine = Engine.builder(0).add(chamber).build();
 
         run(engine, 40, EngineEvent.class); // starts on first step, flows on the next
         assertTrue(chamber.erupting());
-        // Coherent magma degasses as it rises, so the conduit is more viscous than the chamber melt.
-        assertTrue(chamber.conduitViscosityLog10() > chamber.viscosityLog10());
-        double viscosity = Math.pow(10, chamber.conduitViscosityLog10());
-        double r = config.conduitRadius();
-        double poiseuille = Math.PI * r * r * r * r * chamber.overpressureMPa() * 1e6 / (8 * viscosity * config.lithostaticDepth());
-        assertEquals(poiseuille, chamber.eruptionRate(), poiseuille * 0.02);
+        double flow = chamber.conduitFlow().dreRateM3PerS();
+        assertEquals(flow, chamber.physicalEruptionRate(), flow * 0.05, "the chamber drains at the conduit's steady rate");
 
         double early = chamber.eruptionRate();
         run(engine, 20 * 1800, EngineEvent.class);
@@ -145,6 +142,71 @@ class MagmaChamberTest {
         assertEquals(volume / stiffness, chamber.overpressureMPa(), 1e-6);
         assertTrue(chamber.temperatureC() > 1000);
         assertTrue(chamber.bulkSilicaWt() < config.initialSilicaWt());
+    }
+
+    @Test
+    void crystalRichBatchesBringLessHeat() {
+        MagmaChamberConfig config = steady().supplyRate(0).initialTemperatureC(1000).build();
+        MagmaChamber melt = new MagmaChamber(config);
+        MagmaChamber mush = new MagmaChamber(config);
+        Engine a = Engine.builder(0).add(melt).build();
+        Engine b = Engine.builder(0).add(mush).build();
+        a.submit(new InjectRecharge("v", 5e6, 1150, 50, 1.0, 0.2, 0.0));
+        b.submit(new InjectRecharge("v", 5e6, 1150, 50, 1.0, 0.2, 0.5));
+        a.step();
+        b.step();
+        assertTrue(melt.temperatureC() > mush.temperatureC(),
+                "crystals already released their latent heat: " + melt.temperatureC() + " vs " + mush.temperatureC());
+        assertTrue(mush.temperatureC() > 1000, "but a hotter batch still heats the chamber");
+        assertTrue(melt.bulkCo2Wt() > mush.bulkCo2Wt(), "CO₂ comes with the melt fraction only");
+        assertEquals(melt.overpressureMPa(), mush.overpressureMPa(), 1e-12, "volume sets the pressure");
+    }
+
+    @Test
+    void mixingConservesEnthalpy() {
+        double before = MagmaChamber.enthalpy(1000, MagmaChamber.crystalFraction(1000, 52));
+        double batch = MagmaChamber.enthalpy(1200, 0.1);
+        MagmaChamberConfig config = steady().supplyRate(0).initialTemperatureC(1000).initialSilicaWt(52).build();
+        MagmaChamber chamber = new MagmaChamber(config);
+        Engine engine = Engine.builder(0).add(chamber).build();
+        double volume = 1e7;
+        engine.submit(new InjectRecharge("v", volume, 1200, 52, 1.0, 0.0, 0.1));
+        engine.step();
+        double f = volume / (config.volume() + volume);
+        double expected = before + f * (batch - before);
+        double after = MagmaChamber.enthalpy(chamber.temperatureC(), chamber.crystalFraction());
+        assertEquals(expected, after, 1e-6 * expected);
+    }
+
+    @Test
+    void supplyMagmaIsSetAtRunTimeAndSaved() {
+        MagmaChamberConfig config = steady().supplyRate(1).initialTemperatureC(1050).build();
+        MagmaChamber chamber = new MagmaChamber(config);
+        Engine engine = Engine.builder(0).add(chamber).build();
+        engine.submit(new SetSupplyMagma("v", 2.0, 1250.0, 47.0, 0.5, 0.4, 0.05, null));
+        engine.step();
+        MagmaChamber.SupplyMagma supply = chamber.supply();
+        assertEquals(new MagmaChamber.SupplyMagma(2.0, 1250, 47, 0.5, 0.4, 0.05, config.supplyVariability()), supply);
+        run(engine, 20 * 600, EngineEvent.class);
+        assertTrue(chamber.temperatureC() > 1050, "the hot supply heats the chamber");
+        assertTrue(chamber.bulkSilicaWt() < config.initialSilicaWt(), "and makes it more mafic");
+        assertTrue(chamber.bulkCo2Wt() > 0);
+
+        InMemorySaveStore saved = Saves.save(engine);
+        MagmaChamber restored = new MagmaChamber(config);
+        Engine.builder(0).add(restored).restore(saved).build();
+        assertEquals(supply, restored.supply(), "the runtime supply is state");
+        restored.resetSupplyFromConfig();
+        assertEquals(config.supplyRate(), restored.supply().rate());
+        assertEquals(config.rechargeTemperatureC(), restored.supply().temperatureC());
+    }
+
+    @Test
+    void magmaCommandsRejectNonsense() {
+        assertThrows(IllegalArgumentException.class, () -> new SetSupplyMagma("v", -1.0, null, null, null, null, null, null));
+        assertThrows(IllegalArgumentException.class, () -> new SetSupplyMagma("v", null, null, null, null, null, 0.95, null));
+        assertThrows(IllegalArgumentException.class, () -> new InjectRecharge("v", 1, 1200, 90, 1));
+        assertThrows(IllegalArgumentException.class, () -> new InjectRecharge("v", 0, 1200, 50, 1));
     }
 
     @Test
@@ -207,25 +269,28 @@ class MagmaChamberTest {
     @Test
     void wetMagmaFragmentsAndErupsFasterThanItsViscosityAllows() {
         MagmaChamber wet = new MagmaChamber(steady().initialSilicaWt(68).initialTemperatureC(880).initialWaterWt(4.5).build());
-        assertTrue(wet.fragmented());
-        assertTrue(wet.conduitConductance() > Math.PI * Math.pow(1.5, 4) * 1e6
-                / (8 * Math.pow(10, wet.viscosityLog10()) * 4000) * 1000);
-        MagmaChamber dry = new MagmaChamber(steady().build());
-        assertFalse(dry.fragmented());
+        assertTrue(wet.fragmented(), "failure would start a fragmenting flow");
+        double coherentPoiseuille = Math.PI * Math.pow(1.5, 4) * wet.config().tensileStrengthMPa() * 1e6
+                / (8 * Math.pow(10, wet.viscosityLog10()) * 4000);
+        assertTrue(wet.forecastFlow().dreRateM3PerS() > 100 * coherentPoiseuille,
+                "fragmented flow is far faster than coherent magma of that viscosity could rise");
+        MagmaChamber degassed = new MagmaChamber(steady().initialSilicaWt(62).initialTemperatureC(950).initialWaterWt(0.3)
+                .tensileStrengthMPa(5).build());
+        assertFalse(degassed.fragmented(), "degassed, viscous magma would rise coherently: " + degassed.forecastFlow());
     }
 
     @Test
     void persistentEruptionWhenSupplyOutpacesTheConduit() {
         MagmaChamberConfig config = steady()
                 .initialOverpressureMPa(15)
-                .supplyRate(20)
+                .supplyRate(50)
                 .build();
         MagmaChamber chamber = new MagmaChamber(config);
         Engine engine = Engine.builder(0).add(chamber).build();
         // The degassing (more viscous) conduit relaxes slowly (τ = Vβ/c ≈ 7 h here); run several τ.
         run(engine, 20 * 3600 * 48, EngineEvent.class);
         assertTrue(chamber.erupting());
-        assertEquals(20, chamber.eruptionRate(), 2, "steady state: output matches supply");
+        assertEquals(50, chamber.eruptionRate(), 5, "steady state: output matches supply");
     }
 
     @Test

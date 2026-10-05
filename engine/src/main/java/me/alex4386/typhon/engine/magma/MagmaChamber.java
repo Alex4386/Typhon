@@ -9,67 +9,71 @@ import java.util.List;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.magma.MagmaCommands.InjectRecharge;
 import me.alex4386.typhon.engine.magma.MagmaCommands.MagmaCommand;
+import me.alex4386.typhon.engine.magma.MagmaCommands.SetSupplyMagma;
 import me.alex4386.typhon.engine.magma.MagmaCommands.SetSupplyRate;
 import me.alex4386.typhon.engine.magma.MagmaCommands.StartEruption;
 import me.alex4386.typhon.engine.magma.MagmaCommands.StopEruption;
 import me.alex4386.typhon.engine.magma.MagmaEvents.Cause;
+import me.alex4386.typhon.engine.magma.conduit.ConduitInput;
+import me.alex4386.typhon.engine.magma.conduit.ConduitJson;
+import me.alex4386.typhon.engine.magma.conduit.ConduitModel;
+import me.alex4386.typhon.engine.magma.conduit.ConduitModel.Branch;
+import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.random.SimRandom;
+import me.alex4386.typhon.engine.save.StateReader;
+import me.alex4386.typhon.engine.save.StateWriter;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.volcano.EruptiveRegime;
 import me.alex4386.typhon.engine.volcano.MagmaState;
-import me.alex4386.typhon.engine.save.StateReader;
-import me.alex4386.typhon.engine.save.StateWriter;
 
 /**
- * Lumped (0-D) magma chamber.
+ * Lumped (0-D) magma chamber feeding a resolved conduit.
  *
  * <p><b>Pressure.</b> The chamber is an elastic reservoir of volume {@code V} and effective
  * compressibility {@code β = β₀ + α/P_abs} (bubble-free system plus exsolved-gas volume fraction
- * {@code α}). Net inflow changes overpressure as {@code dP/dt = (Q_in − Q_out) / (V β)}. Recharge
- * comes from a steady deep supply with log-normal fluctuations and from {@link InjectRecharge}
- * pulses.
+ * {@code α}, H₂O and CO₂). Net inflow changes overpressure as {@code dP/dt = (Q_in − Q_out) / (V β)}.
+ * Recharge comes from a steady deep supply with log-normal fluctuations and from {@link
+ * InjectRecharge} pulses; the supply's rate and magma ({@link SetSupplyMagma}) can change at run time.
  *
- * <p><b>Eruption.</b> When overpressure exceeds the failure pressure an eruption starts and magma
- * leaves through a cylindrical conduit following Poiseuille flow, {@code Q_out = π r⁴ P / (8 μ L)}.
- * A sealed conduit fails at the roof's tensile strength; after an eruption the conduit stays open
- * and re-opens at a much lower overpressure until it seals again (e-folding
- * {@link ConduitConfig#conduitSealTimescale()} of repose). Pressure is integrated exactly
- * ({@code P → P_eq + (P − P_eq) e^(−t/τ)}, {@code τ = Vβ/c}). The eruption ends when overpressure
- * falls below the end threshold; if supply keeps it above, the eruption is persistent.
+ * <p><b>Eruption.</b> A sealed conduit fails at the roof's tensile strength; after an eruption it
+ * stays open and re-opens at a much lower overpressure until it seals again (e-folding {@link
+ * ConduitConfig#conduitSealTimescale()} of repose). While erupting, magma leaves at the rate of the
+ * steady conduit flow ({@link ConduitModel}: exsolution, outgassing, crystallisation, fragmentation,
+ * choking). A sealed conduit failing suddenly decompresses fast and follows the fastest steady flow; an
+ * open conduit or a dike starts on the slowest; during the eruption the flow stays on its branch until
+ * that branch disappears (Melnik &amp; Sparks 1999). Between conduit solutions the outflow is
+ * linearised about the magmastatic balance, {@code Q = k (P − P₀)}, and pressure integrated exactly.
+ * The eruption ends when overpressure falls below the end threshold, or when the conduit can no longer
+ * carry any flow.
  *
- * <p><b>Conduit regime.</b> {@link ConduitFlow} decides how the magma leaves: a closed conduit failing
- * at high overpressure decompresses fast, so gas-rich, viscous magma fragments into a sustained
- * explosive column ({@link EruptiveRegime#EXPLOSIVE}); slowly rising magma outgasses and extrudes as
- * a dome ({@link EruptiveRegime#DOME}); fluid magma either fountains or, when gas slugs outrun the
- * melt, erupts from an open vent ({@link EruptiveRegime#OPEN_VENT}). An explosive phase relaxes to
- * effusion once the ascent slows enough to outgas; it only resumes if the chamber fails again.
+ * <p>Nothing here selects a style. Whether magma fountains, extrudes a dome or feeds a Plinian column
+ * follows from the flow; {@link #eruptiveRegime()} only names it. Gas slugs segregating in fluid magma
+ * accumulate and burst (Strombolian-type explosions); outgassed gas trapped beneath a stiff,
+ * crystal-rich plug pressurises until the plug fails (Vulcanian-type). Both are physical events
+ * queued for the surface coupling ({@link #drainBursts()}).
  *
- * <p><b>Explosions.</b> Open vents accumulate a share of the exsolving gas into slugs that burst
- * (Strombolian; gamma-distributed slug masses give quasi-periodic intervals). Domes trap gas beneath a
- * plug in the porous upper conduit until its pressure exceeds the plug strength (Vulcanian); a new
- * plug then needs time to seal. Bursts are queued for the surface coupling ({@link #drainBursts()}).
- *
- * <p><b>Thermal and chemical evolution.</b> Temperature relaxes towards the wall-rock temperature
- * and is reset by mixing with recharge. Crystal fraction follows a linear liquidus–solidus
- * interpolation (liquidus falls with SiO₂). Fractional crystallisation of a mafic assemblage
- * enriches the residual melt in SiO₂ (mass balance) and in water, which is capped by its solubility
- * {@code ≈ 0.411 √P[MPa]} wt%; the excess exsolves and slowly vents. A chamber left alone therefore
- * cools, crystallises and becomes more silicic, wetter and more explosive.
+ * <p><b>Thermal and chemical evolution.</b> Temperature relaxes towards the wall-rock temperature;
+ * recharge mixes by mass and enthalpy (sensible + latent heat; crystals carry no latent heat). Crystal
+ * fraction follows a linear liquidus–solidus interpolation. Fractional crystallisation enriches the
+ * residual melt in SiO₂, H₂O and CO₂; volatiles beyond solubility ({@code 0.411 √P} wt% H₂O, Henry's
+ * law for CO₂) exsolve and slowly vent.
  *
  * <p><b>Time.</b> Physical time runs {@code dormantTimeScale} times faster than simulated time while
- * the chamber is quiet and {@code eruptiveTimeScale} times faster during eruptions, so dormancy that
- * takes centuries in nature passes in an hour of play. All {@link MagmaState} rates are per
- * simulated second.
+ * the chamber is quiet and {@code eruptiveTimeScale} times faster during eruptions. All {@link
+ * MagmaState} rates are per simulated second unless named physical.
  *
- * <p>References: Blake (1981), Nature 289:783-785 (open-chamber overpressure and tensile failure); Huppert &amp; Woods (2002), Nature 420:493-495 (volatiles raise compressibility); Wilson &amp; Head (1981), JGR 86:2971-3001 (conduit flow, H₂O solubility). See {@code docs/references.md}.
+ * <p>References: Blake (1981), Nature 289:783-785; Huppert &amp; Woods (2002), Nature 420:493-495;
+ * Wilson &amp; Head (1981), JGR 86:2971-3001; Melnik &amp; Sparks (1999), Nature 402:37-41. See {@code
+ * docs/eruption-dynamics.md}.
  */
 public final class MagmaChamber implements Subsystem, MagmaState {
     static final double ROCK_DENSITY = 2600;
-    static final double MAGMA_DENSITY = 2500;
+    static final double MAGMA_DENSITY = ConduitModel.MAGMA_DENSITY;
     static final double GRAVITY = 9.81;
     static final double WATER_MOLAR_MASS = 0.018;
+    static final double CO2_MOLAR_MASS = 0.044;
     static final double GAS_CONSTANT = 8.314;
     static final double SOLIDUS_C = 700;
     /** Specific heat of silicate melt (J/kg/K); Spera (2000), Encyclopedia of Volcanoes. */
@@ -79,8 +83,15 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     static final double MAX_CRYSTAL_FRACTION = 0.58;
     static final double MAX_MELT_SILICA = 77;
     static final int MAX_PENDING_BURSTS = 64;
-    /** Hysteresis on the slug-speed / ascent-speed comparison that separates fountains from open vents. */
-    static final double REGIME_HYSTERESIS = 1.1;
+    /** Water table below the vent assumed until the surface reports one (m). */
+    static final double DEFAULT_WATER_TABLE_DEPTH_M = 200;
+    /**
+     * Relative change of the conduit's drivers that triggers a new steady solution during an eruption
+     * (see {@link ConduitInput#closeTo}).
+     */
+    static final double RESOLVE_TOLERANCE = 0.02;
+    /** Width (log10 Pa·s) of the transition from soft lava to a gas-tight plug. */
+    static final double PLUG_TRANSITION_LOG10 = 0.5;
 
     private final MagmaChamberConfig config;
 
@@ -88,7 +99,14 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private double temperature;
     private double bulkSilica;
     private double bulkWater;
+    private double bulkCo2;
     private double supplyRate;
+    private double supplyVariability;
+    private double rechargeTemperature;
+    private double rechargeSilica;
+    private double rechargeWater;
+    private double rechargeCo2;
+    private double rechargeCrystals;
     private boolean erupting;
     private double eruptionStartTime;
     private int eruptionCount;
@@ -101,13 +119,23 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private boolean pendingFlank;
     private EruptiveRegime regime = EruptiveRegime.QUIESCENT;
     private double conduitOpenness;
-    private double ventWater;
-    private double ascentVelocity;
+    private double ventAmbientPa = ConduitInput.ATMOSPHERE_PA;
+    private double waterTableDepthM = DEFAULT_WATER_TABLE_DEPTH_M;
+    /** Drivers of the current steady conduit flow, and the flow itself (null when not erupting). */
+    private ConduitInput conduitInput;
+    private ConduitSolution conduit;
+    /** The solution before the current one (for the secant outflow slope): overpressure and rate. */
+    private double previousSolvedOverpressure;
+    private double previousSolvedRate;
     private double slugGas;
     private double nextSlugMass;
     private double plugGas;
     private double resealRemaining;
     private final ArrayDeque<ConduitBurst> bursts = new ArrayDeque<>();
+
+    // Forecast cache: a pure function of the rounded input, so it needs no saving.
+    private ConduitInput forecastKey;
+    private ConduitSolution forecast;
 
     public MagmaChamber(MagmaChamberConfig config) {
         this.config = config;
@@ -115,8 +143,9 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         this.temperature = config.initialTemperatureC();
         this.bulkSilica = config.initialSilicaWt();
         this.bulkWater = config.initialWaterWt();
-        this.supplyRate = config.supplyRate();
+        this.bulkCo2 = config.initialCo2Wt();
         this.conduitOpenness = config.conduit().initialOpenness();
+        resetSupplyFromConfig();
     }
 
     @Override
@@ -148,6 +177,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     @Override
     public void registerCommands(CommandBus bus) {
         bus.register(SetSupplyRate.class, this::handleIfTargeted);
+        bus.register(SetSupplyMagma.class, this::handleIfTargeted);
         bus.register(InjectRecharge.class, this::handleIfTargeted);
         bus.register(StartEruption.class, this::handleIfTargeted);
         bus.register(StopEruption.class, this::handleIfTargeted);
@@ -160,7 +190,18 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     void handle(MagmaCommand command) {
         switch (command) {
             case SetSupplyRate c -> supplyRate = c.supplyRate();
-            case InjectRecharge c -> inject(c.volume(), c.temperatureC(), c.silicaWt(), c.waterWt());
+            case SetSupplyMagma c -> {
+                if (c.supplyRate() != null) supplyRate = c.supplyRate();
+                if (c.temperatureC() != null) rechargeTemperature = c.temperatureC();
+                if (c.silicaWt() != null) rechargeSilica = c.silicaWt();
+                if (c.waterWt() != null) rechargeWater = c.waterWt();
+                if (c.co2Wt() != null) rechargeCo2 = c.co2Wt();
+                if (c.crystalFraction() != null) rechargeCrystals = c.crystalFraction();
+                if (c.variability() != null) supplyVariability = c.variability();
+            }
+            case InjectRecharge c -> inject(c.volume(), c.temperatureC(), c.silicaWt(), c.waterWt(),
+                    c.co2Wt() != null ? c.co2Wt() : rechargeCo2,
+                    c.crystalFraction() != null ? c.crystalFraction() : rechargeCrystals);
             case StartEruption c -> {
                 pendingStart = true;
                 pendingStop = false;
@@ -184,34 +225,59 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         double supply = currentSupply(context.random());
         double inflow = supply * physicalDt;
 
-        mix(inflow, config.rechargeTemperatureC(), config.rechargeSilicaWt(), config.rechargeWaterWt());
+        mix(inflow, rechargeTemperature, rechargeSilica, rechargeWater, rechargeCo2, rechargeCrystals);
         temperature = config.wallTemperatureC()
                 + (temperature - config.wallTemperatureC()) * Math.exp(-physicalDt / config.coolingTimescale());
         double phi = crystalFraction();
-        bulkWater -= exsolvedWaterWt() * (1 - phi) * (1 - Math.exp(-physicalDt / config.degassingTimescale()));
+        double vented = 1 - Math.exp(-physicalDt / config.degassingTimescale());
+        double ventedWater = exsolvedWaterWt() * (1 - phi) * vented;
+        double ventedCo2 = exsolvedCo2Wt() * (1 - phi) * vented;
+        bulkWater -= ventedWater;
+        bulkCo2 -= ventedCo2;
+        // Free gas leaving the chamber rises through an open conduit (through the crust otherwise).
+        double magmaMass = config.volume() * MAGMA_DENSITY;
+        double conduitShare = erupting ? 1 : conduitOpenness;
+        double gasWater = ventedWater / 100 * magmaMass * conduitShare;
+        double gasCo2 = ventedCo2 / 100 * magmaMass * conduitShare;
 
         double stiffness = config.volume() * effectiveCompressibility(); // m³ per MPa
         double previous = overpressure;
         double erupted = 0;
 
         if (erupting) {
-            double conductance = conduitConductance(); // m³/s per MPa
-            if (overpressure > 0) {
-                conductance = Math.min(conductance, config.maxEruptionRate() / overpressure);
-            }
-            double equilibrium = supply / conductance;
-            double tau = stiffness / conductance;
-            overpressure = equilibrium + (overpressure - equilibrium) * Math.exp(-physicalDt / tau);
-            erupted = Math.max(0, inflow - stiffness * (overpressure - previous));
-            eruptedVolume += erupted;
+            ConduitSolution flow = updateConduit();
+            if (flow == null) {
+                endEruption(context, Cause.AUTOMATIC); // the conduit can no longer carry magma
+            } else {
+                // Outflow linearised about the last solutions: Q = k (P − P₀).
+                double solvedAt = solvedOverpressureMPa();
+                double conductance = flow.dreRateM3PerS() / Math.max(1e-6, solvedAt - zeroFlowOverpressureMPa());
+                double slope = (flow.dreRateM3PerS() - previousSolvedRate) / (solvedAt - previousSolvedOverpressure);
+                boolean sameBranch = previousSolvedRate > 0
+                        && Math.abs(Math.log(flow.dreRateM3PerS() / previousSolvedRate)) < Math.log(3);
+                if (sameBranch && Math.abs(solvedAt - previousSolvedOverpressure) > 1e-3 && slope > 0) {
+                    conductance = slope; // m³/s per MPa
+                }
+                double base = solvedAt - flow.dreRateM3PerS() / conductance;
+                conductance = Math.min(conductance, config.maxEruptionRate() / Math.max(1e-6, overpressure - base));
+                if (conductance > 0) {
+                    double equilibrium = base + supply / conductance;
+                    double tau = stiffness / conductance;
+                    overpressure = equilibrium + (overpressure - equilibrium) * Math.exp(-physicalDt / tau);
+                } else {
+                    overpressure += inflow / stiffness;
+                }
+                erupted = Math.max(0, inflow - stiffness * (overpressure - previous));
+                eruptedVolume += erupted;
 
-            double physicalRate = erupted / physicalDt;
-            updateRegime(context, physicalRate);
-            runConduitGas(context, physicalRate, physicalDt);
-            if (overpressure <= config.eruptionEndOverpressureMPa()) {
-                endEruption(context, Cause.AUTOMATIC);
+                runConduitGas(context, flow, physicalDt, gasWater, gasCo2);
+                setRegime(context, describe(flow));
+                if (overpressure <= config.eruptionEndOverpressureMPa()) {
+                    endEruption(context, Cause.AUTOMATIC);
+                }
             }
         } else {
+            percolateGas(context, physicalDt, gasWater, gasCo2);
             conduitOpenness *= Math.exp(-physicalDt / config.conduit().conduitSealTimescale());
             overpressure += inflow / stiffness;
             if (overpressure >= failureOverpressureMPa()) {
@@ -233,6 +299,16 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      */
     public void requestFlankEruption() {
         pendingFlank = true;
+    }
+
+    /**
+     * Conditions at the vent the conduit flow exits into, reported by the surface coupling: ambient
+     * pressure (atmosphere plus water standing over the vent) and the depth of the water table below
+     * the vent, which sets how much gas the conduit can lose into its wall. Used from the next step.
+     */
+    public void setVentEnvironment(double ambientPressurePa, double waterTableDepthM) {
+        if (ambientPressurePa > 0) this.ventAmbientPa = ambientPressurePa;
+        if (waterTableDepthM >= 0) this.waterTableDepthM = waterTableDepthM;
     }
 
     private void applyOverrides(StepContext context) {
@@ -259,13 +335,16 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     }
 
     private void startEruption(StepContext context, Cause cause) {
-        // A dike-fed flank eruption uses a fresh, already-open pathway: no sudden roof failure.
-        boolean closed = cause != Cause.DIKE && conduitOpenness < 0.5;
-        EruptiveRegime onset = onsetRegime(closed);
-        ConduitFlow.Assessment a = assess();
-        double onsetRate = cappedRate(onset == EruptiveRegime.EXPLOSIVE ? a.fragmentedConductance() : a.effusiveConductance());
-        ascentVelocity = ConduitFlow.ascentVelocity(onsetRate, config.conduitRadius());
-        ventWater = ConduitFlow.retainedWaterWt(config, waterWt(), onsetRate);
+        // A sealed roof failing decompresses the column suddenly: the fastest steady flow. An open
+        // conduit or a dike-fed fissure lets magma start rising on the slowest.
+        boolean sealed = cause != Cause.DIKE && conduitOpenness < 0.5;
+        ConduitInput in = conduitInput(overpressure);
+        ConduitSolution flow = ConduitModel.solve(in, config.conduit(), sealed ? Branch.FASTEST : Branch.SLOWEST);
+        if (flow == null) return; // the chamber cannot lift magma to the surface
+        conduitInput = in;
+        conduit = flow;
+        previousSolvedOverpressure = 0;
+        previousSolvedRate = 0;
         erupting = true;
         eruptionStartTime = context.time();
         eruptionCount++;
@@ -274,19 +353,21 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         plugGas = 0;
         resealRemaining = 0;
         context.outbox().emit(new MagmaEvents.EruptionStarted(context.time(), config.volcanoId(), overpressure, cause));
-        setRegime(context, onset);
+        setRegime(context, describe(flow));
     }
 
     private void endEruption(StepContext context, Cause cause) {
         erupting = false;
         eruptionRate = 0;
         conduitOpenness = 1;
+        conduit = null;
+        conduitInput = null;
         context.outbox().emit(new MagmaEvents.EruptionEnded(
                 context.time(), config.volcanoId(), eruptedVolume, context.time() - eruptionStartTime, cause));
         setRegime(context, EruptiveRegime.QUIESCENT);
     }
 
-    // ── Conduit regime ──
+    // ── Conduit ──
 
     /**
      * Overpressure at which the next eruption starts: the tensile strength for a sealed conduit,
@@ -302,113 +383,208 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return conduitOpenness;
     }
 
-    private ConduitFlow.Assessment assess() {
-        return ConduitFlow.assess(config, silicaWt(), waterWt(), temperature, crystalFraction());
+    /**
+     * Overpressure (MPa) at which a column of bubble-free magma just balances the chamber: magma lighter
+     * than the crust rises even below lithostatic pressure.
+     */
+    public double zeroFlowOverpressureMPa() {
+        return -(ROCK_DENSITY - MAGMA_DENSITY) * GRAVITY * config.lithostaticDepth() / 1e6;
     }
 
-    /** Rate (m³/s) through a conduit of {@code conductance}; before an eruption, at failure pressure. */
-    private double cappedRate(double conductance) {
-        double pressure = erupting ? overpressure : Math.max(overpressure, failureOverpressureMPa());
-        return Math.min(config.maxEruptionRate(), conductance * Math.max(0, pressure));
+    /** Drivers of the conduit flow at a given chamber overpressure. */
+    ConduitInput conduitInput(double overpressureMPa) {
+        double phi = crystalFraction();
+        double pressure = Math.max(0.1, lithostaticPressureMPa() + overpressureMPa) * 1e6;
+        return new ConduitInput(pressure, temperature, silicaWt(), waterWt(), meltCo2Wt(),
+                exsolvedWaterWt() / 100 * (1 - phi), phi, config.conduitRadius(), config.lithostaticDepth(),
+                ventAmbientPa, waterTableDepthM);
     }
 
-    private boolean fragmentsAt(double rate) {
-        return ConduitFlow.fragments(config, silicaWt(), waterWt(), temperature, crystalFraction(), rate);
+    /** Keeps the steady flow up to date with the chamber, staying on the current branch. */
+    private ConduitSolution updateConduit() {
+        ConduitInput in = conduitInput(overpressure);
+        if (conduit != null && in.closeTo(conduitInput, RESOLVE_TOLERANCE)) return conduit;
+        ConduitSolution next = conduit == null
+                ? ConduitModel.solve(in, config.conduit(), Branch.SLOWEST)
+                : ConduitModel.solveNear(in, config.conduit(), conduit.massFluxKgPerS());
+        if (conduit != null) {
+            previousSolvedOverpressure = solvedOverpressureMPa();
+            previousSolvedRate = conduit.dreRateM3PerS();
+        }
+        conduitInput = in;
+        conduit = next;
+        return next;
+    }
+
+    /** Chamber overpressure (MPa) the current conduit solution was computed at. */
+    private double solvedOverpressureMPa() {
+        return conduitInput.chamberPressurePa() / 1e6 - lithostaticPressureMPa();
+    }
+
+    /** The steady flow while erupting, physical units; {@code null} otherwise. */
+    @Override
+    public ConduitSolution conduitFlow() {
+        return erupting ? conduit : null;
     }
 
     /**
-     * Regime at eruption onset. A sealed conduit failing at high overpressure decompresses the magma
-     * column suddenly, so it is tested at the fragmented-flow rate; an open conduit or dike lets
-     * magma start rising at the coherent-flow rate.
+     * The flow a failure of the conduit as it is now would start (at the failure overpressure, on the
+     * branch its openness implies); {@code null} if the chamber could not lift magma to the surface.
      */
-    private EruptiveRegime onsetRegime(boolean closedConduit) {
-        ConduitFlow.Assessment a = assess();
-        double coherent = cappedRate(a.effusiveConductance());
-        if (closedConduit && fragmentsAt(cappedRate(a.fragmentedConductance()))) return EruptiveRegime.EXPLOSIVE;
-        if (!closedConduit && fragmentsAt(coherent)) return EruptiveRegime.EXPLOSIVE;
-        return effusiveRegime(a, coherent, null);
+    @Override
+    public ConduitSolution forecastFlow() {
+        double op = Math.max(overpressure, failureOverpressureMPa());
+        ConduitInput key = conduitInput(op).rounded();
+        Branch branch = conduitOpenness < 0.5 ? Branch.FASTEST : Branch.SLOWEST;
+        if (!key.equals(forecastKey)) {
+            forecastKey = key;
+            forecast = ConduitModel.solve(key, config.conduit(), branch);
+        }
+        return forecast;
     }
 
-    private EruptiveRegime effusiveRegime(ConduitFlow.Assessment a, double rate, EruptiveRegime previous) {
-        if (!a.slugFlowPossible()) return EruptiveRegime.DOME;
-        double u = ConduitFlow.ascentVelocity(rate, config.conduitRadius());
-        double slug = a.slugVelocity();
-        if (previous == EruptiveRegime.OPEN_VENT) {
-            return u > REGIME_HYSTERESIS * slug ? EruptiveRegime.FOUNTAINING : EruptiveRegime.OPEN_VENT;
-        }
-        if (previous == EruptiveRegime.FOUNTAINING) {
-            return slug > REGIME_HYSTERESIS * u ? EruptiveRegime.OPEN_VENT : EruptiveRegime.FOUNTAINING;
-        }
-        return slug > u ? EruptiveRegime.OPEN_VENT : EruptiveRegime.FOUNTAINING;
+    @Override
+    public double ventAmbientPressurePa() {
+        return ventAmbientPa;
     }
 
-    /** Re-evaluates the regime for the rate actually erupted this step (physical m³/s). */
-    private void updateRegime(StepContext context, double physicalRate) {
-        ascentVelocity = ConduitFlow.ascentVelocity(physicalRate, config.conduitRadius());
-        ventWater = ConduitFlow.retainedWaterWt(config, waterWt(), physicalRate);
-        EruptiveRegime next;
-        if (regime == EruptiveRegime.EXPLOSIVE) {
-            // Sustained fragmentation stops once the column decelerates enough to outgas or flow
-            // ductilely; it does not resume until the chamber fails again.
-            next = fragmentsAt(physicalRate) ? EruptiveRegime.EXPLOSIVE : effusiveRegime(assess(), physicalRate, null);
-        } else {
-            next = effusiveRegime(assess(), physicalRate, regime);
+    /** Names a steady flow (telemetry only). */
+    public static EruptiveRegime describe(ConduitSolution flow) {
+        if (flow == null) return EruptiveRegime.QUIESCENT;
+        if (flow.fragmented()) {
+            boolean nearVent = !(flow.fragmentationDepthM() > 50);
+            return flow.fragmentation() == ConduitSolution.Fragmentation.INERTIAL && nearVent
+                    ? EruptiveRegime.FOUNTAINING : EruptiveRegime.EXPLOSIVE;
         }
-        setRegime(context, next);
+        if (flow.segregatedGasFraction() > 0.5) return EruptiveRegime.OPEN_VENT;
+        if (flow.exitMeltViscosityLog10() >= 8) return EruptiveRegime.DOME;
+        return EruptiveRegime.EFFUSIVE;
     }
 
     private void setRegime(StepContext context, EruptiveRegime next) {
         if (next == regime) return;
         EruptiveRegime previous = regime;
         regime = next;
-        if (next != EruptiveRegime.OPEN_VENT) slugGas = 0;
-        if (next != EruptiveRegime.DOME) {
+        context.outbox().emit(new MagmaEvents.EruptiveRegimeChanged(
+                context.time(), config.volcanoId(), previous, next, ascentVelocity(), ventWaterWt()));
+    }
+
+    // ── Conduit gas: slug bursts and plug failures ──
+
+    /**
+     * Gas reaching the top of the conduit during an eruption: slugs that segregated from fluid magma,
+     * plus chamber gas rising through it, coalesce and burst; gas outgassed from stiff lava is trapped
+     * beneath its plug until the plug fails.
+     */
+    private void runConduitGas(StepContext context, ConduitSolution flow, double physicalDt, double chamberWaterKg,
+            double chamberCo2Kg) {
+        ConduitConfig c = config.conduit();
+        double r = config.conduitRadius();
+
+        // In a fragmenting flow the segregated gas streams up with the jet (churn flow): no discrete slugs.
+        double coalescing = flow.fragmented() ? 0 : coalescence(Math.pow(10, flow.exitMeltViscosityLog10()));
+        double chamberGas = (chamberWaterKg + chamberCo2Kg) * coalescing;
+        double slugGasKg = flow.fragmented() ? 0 : flow.slugGasFluxKgPerS() * physicalDt + chamberGas;
+        double gasConstant = flow.slugGasFluxKgPerS() > 0 || chamberGas <= 0 ? flow.exitGasConstant()
+                : gasConstant(chamberWaterKg, chamberCo2Kg);
+        accumulateSlugs(context, slugGasKg, gasConstant);
+
+        // Plug: degassing-induced crystallisation stiffens coherent lava; the gas it outgasses is trapped
+        // beneath the stiff cap until the cap fails.
+        double stiffness = plugStiffness(flow);
+        if (stiffness > 0.01) {
+            if (resealRemaining > 0) {
+                resealRemaining = Math.max(0, resealRemaining - physicalDt); // gas escapes the broken plug
+            } else {
+                double passive = flow.passiveGasFluxKgPerS() * physicalDt + (chamberWaterKg + chamberCo2Kg) - chamberGas;
+                plugGas += stiffness * passive;
+            }
+            double strength = stiffness * c.plugStrengthMPa();
+            if (plugPressureMPa() >= strength) {
+                double gas = plugGas;
+                double ejecta = MAGMA_DENSITY * (1 - c.plugPorosity()) * Math.PI * r * r * c.plugCapDepthM();
+                queueBurst(new ConduitBurst(context.time(), ConduitBurst.Kind.PLUG, gas, ejecta,
+                        plugPressureMPa(), temperature, silicaWt(), burstDuration(c.plugCapDepthM(), strength * 1e6)));
+                plugGas = 0;
+                // The porous zone reseals once fresh magma has risen through it.
+                resealRemaining = c.plugCapDepthM() / Math.max(flow.ascentVelocity(), 1e-9);
+            }
+        } else {
             plugGas = 0;
             resealRemaining = 0;
         }
-        context.outbox().emit(new MagmaEvents.EruptiveRegimeChanged(
-                context.time(), config.volcanoId(), previous, next, ascentVelocity, ventWaterWt()));
     }
 
-    // ── Conduit gas: Strombolian slugs and Vulcanian plugs ──
+    /**
+     * Between eruptions, chamber gas rising through the open conduit's standing magma: in fluid magma
+     * it coalesces into slugs that burst at the surface (persistent open-vent activity); otherwise it
+     * escapes passively.
+     */
+    private void percolateGas(StepContext context, double physicalDt, double waterKg, double co2Kg) {
+        plugGas = 0;
+        resealRemaining = 0;
+        double gas = (waterKg + co2Kg) * coalescence(Math.pow(10, viscosityLog10()));
+        if (gas > 0) accumulateSlugs(context, gas, gasConstant(waterKg, co2Kg));
+        else slugGas = 0;
+    }
 
-    private void runConduitGas(StepContext context, double physicalRate, double physicalDt) {
-        ConduitConfig c = config.conduit();
-        double gasFlux = physicalRate * ConduitFlow.MAGMA_DENSITY * Math.max(0, waterWt() - c.degassedWaterWt()) / 100;
-        SimRandom random = context.random();
-        if (regime == EruptiveRegime.OPEN_VENT) {
-            slugGas += c.slugGasFraction() * gasFlux * physicalDt;
-            if (nextSlugMass <= 0) nextSlugMass = sampleSlugMass(random);
-            for (int n = 0; slugGas >= nextSlugMass && n < 8; n++) {
-                double gas = nextSlugMass;
-                slugGas -= gas;
-                queueBurst(new ConduitBurst(context.time(), ConduitBurst.Kind.STROMBOLIAN, gas,
-                        gas * (1 / c.strombolianGasMassFraction() - 1), c.slugOverpressureMPa(), temperature, silicaWt(),
-                        c.strombolianDurationSeconds()));
-                nextSlugMass = sampleSlugMass(random);
-            }
-        } else if (regime == EruptiveRegime.DOME) {
-            if (resealRemaining > 0) {
-                resealRemaining = Math.max(0, resealRemaining - physicalDt); // gas escapes through the broken plug
-            } else {
-                plugGas += c.plugTrappedGasFraction() * gasFlux * physicalDt;
-            }
-            if (plugPressureMPa() >= c.plugStrengthMPa()) {
-                double gas = plugGas;
-                queueBurst(new ConduitBurst(context.time(), ConduitBurst.Kind.VULCANIAN, gas,
-                        gas * (1 / c.vulcanianGasMassFraction() - 1), plugPressureMPa(), temperature, silicaWt(),
-                        c.vulcanianDurationSeconds()));
-                plugGas = 0;
-                resealRemaining = c.plugResealSeconds();
-            }
+    /** Share of rising gas that coalesces into slugs in magma of viscosity {@code eta} (Pa·s). */
+    private double coalescence(double eta) {
+        return 1 / (1 + eta / config.conduit().coalescenceViscosity());
+    }
+
+    private static double gasConstant(double waterKg, double co2Kg) {
+        double total = waterKg + co2Kg;
+        return total > 0 ? (waterKg * 461.5 + co2Kg * 188.9) / total : 461.5;
+    }
+
+    /**
+     * Adds slug gas and bursts every slug that is complete. A slug fills {@link
+     * ConduitConfig#slugLengthDiameters()} conduit diameters at the pressure of the melt head it lifts.
+     */
+    private void accumulateSlugs(StepContext context, double gasKg, double gasConstant) {
+        if (!(gasKg > 0)) {
+            slugGas = 0;
+            return;
         }
+        ConduitConfig c = config.conduit();
+        SimRandom random = context.random();
+        double r = config.conduitRadius();
+        double tK = temperature + 273.15;
+        slugGas += gasKg;
+        double length = c.slugLengthDiameters() * 2 * r;
+        double burstOverpressure = MAGMA_DENSITY * GRAVITY * length; // the melt head the slug lifts
+        double meanMass = (ventAmbientPa + burstOverpressure) / (gasConstant * tK) * Math.PI * r * r * length;
+        if (nextSlugMass <= 0) nextSlugMass = sampleSlugMass(random, meanMass);
+        for (int n = 0; slugGas >= nextSlugMass && n < 8; n++) {
+            double gas = nextSlugMass;
+            slugGas -= gas;
+            double ejecta = MAGMA_DENSITY * Math.PI * r * r * 2 * r; // the magma cap over the slug
+            queueBurst(new ConduitBurst(context.time(), ConduitBurst.Kind.SLUG, gas, ejecta,
+                    burstOverpressure / 1e6, temperature, silicaWt(), burstDuration(length, burstOverpressure)));
+            nextSlugMass = sampleSlugMass(random, meanMass);
+        }
+        // Bound the backlog: a gas flux too high for discrete slugs is continuous churn flow.
+        slugGas = Math.min(slugGas, 8 * meanMass);
+    }
+
+    /** 0 for soft lava, 1 for a gas-tight crystal-rich plug, from the vent viscosity. */
+    double plugStiffness(ConduitSolution flow) {
+        if (flow.fragmented()) return 0;
+        double x = (flow.exitMeltViscosityLog10() - config.conduit().plugViscosityLog10()) / PLUG_TRANSITION_LOG10;
+        return 1 / (1 + Math.exp(-x));
+    }
+
+    /** Time (physical s) for a burst to empty a gas pocket of {@code length} at {@code overpressurePa}. */
+    private static double burstDuration(double length, double overpressurePa) {
+        return Math.max(1, length / Math.sqrt(Math.max(1, overpressurePa) / MAGMA_DENSITY));
     }
 
     /** Gamma(k = 4) slug masses: quasi-periodic bursts around the mean. */
-    private double sampleSlugMass(SimRandom random) {
+    private static double sampleSlugMass(SimRandom random, double mean) {
         double sum = 0;
         for (int i = 0; i < 4; i++) sum += random.nextExponential(1);
-        return config.conduit().slugGasMassKg() * sum / 4;
+        return mean * sum / 4;
     }
 
     /** Pressure of gas trapped beneath a dome plug (ideal gas in the porous upper conduit, MPa). */
@@ -416,7 +592,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         ConduitConfig c = config.conduit();
         double r = config.conduitRadius();
         double volume = Math.PI * r * r * c.plugCapDepthM() * c.plugPorosity();
-        return plugGas * ConduitFlow.GAS_CONSTANT * (temperature + 273.15) / (ConduitFlow.WATER_MOLAR_MASS * volume) / 1e6;
+        return plugGas * GAS_CONSTANT * (temperature + 273.15) / (WATER_MOLAR_MASS * volume) / 1e6;
     }
 
     private void queueBurst(ConduitBurst burst) {
@@ -431,24 +607,55 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return out;
     }
 
+    // ── Supply and mixing ──
+
     private double currentSupply(SimRandom random) {
-        double sigma = config.supplyVariability();
+        double sigma = supplyVariability;
         if (supplyRate == 0 || sigma == 0) return supplyRate;
         return supplyRate * Math.exp(sigma * random.nextGaussian() - 0.5 * sigma * sigma);
     }
 
-    private void inject(double volume, double temperatureC, double silicaWt, double waterWt) {
+    private void inject(double volume, double temperatureC, double silicaWt, double waterWt, double co2Wt,
+            double crystals) {
         double stiffness = config.volume() * effectiveCompressibility();
-        mix(volume, temperatureC, silicaWt, waterWt);
+        mix(volume, temperatureC, silicaWt, waterWt, co2Wt, crystals);
         overpressure += volume / stiffness;
     }
 
-    private void mix(double volume, double temperatureC, double silicaWt, double waterWt) {
-        if (volume <= 0) return;
-        double f = Math.min(1, volume / config.volume());
-        temperature += f * (temperatureC - temperature);
+    /**
+     * Mixes {@code volume} of magma into the chamber by mass (SiO₂, H₂O, CO₂) and enthalpy. Melt
+     * carries latent heat that crystals have already released, so the mixture's temperature is found
+     * from the combined enthalpy with the chamber's own crystallinity–temperature relation.
+     */
+    private void mix(double volume, double temperatureC, double silicaWt, double waterWt, double co2Wt,
+            double crystals) {
+        if (!(volume > 0)) return;
+        double f = volume / (config.volume() + volume);
+        double melt = 1 - Math.max(0, Math.min(1, crystals));
+        double enthalpy = enthalpy(temperature, crystalFraction());
+        enthalpy += f * (enthalpy(temperatureC, crystals) - enthalpy);
         bulkSilica += f * (silicaWt - bulkSilica);
-        bulkWater += f * (waterWt - bulkWater);
+        bulkWater += f * (waterWt * melt - bulkWater);
+        bulkCo2 += f * (co2Wt * melt - bulkCo2);
+        temperature = temperatureForEnthalpy(enthalpy);
+    }
+
+    /** Specific enthalpy (J/kg): sensible heat plus the latent heat still held by the melt. */
+    static double enthalpy(double temperatureC, double crystalFraction) {
+        double crystallised = Math.max(0, Math.min(1, crystalFraction / MAX_CRYSTAL_FRACTION));
+        return MELT_HEAT_CAPACITY * temperatureC + LATENT_HEAT_CRYSTALLISATION * (1 - crystallised);
+    }
+
+    /** Temperature at which the chamber's magma has specific enthalpy {@code h} (monotonic: bisection). */
+    private double temperatureForEnthalpy(double h) {
+        double lo = -273;
+        double hi = 3000;
+        for (int i = 0; i < 60; i++) {
+            double mid = 0.5 * (lo + hi);
+            if (enthalpy(mid, crystalFraction(mid, bulkSilica)) < h) lo = mid;
+            else hi = mid;
+        }
+        return 0.5 * (lo + hi);
     }
 
     private MagmaEvents.ChamberSample sample(double time) {
@@ -486,9 +693,18 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return 1250 - 9 * (MeltViscosity.clamp(silicaWt, 45, MAX_MELT_SILICA) - 48);
     }
 
+    private double absolutePressureMPa() {
+        return Math.max(0.1, lithostaticPressureMPa() + overpressure);
+    }
+
     /** H₂O solubility in the melt at chamber pressure (wt%). */
     public double waterSolubilityWt() {
-        return 0.411 * Math.sqrt(Math.max(0.1, lithostaticPressureMPa() + overpressure));
+        return ConduitModel.SOLUBILITY * Math.sqrt(absolutePressureMPa());
+    }
+
+    /** CO₂ solubility in the melt at chamber pressure (wt%, Henry's law). */
+    public double co2SolubilityWt() {
+        return ConduitModel.CO2_SOLUBILITY * absolutePressureMPa();
     }
 
     /** Water exsolved as a gas phase, per unit melt (wt%). */
@@ -496,17 +712,27 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return Math.max(0, meltTotalWater() - waterSolubilityWt());
     }
 
+    /** CO₂ exsolved as a gas phase, per unit melt (wt%). */
+    public double exsolvedCo2Wt() {
+        return Math.max(0, meltCo2Wt() - co2SolubilityWt());
+    }
+
     private double meltTotalWater() {
         return bulkWater / (1 - crystalFraction());
     }
 
-    /** Volume fraction of exsolved gas in the magma. */
+    /** Total CO₂ of the melt (dissolved and exsolved, wt%). */
+    public double meltCo2Wt() {
+        return Math.max(0, bulkCo2) / (1 - crystalFraction());
+    }
+
+    /** Volume fraction of exsolved gas (H₂O + CO₂) in the magma. */
     public double gasVolumeFraction() {
-        double x = exsolvedWaterWt() / 100;
-        if (x <= 0) return 0;
-        double absolutePa = (lithostaticPressureMPa() + Math.max(0, overpressure)) * 1e6;
-        double gasDensity = absolutePa * WATER_MOLAR_MASS / (GAS_CONSTANT * (temperature + 273.15));
-        double ratio = x * MAGMA_DENSITY / gasDensity;
+        double melt = 1 - crystalFraction();
+        double moles = exsolvedWaterWt() / 100 * melt / WATER_MOLAR_MASS + exsolvedCo2Wt() / 100 * melt / CO2_MOLAR_MASS;
+        if (moles <= 0) return 0;
+        double gasVolume = moles * GAS_CONSTANT * (temperature + 273.15) / (absolutePressureMPa() * 1e6); // per kg
+        double ratio = gasVolume * MAGMA_DENSITY;
         return ratio / (1 + ratio);
     }
 
@@ -522,23 +748,18 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     }
 
     /**
-     * True when erupting magma fragments into a gas-driven (explosive) flow. Before an eruption: whether
-     * failure of the conduit as it is now would start explosively.
+     * True when erupting magma fragments in the conduit or at the vent. Before an eruption: whether
+     * failure of the conduit as it is now would.
      */
     public boolean fragmented() {
-        if (erupting) return regime == EruptiveRegime.EXPLOSIVE;
-        return onsetRegime(conduitOpenness < 0.5) == EruptiveRegime.EXPLOSIVE;
+        ConduitSolution flow = erupting ? conduit : forecastFlow();
+        return flow != null && flow.fragmented();
     }
 
-    /** log10 of the viscosity (Pa·s) of coherent magma rising through the conduit (partly degassed). */
+    /** log10 of the viscosity (Pa·s) of the lava at the vent (current or forecast flow). */
     public double conduitViscosityLog10() {
-        return assess().conduitViscosityLog10();
-    }
-
-    /** Poiseuille conduit conductance (m³/s per MPa of overpressure) for the current regime. */
-    double conduitConductance() {
-        ConduitFlow.Assessment a = assess();
-        return fragmented() ? a.fragmentedConductance() : a.effusiveConductance();
+        ConduitSolution flow = erupting ? conduit : forecastFlow();
+        return flow != null ? flow.exitMeltViscosityLog10() : viscosityLog10();
     }
 
     @Override
@@ -546,15 +767,15 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return regime;
     }
 
-    /** Dissolved H₂O reaching the fragmentation level (wt%); the chamber value when not erupting. */
+    /** Dissolved H₂O reaching the vent (wt%); the chamber value when not erupting. */
     @Override
     public double ventWaterWt() {
-        return erupting ? ventWater : waterWt();
+        return erupting && conduit != null ? conduit.exitDissolvedWaterWt() : waterWt();
     }
 
-    /** Mean magma ascent speed in the conduit during the last eruptive step (m/s). */
+    /** Magma ascent speed in the lower conduit (m/s); 0 when not erupting. */
     public double ascentVelocity() {
-        return erupting ? ascentVelocity : 0;
+        return erupting && conduit != null ? conduit.ascentVelocity() : 0;
     }
 
     // ── MagmaState ──
@@ -628,8 +849,12 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     @Override
     public double crystalFraction() {
-        double liquidus = liquidusC(bulkSilica);
-        double x = (liquidus - temperature) / (liquidus - SOLIDUS_C);
+        return crystalFraction(temperature, bulkSilica);
+    }
+
+    static double crystalFraction(double temperatureC, double bulkSilicaWt) {
+        double liquidus = liquidusC(bulkSilicaWt);
+        double x = (liquidus - temperatureC) / (liquidus - SOLIDUS_C);
         return MAX_CRYSTAL_FRACTION * MeltViscosity.clamp(x, 0, 1);
     }
 
@@ -651,8 +876,21 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return bulkWater;
     }
 
+    public double bulkCo2Wt() {
+        return bulkCo2;
+    }
+
     public double supplyRate() {
         return supplyRate;
+    }
+
+    /** The magma the deep supply currently delivers (settable with {@link SetSupplyMagma}). */
+    public record SupplyMagma(double rate, double temperatureC, double silicaWt, double waterWt, double co2Wt,
+            double crystalFraction, double variability) {}
+
+    public SupplyMagma supply() {
+        return new SupplyMagma(supplyRate, rechargeTemperature, rechargeSilica, rechargeWater, rechargeCo2,
+                rechargeCrystals, supplyVariability);
     }
 
     /**
@@ -664,7 +902,20 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         this.supplyRate = rate;
     }
 
-    /** DRE volume erupted so far in the current (or last) eruption (m³). */
+    /**
+     * Re-applies the configured supply (rate, variability and magma) over the saved one; call between
+     * steps when a world's definition changed.
+     */
+    public void resetSupplyFromConfig() {
+        supplyRate = config.supplyRate();
+        supplyVariability = config.supplyVariability();
+        rechargeTemperature = config.rechargeTemperatureC();
+        rechargeSilica = config.rechargeSilicaWt();
+        rechargeWater = config.rechargeWaterWt();
+        rechargeCo2 = config.rechargeCo2Wt();
+        rechargeCrystals = config.rechargeCrystalFraction();
+    }
+
     /**
      * Number of eruptions started so far: the current (or most recent) eruption's id. Deposits are
      * attributed to it, so stratigraphy shows one unit per eruption. 0 before the first eruption.
@@ -678,6 +929,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return eruptionStartTime;
     }
 
+    /** DRE volume erupted so far in the current (or last) eruption (m³). */
     public double eruptedVolume() {
         return eruptedVolume;
     }
@@ -694,7 +946,14 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         out.addProperty("temperature", temperature);
         out.addProperty("bulkSilica", bulkSilica);
         out.addProperty("bulkWater", bulkWater);
+        out.addProperty("bulkCo2", bulkCo2);
         out.addProperty("supplyRate", supplyRate);
+        out.addProperty("supplyVariability", supplyVariability);
+        out.addProperty("rechargeTemperature", rechargeTemperature);
+        out.addProperty("rechargeSilica", rechargeSilica);
+        out.addProperty("rechargeWater", rechargeWater);
+        out.addProperty("rechargeCo2", rechargeCo2);
+        out.addProperty("rechargeCrystals", rechargeCrystals);
         out.addProperty("erupting", erupting);
         out.addProperty("eruptionStartTime", eruptionStartTime);
         out.addProperty("eruptionCount", eruptionCount);
@@ -704,8 +963,14 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         out.addProperty("overpressureRate", overpressureRate);
         out.addProperty("regime", regime.name());
         out.addProperty("conduitOpenness", conduitOpenness);
-        out.addProperty("ventWater", ventWater);
-        out.addProperty("ascentVelocity", ascentVelocity);
+        out.addProperty("ventAmbientPa", ventAmbientPa);
+        out.addProperty("waterTableDepthM", waterTableDepthM);
+        if (conduitInput != null && conduit != null) {
+            out.add("conduitInput", ConduitJson.write(conduitInput));
+            out.add("conduit", ConduitJson.write(conduit));
+            out.addProperty("previousSolvedOverpressure", previousSolvedOverpressure);
+            out.addProperty("previousSolvedRate", previousSolvedRate);
+        }
         out.addProperty("slugGas", slugGas);
         out.addProperty("nextSlugMass", nextSlugMass);
         out.addProperty("plugGas", plugGas);
@@ -736,7 +1001,14 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         temperature = in.get("temperature").getAsDouble();
         bulkSilica = in.get("bulkSilica").getAsDouble();
         bulkWater = in.get("bulkWater").getAsDouble();
+        bulkCo2 = number(in, "bulkCo2", config.initialCo2Wt());
         supplyRate = in.get("supplyRate").getAsDouble();
+        supplyVariability = number(in, "supplyVariability", config.supplyVariability());
+        rechargeTemperature = number(in, "rechargeTemperature", config.rechargeTemperatureC());
+        rechargeSilica = number(in, "rechargeSilica", config.rechargeSilicaWt());
+        rechargeWater = number(in, "rechargeWater", config.rechargeWaterWt());
+        rechargeCo2 = number(in, "rechargeCo2", config.rechargeCo2Wt());
+        rechargeCrystals = number(in, "rechargeCrystals", config.rechargeCrystalFraction());
         erupting = in.get("erupting").getAsBoolean();
         eruptionStartTime = in.get("eruptionStartTime").getAsDouble();
         eruptionCount = in.has("eruptionCount") ? in.get("eruptionCount").getAsInt() : 0;
@@ -744,23 +1016,37 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         eruptedVolume = in.get("eruptedVolume").getAsDouble();
         eruptionRate = in.get("eruptionRate").getAsDouble();
         overpressureRate = in.get("overpressureRate").getAsDouble();
-        regime = in.has("regime") ? EruptiveRegime.valueOf(in.get("regime").getAsString())
-                : (erupting ? EruptiveRegime.FOUNTAINING : EruptiveRegime.QUIESCENT);
-        conduitOpenness = in.has("conduitOpenness") ? in.get("conduitOpenness").getAsDouble() : config.conduit().initialOpenness();
-        ventWater = in.has("ventWater") ? in.get("ventWater").getAsDouble() : waterWt();
-        ascentVelocity = in.has("ascentVelocity") ? in.get("ascentVelocity").getAsDouble() : 0;
-        slugGas = in.has("slugGas") ? in.get("slugGas").getAsDouble() : 0;
-        nextSlugMass = in.has("nextSlugMass") ? in.get("nextSlugMass").getAsDouble() : 0;
-        plugGas = in.has("plugGas") ? in.get("plugGas").getAsDouble() : 0;
-        resealRemaining = in.has("resealRemaining") ? in.get("resealRemaining").getAsDouble() : 0;
+        regime = in.has("regime") ? EruptiveRegime.valueOf(in.get("regime").getAsString()) : EruptiveRegime.QUIESCENT;
+        conduitOpenness = number(in, "conduitOpenness", config.conduit().initialOpenness());
+        ventAmbientPa = number(in, "ventAmbientPa", ConduitInput.ATMOSPHERE_PA);
+        waterTableDepthM = number(in, "waterTableDepthM", DEFAULT_WATER_TABLE_DEPTH_M);
+        if (in.has("conduitInput") && in.has("conduit")) {
+            conduitInput = ConduitJson.readInput(in.getAsJsonObject("conduitInput"));
+            conduit = ConduitJson.readSolution(in.getAsJsonObject("conduit"));
+            previousSolvedOverpressure = number(in, "previousSolvedOverpressure", 0);
+            previousSolvedRate = number(in, "previousSolvedRate", 0);
+        } else {
+            conduitInput = null;
+            conduit = null;
+        }
+        slugGas = number(in, "slugGas", 0);
+        nextSlugMass = number(in, "nextSlugMass", 0);
+        plugGas = number(in, "plugGas", 0);
+        resealRemaining = number(in, "resealRemaining", 0);
+        forecastKey = null;
+        forecast = null;
         bursts.clear();
         if (in.has("bursts")) {
             for (JsonElement e : in.getAsJsonArray("bursts")) {
                 JsonObject o = e.getAsJsonObject();
-                bursts.addLast(new ConduitBurst(o.get("time").getAsDouble(), ConduitBurst.Kind.valueOf(o.get("kind").getAsString()),
+                bursts.addLast(new ConduitBurst(o.get("time").getAsDouble(), ConduitBurst.Kind.parse(o.get("kind").getAsString()),
                         o.get("gas").getAsDouble(), o.get("ejecta").getAsDouble(), o.get("overpressure").getAsDouble(),
                         o.get("temperature").getAsDouble(), o.get("silica").getAsDouble(), o.get("duration").getAsDouble()));
             }
         }
+    }
+
+    private static double number(JsonObject in, String key, double fallback) {
+        return in.has(key) ? in.get(key).getAsDouble() : fallback;
     }
 }

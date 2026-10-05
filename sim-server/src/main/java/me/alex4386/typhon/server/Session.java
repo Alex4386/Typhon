@@ -697,7 +697,7 @@ final class Session implements AutoCloseable {
                         default -> {
                             MagmaCommands.InjectRecharge inject;
                             try {
-                                inject = Tuning.injection(vid, cmd, v.chamber().config());
+                                inject = Tuning.injection(vid, cmd, v.chamber().supply());
                             } catch (IllegalArgumentException e) {
                                 return done(CommandResult.error("badRequest", e.getMessage()));
                             }

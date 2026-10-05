@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import me.alex4386.typhon.engine.alert.EruptionStyle;
 import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.deformation.DeformationEvents;
 import me.alex4386.typhon.engine.deformation.DeformationModel;
@@ -284,8 +285,10 @@ final class Probe {
             JsonObject alert = new JsonObject();
             var level = v.alert().level(); // null until the estimator's first sample (fresh or reset volcano)
             alert.addProperty("level", level == null ? "DORMANT" : level.name());
-            var style = v.alert().suggestedStyle();
-            alert.addProperty("style", style == null ? "HAWAIIAN" : style.name()); // only shown while erupting
+            EruptionStyle style = v.classifier().style();
+            alert.addProperty("style", style == null ? null : style.name());
+            alert.addProperty("vei", v.classifier().vei());
+            alert.addProperty("styleForecast", v.classifier().isForecast());
             o.add("alert", alert);
 
             o.add("deformation", deformation(v.deformation(), map));

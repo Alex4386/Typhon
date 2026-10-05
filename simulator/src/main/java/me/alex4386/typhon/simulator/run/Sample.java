@@ -2,6 +2,8 @@ package me.alex4386.typhon.simulator.run;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import me.alex4386.typhon.engine.alert.EruptionStyle;
+import me.alex4386.typhon.engine.assembly.VentPartition;
 import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.geothermal.Geothermal;
 import me.alex4386.typhon.engine.subsurface.Subsurface;
@@ -20,7 +22,7 @@ import me.alex4386.typhon.simulator.world.VoxelWorld;
  *
  * @param values numeric columns in a stable order (booleans as 0/1, enums as ordinals)
  * @param alertLevel alert level name
- * @param style suggested eruption style name
+ * @param style estimated eruption style name ({@code NONE} before the first estimate)
  */
 public record Sample(long step, double timeSeconds, Map<String, Double> values, String alertLevel, String style) {
 
@@ -57,7 +59,16 @@ public record Sample(long step, double timeSeconds, Map<String, Double> values, 
         v.put("tremor", bool(seismic.tremorActive()));
         v.put("swarm", bool(seismic.swarmActive()));
         v.put("alert_level", (double) volcano.alert().level().ordinal());
-        v.put("style", (double) volcano.alert().suggestedStyle().ordinal());
+        EruptionStyle style = volcano.classifier().style();
+        v.put("style", style == null ? -1.0 : style.ordinal());
+        v.put("style_is_forecast", bool(volcano.classifier().isForecast()));
+        v.put("vei", (double) volcano.classifier().vei());
+        VentPartition.Result partition = volcano.coupler().partition();
+        v.put("lava_share", partition == null ? 0 : partition.lavaShare());
+        v.put("column_share", partition == null || partition.magmaMassFlux() <= 0 ? 0
+                : partition.columnMassFlux() / partition.magmaMassFlux());
+        v.put("collapse_fraction", partition == null ? 0 : partition.collapseFraction());
+        v.put("water_magma_ratio", partition == null ? 0 : partition.waterMagmaRatio());
         v.put("effusing", bool(volcano.coupler().effusing()));
         v.put("explosive", bool(volcano.coupler().explosive()));
         v.put("lava_volume_blocks", lava.toBlocks(lava.totalLavaVolume()));
@@ -94,7 +105,8 @@ public record Sample(long step, double timeSeconds, Map<String, Double> values, 
         }
         v.put("world_changes", (double) world.appliedChanges());
         v.put("world_conflicts", (double) world.conflicts());
-        return new Sample(frame.step(), frame.time(), v, volcano.alert().level().name(), volcano.alert().suggestedStyle().name());
+        return new Sample(frame.step(), frame.time(), v, volcano.alert().level().name(),
+                style == null ? "NONE" : style.name());
     }
 
     private static double bool(boolean b) {

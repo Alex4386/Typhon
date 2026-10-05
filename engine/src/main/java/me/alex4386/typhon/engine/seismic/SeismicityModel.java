@@ -10,6 +10,7 @@ import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
+import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.volcano.EruptiveRegime;
 import me.alex4386.typhon.engine.volcano.MagmaState;
 import me.alex4386.typhon.engine.save.StateReader;
@@ -99,10 +100,12 @@ public final class SeismicityModel implements Subsystem {
 
         expectedVtRate = vtRate(now);
         expectedLpRate = Math.min(config.maxEventRate(), config.backgroundLpRate() + config.lpPerEruptionRate() * eruptionRate);
-        // Sustained explosive columns crackle with explosion quakes; discrete explosions (Strombolian,
-        // Vulcanian, phreatomagmatic) are reported by the surface coupling via queueExplosion.
-        EruptiveRegime regime = magma.eruptiveRegime();
-        boolean continuous = regime == EruptiveRegime.UNKNOWN || regime == EruptiveRegime.EXPLOSIVE;
+        // Magma fragmenting in the conduit crackles with explosion quakes; discrete explosions (slug
+        // bursts, plug failures, magma-water jets) are reported by the surface coupling via
+        // queueExplosion. Without a resolved conduit, every eruption may crackle.
+        ConduitSolution flow = magma.conduitFlow();
+        boolean continuous = magma.eruptiveRegime() == EruptiveRegime.UNKNOWN
+                || (flow != null && flow.fragmented() && flow.fragmentationDepthM() > 0);
         expectedExplosionRate = erupting && continuous
                 ? Math.min(config.maxEventRate(), config.explosionRate() * explosivity(magma)) : 0;
 

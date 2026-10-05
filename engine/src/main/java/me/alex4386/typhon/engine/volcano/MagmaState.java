@@ -1,5 +1,7 @@
 package me.alex4386.typhon.engine.volcano;
 
+import me.alex4386.typhon.engine.magma.conduit.ConduitInput;
+import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.math.BlockPos;
 
 /**
@@ -69,9 +71,33 @@ public interface MagmaState {
         return eruptionRate() > 0;
     }
 
-    /** How the magma currently leaves the conduit; {@link EruptiveRegime#UNKNOWN} if not modelled. */
+    /** Descriptor of the conduit flow; {@link EruptiveRegime#UNKNOWN} if not modelled. Never drives behaviour. */
     default EruptiveRegime eruptiveRegime() {
         return EruptiveRegime.UNKNOWN;
+    }
+
+    /**
+     * The steady conduit flow feeding the vent while erupting (physical units), or {@code null} when
+     * not erupting or when the magma model does not resolve conduit flow.
+     */
+    default ConduitSolution conduitFlow() {
+        return null;
+    }
+
+    /**
+     * The flow the conduit would carry if it failed now (the eruption the magma system is heading
+     * for); {@code null} if it could not flow or the model does not resolve it.
+     */
+    default ConduitSolution forecastFlow() {
+        return null;
+    }
+
+    /**
+     * Ambient pressure at the vent (Pa) the conduit flow exits into: the atmosphere plus any water
+     * standing over the vent.
+     */
+    default double ventAmbientPressurePa() {
+        return ConduitInput.ATMOSPHERE_PA;
     }
 
     /**

@@ -23,9 +23,12 @@ import me.alex4386.typhon.engine.math.BlockPos;
  * @param rechargeTemperatureC temperature of the supplied magma
  * @param rechargeSilicaWt SiO₂ of the supplied magma (wt%)
  * @param rechargeWaterWt H₂O of the supplied magma (wt%)
+ * @param rechargeCo2Wt CO₂ of the supplied magma's melt (wt%)
+ * @param rechargeCrystalFraction crystal volume fraction the supplied magma carries
  * @param initialTemperatureC chamber temperature at creation
  * @param initialSilicaWt bulk SiO₂ at creation (wt%)
  * @param initialWaterWt bulk H₂O at creation (wt%)
+ * @param initialCo2Wt bulk CO₂ at creation (wt%)
  * @param initialOverpressureMPa overpressure at creation
  * @param wallTemperatureC temperature the chamber relaxes towards by conduction
  * @param coolingTimescale e-folding time of conductive cooling (physical s)
@@ -33,8 +36,8 @@ import me.alex4386.typhon.engine.math.BlockPos;
  * @param crystalSilicaWt SiO₂ of the crystallising (mafic) assemblage; drives melt evolution
  * @param conduit conduit-flow physics: outgassing, fragmentation, open/closed conduit, explosion
  *     cycles (see {@link ConduitConfig})
- * @param fragmentedViscosity effective conduit viscosity (Pa·s) of a fragmented gas–pyroclast mixture
- * @param maxEruptionRate cap on the eruption rate (m³ per physical second)
+ * @param maxEruptionRate numerical safety cap on the eruption rate (m³ per physical second); the
+ *     conduit model sets the actual rate
  * @param dormantTimeScale physical seconds per simulated second while not erupting
  * @param eruptiveTimeScale physical seconds per simulated second while erupting
  * @param stepPeriodSeconds how often the chamber steps (simulated seconds)
@@ -54,16 +57,18 @@ public record MagmaChamberConfig(
         double rechargeTemperatureC,
         double rechargeSilicaWt,
         double rechargeWaterWt,
+        double rechargeCo2Wt,
+        double rechargeCrystalFraction,
         double initialTemperatureC,
         double initialSilicaWt,
         double initialWaterWt,
+        double initialCo2Wt,
         double initialOverpressureMPa,
         double wallTemperatureC,
         double coolingTimescale,
         double degassingTimescale,
         double crystalSilicaWt,
         ConduitConfig conduit,
-        double fragmentedViscosity,
         double maxEruptionRate,
         double dormantTimeScale,
         double eruptiveTimeScale,
@@ -86,7 +91,9 @@ public record MagmaChamberConfig(
         requirePositive("coolingTimescale", coolingTimescale);
         requirePositive("degassingTimescale", degassingTimescale);
         Objects.requireNonNull(conduit, "conduit");
-        requirePositive("fragmentedViscosity", fragmentedViscosity);
+        MagmaCommands.validateMagma(rechargeTemperatureC, rechargeSilicaWt, rechargeWaterWt, rechargeCo2Wt,
+                rechargeCrystalFraction);
+        if (!(initialCo2Wt >= 0)) throw new IllegalArgumentException("initialCo2Wt must be >= 0");
         requirePositive("maxEruptionRate", maxEruptionRate);
         requirePositive("dormantTimeScale", dormantTimeScale);
         requirePositive("eruptiveTimeScale", eruptiveTimeScale);
@@ -120,16 +127,18 @@ public record MagmaChamberConfig(
         b.rechargeTemperatureC = rechargeTemperatureC;
         b.rechargeSilicaWt = rechargeSilicaWt;
         b.rechargeWaterWt = rechargeWaterWt;
+        b.rechargeCo2Wt = rechargeCo2Wt;
+        b.rechargeCrystalFraction = rechargeCrystalFraction;
         b.initialTemperatureC = initialTemperatureC;
         b.initialSilicaWt = initialSilicaWt;
         b.initialWaterWt = initialWaterWt;
+        b.initialCo2Wt = initialCo2Wt;
         b.initialOverpressureMPa = initialOverpressureMPa;
         b.wallTemperatureC = wallTemperatureC;
         b.coolingTimescale = coolingTimescale;
         b.degassingTimescale = degassingTimescale;
         b.crystalSilicaWt = crystalSilicaWt;
         b.conduit = conduit;
-        b.fragmentedViscosity = fragmentedViscosity;
         b.maxEruptionRate = maxEruptionRate;
         b.dormantTimeScale = dormantTimeScale;
         b.eruptiveTimeScale = eruptiveTimeScale;
@@ -156,17 +165,19 @@ public record MagmaChamberConfig(
         private double rechargeTemperatureC = 1180;
         private double rechargeSilicaWt = 50;
         private double rechargeWaterWt = 1.5;
+        private double rechargeCo2Wt = 0;
+        private double rechargeCrystalFraction = 0;
         private double initialTemperatureC = 1100;
         private double initialSilicaWt = 52;
         private double initialWaterWt = 2.0;
+        private double initialCo2Wt = 0;
         private double initialOverpressureMPa = 0;
         private double wallTemperatureC = 400;
         private double coolingTimescale = 2e10;
         private double degassingTimescale = 1e9;
         private double crystalSilicaWt = 47;
         private ConduitConfig conduit = ConduitConfig.DEFAULT;
-        private double fragmentedViscosity = 100;
-        private double maxEruptionRate = 100;
+        private double maxEruptionRate = 1e6;
         private double dormantTimeScale = 5000;
         private double eruptiveTimeScale = 1;
         private double stepPeriodSeconds = 1.0;
@@ -188,16 +199,18 @@ public record MagmaChamberConfig(
         public Builder rechargeTemperatureC(double v) { rechargeTemperatureC = v; return this; }
         public Builder rechargeSilicaWt(double v) { rechargeSilicaWt = v; return this; }
         public Builder rechargeWaterWt(double v) { rechargeWaterWt = v; return this; }
+        public Builder rechargeCo2Wt(double v) { rechargeCo2Wt = v; return this; }
+        public Builder rechargeCrystalFraction(double v) { rechargeCrystalFraction = v; return this; }
         public Builder initialTemperatureC(double v) { initialTemperatureC = v; return this; }
         public Builder initialSilicaWt(double v) { initialSilicaWt = v; return this; }
         public Builder initialWaterWt(double v) { initialWaterWt = v; return this; }
+        public Builder initialCo2Wt(double v) { initialCo2Wt = v; return this; }
         public Builder initialOverpressureMPa(double v) { initialOverpressureMPa = v; return this; }
         public Builder wallTemperatureC(double v) { wallTemperatureC = v; return this; }
         public Builder coolingTimescale(double v) { coolingTimescale = v; return this; }
         public Builder degassingTimescale(double v) { degassingTimescale = v; return this; }
         public Builder crystalSilicaWt(double v) { crystalSilicaWt = v; return this; }
         public Builder conduit(ConduitConfig v) { conduit = v; return this; }
-        public Builder fragmentedViscosity(double v) { fragmentedViscosity = v; return this; }
         public Builder maxEruptionRate(double v) { maxEruptionRate = v; return this; }
         public Builder dormantTimeScale(double v) { dormantTimeScale = v; return this; }
         public Builder eruptiveTimeScale(double v) { eruptiveTimeScale = v; return this; }
@@ -207,9 +220,10 @@ public record MagmaChamberConfig(
         public MagmaChamberConfig build() {
             return new MagmaChamberConfig(volcanoId, center, volume, compressibilityPerMPa, lithostaticDepth,
                     conduitRadius, tensileStrengthMPa, eruptionEndOverpressureMPa, supplyRate, supplyVariability,
-                    rechargeTemperatureC, rechargeSilicaWt, rechargeWaterWt, initialTemperatureC, initialSilicaWt,
-                    initialWaterWt, initialOverpressureMPa, wallTemperatureC, coolingTimescale, degassingTimescale,
-                    crystalSilicaWt, conduit, fragmentedViscosity, maxEruptionRate, dormantTimeScale,
+                    rechargeTemperatureC, rechargeSilicaWt, rechargeWaterWt, rechargeCo2Wt, rechargeCrystalFraction,
+                    initialTemperatureC, initialSilicaWt, initialWaterWt, initialCo2Wt, initialOverpressureMPa,
+                    wallTemperatureC, coolingTimescale, degassingTimescale, crystalSilicaWt, conduit, maxEruptionRate,
+                    dormantTimeScale,
                     eruptiveTimeScale, stepPeriodSeconds, samplePeriodSeconds);
         }
     }

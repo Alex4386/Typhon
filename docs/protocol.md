@@ -101,7 +101,7 @@ volcano, out of world, …).
 | `startEruption` | `volcanoId` | Forced eruption start (`MagmaCommands.StartEruption`). |
 | `stopEruption` | `volcanoId` | Forced stop. |
 | `forceDike` | `volcanoId` | `DikeCommands.ForceDike`. |
-| `injectMagma` | `volcanoId`, `volumeM3` (0–1e12), `temperatureC?` (650–1350), `silicaWt?` (42–78), `waterWt?` (0–8) | Recharge pulse (`MagmaCommands.InjectRecharge`). Omitted properties use the volcano's configured recharge magma; out-of-range values are rejected. The accepted fields, their ranges and defaults are listed in `schema.commands.injectMagma` (§4.7), so clients build their form from it and pick up new fields without changes. |
+| `injectMagma` | `volcanoId`, `volumeM3` (0–1e12), `temperatureC?` (650–1350), `silicaWt?` (42–78), `waterWt?` (0–8), `co2Wt?` (0–3), `crystalFraction?` (0–0.6) | Recharge pulse (`MagmaCommands.InjectRecharge`). Omitted properties take the magma the deep supply delivers now; out-of-range values are rejected. The accepted fields, their ranges and defaults are listed in `schema.commands.injectMagma` (§4.7), so clients build their form from it and pick up new fields without changes. |
 | `rain` | `mmPerHour` | World rainfall rate; 0 stops it. |
 | `addWater` | `at: XY`, `volumeM3`, `seconds?` | Pour water at a point, released over `seconds` (default 600). This is surface-water input that can infiltrate to the water table (plan §3-1). |
 | `dig` | `at: XY`, `radius` (m), `depth` (m) | Excavate a pit from the surface (`WorldEdit.carve`/`erode`). |
@@ -241,8 +241,12 @@ This is a snapshot of 0D state per volcano (from `runner` snapshots), sent ≥ 2
 ```
 
 - `eruptionRate` is DRE m³/s.
-- `regime` is one of `NONE`, `FOUNTAINING`, `OPEN_VENT`, `DOME`, `EXPLOSIVE`, `SURTSEYAN`.
-- `alert.level` is one of the six alert levels; `alert.style` is the suggested eruption style.
+- `regime` is one of `NONE`, `FOUNTAINING`, `OPEN_VENT`, `EFFUSIVE`, `DOME`, `EXPLOSIVE`, `SURTSEYAN`: a descriptor
+  derived from the conduit flow (never an input).
+- `alert.level` is one of the six alert levels; `alert.style` is the eruption style *estimated* from what the
+  eruption does (`HAWAIIAN`, `STROMBOLIAN`, `VULCANIAN`, `PELEAN`, `PLINIAN`, `LAVA_DOME`, `SUBPLINIAN`, `SURTSEYAN`,
+  `PHREATIC`, `MIXED`), or `null` before the first estimate. `alert.vei` is the estimated VEI and
+  `alert.styleForecast` is true while no eruption is running (the style is then a forecast for the next one).
 - Station displacements are in metres and tilt in µrad.
 - `plume` is present only while an eruption column exists.
 - `chamber.volumeM3` (optional) is the chamber's magma volume (m³), e.g. for previewing how an
@@ -265,6 +269,7 @@ at least the most recent ~500 seismic events. Every event has `kind` and `time` 
 | `eruptionEnded` | `volcanoId`, `eruptedVolumeM3` | `MagmaEvents.EruptionEnded` |
 | `alertChanged` | `volcanoId`, `previous` (or null), `current` | `AlertEvents.AlertLevelChanged` |
 | `regimeChanged` | `volcanoId`, `regime` | eruptive-regime change |
+| `styleEstimated` | `volcanoId`, `previous`, `current`, `vei`, `forecast`, `probabilities` | the estimated eruption style or VEI changed (`probabilities`: style → probability) |
 | `dikeAdvanced` | `volcanoId`, `dikeId`, `path` [[x,y,z]…] (full path so far) | `DikeEvents.DikeAdvanced` |
 | `fissureOpened` | `volcanoId`, `vent: VentInfo` | `DikeEvents.FissureOpened` |
 | `bombLaunched` | `volcanoId`, `id`, `start`, `velocity` (m/s), `dragK`, `flightSeconds`, `landing` | `TephraEvents.BombLaunched` |

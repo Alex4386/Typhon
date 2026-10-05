@@ -343,9 +343,11 @@ export type AlertLevel =
   | 'ERUPTION_IMMINENT'
   | 'ERUPTING';
 
-export type EruptionStyle = 'HAWAIIAN' | 'STROMBOLIAN' | 'VULCANIAN' | 'PELEAN' | 'PLINIAN' | 'LAVA_DOME';
+export type EruptionStyle =
+  | 'HAWAIIAN' | 'STROMBOLIAN' | 'VULCANIAN' | 'PELEAN' | 'PLINIAN' | 'LAVA_DOME'
+  | 'SUBPLINIAN' | 'SURTSEYAN' | 'PHREATIC' | 'MIXED';
 
-export type EruptiveRegime = 'NONE' | 'FOUNTAINING' | 'OPEN_VENT' | 'DOME' | 'EXPLOSIVE' | 'SURTSEYAN';
+export type EruptiveRegime = 'NONE' | 'FOUNTAINING' | 'OPEN_VENT' | 'EFFUSIVE' | 'DOME' | 'EXPLOSIVE' | 'SURTSEYAN';
 
 export interface VolcanoState {
   chamber: {
@@ -362,7 +364,8 @@ export interface VolcanoState {
     regime: EruptiveRegime;
   };
   seismic: { rsam: number; vtPerMinute: number; lpPerMinute: number; tremor: boolean; swarm: boolean };
-  alert: { level: AlertLevel; style: EruptionStyle };
+  /** style: estimated from the eruption (or, with styleForecast, forecast for the next one); null until estimated. */
+  alert: { level: AlertLevel; style: EruptionStyle | null; vei?: number; styleForecast?: boolean };
   deformation: { maxUpliftM: number; stations: StationReading[] };
   plume?: { topZ: number; massRateKgS: number };
   /** Time compression now in force (`current`) and its dormant/eruptive settings. */
@@ -397,6 +400,16 @@ export type SimEvent =
   | { kind: 'eruptionEnded'; time: number; volcanoId: string; eruptedVolumeM3: number }
   | { kind: 'alertChanged'; time: number; volcanoId: string; previous: AlertLevel | null; current: AlertLevel }
   | { kind: 'regimeChanged'; time: number; volcanoId: string; regime: EruptiveRegime }
+  | {
+      kind: 'styleEstimated';
+      time: number;
+      volcanoId: string;
+      previous: EruptionStyle | null;
+      current: EruptionStyle;
+      vei: number;
+      forecast: boolean;
+      probabilities: Partial<Record<EruptionStyle, number>>;
+    }
   | { kind: 'dikeAdvanced'; time: number; volcanoId: string; dikeId: number; path: [number, number, number][] }
   | { kind: 'fissureOpened'; time: number; volcanoId: string; vent: VentInfo }
   | { kind: 'bombLaunched'; time: number; volcanoId: string; id: number; start: [number, number, number]; velocity: [number, number, number]; dragK: number; flightSeconds: number; landing: [number, number, number] }

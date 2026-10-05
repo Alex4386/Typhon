@@ -11,7 +11,7 @@ import java.util.TreeMap;
 import me.alex4386.typhon.engine.assembly.SurfaceEvents.PhreatomagmaticChanged;
 import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.alert.AlertEvents.AlertLevelChanged;
-import me.alex4386.typhon.engine.alert.AlertEvents.EruptionStyleSuggested;
+import me.alex4386.typhon.engine.alert.AlertEvents.EruptionStyleEstimated;
 import me.alex4386.typhon.engine.geothermal.GeyserFormed;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeature;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeatureFormed;
@@ -39,7 +39,7 @@ public final class RunSummary {
      *
      * @param endSeconds end time, {@code NaN} if still erupting when the run finished
      * @param volumeM3 erupted DRE volume (m³; so far, for an ongoing eruption)
-     * @param styles eruption styles suggested while it lasted, in order
+     * @param styles eruption styles estimated while it lasted, in order
      */
     public record Eruption(String volcanoId, double startSeconds, double endSeconds, double volumeM3, String startCause,
             List<String> styles) {
@@ -56,7 +56,9 @@ public final class RunSummary {
     public final List<Eruption> eruptionRecords = new ArrayList<>();
     /** Times of explosion quakes (s), for sequence metrics. */
     public final List<Double> explosionTimes = new ArrayList<>();
-    /** First time each eruption style was suggested (s). */
+    /** Highest VEI estimated during an eruption (−1 if none). */
+    public int maxVei = -1;
+    /** First time each eruption style was estimated during an eruption (s). */
     public final Map<String, Double> firstStyleSeconds = new TreeMap<>();
     /** Start and end (s) of the first phreatomagmatic phase; {@code NaN} if not seen. */
     public double phreatomagmaticStartSeconds = Double.NaN;
@@ -117,8 +119,11 @@ public final class RunSummary {
                 }
             }
             case AlertLevelChanged e -> milestones.add(new Milestone(t, "Alert level " + e.previous() + " -> " + e.current()));
-            case EruptionStyleSuggested e -> {
-                milestones.add(new Milestone(t, "Eruption style " + e.previous() + " -> " + e.current()));
+            case EruptionStyleEstimated e -> {
+                milestones.add(new Milestone(t, (e.forecast() ? "Forecast style " : "Estimated style ") + e.previous()
+                        + " -> " + e.current() + " (VEI " + e.vei() + ")"));
+                if (e.forecast()) break; // only what eruptions actually did counts as their style
+                maxVei = Math.max(maxVei, e.vei());
                 String style = e.current().toString();
                 currentStyle.put(e.volcanoId(), style);
                 firstStyleSeconds.putIfAbsent(style, t);

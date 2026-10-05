@@ -20,6 +20,7 @@ import me.alex4386.typhon.engine.config.ConfigNode;
 import me.alex4386.typhon.engine.config.VolcanoDefinition;
 import me.alex4386.typhon.engine.config.WorldDefinition;
 import me.alex4386.typhon.engine.config.Yaml;
+import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaCommands;
 import me.alex4386.typhon.engine.worlds.ConfigChanges;
@@ -131,17 +132,26 @@ final class Tuning {
 
     /** One {@code injectMagma} field and the volcano setting its default comes from. */
     record InjectField(String id, String label, String unit, double min, double max, boolean log, String help,
-            ToDoubleFunction<MagmaChamberConfig> fallback) {}
+            ToDoubleFunction<MagmaChamberConfig> configured, ToDoubleFunction<MagmaChamber.SupplyMagma> current) {}
 
     /**
-     * Fields of {@code injectMagma} besides {@code volumeM3}. To add one (e.g. CO₂ or crystals once
-     * {@link MagmaCommands.InjectRecharge} takes them): add an entry here and pass it on in
-     * {@link #injection}; the client builds its dialog from this list.
+     * Fields of {@code injectMagma} besides {@code volumeM3}, in {@link MagmaCommands.InjectRecharge}
+     * argument order. To add one: add an entry here and pass it on in {@link #injection}; the client
+     * builds its dialog from this list.
      */
     static final List<InjectField> INJECT_FIELDS = List.of(
-            new InjectField("temperatureC", "Temperature", "°C", 650, 1350, false, null, MagmaChamberConfig::rechargeTemperatureC),
-            new InjectField("silicaWt", "Silica (SiO₂)", "wt%", 42, 78, false, "Sets how sticky the magma is", MagmaChamberConfig::rechargeSilicaWt),
-            new InjectField("waterWt", "Water (H₂O)", "wt%", 0, 8, false, "Dissolved gas that drives explosions", MagmaChamberConfig::rechargeWaterWt));
+            new InjectField("temperatureC", "Temperature", "°C", 650, 1350, false, null,
+                    MagmaChamberConfig::rechargeTemperatureC, MagmaChamber.SupplyMagma::temperatureC),
+            new InjectField("silicaWt", "Silica (SiO₂)", "wt%", 42, 78, false, "Sets how sticky the magma is",
+                    MagmaChamberConfig::rechargeSilicaWt, MagmaChamber.SupplyMagma::silicaWt),
+            new InjectField("waterWt", "Water (H₂O)", "wt%", 0, 8, false, "Dissolved gas that drives explosions",
+                    MagmaChamberConfig::rechargeWaterWt, MagmaChamber.SupplyMagma::waterWt),
+            new InjectField("co2Wt", "Carbon dioxide (CO₂)", "wt%", 0, 3, false,
+                    "Less soluble than water: exsolves deep and drives gas-rich, explosive ascent",
+                    MagmaChamberConfig::rechargeCo2Wt, MagmaChamber.SupplyMagma::co2Wt),
+            new InjectField("crystalFraction", "Crystals", "fraction", 0, 0.6, false,
+                    "Share of the magma already crystallised; crystals stiffen it and carry no latent heat",
+                    MagmaChamberConfig::rechargeCrystalFraction, MagmaChamber.SupplyMagma::crystalFraction));
 
     static final double INJECT_DEFAULT_M3 = 5e6;
 
@@ -154,14 +164,14 @@ final class Tuning {
         out.add(vol);
         for (InjectField f : INJECT_FIELDS) {
             JsonObject j = spec(f.id(), f.label(), f.unit(), "Magma", f.min(), f.max(), f.log(), f.help());
-            j.add("default", Json.num(f.fallback().applyAsDouble(c)));
+            j.add("default", Json.num(f.configured().applyAsDouble(c)));
             out.add(j);
         }
         return out;
     }
 
-    /** Builds the engine command, validating ranges; missing fields use the configured supply magma. */
-    static MagmaCommands.InjectRecharge injection(String volcanoId, JsonObject cmd, MagmaChamberConfig c) {
+    /** Builds the engine command, validating ranges; missing fields use the magma the supply delivers now. */
+    static MagmaCommands.InjectRecharge injection(String volcanoId, JsonObject cmd, MagmaChamber.SupplyMagma supply) {
         Double vol = Json.dbl(cmd, "volumeM3");
         if (vol == null || !(vol > 0) || vol > 1e12) throw new IllegalArgumentException("volumeM3 must be in (0, 1e12]");
         double[] v = new double[INJECT_FIELDS.size()];
@@ -169,14 +179,14 @@ final class Tuning {
             InjectField f = INJECT_FIELDS.get(i);
             Double x = Json.dbl(cmd, f.id());
             if (x == null) {
-                v[i] = f.fallback().applyAsDouble(c);
+                v[i] = f.current().applyAsDouble(supply);
             } else if (!(x >= f.min() && x <= f.max())) {
                 throw new IllegalArgumentException(f.id() + " must be in [" + f.min() + ", " + f.max() + "] " + f.unit());
             } else {
                 v[i] = x;
             }
         }
-        return new MagmaCommands.InjectRecharge(volcanoId, vol, v[0], v[1], v[2]);
+        return new MagmaCommands.InjectRecharge(volcanoId, vol, v[0], v[1], v[2], v[3], v[4]);
     }
 
     // ── Schema ──

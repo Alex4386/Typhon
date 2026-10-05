@@ -254,6 +254,43 @@ through `VolcanoScaling` (Froude similarity: with L metres per block, lengths ×
 velocities ×1/√L; eruption columns use their own length scale; dormancy is time-compressed).
 Tests assert physical relationships (basalt runs farther than dacite), not tuned ratios.
 
+## Eruptions are emulated, not chosen
+
+No preset or definition selects an eruption style. The chamber feeds a resolved steady conduit flow
+(`magma.conduit.ConduitModel`), whose outputs (mass flux, exit velocity and pressure, gas fractions,
+fragmentation depth and mode, vent viscosity and crystallinity) are partitioned continuously at the
+vent (`assembly.VentPartition`) into lava, fountain fall-back, ballistics, an eruption column and its
+collapsing share, and magma–water explosions. Gas slugs and stiff plugs burst as discrete explosions
+when the flow makes them. What an observer would call the eruption (Hawaiian, Strombolian,
+Vulcanian, Pelean, sub-Plinian, Plinian, lava dome, Surtseyan, mixed) and its VEI are *estimated*
+from the resulting activity by `alert.EruptionClassifier` and reported in
+`AlertEvents.EruptionStyleEstimated`; nothing reads them back. `EruptiveRegime` is a one-word
+descriptor of the conduit flow for telemetry. See `docs/eruption-dynamics.md`.
+
+### Magma supply and injection commands
+
+All magma inputs are tunable at run time. Commands are records (Gson-serialisable; boxed fields are
+optional and `null` means "keep" / "use the supply's"), addressed by volcano id, applied at the
+chamber's next step, and their effect is saved with the chamber's state.
+
+| Command | Fields | Effect |
+|---|---|---|
+| `MagmaCommands.SetSupplyRate` | `volcanoId`, `double supplyRate` (m³/s DRE, physical) | Deep supply rate. |
+| `MagmaCommands.SetSupplyMagma` | `volcanoId`, `Double supplyRate`, `Double temperatureC`, `Double silicaWt`, `Double waterWt`, `Double co2Wt`, `Double crystalFraction` (0–0.9), `Double variability` (log-normal σ) | Rate and magma of the continuous deep supply; each field optional. |
+| `MagmaCommands.InjectRecharge` | `volcanoId`, `double volume` (m³ DRE), `double temperatureC`, `double silicaWt`, `double waterWt`, `Double co2Wt`, `Double crystalFraction` | One recharge pulse: raises overpressure by `volume / (V β)` and mixes in. `co2Wt` / `crystalFraction` default to the supply's. The 5-argument constructor keeps the old form. |
+| `MagmaCommands.StartEruption` / `StopEruption` | `volcanoId` | Manual overrides. |
+
+Water and CO₂ are melt contents (wt%); `silicaWt` is the bulk SiO₂. Supply and pulses mix by mass
+(SiO₂, H₂O and CO₂ of the melt fraction) and by enthalpy `h = c_p T + L (1 − φ/φ_max)`: crystals have
+already released their latent heat, so a crystal-rich batch heats the chamber less than a melt of the
+same temperature. The chamber's own crystallinity then follows its temperature. A world definition's
+`magma.chamber.supply*` / `recharge*` keys are the initial supply; changing them in a definition
+re-applies them over the saved state on reload (`MagmaChamber.resetSupplyFromConfig`). Validation:
+temperature 0–2000 °C, SiO₂ 35–80 wt%, H₂O 0–15 wt%, CO₂ 0–5 wt%, crystals 0–0.9, rate ≥ 0.
+
+`MagmaChamber.supply()` reports the current supply (`SupplyMagma(rate, temperatureC, silicaWt,
+waterWt, co2Wt, crystalFraction, variability)`).
+
 ## Layout
 
 | Package | Contents |
@@ -269,9 +306,9 @@ Tests assert physical relationships (basalt runs farther than dacite), not tuned
 | `worlds` | `World` (multi-volcano assembly, saves, runtime changes), `WorldDirectory`, `ConfigChanges`, `HistoryRouter` |
 | `terrain` | `TerrainModel` (block-level bridge over the world model), `TerrainSnapshot` command |
 | `volcano` | Shared volcano model: `VentSite`, `MagmaState`, `VolcanoScaling` |
-| `magma` | `MagmaChamber` (lumped chamber: recharge, overpressure, crystallisation, Poiseuille eruption, open/closed conduit, Strombolian slugs, Vulcanian plugs), `ConduitFlow` (outgassing, brittle fragmentation, gas segregation → `EruptiveRegime`), `MeltViscosity` |
+| `magma` | `MagmaChamber` (lumped chamber: recharge by mass and enthalpy, overpressure, crystallisation, H₂O/CO₂ exsolution, open/closed conduit, slug bursts, plug failures), `MagmaCommands`, `MeltViscosity`; `magma.conduit`: `ConduitModel` (steady 1-D two-phase conduit flow: exsolution, outgassing, microlites, fragmentation, choking, multiple steady states), `ConduitSolution` |
 | `seismic` | `SeismicityModel` (VT/LP/tremor/explosion, Gutenberg–Richter, RSAM), `SeismicIntensity` |
-| `alert` | `AlertLevelEstimator` (status with hysteresis), `EruptionStyleClassifier` |
+| `alert` | `AlertLevelEstimator` (status with hysteresis), `EruptionClassifier` (style probabilities and VEI estimated from the eruption's observables; output only) |
 | `lava` | `LavaFlow` (MAGFLOW-style Bingham cellular automaton on an 8-neighbour L-metre grid in real units, cooling, crust and lava tubes, ocean-entry deltas) |
 | `dike` | `DikePropagation` (buoyancy/stress-driven dike ascent, flank fissures, induced VT hypocentres) |
 | `deformation` | `DeformationModel` (Mogi chamber source + dike dislocation, virtual GNSS/tilt stations) |
@@ -279,6 +316,6 @@ Tests assert physical relationships (basalt runs farther than dacite), not tuned
 | `tephra` | `TephraSubsystem` (drag ballistics, Mastin plume, ash advection–diffusion and fall) |
 | `subsurface` | `Subsurface` (world-level heat conduction, Dupuit groundwater, boiling, surface water, water budget), `HydrothermalField`, `HeatSources` |
 | `geothermal` | `Geothermal` (supplies volcano heat to the subsurface; fumaroles, sulfur, geysers, springs, alteration from its fields) |
-| `assembly` | `VolcanoSystem` (wires one volcano together), `VolcanoCoupler` (vent selection, eruption → lava/tephra/PDC) |
+| `assembly` | `VolcanoSystem` (wires one volcano together), `VolcanoCoupler` (vent selection, eruption → lava/tephra/PDC, magma–water), `VentPartition` (continuous partition of the conduit flow at the vent) |
 
 Build and test: `./gradlew :engine:test` (performance smoke tests: `./gradlew :engine:perfTest`).

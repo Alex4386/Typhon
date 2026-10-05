@@ -2,23 +2,26 @@ package me.alex4386.typhon.engine.magma;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.gson.JsonParser;
 import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionEnded;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
-import me.alex4386.typhon.engine.magma.MagmaEvents.EruptiveRegimeChanged;
+import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.EngineEvent;
-import me.alex4386.typhon.engine.sim.Engine;
-import me.alex4386.typhon.engine.volcano.EruptiveRegime;
-import org.junit.jupiter.api.Test;
-import me.alex4386.typhon.engine.testing.Saves;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
+import me.alex4386.typhon.engine.sim.Engine;
+import me.alex4386.typhon.engine.testing.Saves;
+import org.junit.jupiter.api.Test;
 
-/** Conduit-controlled eruption dynamics: explosive → effusive transitions and explosion cycles. */
+/**
+ * Conduit-controlled eruption dynamics that must emerge from the flow, never chosen: fragmenting
+ * onset of a sealed wet chamber relaxing to coherent outgassed extrusion, plug failures over stiff
+ * lava, quasi-periodic slug bursts of an open basaltic vent.
+ */
 class EruptionDynamicsTest {
     private static final BlockPos CENTER = new BlockPos(0, -40, 0);
 
@@ -30,36 +33,58 @@ class EruptionDynamicsTest {
                 .initialWaterWt(4.6).rechargeWaterWt(4.6)
                 .initialTemperatureC(920).rechargeTemperatureC(950)
                 .initialOverpressureMPa(15.1)
-                .maxEruptionRate(8000)
                 .supplyRate(1).supplyVariability(0)
                 .eruptiveTimeScale(20)
                 .build();
     }
 
-    /** Stromboli-like open-vent basalt near its persistent steady state. */
+    /**
+     * Stromboli-like: an open conduit over CO₂-rich basalt below its re-opening pressure, slow supply.
+     * Physical time throughout.
+     */
     static MagmaChamberConfig openVentBasalt() {
         return MagmaChamberConfig.builder("v", CENTER)
                 .volume(5e7).lithostaticDepth(3000).conduitRadius(0.8)
                 .tensileStrengthMPa(8).eruptionEndOverpressureMPa(0.5)
-                .supplyRate(0.4).supplyVariability(0)
+                .supplyRate(0.002).supplyVariability(0)
                 .initialSilicaWt(50).rechargeSilicaWt(50)
                 .initialWaterWt(2.7).rechargeWaterWt(2.7)
+                .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
                 .initialTemperatureC(1140).rechargeTemperatureC(1150)
-                .initialOverpressureMPa(1.5)
+                .initialOverpressureMPa(0)
+                .dormantTimeScale(1).eruptiveTimeScale(1)
                 .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
                 .build();
     }
 
-    record Run(List<EngineEvent> events, List<ConduitBurst> bursts) {}
+    /** Degassed, crystal-rich dacite under an open conduit, just past re-opening. Eruptions ×200. */
+    static MagmaChamberConfig degassedDacite() {
+        return MagmaChamberConfig.builder("v", CENTER)
+                .volume(5e8).lithostaticDepth(3000).conduitRadius(10)
+                .initialSilicaWt(62).rechargeSilicaWt(62)
+                .initialWaterWt(0.6).rechargeWaterWt(0.6)
+                .initialCo2Wt(0).rechargeCo2Wt(0)
+                .initialTemperatureC(900).rechargeTemperatureC(900)
+                .initialOverpressureMPa(1.6).eruptionEndOverpressureMPa(-2)
+                .supplyRate(0.5).supplyVariability(0)
+                .eruptiveTimeScale(200)
+                .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
+                .build();
+    }
+
+    record Run(List<EngineEvent> events, List<ConduitBurst> bursts, List<ConduitSolution> flows) {}
 
     static Run run(Engine engine, MagmaChamber chamber, int ticks) {
         List<EngineEvent> events = new ArrayList<>();
         List<ConduitBurst> bursts = new ArrayList<>();
+        List<ConduitSolution> flows = new ArrayList<>();
         for (int i = 0; i < ticks; i++) {
             events.addAll(engine.step().events());
             bursts.addAll(chamber.drainBursts());
+            ConduitSolution flow = chamber.conduitFlow();
+            if (flow != null && (flows.isEmpty() || flows.get(flows.size() - 1) != flow)) flows.add(flow);
         }
-        return new Run(events, bursts);
+        return new Run(events, bursts, flows);
     }
 
     static <T> List<T> of(List<EngineEvent> events, Class<T> type) {
@@ -67,44 +92,44 @@ class EruptionDynamicsTest {
     }
 
     @Test
-    void plinianOnsetRelaxesToDegassedDomeGrowth() {
+    void sealedWetChamberFailsExplosivelyThenReopensAtLowPressure() {
         MagmaChamber chamber = new MagmaChamber(dacite());
         Engine engine = Engine.builder(0).add(chamber).build();
         Run run = run(engine, chamber, 20 * 60 * 20);
 
-        List<EruptiveRegimeChanged> regimes = of(run.events(), EruptiveRegimeChanged.class);
-        assertEquals(EruptiveRegime.EXPLOSIVE, regimes.get(0).current(), "a sealed conduit failing at high pressure fragments");
-        assertTrue(regimes.get(0).ventWaterWt() > 4, "the Plinian column carries its water");
+        ConduitSolution onset = run.flows().get(0);
+        assertTrue(onset.fragmented(), "a sealed conduit failing at high pressure fragments: " + onset);
+        assertTrue(onset.fragmentationDepthM() > 100, "deep in the conduit: " + onset.fragmentationDepthM());
+        assertTrue(onset.dreRateM3PerS() > 300, "a Plinian-scale discharge: " + onset.dreRateM3PerS());
 
         List<EruptionStarted> starts = of(run.events(), EruptionStarted.class);
-        assertTrue(starts.size() >= 2, "the chamber recharges and erupts again");
-        EruptionStarted second = starts.get(1);
-        assertTrue(second.overpressureMPa() < dacite().tensileStrengthMPa() / 2,
-                "an open conduit re-opens far below the tensile strength: " + second.overpressureMPa());
-        assertEquals(EruptiveRegime.DOME, chamber.eruptiveRegime(), "slow ascent outgasses into a dome");
-        assertTrue(chamber.ventWaterWt() < 0.5, "dome lava is degassed: " + chamber.ventWaterWt());
-        assertTrue(chamber.waterWt() > 4, "while the chamber itself stays water-rich");
-        assertFalse(chamber.fragmented());
+        assertTrue(starts.size() >= 2, "the chamber recharges and erupts again: " + starts.size());
+        assertTrue(starts.get(1).overpressureMPa() < dacite().tensileStrengthMPa() / 2,
+                "an open conduit re-opens far below the tensile strength: " + starts.get(1).overpressureMPa());
+        assertTrue(chamber.waterWt() > 4, "the chamber stays water-rich, so its eruptions stay explosive");
     }
 
     @Test
-    void domePlugFailsInVulcanianCycles() {
-        MagmaChamberConfig config = dacite();
-        MagmaChamber chamber = new MagmaChamber(config);
+    void degassedDaciteExtrudesStiffLavaWhosePlugFails() {
+        MagmaChamber chamber = new MagmaChamber(degassedDacite());
         Engine engine = Engine.builder(0).add(chamber).build();
-        Run run = run(engine, chamber, 20 * 3600);
+        Run run = run(engine, chamber, 20 * 3600 * 4);
 
-        List<ConduitBurst> vulcanian = run.bursts().stream().filter(b -> b.kind() == ConduitBurst.Kind.VULCANIAN).toList();
-        assertTrue(vulcanian.size() >= 2, "repeated plug failures: " + vulcanian.size());
-        assertTrue(run.bursts().stream().noneMatch(b -> b.kind() == ConduitBurst.Kind.STROMBOLIAN),
-                "gas slugs cannot form in viscous dacite");
-        double resealSeconds = config.conduit().plugResealSeconds() / config.eruptiveTimeScale();
-        for (int i = 1; i < vulcanian.size(); i++) {
-            assertTrue(vulcanian.get(i).time() - vulcanian.get(i - 1).time() > resealSeconds, "a new plug must seal first");
-        }
-        for (ConduitBurst b : vulcanian) {
-            assertTrue(b.overpressureMPa() >= config.conduit().plugStrengthMPa());
-            assertEquals(config.conduit().vulcanianGasMassFraction(), b.gasMassFraction(), 1e-9);
+        assertTrue(chamber.erupting(), "slow extrusion keeps going");
+        ConduitSolution flow = chamber.conduitFlow();
+        assertFalse(flow.fragmented(), "slow ascent keeps the magma coherent: " + flow);
+        assertTrue(flow.outgassedFraction() > 0.5, "it outgasses on the way up: " + flow.outgassedFraction());
+        assertTrue(flow.exitMeltViscosityLog10() > 8, "stiff, degassed, crystallising lava: " + flow.exitMeltViscosityLog10());
+        assertTrue(flow.dreRateM3PerS() < 10, "dome-scale extrusion: " + flow.dreRateM3PerS());
+        assertTrue(chamber.ventWaterWt() < 0.5, "lava is degassed: " + chamber.ventWaterWt());
+
+        List<ConduitBurst> plugs = run.bursts().stream().filter(b -> b.kind() == ConduitBurst.Kind.PLUG).toList();
+        assertTrue(plugs.size() >= 2, "repeated plug failures: " + plugs.size());
+        assertTrue(run.bursts().stream().noneMatch(b -> b.kind() == ConduitBurst.Kind.SLUG),
+                "gas slugs cannot segregate in viscous dacite");
+        for (ConduitBurst b : plugs) {
+            assertTrue(b.overpressureMPa() > 0.5, "a plug holds megapascals: " + b.overpressureMPa());
+            assertTrue(b.gasMassFraction() < 0.1, "plug failures blast out mostly rock: " + b.gasMassFraction());
         }
     }
 
@@ -115,11 +140,10 @@ class EruptionDynamicsTest {
         Engine engine = Engine.builder(0).add(chamber).build();
         Run run = run(engine, chamber, 20 * 3600 * 2);
 
-        assertTrue(chamber.erupting(), "supply balances outflow: persistent activity");
-        assertEquals(EruptiveRegime.OPEN_VENT, chamber.eruptiveRegime());
+        assertFalse(chamber.erupting(), "no lava: the chamber is below its re-opening pressure");
         List<Double> times = run.bursts().stream().map(ConduitBurst::time).toList();
-        assertTrue(times.size() >= 15, "Strombolian explosions: " + times.size());
-        assertTrue(run.bursts().stream().allMatch(b -> b.kind() == ConduitBurst.Kind.STROMBOLIAN));
+        assertTrue(times.size() >= 15, "chamber gas rising through the open conduit bursts as slugs: " + times.size());
+        assertTrue(run.bursts().stream().allMatch(b -> b.kind() == ConduitBurst.Kind.SLUG));
 
         double[] intervals = new double[times.size() - 1];
         double mean = 0;
@@ -131,13 +155,12 @@ class EruptionDynamicsTest {
         for (double v : intervals) var += (v - mean) * (v - mean) / intervals.length;
         double cv = Math.sqrt(var) / mean;
         assertTrue(cv < 0.8, "slug bursts are more regular than a Poisson process (CV 1): " + cv);
+        assertTrue(mean > 10 && mean < 3600, "Stromboli-like: one to a few hundred explosions per hour, was " + mean + " s");
 
-        // Mean interval ≈ slug mass / (slug share × gas flux).
-        double rate = chamber.eruptionRate();
-        double gasFlux = rate * 2500 * (chamber.waterWt() - config.conduit().degassedWaterWt()) / 100;
-        double expected = config.conduit().slugGasMassKg() / (config.conduit().slugGasFraction() * gasFlux);
-        assertEquals(expected, mean, expected * 0.5, "mean interval");
-        assertTrue(mean > 60 && mean < 900, "Stromboli-like: a few to ~15 explosions per hour, was " + mean + " s");
+        // A stiff magma column lets the same gas escape passively instead.
+        MagmaChamber viscous = new MagmaChamber(config.toBuilder().initialSilicaWt(66).initialTemperatureC(950).build());
+        Engine viscousEngine = Engine.builder(0).add(viscous).build();
+        assertTrue(run(viscousEngine, viscous, 20 * 3600).bursts().size() < times.size() / 4);
     }
 
     @Test
@@ -146,7 +169,7 @@ class EruptionDynamicsTest {
         MagmaChamber chamber = new MagmaChamber(config);
         Engine engine = Engine.builder(0).add(chamber).build();
         boolean ended = false;
-        for (int i = 0; i < 20 * 600 && !ended; i++) {
+        for (int i = 0; i < 20 * 3600 && !ended; i++) {
             ended = !of(engine.step().events(), EruptionEnded.class).isEmpty();
         }
         assertTrue(ended);
@@ -155,12 +178,12 @@ class EruptionDynamicsTest {
         run(engine, chamber, 20 * 3600 * 2); // years of repose at ×5000
         assertTrue(chamber.conduitOpenness() < 0.5);
         assertTrue(chamber.failureOverpressureMPa() > 0.5 * config.tensileStrengthMPa(), "sealed again");
-        assertTrue(chamber.fragmented(), "the next failure of a sealed conduit would be explosive again");
+        assertTrue(chamber.fragmented(), "the next failure of a sealed conduit would fragment again");
     }
 
     @Test
     void conduitStateResumesBitForBit() {
-        MagmaChamberConfig config = dacite();
+        MagmaChamberConfig config = degassedDacite();
         int before = 20 * 60 * 25;
         int after = 20 * 60 * 20;
 
@@ -171,7 +194,7 @@ class EruptionDynamicsTest {
         MagmaChamber first = new MagmaChamber(config);
         Engine engine = Engine.builder(3).add(first).build();
         run(engine, first, before);
-        assertTrue(first.plugPressureMPa() > 0, "save with gas trapped under the plug");
+        assertNotNull(first.conduitFlow(), "save mid-eruption");
         InMemorySaveStore saved = Saves.save(engine);
 
         MagmaChamber second = new MagmaChamber(config);
@@ -179,9 +202,11 @@ class EruptionDynamicsTest {
         Run rest = run(resumed, second, after);
 
         List<ConduitBurst> expected = all.bursts().stream().filter(b -> b.time() >= before / 20.0).toList();
+        assertTrue(first.plugPressureMPa() > 0, "saved with gas trapped beneath the plug");
         assertEquals(expected, rest.bursts());
         assertEquals(all.events().subList(all.events().size() - rest.events().size(), all.events().size()), rest.events());
         assertEquals(reference.overpressureMPa(), second.overpressureMPa());
         assertEquals(reference.plugPressureMPa(), second.plugPressureMPa());
+        assertEquals(reference.conduitFlow(), second.conduitFlow());
     }
 }

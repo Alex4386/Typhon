@@ -17,8 +17,8 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * time and then step down one level at a time, so the status does not flicker around thresholds. A
  * quiet, largely crystallised chamber is {@link AlertLevel#EXTINCT}.
  *
- * <p>It also suggests the eruption style the magma would produce now (see
- * {@link EruptionStyleClassifier}).
+ * <p>Its snapshot also carries the estimated eruption style when an {@link EruptionClassifier} is
+ * attached; the estimate is made from the eruption itself, not from the alert observables.
  *
  * <p>References: Gardner &amp; Guffanti (2006), USGS Fact Sheet 2006-3139 (alert-level system); Endo &amp; Murray (1991), Bull. Volcanol. 53:533-545 (RSAM). See {@code docs/references.md}.
  */
@@ -28,7 +28,7 @@ public final class AlertLevelEstimator implements Subsystem {
     private final SeismicityModel seismicity;
 
     private AlertLevel level;
-    private EruptionStyle style;
+    private EruptionClassifier classifier;
     /** Simulated time at which a downgrade became possible (negative = not pending). */
     private double downgradeSince = -1;
 
@@ -60,12 +60,17 @@ public final class AlertLevelEstimator implements Subsystem {
         return config;
     }
 
-    /** Current level and suggested style for dashboards. */
+    /** Current level and estimated style ({@code null} until estimated) for dashboards. */
     public record Snapshot(AlertLevel level, EruptionStyle style) {}
 
     @Override
     public Snapshot snapshot() {
-        return new Snapshot(level, style);
+        return new Snapshot(level, suggestedStyle());
+    }
+
+    /** Attaches the style estimate reported alongside the level. */
+    public void setClassifier(EruptionClassifier classifier) {
+        this.classifier = classifier;
     }
 
     @Override
@@ -80,12 +85,6 @@ public final class AlertLevelEstimator implements Subsystem {
             context.outbox().emit(new AlertEvents.AlertLevelChanged(
                     now, config.volcanoId(), level, next, pressureRatio, vtRate, rsam));
             level = next;
-        }
-
-        EruptionStyle suggested = EruptionStyleClassifier.classify(magma);
-        if (suggested != style) {
-            context.outbox().emit(new AlertEvents.EruptionStyleSuggested(now, config.volcanoId(), style, suggested));
-            style = suggested;
         }
     }
 
@@ -144,16 +143,18 @@ public final class AlertLevelEstimator implements Subsystem {
         return level;
     }
 
-    /** Style the magma would erupt in now, or {@code null} before the first step. */
+    /**
+     * Estimated style of the ongoing eruption, or forecast of the next one; {@code null} without a
+     * classifier or before its first estimate.
+     */
     public EruptionStyle suggestedStyle() {
-        return style;
+        return classifier == null ? null : classifier.style();
     }
 
     @Override
     public void saveState(StateWriter writer) {
         JsonObject out = writer.json();
         if (level != null) out.addProperty("level", level.name());
-        if (style != null) out.addProperty("style", style.name());
         out.addProperty("downgradeSince", downgradeSince);
     }
 
@@ -161,7 +162,6 @@ public final class AlertLevelEstimator implements Subsystem {
     public void loadState(StateReader reader) {
         JsonObject in = reader.json();
         level = in.has("level") ? AlertLevel.valueOf(in.get("level").getAsString()) : null;
-        style = in.has("style") ? EruptionStyle.valueOf(in.get("style").getAsString()) : null;
         downgradeSince = in.get("downgradeSince").getAsDouble();
     }
 }

@@ -83,6 +83,17 @@ final class EventTranslator {
                 o.addProperty("regime", regime(e.current()));
                 yield o;
             }
+            case AlertEvents.EruptionStyleEstimated e -> {
+                JsonObject o = base("styleEstimated", e.time(), e.volcanoId());
+                o.addProperty("previous", e.previous() == null ? null : e.previous().name());
+                o.addProperty("current", e.current().name());
+                o.addProperty("vei", e.vei());
+                o.addProperty("forecast", e.forecast());
+                JsonObject probabilities = new JsonObject();
+                e.probabilities().forEach((k, v) -> probabilities.add(k.name(), Json.num(v)));
+                o.add("probabilities", probabilities);
+                yield o;
+            }
             case AlertEvents.AlertLevelChanged e -> {
                 JsonObject o = base("alertChanged", e.time(), e.volcanoId());
                 o.addProperty("previous", e.previous() == null ? null : e.previous().name());

@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Objects;
 import me.alex4386.typhon.engine.alert.AlertConfig;
 import me.alex4386.typhon.engine.alert.AlertLevelEstimator;
+import me.alex4386.typhon.engine.alert.EruptionClassifier;
 import me.alex4386.typhon.engine.deformation.DeformationConfig;
 import me.alex4386.typhon.engine.deformation.DeformationModel;
 import me.alex4386.typhon.engine.dike.DikeConfig;
@@ -57,6 +58,7 @@ public final class VolcanoSystem {
     private final DikePropagation dikes;
     private final SeismicityModel seismicity;
     private final AlertLevelEstimator alert;
+    private final EruptionClassifier classifier;
     private final VolcanoCoupler coupler;
     private final TephraSubsystem tephra;
     private final Geothermal geothermal;
@@ -172,6 +174,10 @@ public final class VolcanoSystem {
         this.coupler = new VolcanoCoupler(volcanoId, chamber, seismicity, vents, dikes, b.terrain, b.lava, tephra, pdc,
                 geothermal, scaling, b.ballisticFraction);
 
+        if (subsurface != null) coupler.setGround(subsurface);
+        this.classifier = new EruptionClassifier(volcanoId, chamber, coupler);
+        alert.setClassifier(classifier);
+
         // Every deposit is attributed to this volcano's current eruption (stratigraphy).
         this.units = new VolcanoUnits(b.terrain.world(), volcanoId, chamber);
         coupler.setUnits(units);
@@ -216,7 +222,7 @@ public final class VolcanoSystem {
 
     /**
      * Registers this volcano's subsystems in dependency order (chamber → dikes → seismicity → alert →
-     * coupler → tephra → mass flows → geothermal → deformation). Listeners between subsystems are
+     * coupler → style estimate → tephra → mass flows → geothermal → deformation). Listeners between subsystems are
      * attached at construction, so a restored engine must be built from a fresh {@code VolcanoSystem}.
      */
     public Engine.Builder addTo(Engine.Builder engine) {
@@ -233,6 +239,7 @@ public final class VolcanoSystem {
         list.add(seismicity);
         list.add(alert);
         list.add(coupler);
+        list.add(classifier);
         list.add(tephra);
         if (pdc != null) {
             list.add(pdc);
@@ -253,7 +260,7 @@ public final class VolcanoSystem {
     }
 
     public String volcanoId() { return volcanoId; }
-    /** Share of explosive ejecta leaving as ballistic bombs. */
+    /** Configured ballistic share; no longer used (ballistics follow clast physics). */
     public double ballisticFraction() { return ballisticFraction; }
     public List<VentSite> vents() { return vents; }
     public VolcanoScaling scaling() { return scaling; }
@@ -270,6 +277,8 @@ public final class VolcanoSystem {
     public DeformationModel deformation() { return deformation; }
     public SeismicityModel seismicity() { return seismicity; }
     public AlertLevelEstimator alert() { return alert; }
+    /** Estimated eruption style and VEI (output only). */
+    public EruptionClassifier classifier() { return classifier; }
     public VolcanoCoupler coupler() { return coupler; }
     public TephraSubsystem tephra() { return tephra; }
     /** {@code null} when geothermal activity is disabled. */

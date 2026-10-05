@@ -24,10 +24,19 @@ public record ConduitBurst(
         double durationSeconds) {
 
     public enum Kind {
-        /** A gas slug bursting at the free surface of an open, fluid-magma conduit. */
-        STROMBOLIAN,
-        /** Failure of a dome plug over gas accumulated beneath it. */
-        VULCANIAN
+        /** A segregated gas slug bursting at the free surface of fluid magma. */
+        SLUG,
+        /** Failure of a stiff plug over gas accumulated beneath it. */
+        PLUG;
+
+        /** Reads a saved name, including those of older saves. */
+        public static Kind parse(String name) {
+            return switch (name) {
+                case "STROMBOLIAN" -> SLUG;
+                case "VULCANIAN" -> PLUG;
+                default -> valueOf(name);
+            };
+        }
     }
 
     /** Gas mass fraction of the erupted mixture. */

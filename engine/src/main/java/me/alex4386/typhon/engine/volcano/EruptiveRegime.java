@@ -1,20 +1,24 @@
 package me.alex4386.typhon.engine.volcano;
 
 /**
- * How magma leaves the conduit, decided by conduit physics (ascent speed, gas segregation,
- * permeable outgassing, brittle fragmentation) rather than by composition alone.
+ * A one-word description of the conduit's current steady flow, derived from it for telemetry and
+ * dashboards. It never drives behaviour: the surface partition and every downstream subsystem use the
+ * flow's continuous quantities (exit velocity, gas fractions, fragmentation, viscosity), and the
+ * eruption style is estimated from what actually happens at the surface.
  */
 public enum EruptiveRegime {
     /** The magma model does not resolve conduit flow (e.g. a test stub). */
     UNKNOWN,
     /** Not erupting. */
     QUIESCENT,
-    /** Fluid magma rising faster than its gas can separate: gas-driven lava fountains (Hawaiian). */
+    /** Fluid magma tearing into clots at or near the vent: lava fountains. */
     FOUNTAINING,
-    /** Fluid magma rising slowly enough for gas slugs to segregate: open vent, Strombolian bursts. */
+    /** Coherent fluid magma whose gas segregates into slugs. */
     OPEN_VENT,
-    /** Viscous, outgassed magma extruding slowly under a plug: lava dome, Vulcanian plug failures. */
+    /** Coherent, fluid-to-intermediate lava leaving the vent. */
+    EFFUSIVE,
+    /** Coherent, outgassed, very viscous lava. */
     DOME,
-    /** Gas-rich magma fragmenting brittlely in the conduit: sustained explosive column. */
+    /** Magma fragmenting inside the conduit: a gas–pyroclast jet. */
     EXPLOSIVE
 }

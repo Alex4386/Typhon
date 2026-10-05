@@ -4,10 +4,11 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import me.alex4386.typhon.engine.assembly.SurfaceEvents.BurstKind;
@@ -17,45 +18,46 @@ import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.lava.LavaSource;
 import me.alex4386.typhon.engine.magma.ConduitBurst;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
+import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.massflow.ColumnCollapse;
 import me.alex4386.typhon.engine.massflow.PyroclasticFlows;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.BlockChange;
-import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
+import me.alex4386.typhon.engine.subsurface.HydrothermalField;
 import me.alex4386.typhon.engine.tephra.Ballistics;
 import me.alex4386.typhon.engine.tephra.ExplosivePhase;
 import me.alex4386.typhon.engine.tephra.GrainSizeDistribution;
 import me.alex4386.typhon.engine.tephra.TephraSubsystem;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
+import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.UnitSource;
-import me.alex4386.typhon.engine.volcano.EruptiveRegime;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
-import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
 
 /**
- * Turns the magma chamber's eruption into surface activity.
+ * Turns the magma chamber's conduit flow into surface activity.
  *
  * <ul>
  *   <li>Chooses the erupting vents: the summit vents, or the flank fissures a dike opened (a fissure
  *       opening while the chamber is quiet starts a flank eruption at the current pressure).
- *   <li>Follows the chamber's conduit regime: fountains, open vents and domes effuse lava; a
- *       fragmenting conduit feeds a sustained explosive column.
- *   <li>Turns the chamber's discrete explosions (Strombolian slugs, Vulcanian plug failures) into
- *       bomb salvos, short ash puffs and explosion quakes.
- *   <li>Makes the eruption phreatomagmatic (Surtseyan) while open sea or lake water reaches the vent
- *       at shallow depth: magma–water explosions with fine ash, cock's-tail jets and steam, no lava.
- *       Wet jet fallout builds a tuff ring around the vent; once its rim stands above the water the
- *       vent is sealed off from the sea and effusion takes over (as at Surtsey in April 1964).
- *   <li>Checks explosive columns for collapse (Woods 1988) and feeds the collapsing share into
- *       pyroclastic density currents; feeds heat from effusing vents into the geothermal field.
+ *   <li>Partitions the steady conduit flow continuously ({@link VentPartition}) into lava (coherent
+ *       effusion and clastogenic lava from hot fountain fall-back), ballistic fall-back, an eruption
+ *       column and the share of it that collapses into pyroclastic density currents. Nothing selects a
+ *       style: a fountain, a dome, a Plinian column or a mixture of them follows from the flow.
+ *   <li>Brings external water to the vent: sea or lake water over an open crater and groundwater from
+ *       the aquifer the conduit crosses set a water/magma ratio, and the magma–water fragmentation it
+ *       drives adds fine ash, steam, cock's-tail jets and a tuff ring of wet fallout. Tuff that walls
+ *       the crater off from the sea cuts the water supply (Surtsey, 1964). The vent's ambient pressure
+ *       and water table are reported back to the chamber's conduit.
+ *   <li>Turns the chamber's discrete explosions (slug bursts, plug failures) into bomb salvos, short
+ *       ash puffs and explosion quakes; their ballistic share follows the same clast physics.
  * </ul>
  *
  * <p>Physics stays in real units: lava, tephra and mass flows all take real rates (m³/s, kg/s) and
@@ -64,45 +66,30 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * and before the lava, tephra and mass-flow subsystems so changes apply in the same step.
  */
 public final class VolcanoCoupler implements Subsystem {
-    /** Relative change in explosive rate that restarts the explosive phase with new parameters. */
+    /** Relative change in column parameters that restarts the explosive phase with new parameters. */
     static final double PHASE_UPDATE_THRESHOLD = 0.25;
-    /** Share of a collapsing column's mass that falls back as pyroclastic flows. */
-    static final double COLLAPSE_SHARE = 0.5;
-
-    /**
-     * Water depth (real m) below which magma–water interaction is explosive. Deeper, hydrostatic
-     * pressure suppresses steam expansion and lava erupts as pillows (Surtseyan activity is
-     * typically confined to the upper ~100–200 m; Kokelaar 1986).
-     */
-    static final double PHREATOMAGMATIC_MAX_DEPTH_M = 120;
-    /** Share of the vent area that must be submerged to start / keep phreatomagmatic activity. */
-    static final double PHREATOMAGMATIC_START_FRACTION = 0.25;
-    static final double PHREATOMAGMATIC_STOP_FRACTION = 0.1;
-    /** Mass of sea water flashed to steam per unit mass of magma (Surtseyan ~0.1–0.3). */
-    static final double WATER_MAGMA_RATIO = 0.2;
-    /** Effective expanding-steam mass fraction and pressure driving the jets (most steam condenses). */
-    static final double STEAM_DRIVE_FRACTION = 0.05;
-    static final double STEAM_DRIVE_PRESSURE_MPA = 0.3;
-    static final double STEAM_DRIVE_TEMPERATURE_C = 300;
-    /** Mean interval between cock's-tail jets (real s; Surtsey: every few seconds to minutes). */
-    static final double JET_INTERVAL_SECONDS = 20;
-    /** Fine-ash-rich grain size of phreatomagmatic fragmentation. */
+    /** Column mass flux (kg/s, physical) below which no column is sustained (a few puffs at most). */
+    static final double MIN_COLUMN_MASS_FLUX = 1;
+    /** Lava flux (m³/s DRE, physical) below which no lava source is kept. */
+    static final double MIN_LAVA_RATE = 1e-6;
+    /** Share of the magma fragmented by water that starts / keeps the phreatomagmatic descriptor. */
+    static final double PHREATOMAGMATIC_START_SHARE = 0.2;
+    static final double PHREATOMAGMATIC_STOP_SHARE = 0.1;
+    /** Fine-ash-rich grain size of magma–water fragmentation (bursts of wet ash). */
     static final GrainSizeDistribution PHREATOMAGMATIC_GRAIN = GrainSizeDistribution.of(0.10, 0.20, 0.35, 0.35);
     /** Simulated seconds between steam telemetry events. */
     static final double STEAM_EVENT_SECONDS = 20;
-    /**
-     * Partition of phreatomagmatic ejecta: wet jet/surge fallout building the tuff ring near the vent,
-     * ballistic blocks in the cock's-tail jets, and the remainder lofted as fine ash in the column.
-     */
-    static final double NEAR_VENT_FALLOUT_SHARE = 0.4;
-    static final double JET_BALLISTIC_SHARE = 0.1;
     /** Bulk density of fresh wet tuff (kg/m³). */
     static final double TUFF_BULK_DENSITY = 1500;
     /** Width (blocks) of the tuff ring beyond the crater rim. */
     static final int TUFF_RING_WIDTH = 6;
     static final int MAX_TUFF_BLOCKS_PER_STEP = 64;
+    static final int MAX_BOMBS_PER_SALVO = 10;
     static final BlockId TUFF = BlockId.minecraft("tuff");
     static final BlockId WATER = BlockId.minecraft("water");
+    /** Median clast (m) of a slug burst tearing fluid magma, and of a plug shattering. */
+    static final double SLUG_CLAST_M = 0.03;
+    static final double PLUG_CLAST_M = 2e-3;
 
     private final String volcanoId;
     private final MagmaChamber chamber;
@@ -111,28 +98,41 @@ public final class VolcanoCoupler implements Subsystem {
     private final DikePropagation dikes;
     private final TerrainModel terrain;
     private UnitSource units = UnitSource.UNATTRIBUTED;
+    private HydrothermalField ground;
     private final LavaFlow lava;
     private final TephraSubsystem tephra;
     private final PyroclasticFlows pdc;
     private final Geothermal geothermal;
     private final VolcanoScaling scaling;
-    private final double ballisticFraction;
 
     private final TreeSet<String> activeLavaSources = new TreeSet<>();
     private final Set<String> eruptionVents = new LinkedHashSet<>();
     private int knownFissures;
     private boolean flankPending;
+    /** Column in progress: simulated mass rate (kg per simulated s), collapse share, gas fraction. */
     private double explosiveRate;
-    private boolean explosivePhreatomagmatic;
+    private double explosiveCollapse;
+    private double explosiveGas;
     private String collapseSource;
     /** Simulation time (s) at which the current ash puff ends; negative = none. */
     private double burstPhaseUntil = -1;
     private boolean phreatomagmatic;
     private double waterDepthM;
+    private double openWaterFraction;
     private double nextSteamEventTime;
+    private VentPartition.Result lastPartition;
+    /** Discrete explosions fired so far, by mechanism (for observers such as the style estimate). */
+    private long slugBursts;
+    private long plugBursts;
     /** Fractional tuff thickness (blocks) waiting to become whole blocks, keyed by packed x/z. */
     private final TreeMap<Long, Double> tuffDebt = new TreeMap<>();
+    /** Collapse thresholds by rounded column parameters: a pure function, not saved. */
+    private final Map<Long, Double> collapseThresholds = new HashMap<>();
 
+    /**
+     * @param ballisticFraction ignored: the ballistic share follows from clast physics (kept so
+     *     existing definitions still load)
+     */
     public VolcanoCoupler(String volcanoId, MagmaChamber chamber, SeismicityModel seismicity, List<VentSite> vents,
             DikePropagation dikes, TerrainModel terrain, LavaFlow lava, TephraSubsystem tephra, PyroclasticFlows pdc,
             Geothermal geothermal, VolcanoScaling scaling, double ballisticFraction) {
@@ -148,7 +148,6 @@ public final class VolcanoCoupler implements Subsystem {
         this.pdc = pdc;
         this.geothermal = geothermal;
         this.scaling = scaling;
-        this.ballisticFraction = ballisticFraction;
     }
 
     @Override
@@ -161,51 +160,77 @@ public final class VolcanoCoupler implements Subsystem {
         return 1.0;
     }
 
+    /** Groundwater model the conduit draws aquifer water from (optional). */
+    public void setGround(HydrothermalField ground) {
+        this.ground = ground;
+    }
+
     @Override
     public void step(StepContext context) {
         watchFissures();
         List<ConduitBurst> bursts = chamber.drainBursts();
 
+        List<VentSite> vents = eruptionVents.isEmpty() ? baseVents : activeVents();
+        VentSite main = vents.isEmpty() ? baseVents.get(0) : vents.get(0);
+        VentPartition.Water water = surveyWater(main);
+        chamber.setVentEnvironment(VentPartition.ambientPressurePa(water.surfaceDepthM()),
+                water.waterTableDepthM());
+
         double rate = chamber.eruptionRate();
-        if (rate <= 0) {
+        ConduitSolution flow = chamber.conduitFlow();
+        if (rate <= 0 || flow == null) {
             stopLava();
             stopExplosive();
-            endBurstPhaseIfDue(context.time(), true);
+            endBurstPhaseIfDue(context.time(), false);
             setPhreatomagmatic(context, false, null);
+            lastPartition = null;
             if (!flankPending) eruptionVents.clear();
+            for (ConduitBurst burst : bursts) fireBurst(context, main, burst, false);
             return;
         }
         flankPending = false;
         if (eruptionVents.isEmpty()) {
             for (VentSite vent : baseVents) eruptionVents.add(vent.id());
         }
-        List<VentSite> vents = activeVents();
-        VentSite main = vents.get(0);
+        vents = activeVents();
+        main = vents.get(0);
 
-        updatePhreatomagmatic(context, main);
-        boolean sustained = phreatomagmatic || chamber.eruptiveRegime() == EruptiveRegime.EXPLOSIVE;
+        VentPartition.Result p = VentPartition.partition(flow, chamber.ventAmbientPressurePa(),
+                chamber.config().conduitRadius(), chamber.silicaWt(), water, this::criticalGasFraction);
+        lastPartition = p;
+        // The chamber's actual outflow (linearised between conduit solutions) sets the totals; the
+        // partition sets the shares.
+        double physicalMass = chamber.physicalEruptionRate() * ExplosivePhase.DRE_DENSITY;
+        double scale = p.magmaMassFlux() > 0 ? physicalMass / p.magmaMassFlux() : 0;
+        double compression = scaling.eruptiveTimeCompression();
+        double physicalSeconds = context.dtSeconds() * compression;
 
-        if (sustained) {
-            stopLava();
-            updateExplosive(main, rate);
-        } else {
-            updateLava(vents, rate);
-            stopExplosive();
+        double lavaRate = p.lavaMassFlux() * scale / ExplosivePhase.DRE_DENSITY;
+        if (lavaRate > MIN_LAVA_RATE) updateLava(vents, lavaRate);
+        else stopLava();
+
+        double column = p.columnMassFlux() * scale;
+        boolean sustained = column >= MIN_COLUMN_MASS_FLUX;
+        if (sustained) updateExplosive(main, p, column);
+        else stopExplosive();
+
+        double ballistic = p.ballisticMassFlux() * scale * physicalSeconds;
+        if (ballistic > 0) {
+            tephra.launchSalvo(main, ballistic, p.ballisticSpeed(), 0, 15, chamber.silicaWt(), MAX_BOMBS_PER_SALVO);
         }
 
-        for (ConduitBurst burst : bursts) {
-            fireBurst(context, main, burst, sustained);
+        double wetShare = p.magmaMassFlux() > 0 ? p.waterFragmentedMassFlux() / p.magmaMassFlux() : 0;
+        setPhreatomagmatic(context, phreatomagmatic ? wetShare >= PHREATOMAGMATIC_STOP_SHARE
+                : wetShare >= PHREATOMAGMATIC_START_SHARE, main);
+        if (p.jetMassFlux() > 0) fireJets(context, main, p.jetMassFlux() * scale * physicalSeconds, p.jetSpeed());
+        if (p.wetFalloutMassFlux() > 0) buildTuffRing(context, main, p.wetFalloutMassFlux() * scale * physicalSeconds);
+        if (p.steamMassFlux() > 0 && context.time() >= nextSteamEventTime) {
+            context.outbox().emit(new SurfaceEvents.PhreatomagmaticSteam(
+                    context.time(), volcanoId, main.position(), p.steamMassFlux() * scale, waterDepthM));
+            nextSteamEventTime = context.time() + STEAM_EVENT_SECONDS;
         }
-        if (phreatomagmatic) {
-            fireJets(context, main, rate);
-            buildTuffRing(context, main, rate);
-            if (context.time() >= nextSteamEventTime) {
-                double steam = rate / scaling.eruptiveTimeCompression() * ExplosivePhase.DRE_DENSITY * WATER_MAGMA_RATIO;
-                context.outbox().emit(new SurfaceEvents.PhreatomagmaticSteam(
-                        context.time(), volcanoId, main.position(), steam, waterDepthM));
-                nextSteamEventTime = context.time() + STEAM_EVENT_SECONDS;
-            }
-        }
+
+        for (ConduitBurst burst : bursts) fireBurst(context, main, burst, sustained);
         endBurstPhaseIfDue(context.time(), sustained);
     }
 
@@ -242,12 +267,17 @@ public final class VolcanoCoupler implements Subsystem {
         return active;
     }
 
+    /** The partition of the current eruption's flow at the vent; {@code null} when not erupting. */
+    public VentPartition.Result partition() {
+        return lastPartition;
+    }
+
     // ── Lava ──
 
-    private void updateLava(List<VentSite> vents, double realRate) {
-        // The chamber reports volume per engine second; lava sources take the physical rate, and the
-        // lava field (on this volcano's clock) re-applies the eruptive compression.
-        double perVent = realRate / chamber.config().eruptiveTimeScale() / vents.size();
+    private void updateLava(List<VentSite> vents, double physicalRate) {
+        // Lava sources take the physical rate; the lava field (on this volcano's clock) re-applies the
+        // eruptive compression.
+        double perVent = physicalRate / vents.size();
         Set<String> wanted = new TreeSet<>();
         for (VentSite vent : vents) {
             String sourceId = sourceId(vent);
@@ -278,48 +308,69 @@ public final class VolcanoCoupler implements Subsystem {
         activeLavaSources.clear();
     }
 
-    // ── Sustained explosive columns ──
+    // ── Sustained columns ──
 
-    private void updateExplosive(VentSite vent, double realRate) {
+    private void updateExplosive(VentSite vent, VentPartition.Result p, double physicalColumn) {
+        double compression = scaling.eruptiveTimeCompression();
+        double simulated = physicalColumn * compression;
         boolean restart = explosiveRate <= 0
-                || explosivePhreatomagmatic != phreatomagmatic
-                || Math.abs(realRate - explosiveRate) > PHASE_UPDATE_THRESHOLD * explosiveRate;
+                || Math.abs(simulated - explosiveRate) > PHASE_UPDATE_THRESHOLD * explosiveRate
+                || Math.abs(p.collapseFraction() - explosiveCollapse) > 0.1
+                || Math.abs(p.columnGasFraction() - explosiveGas) > PHASE_UPDATE_THRESHOLD * explosiveGas;
         if (!restart) return;
-        explosiveRate = realRate;
-        explosivePhreatomagmatic = phreatomagmatic;
+        explosiveRate = simulated;
+        explosiveCollapse = p.collapseFraction();
+        explosiveGas = p.columnGasFraction();
         burstPhaseUntil = -1; // the sustained column takes over any ash puff
 
-        // realRate is per simulated second; the column's physics follows the physical rate.
-        double compression = scaling.eruptiveTimeCompression();
-        double mass = realRate * ExplosivePhase.DRE_DENSITY;
-        ExplosivePhase phase;
-        if (phreatomagmatic) {
-            // Steam-driven: fine ash, low column; ballistics come from the cock's-tail jets.
-            double lofted = mass * (1 - NEAR_VENT_FALLOUT_SHARE - JET_BALLISTIC_SHARE);
-            phase = new ExplosivePhase(vent, lofted, STEAM_DRIVE_FRACTION, STEAM_DRIVE_PRESSURE_MPA,
-                    STEAM_DRIVE_TEMPERATURE_C, chamber.silicaWt(), 0, PHREATOMAGMATIC_GRAIN, compression);
-        } else {
-            phase = ExplosivePhase.fromMagma(vent, chamber, ballisticFraction);
-            phase = new ExplosivePhase(phase.vent(), mass, phase.gasFraction(), phase.overpressureMPa(),
-                    phase.temperatureC(), phase.silicaWt(), phase.ballisticFraction(), phase.grainSize(), compression);
-        }
-        double columnMass = phase.massEruptionRate();
-        double collapsing = collapseShare(phase, phase.physicalMassEruptionRate());
-        tephra.startPhase(phase.withMassEruptionRate(columnMass * (1 - collapsing)));
-        updateCollapse(vent, columnMass * collapsing, phase.temperatureC());
+        // The phase's gas thrust is set by the jet: an equivalent overpressure that expands the
+        // column's gas to its exit velocity.
+        double overpressure = equivalentOverpressureMPa(p.columnVelocity(), p.columnGasFraction(), p.columnTemperatureC());
+        ExplosivePhase phase = new ExplosivePhase(vent, simulated, Math.min(1, p.columnGasFraction()), overpressure,
+                p.columnTemperatureC(), chamber.silicaWt(), 0, p.grainSize(), compression);
+        tephra.startPhase(phase.withMassEruptionRate(simulated * (1 - p.collapseFraction())));
+        updateCollapse(vent, simulated * p.collapseFraction(), p.columnTemperatureC());
+    }
+
+    /** Overpressure (MPa) whose isothermal expansion drives gas fraction {@code n} to speed {@code u}. */
+    static double equivalentOverpressureMPa(double u, double n, double temperatureC) {
+        if (!(n > 0) || !(u > 0)) return 0;
+        double x = u * u / (2 * n * 461.5 * (temperatureC + 273.15));
+        return Math.min(100, Math.expm1(Math.min(x, 6)) * 0.101325);
     }
 
     /**
-     * Share of the column falling back as PDCs: {@link #COLLAPSE_SHARE} if the column is unstable.
-     * {@code massRate} must be the physical mass eruption rate (Woods 1988 is a steady-jet criterion).
+     * Gas mass fraction below which the column collapses (Woods 1988), by bisection on {@link
+     * ColumnCollapse}; cached on rounded parameters.
      */
-    private double collapseShare(ExplosivePhase phase, double massRate) {
-        if (pdc == null || massRate <= 0) return 0;
-        double gas = phase.gasFraction();
-        if (!(gas > 0 && gas < 1)) return COLLAPSE_SHARE; // no gas thrust: the jet cannot become buoyant
-        double exitSpeed = Ballistics.gasThrustExitSpeed(gas, phase.temperatureC(), phase.overpressureMPa());
-        if (!(exitSpeed > 0)) return COLLAPSE_SHARE;
-        return ColumnCollapse.analyze(massRate, exitSpeed, gas, phase.temperatureC()).collapses() ? COLLAPSE_SHARE : 0;
+    private double criticalGasFraction(double massFlux, double velocity, double temperatureC) {
+        long key = (Math.round(Math.log10(Math.max(1, massFlux)) * 10) << 32)
+                ^ (Math.round(Math.log(Math.max(1, velocity)) * 20) << 16) ^ Math.round(temperatureC / 20);
+        Double cached = collapseThresholds.get(key);
+        if (cached != null) return cached;
+        double m = Math.pow(10, Math.round(Math.log10(Math.max(1, massFlux)) * 10) / 10.0);
+        double u = Math.exp(Math.round(Math.log(Math.max(1, velocity)) * 20) / 20.0);
+        double t = Math.round(temperatureC / 20) * 20.0;
+        double lo = 1e-3;
+        double hi = 0.6;
+        double critical;
+        if (!ColumnCollapse.analyze(m, u, hi, t).collapses()) {
+            if (ColumnCollapse.analyze(m, u, lo, t).collapses()) {
+                for (int i = 0; i < 16; i++) {
+                    double mid = Math.sqrt(lo * hi);
+                    if (ColumnCollapse.analyze(m, u, mid, t).collapses()) lo = mid;
+                    else hi = mid;
+                }
+                critical = Math.sqrt(lo * hi);
+            } else {
+                critical = lo / 2; // buoyant at any realistic gas content
+            }
+        } else {
+            critical = 1; // collapses whatever its gas
+        }
+        if (collapseThresholds.size() > 4096) collapseThresholds.clear();
+        collapseThresholds.put(key, critical);
+        return critical;
     }
 
     private void updateCollapse(VentSite vent, double massRate, double temperatureC) {
@@ -328,7 +379,7 @@ public final class VolcanoCoupler implements Subsystem {
             pdc.removeSource(collapseSource);
             collapseSource = null;
         }
-        if (massRate > 0) {
+        if (massRate > 0 && explosiveCollapse > 0.01) {
             collapseSource = pdc.columnCollapse(volcanoId, vent.position(), Math.max(1, vent.craterRadius()), massRate,
                     1.0, temperatureC);
         }
@@ -337,7 +388,8 @@ public final class VolcanoCoupler implements Subsystem {
     private void stopExplosive() {
         if (explosiveRate > 0) tephra.stopPhase();
         explosiveRate = 0;
-        explosivePhreatomagmatic = false;
+        explosiveCollapse = 0;
+        explosiveGas = 0;
         if (collapseSource != null && pdc != null) pdc.removeSource(collapseSource);
         collapseSource = null;
     }
@@ -345,43 +397,41 @@ public final class VolcanoCoupler implements Subsystem {
     // ── Discrete explosions ──
 
     /**
-     * A Strombolian or Vulcanian explosion: a bomb salvo, a short ash puff (unless a sustained column
-     * is already running) and an explosion quake.
+     * A slug burst or plug failure: a bomb salvo of the clasts the burst jet cannot carry, a short ash
+     * puff of the rest (unless a sustained column is already running) and an explosion quake.
      */
     private void fireBurst(StepContext context, VentSite vent, ConduitBurst burst, boolean sustained) {
-        boolean strombolian = burst.kind() == ConduitBurst.Kind.STROMBOLIAN;
-        double ballisticShare = strombolian ? 0.8 : 0.2;
+        boolean slug = burst.kind() == ConduitBurst.Kind.SLUG;
+        if (slug) slugBursts++;
+        else plugBursts++;
         double speed = Ballistics.gasThrustExitSpeed(burst.gasMassFraction(), burst.temperatureC(), burst.overpressureMPa());
-        tephra.launchSalvo(vent, burst.ejectaMassKg() * ballisticShare, speed, 0, strombolian ? 20 : 30,
-                burst.silicaWt(), strombolian ? 40 : 120);
-        if (!sustained) {
-            GrainSizeDistribution grain = strombolian ? GrainSizeDistribution.STROMBOLIAN : GrainSizeDistribution.VULCANIAN;
+        double median = slug ? SLUG_CLAST_M : PLUG_CLAST_M;
+        double gasDensity = VentPartition.ambientPressurePa(0) / (461.5 * (burst.temperatureC() + 273.15));
+        double supported = 3 * VentPartition.DRAG_COEFFICIENT * gasDensity * speed * speed
+                / (4 * VentPartition.CLAST_DENSITY * VentPartition.GRAVITY);
+        double ballisticShare = 1 - VentPartition.lognormalCdf(Math.min(supported, VentPartition.BALLISTIC_SIZE), median);
+        tephra.launchSalvo(vent, burst.ejectaMassKg() * ballisticShare, speed, 0, slug ? 20 : 30,
+                burst.silicaWt(), slug ? 40 : 120);
+        if (!sustained && ballisticShare < 1) {
+            double[] f = VentPartition.grainFractions(median, Math.min(supported, VentPartition.BALLISTIC_SIZE));
             startAshPuff(context.time(), vent, burst.ejectaMassKg() * (1 - ballisticShare), burst.durationSeconds(),
-                    burst.gasMassFraction(), burst.overpressureMPa(), burst.temperatureC(), burst.silicaWt(), grain);
+                    burst.gasMassFraction(), burst.overpressureMPa(), burst.temperatureC(), burst.silicaWt(),
+                    GrainSizeDistribution.of(f[0] + 1e-6, f[1] + 1e-6, f[2] + 1e-6, f[3] + 1e-6));
         }
         double energy = 0.5 * burst.ejectaMassKg() * speed * speed;
         if (seismicity != null) seismicity.queueExplosion(vent.position().offset(0, -2, 0), energy);
         context.outbox().emit(new SurfaceEvents.ExplosiveBurst(context.time(), volcanoId,
-                strombolian ? BurstKind.STROMBOLIAN : BurstKind.VULCANIAN, vent.position(), burst.ejectaMassKg(),
+                slug ? BurstKind.STROMBOLIAN : BurstKind.VULCANIAN, vent.position(), burst.ejectaMassKg(),
                 burst.gasMassKg(), speed, energy));
     }
 
-    /** Cock's-tail jets of a submerged vent: Poisson bursts of inclined bombs. */
-    private void fireJets(StepContext context, VentSite vent, double rate) {
-        SimRandom random = context.random();
-        // Jets are timed in physical time; the chamber's rate is per (compressed) simulated second.
-        double compression = scaling.eruptiveTimeCompression();
-        double physicalSeconds = context.dtSeconds() * compression;
-        int jets = Math.min(5, random.nextPoisson(physicalSeconds / JET_INTERVAL_SECONDS));
-        double mass = rate / compression * ExplosivePhase.DRE_DENSITY * JET_INTERVAL_SECONDS * JET_BALLISTIC_SHARE;
-        for (int i = 0; i < jets; i++) {
-            double speed = Ballistics.gasThrustExitSpeed(STEAM_DRIVE_FRACTION, STEAM_DRIVE_TEMPERATURE_C, STEAM_DRIVE_PRESSURE_MPA);
-            tephra.launchSalvo(vent, mass, speed, 40, 15, chamber.silicaWt(), 30);
-            double energy = 0.5 * mass * speed * speed;
-            if (seismicity != null) seismicity.queueExplosion(vent.position(), energy);
-            context.outbox().emit(new SurfaceEvents.ExplosiveBurst(context.time(), volcanoId, BurstKind.SURTSEYAN_JET,
-                    vent.position(), mass, mass * WATER_MAGMA_RATIO, speed, energy));
-        }
+    /** Cock's-tail jets of water-fragmented magma: one salvo of the coarse wet ejecta of this step. */
+    private void fireJets(StepContext context, VentSite vent, double mass, double speed) {
+        tephra.launchSalvo(vent, mass, speed, 40, 15, chamber.silicaWt(), MAX_BOMBS_PER_SALVO);
+        double energy = 0.5 * mass * speed * speed;
+        if (seismicity != null) seismicity.queueExplosion(vent.position(), energy);
+        context.outbox().emit(new SurfaceEvents.ExplosiveBurst(context.time(), volcanoId, BurstKind.SURTSEYAN_JET,
+                vent.position(), mass, 0, speed, energy));
     }
 
     private void startAshPuff(double now, VentSite vent, double ashMassKg, double durationSeconds, double gasFraction,
@@ -404,12 +454,19 @@ public final class VolcanoCoupler implements Subsystem {
     // ── Magma–water interaction ──
 
     /**
-     * Water reaches the vent when the vent floor is submerged at shallow depth and the crater rim is
-     * open to the surrounding water (a ring of columns just outside the crater is submerged).
+     * Water around the vent: depth of water standing over the crater floor, the share of the ring just
+     * outside the crater that is submerged (open to the sea or lake), and the water table below the
+     * vent from the groundwater model.
      */
-    private void updatePhreatomagmatic(StepContext context, VentSite vent) {
-        if (terrain == null) return;
+    private VentPartition.Water surveyWater(VentSite vent) {
         BlockPos c = vent.position();
+        double table = ground != null && ground.known(c.x(), c.z())
+                ? ground.waterTableDepthM(c.x(), c.z()) : Double.POSITIVE_INFINITY;
+        if (terrain == null) {
+            waterDepthM = 0;
+            openWaterFraction = 0;
+            return new VentPartition.Water(0, 0, table);
+        }
         int crater = Math.max(1, vent.craterRadius());
         int ventColumns = 0;
         int ventSubmerged = 0;
@@ -435,27 +492,19 @@ public final class VolcanoCoupler implements Subsystem {
                 }
             }
         }
-        if (ventColumns == 0 || rimColumns == 0) return;
-        double depth = ventSubmerged == 0 ? 0 : depthSum / ventSubmerged * scaling.metersPerBlock();
-        double open = rimSubmerged / (double) rimColumns;
-        boolean wet = ventSubmerged * 2 >= ventColumns;
-        boolean active = phreatomagmatic
-                ? wet && open >= PHREATOMAGMATIC_STOP_FRACTION && depth <= 1.1 * PHREATOMAGMATIC_MAX_DEPTH_M
-                : wet && open >= PHREATOMAGMATIC_START_FRACTION && depth <= PHREATOMAGMATIC_MAX_DEPTH_M;
-        waterDepthM = depth;
-        setPhreatomagmatic(context, active, vent);
+        boolean wet = ventColumns > 0 && ventSubmerged * 2 >= ventColumns;
+        waterDepthM = wet ? depthSum / ventSubmerged * scaling.metersPerBlock() : 0;
+        openWaterFraction = wet && rimColumns > 0 ? rimSubmerged / (double) rimColumns : 0;
+        return new VentPartition.Water(waterDepthM, openWaterFraction, table);
     }
 
     /**
-     * Wet jet and base-surge fallout around a phreatomagmatic vent: {@link #NEAR_VENT_FALLOUT_SHARE}
-     * of the erupted mass settles as tuff in a ring peaking just outside the crater rim, raising the
-     * ground block by block.
+     * Wet jet and base-surge fallout around a water-fragmenting vent: the wet tephra settles as tuff in a
+     * ring peaking just outside the crater rim, raising the ground block by block.
      */
-    private void buildTuffRing(StepContext context, VentSite vent, double rate) {
+    private void buildTuffRing(StepContext context, VentSite vent, double massKg) {
         if (terrain == null) return;
-        // rate is per simulated second, so the volume erupted this step is rate × step length.
-        double bulkBlocks = rate * context.dtSeconds() * ExplosivePhase.DRE_DENSITY
-                * NEAR_VENT_FALLOUT_SHARE / TUFF_BULK_DENSITY * scaling.volumeScale();
+        double bulkBlocks = massKg / TUFF_BULK_DENSITY * scaling.volumeScale();
         int crater = Math.max(1, vent.craterRadius());
         int outer = crater + TUFF_RING_WIDTH;
         double peak = crater + 2;
@@ -514,18 +563,33 @@ public final class VolcanoCoupler implements Subsystem {
         return !activeLavaSources.isEmpty();
     }
 
-    /** True while a sustained explosive column (magmatic or phreatomagmatic) is erupting. */
+    /** True while a sustained column (magmatic and/or phreatomagmatic) is erupting. */
     public boolean explosive() {
         return explosiveRate > 0;
     }
 
-    /** True while water reaching the vent makes the eruption phreatomagmatic. */
+    /** True while water fragments a large share of the erupting magma. */
     public boolean phreatomagmatic() {
         return phreatomagmatic;
     }
 
     public boolean columnCollapsing() {
         return collapseSource != null;
+    }
+
+    /** Slug bursts fired so far. */
+    public long slugBursts() {
+        return slugBursts;
+    }
+
+    /** Plug failures fired so far. */
+    public long plugBursts() {
+        return plugBursts;
+    }
+
+    /** Water depth over the vent (m) at the last survey. */
+    public double waterDepthM() {
+        return waterDepthM;
     }
 
     @Override
@@ -540,12 +604,16 @@ public final class VolcanoCoupler implements Subsystem {
         out.addProperty("knownFissures", knownFissures);
         out.addProperty("flankPending", flankPending);
         out.addProperty("explosiveRate", explosiveRate);
-        out.addProperty("explosivePhreatomagmatic", explosivePhreatomagmatic);
+        out.addProperty("explosiveCollapse", explosiveCollapse);
+        out.addProperty("explosiveGas", explosiveGas);
         if (collapseSource != null) out.addProperty("collapseSource", collapseSource);
         out.addProperty("burstPhaseUntil", burstPhaseUntil);
         out.addProperty("phreatomagmatic", phreatomagmatic);
         out.addProperty("waterDepthM", waterDepthM);
+        out.addProperty("openWaterFraction", openWaterFraction);
         out.addProperty("nextSteamEventTime", nextSteamEventTime);
+        out.addProperty("slugBursts", slugBursts);
+        out.addProperty("plugBursts", plugBursts);
         JsonObject debt = new JsonObject();
         for (Map.Entry<Long, Double> e : tuffDebt.entrySet()) debt.addProperty(Long.toString(e.getKey()), e.getValue());
         out.add("tuffDebt", debt);
@@ -563,12 +631,17 @@ public final class VolcanoCoupler implements Subsystem {
         knownFissures = in.has("knownFissures") ? in.get("knownFissures").getAsInt() : 0;
         flankPending = in.has("flankPending") && in.get("flankPending").getAsBoolean();
         explosiveRate = in.get("explosiveRate").getAsDouble();
-        explosivePhreatomagmatic = in.has("explosivePhreatomagmatic") && in.get("explosivePhreatomagmatic").getAsBoolean();
+        explosiveCollapse = in.has("explosiveCollapse") ? in.get("explosiveCollapse").getAsDouble() : 0;
+        explosiveGas = in.has("explosiveGas") ? in.get("explosiveGas").getAsDouble() : 0;
         collapseSource = in.has("collapseSource") ? in.get("collapseSource").getAsString() : null;
         burstPhaseUntil = in.get("burstPhaseUntil").getAsDouble();
         phreatomagmatic = in.has("phreatomagmatic") && in.get("phreatomagmatic").getAsBoolean();
         waterDepthM = in.has("waterDepthM") ? in.get("waterDepthM").getAsDouble() : 0;
+        openWaterFraction = in.has("openWaterFraction") ? in.get("openWaterFraction").getAsDouble() : 0;
         nextSteamEventTime = in.get("nextSteamEventTime").getAsDouble();
+        slugBursts = in.has("slugBursts") ? in.get("slugBursts").getAsLong() : 0;
+        plugBursts = in.has("plugBursts") ? in.get("plugBursts").getAsLong() : 0;
+        lastPartition = null;
         tuffDebt.clear();
         if (in.has("tuffDebt")) {
             for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("tuffDebt").entrySet()) {

@@ -201,7 +201,8 @@ public final class World {
         Set<String> resync = new TreeSet<>();
         for (ConfigChanges.Change c : changes.all()) {
             if (c.scope().startsWith("volcano:")
-                    && (c.path().equals("magma.chamber.supplyRate") || c.path().equals("active"))) {
+                    && (c.path().startsWith("magma.chamber.supply") || c.path().startsWith("magma.chamber.recharge")
+                            || c.path().equals("active"))) {
                 resync.add(c.scope().substring("volcano:".length()));
             }
         }
@@ -234,7 +235,7 @@ public final class World {
 
     /**
      * Assembles the engine; with {@code restore}, resumes it (volcanoes in {@code resetVolcanoes} start
-     * fresh) and re-applies the definition's magma supply to {@code resyncSupply} (supply is state:
+     * fresh) and re-applies the definition's magma supply (rate and magma) to {@code resyncSupply} (supply is state:
      * a changed definition or activity flag must override the saved value).
      */
     private void build(SaveStore restore, Set<String> resetVolcanoes, Set<String> resyncSupply) {
@@ -266,7 +267,7 @@ public final class World {
         engine = builder.build();
         for (String id : resyncSupply) {
             VolcanoSystem system = systems.get(id);
-            if (system != null) system.chamber().setSupplyRate(system.chamber().config().supplyRate());
+            if (system != null) system.chamber().resetSupplyFromConfig();
         }
         if (!resetVolcanoes.isEmpty()) {
             for (LavaSource source : List.copyOf(lava.sources())) {

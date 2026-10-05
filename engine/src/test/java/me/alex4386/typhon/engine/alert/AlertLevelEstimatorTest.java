@@ -136,45 +136,6 @@ class AlertLevelEstimatorTest {
     }
 
     @Test
-    void suggestsStylesFromMagmaProperties() {
-        assertEquals(EruptionStyle.HAWAIIAN, EruptionStyleClassifier.classify(2.0, 0.5, 30));
-        assertEquals(EruptionStyle.STROMBOLIAN, EruptionStyleClassifier.classify(2.0, 3.0, 5));
-        assertEquals(EruptionStyle.STROMBOLIAN, EruptionStyleClassifier.classify(3.2, 1.5, 5));
-        assertEquals(EruptionStyle.VULCANIAN, EruptionStyleClassifier.classify(5.0, 3.0, 5));
-        assertEquals(EruptionStyle.LAVA_DOME, EruptionStyleClassifier.classify(9.0, 1.0, 0.5));
-        assertEquals(EruptionStyle.PELEAN, EruptionStyleClassifier.classify(9.0, 3.0, 2));
-        assertEquals(EruptionStyle.PLINIAN, EruptionStyleClassifier.classify(9.0, 4.5, 50));
-        assertEquals(EruptionStyle.PLINIAN, EruptionStyleClassifier.classify(6.0, 5.0, 40));
-
-        assertEquals(EruptionStyle.HAWAIIAN, EruptionStyleClassifier.classify(StubMagmaState.basalt()));
-        StubMagmaState dacite = StubMagmaState.wetDacite();
-        dacite.eruptionRate = 1;
-        assertEquals(EruptionStyle.VULCANIAN, EruptionStyleClassifier.classify(dacite));
-        dacite.eruptionRate = 40;
-        assertEquals(EruptionStyle.PLINIAN, EruptionStyleClassifier.classify(dacite));
-        dacite.water = 1.0;
-        assertEquals(EruptionStyle.LAVA_DOME, EruptionStyleClassifier.classify(dacite));
-    }
-
-    @Test
-    void emitsStyleChanges() {
-        StubMagmaState magma = StubMagmaState.basalt();
-        AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v"), magma, null);
-        Engine engine = engine(estimator);
-        List<AlertEvents.EruptionStyleSuggested> styles = new ArrayList<>();
-        for (int i = 0; i < 40; i++) {
-            if (i == 20) magma.water = 3.0;
-            for (EngineEvent e : engine.step().events()) {
-                if (e instanceof AlertEvents.EruptionStyleSuggested s) styles.add(s);
-            }
-        }
-        assertEquals(2, styles.size());
-        assertEquals(EruptionStyle.HAWAIIAN, styles.get(0).current());
-        assertEquals(EruptionStyle.STROMBOLIAN, styles.get(1).current());
-        assertEquals(EruptionStyle.STROMBOLIAN, estimator.suggestedStyle());
-    }
-
-    @Test
     void pendingDowngradeSurvivesSaveAndRestore() {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.overpressure = 0.65 * STRENGTH;

@@ -1,134 +1,154 @@
 package me.alex4386.typhon.engine.magma;
 
 /**
- * Conduit-flow parameters of a {@link MagmaChamber}: how magma degasses on its way up, when it
- * fragments, and how gas drives discrete Strombolian and Vulcanian explosions.
+ * Physical parameters of the conduit between a {@link MagmaChamber} and its vent, used by the steady
+ * conduit-flow model ({@link me.alex4386.typhon.engine.magma.conduit.ConduitModel}). None of them
+ * selects an eruption style: fountains, slugs, plugs, domes and explosive columns all follow from
+ * the flow these parameters produce (see {@code docs/eruption-dynamics.md}).
  *
- * @param permeableOutgassingTimescale e-folding time (s) for gas to escape through connected
- *     bubbles and conduit walls during ascent. Slow ascent (≫ this) erupts degassed magma.
- * @param fragmentationGasFraction gas volume fraction at which a bubbly melt fragments (~0.75;
- *     Sparks 1978)
- * @param fragmentationPressureMPa pressure at the fragmentation level where the gas fraction is
- *     evaluated; magma that only reaches it shallower than this erupts as degassing lava
- * @param brittleStressPa melt viscosity × strain rate above which melt fails brittlely
- *     ({@code k·G∞} with k ≈ 0.01, G∞ ≈ 10 GPa; Papale 1999)
- * @param degassedWaterWt H₂O left in fully degassed lava at the surface (wt%)
- * @param slugFlowMaxViscosity bulk viscosity (Pa·s) above which bubbles cannot coalesce into
- *     conduit-filling gas slugs (no Strombolian activity in viscous magma)
+ * @param initialOpenness 0 = sealed conduit (the roof must fail at its tensile strength),
+ *     1 = open (a persistently active vent)
  * @param reopenOverpressureMPa overpressure that re-opens a conduit left open by a recent eruption
- *     (an open conduit does not need to fracture the roof again)
- * @param conduitSealTimescale e-folding time (physical s) for an open conduit to seal after an
- *     eruption; long repose returns the system to closed-conduit, tensile-strength failure
- * @param initialOpenness 0 = sealed (fresh failure needed), 1 = open (persistently active vent)
- * @param slugGasFraction share of the exsolving gas flux that gathers into slugs (the rest
- *     escapes passively)
- * @param slugGasMassKg mean gas mass of one Strombolian slug (Stromboli: ~10–1000 kg)
- * @param slugOverpressureMPa overpressure of a bursting slug (~0.1–0.5 MPa)
- * @param strombolianGasMassFraction gas mass fraction of a Strombolian burst's ejecta + gas
- *     (pyroclasts ~10–100× the gas mass)
- * @param strombolianDurationSeconds duration of one Strombolian burst
- * @param plugTrappedGasFraction share of the exsolving gas flux trapped beneath a dome plug
- * @param plugCapDepthM depth of the porous upper conduit in which trapped gas accumulates
+ * @param conduitSealTimescale e-folding time (physical s) for an open conduit to seal in repose
+ * @param fragmentationPorosity gas volume fraction at which an expanding foam breaks up (~0.75;
+ *     Sparks 1978)
+ * @param brittleStressPa melt viscosity × strain rate above which melt fails brittlely
+ *     ({@code k·G∞}, k ≈ 0.01, G∞ ≈ 10 GPa; Papale 1999)
+ * @param foamStrengthPa tensile strength of bubble walls: a viscous foam past the fragmentation
+ *     porosity breaks once its bubbles' viscous overpressure ({@code 4/3 η ε̇}) exceeds this over
+ *     the porosity (Spieler et al. 2004); slowly rising foam relaxes and stays coherent
+ * @param turbulentFrictionFactor Darcy friction factor of the gas–pyroclast flow above
+ *     fragmentation (~0.02; Wilson &amp; Head 1981)
+ * @param referencePermeability permeability (m²) of a fully connected bubble network; it scales as
+ *     the cube of the gas fraction above percolation (10⁻¹⁴–10⁻¹¹ m²; Klug &amp; Cashman 1996)
+ * @param percolationThreshold gas volume fraction at which bubbles connect (~0.3)
+ * @param wallPermeability permeability (m²) of the conduit wall rock for lateral outgassing
+ * @param gasViscosity dynamic viscosity of magmatic water vapour (Pa·s)
+ * @param microlitesPerWtWater equilibrium microlite fraction gained per wt% of water lost on ascent
+ *     (decompression crystallisation; Cashman &amp; Blundy 2000)
+ * @param crystallisationTimescale kinetic time (physical s) to approach that equilibrium
+ * @param maxCrystalFraction cap on total crystals (near maximum packing)
+ * @param bubbleRadiusM bubble radius for the capillary number of the bubbly rheology
+ * @param surfaceTension melt–gas surface tension (N/m)
+ * @param coalescenceViscosity melt viscosity (Pa·s) at which bubble coalescence into slugs is
+ *     halved; coalescence fades in viscous melt
+ * @param slugLengthDiameters mean length of a gas slug in conduit diameters (James et al. 2008)
+ * @param plugViscosityLog10 log10 exit viscosity (Pa·s) at which the uppermost conduit stiffens
+ *     into a plug that traps gas (degassing-induced crystallisation; Diller et al. 2006)
+ * @param plugStrengthMPa strength a fully stiffened plug resists trapped gas with
+ * @param plugCapDepthM depth of the porous zone beneath the plug in which gas accumulates
  * @param plugPorosity connected porosity of that zone
- * @param plugStrengthMPa gas pressure at which the plug fails in a Vulcanian explosion
- * @param plugResealSeconds time (physical s) for a new plug to seal after an explosion
- * @param vulcanianGasMassFraction gas mass fraction of the fragmented charge (~1–3 wt%)
- * @param vulcanianDurationSeconds duration of one Vulcanian explosion
+ * @param exsolutionTimescale diffusive time (physical s) for dissolved volatiles to reach
+ *     solubility equilibrium as pressure falls (bubble growth; Sparks 1978). The flow chokes at its
+ *     frozen (not equilibrium) sound speed.
+ * @param wallSlipStressPa shear stress at which coherent magma stops deforming viscously at the wall
+ *     and slides on a marginal shear zone (Pa; dome plugs ~0.5–5 MPa, Iverson et al. 2006). Caps
+ *     the wall friction of stiff, crystal-rich magma
+ * @param wallFrictionCoefficient friction coefficient of that shear zone on the magma pressure
+ *     (gouge, ~0.1–0.6): the slip stress grows with depth
+ * @param gridSteps integration steps along the conduit
  */
 public record ConduitConfig(
-        double permeableOutgassingTimescale,
-        double fragmentationGasFraction,
-        double fragmentationPressureMPa,
-        double brittleStressPa,
-        double degassedWaterWt,
-        double slugFlowMaxViscosity,
+        double initialOpenness,
         double reopenOverpressureMPa,
         double conduitSealTimescale,
-        double initialOpenness,
-        double slugGasFraction,
-        double slugGasMassKg,
-        double slugOverpressureMPa,
-        double strombolianGasMassFraction,
-        double strombolianDurationSeconds,
-        double plugTrappedGasFraction,
+        double fragmentationPorosity,
+        double brittleStressPa,
+        double foamStrengthPa,
+        double turbulentFrictionFactor,
+        double referencePermeability,
+        double percolationThreshold,
+        double wallPermeability,
+        double gasViscosity,
+        double microlitesPerWtWater,
+        double crystallisationTimescale,
+        double maxCrystalFraction,
+        double bubbleRadiusM,
+        double surfaceTension,
+        double coalescenceViscosity,
+        double slugLengthDiameters,
+        double plugViscosityLog10,
+        double plugStrengthMPa,
         double plugCapDepthM,
         double plugPorosity,
-        double plugStrengthMPa,
-        double plugResealSeconds,
-        double vulcanianGasMassFraction,
-        double vulcanianDurationSeconds) {
+        double exsolutionTimescale,
+        double wallSlipStressPa,
+        double wallFrictionCoefficient,
+        int gridSteps) {
 
     /** Literature-based defaults; see each parameter for its source range. */
     public static final ConduitConfig DEFAULT = new ConduitConfig(
-            3600, 0.75, 1.0, 1e8, 0.1, 1e4,
-            3.0, 3e7, 0,
-            0.03, 250, 0.2, 0.01, 10,
-            0.3, 500, 0.2, 5, 1800, 0.02, 40);
+            0, 3.0, 3e7,
+            0.75, 1e8, 1e6, 0.02,
+            1e-11, 0.3, 1e-13, 3e-5,
+            0.12, 2e4, 0.6,
+            1e-4, 0.1,
+            1e3, 5,
+            10, 5, 500, 0.2,
+            1.0, 1e6, 0.1,
+            160);
 
     public ConduitConfig {
-        requirePositive("permeableOutgassingTimescale", permeableOutgassingTimescale);
-        if (!(fragmentationGasFraction > 0 && fragmentationGasFraction < 1)) {
-            throw new IllegalArgumentException("fragmentationGasFraction must be in (0, 1)");
-        }
-        requirePositive("fragmentationPressureMPa", fragmentationPressureMPa);
-        requirePositive("brittleStressPa", brittleStressPa);
-        if (degassedWaterWt < 0) throw new IllegalArgumentException("degassedWaterWt must be >= 0");
-        requirePositive("slugFlowMaxViscosity", slugFlowMaxViscosity);
+        if (!(initialOpenness >= 0 && initialOpenness <= 1)) throw new IllegalArgumentException("initialOpenness must be in [0, 1]");
         requirePositive("reopenOverpressureMPa", reopenOverpressureMPa);
         requirePositive("conduitSealTimescale", conduitSealTimescale);
-        if (!(initialOpenness >= 0 && initialOpenness <= 1)) throw new IllegalArgumentException("initialOpenness must be in [0, 1]");
-        requireFraction("slugGasFraction", slugGasFraction);
-        requirePositive("slugGasMassKg", slugGasMassKg);
-        requirePositive("slugOverpressureMPa", slugOverpressureMPa);
-        requireFraction("strombolianGasMassFraction", strombolianGasMassFraction);
-        requirePositive("strombolianDurationSeconds", strombolianDurationSeconds);
-        requireFraction("plugTrappedGasFraction", plugTrappedGasFraction);
+        requireFraction("fragmentationPorosity", fragmentationPorosity);
+        requirePositive("brittleStressPa", brittleStressPa);
+        requirePositive("foamStrengthPa", foamStrengthPa);
+        requirePositive("turbulentFrictionFactor", turbulentFrictionFactor);
+        requirePositive("referencePermeability", referencePermeability);
+        if (!(percolationThreshold >= 0 && percolationThreshold < fragmentationPorosity)) {
+            throw new IllegalArgumentException("percolationThreshold must be in [0, fragmentationPorosity)");
+        }
+        requirePositive("wallPermeability", wallPermeability);
+        requirePositive("gasViscosity", gasViscosity);
+        if (!(microlitesPerWtWater >= 0)) throw new IllegalArgumentException("microlitesPerWtWater must be >= 0");
+        requirePositive("crystallisationTimescale", crystallisationTimescale);
+        requireFraction("maxCrystalFraction", maxCrystalFraction);
+        requirePositive("bubbleRadiusM", bubbleRadiusM);
+        requirePositive("surfaceTension", surfaceTension);
+        requirePositive("coalescenceViscosity", coalescenceViscosity);
+        requirePositive("slugLengthDiameters", slugLengthDiameters);
+        requirePositive("plugViscosityLog10", plugViscosityLog10);
+        requirePositive("plugStrengthMPa", plugStrengthMPa);
         requirePositive("plugCapDepthM", plugCapDepthM);
         requireFraction("plugPorosity", plugPorosity);
-        requirePositive("plugStrengthMPa", plugStrengthMPa);
-        if (plugResealSeconds < 0) throw new IllegalArgumentException("plugResealSeconds must be >= 0");
-        requireFraction("vulcanianGasMassFraction", vulcanianGasMassFraction);
-        requirePositive("vulcanianDurationSeconds", vulcanianDurationSeconds);
+        requirePositive("exsolutionTimescale", exsolutionTimescale);
+        requirePositive("wallSlipStressPa", wallSlipStressPa);
+        if (!(wallFrictionCoefficient >= 0)) throw new IllegalArgumentException("wallFrictionCoefficient must be >= 0");
+        if (gridSteps < 20) throw new IllegalArgumentException("gridSteps must be >= 20");
     }
 
     public ConduitConfig withInitialOpenness(double value) {
-        return new ConduitConfig(permeableOutgassingTimescale, fragmentationGasFraction, fragmentationPressureMPa,
-                brittleStressPa, degassedWaterWt, slugFlowMaxViscosity, reopenOverpressureMPa, conduitSealTimescale,
-                value, slugGasFraction, slugGasMassKg, slugOverpressureMPa, strombolianGasMassFraction,
-                strombolianDurationSeconds, plugTrappedGasFraction, plugCapDepthM, plugPorosity, plugStrengthMPa,
-                plugResealSeconds, vulcanianGasMassFraction, vulcanianDurationSeconds);
-    }
-
-    public ConduitConfig withPermeableOutgassingTimescale(double value) {
-        return new ConduitConfig(value, fragmentationGasFraction, fragmentationPressureMPa,
-                brittleStressPa, degassedWaterWt, slugFlowMaxViscosity, reopenOverpressureMPa, conduitSealTimescale,
-                initialOpenness, slugGasFraction, slugGasMassKg, slugOverpressureMPa, strombolianGasMassFraction,
-                strombolianDurationSeconds, plugTrappedGasFraction, plugCapDepthM, plugPorosity, plugStrengthMPa,
-                plugResealSeconds, vulcanianGasMassFraction, vulcanianDurationSeconds);
+        return new ConduitConfig(value, reopenOverpressureMPa, conduitSealTimescale, fragmentationPorosity, brittleStressPa, foamStrengthPa,
+                turbulentFrictionFactor, referencePermeability, percolationThreshold, wallPermeability, gasViscosity,
+                microlitesPerWtWater, crystallisationTimescale, maxCrystalFraction, bubbleRadiusM, surfaceTension,
+                coalescenceViscosity, slugLengthDiameters, plugViscosityLog10, plugStrengthMPa, plugCapDepthM, plugPorosity,
+                exsolutionTimescale, wallSlipStressPa, wallFrictionCoefficient, gridSteps);
     }
 
     public ConduitConfig withReopenOverpressureMPa(double value) {
-        return new ConduitConfig(permeableOutgassingTimescale, fragmentationGasFraction, fragmentationPressureMPa,
-                brittleStressPa, degassedWaterWt, slugFlowMaxViscosity, value, conduitSealTimescale,
-                initialOpenness, slugGasFraction, slugGasMassKg, slugOverpressureMPa, strombolianGasMassFraction,
-                strombolianDurationSeconds, plugTrappedGasFraction, plugCapDepthM, plugPorosity, plugStrengthMPa,
-                plugResealSeconds, vulcanianGasMassFraction, vulcanianDurationSeconds);
+        return new ConduitConfig(initialOpenness, value, conduitSealTimescale, fragmentationPorosity, brittleStressPa, foamStrengthPa,
+                turbulentFrictionFactor, referencePermeability, percolationThreshold, wallPermeability, gasViscosity,
+                microlitesPerWtWater, crystallisationTimescale, maxCrystalFraction, bubbleRadiusM, surfaceTension,
+                coalescenceViscosity, slugLengthDiameters, plugViscosityLog10, plugStrengthMPa, plugCapDepthM, plugPorosity,
+                exsolutionTimescale, wallSlipStressPa, wallFrictionCoefficient, gridSteps);
     }
 
-    public ConduitConfig withSlug(double gasFraction, double meanGasMassKg) {
-        return new ConduitConfig(permeableOutgassingTimescale, fragmentationGasFraction, fragmentationPressureMPa,
-                brittleStressPa, degassedWaterWt, slugFlowMaxViscosity, reopenOverpressureMPa, conduitSealTimescale,
-                initialOpenness, gasFraction, meanGasMassKg, slugOverpressureMPa, strombolianGasMassFraction,
-                strombolianDurationSeconds, plugTrappedGasFraction, plugCapDepthM, plugPorosity, plugStrengthMPa,
-                plugResealSeconds, vulcanianGasMassFraction, vulcanianDurationSeconds);
+    public ConduitConfig withPermeability(double reference, double wall) {
+        return new ConduitConfig(initialOpenness, reopenOverpressureMPa, conduitSealTimescale, fragmentationPorosity,
+                brittleStressPa, foamStrengthPa, turbulentFrictionFactor, reference, percolationThreshold, wall, gasViscosity,
+                microlitesPerWtWater, crystallisationTimescale, maxCrystalFraction, bubbleRadiusM, surfaceTension,
+                coalescenceViscosity, slugLengthDiameters, plugViscosityLog10, plugStrengthMPa, plugCapDepthM, plugPorosity,
+                exsolutionTimescale, wallSlipStressPa, wallFrictionCoefficient, gridSteps);
     }
 
-    public ConduitConfig withPlug(double strengthMPa, double resealSeconds) {
-        return new ConduitConfig(permeableOutgassingTimescale, fragmentationGasFraction, fragmentationPressureMPa,
-                brittleStressPa, degassedWaterWt, slugFlowMaxViscosity, reopenOverpressureMPa, conduitSealTimescale,
-                initialOpenness, slugGasFraction, slugGasMassKg, slugOverpressureMPa, strombolianGasMassFraction,
-                strombolianDurationSeconds, plugTrappedGasFraction, plugCapDepthM, plugPorosity, strengthMPa,
-                resealSeconds, vulcanianGasMassFraction, vulcanianDurationSeconds);
+    public ConduitConfig withPlug(double viscosityLog10, double strengthMPa) {
+        return new ConduitConfig(initialOpenness, reopenOverpressureMPa, conduitSealTimescale, fragmentationPorosity,
+                brittleStressPa, foamStrengthPa, turbulentFrictionFactor, referencePermeability, percolationThreshold, wallPermeability,
+                gasViscosity, microlitesPerWtWater, crystallisationTimescale, maxCrystalFraction, bubbleRadiusM,
+                surfaceTension, coalescenceViscosity, slugLengthDiameters, viscosityLog10, strengthMPa, plugCapDepthM,
+                plugPorosity, exsolutionTimescale, wallSlipStressPa, wallFrictionCoefficient, gridSteps);
     }
 
     private static void requirePositive(String name, double value) {

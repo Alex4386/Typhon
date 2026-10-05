@@ -150,7 +150,8 @@ class VolcanoSystemTest {
         assertTrue(w.volcano().chamber().erupting());
         assertEquals(AlertLevel.ERUPTING, w.volcano().alert().level());
         assertTrue(w.volcano().coupler().effusing(), "basalt should effuse");
-        assertFalse(w.volcano().chamber().fragmented());
+        VentPartition.Result p = w.volcano().coupler().partition();
+        assertTrue(p.lavaShare() > 0.4, "fountains fall back molten and feed lava: " + p);
         assertFalse(events(frames, SeismicEvent.class).isEmpty(), "unrest and eruption should be seismic");
 
         boolean lavaPlaced = frames.stream().flatMap(f -> f.blockChanges().stream())
@@ -159,8 +160,10 @@ class VolcanoSystemTest {
         assertTrue(w.lava().totalLavaVolume() + w.lava().solidifiedVolume() > 0);
         // The lava field receives the real erupted volume on an L-metre grid (V/L³ blocks).
         assertEquals(VolcanoScaling.DEFAULT.metersPerBlock(), w.lava().metersPerBlock());
-        double expected = w.volcano().chamber().eruptedVolume();
-        assertEquals(expected, w.lava().emittedVolume(), expected * 0.2 + 1);
+        double erupted = w.volcano().chamber().eruptedVolume();
+        assertTrue(w.lava().emittedVolume() <= erupted * 1.05 + 1, "lava never exceeds the erupted volume");
+        assertTrue(w.lava().emittedVolume() >= erupted * 0.4,
+                "most of it becomes lava: " + w.lava().emittedVolume() + " of " + erupted);
     }
 
     @Test
@@ -190,16 +193,19 @@ class VolcanoSystemTest {
         int before = 20 * 240;
         int after = 20 * 60;
 
-        World reference = world(9, basalt(), null);
+        // Gas-poor basalt through a narrow conduit: lava only, and it stays inside the area the host
+        // re-samples (terrain outside it is not re-sent).
+        MagmaChamberConfig effusive = basalt().toBuilder().initialWaterWt(0.3).rechargeWaterWt(0.3).conduitRadius(0.7).build();
+        World reference = world(9, effusive, null);
         List<EngineFrame> referenceFrames = run(reference.engine(), before + after);
 
-        World first = world(9, basalt(), null);
+        World first = world(9, effusive, null);
         run(first.engine(), before);
         assertTrue(first.volcano().chamber().erupting(), "save point should be mid-eruption");
         InMemorySaveStore saved = Saves.save(first.engine());
         TerrainSnapshot terrain = resample(first.terrain());
 
-        World second = world(9, basalt(), saved);
+        World second = world(9, effusive, saved);
         second.engine().submit(terrain); // host re-sends the live terrain (unchanged blocks keep the exact surface)
         List<EngineFrame> resumed = run(second.engine(), after);
 

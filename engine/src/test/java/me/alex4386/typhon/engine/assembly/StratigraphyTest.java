@@ -69,6 +69,7 @@ class StratigraphyTest {
     private static VolcanoSystem system(String id, VentSite vent, TerrainModel terrain, LavaFlow lava) {
         MagmaChamberConfig chamber = MagmaChamberConfig.builder(id, new BlockPos(vent.position().x(), 40, vent.position().z()))
                 .initialOverpressureMPa(14.95)
+                .initialWaterWt(0.3).rechargeWaterWt(0.3) // gas-poor: lava rather than fountain tephra
                 .supplyVariability(0)
                 .build();
         return VolcanoSystem.builder(id, List.of(vent), terrain, lava)
