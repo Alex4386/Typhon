@@ -125,6 +125,7 @@ public final class Presets {
                             .build();
                     VolcanoSystem volcano = VolcanoSystem.builder("kilauea", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
+                            .stations(Stations.network("KIL", vent, 40, 90))
                             .scaling(scaling)
                             .wind(7, 0.6, WIND_VARIABILITY)
                             .build();
@@ -169,6 +170,7 @@ public final class Presets {
                             .build();
                     VolcanoSystem volcano = VolcanoSystem.builder("stromboli", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
+                            .stations(Stations.network("STR", vent, 40, 90))
                             .scaling(scaling)
                             .ballisticFraction(0.3)
                             .wind(8, 1.2, WIND_VARIABILITY)
@@ -211,6 +213,7 @@ public final class Presets {
                             .build();
                     VolcanoSystem volcano = VolcanoSystem.builder("st-helens", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
+                            .stations(Stations.network("MSH", vent, 40, 90))
                             .scaling(scaling)
                             .ballisticFraction(0.02)
                             .wind(15, 0.0, WIND_VARIABILITY)
@@ -253,6 +256,7 @@ public final class Presets {
                             .build();
                     VolcanoSystem volcano = VolcanoSystem.builder("pinatubo", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
+                            .stations(Stations.network("PIN", vent, 40, 90))
                             .scaling(scaling)
                             .ballisticFraction(0.005)
                             .wind(20, Math.PI, WIND_VARIABILITY)
@@ -295,6 +299,7 @@ public final class Presets {
                             .build();
                     VolcanoSystem volcano = VolcanoSystem.builder("surtsey", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
+                            .stations(Stations.network("SUR", vent, 40, 90))
                             .scaling(scaling)
                             .wind(10, 0.8, WIND_VARIABILITY)
                             .build();
@@ -354,6 +359,7 @@ public final class Presets {
                     subsurface.gradientCPerKm = 100; // caldera heat flow ~30–40× the continental average
                     VolcanoSystem volcano = VolcanoSystem.builder("yellowstone", basins, b.terrain(), b.lava())
                             .chamber(chamber)
+                            .stations(Stations.network("YEL", basins.get(0), 40, 90))
                             .scaling(scaling)
                             .geothermal(geothermal)
                             .subsurfaceConfig(subsurface)

@@ -156,6 +156,7 @@ public final class VolcanoSystem {
 
         if (b.deformation) {
             DeformationConfig deformationConfig = DeformationConfig.forChamber(chamberConfig, scaling);
+            deformationConfig.stations = new java.util.ArrayList<>(b.stations);
             this.deformation = new DeformationModel(deformationConfig, chamber,
                     dikes != null ? dikes::geometries : List::of, b.terrain);
         } else {
@@ -273,6 +274,7 @@ public final class VolcanoSystem {
         private boolean dikes = true;
         private boolean massFlows = true;
         private boolean deformation = true;
+        private List<me.alex4386.typhon.engine.deformation.GeodeticStation> stations = List.of();
         private DikeConfig dikeConfig;
         private MassFlowConfig pdcConfig;
         private MassFlowConfig laharConfig;
@@ -342,6 +344,11 @@ public final class VolcanoSystem {
         public Builder dikesEnabled(boolean enabled) { this.dikes = enabled; return this; }
         public Builder massFlowsEnabled(boolean enabled) { this.massFlows = enabled; return this; }
         public Builder deformationEnabled(boolean enabled) { this.deformation = enabled; return this; }
+        /** Virtual GNSS/tilt stations sampled by the deformation model (world columns). */
+        public Builder stations(List<me.alex4386.typhon.engine.deformation.GeodeticStation> stations) {
+            this.stations = List.copyOf(stations);
+            return this;
+        }
         /** Dike parameters; length scale and time compression are overridden by {@link #scaling}. */
         public Builder dikes(DikeConfig config) { this.dikeConfig = config; return this; }
         /** Mass-flow parameters; {@code metersPerBlock} is overridden by {@link #scaling}. */

@@ -52,7 +52,7 @@ public final class ConfigChanges {
             "name", "active", "timeCompression*", "ballisticFraction",
             "magma.chamber.supplyRate", "magma.chamber.supplyVariability",
             "geothermal.timeScale", "geothermal.prewarmSeconds", "geothermal.max*", "geothermal.*PerHour",
-            "tephra.initialWind*", "tephra.max*");
+            "tephra.initialWind*", "tephra.max*", "deformation.stations*");
 
     public static final ConfigChanges NONE = new ConfigChanges(List.of());
 

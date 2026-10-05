@@ -168,7 +168,11 @@ final class RealPresets {
                             .maxEruptionRate(150)
                             .build();
                     return b.volcano(VolcanoSystem.builder("kilauea-real", List.of(vent), b.terrain(), b.lava())
-                            .chamber(chamber).scaling(scaling(L)).tephra(tephra())
+                            .chamber(chamber)
+                            .stations(List.of(
+                                    // approximate positions of HVO's caldera-rim GNSS sites (Uwekahuna NW, Crater Rim SE)
+                                    Stations.at("UWEV", vent, -1400, 1400, L), Stations.at("CRIM", vent, 1800, -1800, L),
+                                    Stations.at("KIL-FLK-S", vent, 0, -4000, L))).scaling(scaling(L)).tephra(tephra())
                             .wind(7, 0.6, Presets.WIND_VARIABILITY).build());
                 });
     }
@@ -230,7 +234,9 @@ final class RealPresets {
                             .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
                             .build();
                     return b.volcano(VolcanoSystem.builder("stromboli-real", List.of(vent), b.terrain(), b.lava())
-                            .chamber(chamber).scaling(scaling(L)).tephra(tephra()).ballisticFraction(0.3)
+                            .chamber(chamber)
+                            .stations(List.of(Stations.at("STR-N", vent, 0, 1200, L), Stations.at("STR-E", vent, 1500, 0, L),
+                                    Stations.at("STR-S", vent, 0, -1500, L))).scaling(scaling(L)).tephra(tephra()).ballisticFraction(0.3)
                             .wind(8, 1.2, Presets.WIND_VARIABILITY).build());
                 });
     }
@@ -291,7 +297,9 @@ final class RealPresets {
                             .maxEruptionRate(8000)
                             .build();
                     return b.volcano(VolcanoSystem.builder("st-helens-real", List.of(vent), b.terrain(), b.lava())
-                            .chamber(chamber).scaling(scaling(L)).tephra(tephra()).ballisticFraction(0.02)
+                            .chamber(chamber)
+                            .stations(List.of(Stations.at("MSH-N", vent, 0, 3000, L), Stations.at("MSH-E", vent, 3000, 0, L),
+                                    Stations.at("MSH-S", vent, 0, -3000, L))).scaling(scaling(L)).tephra(tephra()).ballisticFraction(0.02)
                             .wind(15, 0.0, Presets.WIND_VARIABILITY).build());
                 });
     }
@@ -349,7 +357,9 @@ final class RealPresets {
                             .maxEruptionRate(4e5)
                             .build();
                     return b.volcano(VolcanoSystem.builder("pinatubo-real", List.of(vent), b.terrain(), b.lava())
-                            .chamber(chamber).scaling(scaling(L)).tephra(tephra()).ballisticFraction(0.005)
+                            .chamber(chamber)
+                            .stations(List.of(Stations.at("PIN-N", vent, 0, 4000, L), Stations.at("PIN-E", vent, 4000, 0, L),
+                                    Stations.at("PIN-W", vent, -4000, 0, L))).scaling(scaling(L)).tephra(tephra()).ballisticFraction(0.005)
                             .wind(20, Math.PI, Presets.WIND_VARIABILITY).build());
                 });
     }
@@ -490,7 +500,12 @@ final class RealPresets {
                     subsurface.rainfallMmPerHour = 0.1;
                     subsurface.gradientCPerKm = 100; // caldera heat flow ~30–40× the continental average
                     return b.volcano(VolcanoSystem.builder("yellowstone-real", basins, b.terrain(), b.lava())
-                            .chamber(chamber).scaling(scaling(L)).tephra(tephra()).geothermal(geothermal)
+                            .chamber(chamber)
+                            .stations(List.of(
+                                    // approximate: Old Faithful (OFW2) and Hayden Valley (HVWY) GNSS sites near the basins
+                                    Stations.at("OFW2", basins.get(0), 0, 300, L),
+                                    Stations.at("HVWY", basins.get(2), -500, 500, L),
+                                    Stations.at("YEL-NOR", basins.get(1), 300, 0, L))).scaling(scaling(L)).tephra(tephra()).geothermal(geothermal)
                             .subsurfaceConfig(subsurface)
                             .geothermalPrewarm(300 * 365.25 * 86400).build());
                 });
