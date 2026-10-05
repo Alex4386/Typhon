@@ -185,6 +185,8 @@ public final class LavaFlow implements Subsystem {
 
     // per-step scratch
     private final double[] flux = new double[DIRS];
+    private final double[] inVolume = new double[DIRS];
+    private final int[] inUnit = new int[DIRS];
     private final TreeMap<Long, OceanEntry> oceanEntries = new TreeMap<>();
     private long oceanGeneration; // bumped whenever oceanEntries is cleared (invalidates chunk caches)
     private final SolidStats solidAcc = new SolidStats();
@@ -610,6 +612,7 @@ public final class LavaFlow implements Subsystem {
             int lx = i & 15;
             int lz = i >> 4;
             double inflow = 0;
+            int inflows = 0;
             for (int d = 0; d < DIRS; d++) {
                 int nx = lx + DX[d];
                 int nz = lz + DZ[d];
@@ -626,23 +629,13 @@ public final class LavaFlow implements Subsystem {
                 heat += in * nc.temperature[k];
                 silica += in * nc.silica[k];
                 water += in * nc.water[k];
+                inVolume[inflows] = in;
+                inUnit[inflows++] = nc.unit[k];
             }
             volume += inflow;
-            if (inflow > 0) {
-                double threshold = UNIT_SHARE * volume;
-                for (int d = 0; d < DIRS; d++) {
-                    int nx = lx + DX[d];
-                    int nz = lz + DZ[d];
-                    LavaChunk nc = c;
-                    if (nx < 0 || nx > 15 || nz < 0 || nz > 15) {
-                        nc = neighbourAt(c, nx, nz, false);
-                        if (nc == null) continue;
-                    }
-                    if (nc.fluxStamp != stamp) continue;
-                    int k = ((nz & 15) << 4) | (nx & 15);
-                    double in = nc.outflow[(d ^ 1) * AREA + k];
-                    if (in >= threshold && nc.unit[k] > unit) unit = nc.unit[k];
-                }
+            double threshold = UNIT_SHARE * volume;
+            for (int n = 0; n < inflows; n++) {
+                if (inVolume[n] >= threshold && inUnit[n] > unit) unit = inUnit[n];
             }
 
             c.nextThickness[i] = volume;
@@ -940,6 +933,7 @@ public final class LavaFlow implements Subsystem {
         double cavity = Math.max(0, (c.roofTop[i] - hc) - c.bed[i]);
         WorldModel world = world();
         int lavaUnit = c.unit[i];
+        int versionBefore = world.version(x, z);
         if (cavity > 0) {
             world.deposit(x, z, cavity, MaterialTable.VOID,
                     Provenance.sibling(world, lavaUnit, DepositType.CAVITY, currentTime), 0, 1, 0);
@@ -947,7 +941,7 @@ public final class LavaFlow implements Subsystem {
         Material roofRock = LavaPalette.rockMaterial(LavaPalette.crustSilica(kind), false, false);
         world.deposit(x, z, hc, roofRock, Provenance.sibling(world, lavaUnit, DepositType.TUBE_ROOF, currentTime),
                 LayerFlags.FRACTURED, roofRock.porosity(), 1);
-        rereadBed(c, i);
+        rereadBed(c, i, versionBefore);
         tubeColumns.put(columnKey(x, z), new int[] {voidBottom, roofBottom - 1});
 
         solidifiedVolume += hc * area();
@@ -1032,8 +1026,10 @@ public final class LavaFlow implements Subsystem {
         if (!(thickness > 0)) return;
         int x = c.worldX(i);
         int z = c.worldZ(i);
+        int versionBefore = world().version(x, z);
         world().deposit(x, z, thickness, material, unit, flags, material.porosity(), 1.0);
-        rereadBed(c, i); // the stacks hold elevations as floats; stay identical to a fresh read (restores)
+        // the stacks hold elevations as floats: re-read so the cache equals a fresh read (restores)
+        rereadBed(c, i, versionBefore);
         c.solid[i] += thickness;
     }
 
@@ -1302,12 +1298,18 @@ public final class LavaFlow implements Subsystem {
         }
     }
 
-    private void rereadBed(LavaChunk c, int i) {
+    /**
+     * Re-reads one column's bed after this field edited it, and accounts for the edit in the chunk's
+     * version sum ({@code versionBefore} = the column's version before the edit) so the next refresh
+     * does not re-read the whole chunk because of the field's own deposits.
+     */
+    private void rereadBed(LavaChunk c, int i, int versionBefore) {
         WorldModel world = world();
         int x = c.worldX(i);
         int z = c.worldZ(i);
         double surface = world.surfaceZ(x, z);
         if (surface == surface) c.bed[i] = surface + world.uplift(x, z);
+        if (c.bedVersion != Long.MIN_VALUE) c.bedVersion += world.version(x, z) - versionBefore;
     }
 
     /** Fed by an effusive source this step: vents stay open (no crust). */
