@@ -24,6 +24,8 @@ import java.util.Map;
 final class Groundwater {
     private final SubsurfaceGrid grid;
     private final SubsurfaceConfig config;
+    private final Parallel parallel;
+    private static final int SOR_BLOCK = 2048;
 
     // Budget of the last step (m³)
     double rechargeVolume;
@@ -41,6 +43,7 @@ final class Groundwater {
     Groundwater(SubsurfaceGrid grid, SubsurfaceConfig config) {
         this.grid = grid;
         this.config = config;
+        this.parallel = new Parallel(config);
     }
 
     /** Lowest permitted water-table elevation in a column (just above the grid bottom). */
@@ -197,22 +200,36 @@ final class Groundwater {
         double[] h = h0.clone();
         double omega = config.sorOmega;
         int iterations = 0;
+        // Red-black SOR: within one colour every update reads only the other colour, so blocks of
+        // columns are updated in parallel with results independent of the thread count.
+        int blocks = (m + SOR_BLOCK - 1) / SOR_BLOCK;
+        List<Integer> blockList = new ArrayList<>(blocks);
+        for (int b = 0; b < blocks; b++) blockList.add(b);
+        double[] blockChange = new double[blocks];
         for (; iterations < config.groundwaterIterations; iterations++) {
-            double maxChange = 0;
+            java.util.Arrays.fill(blockChange, 0);
             for (int colour = 0; colour < 2; colour++) {
-                for (int i = 0; i < m; i++) {
-                    if (fixed[i] || red[i] != (colour == 0)) continue;
-                    double sum = storageCoef[i] * h0[i] + source[i];
-                    if (east[i] >= 0) sum += tEast[i] * h[east[i]];
-                    if (west[i] >= 0) sum += tEast[west[i]] * h[west[i]];
-                    if (south[i] >= 0) sum += tSouth[i] * h[south[i]];
-                    if (north[i] >= 0) sum += tSouth[north[i]] * h[north[i]];
-                    double gs = sum / diag[i];
-                    double next = h[i] + omega * (gs - h[i]);
-                    maxChange = Math.max(maxChange, Math.abs(next - h[i]));
-                    h[i] = next;
-                }
+                boolean wantRed = colour == 0;
+                parallel.forEach(blockList, (bi, b) -> {
+                    int end = Math.min(m, (b + 1) * SOR_BLOCK);
+                    double change = blockChange[b];
+                    for (int i = b * SOR_BLOCK; i < end; i++) {
+                        if (fixed[i] || red[i] != wantRed) continue;
+                        double sum = storageCoef[i] * h0[i] + source[i];
+                        if (east[i] >= 0) sum += tEast[i] * h[east[i]];
+                        if (west[i] >= 0) sum += tEast[west[i]] * h[west[i]];
+                        if (south[i] >= 0) sum += tSouth[i] * h[south[i]];
+                        if (north[i] >= 0) sum += tSouth[north[i]] * h[north[i]];
+                        double gs = sum / diag[i];
+                        double next = h[i] + omega * (gs - h[i]);
+                        change = Math.max(change, Math.abs(next - h[i]));
+                        h[i] = next;
+                    }
+                    blockChange[b] = change;
+                });
             }
+            double maxChange = 0;
+            for (double c : blockChange) maxChange = Math.max(maxChange, c);
             if (maxChange < 1e-6) { // micrometre head changes: converged
                 iterations++;
                 break;

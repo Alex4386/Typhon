@@ -4,6 +4,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.geothermal.Geothermal;
+import me.alex4386.typhon.engine.subsurface.Subsurface;
+import me.alex4386.typhon.engine.subsurface.WaterBudget;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeature;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
@@ -74,6 +76,21 @@ public record Sample(long step, double timeSeconds, Map<String, Double> values, 
             for (HydrothermalFeature kind : HydrothermalFeature.values()) {
                 v.put("features_" + kind.name().toLowerCase(), (double) geothermal.count(kind));
             }
+        }
+        Subsurface subsurface = volcano.subsurface();
+        if (subsurface != null) {
+            WaterBudget water = subsurface.budget();
+            v.put("water_rain_m3", water.rain());
+            v.put("water_surface_m3", water.surfaceStorage());
+            v.put("water_ground_m3", water.groundStorage());
+            v.put("water_boiled_m3", water.boiled());
+            v.put("water_springs_m3", subsurface.springDischarge());
+            v.put("water_to_sea_m3", water.seaOutflow() + water.seaGroundwater());
+            v.put("water_imbalance_m3", water.imbalance());
+            int x = volcano.vents().get(0).position().x();
+            int z = volcano.vents().get(0).position().z();
+            v.put("vent_water_table_depth_m", subsurface.waterTableDepthM(x, z));
+            v.put("vent_ground_temperature_10m_c", subsurface.temperatureC(x, z, 10));
         }
         v.put("world_changes", (double) world.appliedChanges());
         v.put("world_conflicts", (double) world.conflicts());

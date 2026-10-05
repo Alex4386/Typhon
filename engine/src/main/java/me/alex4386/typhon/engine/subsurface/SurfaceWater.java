@@ -84,6 +84,7 @@ final class SurfaceWater {
 
     private final WorldModel world;
     private final SubsurfaceConfig config;
+    private final Parallel parallel;
     private final TreeMap<Long, Tile> tiles = new TreeMap<>();
     /** World-model tiles whose standing water has been imported. */
     final TreeSet<Long> seeded = new TreeSet<>();
@@ -104,6 +105,7 @@ final class SurfaceWater {
     SurfaceWater(WorldModel world, SubsurfaceConfig config) {
         this.world = world;
         this.config = config;
+        this.parallel = new Parallel(config);
     }
 
     static long key(int tx, int tz) {
@@ -448,8 +450,10 @@ final class SurfaceWater {
         double g = SubsurfaceGrid.GRAVITY;
         double n2 = config.manningN * config.manningN;
         double minDepth = config.minFlowDepthM;
+        // Each phase writes only the tile being processed, so tiles run in parallel and the result
+        // does not depend on the thread count.
         // 1. Face discharges (east and south face of every column).
-        for (Tile t : list) {
+        parallel.forEach(list, (idx, t) -> {
             for (int i = 0; i < AREA; i++) {
                 if (!t.known[i]) {
                     t.qEast[i] = 0;
@@ -465,9 +469,9 @@ final class SurfaceWater {
                 t.qEast[i] = faceFlux(t, i, te, je, t.qEast[i], dt, dx, g, n2, minDepth);
                 t.qSouth[i] = faceFlux(t, i, ts, js, t.qSouth[i], dt, dx, g, n2, minDepth);
             }
-        }
+        });
         // 2. Outflow limiter: scale the outgoing faces of each column so its depth stays ≥ 0.
-        for (Tile t : list) {
+        parallel.forEach(list, (idx, t) -> {
             double[] f = t.limiter;
             for (int i = 0; i < AREA; i++) {
                 f[i] = 1;
@@ -484,19 +488,61 @@ final class SurfaceWater {
                 out *= dt / dx;
                 if (out > t.depth[i]) f[i] = out > 0 ? t.depth[i] / out : 0;
             }
-        }
-        // 3. Apply fluxes (each face once, from the column on its west/north side).
+        });
+        // 3. Every column gathers the water through its four faces. Both sides of a face compute the
+        // same amount, so water is conserved exactly; open-water exchange is booked by the land side.
         double area = cellArea();
-        for (Tile t : list) {
+        double[][] sea = new double[list.size()][2]; // {inflow from open water, outflow to open water}
+        parallel.forEach(list, (idx, t) -> {
+            double[] book = sea[idx];
             for (int i = 0; i < AREA; i++) {
+                if (!t.known[i] || t.fixed(i)) continue;
                 int lx = i & 31;
                 int lz = i >> 5;
-                if (t.qEast[i] != 0) transfer(t, i, lx < 31 ? t : t.east, lx < 31 ? i + 1 : i - 31, t.qEast[i], dt, dx, area);
-                if (t.qSouth[i] != 0) {
-                    transfer(t, i, lz < 31 ? t : t.south, lz < 31 ? i + TILE : i - 31 * TILE, t.qSouth[i], dt, dx, area);
-                }
+                double delta = 0;
+                // East and south faces: owned here, + = out of this column.
+                Tile te = lx < 31 ? t : t.east;
+                int je = lx < 31 ? i + 1 : i - 31;
+                delta -= moved(t, i, te, je, t.qEast[i], dt, dx, area, book, true);
+                Tile ts = lz < 31 ? t : t.south;
+                int js = lz < 31 ? i + TILE : i - 31 * TILE;
+                delta -= moved(t, i, ts, js, t.qSouth[i], dt, dx, area, book, true);
+                // West and north faces: owned by the neighbour, + = into this column.
+                Tile tw = lx > 0 ? t : t.west;
+                int jw = lx > 0 ? i - 1 : i + 31;
+                if (tw != null) delta += moved(tw, jw, t, i, tw.qEast[jw], dt, dx, area, book, false);
+                Tile tn = lz > 0 ? t : t.north;
+                int jn = lz > 0 ? i - TILE : i + 31 * TILE;
+                if (tn != null) delta += moved(tn, jn, t, i, tn.qSouth[jn], dt, dx, area, book, false);
+                double d = t.depth[i] + delta;
+                t.depth[i] = d < 0 ? 0 : d;
             }
+        });
+        for (double[] book : sea) {
+            seaInflow += book[0];
+            seaOutflow += book[1];
         }
+    }
+
+    /**
+     * Depth (m over one column) moved through the face from {@code (a, i)} to {@code (b, j)} this
+     * substep ({@code q} owned by {@code a}). When the far side is open water, the exchange is
+     * booked: {@code book[0]} inflow from it, {@code book[1]} outflow to it.
+     */
+    private static double moved(Tile a, int i, Tile b, int j, double q, double dt, double dx, double area,
+            double[] book, boolean landIsA) {
+        if (q == 0 || b == null) return 0;
+        double scale = q > 0 ? a.limiter[i] : b.limiter[j];
+        double depth = q * scale * dt / dx; // + = from a to b
+        Tile open = landIsA ? b : a;
+        int k = landIsA ? j : i;
+        if (open.fixed(k)) {
+            double volume = depth * area; // + = a → b
+            double towardsOpen = landIsA ? volume : -volume;
+            if (towardsOpen > 0) book[1] += towardsOpen;
+            else book[0] -= towardsOpen;
+        }
+        return depth;
     }
 
     private static double faceFlux(Tile t, int i, Tile o, int j, double q, double dt, double dx, double g, double n2,
@@ -512,26 +558,5 @@ final class SurfaceWater {
         if (hf <= minDepth) return 0;
         double slope = (etaJ - etaI) / dx;
         return (q - g * hf * dt * slope) / (1 + g * dt * n2 * Math.abs(q) / Math.pow(hf, 7.0 / 3.0));
-    }
-
-    private void transfer(Tile t, int i, Tile o, int j, double q, double dt, double dx, double area) {
-        if (o == null) return;
-        double scale = q > 0 ? t.limiter[i] : o.limiter[j];
-        double depthMoved = q * scale * dt / dx; // m over one column, + = from (t,i) to (o,j)
-        double volume = depthMoved * area;
-        if (t.fixed(i)) {
-            seaInflow += Math.max(0, volume);
-            seaOutflow += Math.max(0, -volume);
-        } else {
-            t.depth[i] -= depthMoved;
-            if (t.depth[i] < 0) t.depth[i] = 0;
-        }
-        if (o.fixed(j)) {
-            seaOutflow += Math.max(0, volume);
-            seaInflow += Math.max(0, -volume);
-        } else {
-            o.depth[j] += depthMoved;
-            if (o.depth[j] < 0) o.depth[j] = 0;
-        }
     }
 }
