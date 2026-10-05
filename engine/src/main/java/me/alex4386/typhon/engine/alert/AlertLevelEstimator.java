@@ -19,6 +19,8 @@ import me.alex4386.typhon.engine.save.StateWriter;
  *
  * <p>It also suggests the eruption style the magma would produce now (see
  * {@link EruptionStyleClassifier}).
+ *
+ * <p>References: Gardner &amp; Guffanti (2006), USGS Fact Sheet 2006-3139 (alert-level system); Endo &amp; Murray (1991), Bull. Volcanol. 53:533-545 (RSAM). See {@code docs/references.md}.
  */
 public final class AlertLevelEstimator implements Subsystem {
     private final AlertConfig config;

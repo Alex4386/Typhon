@@ -7,6 +7,8 @@ import me.alex4386.typhon.engine.math.BlockPos;
  *
  * <p>Amplitude decays with hypocentral distance as {@code (r₀ / r)^1.5} (body-wave geometric
  * spreading plus attenuation), with {@code r₀ = 10} blocks as the near-field saturation distance.
+ *
+ * <p>References: McNutt (2005), Annu. Rev. Earth Planet. Sci. 33:461-491 (volcano seismology). See {@code docs/references.md}.
  */
 public final class SeismicIntensity {
     public static final double NEAR_FIELD_DISTANCE = 10;

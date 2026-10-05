@@ -62,6 +62,8 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * the chamber is quiet and {@code eruptiveTimeScale} times faster during eruptions, so dormancy that
  * takes centuries in nature passes in an hour of play. All {@link MagmaState} rates are per
  * simulated second.
+ *
+ * <p>References: Blake (1981), Nature 289:783-785 (open-chamber overpressure and tensile failure); Huppert &amp; Woods (2002), Nature 420:493-495 (volatiles raise compressibility); Wilson &amp; Head (1981), JGR 86:2971-3001 (conduit flow, H₂O solubility). See {@code docs/references.md}.
  */
 public final class MagmaChamber implements Subsystem, MagmaState {
     static final double ROCK_DENSITY = 2600;

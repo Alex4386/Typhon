@@ -54,6 +54,8 @@ import me.alex4386.typhon.engine.save.StateWriter;
  *
  * <p>Depth is tracked in real metres; the model world compresses it between the chamber and the
  * surface, so the tip's world y is interpolated.
+ *
+ * <p>References: Rubin (1995), Annu. Rev. Earth Planet. Sci. 23:287-336 (propagation of magma-filled cracks). See {@code docs/references.md}.
  */
 public final class DikePropagation implements Subsystem {
     static final double GRAVITY = 9.81;

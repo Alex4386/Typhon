@@ -40,6 +40,8 @@ import me.alex4386.typhon.engine.world.WorldModel;
  *
  * <p>Iteration is in key order everywhere, so results are deterministic and independent of thread
  * count; state round-trips bit for bit through {@link #saveState}/{@link #loadState}.
+ *
+ * <p>References: Haas (1971), Econ. Geol. 66:940-946 (boiling point for depth); Bates et al. (2010), J. Hydrol. 387:33-45 (local-inertial shallow water). See {@code docs/references.md}.
  */
 public final class Subsurface implements Subsystem, HydrothermalField {
     public static final String ID = "subsurface";

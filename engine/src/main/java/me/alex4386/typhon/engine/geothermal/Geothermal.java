@@ -65,6 +65,8 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * <p>All surface edits are compare-and-set against the surface id from the {@link TerrainModel} and
  * are mirrored back into it. Blocks below the surface (geyser pipes, spring floors) are unknown to
  * the terrain model and are written unconditionally.
+ *
+ * <p>References: Fournier (1989), Annu. Rev. Earth Planet. Sci. 17:13-53 (Yellowstone hydrothermal system); Haas (1971), Econ. Geol. 66:940-946 (boiling point with depth). See {@code docs/references.md}.
  */
 public final class Geothermal implements Subsystem, HeatSources {
     private final String id;

@@ -104,6 +104,8 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * <p>Hosts must not report engine-rendered lava, magma-block skin or roof rock above
  * {@link TerrainModel} ground as ground in later terrain snapshots, or the melt would be counted
  * twice; tube voids are listed by {@link #tubes()}.
+ *
+ * <p>References: Del Negro et al. (2008), Bull. Volcanol. 70:805-812 (MAGFLOW cellular automaton); Hon et al. (1994), GSA Bull. 106:351-370 (crust growth, inflation, tubes). See {@code docs/references.md}.
  */
 public final class LavaFlow implements Subsystem {
     public static final String ID = "lava";
