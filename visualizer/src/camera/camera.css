@@ -4,7 +4,8 @@
   top: 10px;
   right: 10px;
   width: max-content;
-  max-width: min(620px, 56%);
+  /* leave room for the toolbox on the left (≈ 410 px) */
+  max-width: max(250px, min(620px, calc(100% - 430px)));
   background: rgba(22, 27, 34, 0.88);
   border: 1px solid var(--line);
   border-radius: 10px;

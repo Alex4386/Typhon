@@ -2,7 +2,7 @@ import { Field } from '../protocol/fields';
 import type { StateMessage, VolcanoInfo, WorldInfo, XY } from '../protocol/messages';
 import { displayZ } from '../scene/Terrain';
 import { tileStore } from '../store/store';
-import { worldExtent } from '../util/world';
+import { columnOf, sampleColumn, worldExtent } from '../util/world';
 import { frameDistance, orbitPose, type Bookmark, type CameraPose, type FollowTarget } from './math';
 
 /** Everything the camera needs to know about the scene to compute targets. */
@@ -26,10 +26,26 @@ export function volcanoOf(info: SceneInfo): VolcanoInfo | undefined {
   return info.world.volcanoes.find((v) => v.id === info.volcanoId) ?? info.world.volcanoes[0];
 }
 
-/** Ground height (scene units) at world (x, y), or the world's mean elevation where tiles are missing. */
+/** Whether the elevation tile under world (x, y) has arrived. */
+export function groundKnown(info: SceneInfo, x: number, y: number): boolean {
+  const ext = worldExtent(info.world);
+  if (x < ext.minX || x >= ext.maxX || y < ext.minY || y >= ext.maxY) return true;
+  const [i, j] = columnOf(info.world, x, y);
+  return Number.isFinite(sampleColumn(info.world, Field.SurfaceElevation, i, j, Number.NaN));
+}
+
+/**
+ * Ground height (scene units) at world (x, y): sea level outside the world, and an upper-middle
+ * elevation of the world's range where the tile has not streamed in yet (so a camera placed before
+ * the terrain arrives is not put inside the mountain).
+ */
 export function groundAt(info: SceneInfo, x: number, y: number): number {
   const ext = worldExtent(info.world);
   if (x < ext.minX || x >= ext.maxX || y < ext.minY || y >= ext.maxY) return info.world.seaLevel * info.vExag;
+  if (!groundKnown(info, x, y)) {
+    const [lo, hi] = info.world.elevationRange;
+    return (lo + 0.85 * (hi - lo)) * info.vExag;
+  }
   return displayZ(info.world, x, y, info.vExag, info.dExag);
 }
 

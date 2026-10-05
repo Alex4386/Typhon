@@ -25,6 +25,7 @@ import {
 import {
   followPoint,
   groundAt,
+  groundKnown,
   overviewPose,
   plumePose,
   sceneSpan,
@@ -96,6 +97,9 @@ export function CameraRig({ world }: { world: WorldInfo }) {
     transition: null as Transition | null,
     lastSeq: 0,
     initialised: false,
+    /** Default summit view placed before the vent's tile arrived: redo it once the ground is known. */
+    awaitingGround: false,
+    touched: false,
     mode: 'orbit' as CameraMode,
   });
   const tmp = useRef({
@@ -136,6 +140,7 @@ export function CameraRig({ world }: { world: WorldInfo }) {
       if (useCamera.getState().mode === 'tour') useCamera.getState().requestCamera({ kind: 'mode', mode: 'orbit' });
     };
     const onDown = (e: PointerEvent) => {
+      st.current.touched = true;
       stopTour();
       if (!freeLook() || useStore.getState().tool !== 'orbit') return;
       st.current.dragging = true;
@@ -160,6 +165,7 @@ export function CameraRig({ world }: { world: WorldInfo }) {
       }
     };
     const onWheel = (e: WheelEvent) => {
+      st.current.touched = true;
       stopTour();
       if (!freeLook()) return;
       e.preventDefault();
@@ -171,6 +177,7 @@ export function CameraRig({ world }: { world: WorldInfo }) {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isTyping(e)) return;
       held.add(e.code);
+      st.current.touched = true;
       const c = useCamera.getState();
       if (e.ctrlKey || e.metaKey) return;
       if (c.mode === 'tour' && !e.shiftKey) stopTour();
@@ -335,14 +342,29 @@ export function CameraRig({ world }: { world: WorldInfo }) {
     // first frame: initial pose from the URL, the last session, or the summit view
     if (!s.initialised && ctl) {
       s.initialised = true;
-      const pose = c.initialPose ?? loadLastPose(world.name) ?? summitPose(si);
-      applyPoseNow(pose);
+      const saved = c.initialPose ?? loadLastPose(world.name);
+      applyPoseNow(saved ?? summitPose(si));
+      s.awaitingGround = !saved;
       s.lastPos.copy(cam.position);
+    }
+    if (s.awaitingGround) {
+      if (s.touched || s.transition || now > 60) {
+        s.awaitingGround = false;
+      } else {
+        const v = world.volcanoes.find((x) => x.id === si.volcanoId) ?? world.volcanoes[0];
+        const at = v?.vents[0]?.at;
+        if (!at || groundKnown(si, at[0], at[1])) {
+          s.awaitingGround = false;
+          applyPoseNow(summitPose(si));
+          s.lastPos.copy(cam.position);
+        }
+      }
     }
 
     // requests
     if (c.request && c.requestSeq !== s.lastSeq) {
       s.lastSeq = c.requestSeq;
+      s.touched = true;
       const r = c.request;
       switch (r.kind) {
         case 'mode':
