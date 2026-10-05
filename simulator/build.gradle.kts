@@ -33,7 +33,8 @@ tasks.test {
     useJUnitPlatform {
         excludeTags("perf", "slow", "validation")
     }
-    maxHeapSize = "1g"
+    // Real-scale presets (now with a full subsurface model each) run concurrently: 1 GB is too small.
+    maxHeapSize = "4g"
     // Test classes run concurrently (classes.default) and preset scenarios within PresetsTest /
     // WorldScenariosTest run in parallel (@Execution(CONCURRENT)); scenarios share no mutable state.
     systemProperty("junit.jupiter.execution.parallel.enabled", "true")
