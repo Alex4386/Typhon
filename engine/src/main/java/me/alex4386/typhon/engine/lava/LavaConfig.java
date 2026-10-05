@@ -46,9 +46,12 @@ package me.alex4386.typhon.engine.lava;
  * @param eventPeriodSeconds simulated seconds between aggregated {@link LavaEvents.LavaOceanEntry} and
  *     {@link LavaEvents.LavaSolidified} events
  * @param maxSubsteps upper bound on flow sub-steps per engine step. The physical step is split so
- *     that the explicit flux stays within its stability limit for a 1 m thick flow of the most fluid
- *     lava in the field ({@code Δt ≤ relaxation·L²/D}, {@code D = ρgh³/3η}); deeper ponds and anything
- *     beyond the bound are levelled by the relaxation cap instead
+ *     that the explicit flux stays within its stability limit ({@code Δt ≤ relaxation·L²/D},
+ *     {@code D = ρgh³/3η}) for the most fluid moving lava, with {@code h} capped at
+ *     {@code substepFlowThicknessM}; thicker channels and ponds, and anything beyond the bound, are
+ *     levelled by the relaxation cap instead
+ * @param substepFlowThicknessM flow thickness the sub-step size is resolved for (a typical flow lobe
+ *     or front; pāhoehoe lobes are ~0.2–1 m)
  * @param coolingStepK largest temperature drop of one column per cooling sub-iteration; the heat
  *     balance of a compressed step is integrated in such sub-iterations (per column, so thin films
  *     that cool fast do not hold up the rest)
@@ -85,6 +88,7 @@ public record LavaConfig(
         double waterEntryMinVolumeM3,
         double eventPeriodSeconds,
         int maxSubsteps,
+        double substepFlowThicknessM,
         double coolingStepK) {
 
     public LavaConfig {
@@ -92,6 +96,7 @@ public record LavaConfig(
         if (!(eventPeriodSeconds > 0)) throw new IllegalArgumentException("eventPeriodSeconds must be > 0");
         if (!(timeScale > 0)) throw new IllegalArgumentException("timeScale must be > 0");
         if (maxSubsteps < 1) throw new IllegalArgumentException("maxSubsteps must be >= 1");
+        if (!(substepFlowThicknessM > 0)) throw new IllegalArgumentException("substepFlowThicknessM must be > 0");
         if (!(coolingStepK > 0)) throw new IllegalArgumentException("coolingStepK must be > 0");
     }
 
@@ -104,7 +109,7 @@ public record LavaConfig(
         this(timeScale, coolingScale, densityKgM3, specificHeatJKgK, latentHeatJKg, emissivity, ambientC, waterC,
                 waterHeatTransferWM2K, groundConductivityWMK, groundBoundaryLayerM, minFlowThickness, relaxation,
                 renderMinThickness, quenchRateKPerS, columnarMinThickness, frontEventPeriodSeconds, maxWaterEventsPerStep,
-                true, 1.0, 0.3, 1.0, 0.25, 1.0, 0.05, 0.5, 1.0, 1.0, 0.01, 1.0, 16, 25.0);
+                true, 1.0, 0.3, 1.0, 0.25, 1.0, 0.05, 0.5, 1.0, 1.0, 0.01, 1.0, 8, 0.5, 25.0);
     }
 
     /**
@@ -166,6 +171,7 @@ public record LavaConfig(
         private double metersPerBlock, waterEntryMinVolumeM3;
         private double eventPeriodSeconds;
         private int maxSubsteps;
+        private double substepFlowThicknessM;
         private double coolingStepK;
 
         private Builder(LavaConfig c) {
@@ -200,6 +206,7 @@ public record LavaConfig(
             waterEntryMinVolumeM3 = c.waterEntryMinVolumeM3;
             eventPeriodSeconds = c.eventPeriodSeconds;
             maxSubsteps = c.maxSubsteps;
+            substepFlowThicknessM = c.substepFlowThicknessM;
             coolingStepK = c.coolingStepK;
         }
 
@@ -221,6 +228,7 @@ public record LavaConfig(
         public Builder waterEntryMinVolumeM3(double v) { waterEntryMinVolumeM3 = v; return this; }
         public Builder eventPeriodSeconds(double v) { eventPeriodSeconds = v; return this; }
         public Builder maxSubsteps(int v) { maxSubsteps = v; return this; }
+        public Builder substepFlowThicknessM(double v) { substepFlowThicknessM = v; return this; }
         public Builder coolingStepK(double v) { coolingStepK = v; return this; }
 
         public LavaConfig build() {
@@ -230,7 +238,7 @@ public record LavaConfig(
                     frontEventPeriodSeconds, maxWaterEventsPerStep, crustEnabled, crustConductivityWMK, crustMinThickness,
                     crustDisruptionVelocity, crustRenderThickness, tubeMinRoofThickness, tubeDrainThickness,
                     hyaloclastiteFraction, littoralExplosionFluxM3s, metersPerBlock, waterEntryMinVolumeM3,
-                    eventPeriodSeconds, maxSubsteps, coolingStepK);
+                    eventPeriodSeconds, maxSubsteps, substepFlowThicknessM, coolingStepK);
         }
     }
 }

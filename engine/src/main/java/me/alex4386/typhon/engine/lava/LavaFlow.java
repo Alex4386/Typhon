@@ -534,7 +534,8 @@ public final class LavaFlow implements Subsystem {
         Parallel parallel = context.parallel();
 
         // 1–2. flow sub-steps (flux, gather, swap). The explicit flux is stable for
-        // Δt ≤ relaxation·L²/D, D = ρgh³/3η, for a 1 m flow of the most fluid lava seen last step.
+        // Δt ≤ relaxation·L²/D, D = ρgh³/3η, for the most fluid moving lava seen last step (h capped
+        // at the resolved lobe thickness; thicker channels and ponds level through the relaxation cap).
         int substeps = 1;
         if (lastMaxDiffusivity > 0) {
             double stable = config.relaxation() * metersPerBlock * metersPerBlock / lastMaxDiffusivity;
@@ -690,6 +691,7 @@ public final class LavaFlow implements Subsystem {
         double rhoG = config.densityKgM3() * G;
         double minFlow = config.minFlowThickness();
         double relaxation = config.relaxation();
+        double subH = config.substepFlowThicknessM();
         double cell = metersPerBlock;
         double perDischarge = FACE * dt / cell; // thickness moved per unit discharge: q·(FACE·L)·dt / L²
 
@@ -702,6 +704,7 @@ public final class LavaFlow implements Subsystem {
 
             double eta = Double.NaN;
             double tau = 0;
+            boolean moving = false;
             double total = 0;
             double capScale = 1;
             double discharge = 0; // physical q·width/L summed over directions (m²/s), before numerical caps
@@ -722,9 +725,6 @@ public final class LavaFlow implements Subsystem {
                     double t = c.temperature[i];
                     eta = rheology.viscosityPaS(t, c.silica[i], c.water[i]);
                     tau = rheology.yieldStrengthPa(t, c.silica[i]);
-                    // flow diffusivity of a 1 m thick flow of this lava: sizes the sub-steps
-                    double d1 = rhoG / (3 * eta);
-                    if (d1 > c.maxDiffusivity) c.maxDiffusivity = d1;
                 }
                 double run = DIST[d] * cell;
                 double sin = dh / Math.sqrt(dh * dh + run * run);
@@ -732,6 +732,12 @@ public final class LavaFlow implements Subsystem {
                 double ratio = tau / (drive * h); // h_cr / h
                 if (ratio >= 1) continue;
                 double q = drive * h * h * h / (3 * eta) * (1 - 1.5 * ratio + 0.5 * ratio * ratio * ratio);
+                if (!moving) { // flow diffusivity of this moving lava at the resolved lobe thickness: sizes the sub-steps
+                    moving = true;
+                    double hr = Math.min(h, subH);
+                    double diffusivity = rhoG * hr * hr * hr / (3 * eta);
+                    if (diffusivity > c.maxDiffusivity) c.maxDiffusivity = diffusivity;
+                }
                 discharge += q * FACE;
                 double v = q * perDischarge;
                 if (v > 0) {
@@ -974,7 +980,7 @@ public final class LavaFlow implements Subsystem {
             if (h <= 0 && hc <= 0) continue;
             boolean submerged = submerged(c, i);
             boolean source = isSource(c, i);
-            double speed = localSpeed(c, i);
+            double speed = Double.NaN; // neighbourhood flow speed, read only when a crust decision needs it
 
             if (hc > 0) {
                 double meltTop = c.bed[i] + h;
@@ -983,6 +989,7 @@ public final class LavaFlow implements Subsystem {
                 // A young crust is torn up by fast flow; a roof thick enough to span the flow is
                 // anchored to its levees and lets the melt run beneath it (tube flow).
                 boolean anchored = hc >= config.tubeMinRoofThickness();
+                if (!submerged && !source && !anchored) speed = localSpeed(c, i);
                 boolean torn = submerged || source || (!anchored && speed > config.crustDisruptionVelocity());
                 if (torn && h > 0) {
                     remelt(c, i);
@@ -1028,8 +1035,11 @@ public final class LavaFlow implements Subsystem {
 
                 boolean anchored = hc >= config.tubeMinRoofThickness();
                 boolean quiet = config.crustEnabled() && !submerged && !underVoid
-                        && h + hc >= config.crustMinThickness() && !source
-                        && (anchored || speed <= config.crustDisruptionVelocity());
+                        && h + hc >= config.crustMinThickness() && !source;
+                if (quiet && !anchored) {
+                    if (speed != speed) speed = localSpeed(c, i);
+                    quiet = speed <= config.crustDisruptionVelocity();
+                }
                 boolean growing = quiet && t > solidus && qTop > 0;
 
                 double rate = growing // physical core cooling rate, K/s

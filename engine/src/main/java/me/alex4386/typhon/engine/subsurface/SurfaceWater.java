@@ -48,6 +48,23 @@ final class SurfaceWater {
         final boolean[] known = new boolean[AREA];
         /** Fixed water level of open-water columns (sea, open imported water), NaN elsewhere. */
         final double[] level = new double[AREA];
+        /** {@code level[i]} is set (kept with it in {@link SurfaceWater#refresh}); cheaper to test than NaN. */
+        final boolean[] fixedMask = new boolean[AREA];
+        /** Deepest open-water column with a land neighbour (CFL), cached for one step; -1 = recompute. */
+        double fixedFlowDepth = -1;
+        /** Scratch, refreshed by parallel scans: the tile holds water / any non-zero discharge. */
+        boolean wetScratch;
+        boolean fluxScratch;
+        /** 1 where the column holds water or a non-zero discharge (kept current through substeps). */
+        final byte[] wet = new byte[AREA];
+        /**
+         * 1 for open-water columns that may border land (a known non-fixed neighbour in the tile, or
+         * on the tile edge); refreshed with the bed. They stay active for the flow solver.
+         */
+        final byte[] coast = new byte[AREA];
+        /** Scratch per substep: indices of the columns the flow solver visits. */
+        final int[] active = new int[AREA];
+        int activeCount;
         /** Outflow scaling of the current substep (scratch). */
         final double[] limiter = new double[AREA];
         long version = Long.MIN_VALUE;
@@ -76,7 +93,7 @@ final class SurfaceWater {
         }
 
         boolean fixed(int i) {
-            return !Double.isNaN(level[i]);
+            return fixedMask[i];
         }
 
         boolean dry() {
@@ -84,6 +101,21 @@ final class SurfaceWater {
                 if (depth[i] > 0 || qEast[i] != 0 || qSouth[i] != 0) return false;
             }
             return true;
+        }
+
+        /** Refreshes {@link #wetScratch}, {@link #fluxScratch} and the per-column {@link #wet} flags. */
+        void scan() {
+            boolean anyWet = false;
+            boolean anyFlux = false;
+            for (int i = 0; i < AREA; i++) {
+                boolean w = depth[i] > 0;
+                boolean f = qEast[i] != 0 || qSouth[i] != 0;
+                wet[i] = (byte) (w || f ? 1 : 0);
+                anyWet |= w;
+                anyFlux |= f;
+            }
+            wetScratch = anyWet;
+            fluxScratch = anyFlux;
         }
     }
 
@@ -166,6 +198,8 @@ final class SurfaceWater {
         if (version == t.version) return;
         if (t.version != Long.MIN_VALUE) t.settled = false; // the bed changed under the water
         t.version = version;
+        t.fixedFlowDepth = -1;
+
         for (int i = 0; i < AREA; i++) {
             int x = t.tx * TILE + (i & 31);
             int z = t.tz * TILE + (i >> 5);
@@ -173,6 +207,8 @@ final class SurfaceWater {
             t.known[i] = known;
             t.bed[i] = known ? world.surfaceZ(x, z) + world.uplift(x, z) : Double.NaN;
             t.level[i] = known ? fixedLevel(x, z, t.bed[i]) : Double.NaN;
+            t.fixedMask[i] = !Double.isNaN(t.level[i]);
+
             // Discharges are state (inertia) and must survive a refresh; only cells that are not
             // part of the world lose them. Open-water cells never hold depth of their own.
             if (!known) {
@@ -181,6 +217,19 @@ final class SurfaceWater {
             }
             if (!known || t.fixed(i)) t.depth[i] = 0;
         }
+        for (int i = 0; i < AREA; i++) {
+            int lx = i & 31;
+            int lz = i >> 5;
+            boolean edge = lx == 0 || lx == 31 || lz == 0 || lz == 31;
+            boolean coastal = t.fixedMask[i] && (edge
+                    || land(t, i + 1) || land(t, i - 1)
+                    || land(t, i + TILE) || land(t, i - TILE));
+            t.coast[i] = (byte) (coastal ? 1 : 0);
+        }
+    }
+
+    private static boolean land(Tile t, int j) {
+        return t.known[j] && !t.fixedMask[j];
     }
 
     // ── Queries ──
@@ -339,16 +388,12 @@ final class SurfaceWater {
 
     void step(double dt, Infiltration infiltration) {
         if (tiles.isEmpty()) return;
-        // Wet tiles get their 4 neighbours (transient dry halo) so water can spread.
+        // Wet tiles get their 4 neighbours (transient dry halo) so water can spread. (Tiles are
+        // scanned in parallel; the lists are then built in key order.)
+        List<Tile> existing = new ArrayList<>(tiles.values());
+        parallel.forEach(existing, (idx, t) -> t.scan());
         List<Tile> wet = new ArrayList<>();
-        for (Tile t : tiles.values()) {
-            for (int i = 0; i < AREA; i++) {
-                if (t.depth[i] > 0) {
-                    wet.add(t);
-                    break;
-                }
-            }
-        }
+        for (Tile t : existing) if (t.wetScratch) wet.add(t);
         int[][] around = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
         java.util.Set<Long> halo = new java.util.HashSet<>();
         for (Tile t : wet) {
@@ -358,7 +403,7 @@ final class SurfaceWater {
         // halo tiles this step would create: reset them as if new, and drop the ones no longer needed,
         // so the set of tiles and their state are exactly those of re-creating the halo every step.
         tiles.values().removeIf(t -> {
-            if (!t.dry()) return false;
+            if (t.wetScratch || t.fluxScratch) return false;
             long k = key(t.tx, t.tz);
             if (!halo.contains(k) || world.stacks().tileVersion(t.tx, t.tz) == 0) return true;
             t.settled = false;
@@ -382,6 +427,7 @@ final class SurfaceWater {
             t.west = tiles.get(key(t.tx - 1, t.tz));
             t.south = tiles.get(key(t.tx, t.tz + 1));
             t.north = tiles.get(key(t.tx, t.tz - 1));
+            t.fixedFlowDepth = -1; // neighbours (land next to open water) may have changed
         });
         // Active tiles wake their neighbours, so every face next to moving water is computed by an
         // active tile; settled tiles (lakes at rest) are skipped by the flow solver.
@@ -398,11 +444,13 @@ final class SurfaceWater {
         double dx = world.spec().metersPerColumn();
         double remaining = dt;
         int guard = 0;
+        // Open-water columns next to land have a fixed depth: their part of the CFL depth is cached
+        // per tile; the moving water's part comes out of each substep's gather (phase 3).
+        double maxDepth = Math.max(config.minFlowDepthM, maxFlowDepth(list));
         while (remaining > 1e-9 && guard++ < 10_000) {
-            double maxDepth = Math.max(config.minFlowDepthM, maxFlowDepth(list));
             double stable = config.surfaceWaterCfl * dx / Math.sqrt(SubsurfaceGrid.GRAVITY * maxDepth);
             double h = Math.min(remaining, stable);
-            substep(list, h, dx);
+            maxDepth = Math.max(config.minFlowDepthM, substep(list, h, dx));
             remaining -= h;
         }
         parallel.forEach(list, (idx, t) -> {
@@ -458,7 +506,9 @@ final class SurfaceWater {
         }
         // Dry tiles next to water would be re-created (and re-read from the world) as halo tiles next
         // step; keep them instead (the start of the next step resets or drops them).
-        tiles.values().removeIf(t -> t.dry() && !nextToWater(t));
+        List<Tile> after = new ArrayList<>(tiles.values());
+        parallel.forEach(after, (idx, t) -> t.scan());
+        tiles.values().removeIf(t -> !t.wetScratch && !t.fluxScratch && !nextToWater(t));
     }
 
     private boolean nextToWater(Tile t) {
@@ -466,27 +516,31 @@ final class SurfaceWater {
                 || wetTile(tiles.get(key(t.tx, t.tz + 1))) || wetTile(tiles.get(key(t.tx, t.tz - 1)));
     }
 
+    /** Wet as of the last {@link Tile#scan} (removeIf only drops dry tiles, so wet ones are current). */
     private static boolean wetTile(Tile t) {
-        if (t == null) return false;
-        for (int i = 0; i < AREA; i++) if (t.depth[i] > 0) return true;
-        return false;
+        return t != null && t.wetScratch;
     }
 
     /** Deepest water that can flow this substep: lake/river depths and open water next to land. */
     private double maxFlowDepth(List<Tile> list) {
         parallel.forEach(list, (idx, t) -> {
             double max = 0;
-            for (int i = 0; i < AREA; i++) {
-                if (t.fixed(i)) {
-                    if (hasLandNeighbour(t, i)) max = Math.max(max, t.level[i] - t.bed[i]);
-                } else if (t.depth[i] > max) {
-                    max = t.depth[i];
-                }
-            }
-            t.maxDepthScratch = max;
+            for (int i = 0; i < AREA; i++) if (!t.fixedMask[i] && t.depth[i] > max) max = t.depth[i];
+            t.maxDepthScratch = Math.max(max, fixedFlowDepth(t));
         });
         double max = 0; // exact: max does not depend on the order
         for (Tile t : list) max = Math.max(max, t.maxDepthScratch);
+        return max;
+    }
+
+    /** Deepest open-water column of the tile next to land (cached for the current step). */
+    private double fixedFlowDepth(Tile t) {
+        if (t.fixedFlowDepth >= 0) return t.fixedFlowDepth;
+        double max = 0;
+        for (int i = 0; i < AREA; i++) {
+            if (t.fixedMask[i] && hasLandNeighbour(t, i)) max = Math.max(max, t.level[i] - t.bed[i]);
+        }
+        t.fixedFlowDepth = max;
         return max;
     }
 
@@ -503,28 +557,66 @@ final class SurfaceWater {
         return t != null && t.known[i] && !t.fixed(i);
     }
 
-    /** Work items {tile index, first column, end column}: each tile split into bands of rows. */
-    private static List<int[]> bands(int tiles) {
-        int rowsPerBand = 8;
-        List<int[]> bands = new ArrayList<>(tiles * (TILE / rowsPerBand));
-        for (int t = 0; t < tiles; t++) {
-            for (int r = 0; r < TILE; r += rowsPerBand) bands.add(new int[] {t, r * TILE, (r + rowsPerBand) * TILE});
+    /** Work items {tile index, first, end} over the tiles' active-cell lists (bounded for balance). */
+    private static List<int[]> activeItems(List<Tile> list) {
+        int grain = 256;
+        List<int[]> items = new ArrayList<>();
+        for (int t = 0; t < list.size(); t++) {
+            int n = list.get(t).activeCount;
+            for (int a = 0; a < n; a += grain) items.add(new int[] {t, a, Math.min(n, a + grain)});
         }
-        return bands;
+        return items;
     }
 
-    private void substep(List<Tile> list, double dt, double dx) {
+    /** Whether column {@code i} (local, may be one step outside the tile) seeds activity. */
+    private static boolean seeds(Tile t, int lx, int lz) {
+        Tile o = t;
+        if (lx < 0) { o = t.west; lx += TILE; }
+        else if (lx >= TILE) { o = t.east; lx -= TILE; }
+        if (lz < 0) { o = o == null ? null : t.north; lz += TILE; }
+        else if (lz >= TILE) { o = o == null ? null : t.south; lz -= TILE; }
+        if (o == null) return false;
+        int j = (lz << 5) | lx;
+        return o.wet[j] != 0 || o.coast[j] != 0;
+    }
+
+    /**
+     * Active cells of a tile for the next substep: columns holding water or flow, open water at a
+     * coast, and their four neighbours (water moves at most one column per substep). Every other
+     * column has zero discharges and dry neighbours, so the solver would compute nothing for it.
+     */
+    private static void collectActive(Tile t) {
+        int n = 0;
+        for (int i = 0; i < AREA; i++) {
+            boolean active = t.wet[i] != 0 || t.coast[i] != 0;
+            if (!active) {
+                int lx = i & 31;
+                int lz = i >> 5;
+                active = (lx < 31 ? (t.wet[i + 1] | t.coast[i + 1]) != 0 : seeds(t, lx + 1, lz))
+                        || (lx > 0 ? (t.wet[i - 1] | t.coast[i - 1]) != 0 : seeds(t, lx - 1, lz))
+                        || (lz < 31 ? (t.wet[i + TILE] | t.coast[i + TILE]) != 0 : seeds(t, lx, lz + 1))
+                        || (lz > 0 ? (t.wet[i - TILE] | t.coast[i - TILE]) != 0 : seeds(t, lx, lz - 1));
+            }
+            if (active) t.active[n++] = i;
+        }
+        t.activeCount = n;
+    }
+
+    /** One substep; returns the deepest water (CFL depth) after it. */
+    private double substep(List<Tile> list, double dt, double dx) {
         double g = SubsurfaceGrid.GRAVITY;
         double n2 = config.manningN * config.manningN;
         double minDepth = config.minFlowDepthM;
-        // Each phase writes only the tile being processed, so tiles run in parallel and the result
-        // does not depend on the thread count.
-        // 1. Face discharges (east and south face of every column). Phases 1 and 2 only read state no
-        // item writes, so they are split into row bands (better balance when few tiles are active).
-        List<int[]> bands = bands(list.size());
-        parallel.forEach(bands, (idx, band) -> {
-            Tile t = list.get(band[0]);
-            for (int i = band[1]; i < band[2]; i++) {
+        // Each phase writes only the columns of its item, so items run in parallel and the result
+        // does not depend on the thread count. Only active columns are visited (see collectActive).
+        parallel.forEach(list, (idx, t) -> collectActive(t));
+        List<int[]> items = activeItems(list);
+        // 1. Face discharges (east and south face of every active column). Reads only state no item writes.
+        parallel.forEach(items, (idx, item) -> {
+            Tile t = list.get(item[0]);
+            int[] active = t.active;
+            for (int a = item[1]; a < item[2]; a++) {
+                int i = active[a];
                 if (!t.known[i]) {
                     t.qEast[i] = 0;
                     t.qSouth[i] = 0;
@@ -540,11 +632,14 @@ final class SurfaceWater {
                 t.qSouth[i] = faceFlux(t, i, ts, js, t.qSouth[i], dt, dx, g, n2, minDepth);
             }
         });
-        // 2. Outflow limiter: scale the outgoing faces of each column so its depth stays ≥ 0.
-        parallel.forEach(bands, (idx, band) -> {
-            Tile t = list.get(band[0]);
+        // 2. Outflow limiter: scale the outgoing faces of each column so its depth stays ≥ 0 (only
+        // columns that can send water: active ones).
+        parallel.forEach(items, (idx, item) -> {
+            Tile t = list.get(item[0]);
+            int[] active = t.active;
             double[] f = t.limiter;
-            for (int i = band[1]; i < band[2]; i++) {
+            for (int a = item[1]; a < item[2]; a++) {
+                int i = active[a];
                 f[i] = 1;
                 if (!t.known[i] || t.fixed(i)) continue;
                 int lx = i & 31;
@@ -562,12 +657,21 @@ final class SurfaceWater {
         });
         // 3. Every column gathers the water through its four faces. Both sides of a face compute the
         // same amount, so water is conserved exactly; open-water exchange is booked by the land side.
+        // A column writes only its own depth (and activity flag) and reads only discharges and
+        // limiters, so items run in parallel; their open-water books are folded in item order.
         double area = cellArea();
-        double[][] sea = new double[list.size()][2]; // {inflow from open water, outflow to open water}
-        parallel.forEach(list, (idx, t) -> {
+        double[][] sea = new double[items.size()][3]; // {inflow from, outflow to open water, max depth}
+        parallel.forEach(items, (idx, item) -> {
+            Tile t = list.get(item[0]);
+            int[] active = t.active;
             double[] book = sea[idx];
-            for (int i = 0; i < AREA; i++) {
-                if (!t.known[i] || t.fixed(i)) continue;
+            double max = 0;
+            for (int a = item[1]; a < item[2]; a++) {
+                int i = active[a];
+                if (!t.known[i] || t.fixedMask[i]) {
+                    t.wet[i] = (byte) (t.qEast[i] != 0 || t.qSouth[i] != 0 ? 1 : 0);
+                    continue;
+                }
                 int lx = i & 31;
                 int lz = i >> 5;
                 double delta = 0;
@@ -586,13 +690,21 @@ final class SurfaceWater {
                 int jn = lz > 0 ? i - TILE : i + 31 * TILE;
                 if (tn != null) delta += moved(tn, jn, t, i, tn.qSouth[jn], dt, dx, area, book, false);
                 double d = t.depth[i] + delta;
-                t.depth[i] = d < 0 ? 0 : d;
+                d = d < 0 ? 0 : d;
+                t.depth[i] = d;
+                if (d > max) max = d;
+                t.wet[i] = (byte) (d > 0 || t.qEast[i] != 0 || t.qSouth[i] != 0 ? 1 : 0);
             }
+            book[2] = max;
         });
+        double max = 0;
         for (double[] book : sea) {
             seaInflow += book[0];
             seaOutflow += book[1];
+            max = Math.max(max, book[2]);
         }
+        for (Tile t : list) max = Math.max(max, fixedFlowDepth(t));
+        return max;
     }
 
     /**
@@ -628,6 +740,7 @@ final class SurfaceWater {
         double hf = Math.max(etaI, etaJ) - Math.max(t.bed[i], o.bed[j]);
         if (hf <= minDepth) return 0;
         double slope = (etaJ - etaI) / dx;
-        return (q - g * hf * dt * slope) / (1 + g * dt * n2 * Math.abs(q) / Math.pow(hf, 7.0 / 3.0));
+        // hf^(7/3) as hf²·∛hf: same value to rounding, several times cheaper than pow
+        return (q - g * hf * dt * slope) / (1 + g * dt * n2 * Math.abs(q) / (hf * hf * Math.cbrt(hf)));
     }
 }

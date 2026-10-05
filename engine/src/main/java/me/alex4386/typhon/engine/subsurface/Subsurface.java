@@ -15,6 +15,7 @@ import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
+import me.alex4386.typhon.engine.world.ColumnStacks;
 import me.alex4386.typhon.engine.world.WorldModel;
 
 /**
@@ -65,6 +66,8 @@ public final class Subsurface implements Subsystem, HydrothermalField {
 
     /** Wall time (ns) of the last macro step's phases: preparation (rain, LOD, sources), heat, groundwater. */
     final long[] lastTimings = new long[3];
+    /** {@link ColumnStacks#editCount} at the last {@link #prepare} (transient cache key). */
+    private long preparedEdits = Long.MIN_VALUE;
     private double macroClock;
     private long macroSteps;
     // Cumulative budget terms not held by the components (m³)
@@ -163,9 +166,12 @@ public final class Subsurface implements Subsystem, HydrothermalField {
 
     /** Brings the grid and surface water up to date with the world model (new columns, lakes, edits). */
     void prepare() {
+        long edits = world.stacks().editCount();
+        if (edits == preparedEdits) return; // nothing in the world model changed since the last look
         List<HeatSources.Chamber> chambers = chambers();
         grid.refresh((ch, c) -> initializeColumn(ch, c, chambers));
         surface.seedLakes();
+        preparedEdits = edits;
     }
 
     private void initializeColumn(SolverChunk ch, int c, List<HeatSources.Chamber> chambers) {
@@ -811,5 +817,6 @@ public final class Subsurface implements Subsystem, HydrothermalField {
             }
         }
         grid.invalidate();
+        preparedEdits = Long.MIN_VALUE;
     }
 }

@@ -133,6 +133,8 @@ public final class ColumnStacks {
     }
 
     /** Packed tile coordinates; also the persistence order of tiles. */
+    private long editCount;
+
     static long pack(int tx, int tz) {
         return ((long) tx << 32) | (tz & 0xffffffffL);
     }
@@ -164,7 +166,10 @@ public final class ColumnStacks {
     private Tile tileOrCreate(int x, int z) {
         int tx = tileCoord(x);
         int tz = tileCoord(z);
-        return tiles.computeIfAbsent(key(tx, tz), k -> new Tile(tx, tz));
+        return tiles.computeIfAbsent(key(tx, tz), k -> {
+            editCount++;
+            return new Tile(tx, tz);
+        });
     }
 
     /** Tiles sorted by key (deterministic iteration for persistence). */
@@ -176,10 +181,20 @@ public final class ColumnStacks {
 
     void putTile(Tile tile) {
         tiles.put(key(tile.tx, tile.tz), tile);
+        editCount++;
     }
 
     void clear() {
         tiles.clear();
+        editCount++;
+    }
+
+    /**
+     * Counter that changes whenever any column or tile changes (not persisted): lets derived caches
+     * skip a whole-world scan when nothing changed since they last looked.
+     */
+    public long editCount() {
+        return editCount;
     }
 
     public int tileCount() {
@@ -348,6 +363,7 @@ public final class ColumnStacks {
         int c = local(x, z);
         t.uplift[c] = (float) meters;
         t.version[c]++;
+        editCount++;
     }
 
     /** Standing-water surface elevation, {@code NaN} if dry or unknown. */
@@ -387,6 +403,7 @@ public final class ColumnStacks {
         }
         enforceCap(t, c);
         t.version[c]++;
+        editCount++;
     }
 
     /**
@@ -428,6 +445,7 @@ public final class ColumnStacks {
         fresh.start[TILE_AREA] = pos;
         for (int c : replacements.keySet()) enforceCap(fresh, c);
         tiles.put(key(tileX, tileZ), fresh);
+        editCount++;
     }
 
     /** Local index of column {@code (x, z)} inside its tile. */
@@ -466,6 +484,7 @@ public final class ColumnStacks {
             enforceCap(t, c);
         }
         t.version[c]++;
+        editCount++;
         return true;
     }
 
@@ -512,7 +531,10 @@ public final class ColumnStacks {
             }
         }
         removed += collapseExposedVoids(t, c);
-        if (removed > 0) t.version[c]++;
+        if (removed > 0) {
+            t.version[c]++;
+            editCount++;
+        }
         return new ErodeResult(removed, removedBy);
     }
 
@@ -570,6 +592,7 @@ public final class ColumnStacks {
         mergeIdentical(t, c);
         enforceCap(t, c);
         t.version[c]++;
+        editCount++;
         return new ErodeResult(total, replaced);
     }
 
