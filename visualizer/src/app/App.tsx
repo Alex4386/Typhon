@@ -16,6 +16,7 @@ export function App() {
   const errors = useStore((s) => s.errors);
   const state = useStore((s) => s.state);
   const serverUrl = useStore((s) => s.serverUrl);
+  const underground = useStore((s) => s.underground);
 
   useEffect(() => {
     connect();
@@ -47,7 +48,7 @@ export function App() {
       </header>
       {world ? (
         <main>
-          <section className="view">
+          <section className={underground ? 'view underground' : 'view'}>
             <Viewer world={world} />
             <Toolbox world={world} />
             <CameraBar world={world} />

@@ -148,6 +148,11 @@ main {
   background: linear-gradient(to bottom, #0e1726 0%, #24364d 38%, #5c6b7b 62%, #7d8189 72%, #2c2a29 100%);
 }
 
+/* below the ground the sky gives way to dark rock, so the subsurface overlays read clearly */
+.view.underground {
+  background: radial-gradient(ellipse at 50% 40%, #2a1f19 0%, #16110e 60%, #0b0907 100%);
+}
+
 .toolbox .toggle {
   min-width: 28px;
 }
