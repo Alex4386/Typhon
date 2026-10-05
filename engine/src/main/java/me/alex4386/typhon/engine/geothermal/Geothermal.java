@@ -293,7 +293,7 @@ public final class Geothermal implements Subsystem, HeatSources {
         double volume = magma.volumeM3();
         double fromVolume = volume > 0 ? Math.cbrt(3 * volume / (4 * Math.PI)) : config.chamberRadiusM;
         double radius = Math.min(fromVolume, 0.5 * depth);
-        return List.of(new Chamber(c.x() + 0.5, c.z() + 0.5, centre, surface, radius, t));
+        return List.of(new Chamber(c.x() + 0.5, c.z() + 0.5, centre, surface, radius, t, magma.wallHeatPowerW()));
     }
 
     @Override

@@ -46,6 +46,25 @@ public interface MagmaState {
         return Double.NaN;
     }
 
+    /**
+     * Eruption rate in physical time (DRE m³ per physical second). {@link #eruptionRate()} is per
+     * simulated second, so it includes the eruptive time compression; physics that depends on the
+     * instantaneous intensity of an eruption (column height, column collapse, tremor amplitude,
+     * eruption style) must use this instead.
+     */
+    default double physicalEruptionRate() {
+        return eruptionRate();
+    }
+
+    /**
+     * Heat the chamber currently loses through its wall into the surrounding rock (W, physical
+     * time); {@code NaN} if the magma model does not track its own heat loss. Subsurface models
+     * receive this power, so the ground is heated by exactly the heat the chamber gives up.
+     */
+    default double wallHeatPowerW() {
+        return Double.NaN;
+    }
+
     default boolean erupting() {
         return eruptionRate() > 0;
     }

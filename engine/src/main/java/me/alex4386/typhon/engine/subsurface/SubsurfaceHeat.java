@@ -29,7 +29,12 @@ import java.util.Map;
  *       share of pore water flashed per step and decays once boiling stops.
  * </ol>
  *
- * <p>Cells inside a chamber sphere are held at the chamber temperature.
+ * <p><b>Chambers.</b> The cells a chamber sphere overlaps, and the bottom cells of the columns
+ * whose base lies inside it, are heated towards the chamber temperature by at most the chamber's
+ * wall heat power ({@link HeatSources.Chamber#wallPowerW()}): the energy comes from the magma
+ * model's own budget, so a chamber cannot feed the hydrothermal system more heat than it loses.
+ * Those columns have an insulated base (the chamber supplies their heat), and magma cells do not
+ * boil (they hold no groundwater).
  */
 final class SubsurfaceHeat {
     private final SubsurfaceGrid grid;
@@ -100,6 +105,23 @@ final class SubsurfaceHeat {
         return Double.NaN;
     }
 
+    /** The chamber containing a point, or {@code null}. */
+    static HeatSources.Chamber chamberAt(List<HeatSources.Chamber> chambers, double l, double x, double z,
+            double elevation) {
+        for (HeatSources.Chamber ch : chambers) {
+            double dx = (x - ch.x()) * l;
+            double dz = (z - ch.z()) * l;
+            double dy = elevation - ch.centerElevation();
+            if (dx * dx + dz * dz + dy * dy <= ch.radiusM() * ch.radiusM()) return ch;
+        }
+        return null;
+    }
+
+    /** Whether a chamber holds its cells at its temperature (unbounded heat supply). */
+    static boolean fixedTemperature(HeatSources.Chamber chamber) {
+        return chamber != null && Double.isNaN(chamber.wallPowerW());
+    }
+
     /** Solver-column centre in column coordinates. */
     double centreX(SolverChunk ch, int c) {
         return (ch.gx(c) + 0.5) * grid.ratio();
@@ -122,11 +144,16 @@ final class SubsurfaceHeat {
         }
     }
 
+    /**
+     * Bottom boundary temperature: the chamber temperature where the column's base lies in a
+     * fixed-temperature chamber, {@code NaN} (insulated; the chamber's bounded heat enters the bottom
+     * cell instead) where it lies in a chamber with a wall power, else geotherm plus halo.
+     */
     double bottomTemperature(SolverChunk ch, int c, List<HeatSources.Chamber> chambers) {
         double depth = grid.totalDepth();
-        double inside = insideChamber(chambers, grid.world().spec().metersPerColumn(), centreX(ch, c), centreZ(ch, c),
-                ch.surfaceZ[c] - depth);
-        if (!Double.isNaN(inside)) return inside;
+        HeatSources.Chamber inside = chamberAt(chambers, grid.world().spec().metersPerColumn(), centreX(ch, c),
+                centreZ(ch, c), ch.surfaceZ[c] - depth);
+        if (inside != null) return fixedTemperature(inside) ? inside.temperatureC() : Double.NaN;
         return grid.backgroundTemperature(depth) + halo(chambers, centreX(ch, c), centreZ(ch, c), ch.surfaceZ[c] - depth);
     }
 
@@ -180,9 +207,11 @@ final class SubsurfaceHeat {
             });
         }
         long t2 = System.nanoTime();
+        Map<SolverChunk, double[]> allSources = chamberHeat(chunks, steps, sources, chambers);
+        currentChambers = chambers;
         // Vertical conduction and sources: one implicit step per column.
         forEach(chunks, (idx, ch) -> {
-            double[] src = sources.get(ch);
+            double[] src = allSources.get(ch);
             double dt = steps.get(ch);
             for (int c = 0; c < SolverChunk.AREA; c++) {
                 if (!ch.exists[c]) continue;
@@ -212,6 +241,94 @@ final class SubsurfaceHeat {
         timings[1] = t2 - t1;
         timings[2] = t3 - t2;
         timings[3] = t4 - t3;
+    }
+
+    /** Chambers of the current step (boiling skips their cells). */
+    private List<HeatSources.Chamber> currentChambers = List.of();
+
+    /** Heat the chambers gave to the grid during the last step (J), per chamber in list order. */
+    double[] chamberDelivered = new double[0];
+    /** Heat the overlapped cells would have absorbed to reach the chamber temperature (J). */
+    double[] chamberDemand = new double[0];
+
+    /**
+     * Adds each chamber's heat to the cells it overlaps (and the bottom cells of the columns whose
+     * base lies inside it). A cell's demand is the power that would bring it to the chamber
+     * temperature within its step; the chamber delivers that demand scaled down so the total never
+     * exceeds its wall power times the share of its surface above the grid bottom. Sequential in
+     * chunk-key order, so the result does not depend on the thread count.
+     */
+    private Map<SolverChunk, double[]> chamberHeat(List<SolverChunk> chunks, Map<SolverChunk, Double> steps,
+            Map<SolverChunk, double[]> sources, List<HeatSources.Chamber> chambers) {
+        chamberDelivered = new double[chambers.size()];
+        chamberDemand = new double[chambers.size()];
+        if (chambers.isEmpty()) return sources;
+        Map<SolverChunk, double[]> merged = new IdentityHashMap<>(sources);
+        int n = grid.levels();
+        double l = grid.world().spec().metersPerColumn();
+        double area = grid.area();
+        double bottomDepth = grid.totalDepth();
+        List<double[]> demands = new ArrayList<>(); // {chunk index, cell, power, dt}
+        for (int ci = 0; ci < chambers.size(); ci++) {
+            HeatSources.Chamber chamber = chambers.get(ci);
+            demands.clear();
+            double total = 0;
+            double r2 = chamber.radiusM() * chamber.radiusM();
+            for (int idx = 0; idx < chunks.size(); idx++) {
+                SolverChunk ch = chunks.get(idx);
+                double dt = steps.get(ch);
+                for (int c = 0; c < SolverChunk.AREA; c++) {
+                    if (!ch.exists[c]) continue;
+                    double dx = (centreX(ch, c) - chamber.x()) * l;
+                    double dz = (centreZ(ch, c) - chamber.z()) * l;
+                    double h2 = dx * dx + dz * dz;
+                    if (h2 > r2) continue;
+                    double dyBase = ch.surfaceZ[c] - bottomDepth - chamber.centerElevation();
+                    boolean baseInside = h2 + dyBase * dyBase <= r2;
+                    for (int k = 0; k < n; k++) {
+                        double dy = ch.surfaceZ[c] - grid.centerDepth(k) - chamber.centerElevation();
+                        boolean inside = h2 + dy * dy <= r2 || (k == n - 1 && baseInside);
+                        if (!inside) continue;
+                        int i = c * n + k;
+                        double excess = chamber.temperatureC() - ch.temperature[i];
+                        if (excess <= 0) continue;
+                        double power = capacity(ch, c, k, area * grid.thickness(k)) * excess / dt;
+                        demands.add(new double[] {idx, i, power, dt});
+                        total += power;
+                    }
+                }
+            }
+            if (total <= 0 || fixedTemperature(chamber)) continue; // fixed-temperature cells: see vertical()
+            double budget = chamber.wallPowerW();
+            double scale = 1;
+            if (!Double.isNaN(budget)) {
+                double available = Math.max(0, budget) * shareAboveGridBottom(chamber, bottomDepth);
+                scale = Math.min(1, available / total);
+            }
+            for (double[] d : demands) {
+                SolverChunk ch = chunks.get((int) d[0]);
+                double[] src = merged.get(ch);
+                if (src == null || src == sources.get(ch)) {
+                    src = src == null ? new double[SolverChunk.AREA * n] : src.clone();
+                    merged.put(ch, src);
+                }
+                double energy = scale * d[2] * d[3];
+                src[(int) d[1]] += energy;
+                chamberDelivered[ci] += energy;
+                chamberDemand[ci] += d[2] * d[3];
+            }
+        }
+        return merged;
+    }
+
+    /**
+     * Share of a sphere's surface above the grid bottom: a spherical cap of height {@code h} has area
+     * {@code 2πah}, so the share is {@code h/(2a)}.
+     */
+    static double shareAboveGridBottom(HeatSources.Chamber chamber, double bottomDepth) {
+        double topDepth = chamber.surfaceElevation() - chamber.centerElevation() - chamber.radiusM();
+        double h = bottomDepth - topDepth;
+        return Math.max(0, Math.min(1, h / (2 * chamber.radiusM())));
     }
 
     /** Wall time (ns) of the last step: stability check, lateral transport, vertical solve, boiling. */
@@ -386,16 +503,18 @@ final class SubsurfaceHeat {
                 d += dt * gTop;
                 r += dt * gTop * config.surfaceTemperatureC;
             }
-            if (k == n - 1) {
+            if (k == n - 1 && !Double.isNaN(tBottom)) {
                 d += dt * gBottom;
                 r += dt * gBottom * tBottom;
             }
-            double inside = insideChamber(chambers, l, x, z, ch.surfaceZ[c] - grid.centerDepth(k));
-            if (!Double.isNaN(inside)) {
-                d = 1;
-                r = inside;
-                if (k > 0) lower[k] = 0;
-                if (k < n - 1) upper[k] = 0;
+            if (!chambers.isEmpty()) {
+                HeatSources.Chamber inside = chamberAt(chambers, l, x, z, ch.surfaceZ[c] - grid.centerDepth(k));
+                if (fixedTemperature(inside)) {
+                    d = 1;
+                    r = inside.temperatureC();
+                    if (k > 0) lower[k] = 0;
+                    if (k < n - 1) upper[k] = 0;
+                }
             }
             diag[k] = d;
             rhs[k] = r;
@@ -459,10 +578,15 @@ final class SubsurfaceHeat {
         double area = grid.area();
         double collapse = Math.exp(-dt / config.steamCollapseSeconds);
         double steamMass = 0;
+        double l = grid.world().spec().metersPerColumn();
+        double x = centreX(ch, c);
+        double z = centreZ(ch, c);
         for (int k = 0; k < n; k++) {
             int i = c * n + k;
             double elevation = grid.cellElevation(ch, c, k);
-            if (elevation >= ch.head[c] || ch.porosity[i] <= 0) {
+            boolean magma = !currentChambers.isEmpty()
+                    && !Double.isNaN(insideChamber(currentChambers, l, x, z, ch.surfaceZ[c] - grid.centerDepth(k)));
+            if (elevation >= ch.head[c] || ch.porosity[i] <= 0 || magma) {
                 ch.steam[i] *= collapse;
                 continue;
             }

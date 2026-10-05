@@ -73,6 +73,8 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
     // Cumulative budget terms not held by the components (m³)
     private double rain;
     private double boiled;
+    /** Heat the magma chambers have given to the grid (J). */
+    private double chamberHeat;
     private double seaGroundwater;
     private double deficit;
     private double initialGroundwater;
@@ -276,6 +278,7 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
             return surface.depth(x, z);
         });
         boiled += heat.boiledTotal;
+        for (double e : heat.chamberDelivered) chamberHeat += e;
         long t2 = System.nanoTime();
         groundwater.step(dtPhysical, heat.boiledVolume,
                 (ch, c, v) -> discharge(ch, c, v, SurfaceWater.Source.SPRING));
@@ -285,6 +288,16 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
         lastTimings[0] = t1 - t0;
         lastTimings[1] = t2 - t1;
         lastTimings[2] = t3 - t2;
+    }
+
+    /** Heat the magma chambers have given to the grid so far (J). */
+    public double chamberHeatJ() {
+        return chamberHeat;
+    }
+
+    /** Water boiled off by subsurface heat so far (m³). */
+    public double boiledM3() {
+        return boiled;
     }
 
     /** True while {@link #equilibrate} runs: surface water is not simulated, discharge drains away. */
@@ -748,6 +761,7 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
         JsonObject b = new JsonObject();
         b.addProperty("rain", rain);
         b.addProperty("boiled", boiled);
+        b.addProperty("chamberHeat", chamberHeat);
         b.addProperty("seaGroundwater", seaGroundwater);
         b.addProperty("deficit", deficit);
         b.addProperty("initialGroundwater", initialGroundwater);
@@ -818,6 +832,7 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
         JsonObject b = json.getAsJsonObject("budget");
         rain = b.get("rain").getAsDouble();
         boiled = b.get("boiled").getAsDouble();
+        chamberHeat = b.has("chamberHeat") ? b.get("chamberHeat").getAsDouble() : 0;
         seaGroundwater = b.get("seaGroundwater").getAsDouble();
         deficit = b.get("deficit").getAsDouble();
         initialGroundwater = b.get("initialGroundwater").getAsDouble();

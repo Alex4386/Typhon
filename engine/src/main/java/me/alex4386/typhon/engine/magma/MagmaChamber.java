@@ -72,6 +72,10 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     static final double WATER_MOLAR_MASS = 0.018;
     static final double GAS_CONSTANT = 8.314;
     static final double SOLIDUS_C = 700;
+    /** Specific heat of silicate melt (J/kg/K); Spera (2000), Encyclopedia of Volcanoes. */
+    static final double MELT_HEAT_CAPACITY = 1200;
+    /** Latent heat of crystallisation (J/kg), released between liquidus and solidus; Spera (2000). */
+    static final double LATENT_HEAT_CRYSTALLISATION = 4.0e5;
     static final double MAX_CRYSTAL_FRACTION = 0.58;
     static final double MAX_MELT_SILICA = 77;
     static final int MAX_PENDING_BURSTS = 64;
@@ -563,6 +567,29 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     @Override
     public double volumeM3() {
         return config.volume();
+    }
+
+    @Override
+    public double physicalEruptionRate() {
+        return erupting ? eruptionRate / config.eruptiveTimeScale() : 0;
+    }
+
+    /**
+     * Heat lost through the wall by the conductive cooling of {@link #step}: the temperature relaxes
+     * towards the wall temperature with e-folding time {@code τ}, which at bulk density {@code ρ} and
+     * effective heat capacity {@code c_eff} (specific heat plus latent heat of crystallisation spread
+     * over the liquidus–solidus interval) is a power {@code P = ρ·c_eff·V·(T − T_wall)/τ}.
+     */
+    @Override
+    public double wallHeatPowerW() {
+        double excess = temperature - config.wallTemperatureC();
+        if (!(excess > 0)) return 0;
+        double liquidus = liquidusC();
+        double cEff = MELT_HEAT_CAPACITY;
+        if (temperature > SOLIDUS_C && temperature < liquidus && liquidus > SOLIDUS_C) {
+            cEff += LATENT_HEAT_CRYSTALLISATION / (liquidus - SOLIDUS_C);
+        }
+        return MAGMA_DENSITY * cEff * config.volume() * excess / config.coolingTimescale();
     }
 
     @Override

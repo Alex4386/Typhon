@@ -12,10 +12,23 @@ public interface HeatSources {
      * steady conductive halo of a sphere below an isothermal surface (method of images) sets the
      * grid's bottom boundary and the initial state.
      *
+     * <p>The chamber heats the grid cells it overlaps (and the bottom of the columns above it) with
+     * at most {@code wallPowerW}: the heat it loses through its wall, from the magma model's own
+     * energy budget. The share of that power entering the grid is the share of the chamber's surface
+     * above the grid bottom. {@code NaN} leaves the supply unbounded (cells relax to the chamber
+     * temperature every step, the classic fixed-temperature body).
+     *
      * @param surfaceElevation ground elevation above the chamber (m), the image plane
+     * @param wallPowerW heat the chamber gives to its surroundings (W), or {@code NaN}
      */
     record Chamber(double x, double z, double centerElevation, double surfaceElevation, double radiusM,
-            double temperatureC) {}
+            double temperatureC, double wallPowerW) {
+        /** A fixed-temperature chamber with unbounded heat supply. */
+        public Chamber(double x, double z, double centerElevation, double surfaceElevation, double radiusM,
+                double temperatureC) {
+            this(x, z, centerElevation, surfaceElevation, radiusM, temperatureC, Double.NaN);
+        }
+    }
 
     /**
      * Heat carried up a vent's conduit and hydrothermal plumbing (magmatic gas, convecting
