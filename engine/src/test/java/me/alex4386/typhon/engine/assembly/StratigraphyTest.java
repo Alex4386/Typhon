@@ -151,7 +151,10 @@ class StratigraphyTest {
             String label = u.type() + "#" + u.eruptionId();
             if (rows.isEmpty() || !rows.get(rows.size() - 1).equals(label)) rows.add(label);
         }
-        assertEquals("LAVA#2", rows.get(0), "section top is the youngest lava: " + rows);
+        // Eruption 2's own Strombolian bursts may leave a fall veneer on its lava (FALL#2 over LAVA#2).
+        assertTrue(rows.get(0).endsWith("#2"), "section top belongs to the youngest eruption: " + rows);
+        assertEquals("LAVA#2", rows.stream().filter(r -> r.startsWith("LAVA")).findFirst().orElse(null),
+                "the uppermost lava is the youngest: " + rows);
         assertTrue(rows.indexOf("FALL#1") < rows.lastIndexOf("LAVA#1"), "fall above the older lava: " + rows);
     }
 
