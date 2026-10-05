@@ -75,7 +75,9 @@ export type ClientMessage =
    * Values whose spec says `apply: 'restart'` are refused unless `restart` is true (the affected
    * volcanoes, or the whole world for world-level ones, are rebuilt from their definition).
    */
-  | { type: 'setParams'; requestId?: number; values: Record<string, ParamValue | null>; restart?: boolean };
+  | { type: 'setParams'; requestId?: number; values: Record<string, ParamValue | null>; restart?: boolean }
+  /** Everything known about the column at (x, y); answered with an `inspection` (§3.7). */
+  | { type: 'inspect'; requestId: number; x: number; y: number };
 
 export type ParamValue = number | boolean | string;
 
@@ -125,7 +127,84 @@ export type ServerMessage =
   /** Stratigraphic unit table: full list on attach (`replace: true`), then appended units. */
   | { type: 'units'; units: UnitInfo[]; replace: boolean }
   | { type: 'error'; code: ErrorCode; message: string; requestId?: number }
-  | SchemaMessage;
+  | SchemaMessage
+  | EntitiesMessage
+  | InspectionMessage;
+
+// ───────────────────────── Entities (§4.8) ─────────────────────────
+
+export type EntityKind =
+  | 'chamber'
+  | 'vent'
+  | 'fissure'
+  | 'dike'
+  | 'feature'
+  | 'plume'
+  | 'station'
+  | 'quake'
+  | 'lavaFront'
+  | 'lavaField'
+  | 'pdc'
+  | 'lahar';
+
+export type EntityProp = string | number | boolean | null;
+
+/** A thing in the world with a lifetime: created, updated, removed (ids are stable). */
+export interface Entity {
+  id: string;
+  kind: EntityKind | string;
+  volcanoId?: string;
+  label: string;
+  /** Representative point, protocol metres [x, y, z]. */
+  at: [number, number, number];
+  /** Optional geometry (dikes: origin → tip). */
+  path?: [number, number, number][];
+  props: Record<string, EntityProp>;
+  createdAt: number;
+  updatedAt: number;
+  /** Statistics only, not drawn. */
+  hidden?: boolean;
+}
+
+/** Entity delta: `replace` = full set (attach, replay seek), else upserts and removals since the last one. */
+export interface EntitiesMessage {
+  type: 'entities';
+  time: number;
+  replace: boolean;
+  upsert: Entity[];
+  remove: string[];
+}
+
+export interface InspectionLayer {
+  top: number;
+  bottom: number;
+  material: string;
+  unit: number;
+  depositType?: string;
+  label?: string;
+  porosity: number;
+  voidFraction?: number;
+  loose?: boolean;
+}
+
+/** Reply to `inspect`: one column of the world. */
+export interface InspectionMessage {
+  type: 'inspection';
+  requestId?: number;
+  at: XY;
+  column: string;
+  inside: boolean;
+  surfaceZ?: number;
+  surfaceMaterial?: string;
+  layers?: InspectionLayer[];
+  layerCount?: number;
+  water?: { tableZ: number; tableDepthM: number; surfaceWaterDepthM: number; vadoseM: number; steamFluxKgPerSm2: number };
+  temperatureProfile?: { depthM: number; temperatureC: number; steam?: number }[];
+  groundTemperatureC?: number;
+  lava?: { thicknessM: number; temperatureC: number; crustM: number };
+  pdc?: { depthM: number; speedMPerS: number; temperatureC: number };
+  lahar?: { depthM: number; speedMPerS: number; temperatureC: number };
+}
 
 /** One tunable value. Ids are dotted paths into the world/volcano definition (see docs/protocol.md). */
 export interface ParamSpec {
