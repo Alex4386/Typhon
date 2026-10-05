@@ -36,9 +36,10 @@ class OutputTest {
         for (String line : events) {
             JsonObject e = JsonParser.parseString(line).getAsJsonObject();
             assertTrue(e.has("type") && e.has("time"), line);
-            sawEruption |= e.get("type").getAsString().equals("EruptionStarted");
+            // Stromboli's open vent is active through slug bursts, not chamber eruptions.
+            sawEruption |= e.get("type").getAsString().equals("ExplosiveBurst");
         }
-        assertTrue(sawEruption);
+        assertTrue(sawEruption, "explosions from the open vent");
 
         for (String map : List.of("map-elevation.png", "map-change.png", "map-lava.png", "map-ash.png", "map-geothermal.png",
                 "section-ew.png", "section-columns.png")) {
