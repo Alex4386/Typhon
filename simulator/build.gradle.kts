@@ -33,6 +33,12 @@ tasks.test {
     useJUnitPlatform {
         excludeTags("perf", "slow")
     }
+    maxHeapSize = "1g"
+    // Test classes run concurrently (classes.default) and preset scenarios within PresetsTest /
+    // WorldScenariosTest run in parallel (@Execution(CONCURRENT)); scenarios share no mutable state.
+    systemProperty("junit.jupiter.execution.parallel.enabled", "true")
+    systemProperty("junit.jupiter.execution.parallel.mode.default", "same_thread")
+    systemProperty("junit.jupiter.execution.parallel.mode.classes.default", "concurrent")
 }
 
 // Long scenario runs: ./gradlew :simulator:slowTest

@@ -13,9 +13,12 @@ import me.alex4386.typhon.engine.worlds.World;
 import me.alex4386.typhon.simulator.MainAccess;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+@Execution(ExecutionMode.CONCURRENT)
 class WorldScenariosTest {
     static Stream<String> presets() {
         return Presets.all().stream().map(Preset::name);

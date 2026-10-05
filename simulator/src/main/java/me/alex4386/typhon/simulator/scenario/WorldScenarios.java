@@ -12,6 +12,8 @@ import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.config.ConfigException;
 import me.alex4386.typhon.engine.config.VolcanoDefinition;
 import me.alex4386.typhon.engine.config.WorldDefinition;
+import me.alex4386.typhon.engine.subsurface.Subsurface;
+import me.alex4386.typhon.engine.subsurface.SubsurfaceConfig;
 import me.alex4386.typhon.engine.config.Yaml;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
@@ -155,11 +157,19 @@ public final class WorldScenarios {
             terrain.put("seed", seed);
         }
         VolcanoScaling scaling = scenario.volcano().scaling();
-        WorldDefinition.Geotherm geotherm = real != null ? real.geotherm() : new WorldDefinition.Geotherm(15, 30);
-        WorldDefinition.Aquifer aquifer = real != null ? real.aquifer() : new WorldDefinition.Aquifer(20, 0.1);
+        // The preset's subsurface parameters (its own model, when a volcano created one) become the
+        // world's climate, geotherm, aquifer and subsurface sections; real-scale presets keep their
+        // literature geotherm and aquifer.
+        Subsurface subsurface = scenario.volcano().subsurface();
+        SubsurfaceConfig sc = subsurface != null ? subsurface.configuration().copy()
+                : VolcanoSystem.defaultSubsurfaceConfig(scaling);
+        WorldDefinition.Geotherm geotherm = real != null ? real.geotherm()
+                : new WorldDefinition.Geotherm(sc.surfaceTemperatureC, sc.gradientCPerKm);
+        WorldDefinition.Aquifer aquifer = real != null ? real.aquifer()
+                : new WorldDefinition.Aquifer(sc.initialWaterTableDepthM, sc.specificYield);
         WorldDefinition world = new WorldDefinition(preset.name(), seed, 50, scenario.terrain().world().spec(), scaling,
-                new WorldDefinition.Climate(0, 0.1, Double.NaN, 0, 0.3), geotherm, aquifer, terrain,
-                scenario.lava().config());
+                new WorldDefinition.Climate(sc.rainfallMmPerHour, sc.evaporationMmPerHour, Double.NaN, 0, 0.3),
+                geotherm, aquifer, terrain, scenario.lava().config(), sc);
         List<VolcanoDefinition> volcanoes = new ArrayList<>();
         for (VolcanoSystem v : scenario.volcanoes()) {
             VolcanoDefinition definition = VolcanoDefinition.fromSystem(v, scaling);

@@ -28,6 +28,8 @@ tasks.test {
     useJUnitPlatform {
         excludeTags("perf")
     }
+    // Test classes run in parallel JVMs (each test is self-contained; results are deterministic).
+    maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
 }
 
 // Performance smoke tests: ./gradlew :engine:perfTest

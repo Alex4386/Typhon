@@ -10,6 +10,7 @@ import me.alex4386.typhon.engine.magma.ConduitConfig;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.tephra.TephraConfig;
+import me.alex4386.typhon.engine.subsurface.SubsurfaceConfig;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import me.alex4386.typhon.engine.world.BlockId;
@@ -459,12 +460,18 @@ final class RealPresets {
                     GeothermalConfig geothermal = new GeothermalConfig();
                     geothermal.radius = 192;
                     geothermal.timeScale = 30;
-                    geothermal.ventHeatRate = 0.1;
-                    geothermal.baseSaturation = 0.55;
+                    // Basin heat flux and a wet plateau as in the compact Yellowstone preset (Fournier 1989).
+                    geothermal.ventHeatPowerW = 3e7;
+                    geothermal.ventPipeDepthM = 300;
                     geothermal.maxGeysers = 20;
+                    SubsurfaceConfig subsurface = VolcanoSystem.defaultSubsurfaceConfig(scaling(L));
+                    subsurface.initialWaterTableDepthM = 3;
+                    subsurface.rainfallMmPerHour = 0.1;
+                    subsurface.gradientCPerKm = 100; // caldera heat flow ~30–40× the continental average
                     return b.volcano(VolcanoSystem.builder("yellowstone-real", basins, b.terrain(), b.lava())
                             .chamber(chamber).scaling(scaling(L)).tephra(tephra()).geothermal(geothermal)
-                            .geothermalPrewarm(6 * 3600).build());
+                            .subsurfaceConfig(subsurface)
+                            .geothermalPrewarm(300 * 365.25 * 86400).build());
                 });
     }
 

@@ -11,9 +11,12 @@ import me.alex4386.typhon.simulator.output.CsvWriter;
 import me.alex4386.typhon.simulator.run.Simulation;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+@Execution(ExecutionMode.CONCURRENT)
 class PresetsTest {
     static Stream<String> presetNames() {
         return Presets.all().stream().map(Preset::name);
