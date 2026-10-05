@@ -40,7 +40,8 @@ class OutputTest {
         }
         assertTrue(sawEruption);
 
-        for (String map : List.of("map-elevation.png", "map-change.png", "map-lava.png", "map-ash.png", "map-geothermal.png")) {
+        for (String map : List.of("map-elevation.png", "map-change.png", "map-lava.png", "map-ash.png", "map-geothermal.png",
+                "section-ew.png", "section-columns.png")) {
             assertTrue(ImageIO.read(dir.resolve(map).toFile()).getWidth() > 100, map);
         }
         String html = Files.readString(dir.resolve("report.html"));

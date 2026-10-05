@@ -63,6 +63,7 @@ public final class MapRenderer {
             write(dir, "map-geothermal.png", geothermal(), maps,
                     "Shallow subsurface temperature and hydrothermal features");
         }
+        new SectionRenderer(scenario).writeAll(dir, maps);
         return maps;
     }
 
