@@ -422,7 +422,8 @@ final class Session implements AutoCloseable {
         try {
             // Not added to the shared cache: the state pump still broadcasts these as new units to
             // clients that are already attached (re-sending a known unit id is harmless).
-            JsonArray fresh = call(s -> Probe.units(s.terrain().world(), from)).get(5, TimeUnit.SECONDS);
+            // Attaching is rare: wait out a slow engine step (e.g. a subsurface macro step under load).
+            JsonArray fresh = call(s -> Probe.units(s.terrain().world(), from)).get(60, TimeUnit.SECONDS);
             all.addAll(fresh);
         } catch (Exception e) {
             // Fall back to what the state pump has collected; the next state message carries the rest.
