@@ -58,6 +58,11 @@ final class SurfaceWater {
         boolean settled;
         /** Scratch: woken by an active neighbour this step. */
         boolean wake;
+        /** Scratch of the parallel infiltration pass: volume (m³) per column, folded sequentially. */
+        final double[] infiltratedScratch = new double[AREA];
+        double infiltratedPart;
+        double evaporatedPart;
+        double maxDepthScratch;
         // Neighbour tiles, refreshed at the start of every step
         Tile east;
         Tile west;
@@ -352,13 +357,16 @@ final class SurfaceWater {
                 if (!tiles.containsKey(key(nx, nz)) && world.stacks().tileVersion(nx, nz) != 0) tileOrCreate(nx, nz);
             }
         }
-        for (Tile t : tiles.values()) {
+        // Per tile, in parallel: refresh reads the world model and writes only its own tile; the map
+        // of tiles is not modified meanwhile.
+        List<Tile> all = new ArrayList<>(tiles.values());
+        parallel.forEach(all, (idx, t) -> {
             refresh(t);
             t.east = tiles.get(key(t.tx + 1, t.tz));
             t.west = tiles.get(key(t.tx - 1, t.tz));
             t.south = tiles.get(key(t.tx, t.tz + 1));
             t.north = tiles.get(key(t.tx, t.tz - 1));
-        }
+        });
         // Active tiles wake their neighbours, so every face next to moving water is computed by an
         // active tile; settled tiles (lakes at rest) are skipped by the flow solver.
         for (Tile t : tiles.values()) {
@@ -381,7 +389,7 @@ final class SurfaceWater {
             substep(list, h, dx);
             remaining -= h;
         }
-        for (Tile t : list) {
+        parallel.forEach(list, (idx, t) -> {
             double maxQ = 0;
             for (int i = 0; i < AREA; i++) maxQ = Math.max(maxQ, Math.max(Math.abs(t.qEast[i]), Math.abs(t.qSouth[i])));
             if (maxQ < SETTLED_DISCHARGE) {
@@ -389,12 +397,18 @@ final class SurfaceWater {
                 java.util.Arrays.fill(t.qSouth, 0);
                 t.settled = true;
             }
-        }
+        });
         double evaporation = config.evaporationMmPerHour / 1000.0 / 3600.0 * dt;
         double area = cellArea();
-        for (Tile t : tiles.values()) {
+        // Infiltration capacity and evaporation per tile in parallel (capacity only reads the solver
+        // grid); handing the water to the groundwater model and the budget totals stay sequential,
+        // in tile and column order.
+        parallel.forEach(all, (idx, t) -> {
+            double infPart = 0;
+            double evPart = 0;
             for (int i = 0; i < AREA; i++) {
                 double d = t.depth[i];
+                t.infiltratedScratch[i] = 0;
                 if (d <= 0) continue;
                 int x = t.tx * TILE + (i & 31);
                 int z = t.tz * TILE + (i >> 5);
@@ -402,17 +416,28 @@ final class SurfaceWater {
                 double inf = Math.min(d, cap);
                 if (inf > 0) {
                     d -= inf;
-                    infiltrated += inf * area;
-                    infiltration.accept(x, z, inf * area);
+                    infPart += inf * area;
+                    t.infiltratedScratch[i] = inf * area;
                 }
                 double ev = Math.min(d, evaporation);
                 d -= ev;
-                evaporated += ev * area;
+                evPart += ev * area;
                 if (d < 1e-9) {
-                    evaporated += d * area; // negligible films dry up
+                    evPart += d * area; // negligible films dry up
                     d = 0;
                 }
                 t.depth[i] = d;
+            }
+            t.infiltratedPart = infPart;
+            t.evaporatedPart = evPart;
+        });
+        for (Tile t : all) {
+            infiltrated += t.infiltratedPart;
+            evaporated += t.evaporatedPart;
+            if (t.infiltratedPart == 0) continue;
+            for (int i = 0; i < AREA; i++) {
+                double v = t.infiltratedScratch[i];
+                if (v > 0) infiltration.accept(t.tx * TILE + (i & 31), t.tz * TILE + (i >> 5), v);
             }
         }
         tiles.values().removeIf(Tile::dry);
@@ -420,8 +445,8 @@ final class SurfaceWater {
 
     /** Deepest water that can flow this substep: lake/river depths and open water next to land. */
     private double maxFlowDepth(List<Tile> list) {
-        double max = 0;
-        for (Tile t : list) {
+        parallel.forEach(list, (idx, t) -> {
+            double max = 0;
             for (int i = 0; i < AREA; i++) {
                 if (t.fixed(i)) {
                     if (hasLandNeighbour(t, i)) max = Math.max(max, t.level[i] - t.bed[i]);
@@ -429,7 +454,10 @@ final class SurfaceWater {
                     max = t.depth[i];
                 }
             }
-        }
+            t.maxDepthScratch = max;
+        });
+        double max = 0; // exact: max does not depend on the order
+        for (Tile t : list) max = Math.max(max, t.maxDepthScratch);
         return max;
     }
 
