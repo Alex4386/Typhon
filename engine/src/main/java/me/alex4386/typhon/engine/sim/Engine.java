@@ -55,9 +55,12 @@ public final class Engine {
     private final Queue<EngineCommand> pendingCommands = new ConcurrentLinkedQueue<>();
     private final Outbox outbox = new Outbox();
     private final List<HistoricalEvent> history = new ArrayList<>();
+    private final Parallel parallel;
     private long currentStep;
 
-    private Engine(long seed, long baseStepMicros, long startStep, List<Registered> subsystems, CommandBus commandBus) {
+    private Engine(long seed, long baseStepMicros, long startStep, List<Registered> subsystems, CommandBus commandBus,
+            Parallel parallel) {
+        this.parallel = parallel;
         this.seed = seed;
         this.baseStepMicros = baseStepMicros;
         this.currentStep = startStep;
@@ -75,6 +78,11 @@ public final class Engine {
 
     public long baseStepMicros() {
         return baseStepMicros;
+    }
+
+    /** The executor subsystems use for data-parallel work; results never depend on its thread count. */
+    public Parallel parallel() {
+        return parallel;
     }
 
     /** The step index that the next call to {@link #step()} will simulate. */
@@ -108,7 +116,8 @@ public final class Engine {
 
         for (Registered registered : subsystems) {
             if (registered.isDue(step)) {
-                registered.subsystem.step(new StepContext(step, time, registered.dtMicros, registered.random, outbox));
+                registered.subsystem.step(new StepContext(step, time, registered.dtMicros, registered.random, outbox,
+                        parallel));
             }
         }
 
@@ -263,6 +272,7 @@ public final class Engine {
         private long baseStepMicros = DEFAULT_BASE_STEP_MICROS;
         private SaveStore restoreFrom;
         private boolean allowConfigChanges;
+        private int threads = Parallel.defaultThreads();
 
         private Builder(long seed) {
             this.seed = seed;
@@ -278,6 +288,16 @@ public final class Engine {
         public Builder baseStepMicros(long micros) {
             if (micros <= 0) throw new IllegalArgumentException("base step must be positive");
             this.baseStepMicros = micros;
+            return this;
+        }
+
+        /**
+         * Worker threads for data-parallel subsystem work (default {@link Parallel#defaultThreads()}).
+         * Results are bit-identical for every thread count; this only changes speed.
+         */
+        public Builder threads(int threads) {
+            if (threads < 1) throw new IllegalArgumentException("threads must be at least 1");
+            this.threads = threads;
             return this;
         }
 
@@ -372,7 +392,8 @@ public final class Engine {
             }
 
             long startStep = meta == null ? 0 : meta.get("step").getAsLong();
-            Engine engine = new Engine(seed, baseStepMicros, startStep, List.copyOf(registered), bus);
+            Engine engine = new Engine(seed, baseStepMicros, startStep, List.copyOf(registered), bus,
+                    Parallel.of(threads));
             if (meta != null) {
                 for (JsonElement e : meta.getAsJsonArray("pendingCommands")) {
                     JsonObject entry = e.getAsJsonObject();
