@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useFrame } from '@react-three/fiber';
+import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { SimEvent, WorldInfo, XY } from '../protocol/messages';
 import { useStore } from '../store/store';
@@ -31,6 +32,26 @@ function drape(world: WorldInfo, pts: XY[], vExag: number, dExag: number, lift: 
     }
   }
   return out;
+}
+
+/**
+ * Shrinks its child markers as the camera approaches them (full size beyond ~600 m, down to a
+ * quarter), and hides those within a few metres, so close-up and walk views are not crowded by
+ * markers sized for an overview.
+ */
+function DistanceScaled({ children }: { children: React.ReactNode }) {
+  const group = useRef<THREE.Group>(null);
+  useFrame(({ camera }) => {
+    const g = group.current;
+    if (!g) return;
+    for (const child of g.children) {
+      const d = child.position.distanceTo(camera.position);
+      const s = Math.min(1, Math.max(0.25, d / 600));
+      child.scale.setScalar(s);
+      child.visible = d > 15;
+    }
+  });
+  return <group ref={group}>{children}</group>;
 }
 
 export function Markers({ world }: { world: WorldInfo }) {
@@ -115,13 +136,16 @@ export function Markers({ world }: { world: WorldInfo }) {
           }),
         )}
 
-      {showFeatures &&
-        features.map((f, k) => (
-          <mesh key={k} position={[f.at[0], displayZ(world, f.at[0], f.at[1], vExag, dExag) + 12, -f.at[1]]}>
-            <octahedronGeometry args={[16, 0]} />
-            <meshBasicMaterial color={FEATURE_COLORS[f.feature] ?? '#ffffff'} />
-          </mesh>
-        ))}
+      {showFeatures && (
+        <DistanceScaled>
+          {features.map((f, k) => (
+            <mesh key={k} position={[f.at[0], displayZ(world, f.at[0], f.at[1], vExag, dExag) + 12, -f.at[1]]}>
+              <octahedronGeometry args={[16, 0]} />
+              <meshBasicMaterial color={FEATURE_COLORS[f.feature] ?? '#ffffff'} />
+            </mesh>
+          ))}
+        </DistanceScaled>
+      )}
 
       {sectionPts.length > 1 && <Polyline points={sectionPts} color="#ffe14d" depthTest={false} />}
       {polyline.map((p, k) => (

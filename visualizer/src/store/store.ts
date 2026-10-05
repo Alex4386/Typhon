@@ -92,6 +92,12 @@ interface Store {
   showChambers: boolean;
   showAtmosphere: boolean;
   showFeatures: boolean;
+  /** Draw the groundwater table as a translucent sheet (always on while the camera is underground). */
+  showWaterTable: boolean;
+  /** Make the ground translucent while the camera is below it. */
+  xray: boolean;
+  /** Set by the scene: the camera is below the displayed ground. */
+  underground: boolean;
   waterVolume: number;
   digRadius: number;
   digDepth: number;
@@ -140,6 +146,9 @@ export const useStore = create<Store>((set, get) => ({
   showChambers: true,
   showAtmosphere: true,
   showFeatures: true,
+  showWaterTable: false,
+  xray: true,
+  underground: false,
   waterVolume: 50000,
   digRadius: 40,
   digDepth: 30,
@@ -243,10 +252,11 @@ export function rememberQuality(q: Quality): void {
 }
 
 /** Per-quality rendering settings. */
-export const QUALITY: Record<Quality, { smoothRadius: number; shadows: boolean; plume: number; ash: number; dpr: [number, number] }> = {
-  low: { smoothRadius: 2, shadows: false, plume: 500, ash: 300, dpr: [1, 1] },
-  medium: { smoothRadius: 4, shadows: false, plume: 1200, ash: 800, dpr: [1, 1.5] },
-  high: { smoothRadius: 5, shadows: true, plume: 2400, ash: 1600, dpr: [1, 2] },
+/** `glow`: halo sprites over incandescent lava (0 = off). */
+export const QUALITY: Record<Quality, { smoothRadius: number; shadows: boolean; plume: number; ash: number; glow: number; dpr: [number, number] }> = {
+  low: { smoothRadius: 2, shadows: false, plume: 500, ash: 300, glow: 0, dpr: [1, 1] },
+  medium: { smoothRadius: 4, shadows: false, plume: 1200, ash: 800, glow: 2000, dpr: [1, 1.5] },
+  high: { smoothRadius: 5, shadows: true, plume: 2400, ash: 1600, glow: 6000, dpr: [1, 2] },
 };
 
 function defaultServerUrl(): string {

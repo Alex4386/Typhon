@@ -5,11 +5,37 @@ import { Field, type FieldId } from '../protocol/fields';
 import type { WorldInfo, XY } from '../protocol/messages';
 import { QUALITY, getTile, tileKey, useStore, type SurfaceColorMode } from '../store/store';
 import { BATHY, BLACKBODY, DIVERGING, HYPSO, THERMAL, hexToRgb, ramp, shadeFor, type RGB } from '../util/color';
+import { interpolateGrid } from '../util/grid';
 import { sampleColumn } from '../util/world';
 
 /** Tiles rebuilt per rendered frame, to keep the UI responsive while data streams in. */
 const REBUILDS_PER_FRAME = 8;
 const rebuildQueue = new Map<string, () => void>();
+
+/**
+ * Displayed ground heights per tile (scene units, after smoothing and exaggeration), by tile key:
+ * vertex (a, b) ∈ [0, T]² sits on column (tx·T + a, ty·T + b). Camera collision and overlay placement
+ * sample these so nothing ends up inside the smoothed surface that is actually drawn.
+ */
+const displayHeights = new Map<string, { z: Float32Array; vExag: number; dExag: number }>();
+
+/**
+ * Shared ground material. Double-sided so the surface stays visible from below; while the camera
+ * is underground and x-ray is on it turns translucent so the chamber, conduits, dikes, hypocentres
+ * and water table behind it can be seen.
+ */
+const groundMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+/** Per-frame facts about the camera that other scene parts read without store traffic. */
+export const sceneProbe = { cameraGround: Number.NaN };
+
+/** Groundwater table: a translucent cyan sheet `depth` below the ground. */
+const waterTableMaterial = new THREE.MeshBasicMaterial({
+  color: '#4cc9f0',
+  transparent: true,
+  opacity: 0.32,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+});
 
 /** Reader for vertex (a, b) ∈ [−1, T+1]² of a tile, reaching into the 8 neighbouring tiles. */
 type Reader = (a: number, b: number) => number;
@@ -160,6 +186,8 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
   const lava = useMemo(() => gridGeometry(t), [t]);
   const water = useMemo(() => gridGeometry(t), [t]);
   const flow = useMemo(() => gridGeometry(t), [t]);
+  const table = useMemo(() => gridGeometry(t), [t]);
+  const tableMesh = useRef<THREE.Mesh>(null);
   const lavaMesh = useRef<THREE.Mesh>(null);
   const waterMesh = useRef<THREE.Mesh>(null);
   const flowMesh = useRef<THREE.Mesh>(null);
@@ -210,6 +238,9 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       const wp = water.getAttribute('position') as THREE.BufferAttribute;
       const wc = water.getAttribute('color') as THREE.BufferAttribute;
       const fp = flow.getAttribute('position') as THREE.BufferAttribute;
+      const tp = table.getAttribute('position') as THREE.BufferAttribute;
+      const wetT = new Uint8Array(n * n);
+      let anyTable = false;
       const fc = flow.getAttribute('color') as THREE.BufferAttribute;
       const c: RGB = [0, 0, 0];
       let anyLava = false;
@@ -218,6 +249,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       const wetL = new Uint8Array(n * n);
       const wetW = new Uint8Array(n * n);
       const wetF = new Uint8Array(n * n);
+      const shown = new Float32Array(n * n);
       let maxUplift = 1e-6;
       if (mode === 'uplift') for (let b = 0; b < n; b++) for (let a = 0; a < n; a++) maxUplift = Math.max(maxUplift, Math.abs(upR(a, b)));
       const maxI = (world.tiles.maxTx + 1) * t - 1;
@@ -232,6 +264,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           const elev = elevR(a, b);
           const z = (elev + upR(a, b) * (dExag - 1)) * vExag;
           gp.setXYZ(v, x, z, -y);
+          shown[v] = z;
           // normal from central differences across tile edges (no seams)
           const hx = ((elevR(a + 1, b) - elevR(a - 1, b)) * vExag) / (2 * world.cellSize);
           const hy = ((elevR(a, b + 1) - elevR(a, b - 1)) * vExag) / (2 * world.cellSize);
@@ -266,6 +299,15 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
             wc.setXYZ(v, 0.2, 0.45, 0.65);
           }
 
+          const wtd = fields.wt(a, b);
+          if (Number.isFinite(wtd) && wtd > 0.5) {
+            anyTable = true;
+            wetT[v] = 1;
+            tp.setXYZ(v, x, z - wtd * vExag, -y);
+          } else {
+            tp.setXYZ(v, x, z - 2, -y);
+          }
+
           const pdc = pdcR(a, b);
           const lah = laharR(a, b);
           if (pdc > 0.05 || lah > 0.05) {
@@ -281,9 +323,16 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
         }
       }
       gn.needsUpdate = true;
+      displayHeights.set(key, { z: shown, vExag, dExag });
       if (anyLava) compactIndex(lava, wetL, n);
       if (anyWater) compactIndex(water, wetW, n);
       if (anyFlow) compactIndex(flow, wetF, n);
+      if (anyTable) {
+        compactIndex(table, wetT, n);
+        tp.needsUpdate = true;
+        table.computeBoundingSphere();
+      }
+      if (tableMesh.current) tableMesh.current.userData.has = anyTable;
       ground.computeBoundingSphere();
       ground.computeBoundingBox();
       for (const [geo, any] of [
@@ -307,7 +356,13 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
     });
   }, [rev, vExag, dExag, mode, units, world, tx, ty, t, n, ground, lava, water, flow, smoothR]);
 
-  useEffect(() => () => void rebuildQueue.delete(tileKey(tx, ty)), [tx, ty]);
+  useEffect(
+    () => () => {
+      rebuildQueue.delete(tileKey(tx, ty));
+      displayHeights.delete(tileKey(tx, ty));
+    },
+    [tx, ty],
+  );
 
   return (
     <group>
@@ -323,8 +378,9 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           onPick([e.point.x, -e.point.z], e);
         }}
       >
-        <meshStandardMaterial vertexColors roughness={0.95} metalness={0} />
+        <primitive object={groundMaterial} attach="material" />
       </mesh>
+      <mesh ref={tableMesh} geometry={table} visible={false} renderOrder={5} material={waterTableMaterial} />
       <mesh ref={waterMesh} geometry={water} visible={false} renderOrder={2} receiveShadow={shadows}>
         <meshStandardMaterial vertexColors transparent opacity={0.82} roughness={0.06} metalness={0.35} depthWrite={false} />
       </mesh>
@@ -446,7 +502,25 @@ function colourGround(
 }
 
 export function Terrain({ world, onPick }: { world: WorldInfo; onPick: TileProps['onPick'] }) {
-  useFrame(() => {
+  const group = useRef<THREE.Group>(null);
+  useFrame(({ camera }) => {
+    const st = useStore.getState();
+    const g = displayedGround(world, camera.position.x, -camera.position.z, st.verticalExaggeration, st.deformationExaggeration);
+    sceneProbe.cameraGround = g ?? Number.NaN;
+    const under = g !== undefined && camera.position.y < g - 0.5;
+    if (under !== st.underground) st.set({ underground: under });
+    const xray = under && st.xray;
+    if (groundMaterial.transparent !== xray) {
+      groundMaterial.transparent = xray;
+      groundMaterial.opacity = xray ? 0.28 : 1;
+      groundMaterial.depthWrite = !xray;
+      groundMaterial.needsUpdate = true;
+    }
+    // water-table sheets: shown on request, and always while underground
+    const showTable = st.showWaterTable || under;
+    group.current?.traverse((o) => {
+      if (o instanceof THREE.Mesh && o.material === waterTableMaterial) o.visible = showTable && o.userData.has === true;
+    });
     let k = 0;
     for (const [key, rebuild] of rebuildQueue) {
       rebuildQueue.delete(key);
@@ -457,7 +531,7 @@ export function Terrain({ world, onPick }: { world: WorldInfo; onPick: TileProps
   const tiles: [number, number][] = [];
   for (let ty = world.tiles.minTy; ty <= world.tiles.maxTy; ty++) for (let tx = world.tiles.minTx; tx <= world.tiles.maxTx; tx++) tiles.push([tx, ty]);
   return (
-    <group>
+    <group ref={group}>
       {tiles.map(([tx, ty]) => (
         <TerrainTile key={`${tx},${ty}`} world={world} tx={tx} ty={ty} onPick={onPick} />
       ))}
@@ -465,8 +539,25 @@ export function Terrain({ world, onPick }: { world: WorldInfo; onPick: TileProps
   );
 }
 
+/**
+ * Height of the drawn (smoothed) ground surface at world (x, y), bilinear between the vertices of
+ * the tile meshes; undefined where the tile is not built yet or was built with other exaggerations.
+ */
+export function displayedGround(world: WorldInfo, x: number, y: number, vExag: number, dExag: number): number | undefined {
+  const t = world.tileSize;
+  const fi = (x - world.origin[0]) / world.cellSize - 0.5;
+  const fj = (y - world.origin[1]) / world.cellSize - 0.5;
+  const tx = Math.floor(fi / t);
+  const ty = Math.floor(fj / t);
+  const tile = displayHeights.get(tileKey(tx, ty));
+  if (!tile || tile.vExag !== vExag || tile.dExag !== dExag) return undefined;
+  return interpolateGrid(tile.z, t, fi - tx * t, fj - ty * t);
+}
+
 /** Elevation of world point (x, y) as displayed (with exaggerations), for placing overlays. */
 export function displayZ(world: WorldInfo, x: number, y: number, vExag: number, dExag: number): number {
+  const shown = displayedGround(world, x, y, vExag, dExag);
+  if (shown !== undefined) return shown;
   const i = Math.floor((x - world.origin[0]) / world.cellSize);
   const j = Math.floor((y - world.origin[1]) / world.cellSize);
   const e = sampleColumn(world, Field.SurfaceElevation, i, j, 0);

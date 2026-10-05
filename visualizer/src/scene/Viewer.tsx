@@ -11,6 +11,7 @@ import { worldExtent } from '../util/world';
 import { Atmosphere } from './Atmosphere';
 import { Hypocentres } from './Hypocentres';
 import { LavaGlow } from './LavaGlow';
+import { LavaHalo } from './LavaHalo';
 import { Markers } from './Markers';
 import { Terrain } from './Terrain';
 
@@ -153,6 +154,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
         <Terrain world={world} onPick={onPick} />
       </group>
       <LavaGlow world={world} />
+      <LavaHalo world={world} />
       <Markers world={world} />
       {showHypo && <Hypocentres />}
       <Atmosphere world={world} />

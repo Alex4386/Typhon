@@ -212,6 +212,8 @@ export function Toolbox({ world }: { world: WorldInfo }) {
             ['showChambers', 'chambers'],
             ['showAtmosphere', 'atmosphere'],
             ['showFeatures', 'features'],
+            ['showWaterTable', 'water table'],
+            ['xray', 'x-ray underground'],
           ] as const
         ).map(([k, label]) => (
           <label key={k} className="check">
