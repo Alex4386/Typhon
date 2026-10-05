@@ -12,7 +12,8 @@ import java.util.Map;
  *
  * with transmissivity {@code T = Σ K_k·sat_k} integrated over the saturated part of the column's
  * levels (so impermeable basement and cavities carry no flow), recharge {@code R} draining from the
- * vadose zone, and sinks {@code Q} (boiling). Face transmissivity is the harmonic mean of the two
+ * vadose zone, and sinks {@code Q} (boiling). With {@link SubsurfaceConfig#regionalBoundary} the
+ * columns on the edge of the modelled area keep their head (the regional water table beyond it). Face transmissivity is the harmonic mean of the two
  * columns' effective conductivities times their mean saturated thickness (as in MODFLOW).
  *
  * <p>Each macro step is solved implicitly (Picard-linearised transmissivity) with red-black SOR
@@ -134,6 +135,17 @@ final class Groundwater {
     }
 
     void step(double dt, Map<SolverChunk, double[]> boiled, SpringSink springs) {
+        step(dt, 1, boiled, springs, false);
+    }
+
+    /**
+     * One implicit step of {@code dt}, taking {@code boiledShare} of the boiled volumes. With
+     * {@code requireConvergence}, an SOR solve that hits the iteration cap changes nothing and
+     * returns false (the caller retries with shorter steps): the conservative flux update of an
+     * unconverged solve overshoots around strong sinks.
+     */
+    boolean step(double dt, double boiledShare, Map<SolverChunk, double[]> boiled, SpringSink springs,
+            boolean requireConvergence) {
         rechargeVolume = 0;
         springVolume = 0;
         seaExchange = 0;
@@ -142,7 +154,7 @@ final class Groundwater {
 
         refreshTopology();
         int m = chunkOf.length;
-        if (m == 0) return;
+        if (m == 0) return true;
         int[] east = this.east;
         int[] south = this.south;
         boolean[] red = this.red;
@@ -155,19 +167,21 @@ final class Groundwater {
         double area = grid.area();
         double sea = grid.world().spec().seaLevelZ();
         double drainFactor = 1 - Math.exp(-dt / config.vadoseLagSeconds);
+        double[] drained = new double[m];
         for (int i = 0; i < m; i++) {
             SolverChunk ch = chunkOf[i];
             int c = colOf[i];
-            fixed[i] = ch.sea[c];
-            if (fixed[i]) ch.head[c] = sea;
+            fixed[i] = ch.sea[c] || (config.regionalBoundary && edge(i));
+            if (ch.sea[c]) ch.head[c] = sea;
             h0[i] = ch.head[c];
             storageCoef[i] = config.specificYield * area / dt;
             double drain = ch.vadose[c] * drainFactor;
             ch.vadose[c] -= drain;
+            drained[i] = drain;
             double recharge = drain * area;
             rechargeVolume += recharge;
             double[] b = boiled.get(ch);
-            double boil = b == null ? 0 : b[c];
+            double boil = b == null ? 0 : b[c] * boiledShare;
             boiledVolume += boil;
             source[i] = (recharge - boil) / dt;
             double[] st = transmissivity(ch, c, h0[i]);
@@ -200,6 +214,7 @@ final class Groundwater {
         double[] h = h0.clone();
         double omega = config.sorOmega;
         int iterations = 0;
+        boolean converged = false;
         // Red-black SOR: within one colour every update reads only the other colour, so blocks of
         // columns are updated in parallel with results independent of the thread count.
         int blocks = (m + SOR_BLOCK - 1) / SOR_BLOCK;
@@ -232,10 +247,21 @@ final class Groundwater {
             for (double c : blockChange) maxChange = Math.max(maxChange, c);
             if (maxChange < 1e-6) { // micrometre head changes: converged
                 iterations++;
+                converged = true;
                 break;
             }
         }
         lastIterations = iterations;
+        if (requireConvergence && !converged) {
+            for (int i = 0; i < m; i++) {
+                SolverChunk ch = chunkOf[i];
+                ch.vadose[colOf[i]] += drained[i];
+                if (fixed[i]) ch.head[colOf[i]] = h0[i];
+            }
+            rechargeVolume = 0;
+            boiledVolume = 0;
+            return false;
+        }
 
         // Conservative update from face fluxes (exact water balance).
         double[] net = new double[m]; // m³ into each column over dt
@@ -256,7 +282,7 @@ final class Groundwater {
             int c = colOf[i];
             if (fixed[i]) {
                 seaExchange += net[i];
-                ch.head[c] = sea;
+                ch.head[c] = ch.sea[c] ? sea : h0[i];
                 // Water the boundary column received from recharge/boiling is also exchanged.
                 seaExchange += source[i] * dt;
                 continue;
@@ -275,6 +301,12 @@ final class Groundwater {
             }
             ch.head[c] = next;
         }
+        return true;
+    }
+
+    /** True if the column lies on the edge of the modelled area (a neighbour is missing). */
+    private boolean edge(int i) {
+        return east[i] < 0 || west[i] < 0 || south[i] < 0 || north[i] < 0;
     }
 
     private static double face(double[] keff, double[] sat, int a, int b) {

@@ -300,21 +300,22 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
         for (double e : heat.chamberDelivered) chamberHeat += e;
         bottomHeat += heat.bottomInflow;
         long t2 = System.nanoTime();
-        int substeps = Math.max(1, (int) Math.ceil(dtPhysical / config.maxGroundwaterStepSeconds - 1e-9));
-        Map<SolverChunk, double[]> boiledShare = heat.boiledVolume;
-        if (substeps > 1) {
-            boiledShare = new java.util.IdentityHashMap<>();
-            for (Map.Entry<SolverChunk, double[]> e : heat.boiledVolume.entrySet()) {
-                double[] v = e.getValue().clone();
-                for (int i = 0; i < v.length; i++) v[i] /= substeps;
-                boiledShare.put(e.getKey(), v);
+        // Groundwater sub-steps: as long as the SOR solve converges, halved (down to
+        // minGroundwaterStepSeconds) where it does not. Depends only on the state: deterministic.
+        double done = 0;
+        double step = dtPhysical;
+        while (done < dtPhysical) {
+            double dt = Math.min(step, dtPhysical - done);
+            boolean last = dt <= config.minGroundwaterStepSeconds;
+            if (groundwater.step(dt, dt / dtPhysical, heat.boiledVolume,
+                    (ch, c, v) -> discharge(ch, c, v, SurfaceWater.Source.SPRING), !last)) {
+                seaGroundwater += groundwater.seaExchange;
+                deficit += groundwater.deficitVolume;
+                done += dt;
+                if (dtPhysical - done < 1e-9 * dtPhysical) break;
+            } else {
+                step = Math.max(config.minGroundwaterStepSeconds, dt / 2);
             }
-        }
-        for (int s = 0; s < substeps; s++) {
-            groundwater.step(dtPhysical / substeps, boiledShare,
-                    (ch, c, v) -> discharge(ch, c, v, SurfaceWater.Source.SPRING));
-            seaGroundwater += groundwater.seaExchange;
-            deficit += groundwater.deficitVolume;
         }
         long t3 = System.nanoTime();
         lastTimings[0] = t1 - t0;

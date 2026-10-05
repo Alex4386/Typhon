@@ -76,6 +76,34 @@ class GroundwaterTest {
         assertEquals(0, b.imbalance(), 1e-6 * b.inflow(), b.toString());
     }
 
+    /**
+     * A window in a regional aquifer: the edge keeps its water table and resupplies a boiling
+     * hydrothermal system in the middle, which a closed (no-flow) edge cannot.
+     */
+    @Test
+    void regionalBoundaryResuppliesBoiling() {
+        double closed = edgeHeadAfterBoiling(false);
+        double regional = edgeHeadAfterBoiling(true);
+        assertEquals(-20, regional, 1e-9, "the regional edge keeps its level");
+        assertTrue(closed < regional - 1, "a closed window drains: edge at " + closed);
+    }
+
+    private static double edgeHeadAfterBoiling(boolean regionalBoundary) {
+        int n = 24;
+        WorldModel world = SubsurfaceTestWorld.uniform("basalt", 50, 100, Double.NaN, n, n, (x, z) -> 0);
+        SubsurfaceConfig c = SubsurfaceTestWorld.config();
+        c.initialWaterTableDepthM = 20;
+        c.regionalBoundary = regionalBoundary;
+        Subsurface s = new Subsurface(world, c);
+        s.setHeatSources("v", new SubsurfaceHeatTest.FixedSources(List.of(),
+                List.of(new HeatSources.Vent(12, 12, 5e8, 100, 300))));
+        s.prepare();
+        for (int d = 0; d < 365; d++) s.macroStep(DAY, DAY, false);
+        assertTrue(s.budget().boiled() > 0, "the vent should boil groundwater");
+        assertEquals(0, s.budget().imbalance(), 1e-6 * s.budget().inflow(), s.budget().toString());
+        return s.waterTableZ(0, 0);
+    }
+
     /** Poured water infiltrates, raises the water table and comes back out as a spring. */
     @Test
     void pouredWaterRaisesTheWaterTableAndFeedsSprings() {

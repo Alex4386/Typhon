@@ -47,6 +47,12 @@ public final class SubsurfaceConfig {
     public double waterExpansivity = 7e-4;
     /** Upper limit of the convective Nusselt enhancement of conductivity. */
     public double maxNusselt = 200;
+    /**
+     * Brittle–ductile transition (°C): hotter rock creeps shut its fractures, so groundwater neither
+     * convects nor flows through it (≈360–400 °C; Fournier 1999, Hayba &amp; Ingebritsen 1997). Heat
+     * crosses it by conduction only, which bounds what a hydrothermal system draws from magma.
+     */
+    public double brittleDuctileC = 400;
 
     // ── Water ──
     /** Rainfall (mm/h) over the whole world. */
@@ -85,11 +91,18 @@ public final class SubsurfaceConfig {
     /** Iterations of the red-black SOR groundwater solve per macro step. */
     public int groundwaterIterations = 60;
     /**
-     * Longest groundwater step (physical s); longer macro steps (spin-up) are split. With a fixed
-     * SOR iteration count, very long steps leave the implicit solve unconverged, and the flux update
-     * then overshoots heads below the floor and above the ground (creating water from nothing).
+     * Shortest groundwater sub-step (physical s). A macro step whose SOR solve does not converge
+     * within {@link #groundwaterIterations} is halved until it does, down to this: unconverged around
+     * strong sinks (boiling) in permeable rock, the flux update overshoots heads below the floor and
+     * above the ground (springs from nothing). Young basalt converges at ~2-day steps.
      */
-    public double maxGroundwaterStepSeconds = 30 * 86400;
+    public double minGroundwaterStepSeconds = 86400;
+    /**
+     * Columns on the edge of the modelled area keep their water table: the regional aquifer beyond
+     * a window over a larger volcano, which recharge and drainage keep at its level. Off, the edge is
+     * a no-flow boundary (an island or a closed basin).
+     */
+    public boolean regionalBoundary = false;
     /** SOR over-relaxation factor. */
     public double sorOmega = 1.7;
     /** Latent heat of vaporisation of water (J/kg). */
@@ -133,7 +146,7 @@ public final class SubsurfaceConfig {
         if (!(manningN > 0) || !(surfaceWaterCfl > 0 && surfaceWaterCfl <= 1)) {
             throw new IllegalArgumentException("bad surface-water parameters");
         }
-        if (groundwaterIterations < 1 || !(sorOmega > 0 && sorOmega < 2) || !(maxGroundwaterStepSeconds > 0)) {
+        if (groundwaterIterations < 1 || !(sorOmega > 0 && sorOmega < 2) || !(minGroundwaterStepSeconds > 0)) {
             throw new IllegalArgumentException("bad groundwater solver parameters");
         }
         if (warmEvery < 1 || demoteAfter < 0) throw new IllegalArgumentException("bad LOD parameters");
