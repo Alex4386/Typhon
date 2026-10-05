@@ -70,7 +70,7 @@ interface Transition {
  */
 export function CameraRig({ world }: { world: WorldInfo }) {
   const controls = useRef<OrbitControlsImpl>(null);
-  const { camera, gl, size } = useThree();
+  const { camera, gl, size, scene } = useThree();
   const cam = camera as THREE.PerspectiveCamera;
 
   // ── persistent per-frame state (no allocations in useFrame) ──
@@ -501,6 +501,15 @@ export function CameraRig({ world }: { world: WorldInfo }) {
         cam.near = near;
         cam.far = far;
         cam.updateProjectionMatrix();
+      }
+      // fog distances follow the view distance, so a far-away framing (a 20 km column seen from
+      // 40 km) still shows the volcano, while close views keep their aerial perspective
+      const fog = scene.fog as THREE.Fog | null;
+      if (fog && 'near' in fog) {
+        const span = sceneSpan(world);
+        const view = Math.max(dist, cam.position.y - g);
+        fog.near = Math.max(span * 0.9, view * 0.9);
+        fog.far = Math.max(span * 3.2, view * 3);
       }
     }
 
