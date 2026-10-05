@@ -74,7 +74,7 @@ export function App() {
             }
           >
             <Button variant="outline" size="sm" className="text-muted-foreground" onClick={() => set({ paletteOpen: true })}>
-              <Search /> <span className="hidden lg:inline">Find…</span>
+              <Search /> <span className="hidden 2xl:inline">Find…</span>
             </Button>
           </Tip>
           <DrawerButtons />
@@ -155,7 +155,7 @@ export function App() {
         <Guide />
         <CommandPalette />
         <HoverLabel />
-        <Toaster theme="dark" position="top-center" richColors closeButton visibleToasts={4} />
+        <Toaster theme="dark" position="bottom-center" offset={{ bottom: 64 }} richColors closeButton visibleToasts={3} />
       </div>
     </TooltipProvider>
   );

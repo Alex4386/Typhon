@@ -75,7 +75,7 @@ export function frameDistance(sel: Selection | null, entities: EntityMap): numbe
     case 'fissure':
       return Math.max(500, Number(p.lengthM ?? 200) * 2.5);
     default:
-      return 500;
+      return 800;
   }
 }
 

@@ -179,7 +179,7 @@ final class EntityTracker {
             for (VentSite vent : v.coupler().allVents()) {
                 boolean fissure = vent.kind() == VentKind.FISSURE;
                 JsonObject o = entity("vent:" + vid + ":" + vent.id(), fissure ? "fissure" : "vent", vid,
-                        (fissure ? "Fissure " : "Vent ") + vent.id(), map.point(vent.position()));
+                        fissure ? fissureLabel(vent.id()) : "Vent " + vent.id(), map.point(vent.position()));
                 JsonObject p = o.getAsJsonObject("props");
                 p.addProperty("ventId", vent.id());
                 p.addProperty("shape", vent.kind().name());
@@ -267,6 +267,15 @@ final class EntityTracker {
             out.put("lava:field", o);
         }
         return out;
+    }
+
+    /** "Fissure from dike 2" for fissures the engine names after their dike, else "Fissure <id>". */
+    static String fissureLabel(String ventId) {
+        int k = ventId.lastIndexOf("-dike-");
+        if (k >= 0 && k + 6 < ventId.length() && ventId.substring(k + 6).chars().allMatch(Character::isDigit)) {
+            return "Fissure from dike " + ventId.substring(k + 6);
+        }
+        return "Fissure " + ventId;
     }
 
     static String featureLabel(HydrothermalFeature kind) {

@@ -40,7 +40,7 @@ export function WorldSwitcher() {
   return (
     <DropdownMenu>
       <Tip content="Switch between the worlds this server is running">
-        <DropdownMenuTrigger render={<Button variant="ghost" className="max-w-56 font-semibold" />}>
+        <DropdownMenuTrigger render={<Button variant="ghost" className="max-w-48 font-semibold" />}>
           <span className="truncate">{current ? sessionLabel(current) : world?.name ?? 'No world open'}</span>
           <ChevronDown data-icon="inline-end" className="text-muted-foreground" />
         </DropdownMenuTrigger>
@@ -89,7 +89,7 @@ export function Clock() {
     '\nPlayback speed (next to the play button) only changes how fast you watch it.';
   return (
     <Tip content={title}>
-      <div className="flex flex-col items-end leading-tight" data-testid="clock">
+      <div className="flex flex-col items-end leading-none whitespace-nowrap" data-testid="clock">
         <span className="font-mono text-sm tabular-nums">
           {formatSimTime(now)}
           {clock?.replay && (
@@ -99,7 +99,7 @@ export function Clock() {
           )}
         </span>
         {c !== undefined && (
-          <span className="text-[11px] text-muted-foreground">
+          <span className="mt-0.5 text-[11px] text-muted-foreground max-lg:hidden">
             volcano time {formatFactor(c)}
             {physical !== undefined ? ` · ≈ ${formatDuration(physical)}` : ''}
           </span>
@@ -175,7 +175,7 @@ export function Playback() {
       </DropdownMenu>
       {clock && mode !== 'PAUSED' && !replay && clock.rate > 0 && Math.abs(clock.rate - speed) / speed > 0.3 && (
         <Tip content="The computer cannot keep up with the requested speed">
-          <span className="text-xs text-muted-foreground">(running {clock.rate >= 10 ? clock.rate.toFixed(0) : clock.rate.toFixed(1)}×)</span>
+          <span className="text-xs whitespace-nowrap text-muted-foreground max-xl:hidden">(running {clock.rate >= 10 ? clock.rate.toFixed(0) : clock.rate.toFixed(1)}×)</span>
         </Tip>
       )}
     </div>
@@ -193,7 +193,7 @@ export function DrawerButtons() {
         <Tip key={d.tab} content={`${d.title}${d.key ? ` [${d.key}]` : ''}`}>
           <Button variant={drawer === d.tab ? 'secondary' : 'ghost'} size="sm" aria-pressed={drawer === d.tab} onClick={() => openDrawer(d.tab)} className="relative">
             <d.icon />
-            <span className="hidden xl:inline">{d.label}</span>
+            <span className="hidden 2xl:inline">{d.label}</span>
             {d.tab === 'entities' && newCount > 0 && <span className="absolute top-0.5 right-0.5 size-2 rounded-full bg-primary" aria-label={`${newCount} new`} />}
           </Button>
         </Tip>

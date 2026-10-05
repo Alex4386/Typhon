@@ -16,7 +16,7 @@ import {
 import { rememberSession, rememberedSession, useStore } from '../store/store';
 import { formatPlace, KIND_LABEL, type EntityView } from '../store/entities';
 import { useCamera } from '../camera/cameraStore';
-import { describeEvent, toastTone } from '../panels/events';
+import { NOTABLE_FEATURES, describeEvent, toastTone } from '../panels/events';
 
 /** Fields the visualizer subscribes to. */
 export const SUBSCRIBED_FIELDS: FieldId[] = [
@@ -225,12 +225,26 @@ export function showEntity(id: string): void {
 
 /** Kinds worth a notification when they appear while watching. */
 const ANNOUNCED = new Set(['vent', 'fissure', 'dike', 'feature', 'pdc', 'lahar', 'lavaFront']);
+/** Repeats of the same kind of "new …" notification are held back this long (ms); they still appear in Entities. */
+const ANNOUNCE_REPEAT_MS = 30_000;
+const lastAnnounced = new Map<string, number>();
+
+/** Worth a notification: not diffuse ground features (fumaroles, sulfur, alteration), at most one per kind per 30 s. */
+function announceable(e: EntityView, now: number): boolean {
+  if (!ANNOUNCED.has(e.kind) || e.hidden) return false;
+  if (e.kind === 'feature' && !NOTABLE_FEATURES.has(String(e.props.feature))) return false;
+  const key = e.kind === 'feature' ? `feature:${e.props.feature}` : e.kind;
+  if (now - (lastAnnounced.get(key) ?? -Infinity) < ANNOUNCE_REPEAT_MS) return false;
+  lastAnnounced.set(key, now);
+  return true;
+}
 
 /** “New hot spring at E … N …” with a button that shows it; several at once are summarised. */
 function announce(added: EntityView[]): void {
   if (performance.now() < toastsQuietUntil) return;
   const s = useStore.getState();
-  const news = added.filter((e) => ANNOUNCED.has(e.kind) && !e.hidden);
+  const now = performance.now();
+  const news = added.filter((e) => announceable(e, now));
   if (news.length === 0) return;
   if (news.length > 2) {
     const kinds = [...new Set(news.map((e) => (e.kind === 'feature' ? e.label.toLowerCase() : KIND_LABEL[e.kind]?.toLowerCase() ?? e.kind)))];

@@ -37,7 +37,6 @@ export function Inspector({ world }: { world: WorldInfo }) {
   const selection = useStore((s) => s.selection);
   const entity = useStore((s) => (s.selection?.type === 'entity' ? s.entities[s.selection.id] : undefined));
   const inspection = useStore((s) => s.inspection);
-  const pending = useStore((s) => s.inspectPending !== null);
   const at = inspectAt(selection, entity);
   const ax = at?.[0];
   const ay = at?.[1];
@@ -81,7 +80,7 @@ export function Inspector({ world }: { world: WorldInfo }) {
   const anchor = selectionAnchor(selection, useStore.getState().entities);
 
   return (
-    <aside className={cn(OVERLAY, 'absolute top-3 right-3 z-10 flex max-h-[calc(100%-1.5rem)] w-80 flex-col text-sm')} aria-label="Inspector">
+    <aside className={cn(OVERLAY, 'absolute top-3 right-3 z-10 flex max-h-[calc(100%-5.5rem)] w-80 flex-col text-sm')} aria-label="Inspector">
       <div className="flex items-start gap-2 p-3 pb-2">
         <span className="mt-1 size-3 shrink-0 rounded-full ring-1 ring-black/40" style={{ background: color }} aria-hidden />
         <div className="min-w-0 flex-1">
@@ -110,7 +109,6 @@ export function Inspector({ world }: { world: WorldInfo }) {
             <Ruler /> Cross-section
           </Button>
         </Tip>
-        {pending && <span className="ml-auto self-center text-xs text-muted-foreground">updating…</span>}
       </div>
       <Separator />
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto p-3">

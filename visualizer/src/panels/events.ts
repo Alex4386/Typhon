@@ -78,7 +78,6 @@ export function toastTone(e: SimEvent): 'info' | 'warn' | 'alert' | null {
     case 'eruptionStarted':
       return 'alert';
     case 'eruptionEnded':
-    case 'fissureOpened':
       return 'warn';
     case 'alertChanged':
       return e.current === 'ERUPTION_IMMINENT' ? 'warn' : null;
@@ -92,7 +91,7 @@ export function toastTone(e: SimEvent): 'info' | 'warn' | 'alert' | null {
 }
 
 /** Geothermal features that mark a regime change worth surfacing among the important events. */
-const NOTABLE_FEATURES = new Set(['GEYSER', 'HOT_SPRING', 'SULFUR_SPRING', 'SUBMARINE_VENT']);
+export const NOTABLE_FEATURES = new Set(['GEYSER', 'HOT_SPRING', 'SULFUR_SPRING', 'SUBMARINE_VENT']);
 
 /** Milestones: changes in what the volcano is doing, not its continuous output. */
 export function isImportant(e: SimEvent): boolean {

@@ -64,6 +64,12 @@ class EntityTrackerTest {
     }
 
     @Test
+    void fissuresAreNamedAfterTheirDike() {
+        assertEquals("Fissure from dike 2", EntityTracker.fissureLabel("kilauea-real-dike-2"));
+        assertEquals("Fissure east-rift", EntityTracker.fissureLabel("east-rift"));
+    }
+
+    @Test
     void notableQuakesAppearAndExpire() {
         EntityTracker t = new EntityTracker(MAP, List.of("v"));
         t.observe(new SeismicEvent(5, "v", SeismicEventType.VT, 3.1, new BlockPos(10, -20, 10), 1, false));
