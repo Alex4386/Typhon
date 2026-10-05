@@ -128,7 +128,7 @@ public final class LavaFlow implements Subsystem {
     private static final int AREA = LavaChunk.AREA;
     private static final int UNKNOWN = LavaChunk.UNKNOWN;
     /** Minimum chunks per parallel task (a chunk is 256 cells of work). */
-    private static final int CHUNK_GRAIN = 2;
+    private static final int CHUNK_GRAIN = 1;
     private static final Comparator<LavaChunk> BY_KEY = Comparator.comparingLong(c -> c.key);
 
     private final TerrainModel terrain;

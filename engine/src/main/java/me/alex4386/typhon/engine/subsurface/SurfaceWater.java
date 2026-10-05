@@ -503,15 +503,28 @@ final class SurfaceWater {
         return t != null && t.known[i] && !t.fixed(i);
     }
 
+    /** Work items {tile index, first column, end column}: each tile split into bands of rows. */
+    private static List<int[]> bands(int tiles) {
+        int rowsPerBand = 8;
+        List<int[]> bands = new ArrayList<>(tiles * (TILE / rowsPerBand));
+        for (int t = 0; t < tiles; t++) {
+            for (int r = 0; r < TILE; r += rowsPerBand) bands.add(new int[] {t, r * TILE, (r + rowsPerBand) * TILE});
+        }
+        return bands;
+    }
+
     private void substep(List<Tile> list, double dt, double dx) {
         double g = SubsurfaceGrid.GRAVITY;
         double n2 = config.manningN * config.manningN;
         double minDepth = config.minFlowDepthM;
         // Each phase writes only the tile being processed, so tiles run in parallel and the result
         // does not depend on the thread count.
-        // 1. Face discharges (east and south face of every column).
-        parallel.forEach(list, (idx, t) -> {
-            for (int i = 0; i < AREA; i++) {
+        // 1. Face discharges (east and south face of every column). Phases 1 and 2 only read state no
+        // item writes, so they are split into row bands (better balance when few tiles are active).
+        List<int[]> bands = bands(list.size());
+        parallel.forEach(bands, (idx, band) -> {
+            Tile t = list.get(band[0]);
+            for (int i = band[1]; i < band[2]; i++) {
                 if (!t.known[i]) {
                     t.qEast[i] = 0;
                     t.qSouth[i] = 0;
@@ -528,9 +541,10 @@ final class SurfaceWater {
             }
         });
         // 2. Outflow limiter: scale the outgoing faces of each column so its depth stays ≥ 0.
-        parallel.forEach(list, (idx, t) -> {
+        parallel.forEach(bands, (idx, band) -> {
+            Tile t = list.get(band[0]);
             double[] f = t.limiter;
-            for (int i = 0; i < AREA; i++) {
+            for (int i = band[1]; i < band[2]; i++) {
                 f[i] = 1;
                 if (!t.known[i] || t.fixed(i)) continue;
                 int lx = i & 31;
