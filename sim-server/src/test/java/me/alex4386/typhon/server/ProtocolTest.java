@@ -186,6 +186,28 @@ class ProtocolTest {
                     "deeper rock is at least as warm as shallower rock");
             assertTrue(Byte.toUnsignedInt(s.saturationU8()[edge]) > 0, "rock at the bottom is below the water table");
 
+            // Surface datum: a 20 m window that follows the ground — ground row 9 of 10 (z −1…+1 m
+            // band straddles the surface), air above, rock below in every column.
+            c.send(String.format(java.util.Locale.ROOT,
+                    "{\"type\":\"section\",\"requestId\":9,\"datum\":\"surface\",\"polyline\":[[%f,%f],[%f,%f]],"
+                            + "\"zMin\":-18,\"zMax\":2,\"nu\":32,\"nz\":10}",
+                    x - 300, y, x + 300, y));
+            TestClient.Msg rel = c.await(x2 -> x2.binary() != null && x2.binary()[0] == Codecs.FRAME_SECTION
+                    && Codecs.decodeSectionFrame(x2.binary()).requestId() == 9, 30);
+            Codecs.SectionFrame r = Codecs.decodeSectionFrame(rel.binary());
+            JsonObject relMeta = Json.GSON.fromJson(r.metaJson(), JsonObject.class);
+            assertEquals("surface", relMeta.get("datum").getAsString());
+            assertEquals(0, relMeta.getAsJsonArray("overlays").size(), "no deep overlays in a surface window");
+            for (int i = 0; i < 32; i++) {
+                assertTrue((r.flags()[9 * 32 + i] & (SectionBuilder.FLAG_AIR | SectionBuilder.FLAG_MAGMA
+                        | SectionBuilder.FLAG_WATER)) != 0, "the top metre above ground is air, lava or water");
+                assertEquals(0, r.flags()[i] & SectionBuilder.FLAG_AIR, "17 m below ground is never air");
+                assertTrue(r.surfaceZ()[i] >= -0.01f, "surface is the datum (plus any molten lava)");
+            }
+            c.send("{\"type\":\"section\",\"requestId\":10,\"datum\":\"sideways\",\"polyline\":[[0,0],[1,0]],"
+                    + "\"zMin\":0,\"zMax\":1,\"nu\":8,\"nz\":8}");
+            assertEquals("badRequest", c.awaitType("error", 5).json().get("code").getAsString());
+
             c.send("{\"type\":\"section\",\"requestId\":8,\"polyline\":[[0,0]],\"zMin\":0,\"zMax\":1,\"nu\":8,\"nz\":8}");
             JsonObject err = c.awaitType("error", 5).json();
             assertEquals("badRequest", err.get("code").getAsString());

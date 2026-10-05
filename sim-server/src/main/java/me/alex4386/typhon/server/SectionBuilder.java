@@ -12,6 +12,7 @@ import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.subsurface.Subsurface;
 import me.alex4386.typhon.engine.volcano.VentSite;
+import me.alex4386.typhon.engine.world.LayerView;
 import me.alex4386.typhon.engine.world.Material;
 import me.alex4386.typhon.engine.world.MaterialClass;
 import me.alex4386.typhon.engine.world.MaterialTable;
@@ -38,7 +39,16 @@ final class SectionBuilder {
 
     private SectionBuilder() {}
 
-    record Request(long requestId, double[][] polyline, double zMin, double zMax, int nu, int nz) {}
+    /**
+     * @param surfaceDatum when true, {@code zMin}/{@code zMax} and every z in the reply are metres
+     *     relative to each column's own ground surface (negative = below ground), so a shallow window
+     *     shows thin deposits at true thickness whatever the relief
+     */
+    record Request(long requestId, double[][] polyline, double zMin, double zMax, int nu, int nz, boolean surfaceDatum) {
+        Request(long requestId, double[][] polyline, double zMin, double zMax, int nu, int nz) {
+            this(requestId, polyline, zMin, zMax, nu, nz, false);
+        }
+    }
 
     static byte[] build(Scenario s, GridMapping map, Request req, Map<String, List<double[]>> dikePaths,
             Set<String> activeDikes, double time) {
@@ -60,8 +70,13 @@ final class SectionBuilder {
             }
         }
         double length = cum[cum.length - 1];
+        boolean relative = req.surfaceDatum();
         // Engine rows run top-down; ask for the same z range and flip into protocol rows (bottom-up).
-        SectionRaster raster = world.section(poly, req.zMin(), req.zMax(), nu, nz);
+        // With a surface datum the curtain follows each column's ground, so it is sampled per column.
+        SectionRaster raster = relative ? null : world.section(poly, req.zMin(), req.zMax(), nu, nz);
+        short[] relMaterial = relative ? new short[nu * nz] : null;
+        int[] relUnit = relative ? new int[nu * nz] : null;
+        byte[] relVoid = relative ? new byte[nu * nz] : null;
 
         float[] surface = new float[nu];
         float[] waterTable = new float[nu];
@@ -79,8 +94,11 @@ final class SectionBuilder {
             double[] p = pointAlong(req.polyline(), cum, along);
             int cx = map.columnAtX(p[0]);
             int cz = map.columnAtY(p[1]);
-            double ground = raster.surfaceZ()[i];
+            double ground = relative ? world.surfaceZ(cx, cz) : raster.surfaceZ()[i];
             double uplift = world.uplift(cx, cz);
+            // z offset: absolute elevation = row z + offset (0 for an absolute datum)
+            double offset = relative && Double.isFinite(ground) ? ground + uplift : 0;
+            if (relative) sampleColumn(world, cx, cz, offset, req, i, relMaterial, relUnit, relVoid);
             double lavaH = lava.thickness(cx, cz);
             double lavaT = lavaH > 0 ? lava.temperatureC(cx, cz) : 0;
             double surfaceT = FieldSampler.AMBIENT_C;
@@ -97,14 +115,15 @@ final class SectionBuilder {
             }
             double tableZ = modelled ? sub.waterTableZ(cx, cz) : Double.NaN;
             double vadose = modelled ? sub.vadoseM(cx, cz) : 0;
-            surface[i] = Double.isFinite(ground) ? (float) (ground + uplift + lavaH) : Float.NaN;
-            waterTable[i] = (float) tableZ;
+            surface[i] = Double.isFinite(ground) ? (float) (ground + uplift + lavaH - offset) : Float.NaN;
+            waterTable[i] = (float) (tableZ - offset);
             for (int k = 0; k < nz; k++) {
-                double z = req.zMin() + (k + 0.5) * dzRow;
+                double z = req.zMin() + (k + 0.5) * dzRow + offset;
                 int src = (nz - 1 - k) * nu + i; // engine row 0 = top
                 int dst = k * nu + i;
-                Material m = MaterialTable.get(raster.material()[src]);
-                int u = raster.unit()[src];
+                Material m = MaterialTable.get(relative ? relMaterial[dst] : raster.material()[src]);
+                int u = relative ? relUnit[dst] : raster.unit()[src];
+                int voidFraction = Byte.toUnsignedInt(relative ? relVoid[dst] : raster.voidFraction()[src]);
                 int f = 0;
                 double t = 0;
                 if (m.materialClass() == MaterialClass.AIR && Double.isFinite(ground) && z < world.spec().datumZ()
@@ -142,7 +161,7 @@ final class SectionBuilder {
                         double warm = (surfaceT - FieldSampler.AMBIENT_C) * Math.exp(-depth / 50);
                         t = FieldSampler.AMBIENT_C + warm + GEOTHERM_C_PER_M * depth;
                     }
-                    if (m.materialClass() == MaterialClass.VOID || Byte.toUnsignedInt(raster.voidFraction()[src]) > 127) {
+                    if (m.materialClass() == MaterialClass.VOID || voidFraction > 127) {
                         f |= FLAG_VOID;
                     }
                     if (m.materialClass() == MaterialClass.WATER) {
@@ -158,7 +177,8 @@ final class SectionBuilder {
             }
         }
 
-        JsonArray overlays = overlays(s, map, req, cum, length, dikePaths, activeDikes);
+        // Deep structures (chamber, conduit, dikes) have no meaning in a surface-relative window.
+        JsonArray overlays = relative ? new JsonArray() : overlays(s, map, req, cum, length, dikePaths, activeDikes);
         // Chamber interiors are melt: flag and colour them by the chamber temperature.
         for (int idx = 0; idx < overlays.size(); idx++) {
             JsonObject o = overlays.get(idx).getAsJsonObject();
@@ -186,6 +206,7 @@ final class SectionBuilder {
         meta.add("length", Json.num(length));
         meta.add("zMin", Json.num(req.zMin()));
         meta.add("zMax", Json.num(req.zMax()));
+        meta.addProperty("datum", relative ? "surface" : "absolute");
         JsonArray units = new JsonArray();
         for (int id : unitIds) units.add(Probe.unit(id, world.unit(id)));
         meta.add("units", units);
@@ -194,6 +215,37 @@ final class SectionBuilder {
         Codecs.SectionBody body = new Codecs.SectionBody(Json.GSON.toJson(meta), surface, waterTable, material, unit,
                 temperature, saturation, steam, flags);
         return Codecs.sectionFrame(req.requestId(), nu, nz, time, body);
+    }
+
+    /**
+     * Surface-datum sampling of one column into protocol rows (bottom-up): row z is relative to the
+     * ground, absolute elevation {@code z + offset}. Air above the top layer; below the deepest
+     * layer the basement continues.
+     */
+    private static void sampleColumn(WorldModel world, int cx, int cz, double offset, Request req, int i,
+            short[] material, int[] unit, byte[] voidFraction) {
+        int nu = req.nu();
+        int nz = req.nz();
+        int n = world.layerCount(cx, cz);
+        double dzRow = (req.zMax() - req.zMin()) / nz;
+        int layer = 0;
+        LayerView current = n > 0 ? world.layer(cx, cz, 0) : null;
+        for (int k = 0; k < nz; k++) {
+            int dst = k * nu + i;
+            double z = req.zMin() + (k + 0.5) * dzRow + offset;
+            while (current != null && z >= current.top() && layer < n - 1) {
+                layer++;
+                current = world.layer(cx, cz, layer);
+            }
+            if (current == null || z >= current.top()) {
+                material[dst] = (short) MaterialTable.AIR.id();
+                unit[dst] = -1;
+                continue;
+            }
+            material[dst] = current.material();
+            unit[dst] = current.unit();
+            voidFraction[dst] = (byte) Math.round(Math.max(0, Math.min(1, current.voidFraction())) * 255);
+        }
     }
 
     private static JsonArray overlays(Scenario s, GridMapping map, Request req, double[] cum, double length,

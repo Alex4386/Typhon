@@ -389,7 +389,13 @@ public final class SimServer implements AutoCloseable {
             c.send(Json.error("badRequest", "Section polyline has zero length", requestId));
             return;
         }
-        byte[] frame = s.section(new SectionBuilder.Request(requestId, pts, zMin, zMax, nu.intValue(), nz.intValue()));
+        String datum = msg.has("datum") && msg.get("datum").isJsonPrimitive() ? msg.get("datum").getAsString() : "absolute";
+        if (!datum.equals("absolute") && !datum.equals("surface")) {
+            c.send(Json.error("badRequest", "section datum must be \"absolute\" or \"surface\"", requestId));
+            return;
+        }
+        byte[] frame = s.section(new SectionBuilder.Request(requestId, pts, zMin, zMax, nu.intValue(), nz.intValue(),
+                datum.equals("surface")));
         c.sendBinary(frame);
     }
 
