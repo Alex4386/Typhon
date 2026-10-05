@@ -283,9 +283,13 @@ public final class Main {
         Sample last = result.samples().get(result.samples().size() - 1);
         out.printf(Locale.ROOT, "Done: %d steps of %s ms in %.1f s (%.0f steps/s, %.0fx real time)%n",
                 result.steps(), fmt(baseStepMs), result.wallSeconds(), result.stepsPerSecond(), result.speedup());
-        out.printf(Locale.ROOT, "  eruptions=%d first=%s peakRate=%.3g m3/s erupted=%.3g m3 alert=%s style=%s%n",
+        out.printf(Locale.ROOT, "  eruptions=%d first=%s peakRate=%.3g m3/s erupted(total)=%.3g m3 alert=%s style=%s%n",
                 summary.eruptions, Double.isNaN(summary.firstEruptionSeconds) ? "none" : time(summary.firstEruptionSeconds),
-                summary.peakEruptionRate, last.get("erupted_volume_m3"), last.alertLevel(), last.style());
+                summary.peakEruptionRate, summary.totalEruptedVolume(), last.alertLevel(), last.style());
+        for (RunSummary.Eruption e : summary.eruptionRecords) {
+            out.printf(Locale.ROOT, "    %-14s %s → %s  %.3g m3 DRE  %s%n", e.volcanoId(), time(e.startSeconds()),
+                    e.ongoing() ? "ongoing" : time(e.endSeconds()), e.volumeM3(), String.join(" → ", e.styles()));
+        }
         out.printf(Locale.ROOT, "  lava emitted=%.0f solidified=%.0f blocks, longest flow=%.0f m; plumeTop=%s; bombs=%d; quakes=%s%n",
                 last.get("lava_emitted_blocks"), last.get("lava_solidified_blocks"), summary.maxFlowLengthM,
                 summary.maxPlumeTopY == Integer.MIN_VALUE ? "none" : Integer.toString(summary.maxPlumeTopY),

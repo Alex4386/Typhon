@@ -66,7 +66,7 @@ public final class ReferenceComparison {
                 yield max == Integer.MIN_VALUE ? Double.NaN : (max + 1) * L;
             }
             case PEAK_ERUPTION_RATE_M3S -> s.peakEruptionRate > 0 ? s.peakEruptionRate : Double.NaN;
-            case ERUPTED_VOLUME_M3 -> samples.isEmpty() ? Double.NaN : samples.get(samples.size() - 1).get("erupted_volume_m3");
+            case ERUPTED_VOLUME_M3 -> s.eruptionRecords.isEmpty() ? Double.NaN : s.totalEruptedVolume();
             case PLUME_TOP_KM -> s.maxPlumeTopY == Integer.MIN_VALUE ? Double.NaN
                     : (s.maxPlumeTopY + 1) * scaling.plumeMetersPerBlock() / 1000;
             case LONGEST_FLOW_M -> s.maxFlowLengthM > 0 ? s.maxFlowLengthM : Double.NaN;

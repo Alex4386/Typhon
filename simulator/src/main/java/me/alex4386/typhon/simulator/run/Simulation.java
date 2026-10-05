@@ -102,6 +102,7 @@ public final class Simulation {
             }
         }
 
+        summary.finish(scenario.volcanoes());
         double wall = (System.nanoTime() - start) / 1e9;
         return new Result(scenario, samples, summary, totalSteps, totalSeconds, wall);
     }

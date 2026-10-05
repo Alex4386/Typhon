@@ -93,7 +93,7 @@ public final class ReportWriter {
         row(h, "Peak eruption rate (real DRE)", fmt(s.peakEruptionRate) + " m³/s"
                 + (Double.isNaN(s.peakEruptionRateSeconds) ? "" : " at " + time(s.peakEruptionRateSeconds)));
         Sample last = samples.get(samples.size() - 1);
-        row(h, "Erupted volume (real DRE)", fmt(last.get("erupted_volume_m3")) + " m³");
+        row(h, "Erupted volume, all eruptions (real DRE)", fmt(s.totalEruptedVolume()) + " m³");
         row(h, "Final alert level / style", esc(last.alertLevel()) + " / " + esc(last.style()));
         row(h, "Lava emitted / solidified (model)", fmt(last.get("lava_emitted_blocks")) + " / "
                 + fmt(last.get("lava_solidified_blocks")) + " blocks³");
@@ -111,6 +111,20 @@ public final class ReportWriter {
                 fmt(scaling.metersPerBlock()), fmt(scaling.plumeMetersPerBlock()),
                 fmt(scaling.dormantTimeCompression()), fmt(scaling.eruptiveTimeCompression())));
         h.append("</table>");
+
+        if (!s.eruptionRecords.isEmpty()) {
+            h.append("<h2>Eruptions</h2><table><tr><th>volcano</th><th>start</th><th>end</th><th>duration</th>")
+                    .append("<th>volume (DRE)</th><th>styles</th><th>trigger</th></tr>");
+            for (RunSummary.Eruption e : s.eruptionRecords) {
+                double end = e.ongoing() ? result.simulatedSeconds() : e.endSeconds();
+                h.append("<tr><td>").append(esc(e.volcanoId())).append("</td><td>").append(time(e.startSeconds()))
+                        .append("</td><td>").append(e.ongoing() ? "ongoing" : time(e.endSeconds())).append("</td><td>")
+                        .append(time(Math.max(0, end - e.startSeconds()))).append("</td><td>").append(fmt(e.volumeM3()))
+                        .append(" m³</td><td>").append(esc(String.join(" → ", e.styles()))).append("</td><td>")
+                        .append(esc(e.startCause())).append("</td></tr>");
+            }
+            h.append("</table>");
+        }
 
         List<ReferenceComparison.Row> comparison = ReferenceComparison.compare(preset, result);
         if (!comparison.isEmpty()) {
