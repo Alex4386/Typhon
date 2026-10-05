@@ -79,6 +79,10 @@ final class LavaTestWorld {
         return Engine.builder(seed).add(terrain).add(lava).build();
     }
 
+    Engine engine(LavaFlow lava, long seed, int threads) {
+        return Engine.builder(seed).threads(threads).add(terrain).add(lava).build();
+    }
+
     void run(Engine engine, int ticks) {
         for (int i = 0; i < ticks; i++) frames.add(engine.step());
     }
