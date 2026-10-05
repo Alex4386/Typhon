@@ -134,6 +134,15 @@ final class SubsurfaceGrid {
         return chunks.get(key(Math.floorDiv(gx, SolverChunk.SIZE), Math.floorDiv(gz, SolverChunk.SIZE)));
     }
 
+    /** Chunk of solver column {@code (gx, gz)}, answering from {@code near} when it holds the column. */
+    SolverChunk neighbourChunk(SolverChunk near, int gx, int gz) {
+        if (Math.floorDiv(gx, SolverChunk.SIZE) == near.cx && Math.floorDiv(gz, SolverChunk.SIZE) == near.cz) return near;
+        return chunkOf(gx, gz);
+    }
+
+    /** Incremented whenever solver columns appear or disappear (for cached topologies). */
+    long structureVersion;
+
     /** All chunks in key order. */
     Iterable<SolverChunk> chunks() {
         return chunks.values();
@@ -144,6 +153,7 @@ final class SubsurfaceGrid {
     }
 
     void putChunk(SolverChunk chunk) {
+        structureVersion++;
         chunks.put(key(chunk.cx, chunk.cz), chunk);
     }
 
@@ -254,11 +264,15 @@ final class SubsurfaceGrid {
         }
         if (known == 0) {
             SolverChunk ch = chunkOf(gx, gz);
-            if (ch != null) ch.exists[SolverChunk.column(gx, gz)] = false;
+            if (ch != null && ch.exists[SolverChunk.column(gx, gz)]) {
+                ch.exists[SolverChunk.column(gx, gz)] = false;
+                structureVersion++;
+            }
             return false;
         }
         SolverChunk ch = chunkOrCreate(Math.floorDiv(gx, SolverChunk.SIZE), Math.floorDiv(gz, SolverChunk.SIZE));
         int c = SolverChunk.column(gx, gz);
+        if (!ch.exists[c]) structureVersion++;
         ch.exists[c] = true;
         ch.surfaceZ[c] = sum / known;
         ch.knownColumns[c] = known;

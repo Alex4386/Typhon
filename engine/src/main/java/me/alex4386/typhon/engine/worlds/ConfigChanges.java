@@ -43,9 +43,9 @@ public final class ConfigChanges {
     static final List<String> HOT_WORLD = List.of(
             "name", "climate.*", "scaling.dormantTimeCompression", "scaling.eruptiveTimeCompression", "terrain*",
             "subsurface.timeScale", "subsurface.macroStepSeconds", "subsurface.surfaceWaterStepSeconds",
-            "subsurface.hotAnomalyC", "subsurface.warmEvery", "subsurface.demoteAfter",
+            "subsurface.hotChangeC", "subsurface.warmEvery", "subsurface.demoteAfter",
             "subsurface.groundwaterIterations", "subsurface.sorOmega", "subsurface.manningN",
-            "subsurface.vadoseLagSeconds");
+            "subsurface.vadoseLagSeconds", "subsurface.threads");
 
     /** Hot-reloadable volcano keys. */
     static final List<String> HOT_VOLCANO = List.of(

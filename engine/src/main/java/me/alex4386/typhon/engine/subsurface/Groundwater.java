@@ -78,6 +78,58 @@ final class Groundwater {
         return sum;
     }
 
+    // Cached column topology (rebuilt when columns appear or disappear)
+    private long topologyVersion = Long.MIN_VALUE;
+    private SolverChunk[] chunkOf = new SolverChunk[0];
+    private int[] colOf = new int[0];
+    private int[] east = new int[0];
+    private int[] south = new int[0];
+    private int[] west = new int[0];
+    private int[] north = new int[0];
+    private boolean[] red = new boolean[0];
+
+    /** Flattens the existing columns (key order) and their neighbour links when the grid changed. */
+    private void refreshTopology() {
+        if (topologyVersion == grid.structureVersion) return;
+        topologyVersion = grid.structureVersion;
+        List<SolverChunk> chunks = new ArrayList<>();
+        List<Integer> cols = new ArrayList<>();
+        for (SolverChunk ch : grid.chunks()) {
+            for (int c = 0; c < SolverChunk.AREA; c++) {
+                if (ch.exists[c]) {
+                    chunks.add(ch);
+                    cols.add(c);
+                }
+            }
+        }
+        int m = chunks.size();
+        chunkOf = chunks.toArray(new SolverChunk[0]);
+        colOf = new int[m];
+        for (int i = 0; i < m; i++) colOf[i] = cols.get(i);
+        java.util.HashMap<Long, Integer> index = new java.util.HashMap<>(m * 2);
+        for (int i = 0; i < m; i++) index.put(SubsurfaceGrid.key(chunkOf[i].gx(colOf[i]), chunkOf[i].gz(colOf[i])), i);
+        east = new int[m];
+        south = new int[m];
+        west = new int[m];
+        north = new int[m];
+        red = new boolean[m];
+        java.util.Arrays.fill(west, -1);
+        java.util.Arrays.fill(north, -1);
+        for (int i = 0; i < m; i++) {
+            int gx = chunkOf[i].gx(colOf[i]);
+            int gz = chunkOf[i].gz(colOf[i]);
+            Integer e = index.get(SubsurfaceGrid.key(gx + 1, gz));
+            Integer so = index.get(SubsurfaceGrid.key(gx, gz + 1));
+            east[i] = e == null ? -1 : e;
+            south[i] = so == null ? -1 : so;
+            red[i] = ((gx + gz) & 1) == 0;
+        }
+        for (int i = 0; i < m; i++) {
+            if (east[i] >= 0) west[east[i]] = i;
+            if (south[i] >= 0) north[south[i]] = i;
+        }
+    }
+
     void step(double dt, Map<SolverChunk, double[]> boiled, SpringSink springs) {
         rechargeVolume = 0;
         springVolume = 0;
@@ -85,28 +137,12 @@ final class Groundwater {
         boiledVolume = 0;
         deficitVolume = 0;
 
-        // Flatten existing columns in key order.
-        List<SolverChunk> chunkOf = new ArrayList<>();
-        List<Integer> colOf = new ArrayList<>();
-        for (SolverChunk ch : grid.chunks()) {
-            for (int c = 0; c < SolverChunk.AREA; c++) {
-                if (ch.exists[c]) {
-                    chunkOf.add(ch);
-                    colOf.add(c);
-                }
-            }
-        }
-        int m = chunkOf.size();
+        refreshTopology();
+        int m = chunkOf.length;
         if (m == 0) return;
-        java.util.HashMap<Long, Integer> index = new java.util.HashMap<>(m * 2);
-        for (int i = 0; i < m; i++) {
-            SolverChunk ch = chunkOf.get(i);
-            int c = colOf.get(i);
-            index.put(SubsurfaceGrid.key(ch.gx(c), ch.gz(c)), i);
-        }
-        int[] east = new int[m];
-        int[] south = new int[m];
-        boolean[] red = new boolean[m];
+        int[] east = this.east;
+        int[] south = this.south;
+        boolean[] red = this.red;
         double[] h0 = new double[m];
         double[] storageCoef = new double[m];
         double[] source = new double[m]; // m³/s
@@ -117,15 +153,8 @@ final class Groundwater {
         double sea = grid.world().spec().seaLevelZ();
         double drainFactor = 1 - Math.exp(-dt / config.vadoseLagSeconds);
         for (int i = 0; i < m; i++) {
-            SolverChunk ch = chunkOf.get(i);
-            int c = colOf.get(i);
-            int gx = ch.gx(c);
-            int gz = ch.gz(c);
-            Integer e = index.get(SubsurfaceGrid.key(gx + 1, gz));
-            Integer s = index.get(SubsurfaceGrid.key(gx, gz + 1));
-            east[i] = e == null ? -1 : e;
-            south[i] = s == null ? -1 : s;
-            red[i] = ((gx + gz) & 1) == 0;
+            SolverChunk ch = chunkOf[i];
+            int c = colOf[i];
             fixed[i] = ch.sea[c];
             if (fixed[i]) ch.head[c] = sea;
             h0[i] = ch.head[c];
@@ -162,14 +191,8 @@ final class Groundwater {
                 diag[south[i]] += tSouth[i];
             }
         }
-        int[] west = new int[m];
-        int[] north = new int[m];
-        java.util.Arrays.fill(west, -1);
-        java.util.Arrays.fill(north, -1);
-        for (int i = 0; i < m; i++) {
-            if (east[i] >= 0) west[east[i]] = i;
-            if (south[i] >= 0) north[south[i]] = i;
-        }
+        int[] west = this.west;
+        int[] north = this.north;
 
         double[] h = h0.clone();
         double omega = config.sorOmega;
@@ -190,7 +213,7 @@ final class Groundwater {
                     h[i] = next;
                 }
             }
-            if (maxChange < 1e-10) {
+            if (maxChange < 1e-6) { // micrometre head changes: converged
                 iterations++;
                 break;
             }
@@ -212,8 +235,8 @@ final class Groundwater {
             }
         }
         for (int i = 0; i < m; i++) {
-            SolverChunk ch = chunkOf.get(i);
-            int c = colOf.get(i);
+            SolverChunk ch = chunkOf[i];
+            int c = colOf[i];
             if (fixed[i]) {
                 seaExchange += net[i];
                 ch.head[c] = sea;

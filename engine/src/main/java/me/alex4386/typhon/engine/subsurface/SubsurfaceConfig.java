@@ -74,9 +74,19 @@ public final class SubsurfaceConfig {
     /** e-folding time (s) of steam-zone collapse (condensation, refilling) once a cell is below boiling. */
     public double steamCollapseSeconds = 7 * 86400;
 
+    // ── Performance ──
+    /**
+     * Threads for the heat solver (0 = all processors). Results are identical for any value: each
+     * parallel task only writes its own chunk.
+     */
+    public int threads = 0;
+
     // ── Level of detail ──
-    /** Temperature anomaly (°C over the background geotherm) that makes a solver chunk HOT. */
-    public double hotAnomalyC = 2;
+    /**
+     * Largest temperature change (°C) during a chunk's last step that keeps it HOT. Chunks whose
+     * temperatures have settled (steady conduction or convection) stop being stepped.
+     */
+    public double hotChangeC = 0.05;
     /** WARM chunks (neighbours of HOT ones) are stepped every this many macro steps. */
     public int warmEvery = 10;
     /** Macro steps a chunk stays at a level after it stopped qualifying (hysteresis). */

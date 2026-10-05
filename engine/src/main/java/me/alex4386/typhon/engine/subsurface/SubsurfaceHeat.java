@@ -35,11 +35,7 @@ final class SubsurfaceHeat {
     private final SubsurfaceGrid grid;
     private final SubsurfaceConfig config;
 
-    private double[] scratchLower;
-    private double[] scratchDiag;
-    private double[] scratchUpper;
-    private double[] scratchRhs;
-    private double[] scratchG;
+    private static final ThreadLocal<double[][]> SCRATCH = ThreadLocal.withInitial(() -> new double[5][0]);
 
     /** Water removed by boiling during the last step, per chunk and column (m³), read by groundwater. */
     final Map<SolverChunk, double[]> boiledVolume = new IdentityHashMap<>();
@@ -148,20 +144,30 @@ final class SubsurfaceHeat {
         boiledTotal = 0;
         if (steps.isEmpty()) return;
         int n = grid.levels();
+        List<SolverChunk> chunks = new ArrayList<>(steps.keySet()); // key order
         // Sub-step for lateral stability with the largest step requested.
         double maxDt = 0;
         for (double dt : steps.values()) maxDt = Math.max(maxDt, dt);
-        int substeps = Math.max(1, (int) Math.ceil(maxDt / stableLateralStep(steps.keySet())));
+        long t0 = System.nanoTime();
+        double[][] before = new double[chunks.size()][];
+        forEach(chunks, (idx, ch) -> before[idx] = ch.temperature.clone());
+        double[] stable = new double[chunks.size()];
+        forEach(chunks, (idx, ch) -> stable[idx] = stableLateralStep(ch));
+        double minStable = Double.MAX_VALUE;
+        for (double v : stable) minStable = Math.min(minStable, v);
+        int substeps = Math.max(1, (int) Math.ceil(maxDt / minStable));
+        long t1 = System.nanoTime();
+        lastSubsteps = substeps;
         Map<SolverChunk, double[]> lateral = new IdentityHashMap<>();
-        for (SolverChunk ch : steps.keySet()) lateral.put(ch, new double[SolverChunk.AREA * n]);
-        // Lateral transport: explicit sub-steps, applied directly to the temperatures.
+        for (SolverChunk ch : chunks) lateral.put(ch, new double[SolverChunk.AREA * n]);
+        // Lateral transport: explicit sub-steps, applied directly to the temperatures. Each column
+        // gathers the energy through its own four faces (computed antisymmetrically, so heat is
+        // conserved exactly), which makes chunks independent and safe to process in parallel.
+        double area = grid.area();
         for (int s = 0; s < substeps; s++) {
-            for (double[] a : lateral.values()) java.util.Arrays.fill(a, 0);
-            for (Map.Entry<SolverChunk, Double> e : steps.entrySet()) {
-                lateralEnergy(e.getKey(), e.getValue() / substeps, steps, lateral, groundwater);
-            }
-            double area = grid.area();
-            for (SolverChunk ch : steps.keySet()) {
+            int sub = substeps;
+            forEach(chunks, (idx, ch) -> lateralEnergy(ch, steps.get(ch) / sub, steps, lateral.get(ch)));
+            forEach(chunks, (idx, ch) -> {
                 double[] lat = lateral.get(ch);
                 for (int c = 0; c < SolverChunk.AREA; c++) {
                     if (!ch.exists[c]) continue;
@@ -170,54 +176,71 @@ final class SubsurfaceHeat {
                         if (lat[i] != 0) ch.temperature[i] += lat[i] / capacity(ch, c, k, area * grid.thickness(k));
                     }
                 }
-            }
+            });
         }
-        // Vertical conduction and sources: one implicit step.
-        for (Map.Entry<SolverChunk, Double> e : steps.entrySet()) {
-            SolverChunk ch = e.getKey();
+        long t2 = System.nanoTime();
+        // Vertical conduction and sources: one implicit step per column.
+        forEach(chunks, (idx, ch) -> {
             double[] src = sources.get(ch);
+            double dt = steps.get(ch);
             for (int c = 0; c < SolverChunk.AREA; c++) {
                 if (!ch.exists[c]) continue;
-                vertical(ch, c, e.getValue(), null, src, 1.0, chambers, waterDepth.depth(ch, c));
+                vertical(ch, c, dt, null, src, 1.0, chambers, waterDepth.depth(ch, c));
             }
-        }
-        for (Map.Entry<SolverChunk, Double> e : steps.entrySet()) {
-            SolverChunk ch = e.getKey();
-            double dt = e.getValue();
+        });
+        long t3 = System.nanoTime();
+        double[][] boiledPerChunk = new double[chunks.size()][];
+        forEach(chunks, (idx, ch) -> {
+            double dt = steps.get(ch);
             double[] boiled = new double[SolverChunk.AREA];
             for (int c = 0; c < SolverChunk.AREA; c++) {
                 if (ch.exists[c]) boil(ch, c, dt, boiled);
             }
-            boiledVolume.put(ch, boiled);
+            boiledPerChunk[idx] = boiled;
+            double change = 0;
+            double[] old = before[idx];
+            for (int i = 0; i < old.length; i++) change = Math.max(change, Math.abs(ch.temperature[i] - old[i]));
+            ch.lastChange = change;
+        });
+        for (int idx = 0; idx < chunks.size(); idx++) {
+            boiledVolume.put(chunks.get(idx), boiledPerChunk[idx]);
+            for (double v : boiledPerChunk[idx]) boiledTotal += v;
         }
+        long t4 = System.nanoTime();
+        timings[0] = t1 - t0;
+        timings[1] = t2 - t1;
+        timings[2] = t3 - t2;
+        timings[3] = t4 - t3;
     }
+
+    /** Wall time (ns) of the last step: stability check, lateral transport, vertical solve, boiling. */
+    final long[] timings = new long[4];
+    int lastSubsteps;
 
     /** Surface-water depth above a solver column (m). */
     interface ColumnWater {
         double depth(SolverChunk ch, int c);
     }
 
-    private double stableLateralStep(Iterable<SolverChunk> chunks) {
+    private double stableLateralStep(SolverChunk ch) {
         double dx = grid.dx();
-        double minStep = Double.POSITIVE_INFINITY;
+        double minStep = Double.MAX_VALUE;
         int n = grid.levels();
-        for (SolverChunk ch : chunks) {
-            for (int c = 0; c < SolverChunk.AREA; c++) {
-                if (!ch.exists[c]) continue;
-                double gradient = headGradient(ch, c);
-                for (int k = 0; k < n; k++) {
-                    int i = c * n + k;
-                    double cap = Math.max(1e3, ch.heatCapacity[i] + ch.porosity[i] * SubsurfaceGrid.WATER_DENSITY
-                            * SubsurfaceGrid.WATER_HEAT_CAPACITY);
-                    double kappa = ch.conductivity[i] / cap;
-                    double velocity = belowWaterTable(ch, c, k) ? ch.hydraulicK[i] * gradient : 0;
-                    double adv = velocity * SubsurfaceGrid.WATER_DENSITY * SubsurfaceGrid.WATER_HEAT_CAPACITY / cap;
-                    double rate = 4 * kappa / (dx * dx) + 4 * adv / dx;
-                    if (rate > 0) minStep = Math.min(minStep, 0.4 / rate);
-                }
+        for (int c = 0; c < SolverChunk.AREA; c++) {
+            if (!ch.exists[c]) continue;
+            double gradient = headGradient(ch, c);
+            for (int k = 0; k < n; k++) {
+                int i = c * n + k;
+                double cap = Math.max(1e3, ch.heatCapacity[i] + ch.porosity[i] * SubsurfaceGrid.WATER_DENSITY
+                        * SubsurfaceGrid.WATER_HEAT_CAPACITY);
+                double kappa = ch.conductivity[i] / cap;
+                double velocity = gradient > 0 && belowWaterTable(ch, c, k) ? ch.hydraulicK[i] * gradient : 0;
+                double adv = velocity * SubsurfaceGrid.WATER_DENSITY * SubsurfaceGrid.WATER_HEAT_CAPACITY / cap;
+                double rate = 4 * kappa / (dx * dx) + 4 * adv / dx;
+                if (rate > 0) minStep = Math.min(minStep, 0.4 / rate);
             }
         }
-        return Double.isInfinite(minStep) ? Double.MAX_VALUE : minStep;
+        return minStep;
     }
 
     /** Largest water-table slope from a column to its existing neighbours. */
@@ -227,7 +250,7 @@ final class SubsurfaceHeat {
         double max = 0;
         int[][] around = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
         for (int[] d : around) {
-            SolverChunk o = grid.chunkOf(gx + d[0], gz + d[1]);
+            SolverChunk o = grid.neighbourChunk(ch, gx + d[0], gz + d[1]);
             if (o == null) continue;
             int oc = SolverChunk.column(gx + d[0], gz + d[1]);
             if (!o.exists[oc]) continue;
@@ -254,51 +277,74 @@ final class SubsurfaceHeat {
         return grid.cellElevation(ch, c, k) < ch.head[c];
     }
 
-    /** Lateral conduction + Darcy advection energy (J) over {@code dt} for one chunk's faces east/south. */
-    private void lateralEnergy(SolverChunk ch, double dt, Map<SolverChunk, Double> stepped,
-            Map<SolverChunk, double[]> lateral, Groundwater groundwater) {
+    private static final int[][] FACES = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+
+    /**
+     * Lateral conduction + Darcy advection energy (J) over {@code dt} into each column of a chunk,
+     * gathered through its four faces.
+     */
+    private void lateralEnergy(SolverChunk ch, double dt, Map<SolverChunk, Double> stepped, double[] mine) {
+        java.util.Arrays.fill(mine, 0);
         int n = grid.levels();
         double dx = grid.dx();
-        double[] mine = lateral.get(ch);
+        Double myStep = stepped.get(ch);
         for (int c = 0; c < SolverChunk.AREA; c++) {
             if (!ch.exists[c]) continue;
             int gx = ch.gx(c);
             int gz = ch.gz(c);
-            for (int dir = 0; dir < 2; dir++) {
-                int ngx = dir == 0 ? gx + 1 : gx;
-                int ngz = dir == 0 ? gz : gz + 1;
-                SolverChunk other = grid.chunkOf(ngx, ngz);
+            for (int[] face : FACES) {
+                int ngx = gx + face[0];
+                int ngz = gz + face[1];
+                SolverChunk other = grid.neighbourChunk(ch, ngx, ngz);
                 if (other == null) continue;
                 int oc = SolverChunk.column(ngx, ngz);
                 if (!other.exists[oc]) continue;
                 // Faces exchange heat only between chunks stepped together with the same time step;
                 // others (dormant, or warm next to hot) are treated as insulating for this step.
-                if (other != ch && !stepped.get(ch).equals(stepped.get(other))) continue;
-                double[] theirs = lateral.get(other);
+                if (other != ch && !myStep.equals(stepped.get(other))) continue;
                 double headGradient = (other.head[oc] - ch.head[c]) / dx;
                 for (int k = 0; k < n; k++) {
                     int i = c * n + k;
                     int j = oc * n + k;
-                    double ka = ch.conductivity[i];
-                    double kb = other.conductivity[j];
-                    double kh = ka + kb > 0 ? 2 * ka * kb / (ka + kb) : 0;
-                    double conductance = grid.thickness(k) * kh; // face area dz·dx over distance dx
+                    double conductance = grid.thickness(k) * harmonic(ch.conductivity[i], other.conductivity[j]);
                     double ti = ch.temperature[i];
                     double tj = other.temperature[j];
-                    // Conduction into ch.
-                    double energy = conductance * (tj - ti) * dt;
-                    if (belowWaterTable(ch, c, k) && belowWaterTable(other, oc, k)) {
-                        // Advection: heat carried by groundwater from ch to other (negative = reverse).
+                    double energy = conductance * (tj - ti) * dt; // conduction into ch
+                    if (headGradient != 0 && belowWaterTable(ch, c, k) && belowWaterTable(other, oc, k)) {
+                        // Advection: heat carried by groundwater between the columns (+ = ch → other).
                         double kHyd = harmonic(ch.hydraulicK[i], other.hydraulicK[j]);
-                        double flow = -kHyd * headGradient * grid.thickness(k) * dx; // m³/s, + = ch → other
+                        double flow = -kHyd * headGradient * grid.thickness(k) * dx; // m³/s
                         double upwind = flow > 0 ? ti : tj;
                         energy -= SubsurfaceGrid.WATER_DENSITY * SubsurfaceGrid.WATER_HEAT_CAPACITY * flow * upwind * dt;
                     }
                     mine[i] += energy;
-                    theirs[j] -= energy;
                 }
             }
         }
+    }
+
+    // ── Parallelism ──
+
+    private interface ChunkWork {
+        void run(int index, SolverChunk chunk);
+    }
+
+    private java.util.concurrent.ForkJoinPool pool;
+
+    /**
+     * Runs {@code work} for every chunk, in parallel when {@link SubsurfaceConfig#threads} allows.
+     * Work items only write their own chunk (or their own slot), so results do not depend on the
+     * number of threads.
+     */
+    private void forEach(List<SolverChunk> chunks, ChunkWork work) {
+        int threads = config.threads > 0 ? config.threads : Runtime.getRuntime().availableProcessors();
+        if (threads <= 1 || chunks.size() < 2) {
+            for (int i = 0; i < chunks.size(); i++) work.run(i, chunks.get(i));
+            return;
+        }
+        if (pool == null || pool.getParallelism() != threads) pool = new java.util.concurrent.ForkJoinPool(threads);
+        pool.submit(() -> java.util.stream.IntStream.range(0, chunks.size()).parallel()
+                .forEach(i -> work.run(i, chunks.get(i)))).join();
     }
 
     static double harmonic(double a, double b) {
@@ -310,18 +356,15 @@ final class SubsurfaceHeat {
             List<HeatSources.Chamber> chambers, double waterDepth) {
         int n = grid.levels();
         double area = grid.area();
-        if (scratchLower == null || scratchLower.length != n) {
-            scratchLower = new double[n];
-            scratchDiag = new double[n];
-            scratchUpper = new double[n];
-            scratchRhs = new double[n];
-            scratchG = new double[n];
+        double[][] scratch = SCRATCH.get();
+        if (scratch[0].length != n) {
+            for (int a = 0; a < scratch.length; a++) scratch[a] = new double[n];
         }
-        double[] lower = scratchLower;
-        double[] diag = scratchDiag;
-        double[] upper = scratchUpper;
-        double[] rhs = scratchRhs;
-        double[] g = scratchG; // conductance between k and k+1 (W/K)
+        double[] lower = scratch[0];
+        double[] diag = scratch[1];
+        double[] upper = scratch[2];
+        double[] rhs = scratch[3];
+        double[] g = scratch[4]; // conductance between k and k+1 (W/K)
         java.util.Arrays.fill(lower, 0);
         java.util.Arrays.fill(upper, 0);
         double nusselt = nusselt(ch, c);
@@ -439,9 +482,13 @@ final class SubsurfaceHeat {
                 ch.steam[i] *= collapse;
                 continue;
             }
+            double t = ch.temperature[i];
+            if (t <= 100) { // below the lowest boiling point: no need to evaluate the curve
+                ch.steam[i] *= collapse;
+                continue;
+            }
             double depth = ch.head[c] - elevation;
             double tbp = boilingPoint(depth);
-            double t = ch.temperature[i];
             // No boiling beyond water's critical point (supercritical fluid) or in (partly) molten rock.
             boolean noPhaseChange = tbp >= CRITICAL_TEMPERATURE_C
                     || (!Double.isNaN(ch.solidus[i]) && t >= ch.solidus[i]);
@@ -464,7 +511,6 @@ final class SubsurfaceHeat {
         ch.steamFlux[c] = steamMass / dt;
         double vol = steamMass / SubsurfaceGrid.WATER_DENSITY;
         boiled[c] = vol;
-        boiledTotal += vol;
     }
 
     /** Chunks in key order that need stepping, helper for callers. */

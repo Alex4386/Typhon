@@ -93,7 +93,7 @@ class SubsurfaceHeatTest {
     @Test
     void dikeSheetAnomalyDecaysAsInverseSquareRootOfTime() {
         SubsurfaceConfig c = dry();
-        c.hotAnomalyC = 0.1;
+        c.hotChangeC = 1e-6;
         WorldModel world = SubsurfaceTestWorld.uniform("basalt", 10, 10, Double.NaN, 100, 3, (x, z) -> 0);
         Subsurface s = new Subsurface(world, c);
         s.prepare();

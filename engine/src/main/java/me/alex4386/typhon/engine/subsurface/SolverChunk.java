@@ -57,6 +57,8 @@ final class SolverChunk {
 
     // ── Level of detail (persisted in the subsystem JSON) ──
     Activity activity = Activity.DORMANT;
+    /** Largest |ΔT| (°C) of any cell during the chunk's last heat step (∞ until stepped). */
+    double lastChange = Double.POSITIVE_INFINITY;
     int quietSteps;
     int warmCounter;
 

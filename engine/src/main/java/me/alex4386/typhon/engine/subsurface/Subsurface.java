@@ -56,6 +56,13 @@ public final class Subsurface implements Subsystem, HydrothermalField {
     /** Pending energy (J) per solver column key and level, from hooks; applied at the next macro step. */
     private final TreeMap<Long, double[]> pendingHeat = new TreeMap<>();
 
+    /** Heat-solver timings of the last macro step (ns): stability, lateral, vertical, boiling; then sub-steps. */
+    long[] heatTimings() {
+        return new long[] {heat.timings[0], heat.timings[1], heat.timings[2], heat.timings[3], heat.lastSubsteps};
+    }
+
+    /** Wall time (ns) of the last macro step's phases: preparation (rain, LOD, sources), heat, groundwater. */
+    final long[] lastTimings = new long[3];
     private double macroClock;
     private long macroSteps;
     // Cumulative budget terms not held by the components (m³)
@@ -175,25 +182,34 @@ public final class Subsurface implements Subsystem, HydrothermalField {
     }
 
     /**
-     * One heat + groundwater step of {@code dtPhysical} seconds. {@code dtSim} is the simulated time it
-     * covers (rain is integrated over physical time).
+     * One heat + groundwater step of {@code dtPhysical} seconds ({@code dtSim} is the simulated time it
+     * covers; rain is integrated over physical time). With {@code levelOfDetail}, settled chunks are
+     * skipped (play); without, every chunk is stepped (spin-up, where slow transients must run to
+     * completion).
      */
-    void macroStep(double dtPhysical, double dtSim, boolean withSurface) {
+    void macroStep(double dtPhysical, double dtSim, boolean levelOfDetail) {
         macroSteps++;
+        long t0 = System.nanoTime();
         List<HeatSources.Chamber> chambers = chambers();
         applyRain(dtPhysical);
-        Map<SolverChunk, Double> steps = activityAndSteps(dtPhysical);
+        Map<SolverChunk, Double> steps = activityAndSteps(dtPhysical, levelOfDetail);
         Map<SolverChunk, double[]> energy = sourceEnergy(dtPhysical, steps);
+        long t1 = System.nanoTime();
         heat.step(steps, energy, chambers, groundwater, (ch, c) -> {
             int x = ch.outletX[c];
             int z = ch.outletZ[c];
             return surface.depth(x, z);
         });
         boiled += heat.boiledTotal;
+        long t2 = System.nanoTime();
         groundwater.step(dtPhysical, heat.boiledVolume,
                 (ch, c, v) -> surface.add(ch.outletX[c], ch.outletZ[c], v, SurfaceWater.Source.SPRING));
         seaGroundwater += groundwater.seaExchange;
         deficit += groundwater.deficitVolume;
+        long t3 = System.nanoTime();
+        lastTimings[0] = t1 - t0;
+        lastTimings[1] = t2 - t1;
+        lastTimings[2] = t3 - t2;
     }
 
     private void applyRain(double dt) {
@@ -223,21 +239,16 @@ public final class Subsurface implements Subsystem, HydrothermalField {
     }
 
     /** Updates chunk activity levels and returns the chunks to step with their time steps. */
-    private Map<SolverChunk, Double> activityAndSteps(double dt) {
+    private Map<SolverChunk, Double> activityAndSteps(double dt, boolean levelOfDetail) {
+        if (!levelOfDetail) {
+            Map<SolverChunk, Double> all = new LinkedHashMap<>();
+            for (SolverChunk ch : grid.chunks()) if (ch.anyExists()) all.put(ch, dt);
+            return all;
+        }
         int n = grid.levels();
         Map<Long, Boolean> anomalous = new TreeMap<>();
         for (SolverChunk ch : grid.chunks()) {
-            boolean hot = pendingHeatIn(ch);
-            for (int c = 0; c < SolverChunk.AREA && !hot; c++) {
-                if (!ch.exists[c]) continue;
-                for (int k = 0; k < n; k++) {
-                    double anomaly = ch.temperature[c * n + k] - grid.backgroundTemperature(grid.centerDepth(k));
-                    if (Math.abs(anomaly) > config.hotAnomalyC) {
-                        hot = true;
-                        break;
-                    }
-                }
-            }
+            boolean hot = pendingHeatIn(ch) || ch.lastChange > config.hotChangeC;
             anomalous.put(SubsurfaceGrid.key(ch.cx, ch.cz), hot);
         }
         for (HeatSources s : sources.values()) {
@@ -251,7 +262,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
         Map<SolverChunk, Double> steps = new LinkedHashMap<>();
         for (SolverChunk ch : grid.chunks()) {
             if (!ch.anyExists()) continue;
-            // HOT: anomalous or next to an anomaly (so heat never crosses into a chunk that is not
+            // HOT: still changing, or next to such a chunk (so heat never crosses into a chunk that is not
             // stepped with it); WARM: within two chunks; DORMANT otherwise.
             SolverChunk.Activity want = SolverChunk.Activity.DORMANT;
             for (int dz = -2; dz <= 2; dz++) {
@@ -638,6 +649,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
             a.add(ch.activity.ordinal());
             a.add(ch.quietSteps);
             a.add(ch.warmCounter);
+            a.add(ch.lastChange);
             activity.add(a);
             solver.put(ch.cx, ch.cz, new FieldChunk()
                     .booleans("initialized", ch.initialized.clone())
@@ -716,6 +728,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
                     ch.activity = SolverChunk.Activity.values()[a.get(2).getAsInt()];
                     ch.quietSteps = a.get(3).getAsInt();
                     ch.warmCounter = a.get(4).getAsInt();
+                    ch.lastChange = a.get(5).getAsDouble();
                 }
                 grid.putChunk(ch);
             }
