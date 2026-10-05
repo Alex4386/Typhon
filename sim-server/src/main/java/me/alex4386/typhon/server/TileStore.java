@@ -2,6 +2,7 @@ package me.alex4386.typhon.server;
 
 import java.util.EnumMap;
 import java.util.Map;
+import me.alex4386.typhon.engine.sim.Parallel;
 import me.alex4386.typhon.server.protocol.Codecs;
 import me.alex4386.typhon.server.protocol.Field;
 
@@ -22,6 +23,9 @@ final class TileStore {
             frame = new byte[tiles][];
         }
     }
+
+    /** Encoding and compression of tiles run in parallel (pure per tile; versions assigned in order). */
+    private static final Parallel ENCODERS = Parallel.of(Parallel.defaultThreads());
 
     private final GridMapping map;
     private final long base;
@@ -56,19 +60,29 @@ final class TileStore {
      */
     synchronized int update(Field field, float[][] tiles, double time, boolean force) {
         FieldTiles ft = fields.computeIfAbsent(field, f -> new FieldTiles(tileCount()));
-        int changed = 0;
         int t = map.tileSize;
-        for (int i = 0; i < tiles.length; i++) {
-            double a = field.codec == Codecs.U8_LINEAR ? 0 : Codecs.DEFAULT_TMAX;
-            Codecs.Payload payload = Codecs.encode(tiles[i], field.codec, a, 1);
-            long h = fnv(payload);
-            if (!force && ft.frame[i] != null && ft.hash[i] == h) continue;
+        int n = tiles.length;
+        double a = field.codec == Codecs.U8_LINEAR ? 0 : Codecs.DEFAULT_TMAX;
+        Codecs.Payload[] payloads = new Codecs.Payload[n];
+        long[] hashes = new long[n];
+        ENCODERS.forEach(n, i -> {
+            payloads[i] = Codecs.encode(tiles[i], field.codec, a, 1);
+            hashes[i] = fnv(payloads[i]);
+        });
+        int[] changedTiles = new int[n];
+        int changed = 0;
+        for (int i = 0; i < n; i++) {
+            if (!force && ft.frame[i] != null && ft.hash[i] == hashes[i]) continue;
             ft.version[i] = Math.max(ft.version[i], base) + 1;
             maxVersion = Math.max(maxVersion, ft.version[i]);
-            ft.hash[i] = h;
-            ft.frame[i] = Codecs.tileFrame(field.id, payload, i % map.tilesX, i / map.tilesX, ft.version[i], t, t, time);
-            changed++;
+            ft.hash[i] = hashes[i];
+            changedTiles[changed++] = i;
         }
+        ENCODERS.forEach(changed, k -> {
+            int i = changedTiles[k];
+            ft.frame[i] = Codecs.tileFrame(field.id, payloads[i], i % map.tilesX, i / map.tilesX, ft.version[i], t, t,
+                    time);
+        });
         return changed;
     }
 

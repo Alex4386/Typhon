@@ -127,6 +127,8 @@ public final class LavaFlow implements Subsystem {
     private static final double FACE = 0.5;
     private static final int AREA = LavaChunk.AREA;
     private static final int UNKNOWN = LavaChunk.UNKNOWN;
+    /** Minimum chunks per parallel task (a chunk is 256 cells of work). */
+    private static final int CHUNK_GRAIN = 2;
     private static final Comparator<LavaChunk> BY_KEY = Comparator.comparingLong(c -> c.key);
 
     private final TerrainModel terrain;
@@ -472,7 +474,7 @@ public final class LavaFlow implements Subsystem {
             ensureFresh(c);
             prepareFlux(c);
         }
-        parallel.forEach(active, c -> computeFlux(c, dt));
+        parallel.forEach(active, CHUNK_GRAIN, c -> computeFlux(c, dt));
         for (LavaChunk c : active) {
             for (int slot = 0; slot < 9; slot++) {
                 if ((c.touchOut & (1 << slot)) != 0) c.neighbours[slot].touchedStamp = stamp;
@@ -487,28 +489,30 @@ public final class LavaFlow implements Subsystem {
             ensureFresh(c);
             prepareNeighbours(c);
         }
-        parallel.forEach(update, c -> gather(c, dt));
+        parallel.forEach(update, CHUNK_GRAIN, c -> gather(c, dt));
         for (LavaChunk c : update) foldOceanInflow(c);
-        parallel.forEach(update, c -> {
+
+        // 3. cooling, crust, tubes & solidification: heat balance in parallel (after the chunk's own
+        // swap; it reads neighbours' speeds only, which the swap does not touch), then the resulting
+        // solidification / drained-tube actions (world edits, random draws, block changes) in order
+        parallel.forEach(update, CHUNK_GRAIN, c -> {
             c.swapBuffers();
             c.recount();
+            c.actionCount = 0;
+            if (c.isActive()) coolHeat(c, dt);
         });
-
-        // 3. cooling, crust, tubes & solidification: heat balance in parallel, then the resulting
-        // solidification / drained-tube actions (world edits, random draws, block changes) in order
         SolidStats stats = solidAcc;
         List<LavaTube> formed = new ArrayList<>();
-        List<LavaChunk> cooling = new ArrayList<>();
-        for (LavaChunk c : update) if (c.isActive()) cooling.add(c);
-        parallel.forEach(cooling, c -> coolHeat(c, dt));
-        for (LavaChunk c : cooling) {
+        for (LavaChunk c : update) {
             applyCoolActions(c, context.random(), outbox, stats, formed);
             foldOceanHeat(c);
         }
-        parallel.forEach(update, LavaChunk::recount);
 
         // 4. rendering
-        parallel.forEach(update, this::render);
+        parallel.forEach(update, CHUNK_GRAIN, c -> {
+            c.recount();
+            render(c);
+        });
         for (LavaChunk c : update) {
             for (BlockChange change : c.rendered) outbox.setBlock(change);
             c.rendered.clear();

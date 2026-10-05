@@ -43,19 +43,21 @@ final class FieldSampler {
         int t = map.tileSize;
         float[][] tiles = new float[map.tilesX * map.tilesY][];
         boolean noLava = lava.activeCellCount() == 0;
-        for (int ty = 0; ty < map.tilesY; ty++) {
-            for (int tx = 0; tx < map.tilesX; tx++) {
-                float[] v = new float[t * t];
-                for (int r = 0; r < t; r++) {
-                    for (int c = 0; c < t; c++) {
-                        int cx = Math.min(map.maxX, map.columnX(tx, c));
-                        int cz = Math.max(map.minZ, map.columnZ(ty, r));
-                        v[r * t + c] = (float) value(field, world, lava, noLava, volcanoes, cx, cz);
-                    }
+        // Runs between engine steps (nothing mutates the world meanwhile): tiles are sampled in
+        // parallel, each into its own array.
+        scenario.engine().parallel().forEach(tiles.length, index -> {
+            int tx = index % map.tilesX;
+            int ty = index / map.tilesX;
+            float[] v = new float[t * t];
+            for (int r = 0; r < t; r++) {
+                for (int c = 0; c < t; c++) {
+                    int cx = Math.min(map.maxX, map.columnX(tx, c));
+                    int cz = Math.max(map.minZ, map.columnZ(ty, r));
+                    v[r * t + c] = (float) value(field, world, lava, noLava, volcanoes, cx, cz);
                 }
-                tiles[ty * map.tilesX + tx] = v;
             }
-        }
+            tiles[index] = v;
+        });
         return tiles;
     }
 

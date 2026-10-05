@@ -414,7 +414,7 @@ public abstract class MassFlowField implements Subsystem {
             ensureFresh(c);
             prepareFaces(c);
         }
-        parallel.forEach(active, c -> computeFaces(c, dt));
+        parallel.forEach(active, 2, c -> computeFaces(c, dt));
         for (MassFlowChunk c : active) {
             for (int d = 0; d < 4; d++) if ((c.touchOut & (1 << d)) != 0) c.neighbours[d].touchedStamp = epoch;
         }
@@ -426,8 +426,8 @@ public abstract class MassFlowField implements Subsystem {
             ensureFresh(c);
             for (int d = 0; d < 4; d++) neighbour(c, d, false);
         }
-        parallel.forEach(update, this::gather); // reads neighbours' current buffers: swap only afterwards
-        parallel.forEach(update, c -> {
+        parallel.forEach(update, 2, this::gather); // reads neighbours' current buffers: swap only afterwards
+        parallel.forEach(update, 4, c -> {
             c.swapBuffers();
             c.recount();
         });

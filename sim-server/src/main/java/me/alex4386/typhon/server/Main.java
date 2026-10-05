@@ -35,6 +35,10 @@ public final class Main {
             }
             opts.put(a.substring(2), args[++i]);
         }
+        if (opts.containsKey("threads")) {
+            // must be set before any engine or tile store exists (see Parallel.defaultThreads)
+            System.setProperty("typhon.threads", String.valueOf(Math.max(1, Integer.parseInt(opts.get("threads")))));
+        }
         String preset = opts.getOrDefault("preset", "kilauea");
         long seed = Long.parseLong(opts.getOrDefault("seed", "1"));
         Path worldsDir = Path.of(opts.getOrDefault("worlds-dir", "worlds"));
@@ -64,6 +68,7 @@ public final class Main {
     private static void usage(PrintStream out) {
         out.println("Usage: sim-server [--preset NAME [--seed N] | --world DIR] [--port 8787] [--host 0.0.0.0]");
         out.println("                  [--worlds-dir worlds] [--ui visualizer/dist] [--speed 20] [--base-step-ms 50]");
+        out.println("                  [--threads N (default: all cores; results are identical for any N)]");
         out.println("Presets:");
         for (Preset p : Presets.all()) out.println("  " + p.name() + " — " + p.title());
     }

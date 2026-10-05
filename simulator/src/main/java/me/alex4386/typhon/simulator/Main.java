@@ -69,6 +69,12 @@ public final class Main {
             usage(out);
             return args.length == 0 ? 1 : 0;
         }
+        for (int i = 1; i + 1 < args.length; i++) {
+            if (args[i].equals("--threads")) {
+                // engine worker threads (results are identical for any count); read by Parallel.defaultThreads
+                System.setProperty("typhon.threads", String.valueOf(Math.max(1, Integer.parseInt(args[i + 1]))));
+            }
+        }
         switch (args[0]) {
             case "list-presets" -> {
                 for (Preset p : Presets.all()) {
@@ -328,6 +334,7 @@ public final class Main {
         out.println("  list-presets");
         out.println("  run --preset NAME [--seed N] [--hours H] [--out DIR] [--sample-seconds S]");
         out.println("      [--base-step-ms MS (default 50)] [--save DIR] [--load DIR]");
+        out.println("      [--threads N (engine worker threads, default all cores; results identical for any N)]");
         out.println("      [--skip-events Type,Type|none] [--dem FILE (GeoTIFF, .hgt, .asc, .png)");
         out.println("      [--dem-lat D --dem-lon D (real-scale presets)] [--dem-cell M] [--dem-meters-per-block L]");
         out.println("      [--dem-max-meters M (png)]] [--quiet]");
