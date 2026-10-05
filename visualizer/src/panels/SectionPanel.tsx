@@ -138,8 +138,8 @@ function UnitLegend({ section, world, mode }: { section: SectionFrame; world: Wo
     <span className="legend">
       {mode === 'strata' &&
         items.map((u) => (
-          <span key={u.id} className="legend-item" title={u.time !== null ? `emplaced at t = ${u.time.toFixed(0)} s` : 'pre-existing geology'}>
-            <i style={{ background: rgbCss(unitColour(world, u.id, u.depositType, u.time !== null)) }} />
+          <span key={u.id} className="legend-item" title={u.time != null ? `emplaced at t = ${u.time.toFixed(0)} s` : 'pre-existing geology'}>
+            <i style={{ background: rgbCss(unitColour(world, u.id, u.depositType, u.time != null)) }} />
             {u.label}
           </span>
         ))}
@@ -176,7 +176,7 @@ function drawSection(g: CanvasRenderingContext2D, W: number, H: number, s: Secti
   const h = H - PAD.t - PAD.b;
   const img = new ImageData(s.nu, s.nz);
   const matRgb = new Map(world.materials.map((m) => [m.id, hexToRgb(m.color)]));
-  const unitRgb = new Map(s.meta.units.map((u) => [u.id, unitColour(world, u.id, u.depositType, u.time !== null)]));
+  const unitRgb = new Map(s.meta.units.map((u) => [u.id, unitColour(world, u.id, u.depositType, u.time != null)]));
   const c: RGB = [0, 0, 0];
   for (let k = 0; k < s.nz; k++) {
     for (let i = 0; i < s.nu; i++) {

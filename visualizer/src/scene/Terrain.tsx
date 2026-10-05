@@ -188,7 +188,8 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       const rawElev = R(Field.SurfaceElevation, 0);
       const elevR = smoothedReader(rawElev, n, smoothR);
       const upR = R(Field.Uplift);
-      const lavaR = R(Field.LavaDepth);
+      // lava thickness varies by tens of metres between cells; smooth it lightly so the lake/flow top is not jagged
+      const lavaR = smoothedReader(R(Field.LavaDepth), n, smoothR > 0 ? 1 : 0);
       const lavaT = R(Field.LavaTemperature);
       const waterR = R(Field.WaterDepth);
       const pdcR = R(Field.PdcDepth);
@@ -419,7 +420,7 @@ function colourGround(
       // fresh lava rock / PDC deposits from the unit table
       const u = f.unit(i, j);
       const info = units[u];
-      if (info && info.time !== null && info.depositType !== 2) {
+      if (info && info.time != null && info.depositType !== 2) {
         const d = depositRgb(world, info.depositType);
         c[0] += (d[0] - c[0]) * 0.8;
         c[1] += (d[1] - c[1]) * 0.8;

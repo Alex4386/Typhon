@@ -5,7 +5,7 @@ import { simNow, useStore } from '../store/store';
 
 const MAX = 3000;
 /** How long (simulated seconds) hypocentres stay visible. */
-const WINDOW = 6 * 3600;
+const WINDOW = 3 * 3600;
 const TYPE_COLOR: Record<string, THREE.Color> = {
   VT: new THREE.Color('#ffd166'),
   LP: new THREE.Color('#06d6a0'),
@@ -30,7 +30,7 @@ export function Hypocentres() {
     for (const q of quakes) {
       const age = now - q.time;
       if (age > WINDOW) continue;
-      const r = 12 * Math.pow(1.8, q.magnitude);
+      const r = 7 * Math.pow(1.8, q.magnitude);
       m.makeScale(r, r, r).setPosition(q.hypocenter[0], q.hypocenter[2] * vExag, -q.hypocenter[1]);
       mesh.setMatrixAt(n, m);
       const fade = 1 - Math.max(0, age) / WINDOW;
@@ -46,7 +46,7 @@ export function Hypocentres() {
   return (
     <instancedMesh ref={ref} args={[undefined, undefined, MAX]} renderOrder={11} frustumCulled={false}>
       <icosahedronGeometry args={[1, 1]} />
-      <meshBasicMaterial transparent opacity={0.85} depthTest={false} depthWrite={false} />
+      <meshBasicMaterial transparent opacity={0.6} depthTest={false} depthWrite={false} />
     </instancedMesh>
   );
 }

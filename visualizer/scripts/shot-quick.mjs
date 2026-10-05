@@ -1,11 +1,12 @@
 // One screenshot of a running visualizer once its tiles have streamed in.
-// Usage: node scripts/shot-quick.mjs out.png [url] [waitSeconds] [js-to-evaluate-before-shot]
+// Usage: node scripts/shot-quick.mjs out.png [url] [waitSeconds] [file-with-js-to-evaluate-before-the-wait]
+import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const out = process.argv[2] ?? 'shot.png';
 const url = process.argv[3] ?? 'http://localhost:8787/?renderer=webgl&debug';
 const wait = Number(process.argv[4] ?? 20);
-const before = process.argv[5];
+const before = process.argv[5] ? readFileSync(process.argv[5], 'utf8') : undefined;
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME || undefined,

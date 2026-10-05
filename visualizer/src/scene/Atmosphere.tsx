@@ -9,6 +9,7 @@ import { displayZ } from './Terrain';
 const PLUME_PARTICLES = 2400;
 const ASH_PARTICLES = 1600;
 const MAX_BOMBS = 400;
+const FOUNTAIN_PARTICLES = 700;
 const MAX_FRONT = 600;
 const G = 9.81;
 
@@ -56,6 +57,7 @@ export function Atmosphere({ world }: { world: WorldInfo }) {
   const ashRef = useRef<THREE.InstancedMesh>(null);
   const bombRef = useRef<THREE.InstancedMesh>(null);
   const frontRef = useRef<THREE.InstancedMesh>(null);
+  const fountainRef = useRef<THREE.InstancedMesh>(null);
   const boltGroup = useRef<THREE.Group>(null);
   const seenBolts = useRef(new Map<string, number>());
 
@@ -134,6 +136,38 @@ export function Atmosphere({ world }: { world: WorldInfo }) {
       if (plume.instanceColor) plume.instanceColor.needsUpdate = true;
       plume.instanceMatrix.needsUpdate = true;
       ash.instanceMatrix.needsUpdate = true;
+    }
+
+    // ── lava fountains (Hawaiian fire fountaining; height grows with the effusion rate) ──
+    const fm0 = fountainRef.current;
+    if (fm0) {
+      let nf = 0;
+      if (show && st.state) {
+        const budget = Math.round(FOUNTAIN_PARTICLES * (st.quality === 'low' ? 0.4 : st.quality === 'medium' ? 0.7 : 1));
+        for (const v of world.volcanoes) {
+          const vs = st.state.volcanoes[v.id];
+          const rate = vs?.chamber.eruptionRate ?? 0;
+          if (!(rate > 0) || vs?.chamber.regime !== 'FOUNTAINING') continue;
+          // Kīlauea's fountains reached ~50–500 m at 10–500 m³/s
+          const H = Math.min(550, 25 * Math.sqrt(rate)) * vExag;
+          for (const vent of v.vents) {
+            const base = displayZ(world, vent.at[0], vent.at[1], vExag, dExag);
+            const per = Math.floor(budget / Math.max(1, v.vents.length * world.volcanoes.length));
+            for (let k = 0; k < per && nf < budget; k++, nf++) {
+              const life = (wall * (0.5 + hash(k + 7) * 0.3) + hash(k)) % 1;
+              const h = H * (0.6 + hash(k + 3) * 0.4) * 4 * life * (1 - life);
+              const ang = hash(k + 11) * Math.PI * 2;
+              const rr = (8 + hash(k + 17) * 25) * life * 2;
+              p.set(vent.at[0] + Math.cos(ang) * rr, base + h, -(vent.at[1] + Math.sin(ang) * rr));
+              const size = 14 + 10 * (1 - life);
+              m.compose(p, q, s.set(size, size, size));
+              fm0.setMatrixAt(nf, m);
+            }
+          }
+        }
+      }
+      fm0.count = nf;
+      fm0.instanceMatrix.needsUpdate = true;
     }
 
     // ── bombs (ballistic, drag ignored for display) ──
@@ -216,6 +250,10 @@ export function Atmosphere({ world }: { world: WorldInfo }) {
       <instancedMesh ref={ashRef} args={[undefined, undefined, ASH_PARTICLES]} frustumCulled={false} renderOrder={7}>
         <planeGeometry args={[1, 1]} />
         <meshLambertMaterial map={puff} color="#8a837b" transparent opacity={0.18} depthWrite={false} />
+      </instancedMesh>
+      <instancedMesh ref={fountainRef} args={[undefined, undefined, FOUNTAIN_PARTICLES]} frustumCulled={false} renderOrder={9}>
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial map={puff} color="#ffb347" transparent opacity={0.9} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </instancedMesh>
       <instancedMesh ref={bombRef} args={[undefined, undefined, MAX_BOMBS]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 0]} />
