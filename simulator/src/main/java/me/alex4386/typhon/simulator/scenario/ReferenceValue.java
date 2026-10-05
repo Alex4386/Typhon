@@ -59,6 +59,8 @@ public record ReferenceValue(String quantity, double low, double high, String ex
         ASH_DOWNWIND_RATIO,
         /** The run's vent-water sequence: {@code SURTSEYAN→EFFUSIVE}, {@code SURTSEYAN} or {@code EFFUSIVE}. */
         PHREATOMAGMATIC_SEQUENCE,
+        /** The first vent-water regime of the run: {@code SURTSEYAN} or {@code EFFUSIVE}. */
+        FIRST_VENT_WATER_PHASE,
         /** Hours from the start to the end of the first phreatomagmatic (Surtseyan) phase. */
         PHREATOMAGMATIC_HOURS
     }

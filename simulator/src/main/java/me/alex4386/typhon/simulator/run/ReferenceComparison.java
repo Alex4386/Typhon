@@ -53,6 +53,13 @@ public final class ReferenceComparison {
                 if (wet) yield "SURTSEYAN";
                 yield Double.isNaN(s.firstLavaFlowSeconds) ? null : "EFFUSIVE";
             }
+            case FIRST_VENT_WATER_PHASE -> {
+                RunSummary s = result.summary();
+                double wet = s.phreatomagmaticStartSeconds;
+                double lava = s.firstLavaFlowSeconds;
+                if (!Double.isNaN(wet) && (Double.isNaN(lava) || wet <= lava)) yield "SURTSEYAN";
+                yield Double.isNaN(lava) ? null : "EFFUSIVE";
+            }
             default -> throw new IllegalArgumentException(ref.metric() + " is numeric");
         };
     }
@@ -124,7 +131,7 @@ public final class ReferenceComparison {
             case PHREATOMAGMATIC_HOURS -> Double.isNaN(s.phreatomagmaticStartSeconds) ? Double.NaN
                     : ((Double.isNaN(s.phreatomagmaticEndSeconds) ? result.simulatedSeconds() : s.phreatomagmaticEndSeconds)
                             - s.phreatomagmaticStartSeconds) / 3600;
-            case FINAL_STYLE, ANY_STYLE, PHREATOMAGMATIC_SEQUENCE ->
+            case FINAL_STYLE, ANY_STYLE, PHREATOMAGMATIC_SEQUENCE, FIRST_VENT_WATER_PHASE ->
                     throw new IllegalArgumentException(metric + " is categorical");
         };
     }

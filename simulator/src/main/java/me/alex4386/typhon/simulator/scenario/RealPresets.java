@@ -404,9 +404,13 @@ final class RealPresets {
                                 "island emerges; 173 m by 1967 (Jakobsson et al. 2000)", Metric.FINAL_MAX_ELEVATION_M),
                         ReferenceValue.category("Eruption style", "HAWAIIAN", "effusive once sealed (1964-67)",
                                 Metric.ANY_STYLE),
+                        ReferenceValue.category("Phase while the sea reaches the vent", "SURTSEYAN",
+                                "explosive (Surtseyan) from Nov 1963 (Thorarinsson 1967)",
+                                Metric.FIRST_VENT_WATER_PHASE),
                         ReferenceValue.category("Vent-water sequence", "SURTSEYAN→EFFUSIVE",
-                                "explosive while sea water reached the vent, effusive once the tephra ring sealed it"
-                                        + " (Thorarinsson 1967; Jakobsson et al. 2000)", Metric.PHREATOMAGMATIC_SEQUENCE),
+                                "effusive once the tephra ring sealed the vent, Apr 1964 (Thorarinsson 1967;"
+                                        + " Jakobsson et al. 2000)", Metric.PHREATOMAGMATIC_SEQUENCE)
+                                .informative("the transition took ~5 months; a run of hours stays Surtseyan"),
                         ReferenceValue.value("Surtseyan phase duration", 3400, "h",
                                 "14 Nov 1963 to 4 Apr 1964, ~142 days (Thorarinsson 1967)", Metric.PHREATOMAGMATIC_HOURS)
                                 .informative("the scenario starts with the vent at 15 m depth and runs for hours;"
@@ -498,8 +502,11 @@ final class RealPresets {
                     GeothermalConfig geothermal = new GeothermalConfig();
                     geothermal.radius = 192;
                     geothermal.timeScale = 30;
-                    // Basin heat flux and a wet plateau as in the compact Yellowstone preset (Fournier 1989).
-                    geothermal.ventHeatPowerW = 3e7;
+                    // Single hydrothermal vents discharge ~1e8 W (Fournier 1989; the caldera ~5e9 W in total).
+                    // The heat halo is set in metres (~60 m), not left at 8 blocks: at 30 m columns the default
+                    // would spread each basin's heat over ~0.7 km² and keep the ground below boiling.
+                    geothermal.ventHeatPowerW = 2e8;
+                    geothermal.ventHaloBlocks = 60 / L;
                     geothermal.ventPipeDepthM = 300;
                     geothermal.maxGeysers = 20;
                     SubsurfaceConfig subsurface = VolcanoSystem.defaultSubsurfaceConfig(scaling(L));
