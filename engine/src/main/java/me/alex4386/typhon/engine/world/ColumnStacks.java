@@ -186,11 +186,14 @@ public final class ColumnStacks {
         return tiles.size();
     }
 
-    /** Keys of all tiles, sorted (decode with {@link #keyTileX}/{@link #keyTileZ}). */
+    /**
+     * Packed coordinates of all tiles, sorted (decode with {@link #keyTileX}/{@link #keyTileZ}). These
+     * are the plain packed values, not the mixed map keys.
+     */
     public long[] tileKeys() {
         long[] keys = new long[tiles.size()];
         int i = 0;
-        for (long k : tiles.keySet()) keys[i++] = k;
+        for (Tile t : tiles.values()) keys[i++] = pack(t.tx, t.tz);
         Arrays.sort(keys);
         return keys;
     }

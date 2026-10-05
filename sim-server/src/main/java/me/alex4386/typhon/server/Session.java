@@ -363,10 +363,28 @@ final class Session implements AutoCloseable {
         return o;
     }
 
+    /**
+     * Every unit known so far. Pulls units the engine created since the last state message first, so
+     * a client attaching before the first state pump still gets the pre-existing geology units.
+     */
     JsonArray allUnits() {
+        int from;
         synchronized (units) {
-            return units.deepCopy();
+            from = unitsKnown;
         }
+        JsonArray all;
+        synchronized (units) {
+            all = units.deepCopy();
+        }
+        try {
+            // Not added to the shared cache: the state pump still broadcasts these as new units to
+            // clients that are already attached (re-sending a known unit id is harmless).
+            JsonArray fresh = call(s -> Probe.units(s.terrain().world(), from)).get(5, TimeUnit.SECONDS);
+            all.addAll(fresh);
+        } catch (Exception e) {
+            // Fall back to what the state pump has collected; the next state message carries the rest.
+        }
+        return all;
     }
 
     /** Drains the runner's event ring; returns an {@code events} message or {@code null}. */
