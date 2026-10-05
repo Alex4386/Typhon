@@ -36,7 +36,7 @@ export function Observatory({ world }: { world: WorldInfo }) {
           ))}
         </select>
         )}
-        {vs && <AlertBadge level={vs.alert.level} style={vs.alert.style} regime={vs.chamber.regime} />}
+        {vs && <AlertBadge level={vs.alert.level} style={vs.alert.style ?? undefined} regime={vs.chamber.regime} />}
       </div>
       <div className="seg" role="tablist" aria-label="Instrument">
         {TABS.map(([t, label, title]) => (

@@ -53,7 +53,9 @@ export function StatusCard({ world }: { world: WorldInfo }) {
         <>
           <div className="sc-what">
             {erupting
-              ? `${STYLE_LABEL[vs.alert.style]?.split(' (')[0] ?? vs.alert.style} eruption — ${REGIME_LABEL[vs.chamber.regime] ?? vs.chamber.regime}`
+              ? vs.alert.style
+                ? `${STYLE_LABEL[vs.alert.style]?.split(' (')[0] ?? vs.alert.style} eruption — ${REGIME_LABEL[vs.chamber.regime] ?? vs.chamber.regime}`
+                : `Eruption (type still being estimated) — ${REGIME_LABEL[vs.chamber.regime] ?? vs.chamber.regime}`
               : vs.seismic.swarm
                 ? 'Earthquake swarm under the volcano'
                 : vs.seismic.tremor
