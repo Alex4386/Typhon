@@ -67,6 +67,10 @@ public final class SectionRenderer {
         ImageIO.write(section(minX, maxX, vent.z()), "png", dir.resolve("section-ew.png").toFile());
         maps.put("section-ew.png", "Cross-section west–east through the main vent (z = " + vent.z()
                 + "): deposits by type, darker bands = later eruptions; vertical exaggeration varies");
+        int[] extent = depositExtent(minX, maxX, vent.z(), vent.x());
+        ImageIO.write(shallowSection(extent[0], extent[1], vent.z()), "png", dir.resolve("section-ew-shallow.png").toFile());
+        maps.put("section-ew-shallow.png", "Same line, flattened to the present surface: the top metres below ground "
+                + "at true thickness (deposits thinner than 2 px are drawn 2 px thick and marked ▸), labelled by unit");
         int distal = distalColumn(vent.x(), vent.z(), maxX);
         ImageIO.write(columns(vent.x(), vent.z(), distal, vent.z()), "png", dir.resolve("section-columns.png").toFile());
         maps.put("section-columns.png", "Stratigraphic columns at the vent (x = " + vent.x() + ") and distal (x = "
@@ -138,6 +142,149 @@ public final class SectionRenderer {
         legend(g, nu, SECTION_HEIGHT);
         g.dispose();
         return img;
+    }
+
+    // ── surface-flattened section ──
+
+    static final int PROFILE_HEIGHT = 70;
+    static final int MIN_LAYER_PX = 2;
+
+    /**
+     * The section with the present surface as datum: each column shows the layers within {@code D}
+     * metres below its own surface, at true thickness. The window {@code D} adapts to the thickest
+     * volcanic pile along the line (2–200 m), so deposits of a few metres stay legible regardless of
+     * the volcano's relief; a small elevation profile on top keeps the geographic context.
+     */
+    BufferedImage shallowSection(int x0, int x1, int z) {
+        int columns = x1 - x0 + 1;
+        int nu = SECTION_WIDTH; // stretched when the deposit spans fewer columns
+        double dx = (double) columns / nu;
+        double thickest = 0;
+        double surfaceMin = Double.MAX_VALUE;
+        double surfaceMax = -Double.MAX_VALUE;
+        for (int x = x0; x <= x1; x++) {
+            double s = world.surfaceZ(x, z);
+            if (Double.isNaN(s)) continue;
+            surfaceMin = Math.min(surfaceMin, s);
+            surfaceMax = Math.max(surfaceMax, s);
+            for (LayerView layer : volcanicLayers(x, z)) thickest = Math.max(thickest, s - layer.bottom());
+        }
+        if (surfaceMin == Double.MAX_VALUE) return blank();
+        double window = niceDepth(Math.max(2, Math.min(200, thickest * 1.25)));
+        int top = PROFILE_HEIGHT;
+        int h = SECTION_HEIGHT;
+        BufferedImage img = new BufferedImage(nu, top + h + LEGEND_HEIGHT, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = graphics(img);
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, nu, top + h + LEGEND_HEIGHT);
+        int maxEruption = 1;
+        for (UnitRecord u : world.units().all()) maxEruption = Math.max(maxEruption, u.eruptionId());
+        double pxPerM = h / window;
+
+        Map<Integer, double[]> anchor = new LinkedHashMap<>(); // unit -> {px, iu, yMid} where thickest on screen
+        int[] surfaceRow = new int[nu];
+        double relief = Math.max(1, surfaceMax - surfaceMin);
+        for (int iu = 0; iu < nu; iu++) {
+            int x = x0 + (int) Math.floor((iu + 0.5) * dx);
+            double s = world.surfaceZ(x, z);
+            surfaceRow[iu] = Double.isNaN(s) ? top - 4 : (int) Math.round(top - 6 - (s - surfaceMin) / relief * (top - 22));
+            if (Double.isNaN(s)) continue;
+            int n = world.layerCount(x, z);
+            for (int k = n - 1; k >= 0; k--) {
+                LayerView layer = world.layer(x, z, k);
+                double dTop = s - layer.top();
+                if (dTop >= window) break;
+                double dBottom = s - layer.bottom();
+                UnitRecord u = world.unit(layer.unit());
+                boolean cavity = layer.material() == MaterialTable.VOID.id();
+                int y0 = top + (int) Math.floor(Math.max(0, dTop) * pxPerM);
+                int y1 = top + (int) Math.ceil(Math.min(window, dBottom) * pxPerM);
+                boolean volcanic = u.volcanoId() != null || cavity;
+                boolean thin = volcanic && y1 - y0 < MIN_LAYER_PX;
+                if (thin) y1 = Math.min(top + h, y0 + MIN_LAYER_PX);
+                g.setColor(cavity ? COLORS.get(DepositType.CAVITY) : unitColor(u, maxEruption));
+                g.fillRect(iu, y0, 1, Math.max(1, y1 - y0));
+                if (thin) img.setRGB(iu, Math.min(top + h - 1, y0), Color.BLACK.getRGB());
+                if (volcanic && !cavity) {
+                    double px = y1 - y0;
+                    double[] best = anchor.get(layer.unit());
+                    if (best == null || px > best[0]) anchor.put(layer.unit(), new double[] {px, iu, (y0 + y1) / 2.0});
+                }
+            }
+        }
+        // elevation profile strip for geographic context
+        g.setColor(new Color(245, 247, 250));
+        g.fillRect(0, 0, nu, top - 1);
+        g.setColor(new Color(120, 110, 100));
+        for (int iu = 1; iu < nu; iu++) g.drawLine(iu - 1, surfaceRow[iu - 1], iu, surfaceRow[iu]);
+        g.setColor(Color.DARK_GRAY);
+        g.drawLine(0, top - 1, nu, top - 1);
+        g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
+        g.drawString(String.format("surface %.0f–%.0f m", surfaceMin, surfaceMax), 4, 11);
+        // depth ticks
+        g.drawString("0 m", 9, top + 11);
+        for (int i = 1; i <= 4; i++) {
+            int y = top + (int) Math.round(i * h / 4.0);
+            g.drawLine(0, y, 6, y);
+            g.drawString(trimDepth(i * window / 4), 9, Math.min(top + h - 2, y + 4));
+        }
+        // unit labels
+        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
+        for (Map.Entry<Integer, double[]> e : anchor.entrySet()) {
+            double[] a = e.getValue();
+            UnitRecord u = world.unit(e.getKey());
+            String label = u.type().name().toLowerCase() + " #" + u.eruptionId();
+            int x = (int) Math.max(40, Math.min(nu - 80, a[1] - 20));
+            int y = (int) Math.round(a[2]) + 4;
+            if (a[0] < 11) { // too thin to hold the text: label just below with a pointer
+                g.setColor(Color.BLACK);
+                g.drawString("▸ " + label, x, Math.min(top + h - 16, y + 10));
+            } else {
+                g.setColor(Color.WHITE);
+                g.drawString(label, x + 1, y + 1);
+                g.setColor(Color.BLACK);
+                g.drawString(label, x, y);
+            }
+        }
+        g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+        g.setColor(Color.BLACK);
+        double widthM = columns * world.spec().metersPerColumn();
+        g.drawString(String.format("W · %.0f m · E  —  top %s below the present surface", widthM, trimDepth(window)),
+                Math.max(40, nu / 2 - 150), top + h - 4);
+        legend(g, nu, top + h);
+        g.dispose();
+        return img;
+    }
+
+    /**
+     * Columns {x0, x1} spanning the volcanic deposits on the line plus a 50 % margin (at least 64
+     * columns, centred on the vent when there are none), clipped to the domain.
+     */
+    int[] depositExtent(int minX, int maxX, int z, int ventX) {
+        int lo = Integer.MAX_VALUE;
+        int hi = Integer.MIN_VALUE;
+        for (int x = minX; x <= maxX; x++) {
+            if (!volcanicLayers(x, z).isEmpty()) {
+                lo = Math.min(lo, x);
+                hi = Math.max(hi, x);
+            }
+        }
+        if (lo > hi) lo = hi = ventX;
+        int margin = Math.max(32 - (hi - lo) / 2, (hi - lo) / 2);
+        return new int[] {Math.max(minX, lo - margin), Math.min(maxX, hi + margin)};
+    }
+
+    /** Rounds a depth window up to 1/2/5 × 10ⁿ metres. */
+    static double niceDepth(double d) {
+        double p = Math.pow(10, Math.floor(Math.log10(d)));
+        for (double m : new double[] {1, 2, 5, 10}) {
+            if (m * p >= d) return m * p;
+        }
+        return 10 * p;
+    }
+
+    private static String trimDepth(double m) {
+        return m >= 10 ? String.format("%.0f m", m) : String.format("%.1f m", m);
     }
 
     /** Deposit-type colour, darkened for later eruptions so successive eruptions show as bands. */
