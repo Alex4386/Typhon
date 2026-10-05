@@ -35,13 +35,16 @@ client                                   server
   listSessions, listCatalog     ─────▶
                                 ◀─────   sessions[…], catalog{presets, worlds}
   attach{sessionId}             ─────▶   (or createSession{preset|world, …})
-                                ◀─────   attached{world}, units{replace:true}, state, events, replayInfo,
-                                         clock, schema
+                                ◀─────   attached{world}, units{replace:true}, state, events,
+                                         entities{replace:true}, replayInfo, clock, schema
   subscribe{fields}             ─────▶
                                 ◀═════   tile frames (binary), throttled by flow control
   flow{tilesProcessed}          ─────▶   (repeatedly)
                                 ◀─────   clock (≥ 2 Hz), state (≥ 2 Hz), events (as produced),
-                                         units (when new deposits appear), replayInfo (~0.5 Hz)
+                                         units (when new deposits appear), replayInfo (~0.5 Hz),
+                                         entities (deltas, ≤ 1 Hz, only when something changed)
+  inspect{requestId, x, y}      ─────▶
+                                ◀─────   inspection{requestId, …}
 ```
 
 If `hello.protocol` differs from the server's, it sends `error{code:"protocol"}` and closes. One
@@ -149,6 +152,36 @@ be reopened, the files are restored. On success: `ack{ok:true, message:"Applied 
 
 Defaults are the definitions as they were before the first change (`<world>/tuning/baseline.json`);
 each change is appended to `<world>/tuning/audit.json` (last 200).
+
+### 3.6 Inspection
+
+`{"type":"inspect","requestId":31,"x":1200,"y":-450}` asks what the simulation knows about the
+column containing the point (x, y) (metres, §1). It is answered on the engine thread with:
+
+```json
+{"type":"inspection","requestId":31,"at":[1205,-455],"column":"120,45","inside":true,
+ "surfaceZ":1020.0,"surfaceMaterial":"BASALT","layerCount":5,
+ "layers":[{"top":1020,"bottom":1019.2,"material":"BASALT","unit":7,"depositType":"lava",
+            "label":"kilauea #1 lava","porosity":0.12,"loose":false}, …],
+ "groundTemperatureC":164,
+ "water":{"tableZ":600.1,"tableDepthM":419.9,"surfaceWaterDepthM":0,"vadoseM":419.9,"steamFluxKgPerSm2":2e-7},
+ "temperatureProfile":[{"depthM":5,"temperatureC":120,"steam":0.4}, …],
+ "lava":{"thicknessM":4.2,"temperatureC":1136,"crustM":0.21},
+ "pdc":{"depthM":…,"speedMPerS":…,"temperatureC":…},"lahar":{…}}
+```
+
+| field | meaning |
+|---|---|
+| `at`, `column` | Centre of the column (m) and its cell indices. |
+| `inside` | False outside the simulated area; nothing else follows then. |
+| `layers` | Stratigraphy top down (at most 24; `layerCount` is the total): `top`/`bottom` (m), `material`, `unit` (§4.2), `depositType?`, `label?`, `porosity`, `voidFraction?`, `loose?`. |
+| `water` | Groundwater: table elevation and depth, standing water, unsaturated thickness, steam flux. Absent where the subsurface model has no data. |
+| `temperatureProfile` | One entry per subsurface level: centre depth below ground (m), temperature, steam fraction. |
+| `groundTemperatureC` | Surface temperature from the geothermal model. |
+| `lava`, `pdc`, `lahar` | Present only where that flow currently covers the column. |
+
+Missing `x`/`y` gives `error{badRequest}`. The visualizer sends `inspect` when the user selects a
+point or an entity, and again every 2 s while the simulation runs.
 
 ## 4. Server → client JSON messages
 
@@ -317,6 +350,46 @@ The tunable parameters and command fields of a session (§3.5):
 | `params[]` | `ParamSpec`: `id`, `label`, `unit?`, `help?`, `group` (heading), `type` (`number`/`boolean`/`choice`), `min?`/`max?` (validated by the server), `step?` (1 for integers), `log?` (slider hint), `choices?`, `value`, `default`, `apply` (`hot`/`restart`), `volcanoId?`. Parameters without curated metadata get a label and unit derived from their name and no range. |
 | `commands` | Fields of commands, as `ParamSpec`s with defaults (`injectMagma`: the volcano's recharge magma). |
 | `audit` | Recent changes, oldest first: `at` (wall ms), `simTime`, `id`, `label`, `from`, `to` (null = back to default), `apply`. |
+
+### 4.8 `entities`
+
+Things in the world with a place and a lifetime, so clients can show where something appeared and
+when it went away:
+
+```json
+{"type":"entities","time":5400,"replace":false,
+ "upsert":[{"id":"feature:kilauea:HOT_SPRING:212:340","kind":"feature","volcanoId":"kilauea",
+            "label":"Hot spring","at":[2120,-3400,980],
+            "props":{"feature":"HOT_SPRING","groundTemperatureC":86},
+            "createdAt":5100,"updatedAt":5400},
+           {"id":"dike:kilauea:3","kind":"dike","volcanoId":"kilauea","label":"Dike 3",
+            "at":[150,-90,-200],"path":[[0,0,-2500],[150,-90,-200]],
+            "props":{"status":"PROPAGATING","tipDepthM":1210,"openingM":1.2,"speedMPerS":0.4, …},
+            "createdAt":5390,"updatedAt":5400}],
+ "remove":["quake:kilauea:3600:…"]}
+```
+
+- `replace:true` (on attach, after a replay jump or a restart) carries the full set: clients drop
+  everything they had. Otherwise the message is a delta: entities that appeared or changed
+  (`upsert`) and ids that are gone (`remove`). Deltas are sent at most once a second and only when
+  something changed.
+- `id` is stable for the entity's life; `createdAt` (simulated s) is when the server first saw it,
+  `updatedAt` when its record last changed. `at` is a representative point [x, y, z] in metres
+  (§1); `path?` is extra geometry (dikes: origin → tip). `hidden:true` marks statistics-only
+  entities that are not drawn. `props` are kind-specific and may grow (unknown keys are ignored).
+
+| kind | id | lifetime | props |
+|---|---|---|---|
+| `chamber` | `chamber:<volcano>` | always | `overpressureMPa`, `tensileStrengthMPa`, `temperatureC`, `silicaWt`, `waterWt`, `crystalFraction`, `volumeM3`, `depthM`, `eruptionRateM3PerS`, `regime`, `styleEstimate?`, `vei`, `radiusM` |
+| `vent`, `fissure` | `vent:<volcano>:<ventId>` | while the vent exists (fissures appear when a dike breaks the surface) | `ventId`, `shape`, `craterRadiusM`, `lengthM?`, `strikeDeg?` (clockwise from east), `erupting` |
+| `dike` | `dike:<volcano>:<n>` | from nucleation until the engine forgets it (it keeps the latest few, stalled or erupted) | `status` (`PROPAGATING`/`STALLED`/`ERUPTED`), `startedAt`, `tipDepthM`, `heightM`, `openingM`, `strikeLengthM`, `speedMPerS`, `volumeM3`, `fissure?` |
+| `feature` | `feature:<volcano>:<KIND>:<x>:<z>` | while the geothermal model keeps the feature | `feature` (`HOT_SPRING`, `GEYSER`, `FUMAROLE`, `MUD_POT`, `SULFUR_SPRING`, `SUBMARINE_VENT`, `SULFUR_DEPOSIT`, `ACID_ALTERATION`, `SINTER`, `CINNABAR`), `groundTemperatureC` (whole degrees), `level?` |
+| `plume` | `plume:<volcano>` | while an eruption column stands | `topZ`, `heightM`, `massRateKgS` |
+| `station` | `station:<volcano>:<name>` | always | `station` |
+| `quake` | `quake:<volcano>:<ms>:<pos>` | M ≥ 2, for 30 simulated minutes (newest 100) | `magnitude`, `type`, `time`, `durationSeconds`, `swarm` |
+| `lavaFront` | `lava:front` | 2 simulated minutes after the last front report | `lengthM`, `activeCells`, `moltenVolumeM3` |
+| `lavaField` | `lava:field` (hidden) | while lava is molten | `activeCells`, `moltenVolumeM3`, `emittedM3`, `solidifiedM3` |
+| `pdc`, `lahar` | `pdc:<flow>`, `lahar:<flow>` | 2 simulated minutes after the last front report | `runoutM`, `volumeM3`, `maxSpeedMPerS`, `maxTemperatureC`/`sedimentFraction`, `activeCells` |
 
 ## 5. Tile frames (binary, kind 1)
 
