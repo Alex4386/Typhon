@@ -33,6 +33,8 @@ import me.alex4386.typhon.engine.world.WorldModel;
 final class SurfaceWater {
     static final int TILE = ColumnStacks.TILE;
     static final int AREA = TILE * TILE;
+    /** Discharge (m²/s) below which a tile's water counts as at rest. */
+    static final double SETTLED_DISCHARGE = 1e-6;
 
     static final class Tile {
         final int tx;
@@ -49,6 +51,13 @@ final class SurfaceWater {
         /** Outflow scaling of the current substep (scratch). */
         final double[] limiter = new double[AREA];
         long version = Long.MIN_VALUE;
+        /**
+         * Water at rest (all discharges below {@link #SETTLED_DISCHARGE}): skipped by the flow solver
+         * until water is added, the bed changes or an active neighbour wakes it.
+         */
+        boolean settled;
+        /** Scratch: woken by an active neighbour this step. */
+        boolean wake;
         // Neighbour tiles, refreshed at the start of every step
         Tile east;
         Tile west;
@@ -148,6 +157,7 @@ final class SurfaceWater {
     void refresh(Tile t) {
         long version = world.stacks().tileVersion(t.tx, t.tz);
         if (version == t.version) return;
+        if (t.version != Long.MIN_VALUE) t.settled = false; // the bed changed under the water
         t.version = version;
         for (int i = 0; i < AREA; i++) {
             int x = t.tx * TILE + (i & 31);
@@ -214,6 +224,7 @@ final class SurfaceWater {
             seaOutflow += volumeM3; // straight into the open water
         } else {
             t.depth[i] += volumeM3 / cellArea();
+            t.settled = false;
         }
         switch (source) {
             case POURED -> poured += volumeM3;
@@ -276,7 +287,7 @@ final class SurfaceWater {
                     int mx = (int) p[0];
                     int mz = (int) p[1];
                     double w = world.waterZ(mx, mz);
-                    if (open) {
+                    if (open || members.size() >= config.reservoirColumns) {
                         openWater.computeIfAbsent(key(Math.floorDiv(mx, TILE), Math.floorDiv(mz, TILE)), k -> {
                             double[] levels = new double[AREA];
                             Arrays.fill(levels, Double.NaN);
@@ -346,7 +357,18 @@ final class SurfaceWater {
             t.south = tiles.get(key(t.tx, t.tz + 1));
             t.north = tiles.get(key(t.tx, t.tz - 1));
         }
-        List<Tile> list = new ArrayList<>(tiles.values());
+        // Active tiles wake their neighbours, so every face next to moving water is computed by an
+        // active tile; settled tiles (lakes at rest) are skipped by the flow solver.
+        for (Tile t : tiles.values()) {
+            if (t.settled) continue;
+            for (Tile n : new Tile[] {t.east, t.west, t.south, t.north}) if (n != null) n.wake = true;
+        }
+        List<Tile> list = new ArrayList<>();
+        for (Tile t : tiles.values()) {
+            if (t.wake) t.settled = false;
+            t.wake = false;
+            if (!t.settled) list.add(t);
+        }
         double dx = world.spec().metersPerColumn();
         double remaining = dt;
         int guard = 0;
@@ -357,9 +379,18 @@ final class SurfaceWater {
             substep(list, h, dx);
             remaining -= h;
         }
+        for (Tile t : list) {
+            double maxQ = 0;
+            for (int i = 0; i < AREA; i++) maxQ = Math.max(maxQ, Math.max(Math.abs(t.qEast[i]), Math.abs(t.qSouth[i])));
+            if (maxQ < SETTLED_DISCHARGE) {
+                java.util.Arrays.fill(t.qEast, 0);
+                java.util.Arrays.fill(t.qSouth, 0);
+                t.settled = true;
+            }
+        }
         double evaporation = config.evaporationMmPerHour / 1000.0 / 3600.0 * dt;
         double area = cellArea();
-        for (Tile t : list) {
+        for (Tile t : tiles.values()) {
             for (int i = 0; i < AREA; i++) {
                 double d = t.depth[i];
                 if (d <= 0) continue;

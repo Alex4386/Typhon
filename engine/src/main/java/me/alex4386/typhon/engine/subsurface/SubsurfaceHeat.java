@@ -228,35 +228,18 @@ final class SubsurfaceHeat {
         int n = grid.levels();
         for (int c = 0; c < SolverChunk.AREA; c++) {
             if (!ch.exists[c]) continue;
-            double gradient = headGradient(ch, c);
             for (int k = 0; k < n; k++) {
                 int i = c * n + k;
                 double cap = Math.max(1e3, ch.heatCapacity[i] + ch.porosity[i] * SubsurfaceGrid.WATER_DENSITY
                         * SubsurfaceGrid.WATER_HEAT_CAPACITY);
                 double kappa = ch.conductivity[i] / cap;
-                double velocity = gradient > 0 && belowWaterTable(ch, c, k) ? ch.hydraulicK[i] * gradient : 0;
-                double adv = velocity * SubsurfaceGrid.WATER_DENSITY * SubsurfaceGrid.WATER_HEAT_CAPACITY / cap;
-                double rate = 4 * kappa / (dx * dx) + 4 * adv / dx;
+                // Conduction only: advection is flux-limited in lateralEnergy, so very permeable
+                // ground (scoria, pumice) cannot force thousands of sub-steps.
+                double rate = 4 * kappa / (dx * dx);
                 if (rate > 0) minStep = Math.min(minStep, 0.4 / rate);
             }
         }
         return minStep;
-    }
-
-    /** Largest water-table slope from a column to its existing neighbours. */
-    private double headGradient(SolverChunk ch, int c) {
-        int gx = ch.gx(c);
-        int gz = ch.gz(c);
-        double max = 0;
-        int[][] around = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-        for (int[] d : around) {
-            SolverChunk o = grid.neighbourChunk(ch, gx + d[0], gz + d[1]);
-            if (o == null) continue;
-            int oc = SolverChunk.column(gx + d[0], gz + d[1]);
-            if (!o.exists[oc]) continue;
-            max = Math.max(max, Math.abs(o.head[oc] - ch.head[c]) / grid.dx());
-        }
-        return max;
     }
 
     private double capacity(SolverChunk ch, int c, int k, double volume) {
@@ -314,6 +297,13 @@ final class SubsurfaceHeat {
                         // Advection: heat carried by groundwater between the columns (+ = ch → other).
                         double kHyd = harmonic(ch.hydraulicK[i], other.hydraulicK[j]);
                         double flow = -kHyd * headGradient * grid.thickness(k) * dx; // m³/s
+                        // Limit the advected heat to a fifth of the smaller cell's heat capacity per
+                        // sub-step (upwind Courant ≤ 0.2 per face): stable and still symmetric.
+                        double volume = grid.area() * grid.thickness(k);
+                        double limit = 0.2 * Math.min(capacity(ch, c, k, volume), capacity(other, oc, k, volume))
+                                / (SubsurfaceGrid.WATER_DENSITY * SubsurfaceGrid.WATER_HEAT_CAPACITY * dt);
+                        if (flow > limit) flow = limit;
+                        else if (flow < -limit) flow = -limit;
                         double upwind = flow > 0 ? ti : tj;
                         energy -= SubsurfaceGrid.WATER_DENSITY * SubsurfaceGrid.WATER_HEAT_CAPACITY * flow * upwind * dt;
                     }

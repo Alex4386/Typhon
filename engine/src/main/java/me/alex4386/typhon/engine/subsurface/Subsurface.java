@@ -203,13 +203,30 @@ public final class Subsurface implements Subsystem, HydrothermalField {
         boiled += heat.boiledTotal;
         long t2 = System.nanoTime();
         groundwater.step(dtPhysical, heat.boiledVolume,
-                (ch, c, v) -> surface.add(ch.outletX[c], ch.outletZ[c], v, SurfaceWater.Source.SPRING));
+                (ch, c, v) -> discharge(ch, c, v, SurfaceWater.Source.SPRING));
         seaGroundwater += groundwater.seaExchange;
         deficit += groundwater.deficitVolume;
         long t3 = System.nanoTime();
         lastTimings[0] = t1 - t0;
         lastTimings[1] = t2 - t1;
         lastTimings[2] = t3 - t2;
+    }
+
+    /** True while {@link #equilibrate} runs: surface water is not simulated, discharge drains away. */
+    private boolean spinningUp;
+
+    /**
+     * Routes spring and runoff water to the surface at a column's outlet. During spin-up the surface
+     * field is not stepped, so the water is assumed to have drained off through the river network.
+     */
+    private boolean discharge(SolverChunk ch, int c, double volume, SurfaceWater.Source source) {
+        if (spinningUp) {
+            if (source == SurfaceWater.Source.SPRING) surface.springInflow += volume;
+            else surface.runoff += volume;
+            surface.seaOutflow += volume;
+            return true;
+        }
+        return surface.add(ch.outletX[c], ch.outletZ[c], volume, source);
     }
 
     private void applyRain(double dt) {
@@ -231,7 +248,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
                 double infiltrated = Math.min(rate, capacity) * dt * area;
                 ch.vadose[c] += infiltrated / area;
                 double runoff = total - infiltrated;
-                if (runoff > 0 && !surface.add(ch.outletX[c], ch.outletZ[c], runoff, SurfaceWater.Source.RUNOFF)) {
+                if (runoff > 0 && !discharge(ch, c, runoff, SurfaceWater.Source.RUNOFF)) {
                     rain -= runoff; // fell outside the known world
                 }
             }
@@ -385,7 +402,12 @@ public final class Subsurface implements Subsystem, HydrothermalField {
         double t = 0;
         while (t < seconds - 1e-9) {
             double dt = Math.min(maxStep, seconds - t);
-            macroStep(dt, dt, false);
+            spinningUp = true;
+            try {
+                macroStep(dt, dt, false);
+            } finally {
+                spinningUp = false;
+            }
             t += dt;
         }
     }
@@ -458,6 +480,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
         double available = t.depth[i] * surface.cellArea();
         double take = Math.min(available, volumeM3);
         t.depth[i] -= take / surface.cellArea();
+        t.settled = false;
         if (t.depth[i] < 1e-12) t.depth[i] = 0;
         removed += take;
         return take;
@@ -669,7 +692,8 @@ public final class Subsurface implements Subsystem, HydrothermalField {
             water.put(t.tx, t.tz, new FieldChunk()
                     .doubles("depth", t.depth.clone())
                     .doubles("qEast", t.qEast.clone())
-                    .doubles("qSouth", t.qSouth.clone()));
+                    .doubles("qSouth", t.qSouth.clone())
+                    .booleans("settled", new boolean[] {t.settled}));
         }
     }
 
@@ -751,6 +775,7 @@ public final class Subsurface implements Subsystem, HydrothermalField {
                 System.arraycopy(d.doubles("depth"), 0, t.depth, 0, SurfaceWater.AREA);
                 System.arraycopy(d.doubles("qEast"), 0, t.qEast, 0, SurfaceWater.AREA);
                 System.arraycopy(d.doubles("qSouth"), 0, t.qSouth, 0, SurfaceWater.AREA);
+                t.settled = d.has("settled") && d.booleans("settled")[0];
                 surface.putTile(t);
             }
         }

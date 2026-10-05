@@ -63,6 +63,12 @@ public final class SubsurfaceConfig {
     public double manningN = 0.035;
     /** Water thinner than this (m) is treated as a wet film: it infiltrates/evaporates but does not flow. */
     public double minFlowDepthM = 1e-3;
+    /**
+     * Imported water bodies of at least this many columns are fixed-level reservoirs (like open water)
+     * instead of simulated lakes: their level changes negligibly over play time, and a deep lake would
+     * force tiny shallow-water steps over its whole area.
+     */
+    public int reservoirColumns = 4096;
     /** Courant number of the local-inertial surface-water scheme (Bates et al. 2010: 0.7). */
     public double surfaceWaterCfl = 0.7;
     /** Iterations of the red-black SOR groundwater solve per macro step. */
