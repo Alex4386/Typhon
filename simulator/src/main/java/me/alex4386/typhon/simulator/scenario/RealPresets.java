@@ -172,6 +172,7 @@ final class RealPresets {
                                 "Poland et al. 2014; Neal et al. 2019", Metric.PEAK_ERUPTION_RATE_M3S),
                         ReferenceValue.category("Eruption style", "HAWAIIAN", "basaltic, H₂O < 0.5 wt%",
                                 Metric.ANY_STYLE),
+                        ReferenceValue.range("VEI", 0, 1, "", "Global Volcanism Program", Metric.MAX_VEI),
                         ReferenceValue.range("Longest lava flow", 100, 10000, "m",
                                 "Hawaiian flows: hundreds of m to km per day (Neal et al. 2019)", Metric.LONGEST_FLOW_M)
                                 .informative("the summit eruption first ponds in Halema'uma'u; flow length over"
@@ -191,8 +192,8 @@ final class RealPresets {
                             .volume(1e9).lithostaticDepth(1500).conduitRadius(1.5).tensileStrengthMPa(10)
                             .eruptionEndOverpressureMPa(1).supplyRate(3).supplyVariability(0.2)
                             .initialSilicaWt(50).rechargeSilicaWt(50).initialWaterWt(0.4).rechargeWaterWt(0.4)
+                            .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
                             .initialTemperatureC(1165).rechargeTemperatureC(1180).initialOverpressureMPa(9.5)
-                            .maxEruptionRate(150)
                             .build();
                     SubsurfaceConfig subsurface = subsurface(setting, L);
                     // The window sits in the island's basal aquifer, held near 610 m by recharge and
@@ -247,7 +248,8 @@ final class RealPresets {
                         ReferenceValue.range("Explosion rate", 3, 20, "per hour", "Ripepe et al. 2008",
                                 Metric.EXPLOSIONS_PER_HOUR),
                         ReferenceValue.category("Eruption style", "STROMBOLIAN", "open-vent basaltic system",
-                                Metric.ANY_STYLE)),
+                                Metric.ANY_STYLE),
+                        ReferenceValue.range("VEI", 0, 2, "", "Global Volcanism Program", Metric.MAX_VEI)),
                 seed -> RealTerrain.build(L, half, seed, (xm, zm) -> {
                     double d = RealTerrain.dist(xm, zm, 0, 0);
                     double cone = 924 - 2924 * Math.pow(Math.min(1, d / 7500), 0.9);
@@ -263,16 +265,17 @@ final class RealPresets {
                     VentSite vent = vent("crater-terrace", terrain, L, craterX, craterZ, 60);
                     MagmaChamberConfig chamber = MagmaChamberConfig.builder("stromboli-real", chamberAt(vent, -3000, L))
                             .volume(5e7).lithostaticDepth(3000).conduitRadius(0.8).tensileStrengthMPa(8)
-                            .eruptionEndOverpressureMPa(0.5).supplyRate(0.4).supplyVariability(0.4)
+                            .eruptionEndOverpressureMPa(0.5).supplyRate(0.002).supplyVariability(0.4)
                             .initialSilicaWt(50).rechargeSilicaWt(50).initialWaterWt(2.7).rechargeWaterWt(2.7)
-                            .initialTemperatureC(1140).rechargeTemperatureC(1150).initialOverpressureMPa(1.5)
+                            .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
+                            .initialTemperatureC(1140).rechargeTemperatureC(1150).initialOverpressureMPa(0)
                             .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
                             .build();
                     return b.volcano(VolcanoSystem.builder("stromboli-real", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
                             .subsurfaceConfig(subsurface(setting, L))
                             .stations(List.of(Stations.at("STR-N", vent, 0, 1200, L), Stations.at("STR-E", vent, 1500, 0, L),
-                                    Stations.at("STR-S", vent, 0, -1500, L))).scaling(scaling(L)).tephra(tephra()).ballisticFraction(0.3)
+                                    Stations.at("STR-S", vent, 0, -1500, L))).scaling(scaling(L)).tephra(tephra())
                             .wind(8, 1.2, Presets.WIND_VARIABILITY).build());
                 });
     }
@@ -315,6 +318,8 @@ final class RealPresets {
                                 "1-2e7 kg/s / 2500 kg/m³ (Carey & Sigurdsson 1985)", Metric.PEAK_ERUPTION_RATE_M3S),
                         ReferenceValue.category("Later style", "LAVA_DOME", "2004-2008 (Schilling et al. 2008)",
                                 Metric.ANY_STYLE),
+                        ReferenceValue.range("VEI", 5, 5, "", "18 May 1980 (Newhall & Self 1982)", Metric.MAX_VEI)
+                                .informative("a VEI 5 needs ~1 km³ of tephra: more than the run horizon erupts"),
                         ReferenceValue.range("Explosions during dome growth", 1, Double.NaN, "",
                                 "Vulcanian explosions through the dome, 1980-86 and 2004-08 (Swanson & Holcomb 1990;"
                                         + " Scott et al. 2008)", Metric.EXPLOSIONS_AFTER_DOME)),
@@ -326,17 +331,16 @@ final class RealPresets {
                     Scenario.Builder b = builder("st-helens-real", seed, terrain, setting);
                     VentSite vent = vent("summit", terrain, L, 0, 0, 120);
                     MagmaChamberConfig chamber = MagmaChamberConfig.builder("st-helens-real", chamberAt(vent, -4800, L))
-                            .volume(5e9).lithostaticDepth(7500).conduitRadius(15).tensileStrengthMPa(15)
+                            .volume(5e9).lithostaticDepth(7500).conduitRadius(30).tensileStrengthMPa(15)
                             .eruptionEndOverpressureMPa(2).supplyRate(1.0).supplyVariability(0.2)
                             .initialSilicaWt(64).rechargeSilicaWt(62).initialWaterWt(4.6).rechargeWaterWt(4.6)
                             .initialTemperatureC(920).rechargeTemperatureC(950).initialOverpressureMPa(15.1)
-                            .maxEruptionRate(8000)
                             .build();
                     return b.volcano(VolcanoSystem.builder("st-helens-real", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
                             .subsurfaceConfig(subsurface(setting, L))
                             .stations(List.of(Stations.at("MSH-N", vent, 0, 3000, L), Stations.at("MSH-E", vent, 3000, 0, L),
-                                    Stations.at("MSH-S", vent, 0, -3000, L))).scaling(scaling(L)).tephra(tephra()).ballisticFraction(0.02)
+                                    Stations.at("MSH-S", vent, 0, -3000, L))).scaling(scaling(L)).tephra(tephra())
                             .wind(15, 0.0, Presets.WIND_VARIABILITY).build());
                 });
     }
@@ -390,19 +394,18 @@ final class RealPresets {
                     Scenario.Builder b = builder("pinatubo-real", seed, terrain, setting);
                     VentSite vent = vent("summit", terrain, L, 0, 0, 240);
                     MagmaChamberConfig chamber = MagmaChamberConfig.builder("pinatubo-real", chamberAt(vent, -5300, L))
-                            .volume(4e10).lithostaticDepth(7000).conduitRadius(25).tensileStrengthMPa(15)
+                            .volume(4e10).lithostaticDepth(7000).conduitRadius(60).tensileStrengthMPa(15)
                             .eruptionEndOverpressureMPa(2).supplyRate(2).supplyVariability(0.1)
                             .initialSilicaWt(64.5).rechargeSilicaWt(64.5).initialWaterWt(6.2).rechargeWaterWt(6.2)
                             .initialTemperatureC(780).rechargeTemperatureC(800).initialOverpressureMPa(15.1)
                             // climactic DRE rate ~0.7-1.5e5 m3/s (Mastin et al. 2009, Table 1); with the Mastin
                             // plume fit this gives the observed 35-40 km column
-                            .maxEruptionRate(1.5e5)
                             .build();
                     return b.volcano(VolcanoSystem.builder("pinatubo-real", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
                             .subsurfaceConfig(subsurface(setting, L))
                             .stations(List.of(Stations.at("PIN-N", vent, 0, 4000, L), Stations.at("PIN-E", vent, 4000, 0, L),
-                                    Stations.at("PIN-W", vent, -4000, 0, L))).scaling(scaling(L)).tephra(tephra()).ballisticFraction(0.005)
+                                    Stations.at("PIN-W", vent, -4000, 0, L))).scaling(scaling(L)).tephra(tephra())
                             .wind(20, Math.PI, Presets.WIND_VARIABILITY).build());
                 });
     }
@@ -440,6 +443,8 @@ final class RealPresets {
                                 "island emerges; 173 m by 1967 (Jakobsson et al. 2000)", Metric.FINAL_MAX_ELEVATION_M),
                         ReferenceValue.category("Eruption style", "HAWAIIAN", "effusive once sealed (1964-67)",
                                 Metric.ANY_STYLE),
+                        ReferenceValue.category("Early style", "SURTSEYAN", "Nov 1963 - Apr 1964 (Thorarinsson 1967)",
+                                Metric.ANY_STYLE),
                         ReferenceValue.category("Phase while the sea reaches the vent", "SURTSEYAN",
                                 "explosive (Surtseyan) from Nov 1963 (Thorarinsson 1967)",
                                 Metric.FIRST_VENT_WATER_PHASE),
@@ -463,8 +468,8 @@ final class RealPresets {
                             .volume(5e8).lithostaticDepth(3000).conduitRadius(2.0).tensileStrengthMPa(12)
                             .eruptionEndOverpressureMPa(1).supplyRate(2).supplyVariability(0.2)
                             .initialSilicaWt(46.5).rechargeSilicaWt(46.5).initialWaterWt(0.7).rechargeWaterWt(0.7)
+                            .initialCo2Wt(0.2).rechargeCo2Wt(0.2)
                             .initialTemperatureC(1170).rechargeTemperatureC(1180).initialOverpressureMPa(11.8)
-                            .maxEruptionRate(100)
                             .build();
                     return b.volcano(VolcanoSystem.builder("surtsey-real", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)

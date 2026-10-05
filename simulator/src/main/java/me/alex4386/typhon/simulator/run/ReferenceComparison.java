@@ -36,16 +36,11 @@ public final class ReferenceComparison {
     static String categorical(ReferenceValue ref, Simulation.Result result) {
         List<Sample> samples = result.samples();
         return switch (ref.metric()) {
-            case FINAL_STYLE -> samples.isEmpty() ? null : samples.get(samples.size() - 1).style();
-            case ANY_STYLE -> {
-                String last = null;
-                for (Sample s : samples) {
-                    if (s.style() == null) continue;
-                    if (s.style().equalsIgnoreCase(ref.expected())) yield s.style();
-                    last = s.style();
-                }
-                yield last;
-            }
+            // Styles estimated from what eruptions did; forecasts between eruptions do not count.
+            case FINAL_STYLE -> result.summary().lastEstimatedStyle;
+            case ANY_STYLE -> result.summary().firstStyleSeconds.keySet().stream()
+                    .filter(st -> st.equalsIgnoreCase(ref.expected())).findFirst()
+                    .orElse(result.summary().lastEstimatedStyle);
             case PHREATOMAGMATIC_SEQUENCE -> {
                 RunSummary s = result.summary();
                 boolean wet = !Double.isNaN(s.phreatomagmaticStartSeconds);
@@ -132,6 +127,7 @@ public final class ReferenceComparison {
                 yield n;
             }
             case ASH_DOWNWIND_RATIO -> ashDownwindRatio(scenario);
+            case MAX_VEI -> s.maxVei < 0 ? Double.NaN : s.maxVei;
             case PHREATOMAGMATIC_HOURS -> Double.isNaN(s.phreatomagmaticStartSeconds) ? Double.NaN
                     : ((Double.isNaN(s.phreatomagmaticEndSeconds) ? result.simulatedSeconds() : s.phreatomagmaticEndSeconds)
                             - s.phreatomagmaticStartSeconds) / 3600;

@@ -215,7 +215,7 @@ public final class WorldScenarios {
                 magma:
                   chamber: {center: {x: 80, y: 20, z: 0}, volume: 2.0e9, lithostaticDepth: 2000, supplyRate: 1.0,
                             initialOverpressureMPa: 14.0, initialSilicaWt: 50, rechargeSilicaWt: 50,
-                            initialWaterWt: 0.5, rechargeWaterWt: 0.5, maxEruptionRate: 80}
+                            initialWaterWt: 0.5, rechargeWaterWt: 0.5}
                 geothermal: {radius: 64}
                 """));
         VolcanoDefinition west = VolcanoDefinition.parse("west", Yaml.parse("west.yaml", """

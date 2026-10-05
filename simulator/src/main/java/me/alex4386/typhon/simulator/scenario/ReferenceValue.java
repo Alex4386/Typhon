@@ -62,7 +62,9 @@ public record ReferenceValue(String quantity, double low, double high, String ex
         /** The first vent-water regime of the run: {@code SURTSEYAN} or {@code EFFUSIVE}. */
         FIRST_VENT_WATER_PHASE,
         /** Hours from the start to the end of the first phreatomagmatic (Surtseyan) phase. */
-        PHREATOMAGMATIC_HOURS
+        PHREATOMAGMATIC_HOURS,
+        /** Highest VEI estimated during an eruption. */
+        MAX_VEI
     }
 
     public static ReferenceValue range(String quantity, double low, double high, String unit, String source,

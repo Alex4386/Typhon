@@ -121,7 +121,6 @@ public final class Presets {
                             .initialWaterWt(0.4).rechargeWaterWt(0.4)
                             .initialTemperatureC(1165).rechargeTemperatureC(1180)
                             .initialOverpressureMPa(9.5)
-                            .maxEruptionRate(150)
                             .build();
                     VolcanoSystem volcano = VolcanoSystem.builder("kilauea", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
@@ -157,22 +156,21 @@ public final class Presets {
                             .conduitRadius(0.8)
                             .tensileStrengthMPa(8)
                             .eruptionEndOverpressureMPa(0.5)
-                            .supplyRate(0.4)
+                            .supplyRate(0.002)
                             .supplyVariability(0.4)
                             .initialSilicaWt(50).rechargeSilicaWt(50)
                             .initialWaterWt(2.7).rechargeWaterWt(2.7)
+                            .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
                             .initialTemperatureC(1140).rechargeTemperatureC(1150)
-                            // Persistently active open conduit near its steady state: supply (0.4 m³/s) balances
-                            // outflow at ~1.3 MPa, so activity never stops. Slugs: Stromboli explosions carry
-                            // ~10-1000 kg of gas (Mori & Burton 2009), a few % of the total gas flux.
-                            .initialOverpressureMPa(1.5)
+                            // An open conduit over a CO₂-rich basaltic chamber below its re-opening pressure:
+                            // whatever activity there is comes from chamber gas rising through it.
+                            .initialOverpressureMPa(0)
                             .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
                             .build();
                     VolcanoSystem volcano = VolcanoSystem.builder("stromboli", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
                             .stations(Stations.network("STR", vent, 40, 90))
                             .scaling(scaling)
-                            .ballisticFraction(0.3)
                             .wind(8, 1.2, WIND_VARIABILITY)
                             .build();
                     return b.volcano(volcano);
@@ -209,13 +207,11 @@ public final class Presets {
                             .initialWaterWt(4.6).rechargeWaterWt(4.6)
                             .initialTemperatureC(920).rechargeTemperatureC(950)
                             .initialOverpressureMPa(15.1)
-                            .maxEruptionRate(8000)
                             .build();
                     VolcanoSystem volcano = VolcanoSystem.builder("st-helens", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
                             .stations(Stations.network("MSH", vent, 40, 90))
                             .scaling(scaling)
-                            .ballisticFraction(0.02)
                             .wind(15, 0.0, WIND_VARIABILITY)
                             .build();
                     return b.volcano(volcano);
@@ -243,7 +239,7 @@ public final class Presets {
                     MagmaChamberConfig chamber = MagmaChamberConfig.builder("pinatubo", chamberBelow(vent, 60))
                             .volume(4e10)
                             .lithostaticDepth(7000)
-                            .conduitRadius(25)
+                            .conduitRadius(60)
                             .tensileStrengthMPa(15)
                             .eruptionEndOverpressureMPa(2)
                             .supplyRate(2)
@@ -251,14 +247,12 @@ public final class Presets {
                             .initialSilicaWt(64.5).rechargeSilicaWt(64.5)
                             .initialWaterWt(6.2).rechargeWaterWt(6.2)
                             .initialTemperatureC(780).rechargeTemperatureC(800)
-                            .initialOverpressureMPa(15.1)
-                            .maxEruptionRate(1.5e5) // 0.8-1.6 km3 DRE in ~3 h (Mastin et al. 2009, Table 1)
+                            .initialOverpressureMPa(15.1) // 0.8-1.6 km3 DRE in ~3 h (Mastin et al. 2009, Table 1)
                             .build();
                     VolcanoSystem volcano = VolcanoSystem.builder("pinatubo", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
                             .stations(Stations.network("PIN", vent, 40, 90))
                             .scaling(scaling)
-                            .ballisticFraction(0.005)
                             .wind(20, Math.PI, WIND_VARIABILITY)
                             .build();
                     return b.volcano(volcano);
@@ -295,7 +289,6 @@ public final class Presets {
                             .initialWaterWt(0.7).rechargeWaterWt(0.7)
                             .initialTemperatureC(1170).rechargeTemperatureC(1180)
                             .initialOverpressureMPa(11.8)
-                            .maxEruptionRate(100)
                             .build();
                     VolcanoSystem volcano = VolcanoSystem.builder("surtsey", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)

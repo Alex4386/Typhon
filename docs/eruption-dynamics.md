@@ -233,3 +233,47 @@ chamber more than its temperature alone suggests.
 * Wilson L., Parfitt E.A., Head J.W. (1995) Explosive volcanic eruptions VIII. The role of magma recycling in controlling the behaviour of Hawaiian-style lava fountains. GJI 121:215–225. ✓
 * Wohletz K.H. (1983) Mechanisms of hydrovolcanic pyroclast formation: grain-size, scanning electron microscopy, and experimental studies. JVGR 17:31–63. ✓
 * Woods A.W. (1988) The fluid dynamics and thermodynamics of eruption columns. Bull. Volcanol. 50:169–193. ✓
+
+## As implemented (differences from the plan above)
+
+- **Kinetic exsolution and the frozen sound speed.** Equilibrium exsolution gives a mixture sound
+  speed of a few m/s right at the saturation level and chokes basaltic flows there. Exsolution (H₂O,
+  and CO₂ by Henry's law, 5×10⁻⁴ wt%/MPa, Dixon 1997) relaxes towards solubility with time constant
+  `exsolutionTimescale` (1 s); the singular point is the *frozen* sound speed
+  `1 + G² ∂v/∂p|ₙ = 0`, and exsolution enters the momentum balance as a source
+  `G² (∂v/∂n) dn/dz`. Exsolution, outgassing and microlite growth are integrated with exponential
+  relaxation (stable at any ascent rate); RK2 sub-steps keep pressure changes below 5 %.
+- **CO₂.** The chamber tracks bulk CO₂; what exceeds solubility at the inlet enters the conduit as free
+  gas (a mixture gas constant is carried to the vent), and exsolved chamber CO₂ adds compressibility.
+- **Wall slip.** Coherent wall stress saturates at `wallSlipStressPa + wallFrictionCoefficient · p`
+  (1 MPa + 0.1 p): stiff crystal-rich magma slides as a plug on a marginal shear zone
+  (Iverson et al. 2006) instead of locking up at Poiseuille stresses of 10⁷ Pa/m.
+- **Fragmentation.** Brittle (Papale) on the *crystal-free* melt viscosity; viscous foams fragment when
+  past the porosity threshold *and* the bubbles' viscous overpressure `4/3 η ε̇ α` exceeds
+  `foamStrengthPa` (1 MPa, Spieler et al. 2004) *and* outgassing cannot keep up; fluid foams
+  (η < 10⁴ Pa s) tear inertially. Within one conduit radius of the vent no criterion is applied (the
+  foam vents freely); a choked flow whose gas would pass the porosity threshold on decompressing to
+  ambient fragments at the vent (Hawaiian fountains).
+- **Outgassing** drives vertical Darcy flow with the steeper of the flow's gradient and
+  `(p − p_ambient)/depth`; lateral loss uses a pore pressure that is ambient above the water table
+  (reported by the groundwater model) and hydrostatic below.
+- **Chamber coupling.** Outflow is linearised about the last two conduit solutions (secant on the
+  current branch, else about the magmastatic balance) and integrated exactly; re-solved when the
+  drivers move by 2 %. The input and solution are saved, so restores are bit-exact. A forecast
+  (failure now, branch by openness) is memoised on rounded inputs.
+- **Chamber gas through an open conduit.** Exsolved gas the chamber vents (degassing timescale) rises
+  through the conduit in proportion to its openness; in fluid magma it coalesces
+  (`1/(1 + η/η_c)`) into slugs that burst at the surface *between* eruptions — persistent
+  Strombolian activity emerges from an open conduit, fluid magma and a gas supply. During an eruption
+  it joins the flow's own slugs (none in a fragmenting flow: churn) or, under a stiff plug, the
+  trapped gas. A plug reseals once magma has risen through the cap depth.
+- **Surface partition.** Clasts the jet carries are further limited by what the buoyant plume can hold
+  up (plume height from Mastin 2009, buoyancy flux from `H = 8.2 F^¼ N^−¾`, rise speed
+  `1.66 (F/z)^⅓` at a third of the height); everything coarser falls back in the fountain. A
+  collapsing column sorts itself: ash < 1 mm feeds PDCs, coarser clasts fall back. In a crater
+  flooded by open water, falling clasts are quenched (no clastogenic lava) and coherent lava is
+  quench-granulated with share `1 − d/150 m` (hyaloclastite, added to the tuff ring); explosive
+  magma–water efficiency is suppressed by `(1 − d/150 m)²` (Kokelaar 1986).
+- **Style estimate** (`alert.EruptionClassifier`): bursts observed between eruptions count as
+  activity (not a forecast); `PHREATIC` is defined but never produced (no magma-free steam blasts are
+  modelled); groundwater-driven magma–water eruptions count towards `SURTSEYAN`.

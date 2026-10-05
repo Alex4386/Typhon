@@ -56,6 +56,8 @@ public final class RunSummary {
     public final List<Eruption> eruptionRecords = new ArrayList<>();
     /** Times of explosion quakes (s), for sequence metrics. */
     public final List<Double> explosionTimes = new ArrayList<>();
+    /** Last style estimated during an eruption ({@code null} if none). */
+    public String lastEstimatedStyle;
     /** Highest VEI estimated during an eruption (−1 if none). */
     public int maxVei = -1;
     /** First time each eruption style was estimated during an eruption (s). */
@@ -126,6 +128,7 @@ public final class RunSummary {
                 maxVei = Math.max(maxVei, e.vei());
                 String style = e.current().toString();
                 currentStyle.put(e.volcanoId(), style);
+                lastEstimatedStyle = style;
                 firstStyleSeconds.putIfAbsent(style, t);
                 Open o = open.get(e.volcanoId());
                 if (o != null) o.styles().add(style);

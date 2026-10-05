@@ -55,6 +55,8 @@ public final class EruptionClassifier implements Subsystem {
     private double slugPerHour;
     private double plugPerHour;
     private double submerged;
+    /** Weight the flow window has accumulated this eruption (bias correction of the averages). */
+    private double windowWeight;
     private long seenSlugs;
     private long seenPlugs;
     // This eruption.
@@ -122,8 +124,9 @@ public final class EruptionClassifier implements Subsystem {
         if (active) {
             if (erupting) observe(physicalDt);
             else resetFlowWindow();
-            memberships = memberships(magmaRate, lavaRate, columnRate, collapseRate, ballisticRate, wetRate,
-                    viscosityLog10, slugPerHour, plugPerHour, submerged);
+            double k = windowWeight > 0 ? 1 / windowWeight : 0;
+            memberships = memberships(magmaRate * k, lavaRate * k, columnRate * k, collapseRate * k, ballisticRate * k,
+                    wetRate * k, viscosityLog10, slugPerHour, plugPerHour, submerged * k);
             nextVei = Math.max(volumeVei(tephraMassKg / TEPHRA_BULK_DENSITY), heightVei(maxColumnKm));
         } else {
             resetFlowWindow();
@@ -164,6 +167,7 @@ public final class EruptionClassifier implements Subsystem {
         double collapse = p == null ? 0 : column * p.collapseFraction();
         double ballistic = p == null ? 0 : (p.ballisticMassFlux() + p.jetMassFlux()) * scale;
         double wet = p == null ? 0 : p.waterFragmentedMassFlux() * scale;
+        windowWeight += w * (1 - windowWeight);
         magmaRate += w * (actual - magmaRate);
         lavaRate += w * (lava - lavaRate);
         columnRate += w * (column - columnRate);
@@ -194,6 +198,7 @@ public final class EruptionClassifier implements Subsystem {
     }
 
     private void resetFlowWindow() {
+        windowWeight = 0;
         magmaRate = 0;
         lavaRate = 0;
         columnRate = 0;
@@ -329,6 +334,7 @@ public final class EruptionClassifier implements Subsystem {
         out.addProperty("slugPerHour", slugPerHour);
         out.addProperty("plugPerHour", plugPerHour);
         out.addProperty("submerged", submerged);
+        out.addProperty("windowWeight", windowWeight);
         out.addProperty("seenSlugs", seenSlugs);
         out.addProperty("seenPlugs", seenPlugs);
         out.addProperty("eruption", eruption);
@@ -355,6 +361,7 @@ public final class EruptionClassifier implements Subsystem {
         slugPerHour = in.get("slugPerHour").getAsDouble();
         plugPerHour = in.get("plugPerHour").getAsDouble();
         submerged = in.get("submerged").getAsDouble();
+        windowWeight = in.has("windowWeight") ? in.get("windowWeight").getAsDouble() : 1;
         seenSlugs = in.get("seenSlugs").getAsLong();
         seenPlugs = in.get("seenPlugs").getAsLong();
         eruption = in.get("eruption").getAsInt();
