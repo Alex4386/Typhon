@@ -34,6 +34,19 @@ never stepped). Events carry `time()` in simulated seconds; frames carry the ste
 Physical time compression (dormancy ×5000, eruptions ×20 by default) lives in `VolcanoScaling` and
 is part of the model; how fast simulation time runs against the wall clock is the runner's job.
 
+**Lava runs on its volcanoes' clocks.** Each `VolcanoSystem` registers its clock with the shared
+`LavaFlow` (`registerClock`: eruptive compression while erupting, dormant otherwise), and lava
+sources take *physical* rates (m³/s). Per step the field advances `dt × C` physical seconds, where
+`C` is the largest compression of the volcanoes currently effusing into it, otherwise the smallest
+current compression of all registered volcanoes (no volcano's flows run ahead of its own clock);
+each source still injects exactly what its volcano erupted, so mass is conserved whichever clock
+the field follows. Flow emplacement, cooling, crust growth and solidification all follow that
+clock: after an eruption the dormant compression freezes the flows within engine minutes and
+stratigraphy appears. Flow is sub-stepped (`Δt ≤ relaxation·L²/D`, `D = ρgh³/3η` for the most
+fluid moving lava at `substepFlowThicknessM`, at most `maxSubsteps`), and cooling integrates each
+column in sub-iterations of at most `coolingStepK`. Without registered clocks (standalone use)
+`LavaConfig.timeScale` is the compression.
+
 ## Runner
 
 `EngineRunner` runs an engine on its own thread:
