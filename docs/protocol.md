@@ -110,7 +110,11 @@ volcano, out of world, …).
 {"type":"attached","sessionId":"s1","world":{ …WorldInfo… }}
 ```
 
-`fields` lists the field ids the server can stream. `WorldInfo`:
+`fields` lists the field ids the server can stream. This is the capability mechanism: a field
+missing from `fields` is not modelled by this server (e.g. `WaterTableDepth` and `SteamFraction`
+before the subsurface model exists). Servers ignore such ids in `subscribe`; clients should treat
+them as unavailable rather than as zero. Section pixels for unmodelled quantities are 0 (saturation,
+steam) or `NaN` (water table). `WorldInfo`:
 
 | field | type | meaning |
 |---|---|---|
@@ -371,6 +375,17 @@ Body (after decompression), in order:
   what they do not know, so these do not bump the protocol version.
 
 ## 9. Implementation notes for M6 (Java)
+
+The Java implementation is `sim-server/` (see its README). Notes from implementing it:
+
+- Engine columns are integer `(x, z)` with `+z` south and blocks `L` metres tall; the server maps
+  column `(cx, cz)` to `x ∈ [cx·L, (cx+1)·L)`, `y ∈ [−(cz+1)·L, −cz·L)` and elevations to
+  `block·L`. Unit ids on the wire are engine unit ids + 1 (0 = none).
+- Events are batched (~4 Hz). Every `events` message re-renders the client's event-driven views,
+  so per-step messages swamp it.
+- `geothermalFeature` is sent for point features only (fumaroles, geysers, springs, mud pots,
+  sulfur deposits, submarine vents); diffuse alteration shows through `TopUnit`.
+- Tiles are 64 columns when the world allows (fewer meshes for the client).
 
 - **Runner.** Run the engine on `EngineRunner`. Use lossless frames for block changes (needed only
   by a Minecraft host) and the event ring for `events`. Build `state` from `runner.snapshot()` and
