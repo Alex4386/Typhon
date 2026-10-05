@@ -146,7 +146,7 @@ public final class Parallel {
      */
     private static final class Pool {
         /** How long an idle worker spins before parking (engine steps issue regions back to back). */
-        private static final long SPIN_NANOS = 100_000;
+        private static final long SPIN_NANOS = Long.getLong("typhon.spinMicros", 100) * 1000;
 
         private final Thread[] workers;
         private final Object turn = new Object();

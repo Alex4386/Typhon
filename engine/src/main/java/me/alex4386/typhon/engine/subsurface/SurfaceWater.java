@@ -350,6 +350,22 @@ final class SurfaceWater {
             }
         }
         int[][] around = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        java.util.Set<Long> halo = new java.util.HashSet<>();
+        for (Tile t : wet) {
+            for (int[] d : around) halo.add(key(t.tx + d[0], t.tz + d[1]));
+        }
+        // Dry tiles kept from the previous step (see the end of this method) stand in for the fresh
+        // halo tiles this step would create: reset them as if new, and drop the ones no longer needed,
+        // so the set of tiles and their state are exactly those of re-creating the halo every step.
+        tiles.values().removeIf(t -> {
+            if (!t.dry()) return false;
+            long k = key(t.tx, t.tz);
+            if (!halo.contains(k) || world.stacks().tileVersion(t.tx, t.tz) == 0) return true;
+            t.settled = false;
+            t.wake = false;
+            return false;
+        });
+        if (tiles.isEmpty()) return;
         for (Tile t : wet) {
             for (int[] d : around) {
                 int nx = t.tx + d[0];
@@ -440,7 +456,20 @@ final class SurfaceWater {
                 if (v > 0) infiltration.accept(t.tx * TILE + (i & 31), t.tz * TILE + (i >> 5), v);
             }
         }
-        tiles.values().removeIf(Tile::dry);
+        // Dry tiles next to water would be re-created (and re-read from the world) as halo tiles next
+        // step; keep them instead (the start of the next step resets or drops them).
+        tiles.values().removeIf(t -> t.dry() && !nextToWater(t));
+    }
+
+    private boolean nextToWater(Tile t) {
+        return wetTile(tiles.get(key(t.tx + 1, t.tz))) || wetTile(tiles.get(key(t.tx - 1, t.tz)))
+                || wetTile(tiles.get(key(t.tx, t.tz + 1))) || wetTile(tiles.get(key(t.tx, t.tz - 1)));
+    }
+
+    private static boolean wetTile(Tile t) {
+        if (t == null) return false;
+        for (int i = 0; i < AREA; i++) if (t.depth[i] > 0) return true;
+        return false;
     }
 
     /** Deepest water that can flow this substep: lake/river depths and open water next to land. */
