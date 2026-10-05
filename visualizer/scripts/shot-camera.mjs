@@ -24,7 +24,10 @@ for (let i = 0; i < 120; i++) {
 }
 await page.waitForTimeout(15000);
 
+// ONLY=06,07 limits which shots are taken (others are skipped quickly)
+const only = process.env.ONLY ? process.env.ONLY.split(',') : null;
 const shot = async (name, wait = 12) => {
+  if (only && !only.some((p) => name.startsWith(p))) return;
   await page.waitForTimeout(wait * 1000);
   await page.screenshot({ path: `${outDir}/${name}.png`, timeout: 600000 });
   const r = await page.evaluate(() => window.__typhonCamera.getState().readout);
