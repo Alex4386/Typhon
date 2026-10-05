@@ -24,7 +24,7 @@ import java.util.Map;
 final class Groundwater {
     private final SubsurfaceGrid grid;
     private final SubsurfaceConfig config;
-    private final Parallel parallel;
+    final Parallel parallel;
     private static final int SOR_BLOCK = 2048;
 
     // Budget of the last step (m³)

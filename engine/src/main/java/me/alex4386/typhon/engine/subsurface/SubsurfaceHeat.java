@@ -44,6 +44,7 @@ final class SubsurfaceHeat {
     SubsurfaceHeat(SubsurfaceGrid grid, SubsurfaceConfig config) {
         this.grid = grid;
         this.config = config;
+        this.parallel = new Parallel(config);
     }
 
     /** Critical temperature of pure water (°C); above it there is no liquid–vapour transition. */
@@ -319,22 +320,15 @@ final class SubsurfaceHeat {
         void run(int index, SolverChunk chunk);
     }
 
-    private java.util.concurrent.ForkJoinPool pool;
+    /** The engine's shared executor (see {@link Parallel}). */
+    final Parallel parallel;
 
     /**
-     * Runs {@code work} for every chunk, in parallel when {@link SubsurfaceConfig#threads} allows.
-     * Work items only write their own chunk (or their own slot), so results do not depend on the
-     * number of threads.
+     * Runs {@code work} for every chunk on the shared executor. Work items only write their own chunk
+     * (or their own slot), so results do not depend on the number of threads.
      */
     private void forEach(List<SolverChunk> chunks, ChunkWork work) {
-        int threads = config.threads > 0 ? config.threads : Runtime.getRuntime().availableProcessors();
-        if (threads <= 1 || chunks.size() < 2) {
-            for (int i = 0; i < chunks.size(); i++) work.run(i, chunks.get(i));
-            return;
-        }
-        if (pool == null || pool.getParallelism() != threads) pool = new java.util.concurrent.ForkJoinPool(threads);
-        pool.submit(() -> java.util.stream.IntStream.range(0, chunks.size()).parallel()
-                .forEach(i -> work.run(i, chunks.get(i)))).join();
+        parallel.forEach(chunks, work::run);
     }
 
     static double harmonic(double a, double b) {

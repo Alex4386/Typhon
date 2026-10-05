@@ -121,6 +121,9 @@ public final class Subsurface implements Subsystem, HydrothermalField {
 
     @Override
     public void step(StepContext context) {
+        heat.parallel.use(context.parallel());
+        groundwater.parallel.use(context.parallel());
+        surface.parallel.use(context.parallel());
         double dt = context.dtSeconds();
         prepare();
         surface.step(dt, infiltration());

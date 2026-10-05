@@ -28,6 +28,17 @@ public final class Outbox {
         events.add(event);
     }
 
+    /**
+     * Moves everything {@code other} collected into this outbox, as if {@code other}'s calls had been
+     * made here (coalescing keeps the earliest {@code expected} and the latest target either way).
+     */
+    public void absorb(Outbox other) {
+        for (BlockChange change : other.blockChanges.values()) setBlock(change);
+        events.addAll(other.events);
+        other.blockChanges.clear();
+        other.events.clear();
+    }
+
     public int pendingBlockChanges() {
         return blockChanges.size();
     }

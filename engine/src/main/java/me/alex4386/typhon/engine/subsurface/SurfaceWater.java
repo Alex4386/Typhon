@@ -84,7 +84,7 @@ final class SurfaceWater {
 
     private final WorldModel world;
     private final SubsurfaceConfig config;
-    private final Parallel parallel;
+    final Parallel parallel;
     private final TreeMap<Long, Tile> tiles = new TreeMap<>();
     /** World-model tiles whose standing water has been imported. */
     final TreeSet<Long> seeded = new TreeSet<>();

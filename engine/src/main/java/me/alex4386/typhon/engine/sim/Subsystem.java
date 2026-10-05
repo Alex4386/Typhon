@@ -36,6 +36,19 @@ public interface Subsystem {
     void step(StepContext context);
 
     /**
+     * Concurrency lane, or {@code null} (the default) for "runs alone".
+     *
+     * <p>Consecutive due subsystems that all declare a lane form a stage; the stage's lanes run
+     * concurrently, the subsystems of one lane in registration order. Declare a lane only if, during
+     * {@link #step}, the subsystem touches nothing but its own state and that of subsystems in the same
+     * lane (e.g. one volcano's 0D magma/seismic/alert chain). Outputs are buffered per subsystem and
+     * merged in registration order, so results equal sequential execution for any thread count.
+     */
+    default String concurrencyLane() {
+        return null;
+    }
+
+    /**
      * The configuration this subsystem was built with. It is stored in save files and hashed; a
      * restore with a different configuration is rejected unless explicitly allowed. Return a record
      * or plain data object Gson can serialise, or {@code null} if there is nothing to check.

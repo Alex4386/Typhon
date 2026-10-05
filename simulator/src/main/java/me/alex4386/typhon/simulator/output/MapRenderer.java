@@ -4,6 +4,8 @@ import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import javax.imageio.ImageIO;
@@ -54,15 +56,32 @@ public final class MapRenderer {
 
     /** Writes every map into {@code dir}; returns file name → caption. */
     public Map<String, String> writeAll(Path dir) throws IOException {
-        Map<String, String> maps = new LinkedHashMap<>();
-        write(dir, "map-elevation.png", elevation(), maps, "Final surface: elevation, water (blue), lava (orange)");
-        write(dir, "map-change.png", change(), maps, "Elevation change: red = built up, blue = removed");
-        write(dir, "map-lava.png", lava(), maps, "Lava: molten (yellow-orange) and new rock thickness (brown)");
-        write(dir, "map-ash.png", ash(), maps, "Tephra deposit thickness (log scale, 1 mm to 10 m)");
+        record Job(String name, java.util.function.Supplier<BufferedImage> render, String caption) {}
+        List<Job> jobs = new ArrayList<>();
+        jobs.add(new Job("map-elevation.png", this::elevation, "Final surface: elevation, water (blue), lava (orange)"));
+        jobs.add(new Job("map-change.png", this::change, "Elevation change: red = built up, blue = removed"));
+        jobs.add(new Job("map-lava.png", this::lava, "Lava: molten (yellow-orange) and new rock thickness (brown)"));
+        jobs.add(new Job("map-ash.png", this::ash, "Tephra deposit thickness (log scale, 1 mm to 10 m)"));
         if (scenario.volcano().geothermal() != null) {
-            write(dir, "map-geothermal.png", geothermal(), maps,
-                    "Shallow subsurface temperature and hydrothermal features");
+            jobs.add(new Job("map-geothermal.png", this::geothermal,
+                    "Shallow subsurface temperature and hydrothermal features"));
         }
+        // The run is over (nothing mutates the world): maps render and encode on all cores.
+        IOException[] failure = new IOException[1];
+        me.alex4386.typhon.engine.sim.Parallel.of(me.alex4386.typhon.engine.sim.Parallel.defaultThreads())
+                .forEach(jobs.size(), i -> {
+                    Job job = jobs.get(i);
+                    try {
+                        ImageIO.write(job.render().get(), "png", dir.resolve(job.name()).toFile());
+                    } catch (IOException e) {
+                        synchronized (failure) {
+                            if (failure[0] == null) failure[0] = e;
+                        }
+                    }
+                });
+        if (failure[0] != null) throw failure[0];
+        Map<String, String> maps = new LinkedHashMap<>();
+        for (Job job : jobs) maps.put(job.name(), job.caption());
         new SectionRenderer(scenario).writeAll(dir, maps);
         return maps;
     }

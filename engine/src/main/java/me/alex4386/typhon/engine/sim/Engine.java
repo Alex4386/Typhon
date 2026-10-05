@@ -114,11 +114,22 @@ public final class Engine {
             commandBus.dispatch(command);
         }
 
-        for (Registered registered : subsystems) {
-            if (registered.isDue(step)) {
-                registered.subsystem.step(new StepContext(step, time, registered.dtMicros, registered.random, outbox,
-                        parallel));
+        int count = subsystems.size();
+        for (int s = 0; s < count; s++) {
+            Registered registered = subsystems.get(s);
+            if (!registered.isDue(step)) continue;
+            if (registered.lane != null && !parallel.isSequential()) {
+                int end = s + 1; // the stage: following due subsystems that also declare a lane
+                while (end < count && subsystems.get(end).lane != null) end++;
+                List<Registered> stage = new ArrayList<>();
+                for (int k = s; k < end; k++) if (subsystems.get(k).isDue(step)) stage.add(subsystems.get(k));
+                if (runStage(stage, step, time)) {
+                    s = end - 1;
+                    continue;
+                }
             }
+            registered.subsystem.step(new StepContext(step, time, registered.dtMicros, registered.random, outbox,
+                    parallel));
         }
 
         currentStep++;
@@ -127,6 +138,30 @@ public final class Engine {
             if (event instanceof HistoricalEvent historical) history.add(historical);
         }
         return frame;
+    }
+
+    /**
+     * Runs a stage of lane-declaring subsystems with lanes in parallel (see
+     * {@link Subsystem#concurrencyLane()}); returns false (nothing run) when it has a single lane.
+     */
+    private boolean runStage(List<Registered> stage, long step, long time) {
+        Map<String, List<Integer>> lanes = new LinkedHashMap<>();
+        for (int i = 0; i < stage.size(); i++) {
+            lanes.computeIfAbsent(stage.get(i).lane, k -> new ArrayList<>()).add(i);
+        }
+        if (lanes.size() < 2) return false;
+        Outbox[] buffers = new Outbox[stage.size()];
+        List<List<Integer>> laneList = new ArrayList<>(lanes.values());
+        parallel.forEach(laneList.size(), l -> {
+            for (int i : laneList.get(l)) {
+                Registered r = stage.get(i);
+                Outbox buffer = new Outbox();
+                buffers[i] = buffer;
+                r.subsystem.step(new StepContext(step, time, r.dtMicros, r.random, buffer, parallel));
+            }
+        });
+        for (Outbox buffer : buffers) outbox.absorb(buffer);
+        return true;
     }
 
     /** Steps until simulation time reaches at least {@code seconds}; returns the frames produced. */
@@ -259,7 +294,7 @@ public final class Engine {
     }
 
     private record Registered(Subsystem subsystem, long periodSteps, long phaseSteps, long dtMicros, SimRandom random,
-            JsonElement configJson, String configHash) {
+            JsonElement configJson, String configHash, String lane) {
         boolean isDue(long step) {
             return periodSteps > 0 && step >= phaseSteps && (step - phaseSteps) % periodSteps == 0;
         }
@@ -388,7 +423,8 @@ public final class Engine {
                 }
 
                 long dt = (periodSteps == 0 ? 1 : periodSteps) * baseStepMicros;
-                registered.add(new Registered(subsystem, periodSteps, phaseSteps, dt, random, configJson, configHash));
+                registered.add(new Registered(subsystem, periodSteps, phaseSteps, dt, random, configJson, configHash,
+                        subsystem.concurrencyLane()));
             }
 
             long startStep = meta == null ? 0 : meta.get("step").getAsLong();

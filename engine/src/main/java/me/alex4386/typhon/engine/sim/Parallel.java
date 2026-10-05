@@ -138,22 +138,19 @@ public final class Parallel {
 
     /**
      * {@code workers} daemon threads plus the caller. One region runs at a time per pool (concurrent
-     * callers — e.g. several engines — take turns). Items are claimed {@code grain} at a time from a
-     * shared counter; completion is a countdown of the workers that saw the region.
+     * callers — e.g. several engines — take turns). Each region is an immutable {@link Region} with
+     * its own claim and completion counters: items are claimed {@code grain} at a time, and the
+     * caller waits only until every <em>item</em> is done — never for a worker to wake up, so a
+     * descheduled or parked worker cannot stall a region (the caller simply does its share). A worker
+     * that wakes late finds its region exhausted and does nothing.
      */
     private static final class Pool {
         /** How long an idle worker spins before parking (engine steps issue regions back to back). */
-        private static final long SPIN_NANOS = 200_000;
+        private static final long SPIN_NANOS = 100_000;
 
         private final Thread[] workers;
         private final Object turn = new Object();
-        private final AtomicInteger next = new AtomicInteger();
-        private final AtomicInteger pending = new AtomicInteger();
-        private final AtomicReference<Throwable> failure = new AtomicReference<>();
-        private volatile long generation;
-        private int n;
-        private int grain;
-        private IntConsumer body;
+        private volatile Region current;
 
         Pool(int workers) {
             this.workers = new Thread[workers];
@@ -167,18 +164,13 @@ public final class Parallel {
 
         void run(int n, int grain, IntConsumer body) {
             synchronized (turn) {
-                this.n = n;
-                this.grain = grain;
-                this.body = body;
-                next.set(0);
-                failure.set(null);
-                pending.set(workers.length);
-                generation++; // publishes the fields above to workers reading the volatile
+                Region region = new Region(n, grain, body);
+                current = region; // volatile: publishes the region to the workers
                 for (Thread t : workers) LockSupport.unpark(t);
-                work();
-                while (pending.get() != 0) Thread.onSpinWait();
-                this.body = null;
-                Throwable t = failure.get();
+                region.work();
+                // Wait for chunks other threads claimed (all of them once the claims ran past n).
+                while (region.done.get() < Math.min(n, region.next.get())) Thread.onSpinWait();
+                Throwable t = region.failure.get();
                 if (t != null) {
                     if (t instanceof RuntimeException e) throw e;
                     if (t instanceof Error e) throw e;
@@ -187,40 +179,59 @@ public final class Parallel {
             }
         }
 
-        private void work() {
-            boolean[] inRegion = IN_REGION.get();
-            inRegion[0] = true;
-            try {
-                int count = n;
-                int g = grain;
-                IntConsumer f = body;
-                while (failure.get() == null) {
-                    int start = next.getAndAdd(g);
-                    if (start >= count) break;
-                    int end = Math.min(count, start + g);
-                    for (int i = start; i < end; i++) f.accept(i);
-                }
-            } catch (Throwable t) {
-                failure.compareAndSet(null, t);
-            } finally {
-                inRegion[0] = false;
-            }
-        }
-
         private void workerLoop() {
-            long seen = generation;
+            Region seen = null;
             while (true) {
                 long spinStart = System.nanoTime();
-                while (generation == seen) {
+                Region region;
+                while ((region = current) == seen) {
                     if (System.nanoTime() - spinStart < SPIN_NANOS) {
                         Thread.onSpinWait();
                     } else {
                         LockSupport.park(this);
                     }
                 }
-                seen = generation;
-                work();
-                pending.decrementAndGet();
+                seen = region;
+                region.work();
+            }
+        }
+    }
+
+    private static final class Region {
+        final int n;
+        final int grain;
+        final IntConsumer body;
+        final AtomicInteger next = new AtomicInteger();
+        final AtomicInteger done = new AtomicInteger();
+        final AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        Region(int n, int grain, IntConsumer body) {
+            this.n = n;
+            this.grain = grain;
+            this.body = body;
+        }
+
+        void work() {
+            boolean[] inRegion = IN_REGION.get();
+            inRegion[0] = true;
+            try {
+                while (true) {
+                    int start = next.getAndAdd(grain);
+                    if (start >= n) break;
+                    int end = Math.min(n, start + grain);
+                    try {
+                        // after a failure, claimed chunks are only counted (the caller is about to throw)
+                        if (failure.get() == null) {
+                            for (int i = start; i < end; i++) body.accept(i);
+                        }
+                    } catch (Throwable t) {
+                        failure.compareAndSet(null, t);
+                    } finally {
+                        done.addAndGet(end - start);
+                    }
+                }
+            } finally {
+                inRegion[0] = false;
             }
         }
     }

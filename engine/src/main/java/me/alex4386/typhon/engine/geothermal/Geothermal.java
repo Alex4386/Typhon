@@ -18,6 +18,7 @@ import java.util.TreeMap;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.random.SimRandom;
+import me.alex4386.typhon.engine.sim.Parallel;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.subsurface.HeatSources;
@@ -152,6 +153,7 @@ public final class Geothermal implements Subsystem, HeatSources {
 
     @Override
     public void step(StepContext context) {
+        parallel = context.parallel();
         double dt = context.dtSeconds() * config.timeScale;
         sampleTerrain();
         if (!prewarmed && config.prewarmSeconds > 0 && knownFraction() >= 0.5) {
@@ -310,9 +312,15 @@ public final class Geothermal implements Subsystem, HeatSources {
 
     // ── Sampling ──
 
+    /**
+     * Executor for the per-cell sampling loops (the engine's, set each step). Cells only write their
+     * own slots and read the world and subsurface, which nothing edits meanwhile.
+     */
+    private Parallel parallel = Parallel.of(Parallel.defaultThreads());
+
     private void sampleTerrain() {
         int n = grid.cellCount();
-        for (int idx = 0; idx < n; idx++) {
+        parallel.forEach(n, SAMPLE_GRAIN, idx -> {
             int x = grid.cellCenterX(idx);
             int z = grid.cellCenterZ(idx);
             TerrainColumn column = terrain.column(x, z);
@@ -320,10 +328,10 @@ public final class Geothermal implements Subsystem, HeatSources {
             ground[idx] = column == null ? referenceY : column.groundY();
             submerged[idx] = column != null
                     && (column.submerged() || field.surfaceWaterDepthM(x, z) >= config.submergedDepthM);
-        }
+        });
         int sx = grid.sizeX();
         int sz = grid.sizeZ();
-        for (int idx = 0; idx < n; idx++) {
+        parallel.forEach(n, SAMPLE_GRAIN, idx -> {
             int ci = grid.cellI(idx);
             int cj = grid.cellJ(idx);
             long sum = 0;
@@ -338,26 +346,28 @@ public final class Geothermal implements Subsystem, HeatSources {
                 }
             }
             localMean[idx] = count == 0 ? ground[idx] : (double) sum / count;
-        }
+        });
     }
+
+    private static final int SAMPLE_GRAIN = 64;
 
     /** Reads the reservoir temperature and liquid saturation of every cell from the subsurface. */
     private void sampleField() {
         double r = config.reservoirDepthM;
-        for (int idx = 0; idx < grid.cellCount(); idx++) {
+        parallel.forEach(grid.cellCount(), SAMPLE_GRAIN, idx -> {
             int x = grid.cellCenterX(idx);
             int z = grid.cellCenterZ(idx);
             if (!known[idx] || !field.known(x, z)) {
                 grid.setExcess(idx, 0);
                 grid.setWater(idx, 0);
-                continue;
+                return;
             }
             double temperature = field.temperatureC(x, z, r);
             grid.setExcess(idx, Math.max(0, temperature - config.ambientC));
             double depth = field.waterTableDepthM(x, z);
             double liquid = clamp(0.5 + (r - depth) / (2 * r), 0, 1);
             grid.setWater(idx, submerged[idx] ? 1 : liquid);
-        }
+        });
     }
 
     // ── Manifestations ──

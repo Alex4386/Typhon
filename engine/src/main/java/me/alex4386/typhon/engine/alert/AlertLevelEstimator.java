@@ -42,6 +42,12 @@ public final class AlertLevelEstimator implements Subsystem {
         return "alert:" + config.volcanoId();
     }
 
+    /** 0D, touches only this volcano's magma/seismic/alert chain: may run beside other volcanoes'. */
+    @Override
+    public String concurrencyLane() {
+        return "volcano:" + config.volcanoId();
+    }
+
     @Override
     public double periodSeconds() {
         return config.stepPeriodSeconds();

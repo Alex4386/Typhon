@@ -49,6 +49,40 @@ change), a bounded **lossy** event ring with a dropped-event count (UIs), and a 
 `EngineSnapshot`. Saves and inspection run between steps via `onEngineThread`. The mode never
 changes results (`EngineRunnerTest.resultsDoNotDependOnRunnerSpeed`).
 
+## Threading
+
+Results are **bit-identical for every thread count**; threads only change speed. The thread count
+is `Engine.Builder.threads(n)` (default: system property `typhon.threads`, else all cores); the
+simulator and sim-server take `--threads N`.
+
+- **Data parallelism inside subsystems** — `StepContext.parallel()` (`sim/Parallel`). A low-latency
+  pool: workers spin briefly between regions (an engine step issues many short ones) and park when
+  idle; the calling thread works too; regions smaller than twice their grain, and nested regions,
+  run inline. Used by lava (flux, gather, heat balance, rendering per chunk), mass flows (faces and
+  gather per chunk), tephra (ash transport, settling and injection per row), geothermal sampling,
+  subsurface heat/groundwater/surface water (per solver chunk / tile), and sim-server tile
+  sampling/encoding.
+- **Lanes** — `Subsystem.concurrencyLane()`: consecutive due subsystems that declare a lane form a
+  stage whose lanes run concurrently (each lane in registration order); outputs are buffered per
+  subsystem and merged in registration order, so results equal sequential execution. The magma
+  chamber, seismicity and alert estimator declare `volcano:<id>`.
+
+Rules for subsystem authors (all checked by thread-count invariance tests,
+`*ThreadInvarianceTest`, `ConcurrencyLaneTest`):
+
+1. A parallel body for item *i* writes only item *i*'s state (its chunk, its row, its slot) and
+   reads only what no item writes in the same region — e.g. neighbours' *previous* buffers. Swap
+   double buffers in a *later* region than the one that reads neighbours.
+2. Never accumulate into shared doubles from a parallel body: write per-item partials and combine
+   them sequentially in item order (`Parallel.sum`, per-chunk scratch folded afterwards).
+3. Anything order-dependent — `Outbox` block changes and events, `SimRandom` draws, world-model and
+   terrain edits, creating chunks or other map entries — happens sequentially, in a fixed (sorted)
+   order, before or after the parallel region. Defer per-item actions into the item's own buffer
+   (as lava defers solidification) and apply them afterwards in order.
+4. Resolve lookups that may create or cache things (neighbour chunks, terrain refresh) in a
+   sequential "prepare" pass; parallel code only reads the prepared slots.
+5. Keep per-thread scratch local (allocate in the body or use a `ThreadLocal`), never in fields.
+
 ## Save format
 
 `Engine.save(SaveStore)` / `Engine.builder(seed)...restore(SaveStore)`; `DirectorySaveStore` on
