@@ -486,7 +486,11 @@ final class SubsurfaceHeat {
             // Below the water table the pores are refilled by the aquifer (the boiled water is taken
             // from its storage, lowering the table), so a whole pore volume can flash per step.
             double water = ch.porosity[i] * volume * SubsurfaceGrid.WATER_DENSITY; // kg
-            double mass = Math.min(water, excess / config.latentHeatVaporJkg);
+            // The flashed pores refill only as fast as the rock lets water in: Darcy inflow under a
+            // unit (gravity) gradient through the cell's top face, ρ_w·K·A·dt. Tight rock heats up
+            // instead (conduction-dominated); permeable ground boils at the rate it is resupplied.
+            double resupply = SubsurfaceGrid.WATER_DENSITY * ch.hydraulicK[i] * area * dt;
+            double mass = Math.min(Math.min(water, resupply), excess / config.latentHeatVaporJkg);
             if (mass <= 0) continue;
             ch.temperature[i] = t - mass * config.latentHeatVaporJkg / cap;
             ch.steam[i] = Math.max(ch.steam[i] * collapse, mass / water);

@@ -83,7 +83,21 @@ class GeothermalHydrologyTest {
         GeothermalConfig config = smallConfig();
         config.ventHeatPowerW = 2e6; // ≈ 0.9 kg/s of steam: within what the aquifer can resupply
         config.ventPipeDepthM = 20;
-        Geothermal geothermal = GeothermalTest.live(config, flatTerrain(40, ANDESITE), new StubMagma(1150),
+        // Permeable host rock (basalt, K ≈ 10⁻⁵ m/s): boiling is limited by how fast the rock lets
+        // water back in, so a liquid-dominated system needs permeable ground (tight andesite would
+        // conduct the heat away instead and simply heat up).
+        me.alex4386.typhon.engine.world.WorldSpec spec = new me.alex4386.typhon.engine.world.WorldSpec(1, 8, -2000,
+                Double.NaN, List.of(new me.alex4386.typhon.engine.world.WorldSpec.GeologyLayer("granite", -500, 0.01)),
+                "basalt", "soil", 1);
+        me.alex4386.typhon.engine.terrain.TerrainModel terrain = new me.alex4386.typhon.engine.terrain.TerrainModel(
+                new me.alex4386.typhon.engine.world.WorldModel(spec));
+        for (int x = -40; x < 40; x++) {
+            for (int z = -40; z < 40; z++) {
+                terrain.setColumn(x, z, me.alex4386.typhon.engine.terrain.TerrainColumn.dry(GeothermalTest.SURFACE_Y,
+                        me.alex4386.typhon.engine.world.BlockId.minecraft("basalt")));
+            }
+        }
+        Geothermal geothermal = GeothermalTest.live(config, terrain, new StubMagma(1150),
                 List.of(VentSite.crater("main", CENTER, 3)), sc);
         geothermal.equilibrate(60 * 86400);
         return geothermal;

@@ -51,6 +51,11 @@ public final class MaterialTable {
     public static final Material SOIL = add("soil", MaterialClass.SOIL, 1500, 0.8, 1200, -5, 0.45, NA, NA, 0.8, true);
     public static final Material CLAY = add("clay", MaterialClass.SOIL, 1800, 1.2, 1100, -9, 0.40, NA, NA, 0.5, false);
     public static final Material SULFUR = add("sulfur", MaterialClass.ROCK, 2000, 0.27, 710, -8, 0.10, 115, 115, 0.5, false);
+    /**
+     * Glacial outwash / alluvial sand and gravel, e.g. the permeable fill of Yellowstone's geyser
+     * basins (White et al. 1975, USGS PP 892): K ≈ 10⁻⁴–10⁻² m/s (Freeze &amp; Cherry 1979, Table 2.2).
+     */
+    public static final Material GRAVEL = add("gravel", MaterialClass.SOIL, 2000, 1.5, 900, -3.5, 0.30, NA, NA, 0.6, true);
 
     private MaterialTable() {}
 

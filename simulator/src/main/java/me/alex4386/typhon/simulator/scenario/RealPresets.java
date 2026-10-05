@@ -452,12 +452,17 @@ final class RealPresets {
 
     // ── Yellowstone ──
 
+    /** Hydrothermal basin centres (m from the domain centre): Upper Geyser Basin, Norris, Mud Volcano, West Thumb. */
+    static final double[][] YELLOWSTONE_BASINS = {{0, 0}, {-1500, -3500}, {2000, 3000}, {3500 - 1500, 600}};
+
     static Preset yellowstone() {
         double L = 30;
         int half = 256; // ±7.7 km
         RealSetting setting = new RealSetting(
                 new WorldSpec(L, 4 * L, -8000, Double.NaN,
-                        List.of(new WorldSpec.GeologyLayer("granite", -3000, 0.01)), "rhyolite", "soil", L),
+                        // Geyser-basin floor: ~60 m of permeable glacial sediment and sinter over
+                        // rhyolite flows (research drill holes Y-1–Y-13, White et al. 1975, USGS PP 892).
+                        List.of(new WorldSpec.GeologyLayer("granite", -3000, 0.01)), "rhyolite", "gravel", 2 * L),
                 List.of(),
                 new WorldDefinition.Geotherm(1, 60, 6.5),
                 new WorldDefinition.Aquifer(5, 0.2, 0.8, Double.NaN, 0.4),
@@ -494,7 +499,17 @@ final class RealPresets {
                     ColumnGrid grid = RealTerrain.build(L, half, seed, (xm, zm) -> {
                         double plateau = 2400 + 250 * smoothStep(-4000, -6500, xm); // caldera rim to the west
                         double lake = RealTerrain.dist(xm, zm, lakeX, lakeZ);
-                        return RealTerrain.crater(plateau, lake, 2600, 100);
+                        double e = RealTerrain.crater(plateau, lake, 2600, 100);
+                        // Geyser basins are groundwater discharge zones in valley floors, not on the
+                        // plateau: West Thumb and Mud Volcano lie at lake/river level, the Upper Geyser
+                        // Basin (~2240 m) even below it. Each basin floor is a broad depression ~5 m
+                        // above the lake, so the lake-controlled water table stays near the surface.
+                        for (double[] basin : YELLOWSTONE_BASINS) {
+                            double d = RealTerrain.dist(xm, zm, basin[0], basin[1]);
+                            double floor = 2357 + 5;
+                            if (e > floor) e = floor + (e - floor) * (1 - Math.exp(-(d * d) / (700.0 * 700.0)));
+                        }
+                        return e;
                     }, 30, 1200, Double.NaN, rock("tuff", 2380));
                     RealTerrain.lake(grid, L, lakeX, lakeZ, 2600, 2357);
                     return grid;
