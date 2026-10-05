@@ -1,0 +1,189 @@
+/* ── camera HUD ── */
+.camerabar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  max-width: calc(100% - 20px);
+  background: rgba(22, 27, 34, 0.88);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 3;
+}
+.camerabar .row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.camerabar .sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--line);
+  margin: 0 2px;
+}
+.camerabar label {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.camerabar .num {
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.camerabar .hint {
+  font-size: 11px;
+}
+
+.compass {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: rgba(22, 27, 34, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 10px 6px 6px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  z-index: 2;
+}
+.compass .rose {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: radial-gradient(circle, #24303d 0%, #161b22 70%);
+  position: relative;
+  cursor: pointer;
+}
+.compass .needle {
+  position: absolute;
+  inset: 0;
+}
+.compass .needle::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 9px;
+  margin-left: -5px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 13px solid var(--accent);
+}
+.compass .needle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 9px;
+  margin-left: -5px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 13px solid #6b7785;
+}
+.compass .needle .n {
+  position: absolute;
+  left: 50%;
+  top: -1px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.minimap {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 4px;
+  background: rgba(22, 27, 34, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  z-index: 2;
+}
+.minimap-canvas {
+  position: relative;
+}
+.minimap-canvas canvas {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+}
+.minimap-canvas canvas:last-child {
+  cursor: crosshair;
+}
+.minimap-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 0 6px;
+  font-size: 11px;
+  opacity: 0.8;
+}
+.minimap-toggle {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+}
+
+.help-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.help {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  max-width: min(560px, 92%);
+  max-height: 90%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.help .row {
+  display: flex;
+  align-items: center;
+}
+.help table {
+  border-collapse: collapse;
+}
+.help td {
+  padding: 3px 8px 3px 0;
+  vertical-align: top;
+}
+.help kbd {
+  display: inline-block;
+  white-space: nowrap;
+  font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+@media (max-width: 900px) {
+  .compass .readout {
+    display: none;
+  }
+  .minimap {
+    transform: scale(0.75);
+    transform-origin: bottom right;
+  }
+}

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { CameraBar, CameraHelp, CameraReadoutPanel, Minimap } from '../camera/CameraHud';
 import { connect } from '../net/connection';
 import { EventLog } from '../panels/EventLog';
 import { AlertBadge, Observatory } from '../panels/Observatory';
@@ -49,6 +50,10 @@ export function App() {
           <section className="view">
             <Viewer world={world} />
             <Toolbox world={world} />
+            <CameraBar world={world} />
+            <CameraReadoutPanel />
+            <Minimap world={world} />
+            <CameraHelp />
           </section>
           <section className="side">
             <Observatory world={world} />
