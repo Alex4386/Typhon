@@ -81,6 +81,10 @@ geometry), the class javadoc says so; see also `engine/README.md` ("Units and sc
 | Unconfined groundwater (Dupuit assumption) | Dupuit, J. (1863). *Études théoriques et pratiques sur le mouvement des eaux* (unverified) |
 | Local-inertial shallow water for surface water | ✓ Bates, P. D., Horritt, M. S. & Fewtrell, T. J. (2010). A simple inertial formulation of the shallow water equations for efficient two-dimensional flood inundation modelling. *J. Hydrol.* 387, 33–45 |
 | Hydrothermal manifestations, Yellowstone heat discharge | ✓ Fournier, R. O. (1989). Geochemistry and dynamics of the Yellowstone National Park hydrothermal system. *Annu. Rev. Earth Planet. Sci.* 17, 13–53. doi:10.1146/annurev.ea.17.050189.000305 |
+| Geyser-basin shallow geology (permeable glacial sediment and sinter over rhyolite) | ✓ White, D. E., Fournier, R. O., Muffler, L. J. P. & Truesdell, A. H. (1975). Physical results of research drilling in thermal areas of Yellowstone National Park, Wyoming. USGS Prof. Paper 892, 70 p. doi:10.3133/pp892 |
+| Hydraulic conductivity of materials (gravel, basalt, sediment, …) | Freeze, R. A. & Cherry, J. A. (1979). *Groundwater*, Table 2.2 (unverified) |
+| Water table as a subdued replica of topography | Haitjema, H. M. & Mitchell-Bruker, S. (2005). Are water tables a subdued replica of the topography? *Ground Water* 43(6), 781–786 (unverified) |
+| Kīlauea summit water table and the 2019–2020 water lake (lava boiled it off in ~1.5 h) | ✓ Nadeau, P. A. et al. (2024). Chemistry, growth, and fate of the unique, short-lived (2019–2020) water lake at the summit of Kīlauea Volcano, Hawaii. *Geochem. Geophys. Geosyst.* doi:10.1029/2023GC011154 |
 
 ## Validation references (simulator presets)
 
