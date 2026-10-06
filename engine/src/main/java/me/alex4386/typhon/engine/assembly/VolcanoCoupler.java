@@ -489,6 +489,8 @@ public final class VolcanoCoupler implements Subsystem {
 
     /** Lifecycle state of {@code ventId} at the last step ({@code null} if unknown). */
     public VentStatus ventStatus(String ventId) {
+        // a seal applies at once; the cached state catches up at the coupler's next step
+        if (sealed.contains(ventId) && find(ventId) != null) return VentStatus.SEALED;
         VentStatus known = ventStates.get(ventId);
         if (known != null) return known;
         return find(ventId) == null ? null : statusOf(ventId, false);
