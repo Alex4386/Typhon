@@ -85,8 +85,9 @@ import me.alex4386.typhon.engine.world.WorldModel;
  *       size into the surface around the vent ({@link CraterScaling}) unless the existing crater
  *       already contains it; the excavated rock lands as an ejecta blanket thinning as
  *       {@code (r/R)^{-3}}.
- *   <li>Vent clearing: while the volcano erupts, the conduit is open, so material that falls or slides
- *       into it is swallowed (re-ejected or engulfed) rather than piling up. Proximal fallout builds a
+ *   <li>Vent clearing: while the volcano erupts, the conduit is open, so loose material that falls or
+ *       slides into it is swallowed (re-ejected or engulfed) rather than piling up; lava standing in
+ *       the vent stays. Proximal fallout builds a
  *       rim, the inner walls fail back to their angle of repose into the conduit, and a cinder-cone
  *       crater forms by itself. After the eruption, wall collapse fills it in.
  *   <li>Piston collapse: a chamber in underpressure whose roof is coherent enough to subside (roof
@@ -314,7 +315,7 @@ public final class Geomorphology implements Subsystem {
         pendingExplosions.clear();
         if (ventsOpen.getAsBoolean()) clearVents();
         if (roof != null) pistonCollapse(outbox);
-        for (double[] q : pendingQuakes) shake(q);
+        shake(pendingQuakes);
         pendingQuakes.clear();
         sweep();
         flushBlocks(outbox);
@@ -430,28 +431,48 @@ public final class Geomorphology implements Subsystem {
 
     // ── Seismic shaking ──
 
-    private void shake(double[] q) {
-        double magnitude = q[3];
-        double radiusM = Math.min(config.maxShakingRadiusM, 1000 * GroundMotion.radiusKm(magnitude, config.minPgaG));
-        if (radiusM <= 0) return;
+    /**
+     * Applies this step's earthquakes: each known world tile gets the largest pseudo-static coefficient
+     * any quake produces at its nearest point (PGA varies little across a tile), and its steep columns
+     * are queued for a check under that load.
+     */
+    private void shake(List<double[]> quakes) {
+        if (quakes.isEmpty()) return;
         double l = world.spec().metersPerColumn();
-        int r = (int) Math.ceil(radiusM / l);
-        int cx = (int) q[0];
-        int cz = (int) q[2];
-        for (int dz = -r; dz <= r; dz++) {
-            for (int dx = -r; dx <= r; dx++) {
-                double d = Math.sqrt((double) dx * dx + (double) dz * dz) * l;
-                if (d > radiusM) continue;
-                int x = cx + dx;
-                int z = cz + dz;
-                if (!world.isKnown(x, z)) continue;
-                if (steepestTan(x, z) < config.minSlope) continue;
-                double kh = GroundMotion.pseudoStatic(GroundMotion.pga(magnitude, d / 1000));
-                long k = key(x, z);
-                shaking.merge(k, kh, Math::max);
-                active.add(k);
+        double minKh = GroundMotion.pseudoStatic(config.minPgaG);
+        long[] keys = world.stacks().tileKeys();
+        java.util.Arrays.sort(keys);
+        for (long key : keys) {
+            int tx = ColumnStacks.keyTileX(key);
+            int tz = ColumnStacks.keyTileZ(key);
+            double x0 = tx * ColumnStacks.TILE;
+            double z0 = tz * ColumnStacks.TILE;
+            double x1 = x0 + ColumnStacks.TILE - 1;
+            double z1 = z0 + ColumnStacks.TILE - 1;
+            double kh = 0;
+            for (double[] q : quakes) {
+                double dx = Math.max(0, Math.max(x0 - q[0], q[0] - x1)) * l;
+                double dz = Math.max(0, Math.max(z0 - q[2], q[2] - z1)) * l;
+                double d = Math.sqrt(dx * dx + dz * dz);
+                if (d > config.maxShakingRadiusM) continue;
+                kh = Math.max(kh, GroundMotion.pseudoStatic(GroundMotion.pga(q[3], d / 1000)));
+            }
+            if (kh < minKh) continue;
+            shaking.put(key, kh);
+            for (int lz = 0; lz < ColumnStacks.TILE; lz++) {
+                for (int lx = 0; lx < ColumnStacks.TILE; lx++) {
+                    int x = (int) x0 + lx;
+                    int z = (int) z0 + lz;
+                    if (steepestTan(x, z) >= config.minSlope) active.add(key(x, z));
+                }
             }
         }
+    }
+
+    private double khAt(int x, int z) {
+        if (shaking.isEmpty()) return 0;
+        Double kh = shaking.get(key(Math.floorDiv(x, ColumnStacks.TILE), Math.floorDiv(z, ColumnStacks.TILE)));
+        return kh == null ? 0 : kh;
     }
 
     // ── Stability assessment ──
@@ -753,7 +774,7 @@ public final class Geomorphology implements Subsystem {
             // Jacobi: evaluate everything on the same surface, then apply
             TreeMap<Long, Failure> moves = new TreeMap<>();
             for (long k : batch) {
-                Evaluation e = evaluate(keyX(k), keyZ(k), shaking.getOrDefault(k, 0.0));
+                Evaluation e = evaluate(keyX(k), keyZ(k), khAt(keyX(k), keyZ(k)));
                 if (e == null) continue;
                 for (Failure f : e.failures()) {
                     Failure prev = moves.get(f.key());
@@ -1102,13 +1123,28 @@ public final class Geomorphology implements Subsystem {
                 int x = (int) c[0];
                 int z = (int) c[1];
                 if (!world.isKnown(x, z)) continue;
-                double excess = world.surfaceZ(x, z) - floor;
+                // a flooded vent belongs to the magma–water interaction (jets, tuff ring) in the coupler
+                TerrainColumn column = terrain.column(x, z);
+                if (column != null && column.submerged()) continue;
+                // only fallen, loose material: lava standing in the vent is the eruption itself
+                double excess = Math.min(world.surfaceZ(x, z) - floor, looseTop(x, z));
                 if (excess < MIN_MOVE) continue;
                 Strip st = strip(x, z, excess, 0);
                 stats.recycledM3 += st.removedM() * l * l;
                 activateDisc(x, z, 2);
             }
         }
+    }
+
+    /** Thickness of the loose layers at the top of a column (m). */
+    private double looseTop(int x, int z) {
+        double sum = 0;
+        for (int k = world.layerCount(x, z) - 1; k > 0; k--) {
+            LayerView layer = world.layer(x, z, k);
+            if (!layer.loose() || !layer.materialInfo().solid()) break;
+            sum += layer.thickness();
+        }
+        return sum;
     }
 
     /** Columns of a vent's conduit mouth: a disc of its crater radius, or the fissure line. */

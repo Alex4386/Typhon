@@ -170,6 +170,8 @@ the bridge (which would deposit unattributed fill a second time).
 | `TephraSubsystem` | `FALL` ash (every mm; none on molten lava, where it joins the flow); bombs: their real volume as `FALL` rock | ash `LOOSE` |
 | `DikePropagation` | `INTRUSION` gabbro/andesite/granite from chamber depth to the tip, along the path | |
 | `VolcanoCoupler` | tuff rings (`FALL`) | |
+| `Geomorphology` | `LANDSLIDE` talus (source material); `EJECTA` crater breccia (excavated material) | `LOOSE` |
+| `DebrisAvalanches` | `DEBRIS_AVALANCHE` debris | `LOOSE` |
 
 Lahars entrain loose `FALL`/`PDC`/`LAHAR` layers out of the stacks (rain failure, bulking), so fresh
 tephra and ignimbrite are lahar source material without any wiring. Without a volcano assembly the
@@ -312,7 +314,8 @@ waterWt, co2Wt, crystalFraction, variability)`).
 | `lava` | `LavaFlow` (MAGFLOW-style Bingham cellular automaton on an 8-neighbour L-metre grid in real units, cooling, crust and lava tubes, ocean-entry deltas) |
 | `dike` | `DikePropagation` (buoyancy/stress-driven dike ascent, flank fissures, induced VT hypocentres; user arrest/remove/block via `DikeCommands`) |
 | `deformation` | `DeformationModel` (Mogi chamber source + dike dislocation, virtual GNSS/tilt stations) |
-| `massflow` | `PyroclasticFlows`, `Lahars` (Voellmy–Salm depth-averaged flows), `ColumnCollapse` (Woods 1988) |
+| `massflow` | `PyroclasticFlows`, `Lahars`, `DebrisAvalanches` (Voellmy–Salm depth-averaged flows), `ColumnCollapse` (Woods 1988) |
+| `geomorph` | `Geomorphology` (infinite-slope + Culmann slope stability on the stratigraphy, strength from material/alteration/heat (`RockStrength`), pore pressure, pseudo-static shaking (`GroundMotion`); talus relaxation or avalanche/debris-flow/block-and-ash release; hydrothermal alteration; explosion craters (`CraterScaling`), open-vent clearing, piston collapse) |
 | `tephra` | `TephraSubsystem` (drag ballistics, Mastin plume, ash advection–diffusion and fall) |
 | `subsurface` | `Subsurface` (world-level heat conduction, Dupuit groundwater, boiling, surface water, water budget), `HydrothermalField`, `HeatSources` |
 | `geothermal` | `Geothermal` (supplies volcano heat to the subsurface; fumaroles, sulfur, geysers, springs, alteration from its fields) |

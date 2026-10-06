@@ -191,6 +191,7 @@ final class Probe {
             case "soil" -> "#5b4a32";
             case "clay" -> "#b07d5a";
             case "sulfur" -> "#e6d23a";
+            case "debris" -> "#7a7468";
             default -> switch (m.materialClass()) {
                 case ROCK -> "#6a6a6a";
                 case TEPHRA -> "#a0907a";
@@ -220,6 +221,9 @@ final class Probe {
                 case HYALOCLASTITE -> "#4f5a4a";
                 case INTRUSION -> "#8b2f1e";
                 case CAVITY -> "#101014";
+                case LANDSLIDE -> "#78964a";
+                case DEBRIS_AVALANCHE -> "#3c823c";
+                case EJECTA -> "#c86ea0";
             });
             out.add(o);
         }

@@ -42,8 +42,11 @@ public final class GeomorphConfig {
     public double hotCollapseTemperatureC = 400;
 
     // ── Seismic shaking ──
-    /** Shaking below this PGA (g) is ignored. */
-    public double minPgaG = 0.005;
+    /**
+     * Shaking below this PGA (g) is ignored: its pseudo-static load (k_h = 0.01) changes a slope's
+     * factor of safety by about 1 %.
+     */
+    public double minPgaG = 0.02;
     /** Farthest shaking considered from an epicentre (m). */
     public double maxShakingRadiusM = 3000;
 
