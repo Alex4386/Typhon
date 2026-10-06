@@ -26,7 +26,7 @@ class ReposeRelaxationTest {
         return v;
     }
 
-    /** Largest excess of any column over a neighbour beyond its repose limit (m; ≤ 0 means all at or below repose). */
+    /** Largest excess of any column over a neighbour beyond its repose limit and tolerance (m; ≤ 0: all at repose). */
     private static double worstExcess(WorldModel w) {
         ReposeRelaxation r = w.reposeRelaxation();
         double worst = Double.NEGATIVE_INFINITY;
@@ -37,7 +37,8 @@ class ReposeRelaxationTest {
                     for (int dz = -1; dz <= 1; dz++) {
                         if (dx == 0 && dz == 0) continue;
                         double d = (dx != 0 && dz != 0) ? L * Math.sqrt(2) : L;
-                        worst = Math.max(worst, w.surfaceZ(x, z) - w.surfaceZ(x + dx, z + dz) - r.limit(x, z, d));
+                        worst = Math.max(worst, w.surfaceZ(x, z) - w.surfaceZ(x + dx, z + dz) - r.limit(x, z, d)
+                                - ReposeRelaxation.toleranceM(d));
                     }
                 }
             }
@@ -49,11 +50,12 @@ class ReposeRelaxationTest {
     void aHugeLoadOnOneColumnEndsUpAsAConeAtRepose() {
         WorldModel w = flat(0);
         w.deposit(0, 0, 300, MaterialTable.SCORIA, 1, LayerFlags.LOOSE, 0.5, 0);
-        assertTrue(worstExcess(w) <= 2 * ReposeRelaxation.MIN_MOVE_M + 1e-4, "no slope above repose: " + worstExcess(w));
+        assertTrue(worstExcess(w) <= 1e-4, "no slope above repose: " + worstExcess(w));
         assertEquals(300 * L * L, volume(w, 0), 1e-3 * 300 * L * L, "volume conserved");
         assertTrue(w.surfaceZ(0, 0) < 0.25 * 300, "no tower left: " + w.surfaceZ(0, 0));
         double expectedRim = Math.tan(Math.toRadians(34)) * L;
-        assertTrue(w.surfaceZ(0, 0) - w.surfaceZ(1, 0) <= expectedRim + 0.01, "column vs neighbour ≤ L·tan φ");
+        assertTrue(w.surfaceZ(0, 0) - w.surfaceZ(1, 0) <= expectedRim + ReposeRelaxation.toleranceM(L) + 1e-4,
+                "column vs neighbour ≤ L·(tan φ + tolerance)");
     }
 
     @Test
@@ -61,7 +63,7 @@ class ReposeRelaxationTest {
         WorldModel w = flat(0);
         for (int i = 0; i < 40; i++) {
             w.deposit(0, 0, 8, i % 2 == 0 ? MaterialTable.SCORIA : MaterialTable.ASH, 1 + i, LayerFlags.LOOSE, 0.45, 0);
-            assertTrue(worstExcess(w) <= 2 * ReposeRelaxation.MIN_MOVE_M + 1e-4, "after load " + i + ": " + worstExcess(w));
+            assertTrue(worstExcess(w) <= 1e-4, "after load " + i + ": " + worstExcess(w));
         }
         assertEquals(320 * L * L, volume(w, 0), 1e-3 * 320 * L * L);
     }
@@ -71,7 +73,7 @@ class ReposeRelaxationTest {
         WorldModel w = flat(-200);
         for (int x = -R; x <= R; x++) for (int z = -R; z <= R; z++) w.setWaterZ(x, z, 0);
         w.deposit(0, 0, 150, MaterialTable.ASH, 1, LayerFlags.LOOSE, 0.45, 0);
-        assertTrue(worstExcess(w) <= 2 * ReposeRelaxation.MIN_MOVE_M + 1e-4);
+        assertTrue(worstExcess(w) <= 1e-4);
         double slope = Math.toDegrees(Math.atan((w.surfaceZ(0, 0) - w.surfaceZ(1, 0)) / L));
         assertTrue(slope < 26, "under water about 20–25°: " + slope);
     }

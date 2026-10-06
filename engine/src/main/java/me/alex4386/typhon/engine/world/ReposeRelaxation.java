@@ -26,6 +26,12 @@ import java.util.TreeSet;
 public final class ReposeRelaxation {
     /** Moves thinner than this are ignored (m). */
     public static final double MIN_MOVE_M = 1e-3;
+    /**
+     * Slopes may exceed {@code tan φ} by this much before material moves (≈ 0.5° at φ = 33°): a pile
+     * kept at repose would otherwise answer every millimetre of ash dusting with a cascade of
+     * millimetre moves across its whole flank.
+     */
+    public static final double SLOPE_TOLERANCE_TAN = 0.01;
     /** Safety bound on moves per drain; anything left stays queued for the next deposit or {@link #drain()}. */
     static final int MAX_MOVES = 2_000_000;
     /** {@code tan φ} under water over {@code tan φ} in air (≈ 24° for 33°; see the class note). */
@@ -51,6 +57,11 @@ public final class ReposeRelaxation {
     public void setSubmergedFactor(double factor) {
         if (!(factor > 0 && factor <= 1)) throw new IllegalArgumentException("submerged factor must be in (0, 1]");
         this.submergedFactor = factor;
+    }
+
+    /** Excess (m) over the repose limit the relaxation leaves at a neighbour {@code distance} metres away. */
+    public static double toleranceM(double distance) {
+        return Math.max(2 * MIN_MOVE_M, distance * SLOPE_TOLERANCE_TAN);
     }
 
     /** Moves made so far (diagnostics). */
@@ -86,8 +97,9 @@ public final class ReposeRelaxation {
     }
 
     /**
-     * Worst excess (m) of a loose-topped column over a neighbour beyond its repose limit, over the rectangle
-     * (inclusive); ≤ {@code 2·}{@link #MIN_MOVE_M} when everything stands at or below repose.
+     * Worst excess (m) of a loose-topped column over a neighbour beyond its repose limit plus the relaxation's
+     * tolerance ({@link #toleranceM}), over the rectangle (inclusive); ≤ 0 when every loose slope stands within
+     * {@code φ +} {@link #SLOPE_TOLERANCE_TAN}.
      */
     public double worstExcessM(int x0, int z0, int x1, int z1) {
         double l = world.spec().metersPerColumn();
@@ -101,7 +113,7 @@ public final class ReposeRelaxation {
                     int nz = z + DZ[d];
                     if (!world.isKnown(nx, nz)) continue;
                     double distance = (d & 1) == 1 ? l * Math.sqrt(2) : l;
-                    worst = Math.max(worst, s - world.surfaceZ(nx, nz) - limit(x, z, distance));
+                    worst = Math.max(worst, s - world.surfaceZ(nx, nz) - limit(x, z, distance) - toleranceM(distance));
                 }
             }
         }
@@ -110,35 +122,45 @@ public final class ReposeRelaxation {
 
     /** The steepest stable surface drop to a neighbour {@code distance} metres away from column (x, z). */
     double limit(int x, int z, double distance) {
+        return distance * reposeTan(x, z);
+    }
+
+    /** {@code tan φ} of the loose top of a column (reduced under water); infinite for an empty column. */
+    double reposeTan(int x, int z) {
         int n = world.layerCount(x, z);
         if (n == 0) return Double.POSITIVE_INFINITY;
         Material top = world.layer(x, z, n - 1).materialInfo();
         double tan = Math.tan(Math.toRadians(MaterialTable.reposeAngleDeg(top)));
         double water = world.waterZ(x, z);
         if (Double.isFinite(water) && water > world.surfaceZ(x, z)) tan *= submergedFactor;
-        return distance * tan;
+        return tan;
     }
 
     private boolean relax(int x, int z) {
         if (!world.isKnown(x, z)) return false;
-        double loose = looseTop(x, z);
-        if (loose < MIN_MOVE_M) return false;
         double l = world.spec().metersPerColumn();
+        double tan = reposeTan(x, z);
+        if (!Double.isFinite(tan)) return false;
         double s = world.surfaceZ(x, z);
         int best = -1;
         double bestExcess = 0;
+        double bestTolerance = 0;
         for (int d = 0; d < 8; d++) {
             int nx = x + DX[d];
             int nz = z + DZ[d];
             if (!world.isKnown(nx, nz)) continue;
             double distance = (d & 1) == 1 ? l * Math.sqrt(2) : l;
-            double excess = s - world.surfaceZ(nx, nz) - limit(x, z, distance);
-            if (excess > bestExcess) {
+            double excess = s - world.surfaceZ(nx, nz) - distance * tan;
+            double tolerance = Math.max(2 * MIN_MOVE_M, distance * SLOPE_TOLERANCE_TAN);
+            if (excess - tolerance > bestExcess - bestTolerance) {
                 bestExcess = excess;
+                bestTolerance = tolerance;
                 best = d;
             }
         }
-        if (best < 0 || bestExcess < 2 * MIN_MOVE_M) return false;
+        if (best < 0 || bestExcess <= bestTolerance) return false;
+        double loose = looseTop(x, z);
+        if (loose < MIN_MOVE_M) return false;
         double amount = Math.min(loose, bestExcess / 2);
         if (amount < MIN_MOVE_M) return false;
         move(x, z, x + DX[best], z + DZ[best], amount);

@@ -1,6 +1,7 @@
 package me.alex4386.typhon.simulator.scenario;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -132,7 +133,10 @@ class IslandFlowTest {
             if (i % 200 == 0 || st.oceanEntryAfterEffusive >= 0) {
                 Edifice ed = Edifice.measure(s, floor);
                 st.observe(step, volcSeconds, v, ed, s.lava().activeCellCount());
-                double excess = wm.reposeRelaxation().worstExcessM(-60, -60, 60, 60);
+                // the world model is rebuilt when a volcano is added: read the current one
+                ReposeRelaxation repose = s.terrain().world().reposeRelaxation();
+                assertNotNull(repose, "a volcano's world relaxes loose deposits to their angle of repose");
+                double excess = repose.worstExcessM(-60, -60, 60, 60);
                 if (excess > steepest) {
                     steepest = excess;
                     steepestAt = step;
@@ -152,9 +156,10 @@ class IslandFlowTest {
             }
         }
         report.stage("eruptions", t, "%d eruptions, %d ocean entries, %.0f h of volcano time", st.eruptions, st.oceanEntries, volcSeconds / 3600);
-        report.line("loose deposits: worst excess over the angle of repose %.4f m (step %d); %d repose moves", steepest, steepestAt,
-                wm.reposeRelaxation().moves());
-        assertTrue(steepest <= 2 * ReposeRelaxation.MIN_MOVE_M + 1e-3,
+        report.line("loose deposits: worst excess over the angle of repose (+%.2f in tan) %.4f m (step %d); %d repose moves",
+                ReposeRelaxation.SLOPE_TOLERANCE_TAN, steepest, steepestAt,
+                s.terrain().world().reposeRelaxation().moves());
+        assertTrue(steepest <= 1e-3,
                 "no loose deposit ever stands above its angle of repose: " + steepest + " m at step " + steepestAt);
         for (String d : st.history) report.line("%s", d);
         Edifice end = Edifice.measure(s, floor);
