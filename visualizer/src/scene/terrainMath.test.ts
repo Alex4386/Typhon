@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { distanceOutside, farFieldElevation, median, sampleLevel, stackedContext, stretch, type Extrapolation, type LevelGrid } from './farField';
-import { clampedReader, elevationQuantum } from './terrainMath';
+import { distanceOutside, farFieldElevation, median, sampleLevel, stackedContext, stretch, type Extrapolation, type LevelGrid } from './farFieldMath';
+import { bakedReader, clampedReader, elevationQuantum, gridReader } from './terrainMath';
 
 describe('display smoothing', () => {
   it('finds the block step of stepped elevations, none for continuous ones', () => {
@@ -19,6 +19,18 @@ describe('display smoothing', () => {
     expect(shown(4, 0)).toBe(99);
     expect(shown(5, 0)).toBe(61);
     expect(shown(0, 0)).toBe(100);
+  });
+
+  it('bakes a reader over [−1, n]² and clamps reads outside it', () => {
+    let calls = 0;
+    const r = (a: number, b: number) => (calls++, a * 10 + b);
+    const { grid, read } = bakedReader(r, 4);
+    expect(calls).toBe(36);
+    expect(read(2, 3)).toBe(23);
+    expect(read(-1, 4)).toBe(-6);
+    expect(read(9, -5)).toBe(39);
+    expect(gridReader(grid, 4)(0, 0)).toBe(0);
+    expect(calls).toBe(36);
   });
 });
 

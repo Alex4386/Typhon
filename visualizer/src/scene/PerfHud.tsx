@@ -7,7 +7,8 @@ const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)} M` : n >= 1e4 ? 
 /**
  * Frame statistics over the 3D view (View → Graphics → "Frame statistics"): rendered frames per
  * second (0 while the scene is idle: it is only drawn when something changes), frame time, JS time
- * per frame, draw calls, triangles, entity markers drawn and the current pixel ratio.
+ * per frame, terrain rebuild time and backlog, draw calls, triangles, entity markers drawn and the
+ * current pixel ratio.
  */
 export function PerfHud() {
   const show = useStore((s) => s.showPerf);
@@ -23,6 +24,8 @@ export function PerfHud() {
     ['fps', p.fps.toFixed(p.fps < 10 ? 1 : 0)],
     ['frame', `${p.frameMs.toFixed(1)} ms`],
     ['JS', `${p.cpuMs.toFixed(1)} ms`],
+    ['rebuild', `${p.rebuildMs.toFixed(1)} ms`],
+    ['queued', fmt(p.rebuildQueue)],
     ['draws', fmt(p.calls)],
     ['tris', fmt(p.triangles)],
     ['markers', fmt(p.entities)],

@@ -9,8 +9,7 @@ import type { RGB } from '../util/color';
 import { sampleColumn } from '../util/world';
 
 import { detailHeights, detailLevels, levelRect, refinement, wantsDetail } from './detail';
-import { cancelRebuild, colourGround, gridGeometry, groundMaterial, lin, queueRebuild, sceneProbe, smoothedReader, worldQuantum, type GroundFields } from './Terrain';
-import { clampedReader } from './terrainMath';
+import { cachedElevation, cancelRebuild, colourGround, forgetElevation, gridGeometry, groundMaterial, lin, queueRebuild, sceneProbe, worldQuantum, type GroundFields } from './Terrain';
 
 /** How often (ms) the camera's distance to the crater regions is checked. */
 const CHECK_MS = 500;
@@ -124,7 +123,9 @@ function DetailTile({ world, level, tx, ty, onPick }: { world: WorldInfo; level:
       // the same edge-preserving smoothing as the core (block steps go, craters and rims stay), over
       // one column's worth of detail cells
       const q = worldQuantum(world, getTile(Field.SurfaceElevation, Math.floor(tx / r), Math.floor(ty / r))?.values);
-      const elevR = q > 0 ? clampedReader(rawElev, smoothedReader(rawElev, n, r), q) : rawElev;
+      const deps = [];
+      for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) deps.push(getLodTile(level.level, tx + ox, ty + oy));
+      const elevR = cachedElevation(key, deps, n, r, q, rawElev);
       const c = level.cellSize;
       // column fields interpolated between column centres, so colours do not come in column squares
       const fc = (a: number) => (tx * t + a + 0.5) / r - 0.5;
@@ -189,6 +190,7 @@ function DetailTile({ world, level, tx, ty, onPick }: { world: WorldInfo; level:
     () => () => {
       cancelRebuild(key);
       detailHeights.delete(key);
+      forgetElevation(key);
       geo.dispose();
     },
     [key, geo],

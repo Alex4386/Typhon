@@ -7,15 +7,21 @@ import { QUALITY, getTile, lodKey, tileKey, useStore, type SurfaceColorMode } fr
 import { BATHY, DIVERGING, HYPSO, THERMAL, hexToRgb, ramp, shadeFor, type RGB } from '../util/color';
 import { interpolateGrid } from '../util/grid';
 import { sampleColumn } from '../util/world';
-import { clampedReader, elevationQuantum } from './terrainMath';
+import type { TileFrame } from '../protocol/frames';
+import { bakedReader, clampedReader, elevationQuantum, gridReader } from './terrainMath';
+import { perfStats } from './perf';
 import { CRUST_RGB, crustLight, lavaSurfaceColor, weightedTemperature } from './lavaColor';
 import { detailCovers, detailHeights, detailLevels, overlappingDetailTiles, refinement } from './detail';
 
-/** Tiles rebuilt per rendered frame, to keep the UI responsive while data streams in. */
-const REBUILDS_PER_FRAME = 8;
+/**
+ * Time a frame may spend on tile rebuilds (ms; at least one runs per frame), to keep the view
+ * responsive while data streams in. A slow machine rebuilds fewer tiles per frame instead of
+ * dropping frames.
+ */
+const REBUILD_BUDGET_MS = 4;
 const rebuildQueue = new Map<string, () => void>();
 
-/** Queues a mesh rebuild (replacing any pending one for `key`); drained a few per frame. */
+/** Queues a mesh rebuild (replacing any pending one for `key`); drained within a time budget per frame. */
 export function queueRebuild(key: string, rebuild: () => void): void {
   rebuildQueue.set(key, rebuild);
 }
@@ -114,6 +120,38 @@ export function smoothedReader(raw: Reader, n: number, r: number): Reader {
     const cb = Math.min(outN - 1, Math.max(0, b + 1));
     return out[cb * outN + ca];
   };
+}
+
+/**
+ * Smoothed display elevations of a tile's vertices, by tile key, with the 3×3 elevation tiles they
+ * were made from: lava, ash or temperature updates rebuild a tile far more often than its ground
+ * changes, and the smoothing is the costliest part of a rebuild.
+ */
+const elevationCache = new Map<string, { deps: (TileFrame | undefined)[]; smoothR: number; q: number; grid: Float32Array }>();
+
+/**
+ * Display elevations for vertices [−1, n]² under `key`: `raw` smoothed by radius `smoothR` without
+ * moving further than one step `q` from the data, baked into a grid. Reused while `deps` (the
+ * elevation tiles `raw` reads) are the same objects.
+ */
+export function cachedElevation(key: string, deps: (TileFrame | undefined)[], n: number, smoothR: number, q: number, raw: Reader): Reader {
+  const hit = elevationCache.get(key);
+  if (hit && hit.smoothR === smoothR && hit.q === q && hit.deps.length === deps.length && hit.deps.every((d, k) => d === deps[k])) return gridReader(hit.grid, n);
+  const shown = smoothR > 0 && q > 0 ? clampedReader(raw, smoothedReader(raw, n, smoothR), q) : raw;
+  const { grid, read } = bakedReader(shown, n);
+  elevationCache.set(key, { deps, smoothR, q, grid });
+  return read;
+}
+
+export function forgetElevation(key: string): void {
+  elevationCache.delete(key);
+}
+
+/** Display elevations of core tile (tx, ty). */
+function displayElevation(key: string, tx: number, ty: number, n: number, smoothR: number, q: number, raw: Reader): Reader {
+  const deps: (TileFrame | undefined)[] = [];
+  for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) deps.push(getTile(Field.SurfaceElevation, tx + ox, ty + oy));
+  return cachedElevation(key, deps, n, smoothR, q, raw);
 }
 
 /** One quantum per world (estimated from the first tile that shows one), so tile seams agree. */
@@ -262,7 +300,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       // smoothing only removes the block terraces: the shown height stays within one elevation step of
       // the data, so crater rims, vents and scarps keep their real shape
       const q = worldQuantum(world, getTile(Field.SurfaceElevation, tx, ty)?.values);
-      const elevR = smoothR > 0 && q > 0 ? clampedReader(rawElev, smoothedReader(rawElev, n, smoothR), q) : rawElev;
+      const elevR = displayElevation(key, tx, ty, n, smoothR, q, rawElev);
       const upR = R(Field.Uplift);
       // lava thickness varies by tens of metres between cells; smooth it lightly so the lake/flow top is not jagged
       const lavaRaw = R(Field.LavaDepth);
@@ -432,6 +470,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
     () => () => {
       rebuildQueue.delete(tileKey(tx, ty));
       displayHeights.delete(tileKey(tx, ty));
+      elevationCache.delete(tileKey(tx, ty));
     },
     [tx, ty],
   );
@@ -596,11 +635,15 @@ export function Terrain({ world, onPick }: { world: WorldInfo; onPick: TileProps
     // water-table sheets: shown on request, and always while underground
     const showTable = st.showWaterTable || under;
     let k = 0;
+    const t0 = performance.now();
     for (const [key, rebuild] of rebuildQueue) {
       rebuildQueue.delete(key);
       rebuild();
-      if (++k >= REBUILDS_PER_FRAME) break;
+      k++;
+      if (performance.now() - t0 >= REBUILD_BUDGET_MS) break;
     }
+    perfStats.rebuildMs = performance.now() - t0;
+    perfStats.rebuildQueue = rebuildQueue.size;
     // (only when toggled or after rebuilds, not a scene-graph walk every frame)
     if (showTable !== lastTable.current || k > 0) {
       lastTable.current = showTable;

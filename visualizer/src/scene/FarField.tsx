@@ -16,7 +16,7 @@ import {
   type Domain,
   type Extrapolation,
   type LevelGrid,
-} from './farField';
+} from './farFieldMath';
 import { displayZ } from './Terrain';
 
 /**

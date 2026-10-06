@@ -19,6 +19,9 @@ export const perfStats = {
   entities: 0,
   /** Frames rendered since the page loaded. */
   frames: 0,
+  /** Time the last frame spent rebuilding terrain tiles (ms), and the rebuilds still queued. */
+  rebuildMs: 0,
+  rebuildQueue: 0,
   /** Current device-pixel ratio (adaptive quality lowers it under load). */
   dpr: 1,
 };

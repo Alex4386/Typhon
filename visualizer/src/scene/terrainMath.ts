@@ -23,6 +23,27 @@ export function elevationQuantum(values: Float32Array | undefined): number {
   return Math.min(...common);
 }
 
+/**
+ * Samples `r` once over vertices (a, b) ∈ [−1, n]² into an array and reads from it (clamped to that
+ * range): a chain of reader closures evaluated a few times per vertex becomes one array lookup.
+ */
+export function bakedReader(r: Reader, n: number): { grid: Float32Array; read: Reader } {
+  const m = n + 2;
+  const grid = new Float32Array(m * m);
+  for (let b = 0; b < m; b++) for (let a = 0; a < m; a++) grid[b * m + a] = r(a - 1, b - 1);
+  return { grid, read: gridReader(grid, n) };
+}
+
+/** Reader over a grid baked by {@link bakedReader}. */
+export function gridReader(grid: Float32Array, n: number): Reader {
+  const m = n + 2;
+  return (a, b) => {
+    const ca = a < -1 ? 0 : a > n ? m - 1 : a + 1;
+    const cb = b < -1 ? 0 : b > n ? m - 1 : b + 1;
+    return grid[cb * m + ca];
+  };
+}
+
 /** `smooth`, but never further than `q` from `raw` (edge-preserving: features larger than a step survive). */
 export function clampedReader(raw: Reader, smooth: Reader, q: number): Reader {
   return (a, b) => {
