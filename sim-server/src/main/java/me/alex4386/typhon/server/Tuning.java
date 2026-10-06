@@ -354,12 +354,8 @@ final class Tuning {
                 "A conduit (pipe) or a dike (sheet); their flow scales as r⁴ and as opening³ × length.");
         kind.addProperty("type", "choice");
         JsonArray choices = new JsonArray();
-        for (String[] c : new String[][] {{"conduit", "Conduit"}, {"dike", "Dike"}}) {
-            JsonObject o = new JsonObject();
-            o.addProperty("value", c[0]);
-            o.addProperty("label", c[1]);
-            choices.add(o);
-        }
+        choices.add("conduit");
+        choices.add("dike");
         kind.add("choices", choices);
         kind.addProperty("default", "conduit");
         out.add(kind);

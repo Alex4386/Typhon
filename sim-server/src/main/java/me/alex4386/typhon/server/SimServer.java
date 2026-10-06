@@ -463,6 +463,7 @@ public final class SimServer implements AutoCloseable {
                 case "setConfig" -> setConfig(c, msg, requestId);
                 case "placeChamber" -> placeChamber(c, msg, requestId);
                 case "plumbing" -> plumbing(c, msg, requestId);
+                case "getConfig" -> getConfig(c, requestId);
                 case "removeVolcano" -> removeVolcano(c, msg, requestId);
                 case "replay" -> replay(c, msg, requestId);
                 case "seek" -> seek(c, msg, requestId);
@@ -892,6 +893,19 @@ public final class SimServer implements AutoCloseable {
         JsonObject fields = msg.has("fields") && msg.get("fields").isJsonObject() ? msg.getAsJsonObject("fields") : new JsonObject();
         return new Session.PlumbingOp(op, volcanoId, chamberId, connectionId, at, Json.str(msg, "from"), Json.str(msg, "to"),
                 Json.str(msg, "kind"), fields, dryRun, confirm);
+    }
+
+    /** WS {@code getConfig}: the attached world's current definitions, as HTTP {@code GET …/config}. */
+    private void getConfig(ClientConnection c, Long requestId) {
+        Session s = c.session;
+        if (s == null || s.live().session() == null) {
+            c.send(Json.error("noSession", "Attach to a world session first", requestId));
+            return;
+        }
+        JsonObject reply = ConfigApi.current(s.live().session());
+        reply.addProperty("type", "config");
+        if (requestId != null) reply.addProperty("requestId", requestId);
+        c.send(reply);
     }
 
     /** WS {@code plumbing}: one edit of a volcano's chambers and pathways; replies {@code configResult}. */
