@@ -20,6 +20,7 @@ import type {
 } from '../protocol/messages';
 import { isBool, isFlags, loadPref, PREF_KEYS, savePref } from './prefs';
 import { loadQuakeFilter, saveQuakeFilter, type QuakeFilter } from './quakeFilter';
+import { isImportant, mergeByTime } from '../panels/events';
 import { applyEntities, pruneEntities, type EntityMap, type EntityView, type Selection } from './entities';
 
 /** Side drawer pages; only one is open at a time (progressive disclosure). */
@@ -51,6 +52,8 @@ export type SurfaceColorMode =
 export type ConnectionStatus = 'connecting' | 'open' | 'closed';
 
 const EVENT_CAP = 4000;
+const KEY_EVENT_CAP = 5000;
+
 const HISTORY_CAP = 6000;
 
 /** One sample of 0D state per volcano, kept for charts. */
@@ -123,6 +126,11 @@ interface Store {
   state: StateMessage | null;
   history: Record<string, HistorySample[]>;
   events: SimEvent[];
+  /**
+   * Key-event candidates ({@link isImportant}), kept apart from `events`: quakes and bombs arrive by
+   * the thousand and would push the eruption start out of the capped event list.
+   */
+  keyEvents: SimEvent[];
   droppedEvents: number;
   /** Revision per tile key, bumped when any field of that tile changes. */
   tileRevision: Record<string, number>;
@@ -212,6 +220,7 @@ export const useStore = create<Store>((set, get) => ({
   state: null,
   history: {},
   events: [],
+  keyEvents: [],
   droppedEvents: 0,
   tileRevision: {},
   section: null,
@@ -305,13 +314,19 @@ export const useStore = create<Store>((set, get) => ({
     if (events.length === 0 && dropped === 0) return;
     const all = get().events.concat(events);
     if (all.length > EVENT_CAP) all.splice(0, all.length - EVENT_CAP);
-    set({ events: all, droppedEvents: get().droppedEvents + dropped });
+    const key = events.filter(isImportant);
+    let keyEvents = get().keyEvents;
+    if (key.length > 0) {
+      keyEvents = mergeByTime(keyEvents, key);
+      if (keyEvents.length > KEY_EVENT_CAP) keyEvents.splice(0, keyEvents.length - KEY_EVENT_CAP);
+    }
+    set({ events: all, keyEvents, droppedEvents: get().droppedEvents + dropped });
   },
 
   clearForReplay: (time) => {
     const history: Record<string, HistorySample[]> = {};
     for (const [id, arr] of Object.entries(get().history)) history[id] = arr.filter((h) => h.time <= time);
-    set({ history, events: get().events.filter((e) => e.time <= time) });
+    set({ history, events: get().events.filter((e) => e.time <= time), keyEvents: get().keyEvents.filter((e) => e.time <= time) });
   },
 
   pushError: (msg) => {
@@ -328,6 +343,7 @@ export const useStore = create<Store>((set, get) => ({
       state: null,
       history: {},
       events: [],
+      keyEvents: [],
       droppedEvents: 0,
       tileRevision: {},
       section: null,

@@ -8,13 +8,14 @@ import { useCamera } from '../camera/cameraStore';
 import { send, showEntity } from '../net/connection';
 import type { SimEvent } from '../protocol/messages';
 import { nearestSurfaceEntity } from '../scene/picking';
-import { useStore } from '../store/store';
+import { simNow, useStore } from '../store/store';
 import { formatSimTime } from '../util/world';
-import { collapse, describeEvent, isImportant } from './events';
+import { filterQuakes } from '../store/quakeFilter';
+import { collapse, describeEvent, describeRow, isImportant, keyEventRows } from './events';
 
 const FILTERS: [string, string, (e: SimEvent) => boolean][] = [
-  ['Key events', 'Eruptions, status changes, new vents and big quakes', isImportant],
-  ['Quakes', 'Every earthquake and tremor', (e) => e.kind === 'seismic'],
+  ['Key events', 'Eruptions, status and style changes, dikes, new vents, lava reaching the sea, big quakes and bursts', isImportant],
+  ['Quakes', 'Recent earthquakes and tremor (the last N set in View → Earthquakes)', (e) => e.kind === 'seismic'],
   ['Hot springs etc.', 'Geothermal features and lava reaching the sea', (e) => e.kind === 'geothermalFeature' || e.kind === 'oceanEntry'],
   ['Everything', 'All events', () => true],
 ];
@@ -39,6 +40,12 @@ function placeOf(e: SimEvent): [number, number] | null {
       return e.at;
     case 'dikeAdvanced':
       return e.path.length ? [e.path[e.path.length - 1][0], e.path[e.path.length - 1][1]] : null;
+    case 'dikeStarted':
+      return [e.origin[0], e.origin[1]];
+    case 'dikeStalled':
+      return [e.tip[0], e.tip[1]];
+    case 'bombLaunched':
+      return [e.start[0], e.start[1]];
     default:
       return null;
   }
@@ -52,7 +59,7 @@ export function locateEvent(e: SimEvent): void {
     useCamera.getState().requestCamera({ kind: 'frameSelection' });
     return;
   }
-  if (e.kind === 'dikeAdvanced') {
+  if (e.kind === 'dikeAdvanced' || e.kind === 'dikeStarted' || e.kind === 'dikeStalled') {
     const id = `dike:${e.volcanoId}:${e.dikeId}`;
     if (s.entities[id]) return showEntity(id);
   }
@@ -66,11 +73,21 @@ export function locateEvent(e: SimEvent): void {
 
 export function EventLog() {
   const events = useStore((s) => s.events);
+  const keyEvents = useStore((s) => s.keyEvents);
+  const quakeFilter = useStore((s) => s.quakeFilter);
+  const clockTime = useStore((s) => s.clock?.time ?? 0);
   const dropped = useStore((s) => s.droppedEvents);
   const world = useStore((s) => s.world);
   const replayInfo = useStore((s) => s.replayInfo);
   const [filter, setFilter] = useState(0);
-  const rows = useMemo(() => collapse(events.filter(FILTERS[filter][2]), 200), [events, filter]);
+  const rows = useMemo(() => {
+    if (filter === 0) return keyEventRows(keyEvents, 200);
+    if (filter === 1) {
+      const quakes = events.filter((e): e is Extract<SimEvent, { kind: 'seismic' }> => e.kind === 'seismic');
+      return collapse(filterQuakes(quakes, Math.max(simNow(), clockTime), quakeFilter), 200);
+    }
+    return collapse(events.filter(FILTERS[filter][2]), 200);
+  }, [events, keyEvents, filter, quakeFilter, clockTime]);
   const names = useMemo(() => new Map(world?.volcanoes.map((v) => [v.id, v.name]) ?? []), [world]);
   const canJump = (replayInfo?.keyframes.length ?? 0) > 0;
   return (
@@ -86,7 +103,7 @@ export function EventLog() {
       </Tabs>
       {dropped > 0 && <Hint>{dropped} minor events were dropped to keep up.</Hint>}
       <ul className="flex flex-col">
-        {rows.length === 0 && <Hint>Nothing yet — events appear here as the volcano changes.</Hint>}
+        {rows.length === 0 && <Hint>{filter === 0 ? 'No key events yet — eruptions, status changes, dikes and new vents appear here.' : 'Nothing yet — events appear here as the volcano changes.'}</Hint>}
         {rows.map(({ event: e, count, firstTime }, k) => {
           const place = placeOf(e);
           return (
@@ -96,8 +113,8 @@ export function EventLog() {
               </time>
               <span className="min-w-0 flex-1">
                 {'volcanoId' in e && (world?.volcanoes.length ?? 0) > 1 && <b className="mr-1">{names.get(e.volcanoId) ?? e.volcanoId}</b>}
-                {describeEvent(e)}
-                {count > 1 && <em className="text-muted-foreground"> ×{count}</em>}
+                {filter === 0 ? describeRow({ event: e, count, firstTime }) : describeEvent(e)}
+                {count > 1 && filter !== 0 && <em className="text-muted-foreground"> ×{count}</em>}
               </span>
               <span className="flex shrink-0 gap-0.5 opacity-60 group-hover:opacity-100">
                 {place && (

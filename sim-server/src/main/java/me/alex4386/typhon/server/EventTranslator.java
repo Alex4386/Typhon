@@ -109,7 +109,11 @@ final class EventTranslator {
                 List<double[]> path = new ArrayList<>();
                 path.add(map.point(e.origin()));
                 dikePaths.put(key, path);
-                yield null;
+                JsonObject o = base("dikeStarted", e.time(), e.volcanoId());
+                o.addProperty("dikeId", e.dikeId());
+                o.add("origin", Json.xyz(path.get(0)));
+                o.add("overpressureMPa", Json.num(e.overpressureMPa()));
+                yield o;
             }
             case DikeEvents.DikeAdvanced e -> {
                 String key = e.volcanoId() + "#" + e.dikeId();
@@ -124,8 +128,13 @@ final class EventTranslator {
             }
             case DikeEvents.DikeStalled e -> {
                 finishedDikes.add(e.volcanoId() + "#" + e.dikeId());
-                yield message(e.time(), "Dike " + e.dikeId() + " of " + e.volcanoId() + " stalled ("
-                        + e.reason().name().toLowerCase() + ")");
+                JsonObject o = base("dikeStalled", e.time(), e.volcanoId());
+                o.addProperty("dikeId", e.dikeId());
+                o.add("tip", Json.xyz(map.point(e.tip())));
+                o.add("depthM", Json.num(e.depthM()));
+                o.add("volumeM3", Json.num(e.volumeM3()));
+                o.addProperty("reason", e.reason().name());
+                yield o;
             }
             case DikeEvents.FissureOpened e -> {
                 finishedDikes.add(e.volcanoId() + "#" + e.dikeId());

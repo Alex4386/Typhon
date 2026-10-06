@@ -9,11 +9,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -70,6 +72,15 @@ final class Session implements AutoCloseable {
     static final double KEYFRAME_SECONDS = 300;
     static final int MAX_KEYFRAMES = 64;
     static final int EVENT_LOG_LIMIT = 20000;
+    /** Milestones kept for attaching clients regardless of how many routine events followed them. */
+    static final int MILESTONE_LIMIT = 4000;
+    /**
+     * Event kinds that mark a change in what a volcano is doing (eruptions, alert and style changes,
+     * dikes, new vents, notable features): an attaching client always gets these in its backlog, so its
+     * "key events" view is complete even after hours of quakes, bombs and plume updates.
+     */
+    static final Set<String> MILESTONES = Set.of("eruptionStarted", "eruptionEnded", "alertChanged", "regimeChanged",
+            "styleEstimated", "dikeStarted", "dikeStalled", "fissureOpened", "message");
     static final String SESSION_FILE = "session.json";
 
     enum Kind { PRESET, WORLD }
@@ -112,6 +123,10 @@ final class Session implements AutoCloseable {
     /** Selectable things in the world (§4.8). */
     private volatile EntityTracker entities;
     private final Deque<JsonObject> eventLog = new ArrayDeque<>();
+    /** Milestone events (guarded by {@link #eventLog}), plus the first ocean entry and first of each feature type. */
+    private final Deque<JsonObject> milestones = new ArrayDeque<>();
+    /** Kinds of "firsts" already in {@link #milestones} (guarded by {@link #eventLog}). */
+    private final Set<String> firsts = new HashSet<>();
     final Map<String, List<String>> activeVents = new ConcurrentHashMap<>();
     private final JsonArray units = new JsonArray();
     private int unitsKnown;
@@ -231,6 +246,8 @@ final class Session implements AutoCloseable {
         this.entities = new EntityTracker(map, volcanoIds);
         synchronized (eventLog) {
             eventLog.clear();
+            milestones.clear();
+            firsts.clear();
         }
         activeVents.clear();
         synchronized (units) {
@@ -524,8 +541,13 @@ final class Session implements AutoCloseable {
         }
         if (out.isEmpty() && newDropped == 0) return null;
         synchronized (eventLog) {
-            for (int i = 0; i < out.size(); i++) eventLog.addLast(out.get(i).getAsJsonObject());
+            for (int i = 0; i < out.size(); i++) {
+                JsonObject e = out.get(i).getAsJsonObject();
+                eventLog.addLast(e);
+                if (isMilestone(e, firsts)) milestones.addLast(e);
+            }
             while (eventLog.size() > EVENT_LOG_LIMIT) eventLog.removeFirst();
+            while (milestones.size() > MILESTONE_LIMIT) milestones.removeFirst();
         }
         JsonObject msg = Json.obj("events");
         msg.add("events", out);
@@ -533,27 +555,57 @@ final class Session implements AutoCloseable {
         return msg;
     }
 
-    /** Backlog for (re)attaching clients: recent non-seismic events plus the latest ~600 seismic ones. */
+    /**
+     * Whether an event goes into the milestone log: milestone kinds, and the first ocean entry and the
+     * first geothermal feature of each type per volcano (later ones are routine; `firsts` remembers them).
+     */
+    static boolean isMilestone(JsonObject e, Set<String> firsts) {
+        String kind = e.get("kind").getAsString();
+        if (MILESTONES.contains(kind)) return true;
+        String first = switch (kind) {
+            case "oceanEntry" -> "oceanEntry";
+            case "geothermalFeature" -> "feature:" + e.get("volcanoId").getAsString() + ":" + e.get("feature").getAsString();
+            default -> null;
+        };
+        return first != null && firsts.add(first);
+    }
+
+    /**
+     * Backlog for (re)attaching clients: every milestone, recent other events, and the latest ~600
+     * seismic ones (and bombs), in time order, up to {@code until}.
+     */
     JsonObject backlog(double until) {
-        List<JsonObject> seismic = new ArrayList<>();
-        List<JsonObject> other = new ArrayList<>();
+        List<JsonObject> all;
         synchronized (eventLog) {
-            for (JsonObject e : eventLog) {
-                if (e.get("time").getAsDouble() > until) continue;
-                String kind = e.get("kind").getAsString();
-                if (kind.equals("seismic") || kind.equals("bombLaunched")) seismic.add(e);
-                else other.add(e);
-            }
+            all = selectBacklog(eventLog, milestones, until);
         }
-        List<JsonObject> all = new ArrayList<>(other.subList(Math.max(0, other.size() - 1500), other.size()));
-        all.addAll(seismic.subList(Math.max(0, seismic.size() - 600), seismic.size()));
-        all.sort(Comparator.comparingDouble(e -> e.get("time").getAsDouble()));
         JsonArray arr = new JsonArray();
         all.forEach(arr::add);
         JsonObject msg = Json.obj("events");
         msg.add("events", arr);
         msg.addProperty("dropped", 0);
         return msg;
+    }
+
+    /** The backlog events (see {@link #backlog}) from an event log and its milestone log, in time order. */
+    static List<JsonObject> selectBacklog(Iterable<JsonObject> log, Iterable<JsonObject> milestones, double until) {
+        List<JsonObject> seismic = new ArrayList<>();
+        List<JsonObject> other = new ArrayList<>();
+        Set<JsonObject> included = Collections.newSetFromMap(new IdentityHashMap<>());
+        List<JsonObject> all = new ArrayList<>();
+        for (JsonObject e : milestones) {
+            if (e.get("time").getAsDouble() <= until && included.add(e)) all.add(e);
+        }
+        for (JsonObject e : log) {
+            if (e.get("time").getAsDouble() > until) continue;
+            String kind = e.get("kind").getAsString();
+            if (kind.equals("seismic") || kind.equals("bombLaunched")) seismic.add(e);
+            else other.add(e);
+        }
+        for (JsonObject e : other.subList(Math.max(0, other.size() - 1500), other.size())) if (included.add(e)) all.add(e);
+        all.addAll(seismic.subList(Math.max(0, seismic.size() - 600), seismic.size()));
+        all.sort(Comparator.comparingDouble(e -> e.get("time").getAsDouble()));
+        return all;
     }
 
     // ── Entities and inspection (§4.8, §3.7) ──

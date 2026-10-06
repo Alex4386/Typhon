@@ -489,7 +489,9 @@ export type SimEvent =
       forecast: boolean;
       probabilities: Partial<Record<EruptionStyle, number>>;
     }
+  | { kind: 'dikeStarted'; time: number; volcanoId: string; dikeId: number; origin: [number, number, number]; overpressureMPa: number }
   | { kind: 'dikeAdvanced'; time: number; volcanoId: string; dikeId: number; path: [number, number, number][] }
+  | { kind: 'dikeStalled'; time: number; volcanoId: string; dikeId: number; tip: [number, number, number]; depthM: number; volumeM3: number; reason: string }
   | { kind: 'fissureOpened'; time: number; volcanoId: string; vent: VentInfo }
   | { kind: 'bombLaunched'; time: number; volcanoId: string; id: number; start: [number, number, number]; velocity: [number, number, number]; dragK: number; flightSeconds: number; landing: [number, number, number] }
   | { kind: 'plume'; time: number; volcanoId: string; base: [number, number, number]; topZ: number; radius: number; massRateKgS: number }
