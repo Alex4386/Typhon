@@ -155,10 +155,10 @@ public final class ConfigChanges {
             String scope = "volcano:" + id;
             if (a == null) {
                 out.add(new Change(scope, "*", Kind.HOT, null, "added",
-                        new ConfigImpact.Impact(ConfigImpact.Kind.RELOAD, ConfigImpact.Target.VOLCANO, "a new volcano")));
+                        ConfigImpact.volcanoAdded()));
             } else if (b == null) {
                 out.add(new Change(scope, "*", Kind.REINIT, "present", null,
-                        new ConfigImpact.Impact(ConfigImpact.Kind.REINIT, ConfigImpact.Target.VOLCANO, "removed")));
+                        ConfigImpact.volcanoRemoved()));
             } else {
                 diff(scope, "", a, b, ConfigImpact::volcano, out);
             }

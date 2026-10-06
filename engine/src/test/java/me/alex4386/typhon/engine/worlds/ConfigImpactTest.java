@@ -75,4 +75,38 @@ class ConfigImpactTest {
         assertTrue(ConfigImpact.volcano("tephra.cellSize").message("Kilauea").contains("ash"));
         assertEquals("Applies at once; the simulation carries on.", ConfigImpact.volcano("dikes.maxSpeed").message("Kilauea"));
     }
+
+    @Test
+    void addingAndRemovingAVolcanoReadAsSentences() {
+        assertEquals("Adds Ruapehu after a short pause; everything already simulated carries on.",
+                ConfigImpact.volcanoAdded().message("Ruapehu"));
+        String removed = ConfigImpact.volcanoRemoved().message("Ruapehu");
+        assertTrue(removed.startsWith("Removes Ruapehu: its magma system"), removed);
+        assertEquals(ConfigImpact.volcanoRemoved(), ConfigImpact.volcano("*"));
+    }
+
+    /** Every template, for every target, with and without a reason: a plain sentence with no template seams. */
+    @Test
+    void everyMessageIsAWellFormedSentence() {
+        java.util.List<ConfigImpact.Impact> all = new java.util.ArrayList<>();
+        all.add(ConfigImpact.Impact.LIVE);
+        for (Kind k : new Kind[] {Kind.RELOAD, Kind.REINIT}) {
+            for (Target t : Target.values()) {
+                if (t == Target.NONE) continue;
+                for (String reason : new String[] {"geology", ConfigImpact.ADDED, ConfigImpact.REMOVED, "an initial condition of the chamber"}) {
+                    all.add(new ConfigImpact.Impact(k, t, reason));
+                }
+            }
+        }
+        for (ConfigImpact.Impact i : all) {
+            for (String name : new String[] {"Kilauea", null}) {
+                String m = i.message(name);
+                String what = i + " / " + name + ": " + m;
+                assertTrue(Character.isUpperCase(m.charAt(0)), what);
+                assertTrue(m.endsWith("."), what);
+                assertTrue(!m.contains("null") && !m.contains("()") && !m.contains("  ") && !m.contains("'s a ") && !m.contains("'s an "),
+                        what);
+            }
+        }
+    }
 }

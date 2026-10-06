@@ -71,10 +71,13 @@ public final class ConfigImpact {
             return switch (kind) {
                 case LIVE -> "Applies at once; the simulation carries on.";
                 case RELOAD -> switch (target) {
+                    case VOLCANO -> ADDED.equals(reason)
+                            ? "Adds " + who + " after a short pause; everything already simulated carries on."
+                            : "Rebuilds " + who + " (" + reason + ") after a short pause; everything simulated is kept.";
                     case EDIFICE -> "Rebuilds " + who + "'s edifice description after a short pause; everything simulated is kept"
                             + " (only ground generated from now on uses it).";
-                    default -> "Rebuilds the world's " + (reason == null ? "inputs" : reason) + " after a short pause; everything"
-                            + " simulated is kept (only ground generated from now on uses it).";
+                    default -> "Rebuilds the world's inputs" + (reason == null ? "" : " (" + reason + ")") + " after a short pause;"
+                            + " everything simulated is kept (only ground generated from now on uses it).";
                 };
                 case REINIT -> switch (target) {
                     case WORLD -> "Cannot change in a running world (" + reason + "); create a new world with it.";
@@ -83,11 +86,19 @@ public final class ConfigImpact {
                     case GEOTHERMAL -> "Restarts " + who + "'s hot springs and fumaroles on the new grid (" + reason
                             + "); they form again over time.";
                     case DETAIL -> "Rebuilds " + who + "'s fine crater surface (" + reason + ") from the terrain.";
-                    default -> "Restarts " + who + " from its new settings (" + reason + "): magma chamber, dikes, ash and eruption"
-                            + " history start over; the landscape and lava already erupted are kept.";
+                    case VOLCANO -> REMOVED.equals(reason)
+                            ? "Removes " + who + ": its magma system, dikes, vents and eruption history are deleted; the landscape and"
+                                    + " everything it erupted stay."
+                            : restarts(who, reason);
+                    default -> restarts(who, reason);
                 };
             };
         }
+    }
+
+    private static String restarts(String who, String reason) {
+        return "Restarts " + who + " from its new settings (" + reason + "): magma chamber, dikes, ash and eruption history start"
+                + " over; the landscape and lava already erupted are kept.";
     }
 
     private record Rule(String pattern, Impact impact) {}
@@ -142,8 +153,23 @@ public final class ConfigImpact {
 
     /** What a change to a volcano definition at dotted {@code path} needs. */
     public static Impact volcano(String path) {
-        if (path.equals("*")) return reinit(Target.VOLCANO, "added or removed"); // the whole volcano
+        if (path.equals("*")) return volcanoRemoved(); // the whole volcano (an added one is diffed as such)
         return classify(path, VOLCANO);
+    }
+
+    /** Reason of {@link #volcanoAdded()}. */
+    public static final String ADDED = "added";
+    /** Reason of {@link #volcanoRemoved()}. */
+    public static final String REMOVED = "removed";
+
+    /** A volcano added to a running world: built after a short pause, nothing else changes. */
+    public static Impact volcanoAdded() {
+        return reload(Target.VOLCANO, ADDED);
+    }
+
+    /** A volcano removed from a running world. */
+    public static Impact volcanoRemoved() {
+        return reinit(Target.VOLCANO, REMOVED);
     }
 
     /** What a change to the world definition at dotted {@code path} needs. */
