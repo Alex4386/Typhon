@@ -110,7 +110,7 @@ class SurfaceCouplingTest {
         double before = s.temperatureC(24, 24, depth);
         // a 1 m thick dike segment 50 m tall along a 16 m cell at 1150 °C
         s.addIntrusionHeat(24.5, 24.5, depth, 50 * 16, 1.0, 1150);
-        s.macroStep(1, 1, false);
+        s.macroStep(1, false);
         double after = s.temperatureC(24, 24, depth);
         assertTrue(after > before + 1, "rock beside the dike: " + before + " → " + after);
     }

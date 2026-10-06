@@ -144,6 +144,13 @@ class GeothermalTest {
         return builder.add(geothermal);
     }
 
+    /** Engine with fixed base steps (no adaptive stepping): for comparisons step by step. */
+    static Engine.Builder fixedEngine(Geothermal geothermal, long seed) {
+        Engine.Builder builder = Engine.builder(seed);
+        if (geothermal.field() instanceof Subsurface subsurface) builder.add(subsurface);
+        return builder.add(geothermal);
+    }
+
     static List<EngineFrame> run(Geothermal geothermal, long seed, int steps) {
         Engine engine = engine(geothermal, seed).build();
         return run(engine, geothermal, steps);

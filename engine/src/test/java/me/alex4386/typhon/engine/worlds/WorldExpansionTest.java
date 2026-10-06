@@ -42,6 +42,9 @@ class WorldExpansionTest {
                 """.formatted(expansion)));
     }
 
+    /** The spans below were written for lava running ×20 faster than the clock; one clock now. */
+    static final double LAVA = 20;
+
     static final String GROW = "{tileColumns: 16, marginTiles: 1, maxExtentM: 2000, maxTiles: 40}";
 
     static List<VolcanoDefinition> quiet() {
@@ -96,7 +99,7 @@ class WorldExpansionTest {
     @Test
     void lavaReachingTheEdgeKeepsFlowingOnMaterialisedGround() {
         World w = create(GROW, new InMemorySaveStore(), new InMemorySaveStore());
-        List<EngineFrame> frames = w.engine().runFor(240);
+        List<EngineFrame> frames = w.engine().runFor(LAVA * 240);
         List<AreaExpanded> grown = expansions(frames);
         assertFalse(grown.isEmpty(), "the flow near the east edge materialises ground beyond it");
         assertTrue(w.terrain().isKnown(40, 0), "ground east of the old edge is simulated");
@@ -112,9 +115,9 @@ class WorldExpansionTest {
     @Test
     void growthIsThreadInvariant() {
         List<EngineFrame> one = withThreads(1,
-                () -> create(GROW, new InMemorySaveStore(), new InMemorySaveStore()).engine().runFor(150));
+                () -> create(GROW, new InMemorySaveStore(), new InMemorySaveStore()).engine().runFor(LAVA * 150));
         List<EngineFrame> four = withThreads(4,
-                () -> create(GROW, new InMemorySaveStore(), new InMemorySaveStore()).engine().runFor(150));
+                () -> create(GROW, new InMemorySaveStore(), new InMemorySaveStore()).engine().runFor(LAVA * 150));
         assertFalse(expansions(one).isEmpty());
         assertEquals(one, four);
     }
@@ -122,20 +125,20 @@ class WorldExpansionTest {
     @Test
     void restoringMidExpansionContinuesBitForBit() {
         World reference = create(GROW, new InMemorySaveStore(), new InMemorySaveStore());
-        List<EngineFrame> first = reference.engine().runFor(15);
+        List<EngineFrame> first = reference.engine().runFor(LAVA * 15);
         assertFalse(expansions(first).isEmpty(), "the save point lies after the first growth");
-        List<EngineFrame> rest = reference.engine().runFor(30);
+        List<EngineFrame> rest = reference.engine().runFor(LAVA * 30);
         assertFalse(expansions(rest).isEmpty(), "and the area keeps growing after it");
 
         InMemorySaveStore state = new InMemorySaveStore();
         InMemorySaveStore history = new InMemorySaveStore();
         World firstPart = create(GROW, state, history);
-        firstPart.engine().runFor(15);
+        firstPart.engine().runFor(LAVA * 15);
         firstPart.save();
         World resumed = World.reopen(world(GROW), quiet(), state, history, World.ChangePolicy.REJECT);
         resumed.setTerrainGenerator(PLANE);
         assertEquals(firstPart.expansion().addedTiles(), resumed.expansion().addedTiles());
-        assertEquals(rest, resumed.engine().runFor(30));
+        assertEquals(rest, resumed.engine().runFor(LAVA * 30));
         assertEquals(reference.engine().stateHash(), resumed.engine().stateHash());
     }
 
@@ -143,13 +146,13 @@ class WorldExpansionTest {
     void capsBoundTheGrowth() {
         World capped = create("{tileColumns: 16, marginTiles: 1, maxExtentM: 2000, maxTiles: 2}",
                 new InMemorySaveStore(), new InMemorySaveStore());
-        capped.engine().runFor(240);
+        capped.engine().runFor(LAVA * 240);
         assertEquals(2, capped.expansion().addedTiles());
 
         // a 320 m square around the origin is exactly the 64-column core: nothing to add
         World boxed = create("{tileColumns: 16, marginTiles: 1, maxExtentM: 256, maxTiles: 40}",
                 new InMemorySaveStore(), new InMemorySaveStore());
-        boxed.engine().runFor(240);
+        boxed.engine().runFor(LAVA * 240);
         assertEquals(0, boxed.expansion().addedTiles());
         assertFalse(boxed.terrain().isKnown(40, 0));
     }
@@ -183,7 +186,7 @@ class WorldExpansionTest {
         World w = World.create(world(GROW), quiet(), core());
         w.lava().addSource(LavaSource.at("test/vent", new BlockPos(24, 58, 0), 1, 1150, 50, 0.1));
         assertNotNull(w.expansion());
-        w.engine().runFor(120);
+        w.engine().runFor(LAVA * 120);
         assertEquals(0, w.expansion().addedTiles());
     }
 }

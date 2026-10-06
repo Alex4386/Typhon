@@ -168,6 +168,7 @@ class GeothermalHydrologyTest {
         GeothermalConfig config = frozenConfig(0.2);
         config.fumaroleFormationPerHour = 0;
         config.acidAlterationPerHour = 0;
+        GeothermalTest.stepTime(config, 1); // nothing forms: test steps of one geothermal period
         Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 300);
         Engine engine = GeothermalTest.engine(geothermal, 1).build();
 
@@ -190,7 +191,10 @@ class GeothermalHydrologyTest {
         config.sulfurDepositPerHour = 0;
         config.acidAlterationPerHour = 0;
         Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 300);
-        List<EngineFrame> frames = run(geothermal, 7, 90); // 180 s of steady fumaroles
+        Engine engine = GeothermalTest.engine(geothermal, 7).build();
+        run(engine, geothermal, 90); // fumaroles form over days
+        GeothermalTest.stepTime(config, 1);
+        List<EngineFrame> frames = run(engine, geothermal, 90); // then 180 s of steady fumaroles
 
         List<FumaroleActivity> activity = events(frames, FumaroleActivity.class);
         assertFalse(activity.isEmpty());
@@ -207,12 +211,12 @@ class GeothermalHydrologyTest {
         GeothermalConfig prewarmConfig = smallConfig();
         prewarmConfig.prewarmSeconds = 30 * 86400;
         Geothermal prewarmed = liveVolcano(prewarmConfig);
-        Engine engine = GeothermalTest.engine(prewarmed, 3).build();
+        Engine engine = GeothermalTest.fixedEngine(prewarmed, 3).build();
         engine.runFor(prewarmConfig.stepSeconds);
 
         Geothermal manual = liveVolcano(smallConfig());
         manual.equilibrate(30 * 86400);
-        Engine manualEngine = GeothermalTest.engine(manual, 3).build();
+        Engine manualEngine = GeothermalTest.fixedEngine(manual, 3).build();
         manualEngine.runFor(prewarmConfig.stepSeconds);
         assertArrayEquals(manual.grid().excess, prewarmed.grid().excess);
         assertTrue(prewarmed.grid().maxExcess() > 0);
@@ -223,7 +227,7 @@ class GeothermalHydrologyTest {
         GeothermalConfig again = smallConfig();
         again.prewarmSeconds = 30 * 86400;
         Geothermal restored = liveVolcano(again);
-        Engine restoredEngine = GeothermalTest.engine(restored, 3).restore(saved).build();
+        Engine restoredEngine = GeothermalTest.fixedEngine(restored, 3).restore(saved).build();
         assertEquals(reference, run(restoredEngine, restored, 20));
         assertArrayEquals(prewarmed.grid().excess, restored.grid().excess);
     }

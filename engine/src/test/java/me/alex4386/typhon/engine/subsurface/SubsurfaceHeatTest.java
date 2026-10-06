@@ -43,7 +43,7 @@ class SubsurfaceHeatTest {
         double day = 86400;
         double t = 0;
         while (t < YEAR - 1) {
-            s.macroStep(day, day, false);
+            s.macroStep(day, false);
             t += day;
         }
         for (int k = 0; k < s.levels() && s.levelCenterDepth(k) < 40; k++) {
@@ -113,7 +113,7 @@ class SubsurfaceHeatTest {
         double t = 0;
         double a1 = 0;
         while (t < t2 - 1) {
-            s.macroStep(dt, dt, false);
+            s.macroStep(dt, false);
             t += dt;
             if (Math.abs(t - t1) < 1) a1 = s.temperatureC(50, 1, depth);
         }

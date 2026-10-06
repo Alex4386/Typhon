@@ -25,6 +25,7 @@ import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
+import me.alex4386.typhon.engine.testing.Runs;
 import me.alex4386.typhon.engine.world.BlockId;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -40,11 +41,11 @@ class SaveFormatTest {
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder("v", List.of(VENT), terrain, lava)
                 .chamber(MagmaChamberConfig.builder("v", new BlockPos(0, 40, 0))
-                        .initialOverpressureMPa(14.95).supplyVariability(0).build())
+                        .initialOverpressureMPa(14.9999).supplyVariability(0).build())
                 .scaling(VolcanoScaling.DEFAULT)
                 .dikesEnabled(false)
                 .build();
-        Engine.Builder builder = Engine.builder(21).add(terrain);
+        Engine.Builder builder = Engine.builder(21).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(terrain);
         volcano.addTo(builder).add(lava);
         if (restore != null) builder.restore(restore);
         Engine engine = builder.build();
@@ -74,11 +75,12 @@ class SaveFormatTest {
     @Test
     void directoryRoundTripResumesBitForBit(@TempDir Path dir) {
         World reference = world(null);
-        List<EngineFrame> expected = new ArrayList<>();
-        for (int i = 0; i < 20 * 150; i++) expected.add(reference.engine().step());
+        List<EngineFrame> expected = Runs.runPastOnset(reference.engine(), 86_400, 1200);
+        double save = Runs.onset(expected) + 600;
+        double end = reference.engine().time();
 
         World first = world(null);
-        for (int i = 0; i < 20 * 90; i++) first.engine().step();
+        Runs.until(first.engine(), save);
         assertTrue(first.volcano().chamber().erupting());
         DirectorySaveStore store = new DirectorySaveStore(dir);
         first.engine().save(store);
@@ -95,15 +97,15 @@ class SaveFormatTest {
         // The restored engine needs no terrain from the host: the save is self-contained.
         World second = world(new DirectorySaveStore(dir));
         assertEquals(first.engine().stateHash(), second.engine().stateHash());
-        List<EngineFrame> resumed = new ArrayList<>();
-        for (int i = 0; i < 20 * 60; i++) resumed.add(second.engine().step());
-        assertEquals(expected.subList(20 * 90, 20 * 150), resumed);
+        List<EngineFrame> resumed = Runs.until(second.engine(), end);
+        long saveMicros = first.engine().timeMicros();
+        assertEquals(expected.stream().filter(f -> f.timeMicros() >= saveMicros).toList(), resumed);
     }
 
     @Test
     void incrementalSaveRewritesOnlyChangedFiles(@TempDir Path dir) {
         World w = world(null);
-        for (int i = 0; i < 20 * 60; i++) w.engine().step();
+        Runs.runPastOnset(w.engine(), 86_400, 60);
         DirectorySaveStore store = new DirectorySaveStore(dir);
         w.engine().save(store);
         long first = store.writeCount();
@@ -127,7 +129,7 @@ class SaveFormatTest {
     void historyIsAppendedOncePerEvent(@TempDir Path dir) {
         World w = world(null);
         DirectorySaveStore store = new DirectorySaveStore(dir);
-        for (int i = 0; i < 20 * 90; i++) w.engine().step();
+        Runs.runPastOnset(w.engine(), 86_400, 600);
         w.engine().save(store);
         w.engine().save(store);
         String history = new String(store.read(SaveFormat.HISTORY), StandardCharsets.UTF_8);

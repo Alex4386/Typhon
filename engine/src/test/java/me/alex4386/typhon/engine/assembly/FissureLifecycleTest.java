@@ -35,7 +35,8 @@ import org.junit.jupiter.api.Test;
 
 /** Fissures wane and freeze, later eruptions avoid them, and the user can seal, remove and block. */
 class FissureLifecycleTest {
-    static final int MINUTE = 20 * 60;
+    /** Twenty minutes (s): the spans below were written as minutes of play at the old ×20. */
+    static final double MINUTE = 1200;
 
     record World(Engine engine, TerrainModel terrain, VolcanoSystem volcano) {
         VolcanoCoupler coupler() {
@@ -58,7 +59,7 @@ class FissureLifecycleTest {
                 .scaling(VolcanoScaling.DEFAULT)
                 .dikesEnabled(true)
                 .build();
-        Engine.Builder builder = Engine.builder(seed).threads(threads).add(terrain);
+        Engine.Builder builder = Engine.builder(seed).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).threads(threads).add(terrain);
         volcano.addTo(builder).add(lava);
         if (restore != null) builder.restore(restore);
         Engine engine = builder.build();
@@ -66,15 +67,15 @@ class FissureLifecycleTest {
         return new World(engine, terrain, volcano);
     }
 
-    static List<EngineFrame> run(Engine engine, int ticks) {
-        return VolcanoSystemTest.run(engine, ticks);
+    static List<EngineFrame> run(Engine engine, double seconds) {
+        return VolcanoSystemTest.run(engine, seconds);
     }
 
     /** Forces a dike and runs until its fissure erupts; returns the fissure's id. */
     static String flankEruption(World w, List<EngineFrame> frames) {
         w.engine().step();
         w.engine().submit(new DikeCommands.ForceDike("test"));
-        for (int i = 0; i < 30 * MINUTE; i++) {
+        for (double end = w.engine().time() + 30 * MINUTE; w.engine().time() < end; ) {
             EngineFrame f = w.engine().step();
             frames.add(f);
             List<FissureOpened> opened = events(List.of(f), FissureOpened.class);
@@ -206,7 +207,9 @@ class FissureLifecycleTest {
         World w = world(3, flank(), null, 1);
         w.engine().step();
         w.engine().submit(new DikeCommands.ForceDike("test"));
-        for (int i = 0; i < MINUTE && w.volcano().dikes().dikes().isEmpty(); i++) w.engine().step();
+        for (double end = w.engine().time() + MINUTE; w.engine().time() < end && w.volcano().dikes().dikes().isEmpty(); ) {
+            w.engine().step();
+        }
         Dike dike = w.volcano().dikes().dikes().get(0);
         assertTrue(dike.propagating());
         w.engine().submit(new DikeCommands.ArrestDike("test", dike.id()));
@@ -218,30 +221,32 @@ class FissureLifecycleTest {
 
     @Test
     void flankEruptionIsDeterministicThreadInvariantAndRestoresBitForBit() {
-        int before = 12 * MINUTE;
-        // Short window: on this cone, lava entering ponded water diverges ~6 min after a restore (a lava
-        // ocean-entry restore issue, independent of the fissure state).
-        int after = 4 * MINUTE;
         World reference = world(3, flank(), null, 1);
-        reference.engine().step();
-        reference.engine().submit(new DikeCommands.ForceDike("test"));
-        List<EngineFrame> referenceFrames = run(reference.engine(), before + after);
-        assertFalse(events(referenceFrames.subList(0, before), FissureOpened.class).isEmpty(),
-                "the fissure should open before the save point, so its feeder is saved mid-eruption");
+        List<EngineFrame> referenceFrames = new ArrayList<>();
+        flankEruption(reference, referenceFrames);
+        // Save a little into the flank eruption. Short window after it: on this cone, lava entering
+        // ponded water diverges a few minutes after a restore (a lava ocean-entry restore issue,
+        // independent of the fissure state).
+        double save = reference.engine().time();
+        double end = save + 4 * 60;
+        referenceFrames.addAll(VolcanoSystemTest.until(reference.engine(), end));
 
         World threaded = world(3, flank(), null, 4);
-        threaded.engine().step();
-        threaded.engine().submit(new DikeCommands.ForceDike("test"));
-        assertEquals(referenceFrames, run(threaded.engine(), before + after), "thread count must not matter");
+        List<EngineFrame> threadedFrames = new ArrayList<>();
+        flankEruption(threaded, threadedFrames);
+        threadedFrames.addAll(VolcanoSystemTest.until(threaded.engine(), end));
+        assertEquals(referenceFrames, threadedFrames, "thread count must not matter");
 
         World first = world(3, flank(), null, 1);
         first.engine().step();
         first.engine().submit(new DikeCommands.ForceDike("test"));
-        run(first.engine(), before);
+        VolcanoSystemTest.until(first.engine(), save);
         assertTrue(first.volcano().chamber().erupting(), "save point should be mid flank eruption");
         InMemorySaveStore saved = Saves.save(first.engine());
         // The restored engine holds its own terrain (persisted world model); nothing is re-sent.
         World second = world(3, flank(), saved, 1);
-        assertEquals(referenceFrames.subList(before, before + after), run(second.engine(), after));
+        long saveMicros = first.engine().timeMicros();
+        assertEquals(referenceFrames.stream().filter(f -> f.timeMicros() >= saveMicros).toList(),
+                VolcanoSystemTest.until(second.engine(), end));
     }
 }

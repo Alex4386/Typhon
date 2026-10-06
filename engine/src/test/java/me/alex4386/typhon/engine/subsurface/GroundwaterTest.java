@@ -31,7 +31,7 @@ class GroundwaterTest {
         c.groundwaterIterations = 400;
         Subsurface s = new Subsurface(world, c);
         s.prepare();
-        for (int i = 0; i < 30 * 365; i++) s.macroStep(DAY, DAY, true);
+        for (int i = 0; i < 30 * 365; i++) s.macroStep(DAY, true);
 
         double r = c.rainfallMmPerHour / 1000 / 3600;
         double k = 1e-6; // sediment
@@ -97,7 +97,7 @@ class GroundwaterTest {
         s.setHeatSources("v", new SubsurfaceHeatTest.FixedSources(List.of(),
                 List.of(new HeatSources.Vent(12, 12, 5e8, 100, 300))));
         s.prepare();
-        for (int d = 0; d < 365; d++) s.macroStep(DAY, DAY, false);
+        for (int d = 0; d < 365; d++) s.macroStep(DAY, false);
         assertTrue(s.budget().boiled() > 0, "the vent should boil groundwater");
         assertEquals(0, s.budget().imbalance(), 1e-6 * s.budget().inflow(), s.budget().toString());
         return s.waterTableZ(0, 0);

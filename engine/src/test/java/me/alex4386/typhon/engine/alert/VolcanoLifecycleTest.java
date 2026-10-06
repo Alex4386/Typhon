@@ -32,7 +32,7 @@ class VolcanoLifecycleTest {
         MagmaChamber chamber = new MagmaChamber(MagmaChamberConfig.builder("v", CHAMBER).volume(1e9).build());
         SeismicityModel seismic = new SeismicityModel(SeismicConfig.builder("v", VENT).build(), chamber);
         AlertLevelEstimator alert = new AlertLevelEstimator(AlertConfig.defaults("v"), chamber, seismic);
-        Engine engine = Engine.builder(seed).add(chamber).add(seismic).add(alert).build();
+        Engine engine = Engine.builder(seed).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(chamber).add(seismic).add(alert).build();
         return new Volcano(engine, chamber, seismic, alert);
     }
 
@@ -43,7 +43,7 @@ class VolcanoLifecycleTest {
         List<SeismicEvent> quakes = new ArrayList<>();
         EruptionStarted started = null;
 
-        for (int i = 0; i < 20 * 3600 * 2 && started == null; i++) {
+        while (volcano.engine().time() < 2 * YEAR && started == null) {
             for (EngineEvent e : volcano.engine().step().events()) {
                 if (e instanceof AlertLevelChanged c) changes.add(c);
                 else if (e instanceof SeismicEvent s) quakes.add(s);
@@ -51,7 +51,7 @@ class VolcanoLifecycleTest {
             }
         }
 
-        assertTrue(started != null, "the default system erupts within two hours of play");
+        assertTrue(started != null, "the default system erupts within two years");
         List<AlertLevel> path = changes.stream().map(AlertLevelChanged::current).toList();
         assertEquals(AlertLevel.ERUPTING, path.get(path.size() - 1));
         assertEquals(AlertLevel.ERUPTION_IMMINENT, path.get(path.size() - 2), "an imminent warning precedes the eruption");
@@ -59,26 +59,39 @@ class VolcanoLifecycleTest {
         assertTrue(path.indexOf(AlertLevel.MAJOR_ACTIVITY) < path.indexOf(AlertLevel.ERUPTION_IMMINENT));
 
         double eruptionTime = started.time();
-        double window = 600;
+        double window = 30 * 86_400; // a month at either end of the year-long recharge
         long early = quakes.stream().filter(q -> q.type() == SeismicEventType.VT && q.time() < window).count();
         long late = quakes.stream().filter(q -> q.type() == SeismicEventType.VT && q.time() >= eruptionTime - window).count();
         assertTrue(late > early * 3, "VT seismicity accelerates before failure (early=" + early + ", late=" + late + ")");
     }
 
+    static final double YEAR = 3.156e7;
+
+    /** Time of the first eruption onset of a fresh system with {@code seed} (within two years). */
+    private static double onset(long seed) {
+        Volcano probe = build(seed);
+        while (probe.engine().time() < 2 * YEAR) {
+            for (EngineEvent e : probe.engine().step().events()) if (e instanceof EruptionStarted s) return s.time();
+        }
+        throw new AssertionError("no eruption within two years");
+    }
+
     @Test
     void wholeSystemResumesBitForBitAcrossAnEruption() {
+        double onset = onset(42);
         Volcano reference = build(42);
-        for (int i = 0; i < 20 * 3000; i++) reference.engine().step();
+        // Saved a day before the onset (long quiet steps), resumed through it (short eruptive ones).
+        while (reference.engine().time() < onset - 86_400) reference.engine().step();
 
         Volcano resumed = build(42);
-        Engine restored = Engine.builder(42)
+        Engine restored = Engine.builder(42).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS)
                 .add(resumed.chamber())
                 .add(resumed.seismic())
                 .add(resumed.alert())
                 .restore(Saves.save(reference.engine()))
                 .build();
 
-        for (int i = 0; i < 20 * 1800; i++) {
+        while (reference.engine().time() < onset + 3600) {
             assertEquals(reference.engine().step(), restored.step());
         }
         assertTrue(reference.chamber().erupting() || reference.chamber().eruptedVolume() > 0, "window covers an eruption");

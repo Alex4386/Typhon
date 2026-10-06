@@ -233,7 +233,7 @@ class LavaCrustTubeTest {
 
         TerrainModel resent = before.world().copyTerrain();
         LavaFlow after = new LavaFlow(resent, config);
-        Engine afterEngine = Engine.builder(9).add(resent).add(after)
+        Engine afterEngine = Engine.builder(9).baseStepMicros(before.world().baseStepMicros).add(resent).add(after)
                 .restore(saved).build();
         List<EngineFrame> resumed = new ArrayList<>();
         for (int i = 0; i < 1500; i++) resumed.add(afterEngine.step());

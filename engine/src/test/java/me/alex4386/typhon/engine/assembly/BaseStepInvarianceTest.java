@@ -48,8 +48,8 @@ class BaseStepInvarianceTest {
 
     @Test
     void outcomeDoesNotDependOnTheBaseStep() {
-        Outcome fine = run(50_000, 240);
-        Outcome coarse = run(100_000, 240);
+        Outcome fine = run(50_000, 900); // the chamber fails after ≈ 11 min
+        Outcome coarse = run(100_000, 900);
 
         // The chamber, seismicity and alert subsystems step every 0.5–1 s at either resolution.
         assertEquals(fine.erupted(), coarse.erupted(), 1e-9 * Math.max(1, fine.erupted()));

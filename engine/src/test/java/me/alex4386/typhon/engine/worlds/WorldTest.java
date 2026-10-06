@@ -19,6 +19,7 @@ import me.alex4386.typhon.engine.config.WorldDefinition;
 import me.alex4386.typhon.engine.config.Yaml;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.save.SaveFormat;
+import me.alex4386.typhon.engine.testing.Runs;
 import me.alex4386.typhon.engine.terrain.TerrainChunk;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
@@ -117,7 +118,7 @@ class WorldTest {
         InMemorySaveStore state = new InMemorySaveStore();
         InMemorySaveStore history = new InMemorySaveStore();
         World world = World.create(world(), twins(), terrain(world(), twins()), state, history);
-        run(world, 60);
+        Runs.runPastOnset(world.engine(), 30 * 86_400, 300);
         world.save();
         assertTrue(world.volcano("east").chamber().erupting(), "east starts just below failure");
         byte[] eruptions = history.read("history/volcanoes/east/eruptions.ndjson");
@@ -220,7 +221,7 @@ class WorldTest {
         assertTrue(Files.exists(dir.resolve("volcanoes/east.yaml")));
 
         World first = World.open(dir, WorldTest::terrain, World.ChangePolicy.REJECT);
-        run(first, 30);
+        Runs.runPastOnset(first.engine(), 30 * 86_400, 300);
         first.save();
         assertTrue(Files.exists(dir.resolve("state/meta.json")));
         assertTrue(Files.exists(dir.resolve("state/world.json")));

@@ -30,6 +30,7 @@ import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import me.alex4386.typhon.engine.world.BlockId;
 import org.junit.jupiter.api.Test;
+import me.alex4386.typhon.engine.testing.Runs;
 import me.alex4386.typhon.engine.testing.Saves;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.save.SaveStore;
@@ -94,7 +95,7 @@ class VolcanoSystemTest {
                 .scaling(VolcanoScaling.DEFAULT)
                 .dikesEnabled(dikes)
                 .build();
-        Engine.Builder builder = Engine.builder(seed).add(terrain);
+        Engine.Builder builder = Engine.builder(seed).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(terrain);
         volcano.addTo(builder).add(lava);
         if (restore != null) builder.restore(restore);
         Engine engine = builder.build();
@@ -104,10 +105,10 @@ class VolcanoSystemTest {
         return new World(engine, terrain, lava, volcano);
     }
 
-    /** Basaltic 10 km³ chamber just below failure: erupts within minutes. */
+    /** Basaltic 10 km³ chamber just below failure: recharge breaks it after ≈ 11 minutes. */
     static MagmaChamberConfig basalt() {
         return MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
-                .initialOverpressureMPa(14.9)
+                .initialOverpressureMPa(14.9999)
                 .supplyVariability(0)
                 .build();
     }
@@ -129,10 +130,21 @@ class VolcanoSystemTest {
                 .build();
     }
 
-    static List<EngineFrame> run(Engine engine, int ticks) {
-        List<EngineFrame> frames = new ArrayList<>();
-        for (int i = 0; i < ticks; i++) frames.add(engine.step());
-        return frames;
+    /** Steps until the engine's time reaches {@code seconds} past now. */
+    static List<EngineFrame> run(Engine engine, double seconds) {
+        return engine.runFor(seconds);
+    }
+
+    static List<EngineFrame> until(Engine engine, double time) {
+        return Runs.until(engine, time);
+    }
+
+    static List<EngineFrame> runPastOnset(Engine engine, double maxWait, double seconds) {
+        return Runs.runPastOnset(engine, maxWait, seconds);
+    }
+
+    static double onset(List<EngineFrame> frames) {
+        return Runs.onset(frames);
     }
 
     static <T extends EngineEvent> List<T> events(List<EngineFrame> frames, Class<T> type) {
@@ -144,7 +156,7 @@ class VolcanoSystemTest {
     @Test
     void basalticEruptionPoursLavaAndShakes() {
         World w = world(1, basalt(), null);
-        List<EngineFrame> frames = run(w.engine(), 20 * 60 * 5);
+        List<EngineFrame> frames = runPastOnset(w.engine(), 86_400, 20 * 60);
 
         assertFalse(events(frames, EruptionStarted.class).isEmpty(), "chamber should fail and erupt");
         assertTrue(w.volcano().chamber().erupting());
@@ -169,7 +181,7 @@ class VolcanoSystemTest {
     @Test
     void wetRhyoliteEruptsExplosively() {
         World w = world(2, rhyolite(), null);
-        List<EngineFrame> frames = run(w.engine(), 20 * 30);
+        List<EngineFrame> frames = runPastOnset(w.engine(), 3600, 600);
 
         assertFalse(events(frames, EruptionStarted.class).isEmpty());
         assertTrue(w.volcano().chamber().erupting());
@@ -183,33 +195,35 @@ class VolcanoSystemTest {
 
     @Test
     void sameSeedSameEruption() {
-        List<EngineFrame> a = run(world(5, basalt(), null).engine(), 20 * 90);
-        List<EngineFrame> b = run(world(5, basalt(), null).engine(), 20 * 90);
+        List<EngineFrame> a = run(world(5, basalt(), null).engine(), 900);
+        List<EngineFrame> b = run(world(5, basalt(), null).engine(), 900);
+        assertFalse(Double.isNaN(onset(a)), "the window covers the onset");
         assertEquals(a, b);
     }
 
     @Test
     void saveAndRestoreMidEruptionIsBitForBit() {
-        int before = 20 * 240;
-        int after = 20 * 60;
 
         // Gas-poor basalt through a narrow conduit: lava only, and it stays inside the area the host
         // re-samples (terrain outside it is not re-sent).
         MagmaChamberConfig effusive = basalt().toBuilder().initialWaterWt(0.3).rechargeWaterWt(0.3).conduitRadius(0.7).build();
         World reference = world(9, effusive, null);
-        List<EngineFrame> referenceFrames = run(reference.engine(), before + after);
+        List<EngineFrame> referenceFrames = runPastOnset(reference.engine(), 86_400, 1500);
+        double save = onset(referenceFrames) + 1200;
+        double end = reference.engine().time();
 
         World first = world(9, effusive, null);
-        run(first.engine(), before);
+        until(first.engine(), save);
         assertTrue(first.volcano().chamber().erupting(), "save point should be mid-eruption");
         InMemorySaveStore saved = Saves.save(first.engine());
         TerrainSnapshot terrain = resample(first.terrain());
 
         World second = world(9, effusive, saved);
         second.engine().submit(terrain); // host re-sends the live terrain (unchanged blocks keep the exact surface)
-        List<EngineFrame> resumed = run(second.engine(), after);
+        List<EngineFrame> resumed = until(second.engine(), end);
 
-        assertEquals(referenceFrames.subList(before, before + after), resumed);
+        long saveMicros = first.engine().timeMicros();
+        assertEquals(referenceFrames.stream().filter(f -> f.timeMicros() >= saveMicros).toList(), resumed);
     }
 
     @Test
@@ -221,7 +235,12 @@ class VolcanoSystemTest {
         World w = world(3, chamber, null, true);
         w.engine().step();
         w.volcano().dikes().forceDike();
-        List<EngineFrame> frames = run(w.engine(), 20 * 60 * 10);
+        List<EngineFrame> frames = new ArrayList<>();
+        for (double end = w.engine().time() + 30 * 86_400; w.engine().time() < end
+                && events(frames, EruptionStarted.class).isEmpty(); ) {
+            frames.add(w.engine().step());
+        }
+        frames.addAll(run(w.engine(), 60));
 
         List<FissureOpened> fissures = events(frames, FissureOpened.class);
         assertFalse(fissures.isEmpty(), "the dike should reach the surface");

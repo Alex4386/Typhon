@@ -116,7 +116,7 @@ class LavaScalingTest {
         world.run(engine, 400);
 
         double period = lava.config().eventPeriodSeconds();
-        int interval = (int) Math.round(period * 20);
+        int interval = (int) Math.round(period * 1e6 / world.baseStepMicros); // ticks per event period
         List<LavaEvents.LavaSolidified> solid = world.events(LavaEvents.LavaSolidified.class);
         assertTrue(!solid.isEmpty() && solid.size() <= 400 / interval + 1, "solidified events: " + solid.size());
         assertTrue(solid.stream().allMatch(e -> Math.abs(e.time() / period - Math.rint(e.time() / period)) < 1e-9));

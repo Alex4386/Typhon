@@ -22,7 +22,7 @@ class ChamberHeatBudgetTest {
         s.prepare();
         HeatSources.Chamber chamber = new HeatSources.Chamber(12, 12, -700, 0, 350, 1150, wallPowerW);
         s.setHeatSources("v", new FixedSources(List.of(chamber), List.of()));
-        for (int d = 0; d < days; d++) s.macroStep(DAY, DAY, false);
+        for (int d = 0; d < days; d++) s.macroStep(DAY, false);
         return s;
     }
 

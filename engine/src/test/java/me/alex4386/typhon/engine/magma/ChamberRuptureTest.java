@@ -12,8 +12,8 @@ import me.alex4386.typhon.engine.testing.Saves;
 import org.junit.jupiter.api.Test;
 
 /**
- * Wall rupture bounds the chamber's overpressure, and the eruption it drives is the same per unit
- * of volcano time whatever the time compression (the stromboli repro: ×500 eruptive, 0.3 m³/s).
+ * Wall rupture bounds the chamber's overpressure, and the eruption it drives converges whatever
+ * the step length (the stromboli repro: a strong supply of 0.3 m³/s).
  */
 class ChamberRuptureTest {
     private static final BlockPos CENTER = new BlockPos(0, -40, 0);

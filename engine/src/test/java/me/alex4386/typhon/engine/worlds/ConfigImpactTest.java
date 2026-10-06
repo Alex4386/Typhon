@@ -23,12 +23,12 @@ class ConfigImpactTest {
 
     @Test
     void volcanoTable() {
-        for (String live : new String[] {"name", "active", "ballisticFraction", "timeCompression.dormant",
+        for (String live : new String[] {"name", "active", "ballisticFraction",
                 "magma.chamber.supplyRate", "magma.chamber.rechargeCo2Wt", "magma.chamber.tensileStrengthMPa",
                 "magma.chamber.lithostaticDepth", "magma.chamber.wallRuptureRatio", "magma.chamber.coolingTimescale",
                 "magma.conduit.fragmentationPorosity", "magma.conduit.plugStrengthMPa", "dikes.maxSpeed", "dikes.shearModulusPa",
                 "massFlows.pdc.frictionCoefficient", "massFlows.lahar.erosionCoefficient", "tephra.diffusivity",
-                "tephra.initialWindSpeed", "geothermal.timeScale", "geothermal.hotSpringMinC", "deformation.stations"}) {
+                "tephra.initialWindSpeed", "geothermal.hotSpringMinC", "deformation.stations"}) {
             volcano(live, Kind.LIVE, Target.NONE);
         }
         volcano("magma.chamber.initialTemperatureC", Kind.REINIT, Target.VOLCANO);
@@ -48,7 +48,7 @@ class ConfigImpactTest {
 
     @Test
     void worldTable() {
-        for (String live : new String[] {"name", "climate.rainfallMmPerHour", "scaling.dormantTimeCompression",
+        for (String live : new String[] {"name", "climate.rainfallMmPerHour",
                 "scaling.plumeMetersPerBlock", "lava.emissivity", "subsurface.macroStepSeconds", "subsurface.specificYield",
                 "expansion.marginTiles"}) {
             world(live, Kind.LIVE, Target.NONE);

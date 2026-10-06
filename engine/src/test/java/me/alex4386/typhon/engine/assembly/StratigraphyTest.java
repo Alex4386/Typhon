@@ -3,6 +3,7 @@ package me.alex4386.typhon.engine.assembly;
 import static me.alex4386.typhon.engine.assembly.VolcanoSystemTest.CRATER;
 import static me.alex4386.typhon.engine.assembly.VolcanoSystemTest.cone;
 import static me.alex4386.typhon.engine.assembly.VolcanoSystemTest.run;
+import static me.alex4386.typhon.engine.assembly.VolcanoSystemTest.runPastOnset;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -27,11 +28,13 @@ import org.junit.jupiter.api.Test;
 
 /** Every deposit becomes a layer of the world model attributed to its volcano and eruption. */
 class StratigraphyTest {
-    /**
-     * Physical cooling: the lava field runs on the volcano's clock (eruptive ×20, then dormant ×5000
-     * under the default scaling), so after a stop flows freeze within engine minutes on their own.
-     */
+    /** Physical cooling: after a stop, thin flows freeze within days on their own. */
     private static final LavaConfig FAST_COOLING = LavaConfig.defaults();
+    private static final double DAY = 86_400;
+    /** Length of each eruption (s). */
+    private static final double ERUPTION = 18 * 60;
+    /** Quiet time after a stop for the thinner parts of a flow to freeze (s). */
+    private static final double FREEZE = 14 * DAY;
 
     /** Units of the volcanic layers of a column, bottom to top (consecutive duplicates collapsed). */
     static List<UnitRecord> volcanicUnits(WorldModel world, int x, int z) {
@@ -68,7 +71,7 @@ class StratigraphyTest {
 
     private static VolcanoSystem system(String id, VentSite vent, TerrainModel terrain, LavaFlow lava) {
         MagmaChamberConfig chamber = MagmaChamberConfig.builder(id, new BlockPos(vent.position().x(), 40, vent.position().z()))
-                .initialOverpressureMPa(14.95)
+                .initialOverpressureMPa(14.9999)
                 .initialWaterWt(0.3).rechargeWaterWt(0.3) // gas-poor: lava rather than fountain tephra
                 .supplyVariability(0)
                 .build();
@@ -86,25 +89,25 @@ class StratigraphyTest {
         TerrainModel terrain = new TerrainModel();
         LavaFlow lava = new LavaFlow(terrain, FAST_COOLING);
         VolcanoSystem volcano = system("test", CRATER, terrain, lava);
-        Engine.Builder builder = Engine.builder(21).add(terrain);
+        Engine.Builder builder = Engine.builder(21).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(terrain);
         volcano.addTo(builder).add(lava);
         Engine e = builder.build();
         e.submit(cone());
         WorldModel world = terrain.world();
 
-        run(e, 20 * 60 * 2); // eruption 1 pours lava
+        runPastOnset(e, 30 * DAY, ERUPTION); // eruption 1 pours lava
         assertEquals(1, volcano.chamber().eruptionCount());
         e.submit(new MagmaCommands.StopEruption("test"));
-        run(e, 20 * 60 * 4); // the thinner parts of the flow freeze (the crater pond stays molten)
+        run(e, FREEZE); // the thinner parts of the flow freeze (the crater pond stays molten)
         volcano.tephra().startPhase(ExplosivePhase.strombolian(CRATER, 5e5)); // ash on the cooled flow
-        run(e, 20 * 60 * 2);
+        run(e, 2 * 3600);
         volcano.tephra().stopPhase();
-        run(e, 20 * 30);
+        run(e, 3600);
         e.submit(new MagmaCommands.StartEruption("test"));
-        run(e, 20 * 60 * 2); // eruption 2 pours lava over it
+        run(e, ERUPTION); // eruption 2 pours lava over it
         assertEquals(2, volcano.chamber().eruptionCount());
         e.submit(new MagmaCommands.StopEruption("test"));
-        run(e, 20 * 60 * 4);
+        run(e, FREEZE);
 
         // Wherever both flows have frozen, the older lies below the younger; somewhere the ash that
         // fell on the cooled first flow is sandwiched between them.
@@ -167,17 +170,21 @@ class StratigraphyTest {
         VentSite westVent = VentSite.crater("summit", new BlockPos(-40, 101, 0), 3);
         VolcanoSystem east = system("east", eastVent, terrain, lava);
         VolcanoSystem west = system("west", westVent, terrain, lava);
-        Engine.Builder builder = Engine.builder(5).add(terrain);
+        Engine.Builder builder = Engine.builder(5).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(terrain);
         east.addTo(builder);
         west.addTo(builder);
         builder.add(lava);
         Engine e = builder.build();
         e.submit(cone());
-        run(e, 20 * 60 * 2);
+        for (double end = e.time() + 30 * DAY; e.time() < end
+                && (east.chamber().eruptionCount() == 0 || west.chamber().eruptionCount() == 0); ) {
+            e.step();
+        }
+        run(e, ERUPTION);
         assertTrue(east.chamber().eruptionCount() > 0 && west.chamber().eruptionCount() > 0, "both erupt");
         e.submit(new MagmaCommands.StopEruption("east"));
         e.submit(new MagmaCommands.StopEruption("west"));
-        run(e, 20 * 60 * 2);
+        run(e, FREEZE);
 
         WorldModel world = terrain.world();
         List<UnitRecord> eastColumn = volcanicUnits(world, 40, 0);
