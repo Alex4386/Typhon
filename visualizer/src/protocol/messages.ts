@@ -472,14 +472,17 @@ export interface VolcanoState {
     silicaWt: number;
     waterWt: number;
     crystalFraction: number;
-    /** DRE m³/s, 0 when not erupting. */
-    /** m³/s per simulated second (time-compressed): what the scene shows flowing. */
+    /** DRE m³/s per simulated second (time-compressed), 0 when not erupting: what the scene shows flowing. */
     eruptionRate: number;
     /** m³/s of volcano time: comparable with real volcanoes. */
     physicalEruptionRate?: number;
     /** Magma volume in the chamber (m³). */
     volumeM3?: number;
+    /** Overpressure at which the walls rupture (MPa). */
+    ruptureOverpressureMPa?: number;
     regime: EruptiveRegime;
+    /** Magma budget (volcano time); absent from older servers. */
+    budget?: MagmaBudget;
   };
   seismic: { rsam: number; vtPerMinute: number; lpPerMinute: number; tremor: boolean; swarm: boolean };
   /** style: estimated from the eruption (or, with styleForecast, forecast for the next one); null until estimated. */
@@ -589,3 +592,16 @@ export type SectionOverlay =
   | { kind: 'chamber'; u: number; z: number; rx: number; rz: number; temperatureC: number }
   | { kind: 'conduit'; u: number; zTop: number; zBottom: number; width: number; active: boolean }
   | { kind: 'dike'; points: [number, number][]; active: boolean };
+
+/** Where a chamber's magma comes from and goes (volcano-time rates, cumulative volumes). */
+export interface MagmaBudget {
+  supplyM3PerS: number;
+  eruptionM3PerS: number;
+  /** Pressure an erupting chamber settles at (outflow = supply); absent while not erupting. */
+  balanceOverpressureMPa?: number;
+  overpressureRateMPaPerS?: number;
+  intrudedM3: number;
+  wallGrowthM3: number;
+  eruptedM3: number;
+  eruptionEndOverpressureMPa?: number;
+}

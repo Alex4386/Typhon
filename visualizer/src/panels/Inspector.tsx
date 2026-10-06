@@ -15,6 +15,7 @@ import { useStore } from '../store/store';
 import { FEATURE_COLORS } from '../util/color';
 import { formatSimTime, worldExtent } from '../util/world';
 import { DESTRUCTIVE, contextActions, supplyParams, ventLifecycle, type ContextAction, type VentLifecycle } from './actions';
+import { budgetVerdict, type BudgetState } from './budget';
 import { formatVolume } from './events';
 import { fieldError } from './inject';
 import { OVERLAY } from './Overlay';
@@ -106,6 +107,7 @@ export function Inspector({ world }: { world: WorldInfo }) {
       <Separator />
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain p-3">
         {selection.type === 'entity' && entity && <EntityProps e={entity} />}
+        {selection.type === 'entity' && entity?.kind === 'chamber' && entity.volcanoId && <MagmaBudgetView volcanoId={entity.volcanoId} />}
         {selection.type === 'entity' && entity?.kind === 'chamber' && entity.volcanoId && <LandscapeSummary volcanoId={entity.volcanoId} />}
         {selection.type === 'entity' && !entity && <p className="text-muted-foreground">This no longer exists.</p>}
         {selection.type === 'quake' && <QuakeProps q={selection.event} />}
@@ -134,6 +136,44 @@ function Heading({ children }: { children: ReactNode }) {
 }
 
 /** What erosion and collapse have done to the volcano so far (slope failures, craters, caldera). */
+const BUDGET_TONE: Record<BudgetState, string> = {
+  recharging: 'text-muted-foreground',
+  idle: 'text-muted-foreground',
+  settling: 'text-amber-300',
+  steady: 'text-emerald-300',
+  draining: 'text-sky-300',
+  pinned: 'text-red-300',
+};
+
+function rate(r: number): string {
+  return `${r >= 10 ? r.toFixed(0) : r >= 0.1 ? r.toFixed(2) : r.toPrecision(2)} m³/s`;
+}
+
+/** Inflow vs outflow of the chamber and where its pressure is heading (volcano time). */
+function MagmaBudgetView({ volcanoId }: { volcanoId: string }) {
+  const ch = useStore((s) => s.state?.volcanoes[volcanoId]?.chamber);
+  const b = ch?.budget;
+  if (!ch || !b) return null;
+  const erupting = ch.eruptionRate > 0;
+  const v = budgetVerdict(b, ch.overpressureMPa, ch.ruptureOverpressureMPa, erupting);
+  const rows: [string, string][] = [
+    ['In: deep supply', rate(b.supplyM3PerS)],
+    ['Out: eruption', rate(b.eruptionM3PerS)],
+  ];
+  if (erupting && b.balanceOverpressureMPa !== undefined && b.balanceOverpressureMPa !== null) rows.push(['Balance pressure', `${b.balanceOverpressureMPa.toFixed(1)} MPa (now ${ch.overpressureMPa.toFixed(1)})`]);
+  if (ch.ruptureOverpressureMPa !== undefined) rows.push(["Walls' limit", `${ch.ruptureOverpressureMPa.toFixed(1)} MPa`]);
+  rows.push(['Erupted so far', formatVolume(b.eruptedM3)]);
+  if (b.intrudedM3 > 0) rows.push(['Into dikes so far', formatVolume(b.intrudedM3)]);
+  if (b.wallGrowthM3 > 0) rows.push(['Chamber growth so far', formatVolume(b.wallGrowthM3)]);
+  return (
+    <section className="flex flex-col gap-1.5 text-xs">
+      <span className="font-medium text-muted-foreground">Magma budget</span>
+      <p className={BUDGET_TONE[v.state]}>{v.text}</p>
+      <PropTable rows={rows} />
+    </section>
+  );
+}
+
 function LandscapeSummary({ volcanoId }: { volcanoId: string }) {
   const g = useStore((s) => s.state?.volcanoes[volcanoId]?.geomorph);
   if (!g || (g.failures === 0 && g.craters === 0 && g.calderaSubsidenceM <= 0)) return null;

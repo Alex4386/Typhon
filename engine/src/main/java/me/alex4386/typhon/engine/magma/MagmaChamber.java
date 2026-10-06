@@ -110,6 +110,13 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private double ruptureExcess;
     /** The waiting rupture magma has been offered to dikes for a full chamber step. */
     private boolean ruptureOffered;
+    /** Magma that left the chamber into dikes, from rupture and as dikes grew (m³, cumulative). */
+    private double intrudedVolume;
+    /**
+     * Overpressure the erupting chamber relaxes towards, where outflow equals supply
+     * ({@code P₀ + Q_in/k}); NaN while not erupting. Reporting only, recomputed every step.
+     */
+    private double balanceOverpressure = Double.NaN;
     private double overpressure;
     private double temperature;
     private double bulkSilica;
@@ -289,6 +296,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
                 conductance = Math.min(conductance, config.maxEruptionRate() / Math.max(1e-6, overpressure - base));
                 // Fissure feeders narrowing as they freeze throttle the outflow.
                 conductance *= outletCapacity;
+                balanceOverpressure = conductance > 0 ? base + supply / conductance : Double.NaN;
                 if (conductance > 0) {
                     double equilibrium = base + supply / conductance;
                     double tau = stiffness / conductance;
@@ -307,6 +315,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
                 }
             }
         } else {
+            balanceOverpressure = Double.NaN;
             percolateGas(context, physicalDt, gasWater, gasCo2);
             conduitOpenness *= Math.exp(-physicalDt / config.conduit().conduitSealTimescale());
             overpressure += inflow / stiffness;
@@ -774,6 +783,24 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         ruptureExcess = 0;
     }
 
+    /** Magma that left the chamber into dikes so far (m³). */
+    public double intrudedVolumeM3() {
+        return intrudedVolume;
+    }
+
+    /** Magma stored by the walls yielding so far (inelastic chamber growth, m³). */
+    public double wallGrowthM3() {
+        return inelasticGrowth;
+    }
+
+    /**
+     * Overpressure an erupting chamber settles at, where outflow balances supply (MPa); above
+     * {@link #ruptureOverpressureMPa()} the walls fail before it is reached. NaN while not erupting.
+     */
+    public double balanceOverpressureMPa() {
+        return balanceOverpressure;
+    }
+
     /** Magma beyond the rupture limit waiting for a dike (m³); a dike that starts now carries it. */
     public double ruptureExcessM3() {
         return ruptureExcess;
@@ -784,6 +811,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         double v = ruptureExcess;
         ruptureExcess = 0;
         ruptureOffered = false;
+        intrudedVolume += v;
         return v;
     }
 
@@ -843,6 +871,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      */
     public double withdraw(double volume) {
         if (!(volume > 0)) return 0;
+        intrudedVolume += volume;
         double drop = volume / (this.volume * effectiveCompressibility());
         overpressure -= drop;
         return drop;
@@ -1133,6 +1162,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         out.addProperty("inelasticGrowth", inelasticGrowth);
         out.addProperty("ruptureExcess", ruptureExcess);
         out.addProperty("ruptureOffered", ruptureOffered);
+        out.addProperty("intrudedVolume", intrudedVolume);
         out.addProperty("temperature", temperature);
         out.addProperty("bulkSilica", bulkSilica);
         out.addProperty("bulkWater", bulkWater);
@@ -1194,6 +1224,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         inelasticGrowth = in.has("inelasticGrowth") ? in.get("inelasticGrowth").getAsDouble() : 0;
         ruptureExcess = in.has("ruptureExcess") ? in.get("ruptureExcess").getAsDouble() : 0;
         ruptureOffered = in.has("ruptureOffered") && in.get("ruptureOffered").getAsBoolean();
+        intrudedVolume = in.has("intrudedVolume") ? in.get("intrudedVolume").getAsDouble() : 0;
         temperature = in.get("temperature").getAsDouble();
         bulkSilica = in.get("bulkSilica").getAsDouble();
         bulkWater = in.get("bulkWater").getAsDouble();

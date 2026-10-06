@@ -283,6 +283,17 @@ final class Probe {
             chamber.add("ruptureOverpressureMPa", Json.num(ch.ruptureOverpressureMPa()));
             chamber.add("failureOverpressureMPa", Json.num(ch.failureOverpressureMPa()));
             chamber.add("volumeM3", Json.num(ch.volumeM3()));
+            // magma budget: what comes in, what goes out and where the pressure is heading
+            JsonObject budget = new JsonObject();
+            budget.add("supplyM3PerS", Json.num(ch.supplyRate())); // volcano time
+            budget.add("eruptionM3PerS", Json.num(ch.physicalEruptionRate()));
+            budget.add("balanceOverpressureMPa", Json.num(ch.balanceOverpressureMPa()));
+            budget.add("overpressureRateMPaPerS", Json.num(ch.overpressureRateMPaPerSecond())); // per simulated second
+            budget.add("intrudedM3", Json.num(ch.intrudedVolumeM3()));
+            budget.add("wallGrowthM3", Json.num(ch.wallGrowthM3()));
+            budget.add("eruptedM3", Json.num(ch.eruptedVolume()));
+            budget.add("eruptionEndOverpressureMPa", Json.num(ch.config().eruptionEndOverpressureMPa()));
+            chamber.add("budget", budget);
             String regime = v.coupler().phreatomagmatic() ? "SURTSEYAN" : EventTranslator.regime(ch.eruptiveRegime());
             chamber.addProperty("regime", regime);
             o.add("chamber", chamber);
