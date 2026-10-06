@@ -68,7 +68,7 @@ export function Markers({ world }: { world: WorldInfo }) {
                 position={[cx, cz * vExag, -cy]}
                 scale={[v.chamber.radius, (v.chamber.radius / 1.8) * vExag, v.chamber.radius]}
                 renderOrder={9}
-                {...pickHandlers({ pick: { type: 'entity', id }, label: `${v.name} magma chamber`, detail: st ? `${st.chamber.overpressureMPa.toFixed(1)} MPa overpressure` : undefined })}
+                {...pickHandlers({ pick: { type: 'entity', id }, label: `${v.name} magma chamber`, detail: st ? `${st.chamber.overpressureMPa.toFixed(1)} MPa overpressure` : undefined, xray: true, volume: true })}
               >
                 <sphereGeometry args={[1, 32, 16]} />
                 <meshBasicMaterial color={new THREE.Color().setHSL(0.06 - hot * 0.05, 1, 0.45 + hot * 0.1 + (lit ? 0.15 : 0))} transparent opacity={lit ? 0.32 : 0.18} depthTest={false} depthWrite={false} />

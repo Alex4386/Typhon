@@ -19,6 +19,11 @@ export interface PickData {
   detail?: string;
   /** Drawn through the ground: picked even when the ground is in front of it. */
   xray?: boolean;
+  /**
+   * A large see-through volume (a magma chamber): picked through the ground too, but after markers
+   * right next to the click, which sit inside its outline from above.
+   */
+  volume?: boolean;
 }
 
 /** Kinds drawn through the ground (x-ray) so they can be seen and picked from above. */

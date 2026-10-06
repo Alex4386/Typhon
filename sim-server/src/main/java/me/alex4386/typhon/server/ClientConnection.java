@@ -99,7 +99,10 @@ final class ClientConnection {
         fields.addAll(requested);
         levels.clear();
         for (int l : lodLevels) if (l != 0) levels.add(l);
-        lodSent.clear();
+        // the client keeps what it holds of fields and levels it still subscribes to (§5.4), so only
+        // tiles it never had are streamed again; attaching subscribes to nothing, which forgets everything
+        lodSent.keySet().retainAll(levels);
+        for (Map<Field, long[]> held : lodSent.values()) held.keySet().retainAll(fields);
         if (bounds != null) {
             minTx = bounds[0];
             minTy = bounds[1];
@@ -111,7 +114,7 @@ final class ClientConnection {
         }
         tilesSent = 0;
         tilesAcked = 0;
-        sentVersions.clear();
+        sentVersions.keySet().retainAll(fields);
     }
 
     synchronized void acknowledge(long processed) {

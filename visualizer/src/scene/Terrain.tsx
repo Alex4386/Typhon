@@ -3,16 +3,26 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { Field, type FieldId } from '../protocol/fields';
 import type { WorldInfo, XY } from '../protocol/messages';
-import { QUALITY, getTile, tileKey, useStore, type SurfaceColorMode } from '../store/store';
+import { QUALITY, getTile, lodKey, tileKey, useStore, type SurfaceColorMode } from '../store/store';
 import { BATHY, DIVERGING, HYPSO, THERMAL, hexToRgb, ramp, shadeFor, type RGB } from '../util/color';
 import { interpolateGrid } from '../util/grid';
 import { sampleColumn } from '../util/world';
 import { clampedReader, elevationQuantum } from './terrainMath';
 import { CRUST_RGB, crustLight, lavaSurfaceColor, weightedTemperature } from './lavaColor';
+import { detailCovers, detailHeights, detailLevels, overlappingDetailTiles, refinement } from './detail';
 
 /** Tiles rebuilt per rendered frame, to keep the UI responsive while data streams in. */
 const REBUILDS_PER_FRAME = 8;
 const rebuildQueue = new Map<string, () => void>();
+
+/** Queues a mesh rebuild (replacing any pending one for `key`); drained a few per frame. */
+export function queueRebuild(key: string, rebuild: () => void): void {
+  rebuildQueue.set(key, rebuild);
+}
+
+export function cancelRebuild(key: string): void {
+  rebuildQueue.delete(key);
+}
 
 /**
  * Displayed ground heights per tile (scene units, after smoothing and exaggeration), by tile key:
@@ -27,7 +37,7 @@ const displayHeights = new Map<string, { z: Float32Array; vExag: number; dExag: 
  * and water table behind it can be seen. Lambert (diffuse only): the ground is rough rock and soil,
  * and per-pixel PBR shading of a screen-filling terrain was the largest fill cost of a frame.
  */
-const groundMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+export const groundMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
 /** Per-frame facts about the camera that other scene parts read without store traffic. */
 export const sceneProbe = { cameraGround: Number.NaN };
 
@@ -108,7 +118,7 @@ export function smoothedReader(raw: Reader, n: number, r: number): Reader {
 
 /** One quantum per world (estimated from the first tile that shows one), so tile seams agree. */
 const QUANTUM = new Map<string, number>();
-function worldQuantum(world: WorldInfo, values: Float32Array | undefined): number {
+export function worldQuantum(world: WorldInfo, values: Float32Array | undefined): number {
   const known = QUANTUM.get(world.name);
   if (known !== undefined) return known;
   const q = elevationQuantum(values);
@@ -117,12 +127,12 @@ function worldQuantum(world: WorldInfo, values: Float32Array | undefined): numbe
 }
 
 /** sRGB → linear, so ramps defined in sRGB display as intended. */
-function lin(c: number): number {
+export function lin(c: number): number {
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 }
 
 /** Geometry of a (T+1)×(T+1) vertex grid; vertex (a, b) sits on column (tx·T + a, ty·T + b). */
-function gridGeometry(t: number): THREE.BufferGeometry {
+export function gridGeometry(t: number): THREE.BufferGeometry {
   const n = t + 1;
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * n * 3), 3));
@@ -189,7 +199,15 @@ function lavaDepositId(world: WorldInfo): number {
   return world.depositTypes.find((d) => d.name === 'LAVA')?.id ?? -1;
 }
 
-function depositRgb(world: WorldInfo, depositType: number): RGB {
+/** Id of a deposit type by name (−1 if the server does not list it). */
+function depositId(world: WorldInfo, name: string): number {
+  return world.depositTypes.find((d) => d.name === name)?.id ?? -1;
+}
+
+/** Fresh tephra colour when the server does not list FALL (pale ash). */
+const ASH_RGB: RGB = [0.72, 0.7, 0.67];
+
+export function depositRgb(world: WorldInfo, depositType: number): RGB {
   let c = DEPOSIT_RGB.get(depositType);
   if (!c) {
     c = hexToRgb(world.depositTypes.find((d) => d.id === depositType)?.color ?? '#888888');
@@ -215,6 +233,14 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
   const rev = useStore((s) => {
     const r = s.tileRevision;
     return (r[tileKey(tx, ty)] ?? 0) + (r[tileKey(tx + 1, ty)] ?? 0) * 7 + (r[tileKey(tx, ty + 1)] ?? 0) * 13 + (r[tileKey(tx + 1, ty + 1)] ?? 0) * 17;
+  });
+  // crater-detail tiles over this tile: where they have arrived they draw the ground instead
+  const levels = useMemo(() => detailLevels(world), [world]);
+  const overlapping = useMemo(() => overlappingDetailTiles(world, levels, tx, ty).map(([l, a, b]) => lodKey(l, a, b)), [world, levels, tx, ty]);
+  const covered = useStore((s) => {
+    let k = 0;
+    for (const key of overlapping) if (s.lodRevision[key] !== undefined) k++;
+    return k;
   });
   const vExag = useStore((s) => s.verticalExaggeration);
   const dExag = useStore((s) => s.deformationExaggeration);
@@ -279,6 +305,8 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       const wetW = new Uint8Array(n * n);
       const wetF = new Uint8Array(n * n);
       const shown = new Float32Array(n * n);
+      const hasLod = (l: number, a: number, b: number) => useStore.getState().lodRevision[lodKey(l, a, b)] !== undefined;
+      const keepG = covered > 0 ? new Uint8Array(n * n) : null;
       let maxUplift = 1e-6;
       if (mode === 'uplift') for (let b = 0; b < n; b++) for (let a = 0; a < n; a++) maxUplift = Math.max(maxUplift, Math.abs(upR(a, b)));
       const maxI = (world.tiles.maxTx + 1) * t - 1;
@@ -294,6 +322,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           const z = (elev + upR(a, b) * (dExag - 1)) * vExag;
           gp.setXYZ(v, x, z, -y);
           shown[v] = z;
+          if (keepG && !detailCovers(world, levels, hasLod, i, j)) keepG[v] = 1;
           // normal from central differences across tile edges (no seams)
           const hx = ((elevR(a + 1, b) - elevR(a - 1, b)) * vExag) / (2 * world.cellSize);
           const hy = ((elevR(a, b + 1) - elevR(a, b - 1)) * vExag) / (2 * world.cellSize);
@@ -362,6 +391,11 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       }
       gn.needsUpdate = true;
       displayHeights.set(key, { z: shown, vExag, dExag });
+      // under loaded crater detail the coarse ground is left out (the detail mesh draws it)
+      if (keepG || ground.userData.cut) {
+        compactIndex(ground, keepG ?? new Uint8Array(n * n).fill(1), n, true);
+        ground.userData.cut = keepG !== null;
+      }
       if (anyLava) compactIndex(lava, wetL, n, true);
       if (anyWater) compactIndex(water, wetW, n);
       if (anyFlow) compactIndex(flow, wetF, n);
@@ -392,7 +426,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       if (waterMesh.current) waterMesh.current.visible = anyWater;
       if (flowMesh.current) flowMesh.current.visible = anyFlow;
     });
-  }, [rev, vExag, dExag, mode, units, world, tx, ty, t, n, ground, lava, water, flow, smoothR]);
+  }, [rev, vExag, dExag, mode, units, world, tx, ty, t, n, ground, lava, water, flow, smoothR, covered, levels]);
 
   useEffect(
     () => () => {
@@ -432,7 +466,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
   );
 }
 
-interface GroundFields {
+export interface GroundFields {
   ash: Reader;
   temp: Reader;
   wt: Reader;
@@ -441,7 +475,7 @@ interface GroundFields {
   steam: Reader;
 }
 
-function colourGround(
+export function colourGround(
   mode: SurfaceColorMode,
   world: WorldInfo,
   f: GroundFields,
@@ -503,18 +537,22 @@ function colourGround(
     case 'natural': {
       if (elev >= world.seaLevel) ramp(HYPSO, (elev - world.seaLevel) / Math.max(1, eHi - world.seaLevel), c);
       else ramp(BATHY, (world.seaLevel - elev) / Math.max(1, world.seaLevel - eLo), c);
-      // fresh ash blankets the surface
+      // tephra fall blankets the surface in proportion to its thickness (a few mm barely shows, decimetres
+      // cover it): tinting by the FALL unit alone painted any dusting solid out to where the ash ends
       const ash = f.ash(i, j);
+      const fall = depositId(world, 'FALL');
       if (ash > 0.002) {
         const k = Math.min(0.85, Math.log10(1 + ash * 200) / 2.2);
-        c[0] += (0.72 - c[0]) * k;
-        c[1] += (0.7 - c[1]) * k;
-        c[2] += (0.67 - c[2]) * k;
+        const t = fall >= 0 ? depositRgb(world, fall) : ASH_RGB;
+        c[0] += (t[0] - c[0]) * k;
+        c[1] += (t[1] - c[1]) * k;
+        c[2] += (t[2] - c[2]) * k;
       }
-      // fresh lava rock / PDC deposits from the unit table
+      // fresh lava rock / PDC / lahar / landslide deposits from the unit table (thick by nature)
       const u = f.unit(i, j);
       const info = units[u];
-      if (info && info.time != null && info.depositType !== 2) {
+      const bedrock = info && (info.depositType === depositId(world, 'EDIFICE') || info.depositType === depositId(world, 'BASEMENT') || info.depositType === depositId(world, 'FILL'));
+      if (info && info.time != null && !bedrock && info.depositType !== fall) {
         const d = depositRgb(world, info.depositType);
         c[0] += (d[0] - c[0]) * 0.8;
         c[1] += (d[1] - c[1]) * 0.8;
@@ -590,6 +628,17 @@ export function Terrain({ world, onPick }: { world: WorldInfo; onPick: TileProps
  */
 export function displayedGround(world: WorldInfo, x: number, y: number, vExag: number, dExag: number): number | undefined {
   const t = world.tileSize;
+  if (detailHeights.size > 0) {
+    for (const l of detailLevels(world)) {
+      const c = world.cellSize / refinement(world, l);
+      const di = (x - world.origin[0]) / c - 0.5;
+      const dj = (y - world.origin[1]) / c - 0.5;
+      const dtx = Math.floor(di / t);
+      const dty = Math.floor(dj / t);
+      const d = detailHeights.get(lodKey(l.level, dtx, dty));
+      if (d && d.vExag === vExag && d.dExag === dExag) return interpolateGrid(d.z, t, di - dtx * t, dj - dty * t);
+    }
+  }
   const fi = (x - world.origin[0]) / world.cellSize - 0.5;
   const fj = (y - world.origin[1]) / world.cellSize - 0.5;
   const tx = Math.floor(fi / t);

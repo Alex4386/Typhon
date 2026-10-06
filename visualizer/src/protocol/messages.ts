@@ -46,7 +46,7 @@ export type ClientMessage =
   /** Deletes a world directory under the worlds dir; it must not be loaded. */
   | { type: 'deleteWorld'; requestId?: number; name: string }
   | { type: 'attach'; sessionId: string }
-  | { type: 'subscribe'; fields: FieldId[]; bounds?: TileBounds }
+  | { type: 'subscribe'; fields: FieldId[]; bounds?: TileBounds; levels?: number[] }
   /**
    * Flow control: total number of tile frames the client has received and processed since it
    * subscribed. The server keeps at most `TILE_WINDOW` unacknowledged tile frames in flight.
@@ -97,7 +97,15 @@ export type SimCommand =
   /** Excavate a vertical shaft/pit: radius (m), from the surface down `depth` m. */
   | { kind: 'dig'; at: XY; radius: number; depth: number }
   /** Wind speed (m/s) and the bearing it blows towards (degrees clockwise from north). */
-  | { kind: 'setWind'; speed: number; bearingDeg: number };
+  | { kind: 'setWind'; speed: number; bearingDeg: number }
+  /** Plug a summit vent or fissure (magma leaves through the others) / open it again. */
+  | { kind: 'sealVent' | 'unsealVent'; volcanoId: string; ventId: string }
+  /** Delete a dike-fed fissure (summit vents can only be sealed). */
+  | { kind: 'removeVent'; volcanoId: string; ventId: string }
+  /** Delete a dike (its fissure stops being a vent; the intrusion stays in the rock). */
+  | { kind: 'removeDike'; volcanoId: string; dikeId: number }
+  /** Stop (or allow again) dikes nucleating on their own; forceDike still works. */
+  | { kind: 'blockDikes'; volcanoId: string; blocked: boolean };
 
 export interface TileBounds {
   minTx: number;
@@ -223,7 +231,15 @@ export interface ParamSpec {
   log?: boolean;
   choices?: string[];
   default?: ParamValue;
-  value?: ParamValue;
+  /** Current value; `null` for an auto parameter while the engine computes it. */
+  value?: ParamValue | null;
+  /**
+   * Computed by the engine from physics unless overridden: `setParams` with a number overrides it,
+   * with `null` hands it back to the engine.
+   */
+  auto?: boolean;
+  /** For an auto parameter: what the engine computes now (null when it cannot say). */
+  computed?: number | null;
   /** `hot`: applies to the running simulation; `restart`: rebuilds the volcano (or world). */
   apply: 'hot' | 'restart';
   /** Volcano the parameter belongs to (absent for world-level ones). */
@@ -355,6 +371,24 @@ export interface WorldInfo {
   volcanoes: VolcanoInfo[];
   materials: MaterialInfo[];
   depositTypes: DepositTypeInfo[];
+  /** The tile pyramid around the core (§5.5); absent on servers without one (the mock). */
+  lod?: LodInfo;
+}
+
+/** One level of the tile pyramid: coarse context (level > 0) or crater detail (level < 0). */
+export interface LodLevelInfo {
+  level: number;
+  /** Cell size of this level (m): the core's cellSize · 2^level. */
+  cellSize: number;
+  tiles: TileBounds;
+  fields: FieldId[];
+  kind: 'context' | 'detail';
+}
+
+export interface LodInfo {
+  levels: LodLevelInfo[];
+  /** Whole landscape the server describes [x0, y0, x1, y1] (m), core included. */
+  extent: [number, number, number, number];
 }
 
 export interface VolcanoInfo {
@@ -447,6 +481,8 @@ export interface VolcanoState {
   alert: { level: AlertLevel; style: EruptionStyle | null; vei?: number; styleForecast?: boolean };
   deformation: { maxUpliftM: number; stations: StationReading[] };
   plume?: { topZ: number; massRateKgS: number };
+  /** Landscape change so far (absent on servers without geomorphology). */
+  geomorph?: { failures: number; failedM3: number; avalanches: number; craters: number; maxCraterRadiusM: number; calderaSubsidenceM: number };
   /** Time compression now in force (`current`) and its dormant/eruptive settings. */
   timeCompression?: TimeCompression & { current: number };
   /** Approximate physical time elapsed for this volcano since the session started (s). */
@@ -496,7 +532,15 @@ export type SimEvent =
   | { kind: 'bombLaunched'; time: number; volcanoId: string; id: number; start: [number, number, number]; velocity: [number, number, number]; dragK: number; flightSeconds: number; landing: [number, number, number] }
   | { kind: 'plume'; time: number; volcanoId: string; base: [number, number, number]; topZ: number; radius: number; massRateKgS: number }
   | { kind: 'lightning'; time: number; volcanoId: string; at: [number, number, number] }
-  | { kind: 'massFlowFront'; time: number; volcanoId: string; flow: 'PDC' | 'LAHAR'; cells: XY[]; speed: number; temperatureC: number }
+  | { kind: 'massFlowFront'; time: number; volcanoId: string; flow: 'PDC' | 'LAHAR' | 'DEBRIS_AVALANCHE'; cells: XY[]; speed: number; temperatureC: number }
+  /** A vent or fissure changed state (fed, waning, frozen, sealed, removed …). */
+  | { kind: 'ventState'; time: number; volcanoId: string; ventId: string; previous: string | null; state: string; feederWidthM?: number }
+  /** A slope gave way: talus, or a debris avalanche / debris flow (style). */
+  | { kind: 'slopeFailure'; time: number; volcanoId: string; at: [number, number, number]; volumeM3: number; style: 'TALUS' | 'DEBRIS_AVALANCHE' | 'DEBRIS_FLOW' | string; trigger: string; factorOfSafety: number }
+  /** An explosion dug or enlarged a crater. */
+  | { kind: 'craterExcavated'; time: number; volcanoId: string; at: [number, number, number]; radiusM: number; depthM: number }
+  /** The chamber roof sank as a piston (caldera or pit-crater collapse); subsidenceM is the total so far. */
+  | { kind: 'calderaCollapse'; time: number; volcanoId: string; at: [number, number, number]; radiusM: number; subsidenceM: number }
   | { kind: 'geothermalFeature'; time: number; volcanoId: string; feature: string; at: [number, number, number] }
   | { kind: 'oceanEntry'; time: number; at: XY; powerMW: number; littoralExplosion: boolean }
   | { kind: 'message'; time: number; text: string };

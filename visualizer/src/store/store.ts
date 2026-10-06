@@ -1,6 +1,6 @@
 import { toast as sonner } from 'sonner';
 import { create } from 'zustand';
-import type { FieldId } from '../protocol/fields';
+import { Field, type FieldId } from '../protocol/fields';
 import type { SectionFrame, TileFrame } from '../protocol/frames';
 import type {
   CatalogMessage,
@@ -89,6 +89,22 @@ export function getTile(field: FieldId, tx: number, ty: number): TileFrame | und
   return tileStore.get(field)?.get(tileKey(tx, ty));
 }
 
+/**
+ * Tiles of the other pyramid levels (§5.5) by level: coarse context (> 0) and crater detail (< 0).
+ * Only the surface elevation is kept: the rest of what those levels carry (lava, ash, … means) is
+ * already drawn from the core's own tiles.
+ */
+export const lodStore = new Map<number, Map<string, TileFrame>>();
+
+/** Revision key of a pyramid tile. */
+export function lodKey(level: number, tx: number, ty: number): string {
+  return `${level}:${tx},${ty}`;
+}
+
+export function getLodTile(level: number, tx: number, ty: number): TileFrame | undefined {
+  return lodStore.get(level)?.get(tileKey(tx, ty));
+}
+
 interface Store {
   status: ConnectionStatus;
   serverUrl: string;
@@ -134,6 +150,10 @@ interface Store {
   droppedEvents: number;
   /** Revision per tile key, bumped when any field of that tile changes. */
   tileRevision: Record<string, number>;
+  /** Revision per pyramid tile ({@link lodKey}), bumped when its elevation changes. */
+  lodRevision: Record<string, number>;
+  /** Bumped whenever any coarse context tile changes (the far field rebuilds from them). */
+  contextRevision: number;
   section: SectionFrame | null;
   sectionPending: number | null;
   /** Surface-datum companion of `section`: the top metres along the same line. */
@@ -183,6 +203,8 @@ interface Store {
   set: (partial: Partial<Store>) => void;
   setStatus: (s: ConnectionStatus) => void;
   applyTiles: (frames: TileFrame[]) => void;
+  /** Forgets the tiles of pyramid levels no longer subscribed (the core's own ground shows again). */
+  dropLodLevels: (levels: number[]) => void;
   applyState: (s: StateMessage) => void;
   addEvents: (events: SimEvent[], dropped: number) => void;
   clearForReplay: (time: number) => void;
@@ -225,6 +247,8 @@ export const useStore = create<Store>((set, get) => ({
   keyEvents: [],
   droppedEvents: 0,
   tileRevision: {},
+  lodRevision: {},
+  contextRevision: 0,
   section: null,
   sectionPending: null,
   sectionShallow: null,
@@ -265,7 +289,26 @@ export const useStore = create<Store>((set, get) => ({
   applyTiles: (frames) => {
     const rev = { ...get().tileRevision };
     let changed = false;
+    let lodRev: Record<string, number> | null = null;
+    let context = 0;
     for (const f of frames) {
+      if (f.level !== 0) {
+        if (f.field !== Field.SurfaceElevation) continue;
+        let byTile = lodStore.get(f.level);
+        if (!byTile) {
+          byTile = new Map();
+          lodStore.set(f.level, byTile);
+        }
+        const key = tileKey(f.tileX, f.tileY);
+        const cur = byTile.get(key);
+        if (cur && cur.version > f.version) continue;
+        byTile.set(key, f);
+        lodRev ??= { ...get().lodRevision };
+        const lk = lodKey(f.level, f.tileX, f.tileY);
+        lodRev[lk] = (lodRev[lk] ?? 0) + 1;
+        if (f.level > 0) context++;
+        continue;
+      }
       let byTile = tileStore.get(f.field);
       if (!byTile) {
         byTile = new Map();
@@ -279,6 +322,16 @@ export const useStore = create<Store>((set, get) => ({
       changed = true;
     }
     if (changed) set({ tileRevision: rev });
+    if (lodRev) set({ lodRevision: lodRev, contextRevision: get().contextRevision + context });
+  },
+
+  dropLodLevels: (levels) => {
+    if (levels.length === 0) return;
+    for (const l of levels) lodStore.delete(l);
+    const prefixes = levels.map((l) => `${l}:`);
+    const rev: Record<string, number> = {};
+    for (const [k, v] of Object.entries(get().lodRevision)) if (!prefixes.some((p) => k.startsWith(p))) rev[k] = v;
+    set({ lodRevision: rev });
   },
 
   applyState: (s) => {
@@ -339,6 +392,7 @@ export const useStore = create<Store>((set, get) => ({
 
   resetSession: () => {
     tileStore.clear();
+    lodStore.clear();
     set({
       world: null,
       schema: null,
@@ -349,6 +403,8 @@ export const useStore = create<Store>((set, get) => ({
       keyEvents: [],
       droppedEvents: 0,
       tileRevision: {},
+      lodRevision: {},
+      contextRevision: 0,
       section: null,
       sectionPending: null,
       sectionShallow: null,

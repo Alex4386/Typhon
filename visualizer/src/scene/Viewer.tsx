@@ -12,12 +12,13 @@ import { Atmosphere } from './Atmosphere';
 import { Hypocentres } from './Hypocentres';
 import { LavaGlow } from './LavaGlow';
 import { LavaHalo } from './LavaHalo';
-import { EntityMarkers, pickDataOf } from './EntityMarkers';
+import { EntityMarkers, pickDataOf, type PickData } from './EntityMarkers';
 import { FarField } from './FarField';
 import { FrameScheduler } from './FrameScheduler';
 import { Markers } from './Markers';
 import { PerfProbe } from './PerfProbe';
 import { nearestSurfaceEntity, pickRadius } from './picking';
+import { DetailTerrain } from './DetailTerrain';
 import { Terrain } from './Terrain';
 
 const FORCE_WEBGL = new URLSearchParams(window.location.search).get('renderer') === 'webgl';
@@ -121,15 +122,19 @@ export function Viewer({ world }: { world: WorldInfo }) {
     const s = useStore.getState();
     switch (s.tool) {
       case 'orbit': {
-        // x-ray markers (dikes, quakes) drawn over the ground win; then a marker next to the click; else the ground
+        // x-ray markers (dikes, quakes) drawn over the ground win; then a marker next to the click; then a
+        // see-through volume the ray passes (the chamber under the summit); else the ground
+        let volume: PickData | undefined;
         for (const hit of e.intersections) {
           const data = pickDataOf(hit);
-          if (data?.xray) return s.select(data.pick);
+          if (data?.volume) volume ??= data;
+          else if (data?.xray) return s.select(data.pick);
           const quakes = hit.object.userData.quakes as { current: Extract<SimEvent, { kind: 'seismic' }>[] } | undefined;
           if (quakes && hit.instanceId !== undefined && quakes.current[hit.instanceId]) return s.select({ type: 'quake', event: quakes.current[hit.instanceId] });
         }
         const near = nearestSurfaceEntity(s.entities, xy, pickRadius(e.distance) / Math.max(1, s.verticalExaggeration * 0.5));
-        s.select(near ? { type: 'entity', id: near.id } : { type: 'point', at: xy });
+        if (near) return s.select({ type: 'entity', id: near.id });
+        s.select(volume ? volume.pick : { type: 'point', at: xy });
         return;
       }
       case 'section':
@@ -170,6 +175,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
         }}
       >
         <Terrain world={world} onPick={onPick} />
+        <DetailTerrain world={world} onPick={onPick} />
       </group>
       <FarField world={world} />
       <LavaGlow world={world} />

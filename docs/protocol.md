@@ -77,7 +77,7 @@ reopened later and can be tuned (§3.5). *In-memory* sessions run a preset witho
 | `attach` | `sessionId: string` | Attach to an existing session (detaching from the current one). Reply: `attached` …, or `error{noSession}`. |
 | `sessionControl` | `requestId?`, `sessionId`, `action: "pause" \| "resume" \| "close" \| "closeWithoutSaving"` | Pause/resume any session (also one this client does not watch). `close` saves a world session and unloads it; clients attached to it receive `detached`. |
 | `deleteWorld` | `requestId?`, `name` | Delete `<worlds-dir>/<name>` (refused while it is loaded). Reply `ack`, then a fresh `catalog`. |
-| `subscribe` | `fields: FieldId[]`, `bounds?: TileBounds`, `levels?: int[]` | Replace the set of streamed tile fields (§5.2). Optional inclusive tile bounds restrict streaming of level 0; omitted means all tiles. `levels` adds pyramid levels from `WorldInfo.lod` (§5.5) — coarse context (> 0) and crater detail (< 0); level 0 always streams. Resets flow-control counters (§5.4). |
+| `subscribe` | `fields: FieldId[]`, `bounds?: TileBounds`, `levels?: int[]` | Replace the set of streamed tile fields (§5.2). Optional inclusive tile bounds restrict streaming of level 0; omitted means all tiles. `levels` adds pyramid levels from `WorldInfo.lod` (§5.5) — coarse context (> 0) and crater detail (< 0); level 0 always streams. Resets flow-control counters (§5.4). The server remembers which tiles the client holds for fields and levels that stay subscribed, so re-subscribing (e.g. to add or drop a detail level) only streams tiles the client never had; a dropped field or level is forgotten and sent in full when subscribed again. |
 | `flow` | `tilesProcessed: number` | Cumulative tile frames processed since the last `subscribe` (§5.4). |
 
 ### 3.2 Transport
@@ -293,6 +293,10 @@ This is a snapshot of 0D state per volcano (from `runner` snapshots), sent ≥ 2
   `alert.styleForecast` is true while no eruption is running (the style is then a forecast for the next one).
 - Station displacements are in metres and tilt in µrad.
 - `plume` is present only while an eruption column exists.
+- `geomorph` (optional) is `{failures, failedM3, avalanches, craters, maxCraterRadiusM, calderaSubsidenceM}`:
+  landscape change since the volcano started — slope failures of every size (including the ravelling
+  not reported one by one), how many became avalanches or debris flows, explosion craters and caldera
+  subsidence (3 significant digits).
 - `chamber.volumeM3` (optional) is the chamber's magma volume (m³), e.g. for previewing how an
   injection mixes in.
 - `timeCompression` (optional) is `{dormant, eruptive, current}` for the volcano, and
@@ -326,8 +330,11 @@ late client always learns that an eruption started, however many quakes and plum
 | `bombLaunched` | `volcanoId`, `id`, `start`, `velocity` (m/s), `dragK`, `flightSeconds`, `landing` | `TephraEvents.BombLaunched` |
 | `plume` | `volcanoId`, `base`, `topZ`, `radius`, `massRateKgS` | `TephraEvents.PlumeColumn` |
 | `lightning` | `volcanoId`, `at` | `TephraEvents.VolcanicLightning` |
-| `massFlowFront` | `volcanoId`, `flow` (`PDC`/`LAHAR`), `cells` [XY…] (≤ 256), `speed`, `temperatureC` | `PdcFront` / `LaharFront` |
+| `massFlowFront` | `volcanoId`, `flow` (`PDC`/`LAHAR`/`DEBRIS_AVALANCHE`), `cells` [XY…] (≤ 256), `speed`, `temperatureC` | `PdcFront` / `LaharFront` |
 | `geothermalFeature` | `volcanoId`, `feature` (e.g. `FUMAROLE`, `GEYSER`, `HOT_SPRING`, `SULFUR_SPRING`, `MUD_POT`, `SULFUR_DEPOSIT`, `SUBMARINE_VENT`), `at` | `GeyserFormed` / `HydrothermalFeatureFormed` |
+| `slopeFailure` | `volcanoId`, `at` [x,y,z], `volumeM3`, `style` (`TALUS`/`DEBRIS_AVALANCHE`/`DEBRIS_FLOW`), `trigger` (`OVERSTEEPENING`/`ALTERATION`/`THERMAL`/`PORE_PRESSURE`/`SEISMIC`), `factorOfSafety` | `GeomorphEvents.SlopeFailure`, for failures above the reporting volume; the small ravelling of steep fresh slopes is only summed in the volcano's `geomorph` state. Avalanches and debris flows are milestones of the backlog. |
+| `craterExcavated` | `volcanoId`, `at`, `radiusM`, `depthM` | `GeomorphEvents.CraterExcavated`: an explosion dug or enlarged a crater (the first per volcano is a milestone). |
+| `calderaCollapse` | `volcanoId`, `at`, `radiusM`, `subsidenceM` (total so far) | `GeomorphEvents.CalderaCollapse`: the chamber roof sinking as a piston (the first per volcano is a milestone). |
 | `oceanEntry` | `at`, `powerMW`, `littoralExplosion` | `LavaOceanEntry` |
 | `message` | `text` | free-form server notices |
 

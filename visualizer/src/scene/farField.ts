@@ -119,3 +119,45 @@ export function stretch(u: number, centre: number, half: number, radius: number)
   const t = (a - 0.25) / 0.75;
   return centre + s * (half + t * t * (radius - half));
 }
+
+/** A regular grid of cells (one pyramid level): value of cell (i, j), or undefined where not loaded. */
+export interface LevelGrid {
+  origin: [number, number];
+  cellSize: number;
+  cell(i: number, j: number): number | undefined;
+}
+
+/**
+ * Bilinear sample between the cell centres of a level grid at world (x, y); undefined unless all
+ * four surrounding cells are loaded.
+ */
+export function sampleLevel(g: LevelGrid, x: number, y: number): number | undefined {
+  const fi = (x - g.origin[0]) / g.cellSize - 0.5;
+  const fj = (y - g.origin[1]) / g.cellSize - 0.5;
+  const i = Math.floor(fi);
+  const j = Math.floor(fj);
+  const a = g.cell(i, j);
+  const b = g.cell(i + 1, j);
+  const c = g.cell(i, j + 1);
+  const d = g.cell(i + 1, j + 1);
+  if (a === undefined || b === undefined || c === undefined || d === undefined) return undefined;
+  const u = fi - i;
+  const v = fj - j;
+  return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+}
+
+/** Context terrain from a stack of level grids, finest first: the finest level covering a point wins. */
+export function stackedContext(levels: LevelGrid[], version: () => number): ContextTerrain {
+  return {
+    sample(x, y) {
+      for (const g of levels) {
+        const v = sampleLevel(g, x, y);
+        if (v !== undefined) return v;
+      }
+      return undefined;
+    },
+    get version() {
+      return version();
+    },
+  };
+}

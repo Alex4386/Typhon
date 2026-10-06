@@ -2,14 +2,30 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { WorldInfo } from '../protocol/messages';
-import { tileKey, useStore } from '../store/store';
+import { getLodTile, tileKey, useStore } from '../store/store';
 import { BATHY, HYPSO, ramp, type RGB } from '../util/color';
 import { worldExtent } from '../util/world';
-import { contextTerrain, farFieldElevation, median, onContextTerrain, stretch, type Domain, type Extrapolation } from './farField';
+import {
+  contextTerrain,
+  farFieldElevation,
+  median,
+  onContextTerrain,
+  setContextTerrain,
+  stackedContext,
+  stretch,
+  type Domain,
+  type Extrapolation,
+  type LevelGrid,
+} from './farField';
 import { displayZ } from './Terrain';
 
-/** Vertices per axis of the far-field grid (the inner quarter spans the domain and is skipped). */
-const N = 97;
+/**
+ * Vertices per axis of the far-field grid (the inner quarter spans the domain and is skipped): finer
+ * when real context terrain is streamed, so its hills and valleys show.
+ */
+function gridSize(world: WorldInfo): number {
+  return world.lod?.levels.some((l) => l.kind === 'context') ? 161 : 97;
+}
 /** How often (ms) edge changes are checked for a rebuild. */
 const CHECK_MS = 1500;
 
@@ -31,6 +47,7 @@ export function domainOf(world: WorldInfo): Domain {
 /** Far-field radius (m from the domain centre): out to where the fog hides everything. */
 export function farRadius(world: WorldInfo): number {
   const e = worldExtent(world);
+
   const span = Math.max(e.maxX - e.minX, e.maxY - e.minY);
   return Math.max(span * 5, 25_000);
 }
@@ -49,7 +66,48 @@ function edgeTiles(world: WorldInfo): string[] {
  * landscape instead of floating as a slab. Continues the domain's edge heights outward (or uses
  * context terrain once registered, see {@link setContextTerrain}); not pickable.
  */
+/** The coarse context levels as grids, finest first (§5.5). */
+function contextGrids(world: WorldInfo): LevelGrid[] {
+  const t = world.tileSize;
+  return (world.lod?.levels ?? [])
+    .filter((l) => l.kind === 'context')
+    .sort((a, b) => a.level - b.level)
+    .map((l) => ({
+      origin: world.origin,
+      cellSize: l.cellSize,
+      cell(i: number, j: number) {
+        const tx = Math.floor(i / t);
+        const ty = Math.floor(j / t);
+        const tile = getLodTile(l.level, tx, ty);
+        if (!tile) return undefined;
+        const v = tile.values[(j - ty * t) * t + (i - tx * t)];
+        return Number.isFinite(v) ? v : undefined;
+      },
+    }));
+}
+
 export function FarField({ world }: { world: WorldInfo }) {
+  const N = gridSize(world);
+  // real terrain around the core, from the server's coarse context levels
+  useEffect(() => {
+    const grids = contextGrids(world);
+    if (grids.length === 0) return;
+    const stack = stackedContext(grids, () => useStore.getState().contextRevision);
+    const ext = world.lod?.extent;
+    // beyond the described landscape (which can end inside the fog distance) its edge carries on
+    const inset = grids[grids.length - 1].cellSize;
+    setContextTerrain(
+      ext
+        ? {
+            sample: (x, y) => stack.sample(Math.min(ext[2] - inset, Math.max(ext[0] + inset, x)), Math.min(ext[3] - inset, Math.max(ext[1] + inset, y))),
+            get version() {
+              return stack.version;
+            },
+          }
+        : stack,
+    );
+    return () => setContextTerrain(null);
+  }, [world]);
   const geo = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * N * 3), 3));
@@ -67,13 +125,13 @@ export function FarField({ world }: { world: WorldInfo }) {
     }
     g.setIndex(idx);
     return g;
-  }, []);
+  }, [N]);
   const sea = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * N * 3), 3));
     g.setIndex(geo.getIndex());
     return g;
-  }, [geo]);
+  }, [geo, N]);
   const seaMesh = useRef<THREE.Mesh>(null);
   const state = useRef({ sig: '', at: 0, ctx: 0 });
   useEffect(() => onContextTerrain(() => (state.current.sig = '')), []);
@@ -97,7 +155,7 @@ export function FarField({ world }: { world: WorldInfo }) {
     const sig = `${rev}|${vExag}|${dExag}|${ctx?.version ?? -1}`;
     if (sig === s.sig) return;
     s.sig = sig;
-    build(world, geo, sea, vExag, dExag);
+    build(world, geo, sea, vExag, dExag, N);
     if (seaMesh.current) seaMesh.current.visible = sea.userData.any === true;
   });
 
@@ -119,7 +177,7 @@ function edgeMin(edgeH: (x: number, y: number) => number, x: number, y: number, 
   return m;
 }
 
-function build(world: WorldInfo, geo: THREE.BufferGeometry, sea: THREE.BufferGeometry, vExag: number, dExag: number): void {
+function build(world: WorldInfo, geo: THREE.BufferGeometry, sea: THREE.BufferGeometry, vExag: number, dExag: number, N: number): void {
   const d = domainOf(world);
   const cx = (d.minX + d.maxX) / 2;
   const cy = (d.minY + d.maxY) / 2;

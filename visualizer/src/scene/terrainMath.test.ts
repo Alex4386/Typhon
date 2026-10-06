@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { distanceOutside, farFieldElevation, median, stretch, type Extrapolation } from './farField';
+import { distanceOutside, farFieldElevation, median, sampleLevel, stackedContext, stretch, type Extrapolation, type LevelGrid } from './farField';
 import { clampedReader, elevationQuantum } from './terrainMath';
 
 describe('display smoothing', () => {
@@ -46,5 +46,28 @@ describe('far field', () => {
     expect(stretch(1, 500, 500, 20000)).toBe(20500);
     expect(stretch(0, 500, 500, 20000)).toBe(500);
     expect(median([3, 1, 2])).toBe(2);
+  });
+});
+
+describe('context levels', () => {
+  // a plane z = x + 2y on cells of 40 m (fine) and 80 m (coarse, wider), cell centres exact
+  const plane = (cell: number, lo: number, hi: number): LevelGrid => ({
+    origin: [0, 0],
+    cellSize: cell,
+    cell: (i, j) => (i < lo || j < lo || i > hi || j > hi ? undefined : (i + 0.5) * cell + 2 * (j + 0.5) * cell),
+  });
+
+  it('interpolates between cell centres and is undefined at unloaded cells', () => {
+    const g = plane(40, 0, 10);
+    expect(sampleLevel(g, 100, 60)).toBeCloseTo(220);
+    expect(sampleLevel(g, 10, 10)).toBeUndefined(); // west of the first centre: needs cell −1
+  });
+
+  it('prefers the finest level that covers a point', () => {
+    const fine = { ...plane(40, 0, 10), cell: (i: number, j: number) => (i < 0 || j < 0 || i > 10 || j > 10 ? undefined : 1) };
+    const ctx = stackedContext([fine, plane(80, -10, 10)], () => 3);
+    expect(ctx.sample(100, 100)).toBe(1);
+    expect(ctx.sample(-200, -200)).toBeCloseTo(-600);
+    expect(ctx.version).toBe(3);
   });
 });

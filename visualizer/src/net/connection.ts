@@ -11,6 +11,7 @@ import {
   type SessionInfo,
   type SimCommand,
   type SimEvent,
+  type WorldInfo,
   type XY,
 } from '../protocol/messages';
 import { rememberSession, rememberedSession, useStore } from '../store/store';
@@ -33,6 +34,35 @@ export const SUBSCRIBED_FIELDS: FieldId[] = [
   Field.Uplift,
   Field.SteamFraction,
 ];
+
+/** Pyramid levels currently subscribed (§5.5), besides level 0. */
+let subscribedLevels: number[] = [];
+
+/** Coarse context levels of a world: always streamed (a few dozen tiles, mostly static). */
+function contextLevels(world: WorldInfo): number[] {
+  return (world.lod?.levels ?? []).filter((l) => l.kind === 'context').map((l) => l.level);
+}
+
+function subscribe(): void {
+  // subscribe resets the server's credit window (§5.4), so restart the count of processed tiles
+  tilesProcessed = 0;
+  send({ type: 'subscribe', fields: SUBSCRIBED_FIELDS, ...(subscribedLevels.length ? { levels: subscribedLevels } : {}) });
+}
+
+/**
+ * Turns the crater-detail levels on or off (the scene asks for them only while the camera is near a
+ * crater). Re-subscribing is cheap: the server only sends tiles the client does not hold yet.
+ */
+export function setDetailLevels(levels: number[]): void {
+  const world = useStore.getState().world;
+  if (!world) return;
+  const next = [...contextLevels(world), ...levels].sort((a, b) => a - b);
+  if (next.join(',') === subscribedLevels.join(',')) return;
+  // the server forgets a dropped level and sends it in full when asked again (§3.1), so drop it here too
+  useStore.getState().dropLodLevels(subscribedLevels.filter((l) => !next.includes(l)));
+  subscribedLevels = next;
+  subscribe();
+}
 
 /** Per-type message counters (debugging aid, exposed as window.__typhonMessages in dev). */
 export const messageCounts: Record<string, number> = {};
@@ -301,7 +331,8 @@ function onText(m: ServerMessage): void {
       s.set({ world: m.world, sessionId: m.sessionId });
       const info = s.sessions.find((x) => x.id === m.sessionId);
       rememberSession(info ? sessionKey(info) : `name:${m.world.name}`);
-      send({ type: 'subscribe', fields: SUBSCRIBED_FIELDS });
+      subscribedLevels = contextLevels(m.world);
+      subscribe();
       return;
     }
     case 'clock':
@@ -350,9 +381,13 @@ function onBinary(buf: Uint8Array): void {
   const s = useStore.getState();
   messageCounts.binary = (messageCounts.binary ?? 0) + 1;
   switch (buf[0]) {
-    case FrameKind.Tile:
-      queueTile(decodeTileFrame(buf));
+    case FrameKind.Tile: {
+      const tile = decodeTileFrame(buf);
+      // a level just dropped can still have tiles in flight: they would cover the core with stale ground
+      if (tile.level !== 0 && !subscribedLevels.includes(tile.level)) return;
+      queueTile(tile);
       return;
+    }
     case FrameKind.Section: {
       messageCounts.section = (messageCounts.section ?? 0) + 1;
       const sec = decodeSectionFrame(buf);

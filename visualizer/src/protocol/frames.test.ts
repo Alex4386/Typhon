@@ -30,6 +30,14 @@ describe('tile frames', () => {
     for (let i = 0; i < values.length; i++) expect(Math.abs(frame.values[i] - values[i])).toBeLessThanOrEqual(0.006);
   });
 
+  it('carries the pyramid level (negative for detail)', () => {
+    const values = ramp(() => 1);
+    for (const level of [0, 2, -2]) {
+      const f = decodeTileFrame(encodeTileFrame({ level, field: Field.SurfaceElevation, codec: Codec.F32Raw, tileX: -1, tileY: 3, version: 1, width: W, height: H, time: 0, values }));
+      expect(f.level).toBe(level);
+    }
+  });
+
   it('sparse depth keeps only non-zero cells, to the millimetre', () => {
     const values = ramp((i) => (i % 5 === 0 ? 0.25 + i * 0.001 : 0));
     const frame = decodeTileFrame(

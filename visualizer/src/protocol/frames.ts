@@ -14,6 +14,8 @@ export const TILE_HEADER_BYTES = 44;
 export const SECTION_HEADER_BYTES = 28;
 
 export interface TileFrame {
+  /** Pyramid level (§5.5): 0 for the core's columns, > 0 coarse context, < 0 crater detail. */
+  level: number;
   field: FieldId;
   codec: CodecId;
   tileX: number;
@@ -178,6 +180,8 @@ export function decodeValues(bytes: Uint8Array, codec: CodecId, n: number, param
 // ───────────────────────── Tile frames ─────────────────────────
 
 export interface TileFrameInput {
+  /** Pyramid level (default 0). */
+  level?: number;
   field: FieldId;
   codec: CodecId;
   tileX: number;
@@ -201,7 +205,7 @@ export function encodeTileFrame(f: TileFrameInput): Uint8Array {
   const dv = new DataView(out.buffer);
   dv.setUint8(0, FrameKind.Tile);
   dv.setUint8(1, FRAME_VERSION);
-  dv.setUint16(2, 0, true);
+  dv.setInt16(2, f.level ?? 0, true);
   dv.setUint16(4, f.field, true);
   dv.setUint8(6, f.codec);
   dv.setUint8(7, compress ? FLAG_ZLIB : 0);
@@ -237,6 +241,7 @@ export function decodeTileFrame(buf: Uint8Array): TileFrame {
   let payload = buf.subarray(TILE_HEADER_BYTES, TILE_HEADER_BYTES + len);
   if (flags & FLAG_ZLIB) payload = unzlibSync(payload);
   return {
+    level: dv.getInt16(2, true),
     field,
     codec,
     tileX: dv.getInt32(8, true),
