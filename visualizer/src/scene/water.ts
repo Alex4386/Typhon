@@ -38,6 +38,10 @@ const WAVES: [number, number, number, number][] = [
   [-0.45, 0.89, 21, 0.1],
   [0.71, -0.7, 11, 0.055],
   [-0.97, -0.24, 5.3, 0.03],
+  // incommensurate directions and lengths, so crests (and the sun's glints on them) do not line up
+  // into a regular stripe pattern
+  [0.28, -0.96, 13.7, 0.05],
+  [-0.81, 0.59, 7.9, 0.035],
 ];
 /** Water's own (back-scattered) colour, linear RGB. */
 const BODY = new THREE.Vector3(0.012, 0.075, 0.11);
@@ -95,7 +99,7 @@ function nodeWater(opts: { perVertexDepth: boolean; depthM?: number; opacity?: n
   const transmit: N = exp(path.negate().div(u.uClarity));
   const sun: N = normalize(u.uSunDir);
   const h: N = normalize(sun.add(v));
-  const spec: N = pow(max(dot(n, h), 0), 220).mul(2.0).mul(farFade.mul(0.7).add(0.3));
+  const spec: N = pow(max(dot(n, h), 0), 140).mul(1.1).mul(farFade.mul(0.7).add(0.3));
   const body: N = vec3(BODY.x, BODY.y, BODY.z).mul(float(0.55).add(clamp(sun.y, 0, 1).mul(0.45)));
   // premultiplied: reflected sky + scattered body + glint, over the transmitted bed
   const alpha: N = clamp(float(1).sub(transmit.mul(float(1).sub(fresnel))).mul(opts.opacity ?? 1), 0.0, 1);
@@ -175,7 +179,7 @@ ${waveGlsl}
     float d = max(vDepth, 0.0);
     float transmit = exp(-(d / max(abs(v.y), 0.2)) / uClarity);
     vec3 sun = normalize(uSunDir);
-    float spec = pow(max(dot(n, normalize(sun + v)), 0.0), 220.0) * 2.0 * (0.3 + 0.7 * farFade);
+    float spec = pow(max(dot(n, normalize(sun + v)), 0.0), 140.0) * 1.1 * (0.3 + 0.7 * farFade);
     vec3 body = vec3(${BODY.x}, ${BODY.y}, ${BODY.z}) * (0.55 + 0.45 * clamp(sun.y, 0.0, 1.0));
     float alpha = clamp((1.0 - transmit * (1.0 - fresnel)) * uOpacity, 0.0, 1.0);
     vec3 lit = uSky * fresnel * ${REFLECT.toFixed(2)} + body * (1.0 - fresnel) * (1.0 - transmit) + uSunColor * spec;

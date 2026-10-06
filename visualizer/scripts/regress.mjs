@@ -70,7 +70,7 @@ async function setup(url = 'ws://127.0.0.1:8797/ws') {
 const VIEWS = {
   // [east offset, north offset, height above sea (m), look-at height (m), look-at east/north offset]
   low: [-700, -500, 60, 10],
-  top: [-520, -360, 420, 0, -260, -180],
+  top: [-420, -300, 250, 0, -220, -150],
   horizon: [-2500, -2500, 900, 0],
   vent: [-260, -180, 160, 20],
   plume: [-3200, -1200, 400, 1500],

@@ -518,7 +518,9 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           const pond = waterR(a, b);
           shallowest = Math.min(shallowest, seaDepth);
           maxLift = Math.max(maxLift, Math.abs(seaZ - world.seaLevel * vExag));
-          if (seaDepth > 0 && seaDepth >= pond) {
+          // the surface-water field carries the open sea too (its depth can differ by a little from
+          // sea level − ground): water that matches the sea is the sea, not a pond
+          if (seaDepth > 0 && pond <= seaDepth + 2) {
             anyWater = true;
             wetW[v] = SEA;
             wp.setXYZ(v, x, seaZ, -y);

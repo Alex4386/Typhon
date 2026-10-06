@@ -52,7 +52,9 @@ export function VolumeCloud({ clouds, color = '#857868' }: { clouds: () => Cloud
       const length = 2 * cl.halfLength;
       const width = 2 * cl.halfWidth;
       // stations along the flow, a lobe or more across it
-      const stations = Math.max(3, Math.min(10, Math.round(length / Math.max(1, width * 0.6))));
+      const stations = Math.max(4, Math.min(14, Math.round(length / Math.max(1, width * 0.45))));
+      // lobes overlap their neighbours along the flow: one continuous cloud, never a row of puffs
+      const spacing = length / stations;
       const across = width > cl.height * 1.5 ? 2 : 1;
       const midGround = cl.ground(cl.x, cl.y);
       let own = 0;
@@ -69,7 +71,7 @@ export function VolumeCloud({ clouds, color = '#857868' }: { clouds: () => Cloud
             const jitter = (Math.sin(seed * 12.9898) * 0.5) * cl.halfWidth * 0.3;
             const x = cl.x + cl.ax * along - cl.ay * (side + jitter);
             const y = cl.y + cl.ay * along + cl.ax * (side + jitter);
-            const size = Math.max(cl.halfWidth * 0.9, h * (tier === 0 ? 1.15 : 0.9));
+            const size = Math.max(cl.halfWidth * 0.9, spacing * 1.8, h * (tier === 0 ? 1.15 : 0.9));
             const ground = cl.ground(x, y);
             const zc = ground + size * (0.36 + tier * 0.55);
             billows.push({
