@@ -137,9 +137,9 @@ final class Tuning {
         String quiet = "Above ~10⁵× a year of recharge passes in minutes; dikes and unrest are skipped over.";
         ADVICE.put("world:scaling.dormantTimeCompression", new Advice(null, 1e5, quiet));
         ADVICE.put("volcano:timeCompression.dormant", new Advice(null, 1e5, quiet));
-        ADVICE.put("volcano:magma.chamber.supplyRate", new Advice(null, 5.0,
-                "Long-term supply above ~5 m³/s is beyond any measured volcano (Kīlauea ~0.1–0.2, Etna ~0.8); the chamber"
-                        + " stays at its rupture limit and grows."));
+        ADVICE.put("volcano:magma.chamber.supplyRate", new Advice(null, 10.0,
+                "Long-term supply above ~10 m³/s exceeds any active volcano (Kīlauea, among the highest, ~3–6 m³/s ="
+                        + " 0.1–0.2 km³/yr; Etna ~1); the chamber sits at its rupture limit and keeps opening dikes."));
         ADVICE.put("volcano:magma.chamber.supplyVariability", new Advice(null, 0.6,
                 "Large pulses make the supply intermittent; eruptions will start and stop abruptly."));
         ADVICE.put("volcano:magma.chamber.tensileStrengthMPa", new Advice(0.5, 20.0,
