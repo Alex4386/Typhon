@@ -144,7 +144,11 @@ public final class Geomorphology implements Subsystem {
     // per-step scratch
     private final TreeMap<Long, Double> shaking = new TreeMap<>();
     private final TreeSet<Long> changed = new TreeSet<>();
-    /** Columns whose ground moved during the latest step (kept until the next one; world expansion). */
+    /**
+     * Crater and caldera centres of the latest step, kept until the next step (world expansion). Slope
+     * failures are not listed: talus settles next to its source, and mobilised ones become debris
+     * avalanches, which report themselves.
+     */
     private final TreeSet<Long> moved = new TreeSet<>();
     private double now;
     private double massWastingStep;
@@ -1105,6 +1109,7 @@ public final class Geomorphology implements Subsystem {
         stats.excavatedM3 += removed * l * l;
         stats.maxCraterRadiusM = Math.max(stats.maxCraterRadiusM, radius);
         activateDisc(cx, cz, ro + 1);
+        moved.add(key(cx, cz));
         outbox.emit(new GeomorphEvents.CraterExcavated(now, volcanoId, new BlockPos(cx, terrain.blockForSurface(rim - depth), cz),
                 radius, depth, energy, removed * l * l));
     }
@@ -1249,6 +1254,7 @@ public final class Geomorphology implements Subsystem {
         calderaSubsidenceM += drop;
         stats.calderaSteps++;
         activateDisc(c.x(), c.z(), r + 2);
+        moved.add(key(c.x(), c.z()));
         outbox.emit(new GeomorphEvents.CalderaCollapse(now, volcanoId, c, radius, drop, calderaSubsidenceM, volume, under,
                 critical));
     }
@@ -1258,7 +1264,6 @@ public final class Geomorphology implements Subsystem {
     private void markChanged(int x, int z) {
         long k = key(x, z);
         changed.add(k);
-        moved.add(k);
         for (int d = 0; d < 8; d++) active.add(key(x + DX[d], z + DZ[d]));
         active.add(k);
     }
@@ -1326,7 +1331,7 @@ public final class Geomorphology implements Subsystem {
         return key(Math.floorDiv(x, ColumnStacks.TILE), Math.floorDiv(z, ColumnStacks.TILE));
     }
 
-    /** World expansion activity: columns whose ground moved in the latest step (failures, craters, collapse). */
+    /** World expansion activity: craters excavated and caldera collapse in the latest step. */
     public void reportActivity(me.alex4386.typhon.engine.expansion.ExpansionActivity.Sink sink) {
         for (long k : moved) sink.active(keyX(k), keyZ(k));
     }
