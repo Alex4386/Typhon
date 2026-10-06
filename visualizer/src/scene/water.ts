@@ -13,7 +13,7 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
  * colour. The bed itself is drawn by the terrain under the transparent surface.
  *
  * Surface: summed deep-water waves (ω² = g·k) tilt the normal. Each wave is band-limited: its
- * amplitude fades as its phase changes by more than ~π per pixel (fwidth), and all waves fade with
+ * amplitude fades out as its phase changes by π/4 to π/2 per pixel (fwidth), and all waves fade with
  * distance, so far water is smooth (Fresnel and sky only) instead of aliasing into moiré.
  *
  * The default renderer is WebGPURenderer, which takes node (TSL) materials; `?renderer=webgl` uses
@@ -73,7 +73,7 @@ function nodeWater(opts: { perVertexDepth: boolean; depthM?: number; opacity?: n
     const w = Math.sqrt(9.81 * k);
     const ph: N = p.x.mul(dx * k).add(p.y.mul(dy * k)).sub(u.uTime.mul(w));
     // band limit: drop the wave once it changes by more than ~π across a pixel
-    const aa: N = float(1).sub(smoothstep(0.5, 1.0, fwidth(ph).div(Math.PI)));
+    const aa: N = float(1).sub(smoothstep(0.25, 0.5, fwidth(ph).div(Math.PI)));
     const a: N = cos(ph).mul(amp * k).mul(aa).mul(farFade);
     sx = sx.add(a.mul(dx));
     sy = sy.add(a.mul(dy));
@@ -126,7 +126,7 @@ const vertex = /* glsl */ `
 const waveGlsl = WAVES.map(([dx, dy, len, amp]) => {
   const k = (2 * Math.PI) / len;
   return `    { float ph = ${(dx * k).toFixed(6)} * p.x + ${(dy * k).toFixed(6)} * p.y - ${Math.sqrt(9.81 * k).toFixed(6)} * uTime;
-      float aa = 1.0 - smoothstep(0.5, 1.0, fwidth(ph) / 3.14159265);
+      float aa = 1.0 - smoothstep(0.25, 0.5, fwidth(ph) / 3.14159265);
       g += vec2(${dx.toFixed(4)}, ${dy.toFixed(4)}) * (${(amp * k).toFixed(6)} * cos(ph) * aa * farFade); }`;
 }).join('\n');
 

@@ -24,8 +24,8 @@ page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 await page.goto(url, { waitUntil: 'commit' });
 await page.waitForSelector('[data-hud]', { timeout: 180000 });
-const gotIt = page.getByRole('button', { name: 'Got it' });
-if (await gotIt.isVisible().catch(() => false)) await gotIt.click();
+// close the first-visit guide through the store (a click can stall while tiles are being built)
+await page.evaluate(() => window.__typhon.getState().set({ guideOpen: false }));
 await page.waitForTimeout(20000);
 for (const [name, [de, dn, h, lookH]] of Object.entries(VIEWS)) {
   await page.evaluate(
