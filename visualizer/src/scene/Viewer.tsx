@@ -11,6 +11,7 @@ import { QUALITY, useStore } from '../store/store';
 import { worldExtent } from '../util/world';
 import { Atmosphere } from './Atmosphere';
 import { SurgeClouds } from './SurgeClouds';
+import { EruptionColumn } from './EruptionColumn';
 import { Hypocentres } from './Hypocentres';
 import { LavaGlow } from './LavaGlow';
 import { LavaHalo } from './LavaHalo';
@@ -235,6 +236,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
       {showHypo && <Hypocentres />}
       <Atmosphere world={world} />
       <SurgeClouds world={world} />
+      <EruptionColumn world={world} />
       <CameraRig world={world} />
       <PerfProbe />
       <FrameScheduler world={world} />

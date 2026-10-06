@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { BillowLayer, type Billow } from './Billows';
 
 /**
  * One cloud: an elongated billowing mass over an oriented footprint (scene units are map metres; the
@@ -25,112 +26,73 @@ export interface CloudShape {
 }
 
 /** Billows per cloud at most, and in total. */
-const PER_CLOUD = 10;
+const PER_CLOUD = 28;
 const MAX_BILLOWS = 160;
+/** Lobes travel from tail to head at this share of the cloud length per second (wall time). */
+const ADVECT = 0.06;
 
 /**
- * Pre-shaded billow texture: overlapping cauliflower lobes, each lit from above (the sun is high),
- * darker underneath, with a soft edge. Drawn once.
- */
-function billowTexture(): THREE.Texture {
-  const size = 256;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = size;
-  const g = cv.getContext('2d')!;
-  const rnd = (i: number) => {
-    const x = Math.sin(i * 91.7 + 17.3) * 43758.5453;
-    return x - Math.floor(x);
-  };
-  // lobes are drawn blurred so their edges never show as rings
-  g.filter = 'blur(7px)';
-  for (let k = 0; k < 34; k++) {
-    // lobes cluster towards the middle, larger at the bottom (the base of a billowing cloud)
-    const a = rnd(k) * Math.PI * 2;
-    const r = Math.sqrt(rnd(k + 40)) * size * 0.28;
-    const x = size / 2 + Math.cos(a) * r;
-    const y = size / 2 + Math.sin(a) * r * 0.8;
-    const lobe = size * (0.12 + rnd(k + 80) * 0.14);
-    const grad = g.createRadialGradient(x - lobe * 0.3, y - lobe * 0.35, lobe * 0.1, x, y, lobe);
-    grad.addColorStop(0, 'rgba(255,255,255,0.7)');
-    grad.addColorStop(0.5, 'rgba(210,210,210,0.5)');
-    grad.addColorStop(1, 'rgba(150,150,150,0)');
-    g.fillStyle = grad;
-    g.beginPath();
-    g.arc(x, y, lobe, 0, Math.PI * 2);
-    g.fill();
-  }
-  // soft overall edge
-  g.filter = 'none';
-  g.globalCompositeOperation = 'destination-in';
-  const mask = g.createRadialGradient(size / 2, size / 2, size * 0.25, size / 2, size / 2, size / 2);
-  mask.addColorStop(0, 'rgba(0,0,0,1)');
-  mask.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = mask;
-  g.fillRect(0, 0, size, size);
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-/**
- * Billowing clouds drawn as a few large, pre-shaded billboards laid out along each cloud's footprint:
- * taller and denser at the head, low and sheet-like at the tail, slowly churning. One instanced draw
- * call for all clouds; no custom shader, so WebGPU and WebGL2 alike. Reusable for any cloud with a
- * footprint (pyroclastic surges now; ocean-entry steam or ash clouds later).
+ * Billowing clouds over oriented footprints, drawn as lit billows (see Billows.tsx): lobes laid out
+ * along each cloud, a few across its width, stacked into tiers at the head where the flow rises
+ * highest, hugging the ground at the tail. The lobes travel along the flow and wrap, so the cloud
+ * visibly moves with it; the sun lights the side of each lobe facing it. One draw call for all clouds,
+ * no custom shader (WebGPU and WebGL2 alike). Reusable for any cloud with a footprint.
  */
 export function VolumeCloud({ clouds, color = '#857868' }: { clouds: () => CloudShape[]; color?: string }) {
-  const mesh = useRef<THREE.InstancedMesh>(null);
-  const tex = useMemo(() => billowTexture(), []);
-  const m = useMemo(() => new THREE.Matrix4(), []);
-  const p = useMemo(() => new THREE.Vector3(), []);
-  const s = useMemo(() => new THREE.Vector3(), []);
-  const q = useMemo(() => new THREE.Quaternion(), []);
-  const roll = useMemo(() => new THREE.Quaternion(), []);
-  const zAxis = useMemo(() => new THREE.Vector3(0, 0, 1), []);
-  const c = useMemo(() => new THREE.Color(), []);
+  const out = useRef<Billow[]>([]);
+  const base = useMemo(() => new THREE.Color(color), [color]);
 
-  useFrame(({ camera, clock }) => {
-    const im = mesh.current;
-    if (!im) return;
+  useFrame(({ clock }) => {
     const t = clock.elapsedTime;
-    let n = 0;
+    const billows = out.current;
+    billows.length = 0;
+    let seed = 0;
     for (const cl of clouds()) {
-      if (n >= MAX_BILLOWS) break;
+      if (billows.length >= MAX_BILLOWS) break;
       const length = 2 * cl.halfLength;
       const width = 2 * cl.halfWidth;
-      const k = Math.max(2, Math.min(PER_CLOUD, Math.round(length / Math.max(1, width * 0.8))));
-      for (let b = 0; b < k && n < MAX_BILLOWS; b++) {
-        // u from tail (0) to head (1)
-        const u = k === 1 ? 1 : b / (k - 1);
-        const along = (u * 2 - 1) * cl.halfLength * 0.85 * cl.head;
-        const x = cl.x + cl.ax * along;
-        const y = cl.y + cl.ay * along;
-        const h = cl.height * (0.3 + 0.7 * Math.pow(u, 1.4));
-        const size = Math.max(width * 1.15, h * 1.25);
-        const churn = Math.sin(t * 0.35 + b * 1.7) * 0.06;
-        const ground = cl.ground(x, y);
-        p.set(x, ground + size * (0.38 + churn), -y);
-        s.set(size * (1 + churn), size * (0.8 - churn * 0.5), 1);
-        roll.setFromAxisAngle(zAxis, b * 2.3 + t * 0.03);
-        q.copy(camera.quaternion).multiply(roll);
-        m.compose(p, q, s);
-        im.setMatrixAt(n, m);
-        // darker, dustier at the base of the tail; lighter where the cloud rises at the head
-        c.setScalar((0.65 + 0.35 * u) * (0.35 + 0.65 * cl.opacity));
-        im.setColorAt(n, c);
-        n++;
+      // stations along the flow, a lobe or more across it
+      const stations = Math.max(3, Math.min(10, Math.round(length / Math.max(1, width * 0.6))));
+      const across = width > cl.height * 1.5 ? 2 : 1;
+      const midGround = cl.ground(cl.x, cl.y);
+      let own = 0;
+      for (let k = 0; k < stations && own < PER_CLOUD && billows.length < MAX_BILLOWS; k++) {
+        // u from tail (0) to head (1), advected forward and wrapping
+        const u = (k / stations + t * ADVECT) % 1;
+        const along = (u * 2 - 1) * cl.halfLength * 0.9 * cl.head;
+        // the head is tallest; the tail a low ash sheet
+        const h = cl.height * (0.25 + 0.75 * Math.pow(u, 1.3));
+        const tiers = u > 0.7 ? 2 : 1;
+        for (let a = 0; a < across && billows.length < MAX_BILLOWS; a++) {
+          for (let tier = 0; tier < tiers && own < PER_CLOUD && billows.length < MAX_BILLOWS; tier++, seed++, own++) {
+            const side = across === 1 ? 0 : (a === 0 ? -0.5 : 0.5) * cl.halfWidth;
+            const jitter = (Math.sin(seed * 12.9898) * 0.5) * cl.halfWidth * 0.3;
+            const x = cl.x + cl.ax * along - cl.ay * (side + jitter);
+            const y = cl.y + cl.ay * along + cl.ax * (side + jitter);
+            const size = Math.max(cl.halfWidth * 0.9, h * (tier === 0 ? 1.15 : 0.9));
+            const ground = cl.ground(x, y);
+            const zc = ground + size * (0.36 + tier * 0.55);
+            billows.push({
+              x,
+              y: zc,
+              z: -y,
+              size,
+              flat: 0.82,
+              // the mass's centre: low over the middle of the footprint, so tops and the sunny side light up
+              cx: cl.x,
+              cy: midGround + cl.height * 0.25,
+              cz: -cl.y,
+              r: base.r,
+              g: base.g,
+              b: base.b,
+              fade: (0.55 + 0.45 * u) * (0.35 + 0.65 * cl.opacity) * 1.6,
+              seed,
+            });
+          }
+        }
       }
     }
-    im.count = n;
-    im.instanceMatrix.needsUpdate = true;
-    if (im.instanceColor) im.instanceColor.needsUpdate = true;
   });
 
-  return (
-    <instancedMesh ref={mesh} args={[undefined, undefined, MAX_BILLOWS]} frustumCulled={false} renderOrder={8}>
-      <planeGeometry args={[1, 1]} />
-      {/* the cloud's colour is the material's; instance colours only shade it (base darker, head lighter) */}
-      <meshBasicMaterial map={tex} color={color} transparent opacity={0.78} depthWrite={false} />
-    </instancedMesh>
-  );
+  return <BillowLayer source={() => out.current} max={MAX_BILLOWS} opacity={0.85} renderOrder={8} />;
 }
