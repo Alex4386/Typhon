@@ -142,7 +142,7 @@ export function InjectDialog({ world, volcanoId, open, onOpenChange }: { world: 
   const fields: ParamSpec[] = injectFieldsFor(schema, id) ?? FALLBACK_INJECT_FIELDS;
   const defaults = useMemo(() => {
     const d: Record<string, ParamValue> = {};
-    for (const f of fields) if (f.value !== undefined) d[f.id] = f.value;
+    for (const f of fields) if (f.value !== undefined && f.value !== null) d[f.id] = f.value;
     else if (f.default !== undefined) d[f.id] = f.default;
     return d;
   }, [fields]);

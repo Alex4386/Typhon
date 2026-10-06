@@ -54,10 +54,11 @@ export function EntitiesPanel({ world }: { world: WorldInfo }) {
   return (
     <div className="flex flex-col gap-3">
       <Tabs value={tab} onValueChange={(v) => isTab(v) && setTab(v)}>
-        <TabsList className="h-auto w-full flex-wrap">
+        {/* one row: short labels, and a horizontal scroll if the drawer is narrower still */}
+        <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden [scrollbar-width:none]">
           {ENTITY_TABS.map((t) => (
-            <TabsTrigger key={t.key} value={t.key} className="min-w-fit">
-              {t.label}
+            <TabsTrigger key={t.key} value={t.key} title={t.label} aria-label={t.label} className="min-w-fit flex-none px-2">
+              {t.short}
               {t.key !== 'quakes' && counts[t.key] > 0 && (
                 <Badge variant="secondary" className="h-4 px-1 text-[10px] tabular-nums">
                   {counts[t.key]}

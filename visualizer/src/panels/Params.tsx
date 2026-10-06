@@ -15,14 +15,11 @@ import type { ParamSpec, ParamValue } from '../protocol/messages';
 import { useStore } from '../store/store';
 import { fieldError } from './inject';
 import { ParamInput, formatParam } from './ParamInput';
+import { atRest, editApplied, isComputed, overrideSeed, shownValue } from './paramState';
+import { Switch } from '@/components/ui/switch';
 
 /** Live (hot) edits are sent this long after the last keystroke/slider move. */
 const LIVE_DEBOUNCE_MS = 400;
-
-function same(a: ParamValue | null | undefined, b: ParamValue | null | undefined): boolean {
-  if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
-  return a === b;
-}
 
 /** Parameters page: weather now, then every tunable value of the world grouped by subject. */
 export function Params() {
@@ -41,7 +38,7 @@ export function Params() {
       for (const spec of schema.params) {
         const v = next[spec.id];
         if (v === undefined) continue;
-        if ((v === null && same(spec.value, spec.default)) || (v !== null && same(spec.value, v))) delete next[spec.id];
+        if (editApplied(spec, v)) delete next[spec.id];
       }
       return next;
     });
@@ -55,16 +52,12 @@ export function Params() {
   }, [specs, filter]);
   const groups = useMemo(() => [...new Set(shown.map((p) => p.group))], [shown]);
 
-  const valueOf = (p: ParamSpec): ParamValue | undefined => {
-    const v = pending[p.id];
-    if (v === null) return p.default;
-    return v ?? p.value;
-  };
+  const valueOf = (p: ParamSpec): ParamValue | undefined => shownValue(p, pending[p.id]);
   const edit = (p: ParamSpec, v: ParamValue | null) => {
     setPending((x) => ({ ...x, [p.id]: v }));
     if (p.apply !== 'hot') return;
-    const value = v === null ? p.default : v;
-    if (p.type === 'number' && fieldError(p, value) !== null) return;
+    // null: back to the default, or to the engine's own value for an auto parameter
+    if (v !== null && p.type === 'number' && fieldError(p, v) !== null) return;
     liveQueue.current[p.id] = v;
     window.clearTimeout(liveTimer.current);
     liveTimer.current = window.setTimeout(() => {
@@ -78,6 +71,7 @@ export function Params() {
     const p = byId.get(id)!;
     return v !== null && fieldError(p, v) !== null;
   });
+  const describe = (p: ParamSpec, v: ParamValue | null | undefined) => (v === null && p.auto ? 'auto' : formatParam(v === null ? p.default : v, p));
   const restartWho = [...new Set(restartEdits.map(([id]) => byId.get(id)?.volcanoId ?? 'world'))];
 
   return (
@@ -106,9 +100,11 @@ export function Params() {
                   .filter((p) => p.group === g)
                   .map((p) => {
                     const v = valueOf(p);
-                    const err = fieldError(p, v);
+                    const computed = isComputed(p, pending[p.id]);
+                    const err = computed ? null : fieldError(p, v);
                     const changed = pending[p.id] !== undefined;
-                    const atDefault = same(v, p.default);
+                    const atDefault = atRest(p, pending[p.id]);
+                    const resetTip = p.auto ? `Back to the computed value${typeof p.computed === 'number' ? ` (${formatParam(p.computed, p)})` : ''}` : `Back to default (${formatParam(p.default, p)})`;
                     return (
                       <div key={p.id} className={cn('flex flex-col gap-1.5 px-3 py-2', changed && 'bg-primary/5')}>
                         <div className="flex items-center gap-2">
@@ -118,13 +114,24 @@ export function Params() {
                             </Label>
                           </Tip>
                           <ApplyBadge apply={p.apply === 'hot' ? 'hot' : 'restart'} />
-                          <Tip content={`Back to default (${formatParam(p.default, p)})`}>
-                            <Button variant="ghost" size="icon-xs" disabled={atDefault || p.default === undefined} aria-label={`Reset ${p.label} to default`} onClick={() => edit(p, null)}>
+                          <Tip content={resetTip}>
+                            <Button variant="ghost" size="icon-xs" disabled={atDefault} aria-label={`Reset ${p.label} to ${p.auto ? 'computed' : 'default'}`} onClick={() => edit(p, null)}>
                               <RotateCcw />
                             </Button>
                           </Tip>
                         </div>
-                        <ParamInput spec={p} value={v} invalid={!!err} onChange={(x) => edit(p, x)} />
+                        {p.auto && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className={cn('flex-1', computed ? 'text-foreground' : 'text-muted-foreground')}>
+                              Auto{typeof p.computed === 'number' ? ` (computed ${formatParam(p.computed, p)})` : ' (computed by the model)'}
+                            </span>
+                            <Label htmlFor={`o-${p.id}`} className="font-normal text-muted-foreground">
+                              Override
+                            </Label>
+                            <Switch id={`o-${p.id}`} size="sm" checked={!computed} onCheckedChange={(on) => edit(p, on ? overrideSeed(p) : null)} />
+                          </div>
+                        )}
+                        {!computed && <ParamInput spec={p} value={v} invalid={!!err} onChange={(x) => edit(p, x)} />}
                         {err ? <p className="text-xs text-destructive">{err}</p> : p.help ? <Hint>{p.help}</Hint> : null}
                       </div>
                     );
@@ -159,7 +166,7 @@ export function Params() {
                   const p = byId.get(id)!;
                   return (
                     <li key={id}>
-                      {p.label}: {formatParam(p.value, p)} → {formatParam(v === null ? p.default : v, p)}
+                      {p.label}: {describe(p, p.value ?? (p.auto ? null : undefined))} → {describe(p, v)}
                     </li>
                   );
                 })}

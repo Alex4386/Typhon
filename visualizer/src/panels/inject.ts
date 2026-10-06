@@ -45,7 +45,7 @@ export function mixPreview(vs: VolcanoState, values: Record<string, ParamValue>)
 }
 
 /** Problems with a field value (out of range, not a number); null when fine. */
-export function fieldError(spec: ParamSpec, v: ParamValue | undefined): string | null {
+export function fieldError(spec: ParamSpec, v: ParamValue | null | undefined): string | null {
   if (spec.type !== 'number') return null;
   if (typeof v !== 'number' || !Number.isFinite(v)) return 'Enter a number';
   if (spec.min !== undefined && v < spec.min) return `At least ${spec.min}${spec.unit ? ' ' + spec.unit : ''}`;

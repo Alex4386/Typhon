@@ -4,11 +4,12 @@ import { isDeposit, type EntityMap, type EntityView } from './entities';
 /** Top-level tabs of the Entities panel. */
 export type EntityTab = 'volcano' | 'hydro' | 'monitoring' | 'quakes';
 
-export const ENTITY_TABS: { key: EntityTab; label: string }[] = [
-  { key: 'volcano', label: 'Volcano' },
-  { key: 'hydro', label: 'Hydrothermal & ground' },
-  { key: 'monitoring', label: 'Monitoring' },
-  { key: 'quakes', label: 'Earthquakes' },
+/** `short` fits the tab row of a narrow drawer; `label` is the full name (tooltip, headings). */
+export const ENTITY_TABS: { key: EntityTab; label: string; short: string }[] = [
+  { key: 'volcano', label: 'Volcano', short: 'Volcano' },
+  { key: 'hydro', label: 'Hydrothermal & ground', short: 'Hydrothermal' },
+  { key: 'monitoring', label: 'Monitoring', short: 'Monitoring' },
+  { key: 'quakes', label: 'Earthquakes', short: 'Quakes' },
 ];
 
 export interface EntityCategory {

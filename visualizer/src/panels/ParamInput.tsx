@@ -21,8 +21,9 @@ export function formatParam(v: ParamValue | null | undefined, spec?: ParamSpec):
  * One parameter editor: a slider (when bounded) plus an exact number box, a switch or a choice.
  * `onChange` fires on every edit; the caller decides when to apply.
  */
-export function ParamInput({ spec, value, onChange, invalid }: { spec: ParamSpec; value: ParamValue | undefined; onChange: (v: ParamValue) => void; invalid?: boolean }) {
-  const [text, setText] = useState(value === undefined ? '' : String(value));
+export function ParamInput({ spec, value, onChange, invalid }: { spec: ParamSpec; value: ParamValue | null | undefined; onChange: (v: ParamValue) => void; invalid?: boolean }) {
+  // null: an auto parameter the engine computes (or no value yet): show an empty box, not "null"
+  const [text, setText] = useState(value === undefined || value === null ? '' : String(value));
   useEffect(() => {
     if (typeof value === 'number' && Number(text) !== value) setText(String(Number(value.toPrecision(6))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
