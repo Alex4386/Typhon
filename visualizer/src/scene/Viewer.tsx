@@ -14,6 +14,7 @@ import { LavaGlow } from './LavaGlow';
 import { LavaHalo } from './LavaHalo';
 import { EntityMarkers, type PickData } from './EntityMarkers';
 import { Markers } from './Markers';
+import { PerfProbe } from './PerfProbe';
 import { nearestSurfaceEntity, pickRadius } from './picking';
 import { Terrain } from './Terrain';
 
@@ -174,6 +175,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
       {showHypo && <Hypocentres />}
       <Atmosphere world={world} />
       <CameraRig world={world} />
+      <PerfProbe />
     </Canvas>
   );
 }

@@ -1,3 +1,4 @@
+import { perfStats } from './scene/perf';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
@@ -11,6 +12,7 @@ if (import.meta.env.DEV || new URLSearchParams(window.location.search).has("debu
   (window as unknown as { __typhon: typeof useStore }).__typhon = useStore;
   (window as unknown as { __typhonTile: typeof getTile }).__typhonTile = getTile;
   (window as unknown as { __typhonCamera: typeof useCamera }).__typhonCamera = useCamera;
+  (window as unknown as { __typhonPerf: typeof perfStats }).__typhonPerf = perfStats;
 }
 
 createRoot(document.getElementById('root')!).render(
