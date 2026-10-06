@@ -1,5 +1,5 @@
-import { useEffect, type ReactNode } from 'react';
-import { Crosshair, Ruler, X } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ArrowUpFromDot, Crosshair, Droplets, Pickaxe, Plus, Ruler, SlidersHorizontal, Square, Triangle, X } from 'lucide-react';
 import { Tip } from '@/components/tip';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -7,14 +7,17 @@ import { Kbd } from '@/components/ui/kbd';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useCamera } from '../camera/cameraStore';
-import { inspect } from '../net/connection';
-import type { EntityProp, InspectionMessage, WorldInfo } from '../protocol/messages';
+import { command, inspect, setParams } from '../net/connection';
+import type { EntityProp, InspectionMessage, ParamSpec, ParamValue, WorldInfo } from '../protocol/messages';
 import { sectionThrough, selectionAnchor } from '../scene/picking';
 import { KIND_LABEL, entityColor, formatPlace, type EntityView, type Selection } from '../store/entities';
 import { useStore } from '../store/store';
 import { FEATURE_COLORS } from '../util/color';
 import { formatSimTime, worldExtent } from '../util/world';
+import { contextActions, supplyParams, type ContextAction } from './actions';
+import { fieldError } from './inject';
 import { OVERLAY } from './Overlay';
+import { ParamInput } from './ParamInput';
 import { HIDDEN_PROPS, formatProp, propLabel } from './props';
 
 /** The selection's column is asked about again this often while it stays selected (ms). */
@@ -98,18 +101,7 @@ export function Inspector({ world }: { world: WorldInfo }) {
           </Button>
         </Tip>
       </div>
-      <div className="flex gap-1.5 px-3 pb-2">
-        <Tip content={<span>Fly to it and frame it <Kbd>F</Kbd></span>}>
-          <Button size="xs" variant="secondary" onClick={frame}>
-            <Crosshair /> Frame
-          </Button>
-        </Tip>
-        <Tip content="Cut a cross-section through it (along a dike or fissure, else west–east)">
-          <Button size="xs" variant="secondary" onClick={cut}>
-            <Ruler /> Cross-section
-          </Button>
-        </Tip>
-      </div>
+      <ActionRow world={world} onFrame={frame} onSection={cut} />
       <Separator />
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto p-3">
         {selection.type === 'entity' && entity && <EntityProps e={entity} />}
@@ -265,5 +257,122 @@ function Column({ c, world }: { c: InspectionMessage; world: WorldInfo }) {
         </>
       )}
     </section>
+  );
+}
+
+const ACTION_ICON: Record<ContextAction['id'], ReactNode> = {
+  inject: <Plus />,
+  startEruption: <Triangle />,
+  stopEruption: <Square />,
+  forceDike: <ArrowUpFromDot />,
+  frame: <Crosshair />,
+  section: <Ruler />,
+  water: <Droplets />,
+  dig: <Pickaxe />,
+  supply: <SlidersHorizontal />,
+};
+
+const ACTION_TIP: Partial<Record<ContextAction['id'], ReactNode>> = {
+  inject: 'Add a batch of magma to this chamber; the form starts from the magma its supply delivers',
+  startEruption: 'Open a vent and start an eruption of this volcano now',
+  stopEruption: 'End the eruption of this volcano now',
+  forceDike: 'Send a dike (magma-filled crack) up from this chamber',
+  frame: (
+    <span>
+      Fly to it and frame it <Kbd>F</Kbd>
+    </span>
+  ),
+  section: 'Cut a cross-section through it (along a dike or fissure, else west to east)',
+  water: 'Pour water at this point (the volume is set in the tool bar)',
+  dig: 'Dig a pit at this point',
+  supply: 'Supply rate, temperature and composition of the magma feeding this chamber',
+};
+
+/** The selection's own actions (see {@link contextActions}); magma supply settings expand inline. */
+function ActionRow({ world, onFrame, onSection }: { world: WorldInfo; onFrame: () => void; onSection: () => void }) {
+  const selection = useStore((s) => s.selection);
+  const entities = useStore((s) => s.entities);
+  const volcanoes = useStore((s) => s.state?.volcanoes);
+  const replay = useStore((s) => s.clock?.replay ?? false);
+  const [supplyOpen, setSupplyOpen] = useState(false);
+  const actions = contextActions(selection, entities, volcanoes);
+  const run = (a: ContextAction) => {
+    const s = useStore.getState();
+    switch (a.id) {
+      case 'inject':
+        return s.set({ injectFor: a.volcanoId, selectedVolcano: a.volcanoId });
+      case 'startEruption':
+      case 'stopEruption':
+      case 'forceDike':
+        return command({ kind: a.id, volcanoId: a.volcanoId });
+      case 'frame':
+        return onFrame();
+      case 'section':
+        return onSection();
+      case 'supply':
+        return setSupplyOpen(!supplyOpen);
+      case 'water':
+      case 'dig':
+        if (selection?.type === 'point')
+          command(a.id === 'water' ? { kind: 'addWater', at: selection.at, volumeM3: s.waterVolume, seconds: 600 } : { kind: 'dig', at: selection.at, radius: s.digRadius, depth: s.digDepth });
+        return;
+    }
+  };
+  const supply = actions.find((a) => a.id === 'supply');
+  return (
+    <>
+      <div className="flex flex-wrap gap-1.5 px-3 pb-2" role="toolbar" aria-label="Actions">
+        {actions.map((a) => (
+          <Tip key={a.id} content={ACTION_TIP[a.id]}>
+            <Button
+              size="xs"
+              variant={a.id === 'stopEruption' ? 'destructive' : a.id === 'startEruption' || a.id === 'inject' ? 'default' : 'secondary'}
+              disabled={replay && a.id !== 'frame' && a.id !== 'section' && a.id !== 'supply'}
+              aria-pressed={a.id === 'supply' ? supplyOpen : undefined}
+              onClick={() => run(a)}
+            >
+              {ACTION_ICON[a.id]} {a.label}
+            </Button>
+          </Tip>
+        ))}
+      </div>
+      {supply && 'volcanoId' in supply && supplyOpen && <SupplySettings world={world} volcanoId={supply.volcanoId} />}
+    </>
+  );
+}
+
+/** The volcano's magma-supply parameters, editable in place (hot changes, debounced). */
+function SupplySettings({ world, volcanoId }: { world: WorldInfo; volcanoId: string }) {
+  const schema = useStore((s) => s.schema);
+  const params = supplyParams(schema, volcanoId);
+  const [edits, setEdits] = useState<Record<string, ParamValue>>({});
+  const timer = useRef(0);
+  const queue = useRef<Record<string, ParamValue>>({});
+  const name = world.volcanoes.find((v) => v.id === volcanoId)?.name ?? volcanoId;
+  if (!schema?.tunable) return <p className="px-3 pb-2 text-xs text-muted-foreground">{schema?.reason ?? 'The settings of this world cannot be changed.'}</p>;
+  if (params.length === 0) return <p className="px-3 pb-2 text-xs text-muted-foreground">No supply settings for {name}.</p>;
+  const edit = (p: ParamSpec, v: ParamValue) => {
+    setEdits((x) => ({ ...x, [p.id]: v }));
+    if (p.type === 'number' && fieldError(p, v) !== null) return;
+    queue.current[p.id] = v;
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      const batch = queue.current;
+      queue.current = {};
+      setParams(batch);
+    }, 600);
+  };
+  return (
+    <div className="flex flex-col gap-2 border-t px-3 py-2" aria-label={`Magma supply of ${name}`}>
+      {params.map((p) => (
+        <div key={p.id} className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground" title={p.help}>
+            {p.label}
+            {p.unit ? ` (${p.unit})` : ''}
+          </span>
+          <ParamInput spec={p} value={edits[p.id] ?? p.value} onChange={(v) => edit(p, v)} invalid={p.type === 'number' && fieldError(p, edits[p.id] ?? p.value) !== null} />
+        </div>
+      ))}
+    </div>
   );
 }

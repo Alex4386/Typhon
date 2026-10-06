@@ -374,6 +374,8 @@ final class Tuning {
         Path dir = s.worldDir();
         MagmaChamberConfig c = s.firstChamberConfig();
         if (c != null) commands.add("injectMagma", injectSchema(c));
+        // per volcano: defaults from that volcano's own supply magma (the plain entry is the first's)
+        s.chamberConfigs().forEach((id, cfg) -> commands.add("injectMagma@" + id, injectSchema(cfg)));
         if (dir == null) {
             o.addProperty("tunable", false);
             o.addProperty("reason", "This world runs in memory only, so its settings cannot be changed. Start it from the"

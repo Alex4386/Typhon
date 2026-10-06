@@ -1027,6 +1027,13 @@ final class Session implements AutoCloseable {
     }
 
     /** Chamber configuration of the first volcano (defaults for the injection dialog). */
+    /** Chamber settings per volcano id, in world order. */
+    Map<String, MagmaChamberConfig> chamberConfigs() {
+        Map<String, MagmaChamberConfig> out = new java.util.LinkedHashMap<>();
+        for (VolcanoSystem v : live.volcanoes()) out.put(v.volcanoId(), v.chamber().config());
+        return out;
+    }
+
     MagmaChamberConfig firstChamberConfig() {
         List<VolcanoSystem> vs = live.volcanoes();
         return vs.isEmpty() ? null : vs.get(0).chamber().config();

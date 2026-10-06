@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArrowUpFromDot, ChevronDown, ChevronUp, Droplets, Pickaxe, Plus, Ruler, Square, Triangle, Wrench } from 'lucide-react';
 import { SimpleSelect } from '@/components/fields';
 import { Tip } from '@/components/tip';
@@ -16,6 +16,7 @@ import { ALERT_COLORS } from '../util/color';
 import { formatDuration, formatFactor } from '../util/world';
 import { ALERT_LABEL, REGIME_LABEL, STYLE_LABEL } from './events';
 import { FALLBACK_INJECT_FIELDS, MAGMA_PRESETS, fieldError, formatVolume, injectWarnings, mixPreview } from './inject';
+import { injectFieldsFor } from './actions';
 import { ParamInput } from './ParamInput';
 
 function useVolcano(world: WorldInfo): { id: string | undefined; name: string; vs: VolcanoState | undefined } {
@@ -131,10 +132,14 @@ export function StatusCard({ world }: { world: WorldInfo }) {
 }
 
 /** Magma injection: volume, temperature and composition (fields come from the server schema). */
-export function InjectDialog({ world, open, onOpenChange }: { world: WorldInfo; open: boolean; onOpenChange: (o: boolean) => void }) {
-  const { id, name, vs } = useVolcano(world);
+export function InjectDialog({ world, volcanoId, open, onOpenChange }: { world: WorldInfo; volcanoId: string | null; open: boolean; onOpenChange: (o: boolean) => void }) {
+  const fallback = useVolcano(world);
+  const id = volcanoId ?? fallback.id;
+  const name = world.volcanoes.find((v) => v.id === id)?.name ?? id ?? '';
+  const vs = useStore((s) => (id ? s.state?.volcanoes[id] : undefined));
   const schema = useStore((s) => s.schema);
-  const fields: ParamSpec[] = schema?.commands.injectMagma ?? FALLBACK_INJECT_FIELDS;
+  // this volcano's own fields: defaults are its supply magma, not the first volcano's
+  const fields: ParamSpec[] = injectFieldsFor(schema, id) ?? FALLBACK_INJECT_FIELDS;
   const defaults = useMemo(() => {
     const d: Record<string, ParamValue> = {};
     for (const f of fields) if (f.value !== undefined) d[f.id] = f.value;
@@ -142,7 +147,13 @@ export function InjectDialog({ world, open, onOpenChange }: { world: WorldInfo; 
     return d;
   }, [fields]);
   const [values, setValues] = useState<Record<string, ParamValue>>(defaults);
-  useEffect(() => setValues((v) => ({ ...defaults, ...v })), [defaults]);
+  // a new target volcano starts from its own defaults; schema refreshes keep the user's edits
+  const lastId = useRef(id);
+  useEffect(() => {
+    const switched = lastId.current !== id;
+    lastId.current = id;
+    setValues((v) => (switched ? { ...defaults, volumeM3: v.volumeM3 ?? defaults.volumeM3 } : { ...defaults, ...v }));
+  }, [defaults, id]);
   const has = (k: string) => fields.some((f) => f.id === k);
   const errors = Object.fromEntries(fields.map((f) => [f.id, fieldError(f, values[f.id])]));
   const ok = Object.values(errors).every((e) => e === null) && !!id;
@@ -280,7 +291,7 @@ export function ActionBar({ world }: { world: WorldInfo }) {
   const digDepth = useStore((s) => s.digDepth);
   const set = useStore((s) => s.set);
   const replay = useStore((s) => s.clock?.replay ?? false);
-  const [injecting, setInjecting] = useState(false);
+  const injectFor = useStore((s) => s.injectFor);
   const erupting = (vs?.chamber.eruptionRate ?? 0) > 0 || vs?.alert.level === 'ERUPTING';
   const pick = (t: Tool) => set({ tool: tool === t ? 'orbit' : t });
   if (!id) return null;
@@ -301,7 +312,7 @@ export function ActionBar({ world }: { world: WorldInfo }) {
           </Tip>
         )}
         <Tip content="Add a batch of magma with chosen temperature and composition" side="top">
-          <Button variant="secondary" size="sm" disabled={replay} onClick={() => setInjecting(true)}>
+          <Button variant="secondary" size="sm" disabled={replay} onClick={() => set({ injectFor: id })}>
             <Plus /> Add magma…
           </Button>
         </Tip>
@@ -351,7 +362,7 @@ export function ActionBar({ world }: { world: WorldInfo }) {
           </Button>
         </div>
       )}
-      <InjectDialog world={world} open={injecting} onOpenChange={setInjecting} />
+      <InjectDialog world={world} volcanoId={injectFor} open={injectFor !== null} onOpenChange={(o) => !o && set({ injectFor: null })} />
     </>
   );
 }

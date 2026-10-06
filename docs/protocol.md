@@ -303,8 +303,12 @@ This is a snapshot of 0D state per volcano (from `runner` snapshots), sent ≥ 2
 `{type:"events", events: SimEvent[], dropped: number}`. These are the engine's events, translated.
 `dropped` counts events lost in the runner's event ring since the previous `events` message.
 
-On attach the server sends a backlog. It includes all non-seismic events that are still relevant, plus
-at least the most recent ~500 seismic events. Every event has `kind` and `time` (s):
+On attach the server sends a backlog, in time order up to the session time: every **milestone**
+(`eruptionStarted`, `eruptionEnded`, `alertChanged`, `regimeChanged`, `styleEstimated`, `dikeStarted`,
+`dikeStalled`, `fissureOpened`, `message`, the first `oceanEntry` and the first `geothermalFeature` of
+each feature type per volcano; the last 4000), the most recent ~1500 other non-seismic events, and the
+most recent ~600 seismic events and bombs. Milestones are kept apart from the rolling event log so a
+late client always learns that an eruption started, however many quakes and plume updates followed. Every event has `kind` and `time` (s):
 
 | kind | fields | engine source |
 |---|---|---|
@@ -315,7 +319,9 @@ at least the most recent ~500 seismic events. Every event has `kind` and `time` 
 | `alertChanged` | `volcanoId`, `previous` (or null), `current` | `AlertEvents.AlertLevelChanged` |
 | `regimeChanged` | `volcanoId`, `regime` | eruptive-regime change |
 | `styleEstimated` | `volcanoId`, `previous`, `current`, `vei`, `forecast`, `probabilities` | the estimated eruption style or VEI changed (`probabilities`: style → probability) |
+| `dikeStarted` | `volcanoId`, `dikeId`, `origin` [x,y,z], `overpressureMPa` | `DikeEvents.DikeStarted` |
 | `dikeAdvanced` | `volcanoId`, `dikeId`, `path` [[x,y,z]…] (full path so far) | `DikeEvents.DikeAdvanced` |
+| `dikeStalled` | `volcanoId`, `dikeId`, `tip` [x,y,z], `depthM`, `volumeM3`, `reason` (`INSUFFICIENT_PRESSURE`/`FROZE`) | `DikeEvents.DikeStalled` (was a `message` before) |
 | `fissureOpened` | `volcanoId`, `vent: VentInfo` | `DikeEvents.FissureOpened` |
 | `bombLaunched` | `volcanoId`, `id`, `start`, `velocity` (m/s), `dragK`, `flightSeconds`, `landing` | `TephraEvents.BombLaunched` |
 | `plume` | `volcanoId`, `base`, `topZ`, `radius`, `massRateKgS` | `TephraEvents.PlumeColumn` |
@@ -360,7 +366,7 @@ The tunable parameters and command fields of a session (§3.5):
 |---|---|
 | `tunable` | False for in-memory sessions (`reason` says why); `params` is then empty but `commands` is still filled. |
 | `params[]` | `ParamSpec`: `id`, `label`, `unit?`, `help?`, `group` (heading), `type` (`number`/`boolean`/`choice`), `min?`/`max?` (validated by the server), `step?` (1 for integers), `log?` (slider hint), `choices?`, `value`, `default`, `apply` (`hot`/`restart`), `volcanoId?`. `recommended?: {min?, max?}` is the physically sensible part of the range with `warning` explaining what goes wrong outside it; `outOfRange: true` marks a current value outside it. Out-of-range values are accepted, and the `setParams` ack message then ends with `Warning: …`. Parameters without curated metadata get a label and unit derived from their name and no range. |
-| `commands` | Fields of commands, as `ParamSpec`s with defaults (`injectMagma`: the volcano's recharge magma; `volumeM3.recommended.max` is 10 % of the chamber volume — larger batches rupture the chamber walls, and the command's ack carries a note saying so). |
+| `commands` | Fields of commands, as `ParamSpec`s with defaults (`injectMagma`: the first volcano's recharge magma; `injectMagma@<volcanoId>`: the same fields with that volcano's own recharge magma as defaults; `volumeM3.recommended.max` is 10 % of the chamber volume — larger batches rupture the chamber walls, and the command's ack carries a note saying so). |
 | `audit` | Recent changes, oldest first: `at` (wall ms), `simTime`, `id`, `label`, `from`, `to` (null = back to default), `apply`. |
 
 ### 4.8 `entities`

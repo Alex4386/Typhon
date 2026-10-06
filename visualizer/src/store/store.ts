@@ -173,6 +173,8 @@ interface Store {
   quakeFilter: QuakeFilter;
   /** Entity categories hidden in the 3D view (persisted). */
   hiddenCategories: Record<string, boolean>;
+  /** Volcano the "Add magma" dialog is open for (null: closed). */
+  injectFor: string | null;
   /** Frame statistics overlay (persisted). */
   showPerf: boolean;
   /** Lower the resolution (and then quality) when frames get slow (persisted). */
@@ -252,6 +254,7 @@ export const useStore = create<Store>((set, get) => ({
   smoothTerrain: true,
   toolboxOpen: false,
   quakeFilter: loadQuakeFilter(),
+  injectFor: null,
   hiddenCategories: loadPref(PREF_KEYS.hiddenCategories, {}, isFlags),
   showPerf: loadPref(PREF_KEYS.showPerf, false, isBool),
   autoQuality: loadPref(PREF_KEYS.autoQuality, true, isBool),
@@ -381,7 +384,16 @@ export const useStore = create<Store>((set, get) => ({
     return u.added;
   },
 
-  select: (selection) => set({ selection, inspection: selection && sameSelection(selection, get().selection) ? get().inspection : null }),
+  select: (selection) => {
+    // selecting something of a volcano makes it the volcano the action bar works on
+    const e = selection?.type === 'entity' ? get().entities[selection.id] : undefined;
+    const v = e?.volcanoId ?? (selection?.type === 'quake' ? selection.event.volcanoId : undefined);
+    set({
+      selection,
+      inspection: selection && sameSelection(selection, get().selection) ? get().inspection : null,
+      ...(v && get().world?.volcanoes.some((w) => w.id === v) ? { selectedVolcano: v } : {}),
+    });
+  },
 }));
 
 function sameSelection(a: Selection, b: Selection | null): boolean {
