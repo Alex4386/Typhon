@@ -329,9 +329,14 @@ public final class WorldModel implements WorldQuery, WorldEdit {
         return new SectionRaster(nu, nz, zMin, zMax, u, surface, material, unit, voids);
     }
 
+    /**
+     * The unit record of {@code id}. An id the table does not know (layers saved by an interrupted save, newer
+     * than the table that came with them) reads as {@link UnitTable#UNATTRIBUTED}: the deposit keeps its
+     * material and thickness and only loses its provenance.
+     */
     @Override
     public UnitRecord unit(int id) {
-        return units.get(id);
+        return id >= 0 && id < units.size() ? units.get(id) : units.get(UnitTable.UNATTRIBUTED);
     }
 
     @Override

@@ -113,13 +113,18 @@ public final class SaveFormat {
         root.addProperty("random", randomState);
         root.add("state", state.json());
         JsonObject schemas = new JsonObject();
-        Set<String> live = new HashSet<>();
+        for (Map.Entry<String, SubsystemState.FieldData> field : state.fields().entrySet()) {
+            schemas.addProperty(field.getKey(), field.getValue().schemaVersion());
+        }
+        root.add("fields", schemas);
+        // The subsystem's JSON first, its region files after: append-only tables in the JSON (the world's unit
+        // table) then always cover the ids its region files reference, also if a save is cut off midway.
+        store.write(subsystemPath(id), jsonBytes(root));
 
+        Set<String> live = new HashSet<>();
         for (Map.Entry<String, SubsystemState.FieldData> field : state.fields().entrySet()) {
             String name = field.getKey();
             SubsystemState.FieldData data = field.getValue();
-            schemas.addProperty(name, data.schemaVersion());
-
             TreeMap<Long, List<StateReader.Entry>> regions = new TreeMap<>();
             Map<Long, int[]> coords = new TreeMap<>();
             for (StateReader.Entry entry : data.chunks()) {
@@ -136,8 +141,6 @@ public final class SaveFormat {
                 live.add(path);
             }
         }
-        root.add("fields", schemas);
-        store.write(subsystemPath(id), jsonBytes(root));
 
         for (String path : store.list(fieldsPrefix(id))) {
             if (!live.contains(path)) store.delete(path);
