@@ -10,7 +10,11 @@ const PLUME_PARTICLES = 2400;
 const ASH_PARTICLES = 1600;
 const MAX_BOMBS = 400;
 const FOUNTAIN_PARTICLES = 700;
-const MAX_FRONT = 600;
+const MAX_FRONT = 220;
+/** Front cells closer than this (m) merge into one dust puff. */
+const FRONT_MERGE_M = 90;
+/** A front puff fades out over this long after its event (simulated s). */
+const FRONT_FADE_S = 300;
 const G = 9.81;
 
 /** Soft round puff (alpha falls off smoothly), drawn once into a canvas texture. */
@@ -49,7 +53,9 @@ function hash(i: number): number {
 
 /**
  * Event-driven atmosphere: eruption column and umbrella, downwind ash cloud, ballistic bombs,
- * lightning and PDC/lahar fronts. Uses instanced meshes only (WebGPU and WebGL2 alike).
+ * lightning and PDC/lahar fronts. Everything translucent is a camera-facing soft sprite on an
+ * instanced quad (WebGPU and WebGL2 alike); counts follow the quality setting and, for the column,
+ * how much of the screen it covers, so overlapping puffs do not pile up overdraw close up.
  */
 export function Atmosphere({ world }: { world: WorldInfo }) {
   const events = useStore((s) => s.events);
@@ -101,10 +107,17 @@ export function Atmosphere({ world }: { world: WorldInfo }) {
           const vs = st.state.volcanoes[v.id];
           if (!vs?.plume) continue;
           const vent = v.vents[0];
+          if (!vent) continue;
           const base = displayZ(world, vent.at[0], vent.at[1], vExag, dExag);
           const top = vs.plume.topZ * vExag;
           const height = Math.max(200, top - base);
-          for (let k = 0; k < counts.plume / world.volcanoes.length && np < counts.plume; k++, np++) {
+          // overdraw scales with how much of the screen the column covers: close up, fewer and
+          // larger puffs; far away the full count keeps the column dense
+          const dist = Math.max(1, camera.position.distanceTo(p.set(vent.at[0], base + height * 0.5, -vent.at[1])));
+          const lod = Math.min(1, Math.max(0.25, dist / (height * 3)));
+          const grow = 1 / Math.sqrt(lod);
+          const perVolcano = Math.round((counts.plume / world.volcanoes.length) * lod);
+          for (let k = 0; k < perVolcano && np < counts.plume; k++, np++) {
             const life = (wall * 0.08 + hash(k)) % 1;
             const h = life * height;
             const umbrella = Math.max(0, (life - 0.75) / 0.25);
@@ -114,18 +127,18 @@ export function Atmosphere({ world }: { world: WorldInfo }) {
             const drift = h * 0.25 * (wind.speed / 10);
             p.set(vent.at[0] + Math.cos(ang) * rr + wx * drift, base + h - umbrella * height * 0.05, -(vent.at[1] + Math.sin(ang) * rr + wy * drift));
             // puffs grow and lighten as the column entrains air and cools
-            const size = 90 + spread * 0.9;
+            const size = (90 + spread * 0.9) * grow;
             m.compose(p, q, s.set(size, size, size));
             plume.setMatrixAt(np, m);
             tint.copy(dark).lerp(light, Math.min(1, life * 1.2));
             plume.setColorAt(np, tint);
           }
-          for (let k = 0; k < counts.ash / world.volcanoes.length && na < counts.ash; k++, na++) {
+          for (let k = 0; k < Math.round((counts.ash / world.volcanoes.length) * lod) && na < counts.ash; k++, na++) {
             const d = ((wall * 0.03 + hash(k + 101)) % 1) * 9000;
             const lateral = (hash(k + 202) - 0.5) * (300 + d * 0.35);
             const z = top - d * 0.05 - hash(k + 303) * height * 0.3;
             p.set(vent.at[0] + wx * d - wy * lateral, Math.max(base, z), -(vent.at[1] + wy * d + wx * lateral));
-            const size = 260 + d * 0.06;
+            const size = (260 + d * 0.06) * grow;
             m.compose(p, q, s.set(size, size * 0.6, size));
             ash.setMatrixAt(na, m);
           }
@@ -181,7 +194,7 @@ export function Atmosphere({ world }: { world: WorldInfo }) {
           const x = b.start[0] + b.velocity[0] * t;
           const y = b.start[1] + b.velocity[1] * t;
           const z = b.start[2] + b.velocity[2] * t - 0.5 * G * t * t;
-          m.compose(p.set(x, z * vExag, -y), q, s.set(10, 10, 10));
+          m.compose(p.set(x, z * vExag, -y), q, s.set(16, 16, 16));
           bm.setMatrixAt(nb++, m);
         }
       }
@@ -189,22 +202,35 @@ export function Atmosphere({ world }: { world: WorldInfo }) {
       bm.instanceMatrix.needsUpdate = true;
     }
 
-    // ── PDC / lahar fronts ──
+    // ── PDC / lahar fronts: soft dust puffs resting on the ground, one per merged cell group ──
     const fm = frontRef.current;
     if (fm) {
       let nf = 0;
       if (show) {
-        for (const f of fronts) {
-          if (now - f.time > 300) continue;
+        const seen = new Set<number>();
+        // newest first: a cell covered by a newer front keeps the newer puff
+        for (let fi = fronts.length - 1; fi >= 0 && nf < MAX_FRONT; fi--) {
+          const f = fronts[fi];
+          const age = now - f.time;
+          if (age < 0 || age > FRONT_FADE_S) continue;
+          const fade = 1 - age / FRONT_FADE_S;
+          const size = (f.flow === 'LAHAR' ? 70 : 140) * (0.6 + 0.4 * fade);
           for (const c of f.cells) {
             if (nf >= MAX_FRONT) break;
-            const z = displayZ(world, c[0], c[1], vExag, dExag);
-            m.compose(p.set(c[0], z + 25, -c[1]), q, s.set(45, 30, 45));
-            fm.setMatrixAt(nf++, m);
+            const key = Math.round(c[0] / FRONT_MERGE_M) * 73856093 + Math.round(c[1] / FRONT_MERGE_M) * 19349663;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const ground = Math.max(displayZ(world, c[0], c[1], vExag, dExag), (world.hasSea === false ? -Infinity : world.seaLevel) * vExag);
+            m.compose(p.set(c[0], ground + size * 0.35, -c[1]), q, s.set(size, size * 0.7, size));
+            fm.setMatrixAt(nf, m);
+            tint.set(f.flow === 'LAHAR' ? '#6f5a44' : '#b9ab98').multiplyScalar(0.55 + 0.45 * fade);
+            fm.setColorAt(nf, tint);
+            nf++;
           }
         }
       }
       fm.count = nf;
+      if (fm.instanceColor) fm.instanceColor.needsUpdate = true;
       fm.instanceMatrix.needsUpdate = true;
     }
 
@@ -255,13 +281,15 @@ export function Atmosphere({ world }: { world: WorldInfo }) {
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial map={puff} color="#ffb347" transparent opacity={0.9} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </instancedMesh>
-      <instancedMesh ref={bombRef} args={[undefined, undefined, MAX_BOMBS]} frustumCulled={false}>
-        <icosahedronGeometry args={[1, 0]} />
-        <meshBasicMaterial color="#ff8a3c" toneMapped={false} />
+      {/* bombs: small glowing billboards (incandescent clasts), not faceted solids */}
+      <instancedMesh ref={bombRef} args={[undefined, undefined, MAX_BOMBS]} frustumCulled={false} renderOrder={9}>
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial map={puff} color="#ff8a3c" transparent opacity={0.95} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </instancedMesh>
+      {/* pyroclastic-flow and lahar fronts: soft dust billows (instance colour carries kind and fade) */}
       <instancedMesh ref={frontRef} args={[undefined, undefined, MAX_FRONT]} frustumCulled={false} renderOrder={8}>
-        <icosahedronGeometry args={[1, 0]} />
-        <meshStandardMaterial color="#c9b9a0" transparent opacity={0.55} depthWrite={false} />
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial map={puff} transparent opacity={0.5} depthWrite={false} />
       </instancedMesh>
       <group ref={boltGroup} />
     </group>
