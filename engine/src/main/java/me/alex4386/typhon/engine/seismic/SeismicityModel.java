@@ -119,13 +119,14 @@ public final class SeismicityModel implements Subsystem {
         double transientAmplitude = 0;
         int vtCount = random.nextPoisson(expectedVtRate * dt);
         for (int i = 0; i < vtCount; i++) {
-            boolean swarm = swarmActive(now);
+            double t = within(now, dt, i, vtCount, random);
+            boolean swarm = swarmActive(t);
             double b = swarm ? config.swarmBValue() : config.vtBValue();
             double m = GutenbergRichter.sample(random, b, config.minMagnitude(), config.maxMagnitude());
             BlockPos hypocenter = hypocenter(random, 0, 0.7, 1.0);
-            transientAmplitude += emit(context, SeismicEventType.VT, m, hypocenter, transientSeconds(0.5, m), swarm);
+            transientAmplitude += emit(context, t, SeismicEventType.VT, m, hypocenter, transientSeconds(0.5, m), swarm);
             if (!swarm && random.chance(config.swarmTriggerProbability())) {
-                swarmUntil = now + random.nextExponential(1 / config.swarmMeanDurationSeconds());
+                swarmUntil = t + random.nextExponential(1 / config.swarmMeanDurationSeconds());
             }
         }
 
@@ -139,17 +140,19 @@ public final class SeismicityModel implements Subsystem {
 
         int lpCount = random.nextPoisson(expectedLpRate * dt);
         for (int i = 0; i < lpCount; i++) {
+            double t = within(now, dt, i, lpCount, random);
             double m = GutenbergRichter.sample(random, config.lpBValue(), config.minMagnitude(), config.lpMaxMagnitude());
             BlockPos hypocenter = hypocenter(random, 0.6, 1.0, 0.4);
-            transientAmplitude += emit(context, SeismicEventType.LP, m, hypocenter, transientSeconds(1.0, m), false);
+            transientAmplitude += emit(context, t, SeismicEventType.LP, m, hypocenter, transientSeconds(1.0, m), false);
         }
 
         int explosionCount = random.nextPoisson(expectedExplosionRate * dt);
         for (int i = 0; i < explosionCount; i++) {
+            double t = within(now, dt, i, explosionCount, random);
             double m = GutenbergRichter.sample(
                     random, config.explosionBValue(), config.explosionMinMagnitude(), config.explosionMaxMagnitude());
             BlockPos hypocenter = config.conduitTop().offset(0, -random.nextInt(0, 10), 0);
-            transientAmplitude += emit(context, SeismicEventType.EXPLOSION, m, hypocenter, transientSeconds(1.0, m), false);
+            transientAmplitude += emit(context, t, SeismicEventType.EXPLOSION, m, hypocenter, transientSeconds(1.0, m), false);
         }
         for (QueuedExplosion q : explosions) {
             transientAmplitude += emit(context, SeismicEventType.EXPLOSION, q.magnitude(), q.hypocenter(),
@@ -162,15 +165,13 @@ public final class SeismicityModel implements Subsystem {
             tremorUntil = now;
         }
         if (erupting && !tremorActive(now)) {
-            // Tremor amplitude and how readily it sets in follow the physical magma flux, not the
-            // time-compressed rate (LP counts above do scale with time).
-            double physicalRate = Math.max(0, magma.eruptionRate());
-            double onsetRate = config.tremorEpisodeRate() * Math.sqrt(physicalRate);
+            // Tremor amplitude and how readily it sets in follow the magma flux.
+            double onsetRate = config.tremorEpisodeRate() * Math.sqrt(eruptionRate);
             if (random.chance(1 - Math.exp(-onsetRate * dt))) {
                 double seconds = random.nextExponential(1 / config.tremorMeanDurationSeconds());
                 double duration = Math.max(0.05, seconds);
                 tremorUntil = now + duration;
-                tremorMagnitude = config.tremorBaseMagnitude() + 0.5 * Math.log10(1 + physicalRate);
+                tremorMagnitude = config.tremorBaseMagnitude() + 0.5 * Math.log10(1 + eruptionRate);
                 emit(context, SeismicEventType.TREMOR, tremorMagnitude, hypocenter(random, 0.8, 1.0, 0.2), duration, false);
             }
         }
@@ -256,8 +257,21 @@ public final class SeismicityModel implements Subsystem {
         return viscous * wet;
     }
 
+    /**
+     * Time of the {@code i}-th of {@code n} random events in the step {@code [now, now + dt)}: uniform
+     * within its share of the step, so a long quiet step spreads its quakes over its length, in order.
+     */
+    private static double within(double now, double dt, int i, int n, SimRandom random) {
+        return now + dt * (i + random.nextDouble()) / n;
+    }
+
     private double emit(StepContext context, SeismicEventType type, double magnitude, BlockPos hypocenter, double durationSeconds, boolean swarm) {
-        SeismicEvent event = new SeismicEvent(context.time(), config.volcanoId(), type, magnitude, hypocenter, durationSeconds, swarm);
+        return emit(context, context.time(), type, magnitude, hypocenter, durationSeconds, swarm);
+    }
+
+    private double emit(StepContext context, double time, SeismicEventType type, double magnitude, BlockPos hypocenter,
+            double durationSeconds, boolean swarm) {
+        SeismicEvent event = new SeismicEvent(time, config.volcanoId(), type, magnitude, hypocenter, durationSeconds, swarm);
         context.outbox().emit(event);
         if (quakeListener != null && type != SeismicEventType.TREMOR) quakeListener.accept(event);
         return event.amplitude();

@@ -193,10 +193,15 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
             if (macroClock < 1e-9) macroClock = 0;
             while (span > 1e-9) {
                 double part = Math.min(span, config.maxMacroSpanSeconds);
-                macroStep(part, part, true);
+                macroStep(part, true);
                 span -= part;
             }
         }
+    }
+
+    /** Surface-water routing of the last step: {substeps, tiles routed, deepest flowing water (m), last |dh/dt| (m/s)}. */
+    public double[] surfaceRoutingStats() {
+        return new double[] {surface.lastSubsteps, surface.lastRoutedTiles, surface.lastMaxDepth, surface.lastChangeRate()};
     }
 
     @Override
@@ -296,18 +301,17 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
     }
 
     /**
-     * One heat + groundwater step of {@code dtPhysical} seconds ({@code dtSim} is the time it
-     * covers; rain is integrated over physical time). With {@code levelOfDetail}, settled chunks are
+     * One heat + groundwater step of {@code span} seconds (rain is integrated over it). With {@code levelOfDetail}, settled chunks are
      * skipped (play); without, every chunk is stepped (spin-up, where slow transients must run to
      * completion).
      */
-    void macroStep(double dtPhysical, double dtSim, boolean levelOfDetail) {
+    void macroStep(double span, boolean levelOfDetail) {
         macroSteps++;
         long t0 = System.nanoTime();
         List<HeatSources.Chamber> chambers = chambers();
-        applyRain(dtPhysical);
-        Map<SolverChunk, Double> steps = activityAndSteps(dtPhysical, levelOfDetail);
-        Map<SolverChunk, double[]> energy = sourceEnergy(dtPhysical, steps);
+        applyRain(span);
+        Map<SolverChunk, Double> steps = activityAndSteps(span, levelOfDetail);
+        Map<SolverChunk, double[]> energy = sourceEnergy(span, steps);
         for (SolverChunk ch : steps.keySet()) {
             double[] e = energy.get(ch);
             if (e != null) for (double v : e) sourceHeat += v;
@@ -325,16 +329,16 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
         // Groundwater sub-steps: as long as the SOR solve converges, halved (down to
         // minGroundwaterStepSeconds) where it does not. Depends only on the state: deterministic.
         double done = 0;
-        double step = dtPhysical;
-        while (done < dtPhysical) {
-            double dt = Math.min(step, dtPhysical - done);
+        double step = span;
+        while (done < span) {
+            double dt = Math.min(step, span - done);
             boolean last = dt <= config.minGroundwaterStepSeconds;
-            if (groundwater.step(dt, dt / dtPhysical, heat.boiledVolume,
+            if (groundwater.step(dt, dt / span, heat.boiledVolume,
                     (ch, c, v) -> discharge(ch, c, v, SurfaceWater.Source.SPRING), !last)) {
                 seaGroundwater += groundwater.seaExchange;
                 deficit += groundwater.deficitVolume;
                 done += dt;
-                if (dtPhysical - done < 1e-9 * dtPhysical) break;
+                if (span - done < 1e-9 * span) break;
             } else {
                 step = Math.max(config.minGroundwaterStepSeconds, dt / 2);
             }
@@ -567,7 +571,7 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
             double dt = Math.min(maxStep, seconds - t);
             spinningUp = true;
             try {
-                macroStep(dt, dt, false);
+                macroStep(dt, false);
             } finally {
                 spinningUp = false;
             }

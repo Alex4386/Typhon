@@ -26,8 +26,20 @@ public final class SubsurfaceConfig {
     public double surfaceWaterStepSeconds = 1;
     /** Longest single heat/groundwater solve (s); longer spans are split (groundwater sub-steps further). */
     public double maxMacroSpanSeconds = 7 * 86_400;
-    /** Longest engine step while surface water moves (s): keeps the CFL sub-steps per step bounded. */
-    public double movingWaterStepSeconds = 30;
+    /**
+     * Longest engine step while surface water moves (s). The flow sub-steps at its own CFL step
+     * whatever the engine step; this only bounds how long other subsystems (erosion, lahars) see the
+     * same water. A spring keeps water moving for good, so a quiet volcano with springs still takes
+     * steps of up to this.
+     */
+    public double movingWaterStepSeconds = 86_400;
+    /**
+     * Surface-water routing per engine step at most (s). Shallow flows reach a quasi-steady state
+     * within minutes; a longer step routes this long and keeps the flow field, while sources,
+     * infiltration and evaporation still integrate over the whole step. Scale knob: raise it to route
+     * long steps in full (cost grows with it).
+     */
+    public double surfaceWaterRoutingSeconds = 300;
 
     // ── Thermal ──
     /** Mean annual surface temperature (°C); upper boundary of conduction. */
@@ -127,7 +139,8 @@ public final class SubsurfaceConfig {
     public void validate() {
         if (levels < 2 || levels > 64) throw new IllegalArgumentException("levels must be in [2, 64]");
         if (!(firstLevelM > 0) || !(levelGrowth >= 1)) throw new IllegalArgumentException("bad level geometry");
-        if (!(macroStepSeconds > 0) || !(surfaceWaterStepSeconds > 0)) {
+        if (!(macroStepSeconds > 0) || !(surfaceWaterStepSeconds > 0) || !(maxMacroSpanSeconds > 0)
+                || !(movingWaterStepSeconds > 0) || !(surfaceWaterRoutingSeconds > 0)) {
             throw new IllegalArgumentException("time steps must be > 0");
         }
         if (rainfallMmPerHour < 0 || evaporationMmPerHour < 0) throw new IllegalArgumentException("negative rates");

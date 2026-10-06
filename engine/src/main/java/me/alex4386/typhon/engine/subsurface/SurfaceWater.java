@@ -35,6 +35,17 @@ final class SurfaceWater {
     static final int AREA = TILE * TILE;
     /** Discharge (m²/s) below which a tile's water counts as at rest. */
     static final double SETTLED_DISCHARGE = 1e-6;
+    /**
+     * A step's routing ends early once the rest of it could change no column's depth by more than this
+     * (m), at the current largest rate of change: the flow is quasi-steady.
+     */
+    static final double STEADY_DEPTH_M = 0.01;
+    /** Largest |dh/dt| (m/s) of the last substep. */
+    private double lastChangeRate;
+    /** Diagnostics of the last step: substeps routed, tiles routed, deepest flowing water (m). */
+    int lastSubsteps;
+    int lastRoutedTiles;
+    double lastMaxDepth;
 
     static final class Tile {
         final int tx;
@@ -43,6 +54,11 @@ final class SurfaceWater {
         /** Unit-width discharge (m²/s) through the east / south face of each column. */
         final double[] qEast = new double[AREA];
         final double[] qSouth = new double[AREA];
+        /** Discharges at the start of the current substep (for the θ-weighted update); see {@link #snapped}. */
+        final double[] qEastOld = new double[AREA];
+        final double[] qSouthOld = new double[AREA];
+        /** Whether {@link #qEastOld}/{@link #qSouthOld} hold this substep's start (routed tiles only). */
+        boolean snapped;
         // Derived from the world model
         final double[] bed = new double[AREA];
         final boolean[] known = new boolean[AREA];
@@ -396,6 +412,10 @@ final class SurfaceWater {
         void accept(int x, int z, double volumeM3);
     }
 
+    double lastChangeRate() {
+        return lastChangeRate;
+    }
+
     /** Whether any surface water moves (an unsettled tile): lakes at rest and the open sea do not. */
     boolean moving() {
         for (Tile t : tiles.values()) if (!t.settled) return true;
@@ -458,17 +478,24 @@ final class SurfaceWater {
             if (!t.settled) list.add(t);
         }
         double dx = world.spec().metersPerColumn();
-        double remaining = dt;
+        // Routing covers at most surfaceWaterRoutingSeconds of a long step: shallow flows settle within
+        // minutes, so a quiet day-long step keeps them quasi-steady without a day of CFL sub-steps.
+        // Volumes stay exact: sources, infiltration and evaporation integrate over the whole step.
+        double remaining = Math.min(dt, config.surfaceWaterRoutingSeconds);
         int guard = 0;
         // Open-water columns next to land have a fixed depth: their part of the CFL depth is cached
         // per tile; the moving water's part comes out of each substep's gather (phase 3).
         double maxDepth = Math.max(config.minFlowDepthM, maxFlowDepth(list));
-        while (remaining > 1e-9 && guard++ < 10_000) {
+        while (remaining > 1e-9 && guard++ < 10_000_000) {
             double stable = config.surfaceWaterCfl * dx / Math.sqrt(SubsurfaceGrid.GRAVITY * maxDepth);
             double h = Math.min(remaining, stable);
             maxDepth = Math.max(config.minFlowDepthM, substep(list, h, dx));
             remaining -= h;
+            if (lastChangeRate * remaining < STEADY_DEPTH_M) break; // quasi-steady: the rest would change < 1 cm
         }
+        lastSubsteps = guard;
+        lastRoutedTiles = list.size();
+        lastMaxDepth = maxDepth;
         parallel.forEach(list, (idx, t) -> {
             double maxQ = 0;
             for (int i = 0; i < AREA; i++) maxQ = Math.max(maxQ, Math.max(Math.abs(t.qEast[i]), Math.abs(t.qSouth[i])));
@@ -625,7 +652,12 @@ final class SurfaceWater {
         double minDepth = config.minFlowDepthM;
         // Each phase writes only the columns of its item, so items run in parallel and the result
         // does not depend on the thread count. Only active columns are visited (see collectActive).
-        parallel.forEach(list, (idx, t) -> collectActive(t));
+        parallel.forEach(list, (idx, t) -> {
+            collectActive(t);
+            System.arraycopy(t.qEast, 0, t.qEastOld, 0, AREA);
+            System.arraycopy(t.qSouth, 0, t.qSouthOld, 0, AREA);
+            t.snapped = true;
+        });
         List<int[]> items = activeItems(list);
         // 1. Face discharges (east and south face of every active column). Reads only state no item writes.
         parallel.forEach(items, (idx, item) -> {
@@ -644,8 +676,16 @@ final class SurfaceWater {
                 int je = lx < 31 ? i + 1 : i - 31;
                 Tile ts = lz < 31 ? t : t.south;
                 int js = lz < 31 ? i + TILE : i - 31 * TILE;
-                t.qEast[i] = faceFlux(t, i, te, je, t.qEast[i], dt, dx, g, n2, minDepth);
-                t.qSouth[i] = faceFlux(t, i, ts, js, t.qSouth[i], dt, dx, g, n2, minDepth);
+                Tile tw = lx > 0 ? t : t.west;
+                int jw = lx > 0 ? i - 1 : i + 31;
+                Tile tn = lz > 0 ? t : t.north;
+                int jn = lz > 0 ? i - TILE : i + 31 * TILE;
+                double qe = t.qEastOld[i];
+                double qs = t.qSouthOld[i];
+                double qeBar = THETA * qe + (1 - THETA) / 2 * (old(tw, jw, true, qe) + old(te, je, true, qe));
+                double qsBar = THETA * qs + (1 - THETA) / 2 * (old(tn, jn, false, qs) + old(ts, js, false, qs));
+                t.qEast[i] = faceFlux(t, i, te, je, qe, qeBar, dt, dx, g, n2, minDepth);
+                t.qSouth[i] = faceFlux(t, i, ts, js, qs, qsBar, dt, dx, g, n2, minDepth);
             }
         });
         // 2. Outflow limiter: scale the outgoing faces of each column so its depth stays ≥ 0 (only
@@ -676,12 +716,13 @@ final class SurfaceWater {
         // A column writes only its own depth (and activity flag) and reads only discharges and
         // limiters, so items run in parallel; their open-water books are folded in item order.
         double area = cellArea();
-        double[][] sea = new double[items.size()][3]; // {inflow from, outflow to open water, max depth}
+        double[][] sea = new double[items.size()][4]; // {inflow from, outflow to open water, max depth, max |dh/dt|}
         parallel.forEach(items, (idx, item) -> {
             Tile t = list.get(item[0]);
             int[] active = t.active;
             double[] book = sea[idx];
             double max = 0;
+            double change = 0;
             for (int a = item[1]; a < item[2]; a++) {
                 int i = active[a];
                 if (!t.known[i] || t.fixedMask[i]) {
@@ -707,20 +748,42 @@ final class SurfaceWater {
                 if (tn != null) delta += moved(tn, jn, t, i, tn.qSouth[jn], dt, dx, area, book, false);
                 double d = t.depth[i] + delta;
                 d = d < 0 ? 0 : d;
+                double rate = Math.abs(d - t.depth[i]) / dt;
+                if (rate > change) change = rate;
                 t.depth[i] = d;
                 if (d > max) max = d;
                 t.wet[i] = (byte) (d > 0 || t.qEast[i] != 0 || t.qSouth[i] != 0 ? 1 : 0);
             }
             book[2] = max;
+            book[3] = change;
         });
         double max = 0;
+        double change = 0;
         for (double[] book : sea) {
             seaInflow += book[0];
             seaOutflow += book[1];
             max = Math.max(max, book[2]);
+            change = Math.max(change, book[3]);
         }
+        lastChangeRate = change;
         for (Tile t : list) max = Math.max(max, fixedFlowDepth(t));
+        for (Tile t : list) t.snapped = false;
         return max;
+    }
+
+    /**
+     * θ of the momentum update (de Almeida, Bates, Freer &amp; Souvignet 2012, WRR 48, W05528): each
+     * face's discharge is relaxed towards its two neighbours' along the flow direction, which damps
+     * the checkerboard oscillation of the local-inertial scheme (Bates et al. 2010) in deep, slow
+     * water so ponds settle instead of sloshing for ever.
+     */
+    static final double THETA = 0.8;
+
+    /** A neighbouring face's discharge at the start of the substep ({@code fallback} off the field). */
+    private static double old(Tile t, int i, boolean east, double fallback) {
+        if (t == null) return fallback;
+        if (t.snapped) return east ? t.qEastOld[i] : t.qSouthOld[i];
+        return east ? t.qEast[i] : t.qSouth[i]; // not routed this substep: unchanged
     }
 
     /**
@@ -744,8 +807,8 @@ final class SurfaceWater {
         return depth;
     }
 
-    private static double faceFlux(Tile t, int i, Tile o, int j, double q, double dt, double dx, double g, double n2,
-            double minDepth) {
+    private static double faceFlux(Tile t, int i, Tile o, int j, double q, double qBar, double dt, double dx, double g,
+            double n2, double minDepth) {
         if (o == null || !o.known[j]) return 0;
         boolean fi = t.fixed(i);
         boolean fj = o.fixed(j);
@@ -757,6 +820,6 @@ final class SurfaceWater {
         if (hf <= minDepth) return 0;
         double slope = (etaJ - etaI) / dx;
         // hf^(7/3) as hf²·∛hf: same value to rounding, several times cheaper than pow
-        return (q - g * hf * dt * slope) / (1 + g * dt * n2 * Math.abs(q) / (hf * hf * Math.cbrt(hf)));
+        return (qBar - g * hf * dt * slope) / (1 + g * dt * n2 * Math.abs(q) / (hf * hf * Math.cbrt(hf)));
     }
 }
