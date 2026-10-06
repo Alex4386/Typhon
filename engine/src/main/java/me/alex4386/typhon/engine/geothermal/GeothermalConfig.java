@@ -42,6 +42,12 @@ public final class GeothermalConfig {
     public double chamberRadiusM = 1000.0;
     /** Thermal conductivity (W/m·K) of lava resting on the ground, for {@link Geothermal#addLavaHeat}. */
     public double lavaConductivity = 1.5;
+    /**
+     * After lava last covered a column, no spring, geyser, mud pot or fumarole forms there for this
+     * long (s of volcano time): a fresh flow is dry, hot, fractured rock without a water table at its
+     * surface. Features on a column that lava reaches are buried.
+     */
+    public double lavaExclusionSeconds = 30 * 86400.0;
 
     // ── Activity from the magma system ──
     public double activityMinChamberC = 600.0;

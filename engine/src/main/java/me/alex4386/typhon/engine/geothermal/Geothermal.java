@@ -85,6 +85,10 @@ public final class Geothermal implements Subsystem, HeatSources {
     private final Map<HydrothermalFeature, Integer> counts = new EnumMap<>(HydrothermalFeature.class);
     private double hazardClock;
     private boolean prewarmed;
+    /** Columns lava has covered: column key → simulated time (s) it was last covered. */
+    private final TreeMap<Long, Double> lavaCover = new TreeMap<>();
+    /** Simulated time of the current step (s). */
+    private double now;
     /** Last announced fumarole intensity and time (s), by column key. */
     private final TreeMap<Long, double[]> fumaroleReports = new TreeMap<>();
     /** Last announced hazard concentration and time (s), by {@code zone · species count + species}. */
@@ -166,6 +170,8 @@ public final class Geothermal implements Subsystem, HeatSources {
     @Override
     public void step(StepContext context) {
         parallel = context.parallel();
+        now = context.time();
+        buryUnderLava(context);
         double dt = context.dtSeconds() * config.timeScale;
         sampleTerrain();
         if (!prewarmed && config.prewarmSeconds > 0 && knownFraction() >= 0.5) {
@@ -219,6 +225,7 @@ public final class Geothermal implements Subsystem, HeatSources {
      */
     public void addLavaHeat(int x, int z, double lavaTemperatureC, double thicknessM) {
         if (!(thicknessM > 0)) return;
+        lavaCover.put(PlacedFeature.key(x, z), now);
         double groundC = field.temperatureC(x, z, 0);
         double flux = config.lavaConductivity * Math.max(0, lavaTemperatureC - groundC) / Math.max(0.25, thicknessM / 2);
         double l = terrain.world().spec().metersPerColumn();
@@ -859,6 +866,7 @@ public final class Geothermal implements Subsystem, HeatSources {
     /** Known, dry, alterable and unoccupied column, or {@code null}. */
     private TerrainColumn buildableColumn(int x, int z) {
         if (features.containsKey(PlacedFeature.key(x, z))) return null;
+        if (lavaCovered(x, z)) return null;
         TerrainColumn column = terrain.column(x, z);
         if (column == null || column.submerged()) return null;
         if (!config.alterableSurfaces.contains(column.surface())) return null;
@@ -888,6 +896,35 @@ public final class Geothermal implements Subsystem, HeatSources {
             }
         }
         return false;
+    }
+
+    /**
+     * True while lava covers column (x, z) or covered it within {@link GeothermalConfig#lavaExclusionSeconds}
+     * of volcano time: no surface feature belongs on a fresh flow.
+     */
+    boolean lavaCovered(int x, int z) {
+        Double at = lavaCover.get(PlacedFeature.key(x, z));
+        return at != null && (now - at) * config.timeScale <= config.lavaExclusionSeconds;
+    }
+
+    /**
+     * Features on columns lava reached since the last step are buried: removed (their entity goes) with
+     * a {@link HydrothermalFeatureBuried} event. Cover older than the exclusion window is forgotten.
+     */
+    private void buryUnderLava(StepContext context) {
+        if (lavaCover.isEmpty()) return;
+        List<Long> stale = new ArrayList<>();
+        for (Map.Entry<Long, Double> e : lavaCover.entrySet()) {
+            if ((now - e.getValue()) * config.timeScale > config.lavaExclusionSeconds) {
+                stale.add(e.getKey());
+                continue;
+            }
+            PlacedFeature f = features.remove(e.getKey());
+            if (f == null) continue;
+            counts.merge(f.kind(), -1, Integer::sum);
+            context.outbox().emit(new HydrothermalFeatureBuried(context.time(), f.kind(), new BlockPos(f.x(), f.y(), f.z())));
+        }
+        for (long k : stale) lavaCover.remove(k);
     }
 
     private void register(PlacedFeature feature) {
@@ -957,6 +994,15 @@ public final class Geothermal implements Subsystem, HeatSources {
         }
         out.add("features", list);
         out.addProperty("prewarmed", prewarmed);
+        JsonArray cover = new JsonArray();
+        for (Map.Entry<Long, Double> e : lavaCover.entrySet()) {
+            JsonArray entry = new JsonArray();
+            entry.add(e.getKey());
+            entry.add(Double.doubleToRawLongBits(e.getValue()));
+            cover.add(entry);
+        }
+        out.add("lavaCover", cover);
+        out.addProperty("now", Double.doubleToRawLongBits(now));
         out.add("fumaroleReports", saveReports(fumaroleReports));
         out.add("hazardReports", saveReports(hazardReports));
     }
@@ -999,6 +1045,14 @@ public final class Geothermal implements Subsystem, HeatSources {
                     entry.get(4).getAsInt()));
         }
         prewarmed = in.has("prewarmed") && in.get("prewarmed").getAsBoolean();
+        lavaCover.clear();
+        if (in.has("lavaCover")) {
+            for (JsonElement element : in.getAsJsonArray("lavaCover")) {
+                JsonArray entry = element.getAsJsonArray();
+                lavaCover.put(entry.get(0).getAsLong(), Double.longBitsToDouble(entry.get(1).getAsLong()));
+            }
+        }
+        now = in.has("now") ? Double.longBitsToDouble(in.get("now").getAsLong()) : 0;
         loadReports(in, "fumaroleReports", fumaroleReports);
         loadReports(in, "hazardReports", hazardReports);
     }

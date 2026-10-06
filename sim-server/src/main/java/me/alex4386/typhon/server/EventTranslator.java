@@ -209,6 +209,14 @@ final class EventTranslator {
                 default -> feature(e.time(), e.feature().name(), e.pos());
             };
             case GeyserFormed e -> feature(e.time(), HydrothermalFeature.GEYSER.name(), e.potentSulfur());
+            case me.alex4386.typhon.engine.geothermal.HydrothermalFeatureBuried e -> switch (e.feature()) {
+                case ACID_ALTERATION, SINTER, CINNABAR -> null;
+                default -> {
+                    JsonObject o = feature(e.time(), e.feature().name(), e.pos());
+                    o.addProperty("kind", "geothermalFeatureBuried");
+                    yield o;
+                }
+            };
             case me.alex4386.typhon.engine.expansion.ExpansionEvents.AreaExpanded e -> {
                 JsonObject o = new JsonObject();
                 o.addProperty("kind", "areaExpanded");

@@ -373,6 +373,37 @@ class GeothermalTest {
     }
 
     @Test
+    void noFeaturesFormOnFreshLava() {
+        // the same hot, wet ground that grows geysers in the test above, but freshly covered by lava
+        Geothermal geothermal = frozen(geyserOnlyConfig(0.9), flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 140);
+        for (int x = -40; x < 40; x++) {
+            for (int z = -40; z < 40; z++) geothermal.addLavaHeat(x, z, 1150, 2);
+        }
+        assertTrue(geothermal.lavaCovered(0, 0));
+        List<EngineFrame> frames = run(geothermal, 3, 30);
+        assertTrue(events(frames, GeyserFormed.class).isEmpty(), "no geyser on a lava flow");
+        assertTrue(geothermal.featuresByColumn().isEmpty());
+    }
+
+    @Test
+    void lavaBuriesFeaturesItReaches() {
+        Geothermal geothermal = frozen(geyserOnlyConfig(0.9), flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 140);
+        Engine engine = engine(geothermal, 3).build();
+        List<GeyserFormed> geysers = events(run(engine, geothermal, 30), GeyserFormed.class);
+        assertFalse(geysers.isEmpty());
+        GeyserFormed first = geysers.get(0);
+        int x = first.potentSulfur().x();
+        int z = first.potentSulfur().z();
+        assertNotNull(geothermal.featuresByColumn().get(PlacedFeature.key(x, z)));
+
+        geothermal.addLavaHeat(x, z, 1150, 3);
+        List<HydrothermalFeatureBuried> buried = events(run(engine, geothermal, 1), HydrothermalFeatureBuried.class);
+        assertEquals(1, buried.stream().filter(b -> b.pos().x() == x && b.pos().z() == z).count(), buried.toString());
+        assertEquals(HydrothermalFeature.GEYSER, buried.get(0).feature());
+        assertNull(geothermal.featuresByColumn().get(PlacedFeature.key(x, z)), "its entity goes with it");
+    }
+
+    @Test
     void noGeysersWhenDryColdOrUnsupported() {
         assertTrue(events(run(frozen(geyserOnlyConfig(0.3), flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 140), 3, 30),
                 GeyserFormed.class).isEmpty(), "dry");
