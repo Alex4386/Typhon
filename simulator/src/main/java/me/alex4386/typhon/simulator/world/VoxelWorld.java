@@ -61,8 +61,8 @@ public final class VoxelWorld {
     }
 
     private BlockId implied(int x, int y, int z) {
-        if (!base.contains(x, z)) return BlockId.AIR;
-        TerrainColumn c = base.column(x, z);
+        TerrainColumn c = base.columnAnywhere(x, z);
+        if (c == null) return BlockId.AIR;
         if (y < c.groundY()) return STONE;
         if (y == c.groundY()) return c.surface();
         if (c.waterY() != TerrainColumn.NO_WATER && y <= c.waterY()) return WATER;
@@ -74,7 +74,7 @@ public final class VoxelWorld {
         int x = change.pos().x();
         int y = change.pos().y();
         int z = change.pos().z();
-        if (!base.contains(x, z)) {
+        if (!base.contains(x, z) && base.source() == null) {
             outside++;
             return false;
         }
@@ -98,7 +98,9 @@ public final class VoxelWorld {
 
     /** Highest solid block in the column (edits included). */
     public int topSolidY(int x, int z) {
-        int ground = base.ground(x, z);
+        TerrainColumn base0 = base.columnAnywhere(x, z);
+        if (base0 == null) return Integer.MIN_VALUE;
+        int ground = base0.groundY();
         NavigableMap<Integer, BlockState> column = edits.get(key(x, z));
         if (column == null || column.isEmpty()) return ground;
         int y = Math.max(ground, column.lastKey());
@@ -110,7 +112,8 @@ public final class VoxelWorld {
 
     /** Highest non-air block (lava and water included). */
     public int topY(int x, int z) {
-        TerrainColumn c = base.column(x, z);
+        TerrainColumn c = base.columnAnywhere(x, z);
+        if (c == null) return Integer.MIN_VALUE;
         int top = Math.max(c.groundY(), c.waterY() == TerrainColumn.NO_WATER ? Integer.MIN_VALUE : c.waterY());
         NavigableMap<Integer, BlockState> column = edits.get(key(x, z));
         if (column == null || column.isEmpty()) return top;

@@ -22,6 +22,7 @@ public final class ColumnGrid {
     private final int[] water;
     private final BlockId[] surface;
     private Relief relief;
+    private Source source;
 
     /**
      * The continuous surface a generator sampled the grid from: ground-block top in blocks at
@@ -31,6 +32,54 @@ public final class ColumnGrid {
     @FunctionalInterface
     public interface Relief {
         double topBlocks(double cx, double cz);
+    }
+
+    /**
+     * The generator itself: the column at any (x, z), a pure function of the coordinates (and the seed
+     * it was built with). A grid built from a source is a window onto an unbounded landscape; the
+     * engine materialises further columns from it on demand ({@code TerrainGenerator}).
+     */
+    @FunctionalInterface
+    public interface Source extends me.alex4386.typhon.engine.terrain.TerrainGenerator {}
+
+    /** A {@code size}-wide grid at ({@code minX}, {@code minZ}) filled from {@code source}. */
+    public static ColumnGrid generate(int minX, int minZ, int size, Source source, Relief relief) {
+        ColumnGrid grid = new ColumnGrid(minX, minZ, size);
+        grid.relief = relief;
+        grid.fill(source);
+        return grid;
+    }
+
+    /** Square grid of {@code 2 * halfExtent} columns centred on the origin, filled from {@code source}. */
+    public static ColumnGrid generateCentered(int halfExtent, Source source, Relief relief) {
+        int half = Math.max(16, ((halfExtent + 15) / 16) * 16);
+        return generate(-half, -half, 2 * half, source, relief);
+    }
+
+    /** Fills every column from {@code source} and keeps it as this grid's generator; returns this grid. */
+    public ColumnGrid fill(Source source) {
+        this.source = source;
+        for (int z = minZ; z < minZ + size; z++) {
+            for (int x = minX; x < minX + size; x++) {
+                TerrainColumn c = source.column(x, z);
+                set(x, z, c.groundY(), c.waterY(), c.surface());
+            }
+        }
+        return this;
+    }
+
+    /** The generator this grid was filled from, or {@code null} (edited grids, compact DEMs). */
+    public Source source() {
+        return source;
+    }
+
+    /**
+     * The same landscape over a different centred window of {@code 2 * halfExtent} columns (rounded up
+     * to whole chunks); requires a {@link #source()}.
+     */
+    public ColumnGrid window(int halfExtent) {
+        if (source == null) throw new IllegalStateException("this grid has no generator to re-window");
+        return generateCentered(halfExtent, source, relief);
     }
 
     public ColumnGrid(int minX, int minZ, int size) {
@@ -82,6 +131,12 @@ public final class ColumnGrid {
     public int water(int x, int z) { return water[index(x, z)]; }
     public BlockId surface(int x, int z) { return surface[index(x, z)]; }
 
+    /** The column at (x, z): from the grid inside it, from the generator outside ({@code null} without one). */
+    public TerrainColumn columnAnywhere(int x, int z) {
+        if (contains(x, z)) return column(x, z);
+        return source == null ? null : source.column(x, z);
+    }
+
     public TerrainColumn column(int x, int z) {
         int i = index(x, z);
         return new TerrainColumn(ground[i], water[i], surface[i]);
@@ -115,6 +170,7 @@ public final class ColumnGrid {
         System.arraycopy(water, 0, c.water, 0, water.length);
         System.arraycopy(surface, 0, c.surface, 0, surface.length);
         c.relief = relief;
+        c.source = source;
         return c;
     }
 

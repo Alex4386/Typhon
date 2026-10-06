@@ -62,14 +62,9 @@ public final class TerrainGenerators {
     public static ColumnGrid plain(int halfExtent, long seed) {
         ValueNoise noise = new ValueNoise(seed);
         DoubleBinaryOperator raw = (x, z) -> 2 * noise.fbm(x, z, 48, 3);
-        ColumnGrid grid = ColumnGrid.centered(halfExtent).withRelief(relief(BASE_Y, raw));
-        for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
-            for (int x = grid.minX(); x <= grid.maxX(); x++) {
-                int y = BASE_Y + (int) Math.round(raw.applyAsDouble(x, z));
-                grid.set(x, z, y, TerrainColumn.NO_WATER, GRASS);
-            }
-        }
-        return grid;
+        return ColumnGrid.generateCentered(halfExtent,
+                (x, z) -> new TerrainColumn(BASE_Y + (int) Math.round(raw.applyAsDouble(x, z)), TerrainColumn.NO_WATER, GRASS),
+                relief(BASE_Y, raw));
     }
 
     /** A cone (stratovolcano or cinder cone) standing on a plain. */
@@ -81,15 +76,11 @@ public final class TerrainGenerators {
             double rough = d > cone.craterRadius() ? 1.5 * noise.fbm(x, z, 24, 3) * Math.min(1, h / 8 + 0.3) : 0;
             return h + rough + 1.5 * noise.fbm(x, z, 64, 2);
         };
-        ColumnGrid grid = ColumnGrid.centered(halfExtent).withRelief(relief(BASE_Y, raw));
-        for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
-            for (int x = grid.minX(); x <= grid.maxX(); x++) {
-                double h = cone.profile(Math.sqrt((double) x * x + (double) z * z));
-                int y = BASE_Y + (int) Math.round(raw.applyAsDouble(x, z));
-                grid.set(x, z, y, TerrainColumn.NO_WATER, h > 2 ? cone.rock() : GRASS);
-            }
-        }
-        return grid;
+        return ColumnGrid.generateCentered(halfExtent, (x, z) -> {
+            double h = cone.profile(Math.sqrt((double) x * x + (double) z * z));
+            int y = BASE_Y + (int) Math.round(raw.applyAsDouble(x, z));
+            return new TerrainColumn(y, TerrainColumn.NO_WATER, h > 2 ? cone.rock() : GRASS);
+        }, relief(BASE_Y, raw));
     }
 
     /**
@@ -110,15 +101,11 @@ public final class TerrainGenerators {
             return d < pitRadius ? h - pitDepth : h;
         };
         DoubleBinaryOperator raw = (x, z) -> profile.applyAsDouble(x, z) + 1.2 * noise.fbm(x, z, 32, 3);
-        ColumnGrid grid = ColumnGrid.centered(halfExtent).withRelief(relief(BASE_Y, raw));
-        for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
-            for (int x = grid.minX(); x <= grid.maxX(); x++) {
-                double h = profile.applyAsDouble(x, z);
-                int y = BASE_Y + (int) Math.round(raw.applyAsDouble(x, z));
-                grid.set(x, z, y, TerrainColumn.NO_WATER, h > 1 ? basalt : GRASS);
-            }
-        }
-        return grid;
+        return ColumnGrid.generateCentered(halfExtent, (x, z) -> {
+            double h = profile.applyAsDouble(x, z);
+            int y = BASE_Y + (int) Math.round(raw.applyAsDouble(x, z));
+            return new TerrainColumn(y, TerrainColumn.NO_WATER, h > 1 ? basalt : GRASS);
+        }, relief(BASE_Y, raw));
     }
 
     /**
@@ -153,18 +140,14 @@ public final class TerrainGenerators {
             return floor + (rimHeight - floor) * wall * wall;
         };
         DoubleBinaryOperator raw = (x, z) -> profile.applyAsDouble(x, z) + 1.2 * noise.fbm(x, z, 40, 3);
-        ColumnGrid grid = ColumnGrid.centered(halfExtent).withRelief(relief(BASE_Y, raw));
-        for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
-            for (int x = grid.minX(); x <= grid.maxX(); x++) {
-                double d = Math.sqrt((double) x * x + (double) z * z);
-                double h = profile.applyAsDouble(x, z);
-                int y = BASE_Y + (int) Math.round(raw.applyAsDouble(x, z));
-                boolean inLake = d < rimRadius && y < lakeY;
-                BlockId surface = inLake ? SAND : (h > 2 ? tuff : GRASS);
-                grid.set(x, z, y, inLake ? lakeY : TerrainColumn.NO_WATER, surface);
-            }
-        }
-        return grid;
+        return ColumnGrid.generateCentered(halfExtent, (x, z) -> {
+            double d = Math.sqrt((double) x * x + (double) z * z);
+            double h = profile.applyAsDouble(x, z);
+            int y = BASE_Y + (int) Math.round(raw.applyAsDouble(x, z));
+            boolean inLake = d < rimRadius && y < lakeY;
+            BlockId surface = inLake ? SAND : (h > 2 ? tuff : GRASS);
+            return new TerrainColumn(y, inLake ? lakeY : TerrainColumn.NO_WATER, surface);
+        }, relief(BASE_Y, raw));
     }
 
     /**
@@ -185,16 +168,12 @@ public final class TerrainGenerators {
                 BlockId.minecraft("basalt"));
         BlockId basalt = BlockId.minecraft("basalt");
         DoubleBinaryOperator raw = (x, z) -> cone.profile(Math.sqrt(x * x + z * z)) + 1.5 * noise.fbm(x, z, 32, 3);
-        ColumnGrid grid = ColumnGrid.centered(halfExtent).withRelief(relief(seafloorY, raw));
-        for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
-            for (int x = grid.minX(); x <= grid.maxX(); x++) {
-                double h = cone.profile(Math.sqrt((double) x * x + (double) z * z));
-                int y = seafloorY + (int) Math.round(raw.applyAsDouble(x, z));
-                boolean submerged = y < seaLevel;
-                BlockId surface = submerged ? (h > 2 ? basalt : GRAVEL) : (y <= seaLevel + 1 ? SAND : basalt);
-                grid.set(x, z, y, submerged ? seaLevel : TerrainColumn.NO_WATER, surface);
-            }
-        }
-        return grid;
+        return ColumnGrid.generateCentered(halfExtent, (x, z) -> {
+            double h = cone.profile(Math.sqrt((double) x * x + (double) z * z));
+            int y = seafloorY + (int) Math.round(raw.applyAsDouble(x, z));
+            boolean submerged = y < seaLevel;
+            BlockId surface = submerged ? (h > 2 ? basalt : GRAVEL) : (y <= seaLevel + 1 ? SAND : basalt);
+            return new TerrainColumn(y, submerged ? seaLevel : TerrainColumn.NO_WATER, surface);
+        }, relief(seafloorY, raw));
     }
 }

@@ -65,8 +65,11 @@ class DemTerrainTest {
         Preset preset = Presets.get("kilauea-real");
         RealSetting real = preset.realSetting();
         Path file = coneDem(dir, real.dem().lat(), real.dem().lon(), 700);
-        ColumnGrid g = DemTerrain.load(file, real.metersPerColumn(), real.halfExtentColumns(), real.spec().seaLevelZ(),
-                real.dem().lat(), real.dem().lon());
+        // the world keeps DEM data as far as it may grow (expansion.maxExtentM)
+        int reach = Math.max(real.halfExtentColumns(), (int) Math.round(
+                me.alex4386.typhon.engine.expansion.ExpansionConfig.DEFAULTS.maxExtentM() / 2 / real.metersPerColumn()));
+        ColumnGrid g = DemTerrain.load(file, real.metersPerColumn(), real.halfExtentColumns(), reach,
+                real.spec().seaLevelZ(), real.dem().lat(), real.dem().lon());
         Scenario scenario = preset.build(4, g, Scenario.Options.DEFAULT);
         VentSite vent = scenario.volcano().vents().get(0);
         assertEquals(g.ground(0, 0), vent.position().y(), "vent re-anchored on the DEM");
@@ -74,7 +77,11 @@ class DemTerrainTest {
         Path world = dir.resolve("world");
         WorldScenarios.writeFromPreset(preset, 4, world, file);
         String yaml = Files.readString(world.resolve("world.yaml"));
-        assertTrue(yaml.contains("source: dem") && yaml.contains("centerLat"), yaml);
+        assertTrue(yaml.contains("source: dem") && yaml.contains("centerLat") && yaml.contains("coreExtentM"), yaml);
+        // compare at the preset's own window: drop the world's larger core
+        yaml = yaml.replaceAll("(?m)^  coreExtentM: .*\\R", "")
+                .replaceAll("(?m)^  halfExtent: .*$", "  halfExtent: " + real.halfExtentColumns());
+        Files.writeString(world.resolve("world.yaml"), yaml);
         Scenario fromWorld = WorldScenarios.open(world, World.ChangePolicy.REJECT);
         assertEquals(scenario.engine().stateHash(), fromWorld.engine().stateHash());
         scenario.engine().runFor(5);

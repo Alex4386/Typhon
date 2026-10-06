@@ -1,5 +1,7 @@
 package me.alex4386.typhon.simulator.scenario;
 
+import me.alex4386.typhon.simulator.terrain.ColumnGrid;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -30,6 +32,13 @@ class WorldScenariosTest {
         Preset preset = Presets.get(name);
         WorldScenarios.writeFromPreset(preset, 3, dir);
         assertTrue(Files.exists(dir.resolve("world.yaml")));
+        // compare at the preset's own window (real-preset worlds start with a larger core, checked below)
+        try {
+            Path yaml = dir.resolve("world.yaml");
+            Files.writeString(yaml, Files.readString(yaml).replaceAll("(?m)^  coreExtentM: .*\\R", ""));
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
 
         Scenario fromPreset = preset.build(3);
         Scenario fromWorld = WorldScenarios.open(dir, World.ChangePolicy.REJECT);
@@ -38,6 +47,30 @@ class WorldScenariosTest {
         fromPreset.engine().runFor(10);
         fromWorld.engine().runFor(10);
         assertEquals(fromPreset.engine().stateHash(), fromWorld.engine().stateHash(), "and run identically");
+    }
+
+    @ParameterizedTest
+    @MethodSource("presets")
+    void worldCoreIsAWiderWindowOntoTheSameLandscape(String name, @TempDir Path dir) throws Exception {
+        Preset preset = Presets.get(name);
+        double core = preset.worldCoreExtentM();
+        if (Double.isNaN(core)) return;
+        WorldScenarios.writeFromPreset(preset, 3, dir);
+        assertTrue(Files.readString(dir.resolve("world.yaml")).contains("coreExtentM"));
+        var definition = new me.alex4386.typhon.engine.worlds.WorldDirectory(dir).readWorld();
+        ColumnGrid wide = WorldScenarios.terrain(definition, dir);
+        ColumnGrid own = preset.terrain(3);
+        double l = definition.spec().metersPerColumn();
+        assertEquals(2 * WorldScenarios.halfColumns(core, l), wide.size(), 16);
+        assertTrue(wide.size() > own.size(), "the world core is larger than the preset's run window");
+        for (int z = own.minZ(); z <= own.maxZ(); z += 7) {
+            for (int x = own.minX(); x <= own.maxX(); x += 7) {
+                assertEquals(own.column(x, z), wide.column(x, z), "column " + x + "," + z);
+            }
+        }
+        // and beyond both, the generator continues the same landscape
+        int far = wide.maxX() + 40;
+        assertEquals(own.source().column(far, 5), wide.source().column(far, 5));
     }
 
     private static String run(String... args) throws Exception {

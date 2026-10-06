@@ -34,38 +34,51 @@ public final class RealTerrain {
     public static ColumnGrid build(double metersPerColumn, int halfExtentColumns, long seed, Elevation elevation,
             double roughnessM, double roughnessScaleM, double seaLevelZ, Paint paint) {
         ValueNoise noise = new ValueNoise(seed);
-        ColumnGrid grid = ColumnGrid.centered(halfExtentColumns).withRelief((cx, cz) -> {
+        ColumnGrid.Relief relief = (cx, cz) -> {
             double xm = cx * metersPerColumn;
             double zm = cz * metersPerColumn;
             double e = elevation.at(xm, zm);
             if (roughnessM > 0) e += roughnessM * noise.fbm(xm, zm, roughnessScaleM, 4);
             return e / metersPerColumn;
-        });
+        };
         int waterY = Double.isNaN(seaLevelZ) ? TerrainColumn.NO_WATER : DemImporter.groundBlock(seaLevelZ, metersPerColumn);
-        for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
-            for (int x = grid.minX(); x <= grid.maxX(); x++) {
-                double xm = (x + 0.5) * metersPerColumn;
-                double zm = (z + 0.5) * metersPerColumn;
-                double e = elevation.at(xm, zm);
-                if (roughnessM > 0) e += roughnessM * noise.fbm(xm, zm, roughnessScaleM, 4);
-                boolean submerged = !Double.isNaN(seaLevelZ) && e < seaLevelZ;
-                grid.set(x, z, DemImporter.groundBlock(e, metersPerColumn), submerged ? waterY : TerrainColumn.NO_WATER,
-                        paint.at(xm, zm, e, submerged));
-            }
-        }
-        return grid;
+        ColumnGrid.Source source = (x, z) -> {
+            double xm = (x + 0.5) * metersPerColumn;
+            double zm = (z + 0.5) * metersPerColumn;
+            double e = elevation.at(xm, zm);
+            if (roughnessM > 0) e += roughnessM * noise.fbm(xm, zm, roughnessScaleM, 4);
+            boolean submerged = !Double.isNaN(seaLevelZ) && e < seaLevelZ;
+            return new TerrainColumn(DemImporter.groundBlock(e, metersPerColumn), submerged ? waterY : TerrainColumn.NO_WATER,
+                    paint.at(xm, zm, e, submerged));
+        };
+        return ColumnGrid.generateCentered(halfExtentColumns, source, relief);
     }
 
-    /** Flood every column whose ground lies below {@code waterZ} (m) within a circle — a lake. */
+    /**
+     * Flood every column whose ground lies below {@code waterZ} (m) within a circle — a lake. On a
+     * generated grid the lake becomes part of the generator, so columns materialised later get it too.
+     */
     public static void lake(ColumnGrid grid, double metersPerColumn, double centerXm, double centerZm, double radiusM,
             double waterZ) {
         int waterY = DemImporter.groundBlock(waterZ, metersPerColumn);
+        BlockId sand = BlockId.minecraft("sand");
+        ColumnGrid.Source base = grid.source();
+        if (base != null) {
+            grid.fill((x, z) -> {
+                TerrainColumn c = base.column(x, z);
+                double dx = (x + 0.5) * metersPerColumn - centerXm;
+                double dz = (z + 0.5) * metersPerColumn - centerZm;
+                if (dx * dx + dz * dz > radiusM * radiusM || c.groundY() >= waterY) return c;
+                return new TerrainColumn(c.groundY(), waterY, sand);
+            });
+            return;
+        }
         for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
             for (int x = grid.minX(); x <= grid.maxX(); x++) {
                 double dx = (x + 0.5) * metersPerColumn - centerXm;
                 double dz = (z + 0.5) * metersPerColumn - centerZm;
                 if (dx * dx + dz * dz > radiusM * radiusM) continue;
-                if (grid.ground(x, z) < waterY) grid.set(x, z, grid.ground(x, z), waterY, BlockId.minecraft("sand"));
+                if (grid.ground(x, z) < waterY) grid.set(x, z, grid.ground(x, z), waterY, sand);
             }
         }
     }

@@ -305,21 +305,24 @@ public final class DemImporter {
      */
     public static ColumnGrid toRealGrid(Dem dem, double metersPerColumn, double centreRow, double centreCol,
             int halfExtentColumns, double seaLevelZ, SurfacePainter painter) {
-        ColumnGrid grid = ColumnGrid.centered(halfExtentColumns);
         int waterY = Double.isNaN(seaLevelZ) ? TerrainColumn.NO_WATER : groundBlock(seaLevelZ, metersPerColumn);
         double spanC = metersPerColumn / dem.cellX();
         double spanR = metersPerColumn / dem.cellY();
-        for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
-            for (int x = grid.minX(); x <= grid.maxX(); x++) {
-                double col = centreCol + (x + 0.5) * spanC;
-                double row = centreRow + (z + 0.5) * spanR;
-                double meters = spanC > 1 || spanR > 1 ? boxAverage(dem, row, col, spanR, spanC) : bilinear(dem, row, col);
-                int y = groundBlock(meters, metersPerColumn);
-                boolean submerged = !Double.isNaN(seaLevelZ) && meters < seaLevelZ;
-                grid.set(x, z, y, submerged ? waterY : TerrainColumn.NO_WATER, painter.paint(x, z, meters, submerged));
-            }
-        }
-        return grid;
+        boolean box = spanC > 1 || spanR > 1;
+        // elevation (m) at fractional column coordinates; beyond the DEM it repeats the nearest edge
+        java.util.function.DoubleBinaryOperator meters = (cx, cz) -> {
+            double col = centreCol + cx * spanC;
+            double row = centreRow + cz * spanR;
+            return box ? boxAverage(dem, row, col, spanR, spanC) : bilinear(dem, row, col);
+        };
+        ColumnGrid.Source source = (x, z) -> {
+            double m = meters.applyAsDouble(x + 0.5, z + 0.5);
+            int y = groundBlock(m, metersPerColumn);
+            boolean submerged = !Double.isNaN(seaLevelZ) && m < seaLevelZ;
+            return new TerrainColumn(y, submerged ? waterY : TerrainColumn.NO_WATER, painter.paint(x, z, m, submerged));
+        };
+        return ColumnGrid.generateCentered(halfExtentColumns, source,
+                (cx, cz) -> meters.applyAsDouble(cx, cz) / metersPerColumn);
     }
 
     /** Ground block whose top is the surface at {@code elevation} (same as {@link WorldSpec#groundBlock}). */

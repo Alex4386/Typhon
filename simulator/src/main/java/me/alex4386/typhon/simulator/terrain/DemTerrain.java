@@ -17,13 +17,23 @@ public final class DemTerrain {
      */
     public static ColumnGrid load(Path file, double metersPerColumn, int halfExtentColumns, double seaLevelZ,
             double centerLat, double centerLon) throws IOException {
+        return load(file, metersPerColumn, halfExtentColumns, halfExtentColumns, seaLevelZ, centerLat, centerLon);
+    }
+
+    /**
+     * {@link #load} keeping DEM data out to {@code reachColumns} from the centre (at least the core's half
+     * width), so columns the engine materialises beyond the core later come from the real DEM; past the
+     * data the nearest edge repeats.
+     */
+    public static ColumnGrid load(Path file, double metersPerColumn, int halfExtentColumns, int reachColumns,
+            double seaLevelZ, double centerLat, double centerLon) throws IOException {
         DemImporter.Dem dem = DemImporter.read(file, DemImporter.ReadOptions.DEFAULT);
         boolean byLatLon = !Double.isNaN(centerLat) && !Double.isNaN(centerLon);
         double[] centre = byLatLon ? dem.locate(centerLat, centerLon) : dem.centre();
         if (centre[0] < 0 || centre[1] < 0 || centre[0] > dem.rows() - 1 || centre[1] > dem.cols() - 1) {
             throw new IOException(file + ": centre " + centerLat + ", " + centerLon + " lies outside the DEM");
         }
-        double half = (halfExtentColumns + 16) * metersPerColumn;
+        double half = (Math.max(halfExtentColumns, reachColumns) + 16) * metersPerColumn;
         DemImporter.Dem crop = DemImporter.crop(dem, centre[0], centre[1], half);
         double voidFill = Double.isNaN(seaLevelZ) ? crop.min() : seaLevelZ;
         crop = DemImporter.fillNoData(crop, Double.isFinite(voidFill) ? voidFill : 0);

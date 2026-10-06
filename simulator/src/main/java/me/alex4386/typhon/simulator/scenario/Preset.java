@@ -38,6 +38,25 @@ public interface Preset {
     ColumnGrid terrain(long seed);
 
     /**
+     * The preset's landscape over a centred window {@code 2·halfExtentColumns} columns wide (rounded up to
+     * whole chunks): the same generator as {@link #terrain(long)}, so any window agrees column for column.
+     */
+    default ColumnGrid terrain(long seed, int halfExtentColumns) {
+        ColumnGrid grid = terrain(seed);
+        if (grid.source() == null || grid.size() == 2 * Math.max(16, ((halfExtentColumns + 15) / 16) * 16)) return grid;
+        return grid.window(halfExtentColumns);
+    }
+
+    /**
+     * Width (m) of the simulated core of a world written from this preset ({@code terrain.coreExtentM});
+     * {@code NaN} keeps {@link #terrain(long)}'s window. Larger than the preset's own run window where the
+     * real setting deserves it (the world grows further on demand).
+     */
+    default double worldCoreExtentM() {
+        return Double.NaN;
+    }
+
+    /**
      * Builds the scenario on {@code terrain} (normally {@link #terrain(long)}; a DEM may replace it,
      * in which case vents are re-anchored to the new ground).
      */

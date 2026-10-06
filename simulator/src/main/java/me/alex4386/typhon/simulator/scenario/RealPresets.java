@@ -34,6 +34,24 @@ import me.alex4386.typhon.simulator.terrain.RealTerrain;
 final class RealPresets {
     private RealPresets() {}
 
+    /**
+     * Width (m) of the initially simulated core of worlds written from the real presets (their own
+     * validation runs keep the smaller windows above). About a million columns each: ~0.25 GB of heap,
+     * ~2 ms per base step at rest, and a one-time hydrothermal spin-up of ~2 min when the world is
+     * created; the world grows beyond on demand ({@code expansion:}).
+     * <ul>
+     *   <li>Kīlauea: the summit caldera plus the upper East and Southwest rift zones (~10 km out).
+     *   <li>Stromboli: the whole island (~5 km) and its submarine flanks.
+     *   <li>St. Helens: the edifice, Spirit Lake and the upper North Fork Toutle valley (1980 blast zone).
+     *   <li>Pinatubo: the 1991 pyroclastic-flow fans (≤ 16 km from the vent).
+     *   <li>Surtsey: the island and the shelf around it.
+     *   <li>Yellowstone: the central caldera (the whole 45 × 85 km caldera is grown into on demand).
+     * </ul>
+     */
+    static final java.util.Map<String, Double> WORLD_CORE_EXTENT_M = java.util.Map.of(
+            "kilauea-real", 20_480.0, "stromboli-real", 12_000.0, "st-helens-real", 20_480.0,
+            "pinatubo-real", 30_720.0, "surtsey-real", 6_400.0, "yellowstone-real", 30_720.0);
+
     static List<Preset> all() {
         return List.of(kilauea(), stromboli(), stHelens(), pinatubo(), surtsey(), yellowstone());
     }
@@ -45,6 +63,11 @@ final class RealPresets {
         @Override
         public ColumnGrid terrain(long seed) {
             return terrain.apply(seed);
+        }
+
+        @Override
+        public double worldCoreExtentM() {
+            return WORLD_CORE_EXTENT_M.getOrDefault(name, Double.NaN);
         }
 
         @Override

@@ -35,6 +35,7 @@ public final class Scenario {
     private final List<Consumer<Scenario>> afterFirstTick;
     private final boolean restored;
     private final World session;
+    private final me.alex4386.typhon.engine.expansion.WorldExpansion expansion;
 
     /**
      * How the engine is built.
@@ -66,6 +67,14 @@ public final class Scenario {
         Engine.Builder engineBuilder = Engine.builder(seed).baseStepMicros(b.options.baseStepMicros()).add(terrain);
         for (VolcanoSystem volcano : volcanoes) volcano.addTo(engineBuilder);
         engineBuilder.add(lava);
+        // grows on demand like a world (same subsystem, so a preset and its world template stay identical)
+        this.expansion = new me.alex4386.typhon.engine.expansion.WorldExpansion(terrain,
+                me.alex4386.typhon.engine.expansion.ExpansionConfig.DEFAULTS);
+        me.alex4386.typhon.engine.subsurface.Subsurface sub = null;
+        for (VolcanoSystem v : volcanoes) if (sub == null) sub = v.subsurface();
+        me.alex4386.typhon.engine.expansion.ExpansionWiring.wire(expansion, lava, sub, volcanoes);
+        expansion.setGenerator(initialTerrain.source());
+        engineBuilder.add(expansion);
         SaveStore restore = b.options.restore();
         if (restore != null) engineBuilder.restore(restore);
         this.engine = engineBuilder.build();
@@ -92,6 +101,8 @@ public final class Scenario {
         this.engine = session.engine();
         this.world = new VoxelWorld(initialTerrain);
         attachRelief(terrain, initialTerrain);
+        if (initialTerrain.source() != null) session.setTerrainGenerator(initialTerrain.source());
+        this.expansion = session.expansion();
         this.restored = restored;
         this.session = session;
         if (restored) {
@@ -186,6 +197,8 @@ public final class Scenario {
     public VolcanoSystem volcano() { return volcanoes.get(0); }
     public Engine engine() { return engine; }
     public VoxelWorld world() { return world; }
+    /** On-demand growth of the simulated area. */
+    public me.alex4386.typhon.engine.expansion.WorldExpansion expansion() { return expansion; }
 
     /** Runs set-up hooks that need the terrain snapshot applied (called once after the first tick). */
     public void runAfterFirstTick() {

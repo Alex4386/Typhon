@@ -40,7 +40,10 @@ import me.alex4386.typhon.simulator.terrain.TerrainGenerators;
  * terrain: {source: twin-cones, separation: 160, height: 60, radius: 140, craterRadius: 5}
  * </pre>
  * Any source may add {@code contextExtentM}: the width (m) of the coarse, static terrain shown
- * around the simulated domain ({@link Scenario#context()}; default 30 km at real scale).
+ * around the simulated domain ({@link Scenario#context()}; default 30 km at real scale), and
+ * {@code coreExtentM}: the width (m) of the initially simulated core (presets: their own window when
+ * absent; DEMs: {@code halfExtent} columns). The landscape beyond is generated from the same source and
+ * simulated on demand ({@code expansion:} in world.yaml).
  */
 public final class WorldScenarios {
     static final String HEADER = "# Typhon world definition (see engine/README.md, \"World definitions\").\n"
@@ -68,7 +71,11 @@ public final class WorldScenarios {
         switch (source) {
             case "preset" -> {
                 String name = string(t, "preset", definition.name());
-                return Presets.get(name).terrain(number(t, "seed", definition.seed()).longValue());
+                long seed = number(t, "seed", definition.seed()).longValue();
+                double core = number(t, "coreExtentM", Double.NaN).doubleValue();
+                Preset preset = Presets.get(name);
+                return Double.isNaN(core) ? preset.terrain(seed)
+                        : preset.terrain(seed, halfColumns(core, definition.spec().metersPerColumn()));
             }
             case "dem" -> {
                 String file = string(t, "path", null);
@@ -80,8 +87,13 @@ public final class WorldScenarios {
                         || lower.endsWith(".tif") || lower.endsWith(".tiff") || lower.endsWith(".hgt");
                 try {
                     if (real) {
-                        return DemTerrain.load(path, definition.spec().metersPerColumn(),
-                                number(t, "halfExtent", 256).intValue(), definition.spec().seaLevelZ(),
+                        double l = definition.spec().metersPerColumn();
+                        double core = number(t, "coreExtentM", Double.NaN).doubleValue();
+                        int half = Double.isNaN(core) ? number(t, "halfExtent", 256).intValue() : halfColumns(core, l);
+                        // keep DEM data as far as the world may grow, so materialised ground is real too
+                        int reach = definition.expansion().enabled()
+                                ? Math.max(half, halfColumns(definition.expansion().maxExtentM(), l)) : half;
+                        return DemTerrain.load(path, l, half, reach, definition.spec().seaLevelZ(),
                                 number(t, "centerLat", Double.NaN).doubleValue(),
                                 number(t, "centerLon", Double.NaN).doubleValue());
                     }
@@ -106,22 +118,23 @@ public final class WorldScenarios {
 
     /** Two cones on a plain, at x = ±separation/2, each with a small summit crater. */
     public static ColumnGrid twinCones(int halfExtent, int separation, int height, int radius, int craterRadius) {
-        ColumnGrid grid = ColumnGrid.centered(halfExtent);
         int[] centres = {-separation / 2, separation / 2};
-        for (int x = grid.minX(); x <= grid.maxX(); x++) {
-            for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
-                double h = 0;
-                for (int cx : centres) {
-                    double d = Math.hypot(x - cx, z);
-                    double cone = height * Math.max(0, 1 - d / radius);
-                    if (d < craterRadius) cone = height - 3;
-                    h = Math.max(h, cone);
-                }
-                grid.set(x, z, TerrainGenerators.BASE_Y + (int) Math.round(h), TerrainColumn.NO_WATER,
-                        BlockId.minecraft(h > 2 ? "basalt" : "grass_block"));
+        return ColumnGrid.generateCentered(halfExtent, (x, z) -> {
+            double h = 0;
+            for (int cx : centres) {
+                double d = Math.hypot(x - cx, z);
+                double cone = height * Math.max(0, 1 - d / radius);
+                if (d < craterRadius) cone = height - 3;
+                h = Math.max(h, cone);
             }
-        }
-        return grid;
+            return new TerrainColumn(TerrainGenerators.BASE_Y + (int) Math.round(h), TerrainColumn.NO_WATER,
+                    BlockId.minecraft(h > 2 ? "basalt" : "grass_block"));
+        }, null);
+    }
+
+    /** Half width in columns of a core {@code extentM} metres wide. */
+    static int halfColumns(double extentM, double metersPerColumn) {
+        return Math.max(16, (int) Math.round(extentM / 2 / metersPerColumn));
     }
 
     // ── Templates ──
@@ -142,9 +155,11 @@ public final class WorldScenarios {
         Scenario scenario;
         if (dem != null) {
             if (real == null) throw new IllegalArgumentException(preset.name() + " is not a real-scale preset");
+            double core = preset.worldCoreExtentM();
+            int half = Double.isNaN(core) ? real.halfExtentColumns() : halfColumns(core, real.metersPerColumn());
             ColumnGrid grid;
             try {
-                grid = DemTerrain.load(dem, real.metersPerColumn(), real.halfExtentColumns(), real.spec().seaLevelZ(),
+                grid = DemTerrain.load(dem, real.metersPerColumn(), half, real.spec().seaLevelZ(),
                         real.dem().lat(), real.dem().lon());
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
@@ -154,12 +169,20 @@ public final class WorldScenarios {
             terrain.put("path", dem.toAbsolutePath().toString());
             terrain.put("centerLat", real.dem().lat());
             terrain.put("centerLon", real.dem().lon());
-            terrain.put("halfExtent", real.halfExtentColumns());
+            terrain.put("halfExtent", half);
+            if (!Double.isNaN(core)) terrain.put("coreExtentM", core);
         } else {
-            scenario = preset.build(seed);
+            double core = preset.worldCoreExtentM();
+            if (Double.isNaN(core)) {
+                scenario = preset.build(seed);
+            } else {
+                double l = real != null ? real.metersPerColumn() : 1;
+                scenario = preset.build(seed, preset.terrain(seed, halfColumns(core, l)), Scenario.Options.DEFAULT);
+            }
             terrain.put("source", "preset");
             terrain.put("preset", preset.name());
             terrain.put("seed", seed);
+            if (!Double.isNaN(core)) terrain.put("coreExtentM", core);
         }
         VolcanoScaling scaling = scenario.volcano().scaling();
         // The preset's subsurface parameters (its own model, when a volcano created one) become the
