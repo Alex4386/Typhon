@@ -149,8 +149,6 @@ export interface NewSessionOptions {
   world?: string;
   name?: string;
   seed?: number;
-  dormant?: number;
-  eruptive?: number;
   paused?: boolean;
   /** Switch to the new world (default true). */
   attach?: boolean;
@@ -158,7 +156,6 @@ export interface NewSessionOptions {
 
 /** Starts a world from a preset (written to the worlds dir) or opens a world directory. */
 export function createSession(o: NewSessionOptions): void {
-  const timeCompression = o.dormant !== undefined || o.eruptive !== undefined ? { dormant: o.dormant, eruptive: o.eruptive } : undefined;
   send({
     type: 'createSession',
     requestId: requestSeq++,
@@ -169,7 +166,6 @@ export function createSession(o: NewSessionOptions): void {
     seed: o.seed,
     paused: o.paused,
     attach: o.attach ?? true,
-    ...(timeCompression ? { timeCompression } : {}),
   });
 }
 

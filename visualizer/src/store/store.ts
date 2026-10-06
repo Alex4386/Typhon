@@ -642,10 +642,14 @@ function defaultServerUrl(): string {
   return `ws://${hostname || 'localhost'}:8787/ws`;
 }
 
-/** Simulation time "now", extrapolated from the last clock message while playing. */
+/**
+ * The clock "now", extrapolated from the last clock message while playing: at the playback speed
+ * (or the measured rate when the computer falls behind it, or plays at Max).
+ */
 export function simNow(): number {
   const c = useStore.getState().clock;
   if (!c) return 0;
   if (c.mode === 'PAUSED' || c.replay) return c.time;
-  return c.time + (c.rate * (performance.now() - c.receivedAt)) / 1000;
+  const rate = c.mode === 'REALTIME' && !(c.rate > 0 && c.rate < 0.7 * c.speed) ? c.speed : c.rate;
+  return c.time + (rate * (performance.now() - c.receivedAt)) / 1000;
 }

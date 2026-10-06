@@ -24,7 +24,6 @@ export type ClientMessage =
   /**
    * Starts (or, for a world that is already loaded, re-uses) a session. From a preset the server
    * writes a new world directory `name` (default: the preset name, made unique) unless `inMemory`.
-   * `timeCompression` overrides the world's dormant/eruptive compression (a hot change).
    */
   | {
       type: 'createSession';
@@ -37,7 +36,6 @@ export type ClientMessage =
       world?: string;
       seed?: number;
       name?: string;
-      timeCompression?: { dormant?: number; eruptive?: number };
       /** Start paused (default: running at the server's initial speed). */
       paused?: boolean;
       /** Attach this client to the new session (default true). */
@@ -61,6 +59,13 @@ export type ClientMessage =
    * `sessionId` controls another loaded session than the attached one.
    */
   | { type: 'transport'; mode: TransportMode; speed?: number; sessionId?: string }
+  /**
+   * Playback speed: seconds per wall second (1–1e7), or `max` (as fast as the computer allows). A
+   * paused session stays paused and resumes at it. Changing the speed ends a playback slow-down.
+   */
+  | { type: 'setSpeed'; speed: number | 'max'; sessionId?: string; requestId?: number }
+  /** Playback policy (all fields optional): slow down to `eruptionSpeed` while something happens. */
+  | ({ type: 'setPlaybackPolicy'; sessionId?: string; requestId?: number } & Partial<PlaybackPolicy>)
   /** Pause, then advance exactly `steps` engine base steps, or the smallest number of steps covering `seconds`. */
   | { type: 'step'; steps?: number; seconds?: number }
   /** Pause automatically once simulation time reaches `time` (s); null clears it. */
@@ -410,11 +415,27 @@ export interface WelcomeMessage {
   mock?: boolean;
 }
 
-export interface TimeCompression {
-  /** Physical seconds per simulated second while the volcano is quiet. */
-  dormant: number;
-  /** Physical seconds per simulated second while it erupts. */
-  eruptive: number;
+/** Event kinds playback can slow down on (besides eruptions). */
+export type SlowEventKind = 'unrest' | 'dike' | 'fissure' | 'pyroclasticFlow' | 'lahar' | 'avalanche';
+
+/** A session's playback policy. */
+export interface PlaybackPolicy {
+  /** Switch to `eruptionSpeed` when an eruption starts; the previous speed returns when it ends. */
+  slowOnEruption: boolean;
+  /** Seconds per wall second while slowed down. */
+  eruptionSpeed: number;
+  /** Events that slow down the same way, for `eventHoldSeconds` after the latest one. */
+  slowOnEvents: SlowEventKind[];
+  eventHoldSeconds: number;
+}
+
+/** The policy plus whether playback is slowed down right now (and what it returns to). */
+export interface PlaybackState extends PlaybackPolicy {
+  slowed: boolean;
+  /** `eruption` or an event kind. */
+  slowedBy?: 'eruption' | SlowEventKind;
+  resumeSpeed?: number;
+  resumeMode?: TransportMode;
 }
 
 export interface SessionInfo {
@@ -426,12 +447,13 @@ export interface SessionInfo {
   time: number;
   mode?: TransportMode;
   speed?: number;
-  /** Measured simulated seconds per wall second. */
+  /** Measured seconds per wall second. */
   rate?: number;
   replay?: boolean;
+  playback?: PlaybackState;
   /** Clients currently attached. */
   clients?: number;
-  volcanoes?: { id: string; alert: AlertLevel; erupting: boolean; timeCompression: TimeCompression & { current?: number } }[];
+  volcanoes?: { id: string; alert: AlertLevel; erupting: boolean }[];
 }
 
 export interface ServerInfo {
@@ -466,7 +488,6 @@ export interface WorldListing {
   volcanoes: number;
   /** A saved state exists: opening resumes it. */
   hasState: boolean;
-  timeCompression?: TimeCompression;
   /** Set when the world is loaded. */
   sessionId?: string;
   /** The definition could not be read. */
@@ -587,21 +608,21 @@ export interface DepositTypeInfo {
 
 export interface ClockMessage {
   type: 'clock';
-  /** Simulation time (s). */
+  /** The clock (s since the world began): the playback position. */
   time: number;
-  /** Completed engine base steps. */
+  /** Completed engine steps. */
   step: number;
   /** Engine base step (s), e.g. 0.05. */
   baseStep: number;
   mode: TransportMode;
   speed: number;
-  /** Measured simulated seconds per wall second. */
+  /** Measured seconds per wall second. */
   rate: number;
   replay: boolean;
-  /** Current time compression of the first volcano (physical s per simulated s). */
-  compression?: number;
-  /** Approximate physical (volcano) time elapsed for the first volcano since the session started (s). */
-  physicalTime?: number;
+  /** Time of the last completed engine step (s); `time` is the playback position. */
+  engineTime?: number;
+  /** Playback policy and slow-down state (absent from older servers). */
+  playback?: PlaybackState;
 }
 
 export interface StateMessage {
@@ -633,16 +654,14 @@ export interface VolcanoState {
     silicaWt: number;
     waterWt: number;
     crystalFraction: number;
-    /** DRE m³/s per simulated second (time-compressed), 0 when not erupting: what the scene shows flowing. */
+    /** Dense-rock-equivalent m³/s, 0 when not erupting. */
     eruptionRate: number;
-    /** m³/s of volcano time: comparable with real volcanoes. */
-    physicalEruptionRate?: number;
     /** Magma volume in the chamber (m³). */
     volumeM3?: number;
     /** Overpressure at which the walls rupture (MPa). */
     ruptureOverpressureMPa?: number;
     regime: EruptiveRegime;
-    /** Magma budget (volcano time); absent from older servers. */
+    /** Magma budget; absent from older servers. */
     budget?: MagmaBudget;
   };
   seismic: { rsam: number; vtPerMinute: number; lpPerMinute: number; tremor: boolean; swarm: boolean };
@@ -652,10 +671,6 @@ export interface VolcanoState {
   plume?: { topZ: number; massRateKgS: number };
   /** Landscape change so far (absent on servers without geomorphology). */
   geomorph?: { failures: number; failedM3: number; avalanches: number; craters: number; maxCraterRadiusM: number; calderaSubsidenceM: number };
-  /** Time compression now in force (`current`) and its dormant/eruptive settings. */
-  timeCompression?: TimeCompression & { current: number };
-  /** Approximate physical time elapsed for this volcano since the session started (s). */
-  physicalTime?: number;
 }
 
 export interface StationReading {

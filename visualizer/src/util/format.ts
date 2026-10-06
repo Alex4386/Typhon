@@ -14,19 +14,28 @@ export function formatDuration(seconds: number): string {
   return `${(s / (86400 * 365.25)).toFixed(1)} years`;
 }
 
-/** "×20", "×5 000" for compression factors. */
+/** "×20", "×5 000" for speeds and other factors. */
 export function formatFactor(f: number): string {
   if (!(f > 0)) return '—';
   if (f < 10) return `×${Number(f.toPrecision(2))}`;
   return `×${Math.round(f).toLocaleString('en-US').replaceAll(',', ' ')}`;
 }
 
-export function formatSimTime(seconds: number): string {
+/** Days in a year of the clock. */
+const YEAR_DAYS = 365;
+
+/**
+ * The world's clock: "Day 12, 04:31:07" from the start (day 1), "Year 3, day 45, 04:31:07" after
+ * the first year. Without {@code withSeconds}: "Day 12, 04:31".
+ */
+export function formatSimTime(seconds: number, withSeconds = true): string {
   const s = Math.max(0, Math.floor(seconds));
-  const d = Math.floor(s / 86400);
+  const days = Math.floor(s / 86400);
   const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  const hms = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-  return d > 0 ? `${d}d ${hms}` : hms;
+  const hm = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  const clock = withSeconds ? `${hm}:${String(sec).padStart(2, '0')}` : hm;
+  const year = Math.floor(days / YEAR_DAYS);
+  return year > 0 ? `Year ${year + 1}, day ${(days % YEAR_DAYS) + 1}, ${clock}` : `Day ${days + 1}, ${clock}`;
 }

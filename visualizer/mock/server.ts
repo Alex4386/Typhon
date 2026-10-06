@@ -10,6 +10,7 @@ import {
   TILE_WINDOW,
   WS_SUBPROTOCOL,
   type ClientMessage,
+  type PlaybackState,
   type ServerMessage,
   type SimEvent,
   type TransportMode,
@@ -26,7 +27,7 @@ const KEYFRAME_SECONDS = 300;
 const MAX_KEYFRAMES = 400;
 /** Skip tile frames for a client while this many bytes are still queued on its socket. */
 const MAX_BUFFERED_BYTES = 128 * 1024;
-/** Simulated seconds per wall second in UNBOUNDED mode (the mock is not a real solver). */
+/** Seconds per wall second in UNBOUNDED mode (the mock is not a real solver). */
 const UNBOUNDED_RATE = 3000;
 
 interface Client {
@@ -45,6 +46,7 @@ class Session {
   mode: TransportMode = 'REALTIME';
   pauseAt: number | null = null;
   speed = 20;
+  playback: PlaybackState = { slowOnEruption: true, eruptionSpeed: 20, slowOnEvents: [], eventHoldSeconds: 3600, slowed: false };
   replay = false;
   rate = 0;
   step = 0;
@@ -223,7 +225,7 @@ function sendReplayInfo(c?: Client) {
 }
 
 function clock(): ServerMessage {
-  return { type: 'clock', time: session.world.time, step: Math.round(session.world.time / BASE_STEP), baseStep: BASE_STEP, mode: session.mode, speed: session.speed, rate: session.rate, replay: session.replay };
+  return { type: 'clock', time: session.world.time, step: Math.round(session.world.time / BASE_STEP), baseStep: BASE_STEP, mode: session.mode, speed: session.speed, rate: session.rate, replay: session.replay, playback: session.playback };
 }
 
 function handle(c: Client, msg: ClientMessage) {
@@ -287,9 +289,25 @@ function handle(c: Client, msg: ClientMessage) {
       return;
     case 'transport':
       session.mode = msg.mode;
-      if (msg.speed !== undefined) session.speed = Math.min(1000, Math.max(0.1, msg.speed));
+      if (msg.speed !== undefined) session.speed = Math.min(1e7, Math.max(1, msg.speed));
       broadcast(clock());
       return;
+    case 'setSpeed':
+      if (msg.speed === 'max') {
+        if (session.mode !== 'PAUSED') session.mode = 'UNBOUNDED';
+      } else {
+        session.speed = Math.min(1e7, Math.max(1, msg.speed));
+        if (session.mode === 'UNBOUNDED') session.mode = 'REALTIME';
+      }
+      session.playback = { ...session.playback, slowed: false, slowedBy: undefined };
+      broadcast(clock());
+      return;
+    case 'setPlaybackPolicy': {
+      const { type: _t, sessionId: _s, requestId: _r, ...policy } = msg;
+      session.playback = { ...session.playback, ...policy };
+      broadcast(clock());
+      return;
+    }
     case 'step': {
       if (session.replay) return;
       session.mode = 'PAUSED';

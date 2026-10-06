@@ -101,8 +101,8 @@ export function Guide() {
           </li>
         </ol>
         <p className="text-xs text-muted-foreground">
-          <b>Time:</b> the clock shows <i>simulated time</i>. Volcanoes are slow, so volcano processes run faster than that (time compression, e.g. ×5 000 while quiet); the clock's second line
-          estimates the volcano time that has passed.
+          <b>Time:</b> there is one clock, counted from the day the world began. The speed button next to Play sets how fast you watch it (×3 600 = an hour a second); when an
+          eruption starts it can slow down to the eruption speed by itself and speed up again when it ends. The speed never changes what happens.
         </p>
         <Table>
           <TableBody>

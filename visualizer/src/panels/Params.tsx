@@ -14,7 +14,7 @@ import { ApplyBadge, ParamRow, useParamEdits } from './ParamRow';
 
 /** Settings tabs by subject: [key, title, matches the group heading after "World · " / "<volcano> · "]. */
 export const PARAM_TOPICS: [string, string, RegExp][] = [
-  ['weather', 'Weather & time', /Weather|Time scale/],
+  ['weather', 'Weather & scale', /Weather|Scale/],
   ['magma', 'Magma', /Magma/],
   ['eruption', 'Eruption & dikes', /Conduit|Dikes/],
   ['heat', 'Heat & water', /Underground|Hot springs/],

@@ -289,8 +289,8 @@ export class MockWorld {
   // ───────────── simulation ─────────────
 
   /**
-   * Advances up to `seconds` of simulated time in 10 s steps, stopping early once `budgetMs` of
-   * wall time is used. Returns the simulated seconds actually advanced.
+   * Advances up to `seconds` of time in 10 s steps, stopping early once `budgetMs` of
+   * wall time is used. Returns the seconds actually advanced.
    */
   advance(seconds: number, budgetMs = Infinity): number {
     const dt = 10;

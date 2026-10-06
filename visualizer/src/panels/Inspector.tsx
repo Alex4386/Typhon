@@ -176,7 +176,7 @@ function rate(r: number): string {
   return `${r >= 10 ? r.toFixed(0) : r >= 0.1 ? r.toFixed(2) : r.toPrecision(2)} m³/s`;
 }
 
-/** Inflow vs outflow of the chamber and where its pressure is heading (volcano time). */
+/** Inflow vs outflow of the chamber and where its pressure is heading. */
 function MagmaBudgetView({ volcanoId }: { volcanoId: string }) {
   const ch = useStore((s) => s.state?.volcanoes[volcanoId]?.chamber);
   const b = ch?.budget;

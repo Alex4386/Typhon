@@ -110,8 +110,6 @@ export function SessionManager() {
                   ) : (
                     `${w.volcanoes} volcano${w.volcanoes === 1 ? "" : "es"} · ${w.hasState ? "saved progress" : "not started yet"}`
                   )}
-                  {w.timeCompression &&
-                    ` · time ${formatFactor(w.timeCompression.dormant)}`}
                 </div>
               </div>
               <Tip
@@ -206,7 +204,6 @@ function SessionRow({
         : best,
     null,
   );
-  const tc = s.volcanoes?.[0]?.timeCompression;
   const close = () => controlSession(s.id, "close");
   return (
     <li
@@ -235,9 +232,9 @@ function SessionRow({
             ? "Paused"
             : s.mode === "UNBOUNDED"
               ? "Running flat out"
-              : `Running ${s.speed ?? ""}×`}{" "}
-          · sim time {formatSimTime(s.time)}
-          {tc && ` · volcano time ${formatFactor(tc.current ?? tc.dormant)}`}
+              : `Running ${formatFactor(s.speed ?? 0)}`}
+          {s.playback?.slowed ? ` · slowed for the ${s.playback.slowedBy === "eruption" ? "eruption" : "event"}` : ""}
+          {" "}· {formatSimTime(s.time, false)}
           {s.clients ? ` · ${s.clients} viewer${s.clients > 1 ? "s" : ""}` : ""}
           {!s.world && " · not saved to disk"}
         </div>
@@ -311,8 +308,6 @@ function NewWorld({ disabled }: { disabled: boolean }) {
   const [preset, setPreset] = useState("");
   const [params, setParams] = useState<Record<string, ParamValue>>({});
   const [name, setName] = useState("");
-  const [dormant, setDormant] = useState("");
-  const [eruptive, setEruptive] = useState("");
   const [paused, setPaused] = useState(false);
   // empty worlds (templates) first: the world-builder path; ready-made presets after
   const fallback = templates.length
@@ -329,10 +324,6 @@ function NewWorld({ disabled }: { disabled: boolean }) {
     params[f.id] !== undefined ? fieldError(f, params[f.id]) : null,
   );
   const nameOk = name === "" || /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name);
-  const num = (t: string) => (t.trim() === "" ? undefined : Number(t));
-  const factorsOk = [dormant, eruptive].every(
-    (t) => t.trim() === "" || Number(t) > 0,
-  );
   return (
     <PanelSection title="Start a new world">
       <form
@@ -342,7 +333,6 @@ function NewWorld({ disabled }: { disabled: boolean }) {
           if (
             (!chosen && !template) ||
             !nameOk ||
-            !factorsOk ||
             paramErrors.some((x) => x !== null)
           )
             return;
@@ -360,8 +350,6 @@ function NewWorld({ disabled }: { disabled: boolean }) {
             createSession({
               preset: chosen.name,
               name: name || undefined,
-              dormant: num(dormant),
-              eruptive: num(eruptive),
               paused,
             });
           }
@@ -450,45 +438,9 @@ function NewWorld({ disabled }: { disabled: boolean }) {
           <Collapsible>
             <CollapsibleTrigger className="group flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
               <ChevronRight className="size-4 transition-transform group-data-[panel-open]:rotate-90" />{" "}
-              Time scale and start options
+              Start options
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-2 flex flex-col gap-3 rounded-lg border p-3">
-              <Hint>
-                Real volcanoes take years to recharge. Time compression makes
-                volcano processes run faster than simulated time so you can
-                watch them. Leave empty for the volcano's default.
-              </Hint>
-              <div className="grid grid-cols-2 gap-2">
-                <Tip content="Physical seconds per simulated second while the volcano is quiet">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="nw-dormant">Quiet periods ×</Label>
-                    <Input
-                      id="nw-dormant"
-                      inputMode="decimal"
-                      placeholder="default"
-                      value={dormant}
-                      onChange={(e) => setDormant(e.target.value)}
-                    />
-                  </div>
-                </Tip>
-                <Tip content="Physical seconds per simulated second while it erupts (usually small so lava looks right)">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="nw-eruptive">During eruptions ×</Label>
-                    <Input
-                      id="nw-eruptive"
-                      inputMode="decimal"
-                      placeholder="default"
-                      value={eruptive}
-                      onChange={(e) => setEruptive(e.target.value)}
-                    />
-                  </div>
-                </Tip>
-              </div>
-              {!factorsOk && (
-                <p className="text-xs text-destructive">
-                  Factors must be positive numbers.
-                </p>
-              )}
               <Label className="flex items-center gap-2 font-normal">
                 <Switch
                   checked={paused}
@@ -518,7 +470,6 @@ function NewWorld({ disabled }: { disabled: boolean }) {
               disabled ||
               (!chosen && !template) ||
               !nameOk ||
-              !factorsOk ||
               paramErrors.some((x) => x !== null)
             }
           >

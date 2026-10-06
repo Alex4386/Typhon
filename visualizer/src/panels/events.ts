@@ -187,7 +187,7 @@ export function isImportant(e: SimEvent): boolean {
   }
 }
 
-/** Aggregation window of repeated key events (s of simulated time). */
+/** Aggregation window of repeated key events (s). */
 const AGGREGATE_S = 3600;
 
 /** What a repeated key event aggregates by (null: a milestone, its own row). */
@@ -217,7 +217,7 @@ function aggregateKey(e: SimEvent): string | null {
 
 /**
  * Key-event rows, newest first: milestones one by one; notable quakes, bursts, new features and
- * ocean entries merged per kind (and volcano) within an hour of simulated time — except the first
+ * ocean entries merged per kind (and volcano) within an hour — except the first
  * ocean entry, which is a milestone of its own ("lava reached the sea").
  */
 export function keyEventRows(events: SimEvent[], limit: number): Row[] {

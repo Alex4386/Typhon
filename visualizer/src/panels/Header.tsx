@@ -1,28 +1,28 @@
 import { useEffect, useState } from 'react';
-import { Activity, ChevronDown, Globe, Hammer, History, List, Pause, Play, Plus, ScrollText, Settings2, SkipForward, SlidersHorizontal, SquareSplitVertical, type LucideIcon } from 'lucide-react';
-import { SimpleSelect } from '@/components/fields';
+import { Activity, ChevronDown, Gauge, Globe, Hammer, History, List, Pause, Play, Plus, ScrollText, Settings2, SkipForward, SlidersHorizontal, SquareSplitVertical, type LucideIcon } from 'lucide-react';
+import { CheckboxRow, SwitchRow } from '@/components/fields';
 import { Tip } from '@/components/tip';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Separator } from '@/components/ui/separator';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { attachSession, send } from '../net/connection';
 import type { SessionInfo } from '../protocol/messages';
 import { simNow, useStore, type DrawerTab } from '../store/store';
 import { formatDuration, formatFactor, formatSimTime } from '../util/world';
-
-/** Playback speeds offered in the menu (simulated seconds per real second). */
-const SPEEDS = [0.5, 1, 5, 20, 100, 1000];
+import { currentSpeedForEruptionsMessage, SLOW_EVENTS, slowOnEruptionMessage, slowOnEventMessage, speedLabel, speedMessage, SPEEDS, speedValue } from './playback';
 
 /** Side panel pages reachable from the header, in order. */
 export const DRAWER_TABS: { tab: DrawerTab; label: string; title: string; icon: LucideIcon; key?: string }[] = [
-  { tab: 'sims', label: 'Worlds', title: 'Start, open, switch, pause and close simulated worlds', icon: Globe },
+  { tab: 'sims', label: 'Worlds', title: 'Start, open, switch, pause and close worlds', icon: Globe },
   { tab: 'build', label: 'Build', title: 'Place and edit magma chambers and the pathways between them; undo and redo', icon: Hammer, key: 'B' },
   { tab: 'entities', label: 'Entities', title: 'Everything on and under the volcano: vents, dikes, hot springs, flows, stations; click one to fly there', icon: List, key: 'E' },
   { tab: 'monitor', label: 'Monitor', title: 'Instruments: earthquakes, magma, ground motion, status history', icon: Activity },
   { tab: 'events', label: 'Events', title: 'What happened, newest first; show it on the map or replay from it', icon: ScrollText },
   { tab: 'section', label: 'Section', title: 'Cut the ground along a line to see layers, heat and water', icon: SquareSplitVertical },
-  { tab: 'tune', label: 'Settings', title: 'Weather, magma supply, time scale and every other setting of this world', icon: SlidersHorizontal },
+  { tab: 'tune', label: 'Settings', title: 'Weather, magma supply and every other setting of this world', icon: SlidersHorizontal },
   { tab: 'view', label: 'View', title: 'What to show on the map, graphics quality, camera tools', icon: Settings2 },
 ];
 
@@ -74,7 +74,7 @@ export function WorldSwitcher() {
   );
 }
 
-/** Simulation clock with the volcano time it stands for. */
+/** The world's clock: one time, played back at the speed next to it. */
 export function Clock() {
   const clock = useStore((s) => s.clock);
   const [now, setNow] = useState(0);
@@ -82,31 +82,89 @@ export function Clock() {
     const id = window.setInterval(() => setNow(simNow()), 250);
     return () => window.clearInterval(id);
   }, []);
-  const c = clock?.compression;
-  const physical = clock?.physicalTime;
-  const title =
-    'Simulated time: how long the simulation has run.\n' +
-    (c ? `Volcano time runs ${formatFactor(c)} faster than simulated time right now (time compression), so slow volcanic processes fit into a session.` : '') +
-    '\nPlayback speed (next to the play button) only changes how fast you watch it.';
+  const fine = clock !== null && clock.mode !== 'UNBOUNDED' && clock.speed < 60;
+  const title = `Time since this world began (${formatDuration(now)}). The playback speed next to the play button only changes how fast you watch it, never the physics.`;
   return (
     <Tip content={title}>
       <div className="flex flex-col items-end leading-none whitespace-nowrap" data-testid="clock">
         <span className="font-mono text-sm tabular-nums">
-          {formatSimTime(now)}
+          {formatSimTime(now, fine)}
           {clock?.replay && (
             <Badge variant="destructive" className="ml-2 align-middle">
               REPLAY
             </Badge>
           )}
         </span>
-        {c !== undefined && (
-          <span className="mt-0.5 text-[11px] text-muted-foreground max-lg:hidden">
-            volcano time {formatFactor(c)}
-            {physical !== undefined ? ` · ≈ ${formatDuration(physical)}` : ''}
-          </span>
-        )}
       </div>
     </Tip>
+  );
+}
+
+/** The speed menu: speeds, Max, and the policy that slows playback down while something happens. */
+export function SpeedMenu() {
+  const clock = useStore((s) => s.clock);
+  const replay = clock?.replay ?? false;
+  const policy = clock?.playback;
+  const value = speedValue(clock);
+  const useCurrent = currentSpeedForEruptionsMessage(clock);
+  const slowed = policy?.slowed ?? false;
+  return (
+    <Popover>
+      <Tip content={slowed ? `Slowed down for the ${policy?.slowedBy === 'eruption' ? 'eruption' : 'event'}; back to ${policy?.resumeMode === 'UNBOUNDED' ? 'Max' : formatFactor(policy?.resumeSpeed ?? 0)} when it is over` : 'Playback speed: seconds of the world per real second (never changes the physics)'}>
+        <PopoverTrigger render={<Button size="sm" variant={slowed ? 'secondary' : 'outline'} disabled={replay} data-testid="speed" />}>
+          <Gauge /> {speedLabel(clock)} <ChevronDown data-icon="inline-end" />
+        </PopoverTrigger>
+      </Tip>
+      <PopoverContent className="w-80" align="start">
+        <div className="flex flex-col gap-3 text-sm">
+          <div>
+            <div className="mb-1 text-xs font-medium text-muted-foreground">Playback speed</div>
+            <div className="grid grid-cols-3 gap-1">
+              {SPEEDS.map(([s, hint]) => (
+                <Tip key={s} content={hint || undefined}>
+                  <Button size="xs" variant={value === String(s) ? 'secondary' : 'ghost'} aria-pressed={value === String(s)} onClick={() => send(speedMessage(String(s)))}>
+                    {formatFactor(s)}
+                  </Button>
+                </Tip>
+              ))}
+              <Tip content="As fast as the computer allows">
+                <Button size="xs" variant={value === 'max' ? 'secondary' : 'ghost'} aria-pressed={value === 'max'} onClick={() => send(speedMessage('max'))}>
+                  Max
+                </Button>
+              </Tip>
+            </div>
+          </div>
+          <Separator />
+          <SwitchRow
+            id="slow-on-eruption"
+            label="Slow down when an eruption starts"
+            help="Switches to the eruption speed when an eruption starts and back to the speed you had when it ends"
+            checked={policy?.slowOnEruption ?? true}
+            onChange={(on) => send(slowOnEruptionMessage(on))}
+          />
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground">
+              Eruption speed <span className="font-medium text-foreground tabular-nums">{formatFactor(policy?.eruptionSpeed ?? 20)}</span>
+            </span>
+            <Button size="xs" variant="outline" disabled={useCurrent === null} onClick={() => useCurrent && send(useCurrent)}>
+              Use current speed for eruptions
+            </Button>
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-medium text-muted-foreground">Also slow down for</div>
+            {SLOW_EVENTS.map(([kind, label]) => (
+              <CheckboxRow
+                key={kind}
+                id={`slow-on-${kind}`}
+                label={label}
+                checked={policy?.slowOnEvents.includes(kind) ?? false}
+                onChange={(on) => send(slowOnEventMessage(policy, kind, on))}
+              />
+            ))}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -115,10 +173,9 @@ export function Playback() {
   const clock = useStore((s) => s.clock);
   const mode = clock?.mode ?? 'PAUSED';
   const replay = clock?.replay ?? false;
-  const speed = clock?.speed ?? 20;
+  const speed = clock?.speed ?? 3600;
   const playing = mode !== 'PAUSED' && !replay;
   const canReplay = useStore((s) => (s.replayInfo?.keyframes.length ?? 0) > 0);
-  const speedValue = mode === 'UNBOUNDED' ? 'max' : String(SPEEDS.reduce((a, b) => (Math.abs(b - speed) < Math.abs(a - speed) ? b : a)));
   return (
     <div className="flex items-center gap-1.5">
       <Tip content={playing ? 'Pause [K]' : 'Play [K]'}>
@@ -134,20 +191,7 @@ export function Playback() {
           {playing ? 'Pause' : 'Play'}
         </Button>
       </Tip>
-      <Tip content="Playback speed: simulated seconds per real second (does not change the physics)">
-        <span>
-          <SimpleSelect
-            label="Playback speed"
-            disabled={replay}
-            value={speedValue}
-            onChange={(v) => {
-              if (v === 'max') send({ type: 'transport', mode: 'UNBOUNDED', speed });
-              else send({ type: 'transport', mode: mode === 'PAUSED' ? 'PAUSED' : 'REALTIME', speed: Number(v) });
-            }}
-            options={[...SPEEDS.map((s) => [String(s), `${s}× speed`] as const), ['max', 'max speed'] as const]}
-          />
-        </span>
-      </Tip>
+      <SpeedMenu />
       <DropdownMenu>
         <Tip content="Step forward by a fixed time, or rewind to watch again">
           <DropdownMenuTrigger render={<Button size="sm" variant="outline" disabled={replay} />}>
@@ -161,6 +205,7 @@ export function Playback() {
               ['10 seconds', { seconds: 10 }, ''],
               ['10 minutes', { seconds: 600 }, ''],
               ['1 hour', { seconds: 3600 }, ''],
+              ['1 day', { seconds: 86_400 }, ''],
             ] as const
           ).map(([label, arg, key]) => (
             <DropdownMenuItem key={label} onClick={() => send({ type: 'step', ...arg })}>
@@ -174,9 +219,9 @@ export function Playback() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      {clock && mode !== 'PAUSED' && !replay && clock.rate > 0 && Math.abs(clock.rate - speed) / speed > 0.3 && (
+      {clock && mode === 'REALTIME' && !replay && clock.rate > 0 && clock.rate < 0.7 * speed && (
         <Tip content="The computer cannot keep up with the requested speed">
-          <span className="text-xs whitespace-nowrap text-muted-foreground max-xl:hidden">(running {clock.rate >= 10 ? clock.rate.toFixed(0) : clock.rate.toFixed(1)}×)</span>
+          <span className="text-xs whitespace-nowrap text-muted-foreground max-xl:hidden">(running {formatFactor(clock.rate)})</span>
         </Tip>
       )}
     </div>

@@ -74,7 +74,6 @@ export function StatusCard({ world }: { world: WorldInfo }) {
   const level = vs?.alert.level ?? 'DORMANT';
   const erupting = (vs?.chamber.eruptionRate ?? 0) > 0 || level === 'ERUPTING';
   const pressure = vs && vs.chamber.tensileStrengthMPa > 0 ? vs.chamber.overpressureMPa / vs.chamber.tensileStrengthMPa : null;
-  const tc = vs?.timeCompression;
   return (
     <section className={`${OVERLAY} flex max-h-full min-h-0 w-72 max-w-full flex-col p-3 text-sm`} aria-label="Volcano status">
       <div className="flex shrink-0 items-center gap-2">
@@ -108,8 +107,8 @@ export function StatusCard({ world }: { world: WorldInfo }) {
           </p>
           <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
             {erupting && (
-              <StatRow label="Lava output" help="Dense-rock-equivalent volume of magma leaving the vent, per second of volcano time (comparable with real eruptions)">
-                {formatRate(vs.chamber.physicalEruptionRate ?? vs.chamber.eruptionRate)} m³/s
+              <StatRow label="Lava output" help="Dense-rock-equivalent volume of magma leaving the vent per second (comparable with real eruptions)">
+                {formatRate(vs.chamber.eruptionRate)} m³/s
               </StatRow>
             )}
             {vs.plume && vs.plume.topZ > 0 && (
@@ -133,12 +132,6 @@ export function StatusCard({ world }: { world: WorldInfo }) {
             <StatRow label="Ground uplift" help="Largest ground uplift measured by the GPS stations">
               {(vs.deformation.maxUpliftM * 100).toFixed(1)} cm
             </StatRow>
-            {tc && (
-              <StatRow label="Time scale" help={`Volcano time runs ${formatFactor(tc.dormant)} faster than simulated time while quiet and ${formatFactor(tc.eruptive)} while erupting.`}>
-                {formatFactor(tc.current)}
-                {vs.physicalTime !== undefined && <span className="text-muted-foreground"> · ≈ {formatDuration(vs.physicalTime)}</span>}
-              </StatRow>
-            )}
           </dl>
           <div className="mt-2 flex gap-1">
             <Button variant="link" size="xs" className="h-auto p-0" onClick={() => set({ drawer: 'monitor' })}>
