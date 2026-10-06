@@ -18,6 +18,7 @@ import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.tephra.TephraCommands.LaunchBomb;
 import me.alex4386.typhon.engine.tephra.TephraCommands.LaunchSalvo;
+import me.alex4386.typhon.engine.tephra.TephraCommands.ProximalFallout;
 import me.alex4386.typhon.engine.tephra.TephraCommands.SetWind;
 import me.alex4386.typhon.engine.tephra.TephraCommands.StartExplosivePhase;
 import me.alex4386.typhon.engine.tephra.TephraCommands.StopExplosivePhase;
@@ -80,6 +81,8 @@ public final class TephraSubsystem implements Subsystem {
     private final TephraConfig config;
     private final WindField wind;
     private final List<EngineCommand> pending = new ArrayList<>();
+    /** Parcels a proximal-fallout command is split into (deterministic sampling of the landing field). */
+    static final int PROXIMAL_PARCELS = 96;
     private final List<Bomb> bombs = new ArrayList<>();
     private final List<Cooling> coolings = new ArrayList<>();
     /** Last announced ash fall per region: {fallRate, airborneLoad, time}. */
@@ -115,6 +118,7 @@ public final class TephraSubsystem implements Subsystem {
         bus.register(SetWind.class, c -> { if (c.target().equals(id)) pending.add(c); });
         bus.register(LaunchBomb.class, c -> { if (c.target().equals(id)) pending.add(c); });
         bus.register(LaunchSalvo.class, c -> { if (c.target().equals(id)) pending.add(c); });
+        bus.register(ProximalFallout.class, c -> { if (c.target().equals(id)) pending.add(c); });
     }
 
     // ── Direct API (same effect as the commands; applied at this subsystem's next step) ──
@@ -140,6 +144,14 @@ public final class TephraSubsystem implements Subsystem {
     public void launchSalvo(VentSite vent, double ballisticMassKg, double exitSpeed, double zenithMeanDeg,
             double zenithSigmaDeg, double silicaWt, int maxBombs) {
         pending.add(new LaunchSalvo(id, vent, ballisticMassKg, exitSpeed, zenithMeanDeg, zenithSigmaDeg, silicaWt, maxBombs));
+    }
+
+    /** See {@link ProximalFallout}; applied at this subsystem's next step. */
+    public void proximalFallout(VentSite vent, double massKg, double exitSpeed, double zenithMeanDeg,
+            double zenithSigmaDeg, double medianSizeM, double minSizeM, double maxSizeM) {
+        if (!(massKg > 0) || !(maxSizeM > minSizeM)) return;
+        pending.add(new ProximalFallout(id, vent, massKg, exitSpeed, zenithMeanDeg, zenithSigmaDeg, medianSizeM,
+                minSizeM, maxSizeM));
     }
 
     public void launchBomb(Vec3d start, Vec3d velocity, double diameter, double silicaWt) {
@@ -235,6 +247,7 @@ public final class TephraSubsystem implements Subsystem {
                 case SetWind set -> wind.set(set.speed(), set.directionRad(), set.variability(), context.random());
                 case LaunchBomb launch -> launch(context, launch.start(), launch.velocity(), launch.diameter(), launch.silicaWt());
                 case LaunchSalvo salvo -> launchSalvo(context, salvo);
+                case ProximalFallout fallout -> depositProximal(context, fallout);
                 default -> throw new IllegalStateException("Unexpected command " + command);
             }
         }
@@ -301,14 +314,58 @@ public final class TephraSubsystem implements Subsystem {
                     config.minBombDiameter,
                     config.maxBombDiameter);
             double speed = exitSpeed * StrictMath.exp(0.15 * random.nextGaussian()) / Math.sqrt(1 + diameter);
-            double zenithDeg = clamp(salvo.zenithMeanDeg() + random.nextGaussian() * salvo.zenithSigmaDeg(),
-                    0, config.maxLaunchAngleDeg);
+            double zenithDeg = launchZenithDeg(salvo.zenithMeanDeg(), salvo.zenithSigmaDeg(), random);
             double zenith = Math.toRadians(zenithDeg);
             double azimuth = random.nextDouble(0, 2 * Math.PI);
             double horizontal = speed * StrictMath.sin(zenith);
             Vec3d velocity = new Vec3d(
                     horizontal * StrictMath.cos(azimuth), speed * StrictMath.cos(zenith), horizontal * StrictMath.sin(azimuth));
             launch(context, sampleVentPoint(salvo.vent(), random), velocity, diameter, salvo.silicaWt());
+        }
+    }
+
+    /**
+     * Launch angle from vertical (degrees): normal around {@code meanDeg}, reflected at the vertical.
+     * Clamping the negative half to 0° instead sends half of a vertical salvo straight up, all landing
+     * back in the vent; reflection gives the half-normal spread of real explosions.
+     */
+    private double launchZenithDeg(double meanDeg, double sigmaDeg, SimRandom random) {
+        double z = Math.abs(meanDeg + random.nextGaussian() * sigmaDeg);
+        return Math.min(z, config.maxLaunchAngleDeg);
+    }
+
+    /** Lapilli of a discrete explosion: see {@link ProximalFallout}. */
+    private void depositProximal(StepContext context, ProximalFallout f) {
+        ensureGrid(f.vent().position());
+        SimRandom random = context.random();
+        double exitSpeed = Math.max(config.minExitSpeed, Math.min(config.maxExitSpeed, f.exitSpeed()));
+        double v = config.ballisticSpeedScale; // Froude: speeds ×1/√L, so ranges come out in blocks
+        Vec3d w = wind.at(context.time());
+        double parcelMass = f.massKg() * config.massScale / PROXIMAL_PARCELS;
+        double sigma = config.bombDiameterSigma;
+        for (int n = 0; n < PROXIMAL_PARCELS; n++) {
+            double d = clamp(f.medianSizeM() * StrictMath.exp(sigma * random.nextGaussian()), f.minSizeM(), f.maxSizeM());
+            double speed = exitSpeed * StrictMath.exp(0.15 * random.nextGaussian()) / Math.sqrt(1 + d);
+            double zenith = Math.toRadians(launchZenithDeg(f.zenithMeanDeg(), f.zenithSigmaDeg(), random));
+            double azimuth = random.nextDouble(0, 2 * Math.PI);
+            // Quadratic drag (v_t = sqrt(g/k)): a vertical launch at speed v peaks at (v_t²/2g)·ln(1 + v²/v_t²),
+            // so use the drag-free speed that reaches the same height.
+            double vt = Math.sqrt(config.gravity / Ballistics.dragFactor(d, config.bombDensity, config.dragCoefficient,
+                    config.airDensity));
+            double u = vt * Math.sqrt(Math.log1p((speed / vt) * (speed / vt)));
+            double vh = u * StrictMath.sin(zenith) * v;
+            double vz = u * StrictMath.cos(zenith) * v;
+            double flight = 2 * vz / config.gravity + 1e-3;
+            // The wind couples over the drag response time tau = v_t/g (model speeds, model seconds); like the
+            // launch speed it is a real speed, Froude-scaled to blocks per model second.
+            double tau = vt * v / config.gravity;
+            double drift = flight - tau * (1 - StrictMath.exp(-flight / tau));
+            double r = vh * flight;
+            Vec3d at = sampleVentPoint(f.vent(), random);
+            double x = at.x() + r * StrictMath.cos(azimuth) + w.x() * v * drift;
+            double z = at.z() + r * StrictMath.sin(azimuth) + w.z() * v * drift;
+            int cell = grid.cellAt((int) Math.floor(x), (int) Math.floor(z));
+            if (cell >= 0) grid.addDeposit(cell, parcelMass);
         }
     }
 
@@ -332,6 +389,9 @@ public final class TephraSubsystem implements Subsystem {
         double[] s = {start.x(), start.y(), start.z(), velocity.x(), velocity.y(), velocity.z()};
         Bomb bomb = new Bomb(
                 nextBombId++, s, diameter, k, silicaWt, (int) Math.floor(start.y()) - 1, context.time());
+        // A launch point sampled inside the crater can sit below a wall column: start on its surface,
+        // otherwise the bomb "lands" on its first step without flying.
+        s[1] = Math.max(s[1], surfaceTop(s[0], s[2], bomb));
 
         // Predict the flight on a copy so hosts can render it; identical unless terrain changes mid-flight.
         Bomb probe = bomb.copy();

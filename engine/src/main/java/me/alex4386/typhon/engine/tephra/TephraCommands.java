@@ -54,6 +54,21 @@ public final class TephraCommands {
         }
     }
 
+    /**
+     * Proximal fallout of a discrete explosion: {@code massKg} (real kg) of lapilli-sized clasts
+     * (between {@code minSizeM} and {@code maxSizeM}, lognormal around {@code medianSizeM}) thrown out
+     * ballistically and deposited around the vent. Too numerous and small to track one by one as
+     * bombs, too coarse to be carried by the explosion's ash cloud: they land within a few hundred
+     * metres, nearly symmetric about the vent, drifting only slightly with the wind.
+     */
+    public record ProximalFallout(String target, VentSite vent, double massKg, double exitSpeed, double zenithMeanDeg,
+            double zenithSigmaDeg, double medianSizeM, double minSizeM, double maxSizeM) implements EngineCommand {
+        public ProximalFallout {
+            Objects.requireNonNull(target, "target");
+            Objects.requireNonNull(vent, "vent");
+        }
+    }
+
     /** Launches a single bomb with explicit initial conditions (debug tools, scripted events). */
     public record LaunchBomb(String target, Vec3d start, Vec3d velocity, double diameter, double silicaWt)
             implements EngineCommand {

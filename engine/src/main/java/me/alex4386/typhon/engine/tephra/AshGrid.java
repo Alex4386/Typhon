@@ -77,7 +77,9 @@ final class AshGrid {
     }
 
     static AshGrid centeredOn(BlockPos center, int cellSize, int cells) {
-        int half = cells * cellSize / 2;
+        // The vent column sits in the middle of a cell (not on the corner of four), so a source at the
+        // vent spreads symmetrically over the cells around it.
+        int half = cells * cellSize / 2 + cellSize / 2;
         return new AshGrid(center.x() - half, center.z() - half, cellSize, cells);
     }
 
