@@ -16,15 +16,15 @@ class ChamberWallHeatTest {
                 .supplyRate(0)
                 .supplyVariability(0)
                 .coolingTimescale(1e10)
-                .dormantTimeScale(1e5)
                 .build();
         MagmaChamber chamber = new MagmaChamber(config);
-        Engine engine = Engine.builder(0).add(chamber).build();
+        Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
         double t0 = chamber.temperatureC();
         double power = chamber.wallHeatPowerW();
-        engine.step(); // one chamber step: 1 simulated second = 1e5 physical seconds
+        engine.step(); // one long quiet step (the chamber covers up to its next 1 s schedule point)
         double t1 = chamber.temperatureC();
-        double physicalSeconds = config.dormantTimeScale() * config.stepPeriodSeconds();
+        double period = config.stepPeriodSeconds();
+        double physicalSeconds = Math.ceil(engine.lastStepSeconds() / period - 1e-9) * period;
 
         double liquidus = chamber.liquidusC();
         double cEff = MagmaChamber.MELT_HEAT_CAPACITY

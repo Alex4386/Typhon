@@ -93,7 +93,7 @@ class EngineRunnerTest {
     @Test
     void realtimePacesSimulationTime() throws Exception {
         EngineRunner runner = new EngineRunner(Engine.builder(0).add(pinger()).build(), t -> {});
-        runner.realtime(10); // 10 simulated seconds per wall second
+        runner.realtime(10); // 10 seconds per wall second
         long start = System.nanoTime();
         runner.start();
         Thread.sleep(500);
@@ -108,7 +108,7 @@ class EngineRunnerTest {
 
     @Test
     void resultsDoNotDependOnRunnerSpeed() throws Exception {
-        int steps = 200; // 10 simulated seconds
+        int steps = 200; // 10 seconds
         EngineRunner fast = new EngineRunner(Engine.builder(9).add(pinger()).build(),
                 EngineRunner.Options.defaults().withMode(EngineRunner.Mode.UNBOUNDED), t -> {});
         EngineRunner slow = new EngineRunner(Engine.builder(9).add(pinger()).build(),

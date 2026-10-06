@@ -36,7 +36,8 @@ class LavaFlowTest {
     @Test
     void conservesVolume() {
         LavaTestWorld world = ramp(3);
-        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(5).withCoolingScale(200));
+        world.coarse(5);
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(200));
         Engine engine = world.engine(lava, 1);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 3, BASALT_T, BASALT_SI, 0.1));
 
@@ -60,7 +61,8 @@ class LavaFlowTest {
             if (x >= 30) return 90; // rim/walls around and beyond the basin
             return 80 - x / 2;
         });
-        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(10).withCoolingScale(0));
+        world.coarse(10);
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 2);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 200);
@@ -107,7 +109,7 @@ class LavaFlowTest {
 
     private static int footprint(double yieldStrength) {
         LavaTestWorld world = new LavaTestWorld(-2, -2, 1, 1, (x, z) -> 64);
-        LavaConfig config = new LavaConfig(1, 0, 2600, 1150, 4e5, 0.95, 25, 15, 3000, 2, 0.5,
+        LavaConfig config = new LavaConfig(0, 2600, 1150, 4e5, 0.95, 25, 15, 3000, 2, 0.5,
                 0.05, 0.2, 0.02, 1, 2, 20, 32);
         LavaFlow lava = new LavaFlow(world.terrain, config, new FixedRheology(100, yieldStrength));
         Engine engine = world.engine(lava, 4);
@@ -127,7 +129,8 @@ class LavaFlowTest {
 
     private static double runout(double temperature, double silica) {
         LavaTestWorld world = ramp(4);
-        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(10).withCoolingScale(50));
+        world.coarse(10);
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(50));
         Engine engine = world.engine(lava, 5);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, temperature, silica, 0.1));
         double farthest = 0;
@@ -219,7 +222,8 @@ class LavaFlowTest {
 
     private static List<EngineFrame> scenario(long seed, int ticks) {
         LavaTestWorld world = ramp(3);
-        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(5).withCoolingScale(200));
+        world.coarse(5);
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(200));
         Engine engine = world.engine(lava, seed);
         lava.addSource(LavaSource.atVent(VentSite.crater("summit", new BlockPos(0, 0, 0), 4), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, ticks);
@@ -228,16 +232,16 @@ class LavaFlowTest {
 
     @Test
     void savedStateResumesBitForBit() {
-        LavaConfig config = LavaConfig.defaults().withTimeScale(5).withCoolingScale(200);
+        LavaConfig config = LavaConfig.defaults().withCoolingScale(200);
         LavaSource source = LavaSource.atVent(VentSite.fissure("rift", new BlockPos(0, 0, 0), 0.3, 9), 2, BASALT_T, BASALT_SI, 0.1);
 
-        LavaTestWorld reference = ramp(3);
+        LavaTestWorld reference = ramp(3).coarse(5);
         LavaFlow refLava = new LavaFlow(reference.terrain, config);
         Engine refEngine = reference.engine(refLava, 99);
         refLava.addSource(source);
         reference.run(refEngine, 300);
 
-        LavaTestWorld before = ramp(3);
+        LavaTestWorld before = ramp(3).coarse(5);
         LavaFlow beforeLava = new LavaFlow(before.terrain, config);
         Engine beforeEngine = before.engine(beforeLava, 99);
         beforeLava.addSource(source);
@@ -246,7 +250,7 @@ class LavaFlowTest {
 
         TerrainModel resentTerrain = before.copyTerrain();
         LavaFlow afterLava = new LavaFlow(resentTerrain, config);
-        Engine afterEngine = Engine.builder(99)
+        Engine afterEngine = Engine.builder(99).baseStepMicros(before.baseStepMicros)
                 .add(resentTerrain)
                 .add(afterLava)
                 .restore(saved)
@@ -263,7 +267,8 @@ class LavaFlowTest {
     void unknownTerrainActsAsWallAndIsRequested() {
         // Only chunk (0,0) is known; the source sits at its +x edge on a slope falling toward +x.
         LavaTestWorld world = new LavaTestWorld(0, 0, 0, 0, (x, z) -> 100 - x);
-        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(5).withCoolingScale(0));
+        world.coarse(5);
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 10);
         lava.addSource(LavaSource.at("edge", new BlockPos(15, 0, 8), 1, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 100);
@@ -281,7 +286,8 @@ class LavaFlowTest {
     void lavaEnteringWaterIsReported() {
         // Ramp falling toward +x; the sea starts at x >= 10.
         LavaTestWorld world = new LavaTestWorld(-1, -1, 1, 0, (x, z) -> 80 - x, (x, z) -> x >= 10 ? 75 : LavaTestWorld.NO_WATER);
-        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(10).withCoolingScale(0));
+        world.coarse(10);
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 11);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 400);
@@ -293,7 +299,8 @@ class LavaFlowTest {
     @Test
     void frontEventsTrackRunout() {
         LavaTestWorld world = ramp(3);
-        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(5).withCoolingScale(0));
+        world.coarse(5);
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 12);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 400);
@@ -324,7 +331,8 @@ class LavaFlowTest {
     void renderedBlocksMatchFinalState() {
         // Every lava block ever placed must be removed or replaced by rock once everything solidified.
         LavaTestWorld world = ramp(3);
-        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(5).withCoolingScale(300));
+        world.coarse(5);
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(300));
         Engine engine = world.engine(lava, 14);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 100);

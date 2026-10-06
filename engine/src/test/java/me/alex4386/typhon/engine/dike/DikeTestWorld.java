@@ -60,9 +60,11 @@ final class DikeTestWorld {
                 .supplyVariability(0);
     }
 
+    /** Engine base step of these tests (1 s). */
+    static final long TICK_MICROS = 1_000_000;
+
     static DikeConfig fastConfig() {
         DikeConfig c = DikeConfig.defaults();
-        c.timeScale = 20;
         c.conduitSealing = 0; // only forced dikes unless a test opts in
         return c;
     }
@@ -74,7 +76,8 @@ final class DikeTestWorld {
         TerrainModel terrain = new TerrainModel();
         MagmaChamber chamber = new MagmaChamber(chamberConfig);
         DikePropagation dikes = new DikePropagation(config, DikeMagmaSource.of(chamber), terrain);
-        Engine.Builder builder = Engine.builder(seed).add(terrain).add(chamber).add(dikes);
+        // one-second ticks: dikes rise metres per second, so tests run minutes of propagation quickly
+        Engine.Builder builder = Engine.builder(seed).baseStepMicros(TICK_MICROS).add(terrain).add(chamber).add(dikes);
         if (restore != null) builder.restore(restore);
         Engine engine = builder.build();
         engine.submit(snapshot);

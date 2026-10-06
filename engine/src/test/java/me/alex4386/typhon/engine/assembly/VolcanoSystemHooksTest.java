@@ -24,7 +24,7 @@ class VolcanoSystemHooksTest {
         TerrainModel terrain = new TerrainModel();
         return VolcanoSystem.builder("v", List.of(FLANK, SUMMIT), terrain, new LavaFlow(terrain))
                 .chamber(MagmaChamberConfig.builder("v", new BlockPos(0, 40, 0)).build())
-                .scaling(new VolcanoScaling(4, 100, 1, 1));
+                .scaling(new VolcanoScaling(4, 100));
     }
 
     @Test

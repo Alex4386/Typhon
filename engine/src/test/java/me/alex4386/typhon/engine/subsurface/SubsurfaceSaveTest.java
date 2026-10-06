@@ -20,7 +20,6 @@ class SubsurfaceSaveTest {
     private static SubsurfaceConfig config() {
         SubsurfaceConfig c = new SubsurfaceConfig();
         c.rainfallMmPerHour = 30;
-        c.timeScale = 1000;
         c.initialWaterTableDepthM = 4;
         return c;
     }

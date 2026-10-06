@@ -88,13 +88,22 @@ class GeothermalTest {
 
     static final Map<GeothermalConfig, Double> FROZEN_WATER = new IdentityHashMap<>();
 
+    /** Physical seconds one test step covers, per config (default: one geothermal period). */
+    static final Map<GeothermalConfig, Double> STEP_TIME = new IdentityHashMap<>();
+
+    /** Lets each test step of {@code config} cover {@code periods} geothermal periods. */
+    static GeothermalConfig stepTime(GeothermalConfig config, double periods) {
+        STEP_TIME.put(config, periods * config.stepSeconds);
+        return config;
+    }
+
     /**
      * Config for a pinned, uniform hydrothermal state ({@link #frozen}): reservoir saturation
-     * {@code water}, two simulated hours per step.
+     * {@code water}, two hours per test step.
      */
     static GeothermalConfig frozenConfig(double water) {
         GeothermalConfig config = smallConfig();
-        config.timeScale = 3600;
+        GeothermalTest.stepTime(config, 3600);
         FROZEN_WATER.put(config, water);
         return config;
     }
@@ -110,11 +119,9 @@ class GeothermalTest {
         return (StubField) geothermal.field();
     }
 
-    /** Subsurface settings for live tests: heat and groundwater compressed so systems develop in a test. */
+    /** Subsurface settings for live tests (they spin the system up with {@code equilibrate} first). */
     static SubsurfaceConfig liveSubsurface() {
-        SubsurfaceConfig c = new SubsurfaceConfig();
-        c.timeScale = 30000;
-        return c;
+        return new SubsurfaceConfig();
     }
 
     /** Geothermal heating a real {@link Subsurface} on the terrain's world model. */
@@ -130,9 +137,9 @@ class GeothermalTest {
         return geothermal;
     }
 
-    /** Engine with the geothermal subsystem (and its live subsurface, if any). */
+    /** Engine with the geothermal subsystem (and its live subsurface, if any), on adaptive steps. */
     static Engine.Builder engine(Geothermal geothermal, long seed) {
-        Engine.Builder builder = Engine.builder(seed);
+        Engine.Builder builder = Engine.builder(seed).adaptive(Geothermal.MAX_STEP_SECONDS);
         if (geothermal.field() instanceof Subsurface subsurface) builder.add(subsurface);
         return builder.add(geothermal);
     }
@@ -142,10 +149,12 @@ class GeothermalTest {
         return run(engine, geothermal, steps);
     }
 
+    /** Runs {@code steps} test steps (see {@link #stepTime}) of physical time. */
     static List<EngineFrame> run(Engine engine, Geothermal geothermal, int steps) {
         List<EngineFrame> frames = new ArrayList<>();
-        long perStep = Math.round(geothermal.periodSeconds() * 20);
-        for (int i = 0; i < steps * perStep; i++) frames.add(engine.step());
+        double perStep = STEP_TIME.getOrDefault((GeothermalConfig) geothermal.config(), geothermal.periodSeconds());
+        double end = engine.time() + steps * perStep;
+        while (engine.time() < end - 1e-9) frames.add(engine.step());
         return frames;
     }
 
@@ -246,7 +255,7 @@ class GeothermalTest {
 
     private static long fumaroleEvents(double chamberC) {
         GeothermalConfig config = smallConfig();
-        config.timeScale = 600;
+        GeothermalTest.stepTime(config, 600);
         config.ventHeatPowerW = 2e6; // a modest hydrothermal area, so the response is not saturated
         config.ventPipeDepthM = 20;
         config.maxFumaroles = 1000;
@@ -462,7 +471,7 @@ class GeothermalTest {
     void alterationAccumulatesOverTime() {
         GeothermalConfig config = frozenConfig(0.3);
         Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 200);
-        Engine engine = Engine.builder(9).add(geothermal).build();
+        Engine engine = engine(geothermal, 9).build();
         run(engine, geothermal, 5);
         int early = geothermal.count(HydrothermalFeature.ACID_ALTERATION);
         run(engine, geothermal, 30);
@@ -555,7 +564,7 @@ class GeothermalTest {
 
     static Geothermal activeVolcano(TerrainModel terrain) {
         GeothermalConfig config = smallConfig();
-        config.timeScale = 900;
+        GeothermalTest.stepTime(config, 900);
         Geothermal geothermal = live(config, terrain, new StubMagma(1150),
                 List.of(VentSite.crater("main", CENTER, 3), VentSite.fissure("rift", new BlockPos(12, 64, 0), 0.5, 20)),
                 liveSubsurface());
@@ -585,7 +594,7 @@ class GeothermalTest {
         InMemorySaveStore saved = Saves.save(before);
 
         GeothermalConfig config = smallConfig();
-        config.timeScale = 900;
+        GeothermalTest.stepTime(config, 900);
         Geothermal second = live(config, world, new StubMagma(1150),
                 List.of(VentSite.crater("main", CENTER, 3), VentSite.fissure("rift", new BlockPos(12, 64, 0), 0.5, 20)),
                 liveSubsurface());

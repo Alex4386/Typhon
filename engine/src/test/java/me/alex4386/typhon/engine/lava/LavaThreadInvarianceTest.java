@@ -21,7 +21,8 @@ class LavaThreadInvarianceTest {
     private static Run run(int threads) {
         LavaTestWorld world = new LavaTestWorld(-2, -2, 3, 2, (x, z) -> 90 - x / 2 + Math.abs(z) / 4,
                 (x, z) -> x >= 40 ? 78 : LavaTestWorld.NO_WATER);
-        LavaConfig config = LavaConfig.defaults().toBuilder().timeScale(20).coolingScale(100)
+        world.coarse(20);
+        LavaConfig config = LavaConfig.defaults().toBuilder().coolingScale(100)
                 .tubeMinRoofThickness(0.5).build();
         LavaFlow lava = new LavaFlow(world.terrain, config);
         Engine engine = world.engine(lava, 42, threads);

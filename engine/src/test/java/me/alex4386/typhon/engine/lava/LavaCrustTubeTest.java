@@ -42,7 +42,8 @@ class LavaCrustTubeTest {
     void pondCrustGrowsWithSquareRootOfTime() {
         // A 3 m basalt pond at physical cooling speed, 10 s per tick.
         LavaTestWorld world = new LavaTestWorld(-1, -1, 0, 0, (x, z) -> x == 0 && z == 0 ? 60 : 100);
-        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(200));
+        world.coarse(200);
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults());
         Engine engine = world.engine(lava, 1);
         lava.addLava(0, 0, 3, BASALT_T, BASALT_SI, 0.1);
 
@@ -69,9 +70,9 @@ class LavaCrustTubeTest {
 
     private static double runout(boolean crust) {
         // Gentle slope (≈3°): slow sheet flow, below the crust disruption speed.
-        LavaTestWorld world = new LavaTestWorld(-1, -2, 12, 1, (x, z) -> 120 - Math.floorDiv(x, 20));
+        LavaTestWorld world = new LavaTestWorld(-1, -2, 12, 1, (x, z) -> 120 - Math.floorDiv(x, 20)).coarse(10);
         LavaFlow lava = new LavaFlow(world.terrain,
-                LavaConfig.defaults().toBuilder().timeScale(10).coolingScale(20).crustEnabled(crust).build());
+                LavaConfig.defaults().toBuilder().coolingScale(20).crustEnabled(crust).build());
         Engine engine = world.engine(lava, 2);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 0.5, BASALT_T, BASALT_SI, 0.1));
         double farthest = 0;
@@ -98,7 +99,8 @@ class LavaCrustTubeTest {
     /** Crust along the proximal centreline of a steep (≈27°) channel where basalt runs at metres per second. */
     private static double channelCrust(double disruptionVelocity) {
         LavaTestWorld world = new LavaTestWorld(-1, -2, 6, 1, (x, z) -> 200 - Math.floorDiv(x, 2));
-        LavaConfig config = LavaConfig.defaults().toBuilder().timeScale(5).coolingScale(20)
+        world.coarse(5);
+        LavaConfig config = LavaConfig.defaults().toBuilder().coolingScale(20)
                 .crustDisruptionVelocity(disruptionVelocity).build();
         LavaFlow lava = new LavaFlow(world.terrain, config);
         Engine engine = world.engine(lava, 3);
@@ -131,7 +133,7 @@ class LavaCrustTubeTest {
 
     /** Fills the dammed trough, lets a crust grow over the pond, then breaches the dam. */
     private static TubeRun pondThenBreach(LavaConfig config, long seed, int drainTicks) {
-        LavaTestWorld world = new LavaTestWorld(-1, -1, 2, 0, (x, z) -> trough(x, z, false));
+        LavaTestWorld world = new LavaTestWorld(-1, -1, 2, 0, (x, z) -> trough(x, z, false)).coarse(20);
         LavaFlow lava = new LavaFlow(world.terrain, config);
         Engine engine = world.engine(lava, seed);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 1.0, BASALT_T, BASALT_SI, 0.1));
@@ -162,8 +164,9 @@ class LavaCrustTubeTest {
         return new TerrainSnapshot(chunks);
     }
 
+    /** Tube runs step 1 s per tick ({@link #pondThenBreach} builds its world coarse). */
     private static LavaConfig tubeConfig() {
-        return LavaConfig.defaults().toBuilder().timeScale(20).coolingScale(100).tubeMinRoofThickness(0.5).build();
+        return LavaConfig.defaults().toBuilder().coolingScale(100).tubeMinRoofThickness(0.5).build();
     }
 
     @Test
@@ -244,7 +247,8 @@ class LavaCrustTubeTest {
     @Test
     void lavaStateRoundTripsThroughRegionFields() {
         LavaTestWorld world = new LavaTestWorld(-1, -1, 1, 1, (x, z) -> 80 - x);
-        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(10));
+        world.coarse(10);
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults());
         Engine engine = world.engine(lava, 4);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 300);
@@ -254,7 +258,8 @@ class LavaCrustTubeTest {
         assertNotNull(saved.field("cells"), "lava cells are stored as a region field");
         assertEquals(5, saved.json().get("format").getAsInt());
 
-        LavaFlow copy = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(10));
+        world.coarse(10);
+        LavaFlow copy = new LavaFlow(world.terrain, LavaConfig.defaults());
         copy.loadState(saved);
         assertEquals(lava.totalLavaVolume(), copy.totalLavaVolume());
         assertEquals(lava.activeCellCount(), copy.activeCellCount());
@@ -277,7 +282,8 @@ class LavaCrustTubeTest {
         LavaTestWorld world = new LavaTestWorld(-1, -1, 3, 0, (x, z) -> Math.max(50, 80 - x), (x, z) -> SEA);
         // Flows now advance at their physical speed even when time-compressed (sub-steps), so lava
         // reaches deep water as a thick tongue; cooling ×50 lets its front freeze within the test.
-        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(10).withCoolingScale(50));
+        world.coarse(10);
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(50));
         Engine engine = world.engine(lava, 5);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 3, BASALT_T, BASALT_SI, 0.1));
         int shoreBefore = shoreline(world.terrain);
@@ -317,7 +323,8 @@ class LavaCrustTubeTest {
     /** Peak entry power (MW), or with {@code explosive}, the number of littoral explosions. */
     private static double maxEntry(double rate, boolean explosive) {
         LavaTestWorld world = new LavaTestWorld(-1, -1, 1, 0, (x, z) -> 80 - x, (x, z) -> x >= 10 ? 75 : LavaTestWorld.NO_WATER);
-        LavaConfig config = LavaConfig.defaults().toBuilder().timeScale(10).coolingScale(1).littoralExplosionFluxM3s(0.5).build();
+        world.coarse(10);
+        LavaConfig config = LavaConfig.defaults().toBuilder().coolingScale(1).littoralExplosionFluxM3s(0.5).build();
         LavaFlow lava = new LavaFlow(world.terrain, config);
         Engine engine = world.engine(lava, 6);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), rate, BASALT_T, BASALT_SI, 0.1));

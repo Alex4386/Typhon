@@ -59,15 +59,14 @@ class GroundwaterTest {
         c.gradientCPerKm = 30;
         c.rainfallMmPerHour = 20;
         c.evaporationMmPerHour = 1;
-        c.timeScale = 2000;
         c.initialWaterTableDepthM = 5;
         Subsurface s = new Subsurface(world, c);
         s.setHeatSources("v", new SubsurfaceHeatTest.FixedSources(List.of(),
                 List.of(new HeatSources.Vent(11.5, 11.5, 2e9, 30, 300))));
-        Engine engine = Engine.builder(7).add(s).build();
-        engine.runFor(100);
+        Engine engine = Engine.builder(7).adaptive(3600).add(s).build();
+        engine.runFor(2e5); // a couple of days
         s.addWater(10, 10, 500);
-        engine.runFor(500);
+        engine.runFor(1e6); // then twelve more
         WaterBudget b = s.budget();
         assertTrue(b.rain() > 0 && b.poured() == 500 && b.evaporated() > 0, b.toString());
         assertTrue(b.boiled() > 0, "the hydrothermal system should boil: " + b);

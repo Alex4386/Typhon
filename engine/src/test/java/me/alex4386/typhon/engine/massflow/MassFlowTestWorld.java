@@ -77,12 +77,21 @@ final class MassFlowTestWorld {
         return new TerrainSnapshot(chunks);
     }
 
+    /** Base step of engines this world builds (µs); {@link #coarse} lengthens it. */
+    long baseStepMicros = Engine.DEFAULT_BASE_STEP_MICROS;
+
+    /** Engines built from now on step {@code factor} × 50 ms per tick (flows sub-step inside). */
+    MassFlowTestWorld coarse(double factor) {
+        baseStepMicros = Math.round(Engine.DEFAULT_BASE_STEP_MICROS * factor);
+        return this;
+    }
+
     Engine engine(MassFlowField field, long seed) {
-        return Engine.builder(seed).add(terrain).add(field).build();
+        return Engine.builder(seed).baseStepMicros(baseStepMicros).add(terrain).add(field).build();
     }
 
     Engine engine(MassFlowField field, long seed, int threads) {
-        return Engine.builder(seed).threads(threads).add(terrain).add(field).build();
+        return Engine.builder(seed).baseStepMicros(baseStepMicros).threads(threads).add(terrain).add(field).build();
     }
 
     void run(Engine engine, int ticks) {

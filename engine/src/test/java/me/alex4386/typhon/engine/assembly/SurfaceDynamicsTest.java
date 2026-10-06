@@ -110,7 +110,7 @@ class SurfaceDynamicsTest {
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder("test", List.of(vent), terrain, lava)
                 .chamber(chamber)
-                .scaling(VolcanoScaling.DEFAULT.withTimeCompression(1, 1))
+                .scaling(VolcanoScaling.DEFAULT)
                 .dikesEnabled(false)
                 .build();
         Engine.Builder builder = Engine.builder(11).add(terrain);

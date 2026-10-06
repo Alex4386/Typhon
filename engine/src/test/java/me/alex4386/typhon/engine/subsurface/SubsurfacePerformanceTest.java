@@ -15,6 +15,9 @@ import org.junit.jupiter.api.Test;
  */
 @Tag("perf")
 class SubsurfacePerformanceTest {
+    /** One macro step of about a week, as a quiet world takes them. */
+    private static final double MACRO_SPAN = 6e5;
+
     @Test
     void tenKilometreWorldFitsTheBudget() {
         int n = 1000;
@@ -29,7 +32,6 @@ class SubsurfacePerformanceTest {
         long worldBytes = rt.totalMemory() - rt.freeMemory() - before;
 
         SubsurfaceConfig c = new SubsurfaceConfig();
-        c.timeScale = 5000;
         c.rainfallMmPerHour = 0; // a settled water table: only the vent area keeps changing
         Subsurface s = new Subsurface(world, c);
         // Typical: a vent's hydrothermal system; level of detail steps only chunks near it.
@@ -40,10 +42,10 @@ class SubsurfacePerformanceTest {
         long totalBytes = rt.totalMemory() - rt.freeMemory() - before;
 
         // Typical: after the initial demotion (demoteAfter steps), level of detail steps only chunks near the volcano.
-        for (int i = 0; i < 50; i++) s.macroStep(c.macroStepSeconds * c.timeScale, c.macroStepSeconds, true);
+        for (int i = 0; i < 50; i++) s.macroStep(MACRO_SPAN, MACRO_SPAN, true);
         int steps = 10;
         long t0 = System.nanoTime();
-        for (int i = 0; i < steps; i++) s.macroStep(c.macroStepSeconds * c.timeScale, c.macroStepSeconds, true);
+        for (int i = 0; i < steps; i++) s.macroStep(MACRO_SPAN, MACRO_SPAN, true);
         double lodMs = (System.nanoTime() - t0) / 1e6 / steps;
         System.out.printf("PERF phases of the last step: prepare %.1f ms, heat %.1f ms, groundwater %.1f ms%n",
                 s.lastTimings[0] / 1e6, s.lastTimings[1] / 1e6, s.lastTimings[2] / 1e6);
@@ -56,9 +58,9 @@ class SubsurfacePerformanceTest {
                 List.of(new HeatSources.Chamber(500, 500, 1500 - 6000, 1500, 1500, 1000)),
                 List.of(new HeatSources.Vent(500, 500, 5e8, 300, 400))));
         c.hotChangeC = -1;
-        for (int i = 0; i < 2; i++) s.macroStep(c.macroStepSeconds * c.timeScale, c.macroStepSeconds, true);
+        for (int i = 0; i < 2; i++) s.macroStep(MACRO_SPAN, MACRO_SPAN, true);
         long t1 = System.nanoTime();
-        for (int i = 0; i < steps; i++) s.macroStep(c.macroStepSeconds * c.timeScale, c.macroStepSeconds, true);
+        for (int i = 0; i < steps; i++) s.macroStep(MACRO_SPAN, MACRO_SPAN, true);
         double fullMs = (System.nanoTime() - t1) / 1e6 / steps;
 
         System.out.printf("PERF world model %.1f MB, world + subsurface %.1f MB, %d solver columns%n",

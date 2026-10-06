@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test;
 class EruptionDynamicsTest {
     private static final BlockPos CENTER = new BlockPos(0, -40, 0);
 
-    /** St. Helens-like wet dacite under a sealed conduit, at failure. Eruptions run ×20 faster. */
+    /** St. Helens-like wet dacite under a sealed conduit, at failure. */
     static MagmaChamberConfig dacite() {
         return MagmaChamberConfig.builder("v", CENTER)
                 .volume(5e8).lithostaticDepth(7500).conduitRadius(15)
@@ -34,14 +34,10 @@ class EruptionDynamicsTest {
                 .initialTemperatureC(920).rechargeTemperatureC(950)
                 .initialOverpressureMPa(15.1)
                 .supplyRate(1).supplyVariability(0)
-                .eruptiveTimeScale(20)
                 .build();
     }
 
-    /**
-     * Stromboli-like: an open conduit over CO₂-rich basalt below its re-opening pressure, slow supply.
-     * Physical time throughout.
-     */
+    /** Stromboli-like: an open conduit over CO₂-rich basalt below its re-opening pressure, slow supply. */
     static MagmaChamberConfig openVentBasalt() {
         return MagmaChamberConfig.builder("v", CENTER)
                 .volume(5e7).lithostaticDepth(3000).conduitRadius(0.8)
@@ -52,12 +48,11 @@ class EruptionDynamicsTest {
                 .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
                 .initialTemperatureC(1140).rechargeTemperatureC(1150)
                 .initialOverpressureMPa(0)
-                .dormantTimeScale(1).eruptiveTimeScale(1)
                 .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
                 .build();
     }
 
-    /** Degassed, crystal-rich dacite under an open conduit, just past re-opening. Eruptions ×200. */
+    /** Degassed, crystal-rich dacite under an open conduit, just past re-opening. */
     static MagmaChamberConfig degassedDacite() {
         return MagmaChamberConfig.builder("v", CENTER)
                 .volume(5e8).lithostaticDepth(3000).conduitRadius(10)
@@ -67,7 +62,6 @@ class EruptionDynamicsTest {
                 .initialTemperatureC(900).rechargeTemperatureC(900)
                 .initialOverpressureMPa(1.6).eruptionEndOverpressureMPa(-2)
                 .supplyRate(0.5).supplyVariability(0)
-                .eruptiveTimeScale(200)
                 .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
                 .build();
     }
@@ -87,6 +81,21 @@ class EruptionDynamicsTest {
         return new Run(events, bursts, flows);
     }
 
+    /** Like {@link #run} for {@code seconds} of time (adaptive engines take long quiet steps). */
+    static Run runFor(Engine engine, MagmaChamber chamber, double seconds) {
+        List<EngineEvent> events = new ArrayList<>();
+        List<ConduitBurst> bursts = new ArrayList<>();
+        List<ConduitSolution> flows = new ArrayList<>();
+        double end = engine.time() + seconds;
+        while (engine.time() < end) {
+            events.addAll(engine.step().events());
+            bursts.addAll(chamber.drainBursts());
+            ConduitSolution flow = chamber.conduitFlow();
+            if (flow != null && (flows.isEmpty() || flows.get(flows.size() - 1) != flow)) flows.add(flow);
+        }
+        return new Run(events, bursts, flows);
+    }
+
     static <T> List<T> of(List<EngineEvent> events, Class<T> type) {
         return events.stream().filter(type::isInstance).map(type::cast).toList();
     }
@@ -94,8 +103,8 @@ class EruptionDynamicsTest {
     @Test
     void sealedWetChamberFailsExplosivelyThenReopensAtLowPressure() {
         MagmaChamber chamber = new MagmaChamber(dacite());
-        Engine engine = Engine.builder(0).add(chamber).build();
-        Run run = run(engine, chamber, 20 * 60 * 20);
+        Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
+        Run run = runFor(engine, chamber, 200 * 86_400.0); // an eruption, months of recharge, the next one
 
         ConduitSolution onset = run.flows().get(0);
         assertTrue(onset.fragmented(), "a sealed conduit failing at high pressure fragments: " + onset);
@@ -112,8 +121,8 @@ class EruptionDynamicsTest {
     @Test
     void degassedDaciteExtrudesStiffLavaWhosePlugFails() {
         MagmaChamber chamber = new MagmaChamber(degassedDacite());
-        Engine engine = Engine.builder(0).add(chamber).build();
-        Run run = run(engine, chamber, 20 * 3600 * 4);
+        Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
+        Run run = runFor(engine, chamber, 800 * 3600.0); // a month of extrusion
 
         assertTrue(chamber.erupting(), "slow extrusion keeps going");
         ConduitSolution flow = chamber.conduitFlow();
@@ -167,15 +176,15 @@ class EruptionDynamicsTest {
     void openConduitSealsDuringLongRepose() {
         MagmaChamberConfig config = dacite().toBuilder().supplyRate(0).build();
         MagmaChamber chamber = new MagmaChamber(config);
-        Engine engine = Engine.builder(0).add(chamber).build();
+        Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
         boolean ended = false;
-        for (int i = 0; i < 20 * 3600 && !ended; i++) {
+        for (int i = 0; i < 200_000 && !ended; i++) {
             ended = !of(engine.step().events(), EruptionEnded.class).isEmpty();
         }
         assertTrue(ended);
         assertEquals(config.reopenOverpressureMPa(), chamber.failureOverpressureMPa(), 1e-9, "freshly open conduit");
 
-        run(engine, chamber, 20 * 3600 * 2); // years of repose at ×5000
+        runFor(engine, chamber, 3.6e7); // over a year of repose
         assertTrue(chamber.conduitOpenness() < 0.5);
         assertTrue(chamber.failureOverpressureMPa() > 0.5 * config.tensileStrengthMPa(), "sealed again");
         assertTrue(chamber.fragmented(), "the next failure of a sealed conduit would fragment again");

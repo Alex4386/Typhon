@@ -33,6 +33,18 @@ class MagmaChamberTest {
         return MagmaChamberConfig.builder("v", CENTER).volume(5e7).supplyRate(0.01).supplyVariability(0);
     }
 
+    /** Steps until {@code seconds} have passed (adaptive engines take long quiet steps). */
+    private static <T extends EngineEvent> List<T> runFor(Engine engine, double seconds, Class<T> type) {
+        List<T> found = new ArrayList<>();
+        double end = engine.time() + seconds;
+        while (engine.time() < end) {
+            for (EngineEvent event : engine.step().events()) {
+                if (type.isInstance(event)) found.add(type.cast(event));
+            }
+        }
+        return found;
+    }
+
     private static <T extends EngineEvent> List<T> run(Engine engine, int ticks, Class<T> type) {
         List<T> found = new ArrayList<>();
         for (int i = 0; i < ticks; i++) {
@@ -48,16 +60,15 @@ class MagmaChamberTest {
         MagmaChamberConfig config = steady().build();
         MagmaChamber chamber = new MagmaChamber(config);
         assertEquals(0, chamber.exsolvedWaterWt(), "default magma is undersaturated");
-        Engine engine = Engine.builder(0).add(chamber).build();
+        Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
 
-        int seconds = 600;
-        run(engine, seconds * 20, EngineEvent.class);
+        runFor(engine, 3e6, EngineEvent.class); // about a month
+        double seconds = engine.time();
 
-        double expected = config.supplyRate() * config.dormantTimeScale() * seconds
-                / (config.volume() * config.compressibilityPerMPa());
+        double expected = config.supplyRate() * seconds / (config.volume() * config.compressibilityPerMPa());
         assertEquals(expected, chamber.overpressureMPa(), expected * 0.01);
-        assertEquals(config.supplyRate() * config.dormantTimeScale() / (config.volume() * config.compressibilityPerMPa()),
-                chamber.overpressureRateMPaPerSecond(), 1e-9);
+        assertEquals(config.supplyRate() / (config.volume() * config.compressibilityPerMPa()),
+                chamber.overpressureRateMPaPerSecond(), 1e-12);
         assertFalse(chamber.erupting());
     }
 
@@ -65,9 +76,10 @@ class MagmaChamberTest {
     void eruptsAtTensileStrengthAndDrainsToEndThreshold() {
         MagmaChamberConfig config = steady().initialOverpressureMPa(14.5).conduitRadius(3).build();
         MagmaChamber chamber = new MagmaChamber(config);
-        Engine engine = Engine.builder(0).add(chamber).build();
+        Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
 
-        List<EngineEvent> events = run(engine, 20 * 3600 * 3, EngineEvent.class);
+        // recharge to failure takes days; the eruption is resolved at fine steps
+        List<EngineEvent> events = runFor(engine, 30 * 86_400, EngineEvent.class);
         EruptionStarted started = events.stream().filter(EruptionStarted.class::isInstance)
                 .map(EruptionStarted.class::cast).findFirst().orElse(null);
         EruptionEnded ended = events.stream().filter(EruptionEnded.class::isInstance)
@@ -95,7 +107,7 @@ class MagmaChamberTest {
         run(engine, 40, EngineEvent.class); // starts on first step, flows on the next
         assertTrue(chamber.erupting());
         double flow = chamber.conduitFlow().dreRateM3PerS();
-        assertEquals(flow, chamber.physicalEruptionRate(), flow * 0.05, "the chamber drains at the conduit's steady rate");
+        assertEquals(flow, chamber.eruptionRate(), flow * 0.05, "the chamber drains at the conduit's steady rate");
 
         double early = chamber.eruptionRate();
         run(engine, 20 * 1800, EngineEvent.class);
@@ -225,10 +237,9 @@ class MagmaChamberTest {
                 .supplyRate(0)
                 .initialTemperatureC(1150)
                 .coolingTimescale(5e7)
-                .dormantTimeScale(1e4)
                 .build();
         MagmaChamber chamber = new MagmaChamber(config);
-        Engine engine = Engine.builder(0).add(chamber).build();
+        Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
 
         double t0 = chamber.temperatureC();
         double phi0 = chamber.crystalFraction();
@@ -236,7 +247,7 @@ class MagmaChamberTest {
         double w0 = chamber.waterWt();
         double eta0 = chamber.viscosityLog10();
 
-        run(engine, 20 * 1500, EngineEvent.class);
+        runFor(engine, 1.5e7, EngineEvent.class); // about half a year
 
         assertTrue(chamber.temperatureC() < t0 - 100, "cools");
         assertTrue(chamber.crystalFraction() > phi0, "crystallises");

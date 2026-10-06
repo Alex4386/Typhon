@@ -73,7 +73,7 @@ class DefinitionsTest {
         assertEquals(4, w.spec().metersPerColumn());
         assertEquals(16, w.spec().solverSpacing());
         assertEquals(4, w.scaling().metersPerBlock());
-        assertEquals(20, w.scaling().eruptiveTimeCompression());
+        // the fixture still has scaling.*TimeCompression: retired keys load and are ignored
         assertTrue(Double.isNaN(w.spec().seaLevelZ()));
         assertEquals(2, w.spec().basement().size());
         assertEquals("basalt", w.spec().edificeMaterial());
@@ -102,10 +102,8 @@ class DefinitionsTest {
         assertEquals(0.2, v.pdc().frictionCoefficient);
         assertFalse(v.deformation());
         assertEquals(0.4, v.tephra().bombMedianDiameter);
-        assertEquals(10, v.eruptiveCompression());
-        assertTrue(Double.isNaN(v.dormantCompression()));
-        assertEquals(10, v.scaling(world().scaling()).eruptiveTimeCompression());
-        assertEquals(5000, v.scaling(world().scaling()).dormantTimeCompression());
+        // the fixture's retired timeCompression section is ignored: one physical clock
+        assertEquals(world().scaling(), v.scaling(world().scaling()));
         assertEquals("basalt", v.edificeMaterial());
     }
 

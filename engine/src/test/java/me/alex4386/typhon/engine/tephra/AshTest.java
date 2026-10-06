@@ -108,35 +108,9 @@ class AshTest {
     }
 
     /**
-     * A time-compressed eruption injects more tephra per simulated second but rises no higher: the
+     * A time-compressed eruption injects more tephra per second but rises no higher: the
      * column follows the physical mass eruption rate.
      */
-    @Test
-    void plumeHeightIsInvariantToTimeCompression() {
-        double physical = 2e6;
-        double[] heights = new double[2];
-        double[] emitted = new double[2];
-        double[] compressions = {1, 20};
-        for (int i = 0; i < 2; i++) {
-            double c = compressions[i];
-            TerrainModel terrain = new TerrainModel();
-            TephraSubsystem tephra = new TephraSubsystem("tephra", terrain, smallGrid());
-            Engine engine = Engine.builder(3).add(terrain).add(tephra).build();
-            engine.submit(TephraTestSupport.flat(22, 99));
-            ExplosivePhase base = ExplosivePhase.plinian(VENT, physical);
-            tephra.startPhase(new ExplosivePhase(base.vent(), physical * c, base.gasFraction(), base.overpressureMPa(),
-                    base.temperatureC(), base.silicaWt(), base.ballisticFraction(), base.grainSize(), c));
-            List<PlumeColumn> columns = events(run(engine, 20 * 10), PlumeColumn.class);
-            assertFalse(columns.isEmpty());
-            heights[i] = columns.get(columns.size() - 1).topY();
-            assertEquals(physical, columns.get(columns.size() - 1).massEruptionRate(), 1e-6 * physical,
-                    "events report the physical rate");
-            emitted[i] = tephra.massBudget().emitted();
-        }
-        assertEquals(heights[0], heights[1], 0.0, "column top must not depend on the compression");
-        assertEquals(20, emitted[1] / emitted[0], 1e-6, "but 20× as much ash is injected per simulated second");
-    }
-
     @Test
     void plumeLightningAndAshFallEventsAreEmitted() {
         TerrainModel terrain = new TerrainModel();

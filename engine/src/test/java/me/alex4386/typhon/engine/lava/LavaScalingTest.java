@@ -44,7 +44,8 @@ class LavaScalingTest {
     private static double realRunout(double metersPerBlock) {
         int run = 4; // one block down per four blocks along x: slope 1:4 at any L
         LavaTestWorld world = new LavaTestWorld(-1, -2, 6, 1, (x, z) -> 150 - Math.floorDiv(x, run));
-        LavaConfig config = LavaConfig.defaults().withMetersPerBlock(metersPerBlock).withTimeScale(5).withCoolingScale(10);
+        world.coarse(5);
+        LavaConfig config = LavaConfig.defaults().withMetersPerBlock(metersPerBlock).withCoolingScale(10);
         LavaFlow lava = new LavaFlow(world.terrain, config);
         Engine engine = world.engine(lava, 7);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 4, BASALT_T, BASALT_SI, 0.1));
@@ -62,7 +63,8 @@ class LavaScalingTest {
         // Cone falling one block every three blocks of radius; vent at the apex.
         LavaTestWorld world = new LavaTestWorld(-3, -3, 2, 2,
                 (x, z) -> 150 - (int) Math.floor(Math.sqrt((double) x * x + (double) z * z) / 3));
-        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(5).withCoolingScale(0));
+        world.coarse(5);
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 9);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 3, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 600);
@@ -107,7 +109,8 @@ class LavaScalingTest {
     void solidificationAndOceanEntryAreAggregated() {
         LavaTestWorld world = new LavaTestWorld(-1, -1, 1, 0, (x, z) -> 80 - x,
                 (x, z) -> x >= 10 ? 75 : LavaTestWorld.NO_WATER);
-        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withTimeScale(10).withCoolingScale(5));
+        world.coarse(10);
+        LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(5));
         Engine engine = world.engine(lava, 13);
         lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 400);

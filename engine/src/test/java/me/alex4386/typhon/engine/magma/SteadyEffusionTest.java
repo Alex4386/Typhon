@@ -16,23 +16,21 @@ import org.junit.jupiter.api.Test;
  */
 class SteadyEffusionTest {
     private static final BlockPos CENTER = new BlockPos(0, 0, 0);
-    private static final double TICK = 0.05;
-    private static final double SCALE = 20; // eruptive time compression
 
     private static MagmaChamberConfig.Builder chamber(double supply) {
         return MagmaChamberConfig.builder("v", CENTER).volume(5e7).compressibilityPerMPa(2e-4).lithostaticDepth(3000)
                 .conduitRadius(0.8).tensileStrengthMPa(8).eruptionEndOverpressureMPa(0.5).supplyRate(supply)
-                .supplyVariability(0).initialOverpressureMPa(7.9).eruptiveTimeScale(SCALE);
+                .supplyVariability(0).initialOverpressureMPa(7.9);
     }
 
-    /** Runs {@code hours} of volcano time after the eruption starts; returns the chamber. */
+    /** Runs {@code hours} after the eruption starts (adaptive steps); returns the chamber. */
     private static MagmaChamber erupt(MagmaChamberConfig config, double hours) {
         MagmaChamber c = new MagmaChamber(config);
-        Engine engine = Engine.builder(0).add(c).build();
+        Engine engine = Engine.builder(0).adaptive(3600).add(c).build();
         double since = Double.NaN;
         while (!(since >= hours * 3600)) {
             engine.step();
-            if (c.erupting()) since = Double.isNaN(since) ? 0 : since + TICK * SCALE;
+            if (c.erupting()) since = Double.isNaN(since) ? 0 : since + engine.lastStepSeconds();
             else if (!Double.isNaN(since)) break; // it stopped
         }
         return c;
@@ -46,7 +44,7 @@ class SteadyEffusionTest {
         double supply = 5;
         MagmaChamber c = erupt(chamber(supply).build(), 72);
         assertTrue(c.erupting(), "a balanced open system keeps erupting");
-        assertEquals(supply, c.physicalEruptionRate(), 0.01 * supply, "outflow equals inflow");
+        assertEquals(supply, c.eruptionRate(), 0.01 * supply, "outflow equals inflow");
         double balance = c.balanceOverpressureMPa();
         assertTrue(balance > c.config().eruptionEndOverpressureMPa() && balance < c.ruptureOverpressureMPa(),
                 "the balance lies in the open, pressurised range: " + balance);
@@ -57,7 +55,7 @@ class SteadyEffusionTest {
         // a day later it is the same state
         MagmaChamber later = erupt(chamber(supply).build(), 96);
         assertEquals(c.overpressureMPa(), later.overpressureMPa(), 0.01 * c.overpressureMPa());
-        assertEquals(c.physicalEruptionRate(), later.physicalEruptionRate(), 0.01 * supply);
+        assertEquals(c.eruptionRate(), later.eruptionRate(), 0.01 * supply);
     }
 
     @Test
@@ -69,10 +67,10 @@ class SteadyEffusionTest {
         assertTrue(c.balanceOverpressureMPa() > c.ruptureOverpressureMPa(),
                 "this supply would need more pressure than the walls hold: " + c.balanceOverpressureMPa());
         assertEquals(c.ruptureOverpressureMPa(), c.overpressureMPa(), 1e-6, "pinned at the rupture limit");
-        assertTrue(c.physicalEruptionRate() < supply, "the conduit cannot carry the whole supply");
+        assertTrue(c.eruptionRate() < supply, "the conduit cannot carry the whole supply");
         double hours = 6;
         double grown = c.wallGrowthM3();
-        double expected = (supply - c.physicalEruptionRate()) * hours * 3600;
+        double expected = (supply - c.eruptionRate()) * hours * 3600;
         assertTrue(grown > 0.5 * expected && grown < 1.5 * expected,
                 "growth ≈ supply − outflow over the eruption: " + grown + " vs " + expected);
     }

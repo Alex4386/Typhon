@@ -244,10 +244,8 @@ class MassFlowTest {
 
     @Test
     void rainSaturatesLooseDepositUntilItFailsAsALahar() {
-        MassFlowTestWorld w = rampWorld();
-        MassFlowConfig config = MassFlowConfig.lahar();
-        config.timeScale = 10; // 10 simulated seconds per engine second
-        Lahars l = new Lahars("lahar", w.terrain, config);
+        MassFlowTestWorld w = rampWorld().coarse(10); // 0.5 s ticks
+        Lahars l = new Lahars("lahar", w.terrain, MassFlowConfig.lahar());
         Engine e = w.engine(l, 1);
         // 0.2 m of tephra with 35% porosity holds 70 mm of water: ~35 min of 120 mm/h rain.
         for (int x = 0; x < 40; x++) {

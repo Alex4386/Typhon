@@ -17,7 +17,6 @@ import org.junit.jupiter.api.Test;
  */
 class ChamberRuptureTest {
     private static final BlockPos CENTER = new BlockPos(0, -40, 0);
-    private static final double TICK = 0.05;
 
     private static MagmaChamberConfig.Builder stromboli() {
         return MagmaChamberConfig.builder("v", CENTER).volume(5e7).compressibilityPerMPa(2e-4)
@@ -48,73 +47,54 @@ class ChamberRuptureTest {
     }
 
     @Test
-    void sustainedSupplyAtExtremeCompressionStaysBounded() {
-        // The user's sliders: supply 0.3 m³/s, ×500 eruptive, ×5000 dormant, plus a 10× supply surge.
-        MagmaChamberConfig config = stromboli().eruptiveTimeScale(500).dormantTimeScale(5000).build();
+    void sustainedSupplyWithLongStepsStaysBounded() {
+        // A year with hour-long quiet steps, plus a 10x supply surge after a month.
+        MagmaChamberConfig config = stromboli().build();
         MagmaChamber chamber = new MagmaChamber(config);
-        Engine engine = Engine.builder(0).add(chamber).build();
+        Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
         double peakP = 0, peakQ = 0;
-        for (int i = 0; i < 20 * 3600; i++) {
-            if (i == 20 * 600) engine.submit(new SetSupplyRate("v", 3.0));
+        boolean surged = false;
+        while (engine.time() < 365 * 86_400.0) {
+            if (!surged && engine.time() >= 30 * 86_400.0) {
+                engine.submit(new SetSupplyRate("v", 3.0));
+                surged = true;
+            }
             engine.step();
             peakP = Math.max(peakP, chamber.overpressureMPa());
-            peakQ = Math.max(peakQ, chamber.physicalEruptionRate());
+            peakQ = Math.max(peakQ, chamber.eruptionRate());
             assertTrue(Double.isFinite(chamber.overpressureMPa()));
         }
         assertTrue(peakP <= chamber.ruptureOverpressureMPa() + 1e-9, "peak overpressure " + peakP);
         assertTrue(chamber.eruptionCount() > 0, "the chamber erupts");
-        assertTrue(peakQ < 1e3, "physical eruption rate stays volcanic, not runaway: " + peakQ);
+        assertTrue(peakQ < 1e3, "the eruption rate stays volcanic, not runaway: " + peakQ);
     }
 
-    /** Erupted volume and overpressure after {@code physical} seconds of eruption at a time scale. */
-    private static double[] eruptAt(double scale, double physical) {
-        MagmaChamberConfig config = stromboli().eruptiveTimeScale(scale).initialOverpressureMPa(7.9).build();
+    /** Erupted volume, overpressure and rate after {@code seconds} of eruption with steps up to {@code maxStep}. */
+    private static double[] eruptWithSteps(double maxStep, double seconds) {
+        MagmaChamberConfig config = stromboli().initialOverpressureMPa(7.9).build();
         MagmaChamber chamber = new MagmaChamber(config);
-        Engine engine = Engine.builder(0).add(chamber).build();
+        Engine.Builder b = Engine.builder(0).add(chamber);
+        if (maxStep > 0) b.adaptive(maxStep);
+        Engine engine = b.build();
         double since = Double.NaN;
-        while (!(since >= physical)) {
+        while (!(since >= seconds)) {
             engine.step();
-            if (chamber.erupting()) since = Double.isNaN(since) ? 0 : since + TICK * scale;
+            if (chamber.erupting()) since = Double.isNaN(since) ? 0 : since + engine.lastStepSeconds();
             assertTrue(chamber.overpressureMPa() <= chamber.ruptureOverpressureMPa() + 1e-9);
         }
-        return new double[] {chamber.eruptedVolume(), chamber.overpressureMPa(), chamber.physicalEruptionRate()};
+        return new double[] {chamber.eruptedVolume(), chamber.overpressureMPa(), chamber.eruptionRate()};
     }
 
     @Test
-    void eruptionConvergesAcrossTimeCompression() {
-        double physical = 3 * 3600;
-        double[] reference = eruptAt(1, physical);
+    void eruptionConvergesAcrossStepLengths() {
+        double seconds = 3 * 3600;
+        double[] reference = eruptWithSteps(0, seconds); // fixed 50 ms steps
         assertTrue(reference[2] > 0.1 && reference[2] < 100, "a Strombolian-scale effusion rate: " + reference[2]);
-        for (double scale : new double[] {20, 200, 500}) {
-            double[] r = eruptAt(scale, physical);
-            assertEquals(reference[0], r[0], 0.05 * reference[0], "erupted volume at ×" + scale);
-            assertEquals(reference[1], r[1], 0.05 * reference[1], "overpressure at ×" + scale);
-            assertEquals(reference[2], r[2], 0.05 * reference[2], "physical eruption rate at ×" + scale);
-        }
-    }
-
-    @Test
-    void retuningCompressionMidEruptionContinuesSmoothly() {
-        MagmaChamberConfig slow = stromboli().eruptiveTimeScale(2).initialOverpressureMPa(7.9).build();
-        MagmaChamber chamber = new MagmaChamber(slow);
-        Engine engine = Engine.builder(0).add(chamber).build();
-        for (int i = 0; i < 20 * 600; i++) engine.step();
-        assertTrue(chamber.erupting());
-        double rate = chamber.physicalEruptionRate();
-        double pressure = chamber.overpressureMPa();
-
-        // Tuning saves the world and reopens it with the new config (Session#reopenWorld).
-        InMemorySaveStore saved = Saves.save(engine);
-        MagmaChamber fast = new MagmaChamber(slow.toBuilder().eruptiveTimeScale(500).build());
-        Engine reopened = Engine.builder(0).add(fast).restore(saved).allowConfigChanges().build();
-        reopened.submit(new SetSupplyRate("v", 0.3));
-        reopened.step();
-        assertTrue(fast.erupting());
-        assertEquals(pressure, fast.overpressureMPa(), 0.05 * pressure, "no pressure jump on retune");
-        for (int i = 0; i < 20 * 60; i++) {
-            reopened.step();
-            assertTrue(fast.overpressureMPa() <= fast.ruptureOverpressureMPa() + 1e-9);
-            assertTrue(fast.physicalEruptionRate() <= 1.5 * rate, "volcano-time rate does not jump with compression");
+        for (double maxStep : new double[] {20, 120, 3600}) {
+            double[] r = eruptWithSteps(maxStep, seconds);
+            assertEquals(reference[0], r[0], 0.05 * reference[0], "erupted volume with steps up to " + maxStep + " s");
+            assertEquals(reference[1], r[1], 0.05 * reference[1], "overpressure with steps up to " + maxStep + " s");
+            assertEquals(reference[2], r[2], 0.05 * reference[2], "eruption rate with steps up to " + maxStep + " s");
         }
     }
 

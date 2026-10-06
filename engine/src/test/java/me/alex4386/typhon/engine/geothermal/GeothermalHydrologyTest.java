@@ -106,7 +106,7 @@ class GeothermalHydrologyTest {
     @Test
     void geysersGrowOnTheWetSideFumarolesOnTheDrySide() {
         GeothermalConfig config = smallConfig();
-        config.timeScale = 600;
+        GeothermalTest.stepTime(config, 600);
         config.geyserFormationPerHour = 2;
         config.hotSpringFormationPerHour = 0;
         config.mudPotFormationPerHour = 0;

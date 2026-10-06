@@ -17,14 +17,13 @@ import org.junit.jupiter.api.Test;
 
 /** Magma moving between a deep and a shallow chamber along a conduit. */
 class MagmaTransferTest {
-    private static final double TICK = 0.05;
     private static final double METERS_PER_BLOCK = 10;
 
     /** A basaltic system: a shallow main chamber at 1.5 km over a deep one at 4 km, no own supply. */
     private static MagmaChamberConfig.Builder main() {
         return MagmaChamberConfig.builder("v", new BlockPos(0, 0, 0)).volume(1e9).lithostaticDepth(1500).tensileStrengthMPa(10)
                 .eruptionEndOverpressureMPa(1).supplyRate(0).supplyVariability(0).initialSilicaWt(50).initialWaterWt(0.4)
-                .initialTemperatureC(1180).dormantTimeScale(5000).eruptiveTimeScale(20);
+                .initialTemperatureC(1180);
     }
 
     private static MagmaChamberConfig.Builder deep() {
@@ -38,7 +37,7 @@ class MagmaTransferTest {
         MagmaChamber d = new MagmaChamber(deepConfig);
         d.setEruptive(false);
         MagmaTransfer t = new MagmaTransfer("v", Map.of(MagmaChamberConfig.MAIN, m, "deep", d), m, List.of(link), METERS_PER_BLOCK);
-        Engine.Builder b = Engine.builder(3).threads(threads).add(m).add(d).add(t);
+        Engine.Builder b = Engine.builder(3).threads(threads).adaptive(3600).add(m).add(d).add(t);
         if (restore != null) b.restore(restore);
         return new Sys(b.build(), m, d, t);
     }
@@ -49,8 +48,9 @@ class MagmaTransferTest {
                 c.stallRateM3PerS(), c.freezeSeconds());
     }
 
-    private static void run(Engine e, int steps) {
-        for (int i = 0; i < steps; i++) e.step();
+    /** Steps until the engine reaches {@code time} (absolute seconds). */
+    private static void runUntil(Engine e, double time) {
+        while (e.time() < time) e.step();
     }
 
     @Test
@@ -59,7 +59,7 @@ class MagmaTransferTest {
         ConnectionConfig link = s.transfer().connections().get(0);
         double drive0 = s.transfer().drivingPressureMPa(link);
         assertTrue(drive0 > 8, "the deep chamber's overpressure plus the denser crust push magma up: " + drive0);
-        run(s.engine(), 20 * 3000); // ~3000 chamber steps of 5000 physical s
+        runUntil(s.engine(), 1.5e7); // half a year
         double drive = s.transfer().drivingPressureMPa(link);
         assertTrue(Math.abs(drive) < 0.02 * drive0, "flow stops at head equilibrium: " + drive);
         assertTrue(s.main().overpressureMPa() > 0, "the shallow chamber is pressurised from below");
@@ -76,13 +76,13 @@ class MagmaTransferTest {
         assertTrue(wide < narrow, "a wider conduit (C ∝ r⁴) transmits the deep recharge sooner: " + wide + " vs " + narrow);
     }
 
-    /** Steps until the main chamber gains 1 MPa while only the deep chamber is supplied. */
+    /** Time until the main chamber gains 1 MPa while only the deep chamber is supplied. */
     private static double timeToPressurise(double radius) {
         Sys s = build(main().build(), deep().supplyRate(5).build(), conduit(radius), 1, null);
         // start at head equilibrium (no flow), so only the recharge drives the main chamber
-        for (int i = 0; i < 200_000; i++) {
+        while (s.engine().time() < 1e9) {
             s.engine().step();
-            if (s.main().overpressureMPa() >= 1) return i;
+            if (s.main().overpressureMPa() >= 1) return s.engine().time();
         }
         return Double.POSITIVE_INFINITY;
     }
@@ -91,14 +91,13 @@ class MagmaTransferTest {
     void anEruptionOfTheShallowChamberDrawsDownTheDeepOne() {
         // basalt is denser than this crust: 2.5 km of magma column holds back ~2.45 MPa, so the deep chamber
         // starts at head equilibrium with the shallow one (no flow until the shallow one loses pressure)
-        // one clock for both runs (quiet and erupting cover the same physical time)
-        MagmaChamberConfig deepCfg = deep().initialOverpressureMPa(12).dormantTimeScale(20).build();
-        MagmaChamberConfig mainCfg = main().initialOverpressureMPa(9.5).dormantTimeScale(20).build();
+        MagmaChamberConfig deepCfg = deep().initialOverpressureMPa(12).build();
+        MagmaChamberConfig mainCfg = main().initialOverpressureMPa(9.5).build();
         Sys quiet = build(mainCfg, deepCfg, conduit(1.5), 1, null);
         Sys erupting = build(mainCfg, deepCfg, conduit(1.5), 1, null);
         erupting.engine().submit(new StartEruption("v"));
-        run(quiet.engine(), 20 * 2000);
-        run(erupting.engine(), 20 * 2000);
+        runUntil(quiet.engine(), 40_000);
+        runUntil(erupting.engine(), 40_000);
         assertTrue(erupting.main().eruptedVolume() > 0, "the main chamber erupted");
         assertTrue(erupting.deep().transferredOutM3() > quiet.deep().transferredOutM3(),
                 "the deep chamber resupplies the erupting one: " + erupting.deep().transferredOutM3() + " vs " + quiet.deep().transferredOutM3());
@@ -109,7 +108,7 @@ class MagmaTransferTest {
     @Test
     void aClosedPathwayCarriesNothing() {
         Sys s = build(main().build(), deep().initialOverpressureMPa(8).build(), conduit(1.5).withOpen(false), 1, null);
-        run(s.engine(), 20 * 100);
+        runUntil(s.engine(), 5e5);
         assertEquals(0, s.main().transferredInM3());
     }
 
@@ -117,16 +116,16 @@ class MagmaTransferTest {
     void transfersRestoreBitForBitAndIgnoreThreadCount() {
         MagmaChamberConfig deepCfg = deep().supplyRate(3).initialOverpressureMPa(4).build();
         Sys reference = build(main().build(), deepCfg, conduit(1.2), 1, null);
-        run(reference.engine(), 20 * 300);
+        runUntil(reference.engine(), 1.5e6);
         InMemorySaveStore saved = Saves.save(reference.engine());
-        run(reference.engine(), 20 * 300);
+        runUntil(reference.engine(), 3e6);
 
         Sys restored = build(main().build(), deepCfg, conduit(1.2), 1, saved);
-        run(restored.engine(), 20 * 300);
+        runUntil(restored.engine(), 3e6);
         assertEquals(reference.engine().stateHash(), restored.engine().stateHash(), "restore is exact");
 
         Sys threaded = build(main().build(), deepCfg, conduit(1.2), 4, null);
-        run(threaded.engine(), 20 * 600);
+        runUntil(threaded.engine(), 3e6);
         assertEquals(reference.engine().stateHash(), threaded.engine().stateHash(), "thread count does not matter");
     }
 
