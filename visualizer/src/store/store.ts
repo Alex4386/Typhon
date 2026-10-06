@@ -1,6 +1,7 @@
 import { toast as sonner } from 'sonner';
 import { create } from 'zustand';
 import { Field, type FieldId } from '../protocol/fields';
+import { DETAIL_TOLERANCE_M, detailMismatch } from '../scene/detail';
 import type { SectionFrame, TileFrame } from '../protocol/frames';
 import type {
   CatalogMessage,
@@ -100,6 +101,9 @@ export const lodStore = new Map<number, Map<string, TileFrame>>();
 export function lodKey(level: number, tx: number, ty: number): string {
   return `${level}:${tx},${ty}`;
 }
+
+/** Detail tiles ignored because they did not match the core's columns (diagnostics). */
+export const detailRejected = { count: 0, lastMismatchM: Number.NaN };
 
 export function getLodTile(level: number, tx: number, ty: number): TileFrame | undefined {
   return lodStore.get(level)?.get(tileKey(tx, ty));
@@ -294,6 +298,20 @@ export const useStore = create<Store>((set, get) => ({
     for (const f of frames) {
       if (f.level !== 0) {
         if (f.field !== Field.SurfaceElevation) continue;
+        // crater detail must refine the core's columns (§5.5); a stale tile would draw the wrong ground
+        const w = get().world;
+        if (f.level < 0 && w) {
+          const r = Math.max(1, Math.round(2 ** -f.level));
+          const off = detailMismatch(f.values, w.tileSize, r, f.tileX, f.tileY, (i, j) => {
+            const tile = getTile(Field.SurfaceElevation, Math.floor(i / w.tileSize), Math.floor(j / w.tileSize));
+            return tile ? tile.values[(j - Math.floor(j / w.tileSize) * w.tileSize) * w.tileSize + (i - Math.floor(i / w.tileSize) * w.tileSize)] : undefined;
+          });
+          if (!(off <= DETAIL_TOLERANCE_M)) {
+            detailRejected.count++;
+            detailRejected.lastMismatchM = off;
+            continue;
+          }
+        }
         let byTile = lodStore.get(f.level);
         if (!byTile) {
           byTile = new Map();

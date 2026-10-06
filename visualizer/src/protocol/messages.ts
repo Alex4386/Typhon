@@ -366,6 +366,8 @@ export interface WorldInfo {
   /** Inclusive tile range present in this world. */
   tiles: TileBounds;
   seaLevel: number;
+  /** False when the world has no sea: `seaLevel` is then only the lowest ground (absent: assume a sea). */
+  hasSea?: boolean;
   /** Elevation range of the world (m), for colour ramps. */
   elevationRange: [number, number];
   volcanoes: VolcanoInfo[];

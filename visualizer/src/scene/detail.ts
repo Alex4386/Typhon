@@ -15,6 +15,30 @@ export function detailLevels(world: WorldInfo): LodLevelInfo[] {
   return (world.lod?.levels ?? []).filter((l) => l.kind === 'detail');
 }
 
+/**
+ * Mean absolute difference (m) between a detail tile's column means and the core columns they refine
+ * (`core(i, j)` undefined where not loaded); NaN when no column could be compared. The protocol says
+ * they agree; a tile that does not is stale and would draw the wrong ground.
+ */
+export function detailMismatch(values: Float32Array, t: number, r: number, tx: number, ty: number, core: (i: number, j: number) => number | undefined): number {
+  let sum = 0;
+  let n = 0;
+  for (let cb = 0; cb < t; cb += r) {
+    for (let ca = 0; ca < t; ca += r) {
+      const v = core(Math.floor((tx * t + ca) / r), Math.floor((ty * t + cb) / r));
+      if (v === undefined || !Number.isFinite(v)) continue;
+      let m = 0;
+      for (let b = 0; b < r; b++) for (let a = 0; a < r; a++) m += values[(cb + b) * t + ca + a];
+      sum += Math.abs(m / (r * r) - v);
+      n++;
+    }
+  }
+  return n ? sum / n : Number.NaN;
+}
+
+/** Largest mean column mismatch (m) a detail tile may have and still be drawn. */
+export const DETAIL_TOLERANCE_M = 1.5;
+
 /** Detail cells per core column along one axis (4 for level −2). */
 export function refinement(world: WorldInfo, l: LodLevelInfo): number {
   return Math.max(1, Math.round(world.cellSize / l.cellSize));

@@ -223,7 +223,8 @@ function build(world: WorldInfo, geo: THREE.BufferGeometry, sea: THREE.BufferGeo
           : farFieldElevation(d, x, y, ex, ctx);
       heights[v] = h;
       pos.setXYZ(v, x, h * vExag - (inside ? 0 : 0.5 * vExag), -y);
-      if (h >= world.seaLevel) ramp(HYPSO, (h - world.seaLevel) / Math.max(1, eHi - world.seaLevel), c);
+      // land below seaLevel in a world without sea (context terrain falling away) stays land
+      if (h >= world.seaLevel || world.hasSea === false) ramp(HYPSO, Math.max(0, (h - world.seaLevel) / Math.max(1, eHi - world.seaLevel)), c);
       else {
         ramp(BATHY, (world.seaLevel - h) / Math.max(1, world.seaLevel - eLo), c);
         if (!inside) anySea = true;

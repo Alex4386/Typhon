@@ -535,7 +535,7 @@ export function colourGround(
       return;
     }
     case 'natural': {
-      if (elev >= world.seaLevel) ramp(HYPSO, (elev - world.seaLevel) / Math.max(1, eHi - world.seaLevel), c);
+      if (elev >= world.seaLevel || world.hasSea === false) ramp(HYPSO, Math.max(0, (elev - world.seaLevel) / Math.max(1, eHi - world.seaLevel)), c);
       else ramp(BATHY, (world.seaLevel - elev) / Math.max(1, world.seaLevel - eLo), c);
       // tephra fall blankets the surface in proportion to its thickness (a few mm barely shows, decimetres
       // cover it): tinting by the FALL unit alone painted any dusting solid out to where the ash ends

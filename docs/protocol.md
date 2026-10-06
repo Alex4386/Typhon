@@ -227,7 +227,8 @@ for `SteamFraction`; section pixels for unmodelled quantities are 0 (saturation,
 | `cellSize` | number | Surface column size `dxS` (m). |
 | `tileSize` | int | Columns per tile edge (`T`); tiles are `T × T`. The engine's `ColumnStacks` tiles are 32×32; the server may stream 32 or 64. |
 | `tiles` | `{minTx,minTy,maxTx,maxTy}` | Inclusive tile range of the world. |
-| `seaLevel` | number | m. |
+| `seaLevel` | number | m. Without a sea (`hasSea` false) the lowest ground, as the base of colour ramps. |
+| `hasSea` | boolean | Whether the world has a sea or standing water level; when false nothing below `seaLevel` is water (context terrain may lie lower). |
 | `elevationRange` | `[min,max]` | Initial elevation range (m), for colour ramps. |
 | `volcanoes` | `VolcanoInfo[]` | `{id, name, vents: VentInfo[], chamber: {center: [x,y,z], radius}}`. |
 | `materials` | `MaterialInfo[]` | `{id, name, color: "#rrggbb", kind}`. `kind` is one of `rock`, `tephra`, `soil`, `ice`, `void`, `water`, `magma`. Ids are those used in sections. |

@@ -73,7 +73,9 @@ final class Probe {
         }
         double specSea = world.spec().seaLevelZ();
         if (Double.isFinite(specSea)) sea = specSea;
+        // without sea or lakes, seaLevel is only the base of the colour ramps (the lowest ground)
         w.add("seaLevel", Json.num(Double.isFinite(sea) ? sea : lo));
+        w.addProperty("hasSea", Double.isFinite(sea));
         w.add("elevationRange", Json.xy(lo, hi));
 
         JsonArray volcanoes = new JsonArray();

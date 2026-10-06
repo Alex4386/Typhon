@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldInfo } from '../protocol/messages';
-import { detailCovers, detailLevels, levelRect, overlappingDetailTiles, refinement, wantsDetail } from './detail';
+import { detailCovers, detailLevels, detailMismatch, levelRect, overlappingDetailTiles, refinement, wantsDetail } from './detail';
 
 // Kīlauea-like: 20 m columns in 64-column tiles, crater detail at level −2 (5 m) over tiles 12…19
 const world = {
@@ -51,5 +51,21 @@ describe('crater detail levels', () => {
     expect(wantsDetail(rect, 0, 0, 20000, 1)).toBe(false); // high above
     expect(wantsDetail(rect, 6000, 0, 500, 1)).toBe(false); // 4.7 km off the region, reach 3.84 km
     expect(wantsDetail(rect, 6000, 0, 500, 1.3)).toBe(true);
+  });
+
+  it('measures how far a detail tile is from the columns it refines', () => {
+    const t = 8;
+    const r = 4;
+    // two columns per row; each column's 4×4 cells average to 100 + column index, with a crater dip inside
+    const values = new Float32Array(t * t).map((_, k) => {
+      const a = k % t;
+      const b = Math.floor(k / t);
+      const col = Math.floor(a / r) + 2 * Math.floor(b / r);
+      return 100 + col + ((a % r) + (b % r) * r === 5 ? -8 : (a % r) + (b % r) * r === 6 ? 8 : 0);
+    });
+    const core = (i: number, j: number) => 100 + (i - 0) + 2 * j;
+    expect(detailMismatch(values, t, r, 0, 0, core)).toBeCloseTo(0);
+    expect(detailMismatch(values, t, r, 0, 0, (i, j) => core(i, j) + 40)).toBeCloseTo(40);
+    expect(detailMismatch(values, t, r, 0, 0, () => undefined)).toBeNaN();
   });
 });
