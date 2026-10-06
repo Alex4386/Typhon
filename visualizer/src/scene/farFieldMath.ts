@@ -76,6 +76,12 @@ export interface Extrapolation {
   base: number;
   /** Distance over which edge heights relax to the base (m). */
   falloff: number;
+  /**
+   * Highest an extrapolated height may reach (m): just under sea level for a sea world whose edge
+   * lies under water, so guessed far terrain never turns open ocean into land; +∞ otherwise.
+   * Server context terrain is not capped.
+   */
+  ceiling?: number;
   /** Amplitude of gentle far hills (m). */
   hills: number;
   /** Horizontal scale of the hills (m). */
@@ -96,7 +102,7 @@ export function farFieldElevation(d: Domain, x: number, y: number, ex: Extrapola
   const known = ctx?.sample(x, y);
   if (known !== undefined && Number.isFinite(known)) return edge + (known - edge) * smoothstep(0, ex.falloff * 0.25, dist);
   const hills = ex.hills * valueNoise(x / ex.hillScale, y / ex.hillScale) * k;
-  return edge + (ex.base - edge) * k + hills;
+  return Math.min(ex.ceiling ?? Infinity, edge + (ex.base - edge) * k + hills);
 }
 
 /** Median of a list (0 for none). */

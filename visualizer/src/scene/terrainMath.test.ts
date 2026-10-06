@@ -38,6 +38,14 @@ describe('far field', () => {
   const d = { minX: 0, minY: 0, maxX: 1000, maxY: 1000 };
   const ex: Extrapolation = { edge: (x) => 100 + x * 0.1, base: 50, falloff: 2000, hills: 0, hillScale: 500 };
 
+  it('keeps guessed far terrain under the sea in a sea world', () => {
+    const sea: Extrapolation = { edge: () => -130, base: -130, falloff: 2000, hills: 400, hillScale: 500, ceiling: -5 };
+    for (const x of [1500, 4000, 9000]) expect(farFieldElevation(d, x, 777, sea, null)).toBeLessThanOrEqual(-5);
+    // server context terrain is not capped
+    const ctx = { sample: () => 300 } as unknown as Parameters<typeof farFieldElevation>[4];
+    expect(farFieldElevation(d, 9000, 500, sea, ctx)).toBeGreaterThan(0);
+  });
+
   it('continues the edge at the seam and relaxes to the base far away', () => {
     expect(farFieldElevation(d, 1000, 500, ex, null)).toBeCloseTo(200);
     expect(farFieldElevation(d, -1, 500, ex, null)).toBeCloseTo(100, 0);

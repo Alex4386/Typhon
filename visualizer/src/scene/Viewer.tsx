@@ -1,4 +1,5 @@
-import { Canvas, type ThreeEvent } from '@react-three/fiber';
+import { waterUniforms } from './water';
+import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu';
@@ -87,6 +88,12 @@ function Sun({ position, target, span, shadows }: { position: [number, number, n
     tgt.updateMatrixWorld();
     if (light.current) light.current.target = tgt;
   }, [tgt, target]);
+  useEffect(() => {
+    waterUniforms.uSunDir.value.set(position[0] - target[0], position[1] - target[1], position[2] - target[2]).normalize();
+  }, [position, target]);
+  useFrame(({ clock }) => {
+    waterUniforms.uTime.value = clock.elapsedTime;
+  });
   return (
     <>
       <primitive object={tgt} />

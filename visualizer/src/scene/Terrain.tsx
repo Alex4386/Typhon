@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { Field, type FieldId } from '../protocol/fields';
 import type { WorldInfo, XY } from '../protocol/messages';
 import { QUALITY, getTile, lodKey, tileKey, useStore, type SurfaceColorMode } from '../store/store';
+import { waterMaterial } from './water';
 import { BATHY, DIVERGING, HYPSO, THERMAL, hexToRgb, ramp, shadeFor, type RGB } from '../util/color';
 import { interpolateGrid } from '../util/grid';
 import { sampleColumn } from '../util/world';
@@ -54,6 +55,9 @@ const displayHeights = new Map<string, { z: Float32Array; vExag: number; dExag: 
 export const groundMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
 /** Per-frame facts about the camera that other scene parts read without store traffic. */
 export const sceneProbe = { cameraGround: Number.NaN };
+
+/** Ponded and flowing water: depth-aware water shading (see water.ts). */
+const pondWater = waterMaterial({ perVertexDepth: true });
 
 /** Groundwater table: a translucent cyan sheet `depth` below the ground. */
 const waterTableMaterial = new THREE.MeshBasicMaterial({
@@ -267,7 +271,12 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
   const n = t + 1;
   const ground = useMemo(() => gridGeometry(t), [t]);
   const lava = useMemo(() => gridGeometry(t), [t]);
-  const water = useMemo(() => gridGeometry(t), [t]);
+  const water = useMemo(() => {
+    const g = gridGeometry(t);
+    // water depth (m) per vertex for the water shader's absorption and transparency
+    g.setAttribute('depth', new THREE.BufferAttribute(new Float32Array((t + 1) * (t + 1)), 1));
+    return g;
+  }, [t]);
   const flow = useMemo(() => gridGeometry(t), [t]);
   const table = useMemo(() => gridGeometry(t), [t]);
   const tableMesh = useRef<THREE.Mesh>(null);
@@ -310,6 +319,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       // the data, so crater rims, vents and scarps keep their real shape
       const q = worldQuantum(world, getTile(Field.SurfaceElevation, tx, ty)?.values);
       const elevR = displayElevation(key, tx, ty, n, smoothR, q, rawElev);
+      const seaOn = world.hasSea !== false && Number.isFinite(world.seaLevel);
       const upR = R(Field.Uplift);
       // lava thickness varies by tens of metres between cells; smooth it lightly so the lake/flow top is not jagged
       const lavaRaw = R(Field.LavaDepth);
@@ -339,6 +349,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       const lc = lava.getAttribute('color') as THREE.BufferAttribute;
       const wp = water.getAttribute('position') as THREE.BufferAttribute;
       const wc = water.getAttribute('color') as THREE.BufferAttribute;
+      const wdA = water.getAttribute('depth') as THREE.BufferAttribute;
       const fp = flow.getAttribute('position') as THREE.BufferAttribute;
       const tp = table.getAttribute('position') as THREE.BufferAttribute;
       const wetT = new Uint8Array(n * n);
@@ -399,17 +410,23 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           }
           lc.setXYZ(v, lin(c[0]), lin(c[1]), lin(c[2]));
 
-          const wd = waterR(a, b);
+          // open sea: wherever the ground lies below sea level the sea covers it, whether or not the
+          // surface-water field carries that column (it tracks ponds, rivers and poured water)
+          const seaDepth = seaOn ? world.seaLevel - elev : 0;
+          const pond = waterR(a, b);
+          const wd = Math.max(pond, seaDepth);
           // ignore thin sheet flow (rain films); show ponded and flowing water
           if (wd > 0.25) {
             anyWater = true;
             wetW[v] = 1;
-            wp.setXYZ(v, x, z + wd * vExag, -y);
+            wp.setXYZ(v, x, (seaDepth >= pond ? world.seaLevel * vExag : z + wd * vExag), -y);
+            wdA.setX(v, wd);
             // shallow turquoise → deep navy (Beer–Lambert-ish with depth)
             const deep = 1 - Math.exp(-wd / 25);
             wc.setXYZ(v, lin(0.22 - deep * 0.18), lin(0.52 - deep * 0.36), lin(0.6 - deep * 0.3));
           } else {
             wp.setXYZ(v, x, z - 2, -y);
+            wdA.setX(v, 0);
             wc.setXYZ(v, 0.2, 0.45, 0.65);
           }
 
@@ -444,7 +461,10 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
         ground.userData.cut = keepG !== null;
       }
       if (anyLava) compactIndex(lava, wetL, n, true);
-      if (anyWater) compactIndex(water, wetW, n);
+      if (anyWater) {
+        compactIndex(water, wetW, n);
+        wdA.needsUpdate = true;
+      }
       if (anyFlow) compactIndex(flow, wetF, n);
       if (anyTable) {
         compactIndex(table, wetT, n);
@@ -501,9 +521,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
         <primitive object={groundMaterial} attach="material" />
       </mesh>
       <mesh ref={tableMesh} geometry={table} visible={false} renderOrder={5} material={waterTableMaterial} />
-      <mesh ref={waterMesh} geometry={water} visible={false} renderOrder={2} receiveShadow={shadows}>
-        <meshStandardMaterial vertexColors transparent opacity={0.82} roughness={0.06} metalness={0.35} depthWrite={false} />
-      </mesh>
+      <mesh ref={waterMesh} geometry={water} visible={false} renderOrder={2} material={pondWater} />
       <mesh ref={lavaMesh} geometry={lava} visible={false} renderOrder={1}>
         <meshBasicMaterial vertexColors toneMapped={false} polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2} />
       </mesh>

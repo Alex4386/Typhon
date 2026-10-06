@@ -1,3 +1,4 @@
+import { waterMaterial } from './water';
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -35,7 +36,11 @@ function lin(c: number): number {
 
 /** Far ground: shares the look of the domain's ground but sits behind it where they overlap. */
 const farMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });
-const seaMaterial = new THREE.MeshLambertMaterial({ color: '#2b5a74', polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });
+/** The open sea beyond the simulated domain: deep water shading (see water.ts). */
+const seaMaterial = waterMaterial({ perVertexDepth: false, depthM: 300 });
+seaMaterial.polygonOffset = true;
+seaMaterial.polygonOffsetFactor = 2;
+seaMaterial.polygonOffsetUnits = 4;
 
 /** The displayed-vertex rectangle of the domain (cell centres of its outermost columns). */
 export function domainOf(world: WorldInfo): Domain {
@@ -193,7 +198,16 @@ function build(world: WorldInfo, geo: THREE.BufferGeometry, sea: THREE.BufferGeo
   }
   const [eLo, eHi] = world.elevationRange;
   const relief = Math.max(50, eHi - eLo);
-  const ex: Extrapolation = { edge: edgeH, base: median(samples), falloff: Math.max(hx, hy) * 1.5, hills: relief * 0.08, hillScale: Math.max(hx, hy) * 0.9 };
+  const base = median(samples);
+  const underSea = world.hasSea !== false && Number.isFinite(world.seaLevel) && base < world.seaLevel;
+  const ex: Extrapolation = {
+    edge: edgeH,
+    base,
+    falloff: Math.max(hx, hy) * 1.5,
+    hills: relief * 0.08,
+    hillScale: Math.max(hx, hy) * 0.9,
+    ...(underSea ? { ceiling: world.seaLevel - 5 } : {}),
+  };
   const ctx = contextTerrain();
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   const col = geo.getAttribute('color') as THREE.BufferAttribute;
