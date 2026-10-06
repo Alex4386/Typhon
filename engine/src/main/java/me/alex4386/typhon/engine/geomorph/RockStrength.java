@@ -101,19 +101,9 @@ public final class RockStrength {
         return new Strength(Math.max(0, c), Math.toRadians(phiDeg), m.densityKgM3(), clamp01(porosity));
     }
 
-    /** Angle of repose of loose deposits of {@code m} (°). */
+    /** Angle of repose of loose deposits of {@code m} (°): {@link MaterialTable#reposeAngleDeg}. */
     static double looseFrictionDeg(Material m) {
-        if (m == MaterialTable.SCORIA) return 34;
-        if (m == MaterialTable.PUMICE) return 35;
-        if (m == MaterialTable.ASH) return 33;
-        if (m == MaterialTable.GRAVEL) return 35;
-        if (m == MaterialTable.DEBRIS) return 37;
-        if (m == MaterialTable.LAHAR_DEPOSIT) return 33;
-        if (m == MaterialTable.SOIL) return 30;
-        if (m == MaterialTable.CLAY) return 18;
-        if (m == MaterialTable.ICE) return 30;
-        if (m.materialClass() == MaterialClass.ROCK) return 37; // angular talus of broken rock
-        return 33;
+        return MaterialTable.reposeAngleDeg(m);
     }
 
     static double looseCohesionPa(Material m) {

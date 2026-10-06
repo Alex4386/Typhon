@@ -176,6 +176,8 @@ public final class VolcanoSystem {
                             c.config().lithostaticDepth(), c.config().center().x(), c.config().center().z()))
                     .toList());
         }
+        // loose deposits of every kind (tephra, bombs, wet tephra, debris) stand at most at their angle of repose
+        if (b.terrain != null) b.terrain.world().enableReposeRelaxation();
         this.coupler = new VolcanoCoupler(volcanoId, chamber, seismicity, vents, dikes, b.terrain, b.lava, tephra, pdc,
                 geothermal, scaling, b.ballisticFraction);
 

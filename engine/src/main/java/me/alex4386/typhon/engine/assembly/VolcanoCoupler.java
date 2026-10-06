@@ -160,6 +160,8 @@ public final class VolcanoCoupler implements Subsystem {
     private double openWaterFraction;
     private double nextSteamEventTime;
     private VentPartition.Result lastPartition;
+    /** Water at the main vent at the last step (reporting). */
+    private VentPartition.Water lastWater = VentPartition.Water.DRY;
     /** Discrete explosions fired so far, by mechanism (for observers such as the style estimate). */
     private long slugBursts;
     private long plugBursts;
@@ -253,6 +255,7 @@ public final class VolcanoCoupler implements Subsystem {
         List<VentSite> vents = outlets();
         VentSite main = vents.isEmpty() ? baseVents.get(0) : vents.get(0);
         VentPartition.Water water = surveyWater(main);
+        lastWater = water;
         chamber.setVentEnvironment(VentPartition.ambientPressurePa(water.surfaceDepthM()),
                 water.waterTableDepthM());
 
@@ -953,6 +956,17 @@ public final class VolcanoCoupler implements Subsystem {
     }
 
     /** Water depth over the vent (m) at the last survey. */
+    /** Share of the erupting magma fragmented by water at the last step (0 when not erupting). */
+    public double wetShare() {
+        VentPartition.Result p = lastPartition;
+        return p != null && p.magmaMassFlux() > 0 ? p.waterFragmentedMassFlux() / p.magmaMassFlux() : 0;
+    }
+
+    /** Water at the main vent at the last step: open depth, rim openness, saturated fill, seepage. */
+    public VentPartition.Water ventWater() {
+        return lastWater;
+    }
+
     public double waterDepthM() {
         return waterDepthM;
     }

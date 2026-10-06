@@ -556,8 +556,9 @@ public final class TephraSubsystem implements Subsystem {
         // than a column; the block above only shows it).
         double l = metersPerBlock();
         double thickness = Math.PI / 6 * bomb.diameter * bomb.diameter * bomb.diameter / (l * l);
+        // a landed bomb is a loose clast among the scoria (cohesionless; it rolls to the angle of repose)
         terrain.world().deposit(x, z, thickness, bombRock(bomb.silicaWt),
-                units.unit(DepositType.FALL, context.time(), Double.NaN), LayerFlags.FRACTURED, 0.1, 1.0);
+                units.unit(DepositType.FALL, context.time(), Double.NaN), LayerFlags.LOOSE, 0.3, 0);
 
         double seconds = Math.max(config.minCoolingSeconds, config.coolingSecondsPerSquareMeter * bomb.diameter * bomb.diameter);
         if (inWater) seconds *= config.waterCoolingFactor;

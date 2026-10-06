@@ -74,6 +74,25 @@ public final class MaterialTable {
         return m;
     }
 
+    /**
+     * Angle of repose of loose deposits of {@code m} (°): scoria and cinder cones 30–35° (Porter 1972, GSA
+     * Bull. 83; Bemis &amp; Ferencz 2017), angular talus and rock-avalanche debris 35–40°, fine ash ≈ 33°.
+     * The single source for slope stability and the repose relaxation of fresh deposits.
+     */
+    public static double reposeAngleDeg(Material m) {
+        if (m == SCORIA) return 34;
+        if (m == PUMICE) return 35;
+        if (m == ASH) return 33;
+        if (m == GRAVEL) return 35;
+        if (m == DEBRIS) return 37;
+        if (m == LAHAR_DEPOSIT) return 33;
+        if (m == SOIL) return 30;
+        if (m == CLAY) return 18;
+        if (m == ICE) return 30;
+        if (m.materialClass() == MaterialClass.ROCK) return 37; // angular talus of broken rock
+        return 33;
+    }
+
     public static Material get(int id) {
         if (id < 0 || id >= BY_ID.size()) throw new IllegalArgumentException("Unknown material id " + id);
         return BY_ID.get(id);

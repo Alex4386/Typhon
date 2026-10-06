@@ -26,6 +26,12 @@ public final class ColumnStacks {
     public static final int MAX_LAYERS = 48;
     /** Thinnest layer the stacks keep (m); thinner remainders are folded into neighbours. */
     static final double EPS = 1e-4;
+    /**
+     * Loose deposits thinner than this landing on a loose top layer that is itself thinner join that layer
+     * instead of starting a new one (m).
+     */
+    public static final double THIN_LAYER_M = 0.05;
+
     /** Minimum thickness erosion leaves in the bottom layer so a column never disappears. */
     static final double MIN_BOTTOM = 1e-3;
 
@@ -474,8 +480,16 @@ public final class ColumnStacks {
         int g = t.start[c + 1] - 1;
         byte por = quantize(porosity);
         byte weld = quantize(welding);
+        boolean thinLoose = thickness < THIN_LAYER_M && (flags & LayerFlags.LOOSE) != 0
+                && (t.flags[g] & LayerFlags.LOOSE) != 0 && t.material[g] != MaterialTable.VOID.id()
+                && material != MaterialTable.VOID.id() && t.voidFrac[g] == 0 && g > t.start[c]
+                && t.top[g] - bottom(t, c, g) < THIN_LAYER_M;
         if (material != MaterialTable.VOID.id() && t.material[g] == material && t.unit[g] == unit
                 && t.flags[g] == (byte) flags && t.porosity[g] == por && t.welding[g] == weld && t.voidFrac[g] == 0) {
+            t.top[g] = (float) (t.top[g] + thickness);
+        } else if (thinLoose) {
+            // a dusting on a dusting (ash between bomb clasts, lapilli on ash): one thin loose layer, not a
+            // stack of near-zero layers
             t.top[g] = (float) (t.top[g] + thickness);
         } else {
             double newTop = t.top[g] + thickness;

@@ -19,6 +19,7 @@ import me.alex4386.typhon.engine.lava.LavaEvents;
 import me.alex4386.typhon.engine.magma.MagmaEvents;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
+import me.alex4386.typhon.engine.world.ReposeRelaxation;
 import me.alex4386.typhon.engine.subsurface.WaterBudget;
 import me.alex4386.typhon.engine.world.WorldModel;
 import me.alex4386.typhon.engine.worlds.ConfigImpact;
@@ -114,6 +115,8 @@ class IslandFlowTest {
         Stages st = new Stages();
         double volcSeconds = 0;
         boolean dialled = false;
+        double steepest = 0; // worst loose-deposit excess over the angle of repose (m), checked as the island grows
+        long steepestAt = -1;
         for (int i = 0; i < BUDGET && st.oceanEntryAfterEffusive < 0; i++) {
             v = s.volcano();
             volcSeconds += 0.05 * (v.chamber().erupting() ? v.scaling().eruptiveTimeCompression() : v.scaling().dormantTimeCompression());
@@ -129,6 +132,11 @@ class IslandFlowTest {
             if (i % 200 == 0 || st.oceanEntryAfterEffusive >= 0) {
                 Edifice ed = Edifice.measure(s, floor);
                 st.observe(step, volcSeconds, v, ed, s.lava().activeCellCount());
+                double excess = wm.reposeRelaxation().worstExcessM(-60, -60, 60, 60);
+                if (excess > steepest) {
+                    steepest = excess;
+                    steepestAt = step;
+                }
             }
             if (!dialled && st.submarine >= 0) {
                 // the live supply dial, mid-eruption: applied in place, nothing rebuilt
@@ -144,6 +152,10 @@ class IslandFlowTest {
             }
         }
         report.stage("eruptions", t, "%d eruptions, %d ocean entries, %.0f h of volcano time", st.eruptions, st.oceanEntries, volcSeconds / 3600);
+        report.line("loose deposits: worst excess over the angle of repose %.4f m (step %d); %d repose moves", steepest, steepestAt,
+                wm.reposeRelaxation().moves());
+        assertTrue(steepest <= 2 * ReposeRelaxation.MIN_MOVE_M + 1e-3,
+                "no loose deposit ever stands above its angle of repose: " + steepest + " m at step " + steepestAt);
         for (String d : st.history) report.line("%s", d);
         Edifice end = Edifice.measure(s, floor);
         report.line("at the end: %s (%.4f km² of land)", end, end.landColumns * l * l / 1e6);
@@ -261,12 +273,14 @@ class IslandFlowTest {
                 emergedLand = ed.landColumns();
             }
             if (effusive < 0 && emerged >= 0 && erupting && !phreato && water == 0 && lavaCells > 0) effusive = step;
-            if (step - lastLog >= 10_000 || (emerged == step) || (effusive == step)) {
+            if (step - lastLog >= 5_000 || (emerged == step) || (effusive == step)) {
                 lastLog = step;
                 String line = String.format(Locale.ROOT,
-                        "  %s: %s, vent water %.0f m, regime %s%s, style %s, %s, lava cells %d", when(step),
-                        erupting ? "erupting" : "quiet", water, v.chamber().eruptiveRegime(), phreato ? " (magma–water)" : "",
-                        style, ed, lavaCells);
+                        "  %s: %s, vent water %.0f m (rim open %.2f, wet fill %.2f, seepage %s), wet share %.2f, regime %s%s, style %s, %s, lava cells %d",
+                        when(step), erupting ? "erupting" : "quiet", water, v.coupler().ventWater().openFraction(),
+                        v.coupler().ventWater().slurryFraction(),
+                        Double.isNaN(v.coupler().ventWater().seepageKgPerS()) ? "open" : String.format(Locale.ROOT, "%.0f kg/s", v.coupler().ventWater().seepageKgPerS()),
+                        v.coupler().wetShare(), v.chamber().eruptiveRegime(), phreato ? " (magma–water)" : "", style, ed, lavaCells);
                 history.add(line);
                 System.out.println("FLOW" + line); // live progress (the report prints at the end)
                 System.out.flush();

@@ -43,6 +43,8 @@ public final class WorldModel implements WorldQuery, WorldEdit {
     private WaterSink waterSink;
     private java.util.function.DoubleBinaryOperator relief;
     private final List<DepositObserver> depositObservers = new ArrayList<>();
+    /** Keeps loose deposits at or below their angle of repose (null until a host enables it). */
+    private ReposeRelaxation repose;
 
     public WorldModel(WorldSpec spec) {
         this.spec = Objects.requireNonNull(spec);
@@ -342,7 +344,28 @@ public final class WorldModel implements WorldQuery, WorldEdit {
         if (done && !depositObservers.isEmpty()) {
             for (DepositObserver o : depositObservers) o.deposited(x, z, thickness, unit, flags);
         }
+        if (done && repose != null && (flags & LayerFlags.LOOSE) != 0) repose.touched(x, z);
         return done;
+    }
+
+    /**
+     * Turns on the {@link ReposeRelaxation} of loose deposits (idempotent): from now on every loose deposit
+     * cascades to its angle of repose at once. Volcano assemblies enable it; bare world models used by
+     * tests that build steep piles on purpose do not.
+     */
+    public ReposeRelaxation enableReposeRelaxation() {
+        if (repose == null) repose = new ReposeRelaxation(this);
+        return repose;
+    }
+
+    /** The repose relaxation, or {@code null} when not enabled. */
+    public ReposeRelaxation reposeRelaxation() {
+        return repose;
+    }
+
+    /** Re-examines the loose deposits around a column after it was cut into (no-op when not enabled). */
+    public void relaxAround(int x, int z) {
+        if (repose != null) repose.touched(x, z);
     }
 
     /** Notified after every successful {@link #deposit}. */

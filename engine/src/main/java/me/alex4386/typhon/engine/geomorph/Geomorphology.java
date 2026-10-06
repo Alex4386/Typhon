@@ -858,6 +858,7 @@ public final class Geomorphology implements Subsystem {
         double temperature = ground.temperatureC(x, z, 0.5 * thickness);
         double removed = world.erode(x, z, thickness, false).removedM();
         markChanged(x, z);
+        world.relaxAround(x, z); // walls left by excavation, failure or a cleared vent slump to repose
         return new Strip(solids, solid, water, temperature, removed);
     }
 
