@@ -51,6 +51,7 @@ import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.VentCommands;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.volcano.VentStatus;
+import me.alex4386.typhon.engine.config.VolcanoDefinition;
 import me.alex4386.typhon.engine.worlds.World;
 import me.alex4386.typhon.server.protocol.Field;
 import me.alex4386.typhon.simulator.scenario.Preset;
@@ -1303,6 +1304,171 @@ final class Session implements AutoCloseable {
         JsonObject volcanoes = new JsonObject();
         volcanoes.add(vid, com.google.gson.JsonNull.INSTANCE);
         return applyConfig(new ConfigApi.Request(null, volcanoes, false, dryRun, confirm));
+    }
+
+    /**
+     * One edit of a volcano's magma plumbing: add, edit (move, resize, retune) or remove a chamber; connect
+     * two chambers, edit or remove a pathway. {@code at} is a map point (m) for adding or moving a chamber;
+     * {@code fields} are placement fields ({@code depthM}, {@code volumeM3}, ...) or definition keys.
+     */
+    record PlumbingOp(String op, String volcanoId, String chamberId, String connectionId, double[] at, String from, String to,
+            String kind, JsonObject fields, boolean dryRun, String confirm) {}
+
+    /**
+     * Applies a {@link PlumbingOp} through the configuration API: the new chamber and pathway lists are
+     * built from the running definition here (the server's one mapping, {@link
+     * me.alex4386.typhon.engine.config.ChamberPlacement}), and the server classifies and reports what
+     * the change does (live, reload, or a reset that asks to confirm).
+     */
+    @SuppressWarnings("unchecked")
+    synchronized ConfigOutcome plumbing(PlumbingOp op) throws Exception {
+        Scenario scenario = live;
+        World world = scenario.session();
+        if (world == null) throw new UnsupportedOperationException("This world runs in memory only; start it from the Worlds page to change it");
+        VolcanoDefinition def = world.volcanoDefinitions().stream().filter(v -> v.id().equals(op.volcanoId())).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("No volcano " + op.volcanoId()));
+        double l = scenario.terrain().world().spec().metersPerColumn();
+        Map<String, Object> magma = (Map<String, Object>) def.toTree().get("magma");
+        List<Map<String, Object>> chambers = deepCopy((List<Object>) magma.get("chambers"));
+        List<Map<String, Object>> connections = deepCopy((List<Object>) magma.get("connections"));
+        JsonObject fields = op.fields() != null ? op.fields() : new JsonObject();
+        JsonObject mainPatch = null;
+        String chamberId = op.chamberId();
+        String connectionId = op.connectionId();
+        String main = me.alex4386.typhon.engine.magma.MagmaChamberConfig.MAIN;
+        switch (op.op()) {
+            case "addChamber" -> {
+                if (op.at() == null) throw new IllegalArgumentException("addChamber needs at: [x, y]");
+                int cx = map.columnAtX(op.at()[0]);
+                int cz = map.columnAtY(op.at()[1]);
+                double ground = groundAt(cx, cz);
+                if (chamberId == null) chamberId = freeId(ids(chambers), "chamber-");
+                if (chamberId.equals(main) || ids(chambers).contains(chamberId)) throw new IllegalArgumentException("Chamber " + chamberId + " exists");
+                chambers.add(me.alex4386.typhon.engine.config.ChamberPlacement.chamberElement(chamberId, placementRequest(cx, cz, fields), ground, l));
+            }
+            case "editChamber" -> {
+                if (chamberId == null) throw new IllegalArgumentException("editChamber needs chamberId");
+                Map<String, Object> target;
+                if (chamberId.equals(main)) {
+                    target = new java.util.LinkedHashMap<>((Map<String, Object>) magma.get("chamber"));
+                } else {
+                    target = find(chambers, chamberId);
+                    if (target == null) throw new IllegalArgumentException("No chamber " + chamberId);
+                }
+                Map<String, Object> center = new java.util.LinkedHashMap<>((Map<String, Object>) target.get("center"));
+                int cx = ((Number) center.get("x")).intValue();
+                int cz = ((Number) center.get("z")).intValue();
+                if (op.at() != null) {
+                    cx = map.columnAtX(op.at()[0]);
+                    cz = map.columnAtY(op.at()[1]);
+                }
+                double depth = fields.has("depthM") ? fields.get("depthM").getAsDouble() : ((Number) target.get("lithostaticDepth")).doubleValue();
+                Map<String, Object> changed = new java.util.LinkedHashMap<>();
+                if (op.at() != null || fields.has("depthM")) {
+                    double ground = groundAt(cx, cz);
+                    Map<String, Object> c = new java.util.LinkedHashMap<>();
+                    c.put("x", cx);
+                    c.put("y", me.alex4386.typhon.engine.config.ChamberPlacement.blockBelow(ground - depth, l));
+                    c.put("z", cz);
+                    changed.put("center", c);
+                    changed.put("lithostaticDepth", depth);
+                }
+                for (Map.Entry<String, JsonElement> e : fields.entrySet()) {
+                    if (e.getKey().equals("depthM")) continue;
+                    String key = me.alex4386.typhon.engine.config.ChamberPlacement.definitionKey(e.getKey());
+                    changed.put(key, Tuning.toJavaValue(e.getValue()));
+                }
+                if (chamberId.equals(main)) {
+                    mainPatch = Json.GSON.toJsonTree(changed).getAsJsonObject();
+                } else {
+                    target.putAll(changed);
+                }
+            }
+            case "removeChamber" -> {
+                if (chamberId == null || chamberId.equals(main)) throw new IllegalArgumentException("The main chamber is removed with its volcano");
+                String id = chamberId;
+                if (!chambers.removeIf(c -> id.equals(c.get("id")))) throw new IllegalArgumentException("No chamber " + id);
+                connections.removeIf(c -> id.equals(c.get("from")) || id.equals(c.get("to")));
+            }
+            case "connect" -> {
+                if (op.from() == null || op.to() == null) throw new IllegalArgumentException("connect needs from and to");
+                if (connectionId == null) {
+                    connectionId = op.from() + "-" + op.to();
+                    if (ids(connections).contains(connectionId)) connectionId = freeId(ids(connections), connectionId + "-");
+                }
+                if (ids(connections).contains(connectionId)) throw new IllegalArgumentException("Pathway " + connectionId + " exists");
+                Map<String, Object> c = me.alex4386.typhon.engine.config.ChamberPlacement.connectionElement(connectionId, op.from(), op.to(),
+                        "dike".equals(op.kind()), null, null);
+                for (Map.Entry<String, JsonElement> e : fields.entrySet()) c.put(e.getKey(), Tuning.toJavaValue(e.getValue()));
+                connections.add(c);
+            }
+            case "editConnection" -> {
+                Map<String, Object> c = connectionId == null ? null : find(connections, connectionId);
+                if (c == null) throw new IllegalArgumentException("No pathway " + connectionId);
+                if (op.kind() != null) c.put("kind", op.kind());
+                for (Map.Entry<String, JsonElement> e : fields.entrySet()) c.put(e.getKey(), Tuning.toJavaValue(e.getValue()));
+            }
+            case "removeConnection" -> {
+                String id = connectionId;
+                if (id == null || !connections.removeIf(c -> id.equals(c.get("id")))) throw new IllegalArgumentException("No pathway " + id);
+            }
+            default -> throw new IllegalArgumentException("Unknown plumbing op " + op.op());
+        }
+        JsonObject magmaPatch = new JsonObject();
+        magmaPatch.add("chambers", Json.GSON.toJsonTree(chambers));
+        magmaPatch.add("connections", Json.GSON.toJsonTree(connections));
+        if (mainPatch != null) magmaPatch.add("chamber", mainPatch);
+        JsonObject volcano = new JsonObject();
+        volcano.add("magma", magmaPatch);
+        JsonObject volcanoes = new JsonObject();
+        volcanoes.add(op.volcanoId(), volcano);
+        ConfigOutcome outcome = applyConfig(new ConfigApi.Request(null, volcanoes, false, op.dryRun(), op.confirm()));
+        if (chamberId != null) outcome.response().addProperty("chamberId", chamberId);
+        if (connectionId != null) outcome.response().addProperty("connectionId", connectionId);
+        return outcome;
+    }
+
+    /** Ground elevation (m) at a simulated column, read on the engine thread. */
+    private double groundAt(int cx, int cz) throws Exception {
+        Scenario scenario = live;
+        double ground = runner.onEngineThread(e -> scenario.terrain().world().isKnown(cx, cz)
+                ? scenario.terrain().world().surfaceZ(cx, cz) : Double.NaN).get(30, TimeUnit.SECONDS);
+        if (Double.isNaN(ground)) throw new IllegalArgumentException("That point is outside the simulated area");
+        return ground;
+    }
+
+    private static me.alex4386.typhon.engine.config.ChamberPlacement.Request placementRequest(int cx, int cz, JsonObject fields) {
+        java.util.function.Function<String, Double> f = k -> fields.has(k) && !fields.get(k).isJsonNull() ? fields.get(k).getAsDouble() : null;
+        Double depth = f.apply("depthM");
+        return new me.alex4386.typhon.engine.config.ChamberPlacement.Request(null, cx, cz,
+                depth != null ? depth : me.alex4386.typhon.engine.config.ChamberPlacement.defaultOf("depthM"),
+                f.apply("volumeM3"), f.apply("temperatureC"), f.apply("silicaWt"), f.apply("waterWt"), f.apply("co2Wt"),
+                f.apply("crystalFraction"), f.apply("supplyRateM3PerS"), f.apply("tensileStrengthMPa"), f.apply("initialOverpressureMPa"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> deepCopy(List<Object> list) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (list == null) return out;
+        for (Object o : list) out.add(new java.util.LinkedHashMap<>((Map<String, Object>) o));
+        return out;
+    }
+
+    private static java.util.Set<String> ids(List<Map<String, Object>> list) {
+        java.util.Set<String> out = new java.util.TreeSet<>();
+        for (Map<String, Object> m : list) out.add(String.valueOf(m.get("id")));
+        return out;
+    }
+
+    private static Map<String, Object> find(List<Map<String, Object>> list, String id) {
+        for (Map<String, Object> m : list) if (id.equals(m.get("id"))) return m;
+        return null;
+    }
+
+    private static String freeId(java.util.Set<String> taken, String prefix) {
+        int n = 1;
+        while (taken.contains(prefix + n)) n++;
+        return prefix + n;
     }
 
     /** Changes the files of a world between saving and reopening it. */

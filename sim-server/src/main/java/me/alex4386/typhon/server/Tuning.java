@@ -317,14 +317,85 @@ final class Tuning {
 
     /** Fields of {@code placeChamber}: depth and magma of a new chamber, defaults from {@link ChamberPlacement#FIELDS}. */
     static JsonArray placeChamberSchema() {
+        return chamberSchema(null, true);
+    }
+
+    /**
+     * Fields of a chamber: its position ({@code x} east and {@code y} north in world metres, the frame of
+     * WorldInfo and the Inspector, bounded by {@code extent} [x0, y0, x1, y1] when known; no default, the
+     * client starts from the clicked point or the view), depth, size and magma. A volcano's first chamber
+     * has a deep supply by default; a further one ({@code firstChamber} false) is fed by its pathways.
+     */
+    static JsonArray chamberSchema(double[] extent, boolean firstChamber) {
         JsonArray out = new JsonArray();
+        out.add(spec("x", "East", "m", "Position", extent != null ? extent[0] : null, extent != null ? extent[2] : null, false,
+                "Distance east of the world origin (as in the Inspector's E … m)."));
+        out.add(spec("y", "North", "m", "Position", extent != null ? extent[1] : null, extent != null ? extent[3] : null, false,
+                "Distance north of the world origin (as in the Inspector's N … m)."));
         for (me.alex4386.typhon.engine.config.ChamberPlacement.Field f : me.alex4386.typhon.engine.config.ChamberPlacement.FIELDS) {
-            String group = f.id().equals("depthM") || f.id().equals("volumeM3") ? "Chamber"
+            String group = f.id().equals("depthM") ? "Position"
+                    : f.id().equals("volumeM3") ? "Chamber"
                     : f.id().equals("supplyRateM3PerS") || f.id().equals("tensileStrengthMPa") || f.id().equals("initialOverpressureMPa")
                             ? "Recharge and strength" : "Magma";
             JsonObject j = spec(f.id(), f.label(), f.unit(), group, f.min(), f.max(), f.log(), f.help());
-            j.add("default", Json.num(f.defaultValue()));
+            double d = !firstChamber && f.id().equals("supplyRateM3PerS") ? 0 : f.defaultValue();
+            j.add("default", Json.num(d));
             out.add(j);
+        }
+        return out;
+    }
+
+    /** Fields of a pathway between chambers, defaults from {@link ConnectionConfig#of}. */
+    static JsonArray connectionSchema() {
+        var d = me.alex4386.typhon.engine.magma.plumbing.ConnectionConfig.of("x", "a", "b",
+                me.alex4386.typhon.engine.magma.plumbing.ConnectionConfig.Kind.CONDUIT);
+        JsonArray out = new JsonArray();
+        JsonObject kind = spec("kind", "Kind", null, "Pathway", null, null, false,
+                "A conduit (pipe) or a dike (sheet); their flow scales as r⁴ and as opening³ × length.");
+        kind.addProperty("type", "choice");
+        JsonArray choices = new JsonArray();
+        for (String[] c : new String[][] {{"conduit", "Conduit"}, {"dike", "Dike"}}) {
+            JsonObject o = new JsonObject();
+            o.addProperty("value", c[0]);
+            o.addProperty("label", c[1]);
+            choices.add(o);
+        }
+        kind.add("choices", choices);
+        kind.addProperty("default", "conduit");
+        out.add(kind);
+        JsonObject r = spec("radiusM", "Conduit radius", "m", "Pathway", 0.1, 50.0, true, "Basaltic feeders are metres across.");
+        r.add("default", Json.num(d.radiusM()));
+        out.add(r);
+        JsonObject w = spec("widthM", "Dike opening", "m", "Pathway", 0.05, 20.0, true, "Typical dikes are 0.5–5 m thick.");
+        w.add("default", Json.num(d.widthM()));
+        out.add(w);
+        JsonObject sl = spec("strikeLengthM", "Dike length", "m", "Pathway", 10.0, 20_000.0, true, null);
+        sl.add("default", Json.num(d.strikeLengthM()));
+        out.add(sl);
+        JsonObject open = spec("open", "Open", null, "State", null, null, false, "A closed pathway carries nothing.");
+        open.addProperty("type", "boolean");
+        open.addProperty("default", d.open());
+        out.add(open);
+        JsonObject freeze = spec("freezeOnStall", "Freezes when stagnant", null, "State", null, null, false,
+                "Magma solidifies in a pathway whose flow stays below the stall rate long enough.");
+        freeze.addProperty("type", "boolean");
+        freeze.addProperty("default", d.freezeOnStall());
+        out.add(freeze);
+        return out;
+    }
+
+    /** The server's magma presets ({@link ChamberPlacement#PRESETS}). */
+    static JsonArray magmaPresets() {
+        JsonArray out = new JsonArray();
+        for (var p : me.alex4386.typhon.engine.config.ChamberPlacement.PRESETS) {
+            JsonObject o = new JsonObject();
+            o.addProperty("id", p.id());
+            o.addProperty("name", p.name());
+            o.addProperty("help", p.help());
+            JsonObject v = new JsonObject();
+            new java.util.TreeMap<>(p.values()).forEach((k, x) -> v.add(k, Json.num(x)));
+            o.add("values", v);
+            out.add(o);
         }
         return out;
     }
@@ -520,6 +591,18 @@ final class Tuning {
         return new String[] {sb.toString(), unit};
     }
 
+    /** The landscape the world describes [x0, y0, x1, y1] (m), from its WorldInfo, or null. */
+    private static double[] worldExtent(Session s) {
+        try {
+            JsonObject lod = s.worldInfo().getAsJsonObject("lod");
+            if (lod == null || !lod.has("extent")) return null;
+            JsonArray e = lod.getAsJsonArray("extent");
+            return new double[] {e.get(0).getAsDouble(), e.get(1).getAsDouble(), e.get(2).getAsDouble(), e.get(3).getAsDouble()};
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     /** The {@code schema} message of a session (§3.6). */
     static JsonObject schema(Session s) {
         JsonObject o = Json.obj("schema");
@@ -531,7 +614,13 @@ final class Tuning {
         Path dir = s.worldDir();
         MagmaChamberConfig c = s.firstChamberConfig();
         if (c != null) commands.add("injectMagma", injectSchema(c));
-        commands.add("placeChamber", placeChamberSchema());
+        double[] extent = worldExtent(s);
+        commands.add("placeChamber", chamberSchema(extent, true));
+        JsonObject components = new JsonObject();
+        components.add("chamber", chamberSchema(extent, false));
+        components.add("connection", connectionSchema());
+        o.add("components", components);
+        o.add("magmaPresets", magmaPresets());
         // per volcano: defaults from that volcano's own supply magma (the plain entry is the first's)
         s.chamberConfigs().forEach((id, cfg) -> commands.add("injectMagma@" + id, injectSchema(cfg)));
         if (dir == null) {

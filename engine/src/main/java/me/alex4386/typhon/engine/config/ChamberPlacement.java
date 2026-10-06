@@ -30,6 +30,25 @@ public final class ChamberPlacement {
         }
     }
 
+    /** A named magma composition to start a chamber or an injection from (temperature °C, SiO₂ and H₂O wt%). */
+    public record MagmaPreset(String id, String name, String help, Map<String, Double> values) {}
+
+    /**
+     * Typical magmas (Wilson 1989; Sigurdsson et al. 2015, Encyclopedia of Volcanoes, ch. 3-4): hotter and
+     * drier towards basalt, cooler, more siliceous and wetter towards rhyolite.
+     */
+    public static final List<MagmaPreset> PRESETS = List.of(
+            new MagmaPreset("hot-basalt", "Hot basalt", "Dry mantle-derived basalt, as under Hawaiʻi: runny lava, fountains",
+                    Map.of("temperatureC", 1200.0, "silicaWt", 49.0, "waterWt", 0.4)),
+            new MagmaPreset("wet-basalt", "Wet basalt", "Arc basalt with more water: lava plus Strombolian bursts",
+                    Map.of("temperatureC", 1120.0, "silicaWt", 51.0, "waterWt", 2.5)),
+            new MagmaPreset("andesite", "Andesite", "Typical subduction-zone magma: sticky, gas-rich, explosive",
+                    Map.of("temperatureC", 1000.0, "silicaWt", 60.0, "waterWt", 4.0)),
+            new MagmaPreset("dacite", "Dacite", "Viscous, water-rich: domes and violent explosions (Mt St Helens 1980)",
+                    Map.of("temperatureC", 900.0, "silicaWt", 66.0, "waterWt", 5.0)),
+            new MagmaPreset("rhyolite", "Rhyolite", "The stickiest magma: Plinian eruptions and obsidian",
+                    Map.of("temperatureC", 800.0, "silicaWt", 74.0, "waterWt", 6.0)));
+
     /** A placement field with its default, range and meaning (for the server's schema). */
     public record Field(String id, String label, String unit, double defaultValue, double min, double max, boolean log,
             String help) {}
@@ -162,6 +181,23 @@ public final class ChamberPlacement {
         if (radiusM != null) m.put("radiusM", radiusM);
         if (widthM != null) m.put("widthM", widthM);
         return m;
+    }
+
+    /** Index of the block whose top is at or just above {@code z} (m): a chamber centre's block. */
+    public static int blockBelow(double z, double metersPerColumn) {
+        return block(z, metersPerColumn);
+    }
+
+    /**
+     * The definition key of a placement field ({@code volumeM3} → {@code volume}); other names are
+     * definition keys already ({@code rechargeTemperatureC}). Depth and position are handled by callers.
+     */
+    public static String definitionKey(String field) {
+        return switch (field) {
+            case "volumeM3" -> "volume";
+            case "supplyRateM3PerS" -> "supplyRate";
+            default -> field;
+        };
     }
 
     /** Index of the block whose top is at or just above {@code z} (m). */

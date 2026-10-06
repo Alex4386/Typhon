@@ -133,6 +133,7 @@ volcano, out of world, …).
 | `getSchema` | — | `schema` (§4.7) of the attached session. It is also sent at the end of every attach burst. |
 | `setConfig` | `requestId?`, `world?`, `volcanoes?: {[id]: …}`, `replace?: boolean`, `dryRun?: boolean`, `confirm?: string` | `configResult` (below). The configuration API; same semantics as HTTP `PATCH`/`PUT /api/sessions/{id}/config`. A volcano id that does not exist with a full definition adds that volcano; `null` removes one. |
 | `placeChamber` | `requestId?`, `at: [x, y]` (map metres), `name?`, `fields?: {depthM?, volumeM3?, temperatureC?, silicaWt?, waterWt?, co2Wt?, crystalFraction?, supplyRateM3PerS?, tensileStrengthMPa?, initialOverpressureMPa?}`, `dryRun?` | Places a magma chamber `depthM` below the ground at the point: a new volcano `volcano-<n>` whose vent is **emergent** (no crater, no edifice: it forms where magma first reaches the surface). Omitted fields take the defaults in `schema.commands.placeChamber`. Applied through the configuration API (adding a volcano is a `reload`); replies `configResult` with `volcanoId`. |
+| `plumbing` | `requestId?`, `volcanoId`, `op`, `chamberId?`, `connectionId?`, `at?: [x, y]`, `from?`, `to?`, `kind?: "conduit"\|"dike"`, `fields?`, `dryRun?`, `confirm?` | One edit of a volcano's magma plumbing (§3.5.1): `op` is `addChamber` (`at`, `fields` from `schema.components.chamber`; `chamberId` optional, else `chamber-<n>`), `editChamber` (`chamberId`; `at` and/or `fields.depthM` move it, other fields retune it; `main` is the volcano's eruptive chamber), `removeChamber` (also removes its pathways), `connect` (`from`, `to`, `kind`, `fields` from `schema.components.connection`), `editConnection` (`connectionId`, `fields`, `kind?`), `removeConnection`. Built into the definition by the server and applied through the configuration API, which classifies it: adding a chamber or pathway is a `reload` keeping every other state; moving or resizing a further chamber resets only that chamber (`needsConfirmation` first); its other fields and every pathway field are `live`. Replies `configResult` with `chamberId`/`connectionId`. |
 | `removeVolcano` | `requestId?`, `volcanoId`, `dryRun?`, `confirm?` | Removes a volcano through the configuration API: a `reinit`, so the first reply is `needsConfirmation` with a `token` to send back as `confirm`. Its deposits stay in the world. |
 | `setParams` | `requestId?`, `values: {[paramId]: number \| boolean \| null}`, `restart?: boolean` | Legacy alias of `setConfig` by parameter id. `restart: true` confirms a reset; without it a reset is refused with `error{badRequest}` carrying the server's description. Replies `ack{message: "Applied n changes" \| "Restarted with n changes"}`. |
 
@@ -191,6 +192,23 @@ world}`. `POST /api/sessions/{id}/volcanoes` with `{x, y, name?, depthM?, …}` 
 fields, at the top level or under `fields`) places a chamber: 201 with the `configResult` body and
 `volcanoId` (`?dryRun=true`: 200, nothing applied). `DELETE /api/sessions/{id}/volcanoes/{volcanoId}`
 removes one: 409 with a `token` first, then `?confirm=<token>` applies it (200).
+
+**Plumbing (HTTP).** The `plumbing` edits, with the same body fields (`x`/`y` may replace `at`):
+`POST /api/sessions/{id}/volcanoes/{vid}/chambers` (addChamber, 201),
+`PATCH …/chambers/{chamberId}` (editChamber), `DELETE …/chambers/{chamberId}` (removeChamber),
+`POST …/volcanoes/{vid}/connections` (connect, 201), `PATCH …/connections/{connectionId}`,
+`DELETE …/connections/{connectionId}`. All take `?dryRun=true` and `?confirm=<token>`; a reset answers
+409 with the server's description and `token` first.
+
+#### 3.5.1 Magma plumbing
+
+A volcano has its main (eruptive) chamber `main` (`magma.chamber`) and optionally further chambers
+(`magma.chambers`, each with an `id`) joined by pathways (`magma.connections`: `from`, `to`, `kind`,
+`radiusM`/`widthM`/`strikeLengthM`, `lengthM?` (else the distance between the chambers), `open`,
+`freezeOnStall`, …). Magma flows from `from` to `to` when their pressure difference beats the magma
+column between them (Poiseuille conductance). Only `main` feeds the summit conduit and vents;
+the others feed it. In the configuration API's change paths the lists are keyed by id:
+`magma.chambers[deep].volume`, `magma.connections[deep-main].radiusM`; a patch sets a whole list.
 
 ### 3.6 Inspection
 
@@ -414,6 +432,8 @@ The tunable parameters and command fields of a session (§3.5):
 |---|---|
 | `tunable` | False for in-memory sessions (`reason` says why); `params` is then empty but `commands` is still filled. |
 | `params[]` | `ParamSpec`: `id`, `label`, `unit?`, `help?`, `group` (heading), `type` (`number`/`boolean`/`choice`), `min?`/`max?` (validated by the server), `step?` (1 for integers), `log?` (slider hint), `choices?`, `value`, `default`, `apply` (`live`/`reload`/`reinit`: the server's prediction of how a change is applied, from the same rules as §3.5) with `impact: {kind, target, message, reason?}` (the consequence in words, to show as is), `volcanoId?`. `recommended?: {min?, max?}` is the physically sensible part of the range with `warning` explaining what goes wrong outside it; `outOfRange: true` marks a current value outside it. `auto: true` marks a value the engine computes from physics unless overridden (wall rupture limit, wall yielding): `value` is null or absent while computed, `computed` is the value in use, a number overrides it and `null` in `setConfig` returns it to computing (the audit records it as `"auto"`). Out-of-range values are accepted, and the answer then carries `warnings`. Parameters without curated metadata get a label and unit derived from their name and no range. |
+| `components` | Forms of builder parts, as `ParamSpec`s with server defaults: `chamber` (position `x` east / `y` north in world metres — the frame of `at` and the Inspector — then `depthM`, size, magma, recharge; a further chamber gets no deep supply by default) and `connection` (`kind` choice, `radiusM`, `widthM`, `strikeLengthM`, `open`, `freezeOnStall`). `commands.placeChamber` has the same position fields. |
+| `magmaPresets` | `[{id, name, help, values: {temperatureC, silicaWt, waterWt}}]`: typical magmas for chamber and injection forms. |
 | `commands` | Fields of commands, as `ParamSpec`s with defaults (`injectMagma`: the first volcano's recharge magma; `injectMagma@<volcanoId>`: the same fields with that volcano's own recharge magma as defaults; `volumeM3.recommended.max` is 10 % of the chamber volume — larger batches rupture the chamber walls, and the command's ack carries a note saying so). |
 | `panels` | Parameter ids the server shows in Inspector panels: `chamber: {[volcanoId]: ids}` (a chamber's live supply, wall and dike settings). |
 | `audit` | Recent changes, oldest first: `at` (wall ms), `simTime`, `id`, `label`, `from`, `to` (null = back to default), `apply` (what was done: `live`/`reload`/`reinit`; `hot`/`restart` in older entries), `message`. |
@@ -447,7 +467,8 @@ when it went away:
 
 | kind | id | lifetime | props |
 |---|---|---|---|
-| `chamber` | `chamber:<volcano>` | always | `overpressureMPa`, `tensileStrengthMPa`, `temperatureC`, `silicaWt`, `waterWt`, `crystalFraction`, `volumeM3`, `depthM`, `eruptionRateM3PerS`, `regime`, `styleEstimate?`, `vei`, `radiusM`, `dikesBlocked?` (when dikes are simulated) |
+| `chamber` | `chamber:<volcano>` (main) or `chamber:<volcano>:<chamberId>` (further) | while defined | `chamberId` (`main` or its id), `overpressureMPa`, `tensileStrengthMPa`, `temperatureC`, `silicaWt`, `waterWt`, `crystalFraction`, `volumeM3`, `depthM`, `radiusM`; main: `eruptionRateM3PerS`, `regime`, `styleEstimate?`, `vei`, `dikesBlocked?` (when dikes are simulated); with further chambers: `transferredInM3`, `transferredOutM3`; further ones: `eruptive:false`, `supplyRateM3PerS` |
+| `connection` | `connection:<volcano>:<connectionId>` | while defined | `path` [from centre, to centre]; `connectionId`, `from`, `to`, `shape` (`CONDUIT`/`DIKE`), `radiusM` or `openingM`, `flowM3PerS` (volcano time), `transferredM3`, `drivingPressureMPa`, `lengthM`, `open`, `frozen` |
 | `vent`, `fissure` | `vent:<volcano>:<ventId>` | while the vent exists (fissures appear when a dike breaks the surface and disappear when removed) | `ventId`, `shape`, `craterRadiusM`, `lengthM?`, `strikeDeg?` (clockwise from east), `erupting`, `state` (`idle`/`active`/`waning`/`frozen`/`sealed`), `sealed`, `fluxM3PerS` (DRE through this vent, 2 significant digits), fissures only: `feederWidthM` (widest open feeder segment, cm precision; 0 once frozen), `segmentsOpen`, `segmentsTotal` |
 | `dike` | `dike:<volcano>:<n>` | from nucleation until removed or the engine forgets it (it keeps the latest few, stalled or erupted) | `status` (`PROPAGATING`/`STALLED`/`ERUPTED`), `startedAt`, `tipDepthM`, `heightM`, `openingM`, `strikeLengthM`, `speedMPerS`, `volumeM3`, `fissure?` |
 | `feature` | `feature:<volcano>:<KIND>:<x>:<z>` | while the geothermal model keeps the feature | `feature` (`HOT_SPRING`, `GEYSER`, `FUMAROLE`, `MUD_POT`, `SULFUR_SPRING`, `SUBMARINE_VENT`, `SULFUR_DEPOSIT`, `ACID_ALTERATION`, `SINTER`, `CINNABAR`), `groundTemperatureC` (whole degrees), `level?` |

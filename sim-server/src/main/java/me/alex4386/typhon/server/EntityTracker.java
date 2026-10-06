@@ -1,5 +1,6 @@
 package me.alex4386.typhon.server;
 
+import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import java.util.ArrayList;
@@ -175,7 +176,66 @@ final class EntityTracker {
             if (style != null) cp.addProperty("styleEstimate", style.name());
             cp.addProperty("vei", v.classifier().vei());
             cp.add("radiusM", Json.num(Probe.displayChamberRadius(v, map, world)));
+            cp.addProperty("chamberId", MagmaChamberConfig.MAIN);
+            if (v.plumbing() != null) {
+                cp.add("transferredInM3", Json.num(ch.transferredInM3()));
+                cp.add("transferredOutM3", Json.num(ch.transferredOutM3()));
+            }
             out.put(chamber.get("id").getAsString(), chamber);
+
+            // further chambers of the plumbing and the pathways between them
+            for (Map.Entry<String, MagmaChamber> ce : v.chambers().entrySet()) {
+                MagmaChamber c = ce.getValue();
+                if (c == ch) continue;
+                JsonObject o = entity("chamber:" + vid + ":" + ce.getKey(), "chamber", vid,
+                        Probe.displayName(vid) + " chamber " + ce.getKey(), Probe.chamberCenter(c, v, map, world));
+                JsonObject p = o.getAsJsonObject("props");
+                p.addProperty("chamberId", ce.getKey());
+                p.addProperty("eruptive", false);
+                p.add("overpressureMPa", Json.num(c.overpressureMPa()));
+                p.add("tensileStrengthMPa", Json.num(c.config().tensileStrengthMPa()));
+                p.add("temperatureC", Json.num(c.temperatureC()));
+                p.add("silicaWt", Json.num(c.silicaWt()));
+                p.add("waterWt", Json.num(c.waterWt()));
+                p.add("crystalFraction", Json.num(c.crystalFraction()));
+                p.add("volumeM3", Json.num(c.volumeM3()));
+                p.add("depthM", Json.num(c.physicalDepthM()));
+                p.add("supplyRateM3PerS", Json.num(c.supplyRate()));
+                p.add("transferredInM3", Json.num(c.transferredInM3()));
+                p.add("transferredOutM3", Json.num(c.transferredOutM3()));
+                p.add("radiusM", Json.num(Probe.displayChamberRadius(c, v, map, world)));
+                out.put(o.get("id").getAsString(), o);
+            }
+            if (v.plumbing() != null) {
+                for (var f : v.plumbing().flows()) {
+                    MagmaChamber a = v.chambers().get(f.from());
+                    MagmaChamber b = v.chambers().get(f.to());
+                    double[] pa = Probe.chamberCenter(a, v, map, world);
+                    double[] pb = Probe.chamberCenter(b, v, map, world);
+                    double[] mid = {(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2, (pa[2] + pb[2]) / 2};
+                    JsonObject o = entity("connection:" + vid + ":" + f.id(), "connection", vid, "Pathway " + f.from() + " → " + f.to(), mid);
+                    JsonArray path = new JsonArray();
+                    path.add(Json.xyz(pa));
+                    path.add(Json.xyz(pb));
+                    o.add("path", path);
+                    JsonObject p = o.getAsJsonObject("props");
+                    p.addProperty("connectionId", f.id());
+                    p.addProperty("from", f.from());
+                    p.addProperty("to", f.to());
+                    var cfg = v.plumbing().connections().stream().filter(x -> x.id().equals(f.id())).findFirst().orElseThrow();
+                    p.addProperty("shape", cfg.kind().name());
+                    if (cfg.kind() == me.alex4386.typhon.engine.magma.plumbing.ConnectionConfig.Kind.CONDUIT) p.add("radiusM", Json.num(cfg.radiusM()));
+                    else p.add("openingM", Json.num(cfg.widthM()));
+                    // Rounded: flows drift every step and would otherwise re-send the pathway each frame.
+                    p.add("flowM3PerS", Json.num(roundSignificant(f.rateM3PerS(), 2)));
+                    p.add("transferredM3", Json.num(roundSignificant(f.transferredM3(), 3)));
+                    p.add("drivingPressureMPa", Json.num(roundSignificant(f.drivingPressureMPa(), 2)));
+                    p.add("lengthM", Json.num(Math.round(f.lengthM())));
+                    p.addProperty("open", f.open());
+                    p.addProperty("frozen", f.frozen());
+                    out.put(o.get("id").getAsString(), o);
+                }
+            }
 
             List<String> active = activeVents.getOrDefault(vid, List.of());
             boolean erupting = ch.erupting();

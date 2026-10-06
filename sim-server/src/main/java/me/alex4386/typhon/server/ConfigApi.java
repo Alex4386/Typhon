@@ -342,6 +342,18 @@ final class ConfigApi {
                 else found = false;
             }
             String key = parts[parts.length - 1];
+            if (found && me.alex4386.typhon.engine.worlds.ConfigImpact.keyedList(path)) {
+                // the plumbing lists are set as a whole (the classifier diffs them element by element)
+                JsonElement v = e.getValue();
+                if (!v.isJsonArray() && !v.isJsonNull()) {
+                    errors.add(new FieldError(id, "expected a list"));
+                } else if (v.isJsonNull() || v.getAsJsonArray().isEmpty()) {
+                    node.remove(key);
+                } else {
+                    node.put(key, Json.GSON.fromJson(v, java.util.List.class));
+                }
+                continue;
+            }
             if (!found || !node.containsKey(key)) {
                 errors.add(new FieldError(id, "unknown setting"));
                 continue;

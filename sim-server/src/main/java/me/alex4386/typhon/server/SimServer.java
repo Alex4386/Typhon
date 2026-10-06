@@ -320,6 +320,17 @@ public final class SimServer implements AutoCloseable {
             JsonObject r = o.response();
             return new HttpReply(r.get("ok").getAsBoolean() ? 200 : r.has("needsConfirmation") ? 409 : 422, r);
         }));
+        // the plumbing of a volcano: chambers and the pathways between them (one code path with WS plumbing)
+        app.post("/api/sessions/{id}/volcanoes/{vid}/chambers", ctx -> plumbingHttp(ctx, "addChamber", ctx.pathParam("vid"), null, null, 201));
+        app.patch("/api/sessions/{id}/volcanoes/{vid}/chambers/{cid}",
+                ctx -> plumbingHttp(ctx, "editChamber", ctx.pathParam("vid"), ctx.pathParam("cid"), null, 200));
+        app.delete("/api/sessions/{id}/volcanoes/{vid}/chambers/{cid}",
+                ctx -> plumbingHttp(ctx, "removeChamber", ctx.pathParam("vid"), ctx.pathParam("cid"), null, 200));
+        app.post("/api/sessions/{id}/volcanoes/{vid}/connections", ctx -> plumbingHttp(ctx, "connect", ctx.pathParam("vid"), null, null, 201));
+        app.patch("/api/sessions/{id}/volcanoes/{vid}/connections/{cid}",
+                ctx -> plumbingHttp(ctx, "editConnection", ctx.pathParam("vid"), null, ctx.pathParam("cid"), 200));
+        app.delete("/api/sessions/{id}/volcanoes/{vid}/connections/{cid}",
+                ctx -> plumbingHttp(ctx, "removeConnection", ctx.pathParam("vid"), null, ctx.pathParam("cid"), 200));
         app.start(config.host(), config.port());
         pump.scheduleWithFixedDelay(this::pumpAll, PUMP_MILLIS, PUMP_MILLIS, TimeUnit.MILLISECONDS);
         if (AUTOSAVE_SECONDS > 0) {
@@ -451,6 +462,7 @@ public final class SimServer implements AutoCloseable {
                 case "setParams" -> setParams(c, msg, requestId);
                 case "setConfig" -> setConfig(c, msg, requestId);
                 case "placeChamber" -> placeChamber(c, msg, requestId);
+                case "plumbing" -> plumbing(c, msg, requestId);
                 case "removeVolcano" -> removeVolcano(c, msg, requestId);
                 case "replay" -> replay(c, msg, requestId);
                 case "seek" -> seek(c, msg, requestId);
@@ -867,6 +879,35 @@ public final class SimServer implements AutoCloseable {
         replyConfig(c, s, outcome, requestId);
     }
 
+    /** A plumbing edit from a WS message or an HTTP body (fields as in docs/protocol.md). */
+    static Session.PlumbingOp plumbingOp(String op, String volcanoId, String chamberId, String connectionId, JsonObject msg, String confirm,
+            boolean dryRun) {
+        double[] at = null;
+        if (msg.has("at") && msg.get("at").isJsonArray()) {
+            var a = msg.getAsJsonArray("at");
+            at = new double[] {a.get(0).getAsDouble(), a.get(1).getAsDouble()};
+        } else if (msg.has("x") && msg.has("y")) {
+            at = new double[] {msg.get("x").getAsDouble(), msg.get("y").getAsDouble()};
+        }
+        JsonObject fields = msg.has("fields") && msg.get("fields").isJsonObject() ? msg.getAsJsonObject("fields") : new JsonObject();
+        return new Session.PlumbingOp(op, volcanoId, chamberId, connectionId, at, Json.str(msg, "from"), Json.str(msg, "to"),
+                Json.str(msg, "kind"), fields, dryRun, confirm);
+    }
+
+    /** WS {@code plumbing}: one edit of a volcano's chambers and pathways; replies {@code configResult}. */
+    private void plumbing(ClientConnection c, JsonObject msg, Long requestId) throws Exception {
+        Session s = c.session;
+        if (s == null) {
+            c.send(Json.error("noSession", "Attach to a session first", requestId));
+            return;
+        }
+        boolean dryRun = msg.has("dryRun") && msg.get("dryRun").getAsBoolean();
+        String confirm = msg.has("confirm") && !msg.get("confirm").isJsonNull() ? msg.get("confirm").getAsString() : null;
+        Session.PlumbingOp op = plumbingOp(Json.str(msg, "op"), Json.str(msg, "volcanoId"), Json.str(msg, "chamberId"),
+                Json.str(msg, "connectionId"), msg, confirm, dryRun);
+        replyConfig(c, s, s.plumbing(op), requestId);
+    }
+
     /** WS {@code removeVolcano}: deletes a volcano (a reset: the reply may ask to confirm). */
     private void removeVolcano(ClientConnection c, JsonObject msg, Long requestId) throws Exception {
         Session s = c.session;
@@ -963,6 +1004,22 @@ public final class SimServer implements AutoCloseable {
             return;
         }
         httpJson(ctx, body -> handler.handle(s, body));
+    }
+
+    /** HTTP plumbing edits: the body as the WS {@code plumbing} message; {@code ?dryRun=true}, {@code ?confirm=<token>}. */
+    private void plumbingHttp(io.javalin.http.Context ctx, String op, String vid, String chamberId, String connectionId, int created) {
+        httpSession(ctx, (s, body) -> {
+            boolean dryRun = "true".equalsIgnoreCase(ctx.queryParam("dryRun")) || (body.has("dryRun") && body.get("dryRun").getAsBoolean());
+            String confirm = ctx.queryParam("confirm");
+            if (confirm == null && body.has("confirm") && !body.get("confirm").isJsonNull()) confirm = body.get("confirm").getAsString();
+            String cid = chamberId != null ? chamberId : Json.str(body, "chamberId");
+            String lid = connectionId != null ? connectionId : Json.str(body, "connectionId");
+            Session.ConfigOutcome o = s.plumbing(plumbingOp(op, vid, cid, lid, body, confirm, dryRun));
+            configApplied(s, o);
+            JsonObject r = o.response();
+            int status = r.get("ok").getAsBoolean() ? (dryRun ? 200 : created) : r.has("needsConfirmation") ? 409 : 422;
+            return new HttpReply(status, r);
+        });
     }
 
     /** HTTP PATCH/PUT of a session's configuration. */

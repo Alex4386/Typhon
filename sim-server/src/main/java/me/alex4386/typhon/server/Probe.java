@@ -132,7 +132,11 @@ final class Probe {
 
     /** Elevation (m) of the ground above the chamber, falling back to the primary vent's floor. */
     static double groundAboveChamber(VolcanoSystem v, GridMapping map, WorldModel world) {
-        BlockPos c = v.chamber().chamberCenter();
+        return groundAboveChamber(v.chamber(), v, map, world);
+    }
+
+    static double groundAboveChamber(me.alex4386.typhon.engine.magma.MagmaChamber chamber, VolcanoSystem v, GridMapping map, WorldModel world) {
+        BlockPos c = chamber.chamberCenter();
         double s = world.surfaceZ(c.x(), c.z());
         return Double.isFinite(s) ? s : (v.vents().get(0).position().y() + 1) * map.cell;
     }
@@ -144,10 +148,15 @@ final class Probe {
      * physical depth is unknown.
      */
     static double[] chamberCenter(VolcanoSystem v, GridMapping map, WorldModel world) {
-        BlockPos b = v.chamber().chamberCenter();
+        return chamberCenter(v.chamber(), v, map, world);
+    }
+
+    /** Centre of any chamber of the plumbing, at its physical depth below the ground above it. */
+    static double[] chamberCenter(me.alex4386.typhon.engine.magma.MagmaChamber chamber, VolcanoSystem v, GridMapping map, WorldModel world) {
+        BlockPos b = chamber.chamberCenter();
         double[] c = {map.x(b.x()), map.y(b.z()), (b.y() + 0.5) * map.cell};
-        double depth = v.chamber().physicalDepthM();
-        if (Double.isFinite(depth) && depth > 0) c[2] = groundAboveChamber(v, map, world) - depth;
+        double depth = chamber.physicalDepthM();
+        if (Double.isFinite(depth) && depth > 0) c[2] = groundAboveChamber(chamber, v, map, world) - depth;
         return c;
     }
 
@@ -156,8 +165,12 @@ final class Probe {
      * below the ground above it.
      */
     static double displayChamberRadius(VolcanoSystem v, GridMapping map, WorldModel world) {
-        double real = Math.cbrt(3 * v.chamber().config().volume() / (4 * Math.PI));
-        double depth = groundAboveChamber(v, map, world) - chamberCenter(v, map, world)[2];
+        return displayChamberRadius(v.chamber(), v, map, world);
+    }
+
+    static double displayChamberRadius(me.alex4386.typhon.engine.magma.MagmaChamber chamber, VolcanoSystem v, GridMapping map, WorldModel world) {
+        double real = Math.cbrt(3 * chamber.config().volume() / (4 * Math.PI));
+        double depth = groundAboveChamber(chamber, v, map, world) - chamberCenter(chamber, v, map, world)[2];
         return Math.max(map.cell * 2, Math.min(real, 0.6 * depth));
     }
 
