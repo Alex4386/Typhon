@@ -32,8 +32,11 @@ public final class ReposeRelaxation {
      * millimetre moves across its whole flank.
      */
     public static final double SLOPE_TOLERANCE_TAN = 0.01;
-    /** Safety bound on moves per drain; anything left stays queued for the next deposit or {@link #drain()}. */
-    static final int MAX_MOVES = 2_000_000;
+    /**
+     * Safety bound on moves per drain (every move lowers the pile's potential energy by a finite amount, so a
+     * drain ends; this only guards against a bug). Anything left stays queued for the next deposit.
+     */
+    static final int MAX_MOVES = 100_000_000;
     /** {@code tan φ} under water over {@code tan φ} in air (≈ 24° for 33°; see the class note). */
     public static final double DEFAULT_SUBMERGED_FACTOR = 0.7;
 
@@ -45,6 +48,7 @@ public final class ReposeRelaxation {
     private boolean running;
     private double submergedFactor = DEFAULT_SUBMERGED_FACTOR;
     private long moves;
+    private long boundHits;
 
     ReposeRelaxation(WorldModel world) {
         this.world = world;
@@ -69,6 +73,11 @@ public final class ReposeRelaxation {
         return moves;
     }
 
+    /** Drains that stopped at {@link #MAX_MOVES} with columns still queued (should stay 0). */
+    public long boundHits() {
+        return boundHits;
+    }
+
     /** Columns waiting to be examined (non-zero only if a drain hit its bound). */
     public int pending() {
         return queue.size();
@@ -91,6 +100,7 @@ public final class ReposeRelaxation {
                 if (relax(unpackX(k), unpackZ(k))) n++;
             }
             moves += n;
+            if (!queue.isEmpty()) boundHits++;
         } finally {
             running = false;
         }
@@ -118,6 +128,37 @@ public final class ReposeRelaxation {
             }
         }
         return worst;
+    }
+
+    /** Where {@link #worstExcessM} finds its worst column, described for diagnostics (or "none"). */
+    public String worstExcessWhere(int x0, int z0, int x1, int z1) {
+        double l = world.spec().metersPerColumn();
+        double worst = 0;
+        String where = "none";
+        for (int x = x0; x <= x1; x++) {
+            for (int z = z0; z <= z1; z++) {
+                if (!world.isKnown(x, z) || looseTop(x, z) < MIN_MOVE_M) continue;
+                double s = world.surfaceZ(x, z);
+                for (int d = 0; d < 8; d++) {
+                    int nx = x + DX[d];
+                    int nz = z + DZ[d];
+                    if (!world.isKnown(nx, nz)) continue;
+                    double distance = (d & 1) == 1 ? l * Math.sqrt(2) : l;
+                    double e = s - world.surfaceZ(nx, nz) - limit(x, z, distance) - toleranceM(distance);
+                    if (e > worst) {
+                        worst = e;
+                        LayerView top = world.layer(x, z, world.layerCount(x, z) - 1);
+                        LayerView ntop = world.layer(nx, nz, world.layerCount(nx, nz) - 1);
+                        where = String.format(java.util.Locale.ROOT,
+                                "(%d,%d) %.2f m %s loose %.2f m water %.2f -> (%d,%d) %.2f m %s%s water %.2f; excess %.3f m",
+                                x, z, s, top.materialInfo().name(), looseTop(x, z), world.waterZ(x, z), nx, nz,
+                                world.surfaceZ(nx, nz), ntop.materialInfo().name(), ntop.loose() ? " loose" : "",
+                                world.waterZ(nx, nz), e);
+                    }
+                }
+            }
+        }
+        return where;
     }
 
     /** The steepest stable surface drop to a neighbour {@code distance} metres away from column (x, z). */

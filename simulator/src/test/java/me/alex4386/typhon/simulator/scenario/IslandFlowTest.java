@@ -118,6 +118,7 @@ class IslandFlowTest {
         boolean dialled = false;
         double steepest = 0; // worst loose-deposit excess over the angle of repose (m), checked as the island grows
         long steepestAt = -1;
+        String steepestWhere = "none";
         for (int i = 0; i < BUDGET && st.oceanEntryAfterEffusive < 0; i++) {
             v = s.volcano();
             volcSeconds += 0.05 * (v.chamber().erupting() ? v.scaling().eruptiveTimeCompression() : v.scaling().dormantTimeCompression());
@@ -140,6 +141,7 @@ class IslandFlowTest {
                 if (excess > steepest) {
                     steepest = excess;
                     steepestAt = step;
+                    steepestWhere = repose.worstExcessWhere(-60, -60, 60, 60);
                 }
             }
             if (!dialled && st.submarine >= 0) {
@@ -159,6 +161,9 @@ class IslandFlowTest {
         report.line("loose deposits: worst excess over the angle of repose (+%.2f in tan) %.4f m (step %d); %d repose moves",
                 ReposeRelaxation.SLOPE_TOLERANCE_TAN, steepest, steepestAt,
                 s.terrain().world().reposeRelaxation().moves());
+        report.line("steepest loose column: %s", steepestWhere);
+        report.line("repose drains cut short by the safety bound: %d; columns still queued: %d",
+                s.terrain().world().reposeRelaxation().boundHits(), s.terrain().world().reposeRelaxation().pending());
         assertTrue(steepest <= 1e-3,
                 "no loose deposit ever stands above its angle of repose: " + steepest + " m at step " + steepestAt);
         for (String d : st.history) report.line("%s", d);

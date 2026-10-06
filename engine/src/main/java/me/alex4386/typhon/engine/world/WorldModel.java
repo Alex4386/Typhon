@@ -116,6 +116,7 @@ public final class WorldModel implements WorldQuery, WorldEdit {
      */
     public void importColumn(int x, int z, double surfaceZ, Material coverMaterial) {
         stacks.setLayers(x, z, importLayers(x, z, surfaceZ, coverMaterial));
+        relaxAround(x, z); // a new neighbour (e.g. the area growing) can undercut loose deposits at the old edge
     }
 
     /** A column to import: surface elevation and cover material ({@code null} = spec default). */
@@ -133,6 +134,7 @@ public final class WorldModel implements WorldQuery, WorldEdit {
         for (Map.Entry<Long, Map<Integer, List<ColumnStacks.LayerSpec>>> e : byTile.entrySet()) {
             stacks.setLayersBatch(unpackX(e.getKey()), unpackZ(e.getKey()), e.getValue());
         }
+        if (repose != null) for (ColumnImport column : columns) repose.touched(column.x(), column.z());
     }
 
     private List<ColumnStacks.LayerSpec> importLayers(int x, int z, double surfaceZ, Material coverMaterial) {
@@ -218,6 +220,7 @@ public final class WorldModel implements WorldQuery, WorldEdit {
 
     public void setUplift(int x, int z, double meters) {
         stacks.setUplift(x, z, meters);
+        relaxAround(x, z);
     }
 
     @Override
@@ -226,7 +229,13 @@ public final class WorldModel implements WorldQuery, WorldEdit {
     }
 
     public void setWaterZ(int x, int z, double elevation) {
+        double before = stacks.water(x, z);
         stacks.setWater(x, z, elevation);
+        // water rising over loose deposits lowers their angle of repose
+        if (repose != null && Double.compare(before, elevation) != 0 && Double.isFinite(elevation)
+                && elevation > stacks.surface(x, z)) {
+            repose.touched(x, z);
+        }
     }
 
     @Override
@@ -344,7 +353,9 @@ public final class WorldModel implements WorldQuery, WorldEdit {
         if (done && !depositObservers.isEmpty()) {
             for (DepositObserver o : depositObservers) o.deposited(x, z, thickness, unit, flags);
         }
-        if (done && repose != null && (flags & LayerFlags.LOOSE) != 0) repose.touched(x, z);
+        // any deposit can change loose slopes: a loose one directly, a consolidated one by being merged into
+        // the loose layers around it or by changing what a neighbour leans on
+        if (done && repose != null) repose.touched(x, z);
         return done;
     }
 
@@ -385,7 +396,9 @@ public final class WorldModel implements WorldQuery, WorldEdit {
 
     @Override
     public ErodeResult erode(int x, int z, double thickness, boolean looseOnly) {
-        return stacks.erode(x, z, thickness, looseOnly);
+        ErodeResult r = stacks.erode(x, z, thickness, looseOnly);
+        if (r.removedM() > 0) relaxAround(x, z); // the loose slopes around a cut slump to repose
+        return r;
     }
 
     @Override
@@ -394,7 +407,7 @@ public final class WorldModel implements WorldQuery, WorldEdit {
         if (Double.isNaN(surface)) return ErodeResult.NONE;
         zLo = Math.max(zLo, spec.datumZ() + ColumnStacks.MIN_BOTTOM);
         if (zLo >= surface) return ErodeResult.NONE;
-        if (zHi >= surface - ColumnStacks.EPS) return stacks.erode(x, z, surface - zLo, false);
+        if (zHi >= surface - ColumnStacks.EPS) return erode(x, z, surface - zLo, false);
         return stacks.replaceRange(x, z, zLo, zHi, MaterialTable.VOID.id(), unit, 0, 1, 0);
     }
 
@@ -410,6 +423,7 @@ public final class WorldModel implements WorldQuery, WorldEdit {
                     material.porosity(), welding);
         }
         if (zHi > surface) stacks.deposit(x, z, zHi - surface, material.id(), unit, flags, material.porosity(), welding);
+        relaxAround(x, z);
         return replaced;
     }
 

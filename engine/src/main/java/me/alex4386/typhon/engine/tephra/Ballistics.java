@@ -49,7 +49,7 @@ public final class Ballistics {
         return u2 > 0 ? Math.sqrt(u2) : 0;
     }
 
-    /** Impact crater radius in blocks: r = k·E^(1/3). */
+    /** Impact crater radius (m): r = k·E^(1/3). */
     public static double craterRadius(double energyJoules, double coefficient) {
         return energyJoules > 0 ? coefficient * StrictMath.cbrt(energyJoules) : 0;
     }

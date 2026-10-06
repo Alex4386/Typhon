@@ -1337,7 +1337,9 @@ public final class LavaFlow implements Subsystem {
         }
         if (best == null) return 0;
         int unit = Provenance.sibling(world(), c.unit[i], DepositType.HYALOCLASTITE, currentTime);
-        depositRock(best, bestIndex, volume, MaterialTable.HYALOCLASTITE, unit, 0);
+        // quench-shattered glass sheds as a loose breccia that avalanches down the flow front (it consolidates
+        // later, by palagonitisation)
+        depositRock(best, bestIndex, volume, MaterialTable.HYALOCLASTITE, unit, LayerFlags.LOOSE);
         raiseGround(best, bestIndex, 0, true, true, false, LavaPalette.HYALOCLASTITE, random, outbox, stats);
         return volume;
     }
@@ -1351,7 +1353,7 @@ public final class LavaFlow implements Subsystem {
         int x = c.worldX(i);
         int z = c.worldZ(i);
         int versionBefore = world().version(x, z);
-        world().deposit(x, z, thickness, material, unit, flags, material.porosity(), 1.0);
+        world().deposit(x, z, thickness, material, unit, flags, material.porosity(), (flags & LayerFlags.LOOSE) != 0 ? 0 : 1.0);
         // the stacks hold elevations as floats: re-read so the cache equals a fresh read (restores)
         rereadBed(c, i, versionBefore);
         c.solid[i] += thickness;

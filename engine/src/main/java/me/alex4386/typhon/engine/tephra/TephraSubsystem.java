@@ -490,7 +490,8 @@ public final class TephraSubsystem implements Subsystem {
         int z = (int) Math.floor(landing.position().z());
         double speed = landing.velocity().length();
         double energy = 0.5 * Ballistics.sphereMass(bomb.diameter, config.bombDensity) * speed * speed;
-        double radius = Ballistics.craterRadius(energy, config.craterCoefficient);
+        // the impact crater is metres across; at real-scale columns (10 m and more) it stays below one column
+        double radius = Ballistics.craterRadius(energy, config.craterCoefficient) / metersPerBlock();
         int impactGround = terrain.groundY(x, z, bomb.fallbackGroundY);
 
         double dug = 0;
