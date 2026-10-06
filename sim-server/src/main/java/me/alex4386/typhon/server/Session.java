@@ -868,10 +868,12 @@ final class Session implements AutoCloseable {
 
     String step(Long steps, Double seconds) {
         if (replay) return "Stepping is disabled in replay mode";
-        long n;
-        if (steps != null) n = steps;
-        else if (seconds != null) n = (long) Math.ceil(seconds * 1e6 / live.engine().baseStepMicros());
-        else n = 1;
+        if (steps == null && seconds != null) {
+            if (!(seconds > 0)) return "seconds must be positive";
+            runner.stepFor(seconds);
+            return null;
+        }
+        long n = steps != null ? steps : 1;
         runner.step((int) Math.max(1, Math.min(Integer.MAX_VALUE, n)));
         return null;
     }

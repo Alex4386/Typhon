@@ -104,7 +104,7 @@ public final class Presets {
                         "Summit reservoir ~1-2 km below Halema'uma'u; long-term supply ~0.1-0.2 km3/yr (~3-6 m3/s)",
                         "Effusion rates typically 1-10 m3/s; 2018 LERZ peaked ~50-100 m3/s",
                         "Shield flank slopes ~3-10 deg; summit 1247 m above sea level"),
-                3,
+                24, // a day of the eruption (the reservoir starts a few minutes from failure)
                 seed -> TerrainGenerators.shield(256, seed, 44, 300, 10, 6),
                 (seed, terrain) -> {
                     Scenario.Builder b = new Scenario.Builder("kilauea", seed, terrain);
@@ -120,7 +120,7 @@ public final class Presets {
                             .initialSilicaWt(50).rechargeSilicaWt(50)
                             .initialWaterWt(0.4).rechargeWaterWt(0.4)
                             .initialTemperatureC(1165).rechargeTemperatureC(1180)
-                            .initialOverpressureMPa(9.5)
+                            .initialOverpressureMPa(9.9999)
                             .build();
                     VolcanoSystem volcano = VolcanoSystem.builder("kilauea", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
@@ -288,7 +288,7 @@ public final class Presets {
                             .initialSilicaWt(46.5).rechargeSilicaWt(46.5)
                             .initialWaterWt(0.7).rechargeWaterWt(0.7)
                             .initialTemperatureC(1170).rechargeTemperatureC(1180)
-                            .initialOverpressureMPa(11.8)
+                            .initialOverpressureMPa(11.99996)
                             .build();
                     VolcanoSystem volcano = VolcanoSystem.builder("surtsey", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
@@ -314,7 +314,7 @@ public final class Presets {
                         "Caldera ~45 x 85 km (0.64 Ma); Yellowstone Lake ~ 2357 m a.s.l.",
                         "Mean heat flow ~2000 mW/m2 (~30-40x continental average); > 500 geysers, ~10,000 thermal features",
                         "Shallow hydrothermal reservoir temperatures ~200-270 C"),
-                3,
+                90, // hydrothermal features form over days
                 seed -> TerrainGenerators.caldera(256, seed, 40, 160, 240, 34, 4),
                 (seed, terrain) -> {
                     Scenario.Builder b = new Scenario.Builder("yellowstone", seed, terrain);

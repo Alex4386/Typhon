@@ -47,10 +47,10 @@ class IslandFlowTest {
 
     private final Report report = new Report();
 
-    /** The flow's ocean: Surtsey's 130 m deep shelf; eruptions ×200 so days of activity fit a test run. */
+    /** The flow's ocean: Surtsey's 130 m deep shelf. */
     static WorldTemplates.Template ocean() {
         WorldTemplates.Template d = WorldTemplates.Template.defaults("ocean");
-        return new WorldTemplates.Template("ocean", 2_400, 10, 130, d.elevationM(), d.slope(), 0, d.roughnessM(), 200);
+        return new WorldTemplates.Template("ocean", 2_400, 10, 130, d.elevationM(), d.slope(), 0, d.roughnessM());
     }
 
     /** The user's chamber: 3 km under the vent, fed at Surtsey's mean rate (~1.1 km³ in 3.5 years ≈ 10 m³/s). */

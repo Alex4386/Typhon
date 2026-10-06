@@ -66,9 +66,9 @@ export type ClientMessage =
   | { type: 'setSpeed'; speed: number | 'max'; sessionId?: string; requestId?: number }
   /** Playback policy (all fields optional): slow down to `eruptionSpeed` while something happens. */
   | ({ type: 'setPlaybackPolicy'; sessionId?: string; requestId?: number } & Partial<PlaybackPolicy>)
-  /** Pause, then advance exactly `steps` engine base steps, or the smallest number of steps covering `seconds`. */
+  /** Pause, then advance exactly `steps` engine steps (their length follows the activity), or until `seconds` have passed. */
   | { type: 'step'; steps?: number; seconds?: number }
-  /** Pause automatically once simulation time reaches `time` (s); null clears it. */
+  /** Pause automatically once the clock reaches `time` (s); null clears it. */
   | { type: 'pauseAt'; time: number | null }
   | { type: 'command'; requestId?: number; command: SimCommand }
   /** `datum: 'surface'` makes zMin/zMax and every z in the reply relative to each column's ground. */

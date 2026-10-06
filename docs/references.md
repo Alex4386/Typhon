@@ -6,7 +6,7 @@ title, journal, volume, pages). Entries marked **(unverified)** are cited from m
 year and topic are believed correct, but volume and page numbers were **not** checked and are left
 out rather than guessed.
 
-Where a model departs from the literature for gameplay or scale (time compression, block
+Where a model departs from the literature for gameplay or scale (block
 geometry), the class javadoc says so; see also `engine/README.md` ("Units and scaling").
 
 ## Magma chamber and conduit — `magma/`

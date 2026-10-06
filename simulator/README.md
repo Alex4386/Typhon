@@ -86,7 +86,7 @@ run --world DIR [--hours H (default 1)] [--out DIR (default DIR/runs/latest)] [-
 saves back into `DIR` at the end (unless `--no-save`). If the definitions changed since the last
 save in ways that do not fit the saved state (grid, geology, chamber geometry, vents, ...), the run
 is refused with the list of changes; `--accept-config-change` keeps the state and applies them,
-`--reset-changed` restarts only the volcanoes that changed. Hot changes (climate, time compression,
+`--reset-changed` restarts only the volcanoes that changed. Hot changes (climate,
 magma supply, feature rates, `active`) apply without a flag.
 
 The `terrain` section of `world.yaml` says where the initial terrain comes from:

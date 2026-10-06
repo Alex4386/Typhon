@@ -171,7 +171,7 @@ final class RealPresets {
                         "Summit reservoir 1-2 km below the caldera (Poland et al. 2014); supply 0.1-0.2 km3/yr",
                         "Effusion rates 1-10 m3/s, 2018 LERZ peak ~50-100 m3/s (Neal et al. 2019)",
                         "Basal water table ~610 m a.s.l. under the summit (Keller et al. 1979)"),
-                3,
+                24, // a day of the eruption (the reservoir starts a few minutes from failure)
                 setting,
                 List.of(
                         ReferenceValue.range("Summit elevation", 1200, 1300, "m", "USGS HVO", Metric.SUMMIT_ELEVATION_M),
@@ -200,7 +200,7 @@ final class RealPresets {
                             .eruptionEndOverpressureMPa(1).supplyRate(3).supplyVariability(0.2)
                             .initialSilicaWt(50).rechargeSilicaWt(50).initialWaterWt(0.4).rechargeWaterWt(0.4)
                             .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
-                            .initialTemperatureC(1165).rechargeTemperatureC(1180).initialOverpressureMPa(9.5)
+                            .initialTemperatureC(1165).rechargeTemperatureC(1180).initialOverpressureMPa(9.9999)
                             .build();
                     SubsurfaceConfig subsurface = subsurface(setting, L);
                     // The window sits in the island's basal aquifer, held near 610 m by recharge and
@@ -476,7 +476,7 @@ final class RealPresets {
                             .eruptionEndOverpressureMPa(1).supplyRate(2).supplyVariability(0.2)
                             .initialSilicaWt(46.5).rechargeSilicaWt(46.5).initialWaterWt(0.7).rechargeWaterWt(0.7)
                             .initialCo2Wt(0.2).rechargeCo2Wt(0.2)
-                            .initialTemperatureC(1170).rechargeTemperatureC(1180).initialOverpressureMPa(11.8)
+                            .initialTemperatureC(1170).rechargeTemperatureC(1180).initialOverpressureMPa(11.99996)
                             .build();
                     return b.volcano(VolcanoSystem.builder("surtsey-real", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
@@ -519,7 +519,7 @@ final class RealPresets {
                         "Yellowstone Lake 2357 m, West Thumb ~ 60 m deep (Morgan et al. 2003)",
                         "Reservoir 5-17 km deep, mostly crystal mush (Farrell et al. 2014; Huang et al. 2015)",
                         "> 500 geysers, ~10,000 thermal features; heat flow ~2000 mW/m2 (Hurwitz & Lowenstern 2014)"),
-                3,
+                90, // hydrothermal features form over days
                 setting,
                 List.of(
                         ReferenceValue.range("Plateau / rim elevation", 2300, 2700, "m", "Christiansen 2001",

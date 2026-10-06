@@ -73,7 +73,7 @@ reopened later and can be tuned (§3.5). *In-memory* sessions run a preset witho
 | `hello` | `protocol: 1`, `client: string` | First message. |
 | `listSessions` | — | Reply: `sessions`. |
 | `listCatalog` | — | Reply: `catalog` (§4.1): presets and the world directories under `--worlds-dir`. |
-| `createSession` | `requestId?`, `template?: "ocean" \| "flat" \| "slope"`, `params?: {…}`, `preset?: string`, `world?: string`, `seed?: number`, `name?: string`, `timeCompression?: {dormant?, eruptive?}`, `paused?: boolean`, `attach?: boolean` (default true), `inMemory?: boolean` | `template`: write `<worlds-dir>/<name>` as an **empty world** (terrain and sea only, no volcano) from a terrain template, with optional `params` (the template's fields in the catalog, defaults from the server), and open it. `world`: open `<worlds-dir>/<world>` (if it is already loaded, its session is reused). `preset`: write a new world directory `<worlds-dir>/<name>` (default: a free name derived from the preset) from the preset and open it; with `inMemory:true` run the preset without files instead. `timeCompression` overrides the world's dormant/eruptive time compression (not allowed for an already loaded world or in memory). Replies `ack{message:"Session <id>"}`, then the attach burst if `attach`; `error{badRequest}` when the server is full or the name is taken. |
+| `createSession` | `requestId?`, `template?: "ocean" \| "flat" \| "slope"`, `params?: {…}`, `preset?: string`, `world?: string`, `seed?: number`, `name?: string`, `paused?: boolean`, `attach?: boolean` (default true), `inMemory?: boolean` | `template`: write `<worlds-dir>/<name>` as an **empty world** (terrain and sea only, no volcano) from a terrain template, with optional `params` (the template's fields in the catalog, defaults from the server), and open it. `world`: open `<worlds-dir>/<world>` (if it is already loaded, its session is reused). `preset`: write a new world directory `<worlds-dir>/<name>` (default: a free name derived from the preset) from the preset and open it; with `inMemory:true` run the preset without files instead. Replies `ack{message:"Session <id>"}`, then the attach burst if `attach`; `error{badRequest}` when the server is full or the name is taken. |
 | `attach` | `sessionId: string` | Attach to an existing session (detaching from the current one). Reply: `attached` …, or `error{noSession}`. |
 | `sessionControl` | `requestId?`, `sessionId`, `action: "pause" \| "resume" \| "close" \| "closeWithoutSaving"` | Pause/resume any session (also one this client does not watch). `close` saves a world session and unloads it; clients attached to it receive `detached`. |
 | `deleteWorld` | `requestId?`, `name` | Delete `<worlds-dir>/<name>` (refused while it is loaded). Reply `ack`, then a fresh `catalog`. |
@@ -84,13 +84,20 @@ reopened later and can be tuned (§3.5). *In-memory* sessions run a preset witho
 
 Names follow `EngineRunner.Mode`.
 
+There is **one clock**: every subsystem runs in seconds of physical time. The engine picks each
+step's length from the state alone (long steps, up to a day, while everything is quiet; seconds or
+less while something erupts, flows or rises), so the physics never depends on how fast it is
+played. **Speed** is playback only: seconds of the clock per wall-clock second.
+
 | type | fields | server action |
 |---|---|---|
-| `transport` | `mode: "REALTIME" \| "UNBOUNDED" \| "PAUSED"`, `speed?: number`, `sessionId?` (another loaded session; default the attached one) | `REALTIME` → `runner.realtime(speed)`, with `speed` clamped to 0.1–1000 and the current speed kept if omitted. `UNBOUNDED` → `runner.unbounded()`, which also remembers `speed`. `PAUSED` → `runner.pause()`. |
-| `step` | `steps?: number` or `seconds?: number` | Pause, then `runner.step(n)`. `n = steps`, or `ceil(seconds / baseStep)`; at least 1. |
-| `pauseAt` | `time: number \| null` | `runner.pauseAtTime(time)` (seconds); `null` clears it. |
+| `transport` | `mode: "REALTIME" \| "UNBOUNDED" \| "PAUSED"`, `speed?: number`, `sessionId?` (another loaded session; default the attached one) | `REALTIME` → `runner.realtime(speed)`, with `speed` clamped to 1–10⁷ and the current speed kept if omitted. `UNBOUNDED` → `runner.unbounded()`, which also remembers `speed`. `PAUSED` → `runner.pause()`. Ends a playback slow-down. |
+| `setSpeed` | `speed: number \| "max"`, `sessionId?`, `requestId?` | Playback speed in seconds per wall second (clamped to 1–10⁷), or `"max"` (as fast as the CPU allows, `UNBOUNDED`). A paused session stays paused and resumes at the new speed. Ends a playback slow-down (the user's choice stands). |
+| `setPlaybackPolicy` | `slowOnEruption?: boolean` (default true), `eruptionSpeed?: number` (default 20), `slowOnEvents?: ("unrest" \| "dike" \| "fissure" \| "pyroclasticFlow" \| "lahar" \| "avalanche")[]` (default none), `eventHoldSeconds?: number` (default 3600), `sessionId?`, `requestId?` | Session playback policy, kept on the server. When an eruption starts (with `slowOnEruption`) or a chosen event happens, playback that is faster switches to `eruptionSpeed` at that very step; the previous speed (or `max`) comes back once no volcano erupts any more and `eventHoldSeconds` of clock time have passed since the last chosen event. Turning the policy off ends a slow-down it caused. |
+| `step` | `steps?: number` or `seconds?: number` | Pause, then `runner.step(steps)` (at least 1 step of whatever length the engine picks), or `runner.stepFor(seconds)`: steps until the clock has advanced by `seconds`. |
+| `pauseAt` | `time: number \| null` | `runner.pauseAtTime(time)` (seconds on the clock; at the end of the step reaching it); `null` clears it. |
 
-After any transport change the server sends a `clock` message promptly.
+After any transport or playback change the server sends a `clock` message promptly.
 
 ### 3.3 Commands
 
@@ -153,7 +160,7 @@ schema's `apply`/`impact`, the response and the audit all come from it):
 
 | kind | what the server does | e.g. |
 |---|---|---|
-| `live` | changes the running subsystems' configuration in place at the next step boundary; nothing restarts, the answer comes in milliseconds. The definition files are written in the background. | every physical parameter: magma supply and properties, rock and wall strength, conduit, dikes, flows, ash, hot springs, time compression, weather, solver tuning |
+| `live` | changes the running subsystems' configuration in place at the next step boundary; nothing restarts, the answer comes in milliseconds. The definition files are written in the background. | every physical parameter: magma supply and properties, rock and wall strength, conduit, dikes, flows, ash, hot springs, weather, solver tuning |
 | `reload` | saves, rebuilds the world from the new definitions and resumes the saved state (a short pause; clients get a new attach burst). | inputs only read when ground is generated or the world assembled: geology, geotherm, aquifer, terrain source, a volcano's edifice |
 | `reinit` | as `reload`, but the affected part starts over from its new definition: only the ash grid (`tephra.cellSize`/`gridCells`/`worldTopY`), only the hot springs (`geothermal.center`/`radius`/`cellSize`), only the crater surface (`detail.*`), or the whole volcano (initial conditions `magma.chamber.initial*`, chamber `volume` and `center`, `magma.conduit.initialOpenness`, vents, adding or removing dikes/hot springs/flows/deformation). The landscape and other volcanoes are kept. | |
 
@@ -249,13 +256,14 @@ point or an entity, and again every 2 s while the simulation runs.
 {"type":"welcome","protocol":1,"server":"typhon-sim-server/1.0","fields":[1,2,3,4,5,6,7,8,9,10,11,12]}
 {"type":"sessions","sessions":[{"id":"s1","name":"Kīlauea","preset":"kilauea","world":"my-kilauea","time":3600.0,
   "mode":"REALTIME","speed":20,"rate":19.6,"replay":false,"clients":1,
-  "volcanoes":[{"id":"kilauea","alert":"ERUPTING","erupting":true,
-                "timeCompression":{"dormant":5000,"eruptive":20,"current":20}}]}],
+  "playback":{"slowOnEruption":true,"eruptionSpeed":20,"slowOnEvents":[],"eventHoldSeconds":3600,"slowed":true,
+              "slowedBy":"eruption","resumeSpeed":86400,"resumeMode":"REALTIME"},
+  "volcanoes":[{"id":"kilauea","alert":"ERUPTING","erupting":true}]}],
  "server":{"maxSessions":8,"cpus":16,"heapUsedMB":812,"heapMaxMB":6144,"worldsDir":"/srv/worlds"}}
 {"type":"catalog","templates":[{"name":"ocean","title":"Open sea","description":"…","fields":[ParamSpec…]}, …],
  "defaultTemplate":"ocean","defaultPreset":"kilauea","presets":[{"name":"kilauea","title":"Kīlauea-like shield","description":"…","realScale":false}],
  "worlds":[{"name":"my-kilauea","title":"Kīlauea","volcanoes":1,"hasState":true,
-            "timeCompression":{"dormant":5000,"eruptive":20},"sessionId":"s1"}],
+            "sessionId":"s1"}],
  "server":{ … }}
 {"type":"attached","sessionId":"s1","world":{ …WorldInfo… }}
 {"type":"detached","sessionId":"s1","reason":"closed"}
@@ -303,20 +311,24 @@ refer to these ids.
 ### 4.3 `clock`
 
 ```json
-{"type":"clock","time":5025.35,"step":100507,"baseStep":0.05,"mode":"REALTIME","speed":20,"rate":19.8,"replay":false}
+{"type":"clock","time":1036825.4,"engineTime":1036800,"step":4210,"baseStep":0.05,"mode":"REALTIME","speed":20,
+ "rate":19.8,"replay":false,
+ "playback":{"slowOnEruption":true,"eruptionSpeed":20,"slowOnEvents":["dike"],"eventHoldSeconds":3600,
+             "slowed":true,"slowedBy":"eruption","resumeSpeed":86400,"resumeMode":"REALTIME"}}
 ```
 
-- `time` is simulation time (s); `step` is `runner.completedStep()`; `baseStep` is the engine base
-  step (s).
-- `speed` is the requested REALTIME multiplier. `rate` is the measured simulated seconds per wall
-  second.
+- `time` is the clock (s since the world began) at the playback position: in `REALTIME` it advances
+  smoothly between the start and the end of a long step. `engineTime` is the time of the last
+  completed step. `step` is `runner.completedStep()`; `baseStep` is the engine's time quantum (s):
+  steps are powers of two of it, chosen by the engine.
+- `speed` is the requested playback speed (clock seconds per wall second). `rate` is the measured
+  clock seconds per wall second.
+- `playback` is the session's policy (`setPlaybackPolicy`) and whether playback is slowed down right
+  now (`slowed`, `slowedBy`: `eruption` or an event kind), with the speed and mode it returns to.
+  A UI shows e.g. "×20 · eruption" while slowed.
 - Send at least twice per second, and immediately after transport changes.
-- Clients extrapolate `time + rate · Δwall` between clocks while not `PAUSED`.
-- `compression` (optional) is the first volcano's current time compression: physical (volcano)
-  seconds per simulated second, its dormant or eruptive value. `physicalTime` (optional) is the
-  approximate physical time elapsed since the session was loaded (simulated time × compression,
-  integrated). Three different rates are in play: simulated time (`time`), volcano time
-  (`time × compression`) and playback (`speed`/`rate`, simulated seconds per wall second).
+- Clients extrapolate `time + speed · Δwall` between clocks in `REALTIME` (or `rate` when it falls
+  well short of `speed`, and in `UNBOUNDED`).
 
 ### 4.4 `state`
 
@@ -335,8 +347,7 @@ This is a snapshot of 0D state per volcano (from `runner` snapshots), sent ≥ 2
    "plume":{"topZ":9200,"massRateKgS":2.1e6}}}}
 ```
 
-- `eruptionRate` is DRE m³ per **simulated** second (it includes the eruptive time compression);
-  `physicalEruptionRate` is DRE m³/s of volcano time and is what a status display should show.
+- `eruptionRate` is DRE m³/s.
 - `ruptureOverpressureMPa` is the wall-rupture limit the chamber's overpressure never exceeds;
   `failureOverpressureMPa` is where the conduit/roof fails and eruptions or dikes start. Show
   "pressure % of limit" against `failureOverpressureMPa`.
@@ -354,8 +365,6 @@ This is a snapshot of 0D state per volcano (from `runner` snapshots), sent ≥ 2
   subsidence (3 significant digits).
 - `chamber.volumeM3` (optional) is the chamber's magma volume (m³), e.g. for previewing how an
   injection mixes in.
-- `timeCompression` (optional) is `{dormant, eruptive, current}` for the volcano, and
-  `physicalTime` (optional) its approximate elapsed volcano time (s), as in `clock`.
 
 ### 4.5 `events`
 
@@ -462,7 +471,7 @@ when it went away:
   everything they had. Otherwise the message is a delta: entities that appeared or changed
   (`upsert`) and ids that are gone (`remove`). Deltas are sent at most once a second and only when
   something changed.
-- `id` is stable for the entity's life; `createdAt` (simulated s) is when the server first saw it,
+- `id` is stable for the entity's life; `createdAt` (clock s) is when the server first saw it,
   `updatedAt` when its record last changed. `at` is a representative point [x, y, z] in metres
   (§1); `path?` is extra geometry (dikes: origin → tip). `hidden:true` marks statistics-only
   entities that are not drawn. `props` are kind-specific and may grow (unknown keys are ignored).
@@ -470,16 +479,16 @@ when it went away:
 | kind | id | lifetime | props |
 |---|---|---|---|
 | `chamber` | `chamber:<volcano>` (main) or `chamber:<volcano>:<chamberId>` (further) | while defined | `chamberId` (`main` or its id), `overpressureMPa`, `tensileStrengthMPa`, `temperatureC`, `silicaWt`, `waterWt`, `crystalFraction`, `volumeM3`, `depthM`, `radiusM`; main: `eruptionRateM3PerS`, `regime`, `styleEstimate?`, `vei`, `dikesBlocked?` (when dikes are simulated); with further chambers: `transferredInM3`, `transferredOutM3`; further ones: `eruptive:false`, `supplyRateM3PerS` |
-| `connection` | `connection:<volcano>:<connectionId>` | while defined | `path` [from centre, to centre]; `connectionId`, `from`, `to`, `shape` (`CONDUIT`/`DIKE`), `radiusM` or `openingM`, `flowM3PerS` (volcano time), `transferredM3`, `drivingPressureMPa`, `lengthM`, `open`, `frozen` |
+| `connection` | `connection:<volcano>:<connectionId>` | while defined | `path` [from centre, to centre]; `connectionId`, `from`, `to`, `shape` (`CONDUIT`/`DIKE`), `radiusM` or `openingM`, `flowM3PerS`, `transferredM3`, `drivingPressureMPa`, `lengthM`, `open`, `frozen` |
 | `vent`, `fissure` | `vent:<volcano>:<ventId>` | while the vent exists (fissures appear when a dike breaks the surface and disappear when removed) | `ventId`, `shape`, `craterRadiusM`, `lengthM?`, `strikeDeg?` (clockwise from east), `erupting`, `state` (`idle`/`active`/`waning`/`frozen`/`sealed`), `sealed`, `fluxM3PerS` (DRE through this vent, 2 significant digits), fissures only: `feederWidthM` (widest open feeder segment, cm precision; 0 once frozen), `segmentsOpen`, `segmentsTotal` |
 | `dike` | `dike:<volcano>:<n>` | from nucleation until removed or the engine forgets it (it keeps the latest few, stalled or erupted) | `status` (`PROPAGATING`/`STALLED`/`ERUPTED`), `startedAt`, `tipDepthM`, `heightM`, `openingM`, `strikeLengthM`, `speedMPerS`, `volumeM3`, `fissure?` |
 | `feature` | `feature:<volcano>:<KIND>:<x>:<z>` | while the geothermal model keeps the feature | `feature` (`HOT_SPRING`, `GEYSER`, `FUMAROLE`, `MUD_POT`, `SULFUR_SPRING`, `SUBMARINE_VENT`, `SULFUR_DEPOSIT`, `ACID_ALTERATION`, `SINTER`, `CINNABAR`), `groundTemperatureC` (whole degrees), `level?` |
 | `plume` | `plume:<volcano>` | while an eruption column stands | `topZ`, `heightM`, `massRateKgS` |
 | `station` | `station:<volcano>:<name>` | always | `station` |
-| `quake` | `quake:<volcano>:<ms>:<pos>` | M ≥ 2, for 30 simulated minutes (newest 100) | `magnitude`, `type`, `time`, `durationSeconds`, `swarm` |
-| `lavaFront` | `lava:front` | 2 simulated minutes after the last front report | `lengthM`, `activeCells`, `moltenVolumeM3` |
+| `quake` | `quake:<volcano>:<ms>:<pos>` | M ≥ 2, for 30 minutes (newest 100) | `magnitude`, `type`, `time`, `durationSeconds`, `swarm` |
+| `lavaFront` | `lava:front` | 2 minutes after the last front report | `lengthM`, `activeCells`, `moltenVolumeM3` |
 | `lavaField` | `lava:field` (hidden) | while lava is molten | `activeCells`, `moltenVolumeM3`, `emittedM3`, `solidifiedM3` |
-| `pdc`, `lahar` | `pdc:<flow>`, `lahar:<flow>` | 2 simulated minutes after the last front report | `runoutM`, `volumeM3`, `maxSpeedMPerS`, `maxTemperatureC`/`sedimentFraction`, `activeCells` |
+| `pdc`, `lahar` | `pdc:<flow>`, `lahar:<flow>` | 2 minutes after the last front report | `runoutM`, `volumeM3`, `maxSpeedMPerS`, `maxTemperatureC`/`sedimentFraction`, `activeCells` |
 
 ## 5. Tile frames (binary, kind 1)
 
@@ -656,7 +665,7 @@ Body (after decompression), in order:
 ## 7. Replay
 
 - The server records the session while it runs:
-  - **Keyframes:** a full engine save every *N* simulated minutes. The engine's region-file save
+  - **Keyframes:** a full engine save every *N* minutes of the clock. The engine's region-file save
     format is fine for this; incremental saves keep them cheap.
   - **Deltas:** the event stream and the tile frames between keyframes, as sent to clients.
 - `replayInfo{start, end, keyframes}` advertises the range.
@@ -668,7 +677,7 @@ Body (after decompression), in order:
   - the state, an events backlog, a `clock` with `replay:true`,
   - every subscribed tile again with fresh versions.
 - `replay{action:"exit"}` returns to the live state with `replayReset{time: liveTime}`.
-- The mock implements keyframe-only replay with in-memory snapshots every 5 simulated minutes.
+- The mock implements keyframe-only replay with in-memory snapshots every 5 minutes of the clock.
 
 ## 8. Versioning
 

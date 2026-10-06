@@ -13,7 +13,7 @@ import { command } from '../net/connection';
 import type { ParamSpec, ParamValue, SimCommand, VolcanoState, WorldInfo } from '../protocol/messages';
 import { useStore, type Tool } from '../store/store';
 import { ALERT_COLORS } from '../util/color';
-import { formatDuration, formatFactor, worldExtent } from '../util/world';
+import { worldExtent } from '../util/world';
 import { SHORT_VIEWPORT, useMediaQuery } from '../util/useMediaQuery';
 import { ALERT_LABEL, REGIME_LABEL, STYLE_LABEL } from './events';
 import { FALLBACK_INJECT_FIELDS, MAGMA_PRESETS, fieldError, formatVolume, injectWarnings, mixPreview } from './inject';

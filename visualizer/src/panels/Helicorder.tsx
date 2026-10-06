@@ -13,7 +13,7 @@ const FREQ: Record<Quake['type'], number> = { VT: 6, LP: 1.2, TREMOR: 2, EXPLOSI
 
 /**
  * Drum-recorder style seismogram synthesised from seismic events: each event is a damped
- * oscillation whose amplitude grows with magnitude; rows are 10 simulated minutes.
+ * oscillation whose amplitude grows with magnitude; rows are 10 minutes.
  */
 export function Helicorder({ volcanoId }: { volcanoId: string | null }) {
   const ref = useRef<HTMLCanvasElement>(null);
