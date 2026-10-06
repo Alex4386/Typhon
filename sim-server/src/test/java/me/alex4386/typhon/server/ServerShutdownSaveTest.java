@@ -25,11 +25,11 @@ class ServerShutdownSaveTest {
             c.send("{\"type\":\"createSession\",\"requestId\":1,\"preset\":\"kilauea\",\"name\":\"beta\",\"paused\":true}");
             String id = c.awaitType("attached", 120).json().get("sessionId").getAsString();
             Session s = server.session(id);
-            c.send("{\"type\":\"step\",\"steps\":200}");
+            c.send("{\"type\":\"step\",\"seconds\":10}");
             long deadline = System.nanoTime() + 60_000_000_000L;
             while (s.time() < 200 * 0.05 - 1e-9 && System.nanoTime() < deadline) Thread.sleep(20);
             assertTrue(s.time() >= 200 * 0.05 - 1e-9, "the session advanced: " + s.time());
-            savedStep = Math.round(s.time() / 0.05);
+            savedStep = s.runner().completedStep();
         } finally {
             server.close();
         }

@@ -301,6 +301,9 @@ class ProtocolTest {
                 }
             };
             String target = "\"volcanoId\":\"" + vid + "\"";
+            // The preset's chamber starts minutes from failure: erupt now so the vent carries flux.
+            JsonObject started = command.apply(40, "\"kind\":\"startEruption\"," + target);
+            assertTrue(started.get("ok").getAsBoolean(), started.toString());
 
             JsonObject sealed = command.apply(41, "\"kind\":\"sealVent\"," + target + ",\"ventId\":\"" + vent + "\"");
             assertTrue(sealed.get("ok").getAsBoolean(), sealed.toString());
@@ -356,7 +359,10 @@ class ProtocolTest {
             long deadline = System.currentTimeMillis() + 10_000;
             while (s.live().engine().time() < before + 1 - 1e-9 && System.currentTimeMillis() < deadline) Thread.sleep(20);
             assertTrue(s.runner().awaitPaused(10, java.util.concurrent.TimeUnit.SECONDS));
-            assertEquals(before + 1, s.live().engine().time(), 1e-9);
+            // at least a second, ending with the step that crossed it (steps vary in length)
+            double advanced = s.live().engine().time() - before;
+            assertTrue(advanced >= 1 - 1e-9 && advanced < 1 + s.live().engine().lastStepSeconds() + 1e-9,
+                    "advanced " + advanced + " s");
             c.send("{\"type\":\"transport\",\"mode\":\"REALTIME\",\"speed\":50}");
             JsonObject clock = c.await(m -> m.type().equals("clock") && m.json().get("mode").getAsString().equals("REALTIME"), 10)
                     .json();

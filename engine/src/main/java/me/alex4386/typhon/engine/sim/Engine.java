@@ -201,7 +201,28 @@ public final class Engine {
         return new long[] {periodSteps, phaseSteps};
     }
 
+    /** One step of the length the state allows (see {@link Builder#adaptive}). */
     public EngineFrame step() {
+        return step(false);
+    }
+
+    /**
+     * Whether commands are queued. Interactive hosts apply them with {@link #stepPrompt()}, so they
+     * take effect at once rather than at the end of a long quiet step.
+     */
+    public boolean hasPendingCommands() {
+        return !pendingCommands.isEmpty();
+    }
+
+    /**
+     * One base step (whatever the state allows): applies queued commands promptly. The run then
+     * depends on when the host stepped this way, as it does on when commands were submitted.
+     */
+    public EngineFrame stepPrompt() {
+        return step(true);
+    }
+
+    private EngineFrame step(boolean prompt) {
         long step = currentStep;
 
         EngineCommand command;
@@ -209,7 +230,7 @@ public final class Engine {
             commandBus.dispatch(command);
         }
 
-        long stride = chooseStride();
+        long stride = prompt ? 1 : chooseStride();
         long time = timeQuanta * baseStepMicros;
         long end = timeQuanta + stride;
         int count = subsystems.size();

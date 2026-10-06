@@ -422,15 +422,17 @@ public final class EngineRunner implements AutoCloseable {
         }
     }
 
-    /** Length of the engine's next step (µs), from its state. */
+    /** Length of the engine's next step (µs): one base step while commands wait, else from its state. */
     private long nextStep() {
-        long micros = Math.max(engine.baseStepMicros(), Math.round(engine.nextStepSeconds() * 1e6));
+        long micros = engine.hasPendingCommands() ? engine.baseStepMicros()
+                : Math.max(engine.baseStepMicros(), Math.round(engine.nextStepSeconds() * 1e6));
         nextStepMicros = micros;
         return micros;
     }
 
     private void doStep() throws InterruptedException {
-        EngineFrame frame = engine.step();
+        // commands from the host take effect at once, not after a long quiet step
+        EngineFrame frame = engine.hasPendingCommands() ? engine.stepPrompt() : engine.step();
         completedStep = engine.currentStep();
         snapshotTimeMicros = engine.timeMicros();
         Consumer<EngineFrame> observer = frameObserver;
