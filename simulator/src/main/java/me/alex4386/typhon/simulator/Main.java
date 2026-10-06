@@ -343,6 +343,10 @@ public final class Main {
         }
         RealSetting real = preset.realSetting();
         RealSetting.DemSource dem = real.dem();
+        if (!dem.available()) {
+            out.println(preset.name() + ": " + dem.notes());
+            return 0;
+        }
         out.printf(Locale.ROOT, "%s: centre %.4f, %.4f; domain %.1f km at %s m per column%n", preset.name(), dem.lat(),
                 dem.lon(), real.domainMeters() / 1000, fmt(real.metersPerColumn()));
         out.println("  Copernicus GLO-30 (no account): " + dem.copernicusUrl());

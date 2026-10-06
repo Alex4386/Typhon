@@ -94,6 +94,8 @@ public final class World {
     /** The host's terrain generator (not persisted; re-attached on every open). */
     private me.alex4386.typhon.engine.terrain.TerrainGenerator generator;
     private final TreeMap<String, VolcanoSystem> systems = new TreeMap<>();
+    /** Worker threads for the engine (0 = the default); results are identical for every count. */
+    private int threads;
 
     private World(WorldDirectory directory, SaveStore stateStore, SaveStore historyStore, WorldDefinition definition,
             Collection<VolcanoDefinition> volcanoes) {
@@ -127,13 +129,25 @@ public final class World {
      * against {@code policy}), otherwise starts fresh on {@code terrain}'s initial terrain.
      */
     public static World open(Path root, TerrainProvider terrain, ChangePolicy policy) {
+        return open(root, terrain, policy, 0);
+    }
+
+    /** {@link #open(Path, TerrainProvider, ChangePolicy)} with {@code threads} engine workers (0 = default). */
+    public static World open(Path root, TerrainProvider terrain, ChangePolicy policy, int threads) {
         WorldDirectory dir = new WorldDirectory(root);
-        return open(dir, dir.stateStore(), dir.historyStore(), terrain, policy);
+        return open(dir, dir.stateStore(), dir.historyStore(), terrain, policy, threads);
     }
 
     static World open(WorldDirectory dir, SaveStore state, SaveStore history, TerrainProvider terrain,
             ChangePolicy policy) {
+        return open(dir, state, history, terrain, policy, 0);
+    }
+
+    static World open(WorldDirectory dir, SaveStore state, SaveStore history, TerrainProvider terrain,
+            ChangePolicy policy, int threads) {
+        if (threads < 0) throw new IllegalArgumentException("threads must be >= 0");
         World world = new World(dir, state, history, dir.readWorld(), dir.readVolcanoes());
+        world.threads = threads;
         if (state.read(SaveFormat.META) == null) {
             world.build(null, Map.of(), Set.of());
             world.engine.submit(terrain.initialTerrain(world.definition, world.volcanoDefinitions()));
@@ -266,6 +280,7 @@ public final class World {
         systems.clear();
         Engine.Builder builder = Engine.builder(definition.seed()).baseStepMicros(definition.baseStepMicros())
                 .add(terrain).add(subsurface);
+        if (threads > 0) builder.threads(threads);
         Set<String> hidden = new HashSet<>();
         for (VolcanoDefinition v : volcanoDefinitions()) {
             VolcanoSystem system = v.assemble(terrain, lava, definition, subsurface);

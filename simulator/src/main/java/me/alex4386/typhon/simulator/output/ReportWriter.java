@@ -145,7 +145,10 @@ public final class ReportWriter {
         for (String ref : preset.references()) h.append("<li>").append(esc(ref)).append("</li>");
         h.append("</ul>");
         RealSetting real = preset.realSetting();
-        if (real != null) {
+        if (real != null && !real.dem().available()) {
+            h.append(String.format(Locale.ROOT, "<p class=\"muted\">Real-scale domain %.1f km at %s m per column. %s</p>",
+                    real.domainMeters() / 1000, fmt(real.metersPerColumn()), esc(real.dem().notes())));
+        } else if (real != null) {
             RealSetting.DemSource dem = real.dem();
             h.append(String.format(Locale.ROOT, "<p class=\"muted\">Real-scale domain %.1f km at %s m per column,"
                             + " centred on %.4f, %.4f. Real DEM: <code>%s</code> (Copernicus GLO-30) or SRTM <code>%s</code>."

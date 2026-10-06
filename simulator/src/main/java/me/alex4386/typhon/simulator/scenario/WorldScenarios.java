@@ -53,11 +53,16 @@ public final class WorldScenarios {
 
     /** Opens (or starts) a world directory as a simulator scenario. */
     public static Scenario open(Path dir, World.ChangePolicy policy) {
+        return open(dir, policy, 0);
+    }
+
+    /** {@link #open(Path, World.ChangePolicy)} with {@code threads} engine workers (0 = default; results are identical). */
+    public static Scenario open(Path dir, World.ChangePolicy policy, int threads) {
         WorldDirectory layout = new WorldDirectory(dir);
         boolean restored = layout.hasState();
         WorldDefinition definition = layout.readWorld();
         ColumnGrid grid = terrain(definition, dir);
-        World world = World.open(dir, (w, volcanoes) -> grid.toSnapshot(), policy);
+        World world = World.open(dir, (w, volcanoes) -> grid.toSnapshot(), policy, threads);
         Scenario scenario = Scenario.fromWorld(definition.name(), world, grid, restored);
         Number context = number(definition.terrain(), "contextExtentM", Double.NaN);
         scenario.setContextExtent(context.doubleValue());
@@ -155,6 +160,7 @@ public final class WorldScenarios {
         Scenario scenario;
         if (dem != null) {
             if (real == null) throw new IllegalArgumentException(preset.name() + " is not a real-scale preset");
+            if (!real.dem().available()) throw new IllegalArgumentException(preset.name() + " is synthetic: " + real.dem().notes());
             double core = preset.worldCoreExtentM();
             int half = Double.isNaN(core) ? real.halfExtentColumns() : halfColumns(core, real.metersPerColumn());
             ColumnGrid grid;

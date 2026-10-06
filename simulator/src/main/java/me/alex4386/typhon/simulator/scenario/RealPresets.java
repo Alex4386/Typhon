@@ -53,7 +53,7 @@ final class RealPresets {
             "pinatubo-real", 30_720.0, "surtsey-real", 6_400.0, "yellowstone-real", 30_720.0);
 
     static List<Preset> all() {
-        return List.of(kilauea(), stromboli(), stHelens(), pinatubo(), surtsey(), yellowstone());
+        return List.of(island(), kilauea(), stromboli(), stHelens(), pinatubo(), surtsey(), yellowstone());
     }
 
     /** A real-scale preset: compact-preset magma physics on a real setting. */
@@ -155,6 +155,102 @@ final class RealPresets {
         BlockId grass = BlockId.minecraft("grass_block");
         BlockId sand = BlockId.minecraft("sand");
         return (xm, zm, e, submerged) -> submerged ? sand : e < vegetationBelow ? grass : r;
+    }
+
+    // ── A generic ocean island ──
+
+    /** Summit, shoreline and shelf of the {@link #island()} preset (m). */
+    static final double ISLAND_SUMMIT_M = 700;
+    static final double ISLAND_SHORE_RADIUS_M = 3000;
+    static final double ISLAND_SHELF_EDGE_M = 3600;
+    static final double ISLAND_SHELF_DEPTH_M = -100;
+    static final double ISLAND_SEAFLOOR_M = -2200;
+    /** Submarine flank slope below the shelf break (°). */
+    static final double ISLAND_FLANK_DEG = 25;
+
+    /**
+     * Ground elevation (m) of the island at distance {@code d} (m) from its summit: a concave subaerial
+     * cone reaching the sea at {@link #ISLAND_SHORE_RADIUS_M}, a wave-cut insular shelf, steep submarine
+     * flanks and the abyssal floor.
+     */
+    static double islandElevation(double d) {
+        if (d <= ISLAND_SHORE_RADIUS_M) return ISLAND_SUMMIT_M * (1 - Math.pow(d / ISLAND_SHORE_RADIUS_M, 0.85));
+        if (d <= ISLAND_SHELF_EDGE_M) {
+            return ISLAND_SHELF_DEPTH_M * (d - ISLAND_SHORE_RADIUS_M) / (ISLAND_SHELF_EDGE_M - ISLAND_SHORE_RADIUS_M);
+        }
+        double flank = ISLAND_SHELF_DEPTH_M - (d - ISLAND_SHELF_EDGE_M) * Math.tan(Math.toRadians(ISLAND_FLANK_DEG));
+        return Math.max(ISLAND_SEAFLOOR_M, flank);
+    }
+
+    /**
+     * A generic basaltic ocean island (not any particular volcano): one young stratocone in open sea,
+     * built to exercise the coast: lava reaching the sea, ocean entries and deltas, a basal freshwater
+     * lens floating on sea water, and growth of the world over the sea. The default preset for new worlds.
+     */
+    static Preset island() {
+        double L = 20;
+        int half = 352; // ±7.04 km: the island (Ø 6 km), its shelf and submarine flanks, sea on every side
+        String id = "island";
+        RealSetting setting = new RealSetting(
+                new WorldSpec(L, 4 * L, -6000, 0,
+                        List.of(new WorldSpec.GeologyLayer("gabbro", -4000, 0.01),
+                                new WorldSpec.GeologyLayer("basalt", ISLAND_SEAFLOOR_M - 100, 0.05)),
+                        "basalt", "basalt", L),
+                List.of(edifice(id, 0, 0, L, Double.POSITIVE_INFINITY, ISLAND_SEAFLOOR_M, "basalt")),
+                new WorldDefinition.Geotherm(22, 60, 6.5),
+                // basal Ghyben–Herzberg lens: the water table rises a few metres above sea level inland
+                // (Hawaiian basal lenses: heads of ~1–10 m, Hunt 1996) and the sea fixes it at the coast
+                new WorldDefinition.Aquifer(30, 0.15, 0.01, 0, 0.5),
+                half,
+                RealSetting.DemSource.synthetic("Synthetic island: there is no real DEM for it."));
+        return new Real(
+                id,
+                "Ocean island (basaltic, open sea)",
+                "A young basaltic stratocone rising from 2.2 km deep sea floor to 700 m, at 20 m per column: a 6 km"
+                        + " island with a summit crater, a wave-cut shelf at ~-100 m and 25° submarine flanks, a"
+                        + " basal freshwater lens on sea water, and a shallow reservoir close to failure. Expect"
+                        + " Hawaiian effusion whose flows reach the coast, build lava deltas and explode where"
+                        + " they enter the sea; the world grows over the sea as they advance.",
+                List.of(
+                        "Subaerial slopes of young oceanic stratocones 10-20 deg; shields 3-12 deg (Peterson & Moore 1987)",
+                        "Insular shelves cut by waves at ~-100 to -150 m (Quartau et al. 2010)",
+                        "Submarine flanks of ocean islands typically 15-25 deg (Mitchell et al. 2002)",
+                        "Ocean-island basalt: SiO2 ~46-50 wt%, H2O ~0.4-1 wt%, 1150-1200 C",
+                        "Magma supply of active ocean islands up to ~0.1-0.2 km3/yr (Kilauea; Poland et al. 2014)",
+                        "Effusion 1-100 m3/s; ocean entries build deltas with littoral explosions (Mattox & Mangan 1997)",
+                        "Basal freshwater lens a few metres above sea level (Hunt 1996)"),
+                3,
+                setting,
+                List.of(
+                        ReferenceValue.range("Summit elevation", 600, 800, "m", "the preset's design", Metric.SUMMIT_ELEVATION_M),
+                        ReferenceValue.range("Effusion rate (peak)", 1, 100, "m³/s", "Neal et al. 2019",
+                                Metric.PEAK_ERUPTION_RATE_M3S),
+                        ReferenceValue.category("Eruption style", "HAWAIIAN", "basaltic, H₂O < 1 wt%", Metric.ANY_STYLE),
+                        ReferenceValue.range("VEI", 0, 2, "", "basaltic ocean islands", Metric.MAX_VEI)),
+                seed -> RealTerrain.build(L, half, seed, (xm, zm) -> {
+                    double d = RealTerrain.dist(xm, zm, 0, 0);
+                    return RealTerrain.crater(islandElevation(d), d, 200, 60);
+                }, 4, 300, 0, rock("basalt", 250)),
+                (seed, terrain) -> {
+                    Scenario.Builder b = builder(id, seed, terrain, setting);
+                    VentSite vent = vent("summit", terrain, L, 0, 0, 150);
+                    MagmaChamberConfig chamber = MagmaChamberConfig.builder(id, chamberAt(vent, -2500, L))
+                            // shallow basaltic reservoir ~3 km below the summit; a ~3 m feeder gives Hawaiian
+                            // effusion rates (Wilson & Head 1981), supply ~1 m³/s (~0.03 km³/yr)
+                            .volume(1e9).lithostaticDepth(3200).conduitRadius(1.5).tensileStrengthMPa(10)
+                            .eruptionEndOverpressureMPa(1).supplyRate(1).supplyVariability(0.2)
+                            .initialSilicaWt(48).rechargeSilicaWt(48).initialWaterWt(0.6).rechargeWaterWt(0.6)
+                            .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
+                            .initialTemperatureC(1160).rechargeTemperatureC(1175).initialOverpressureMPa(9.8)
+                            .build();
+                    return b.volcano(VolcanoSystem.builder(id, List.of(vent), b.terrain(), b.lava())
+                            .chamber(chamber)
+                            .subsurfaceConfig(subsurface(setting, L))
+                            .stations(List.of(Stations.at("ISL-N", vent, 0, 2000, L), Stations.at("ISL-E", vent, 2000, 0, L),
+                                    Stations.at("ISL-SW", vent, -1500, -1500, L)))
+                            .scaling(scaling(L, KILAUEA_ERUPTIVE_COMPRESSION)).tephra(tephra())
+                            .wind(8, 0.8, Presets.WIND_VARIABILITY).build());
+                });
     }
 
     // ── Kīlauea ──

@@ -63,6 +63,16 @@ public record RealSetting(WorldSpec spec, List<Edifice> edifices, WorldDefinitio
                     lo >= 0 ? "E" : "W", Math.abs(lo));
         }
 
+        /** A synthetic setting with no real place behind it (no DEM to download). */
+        public static DemSource synthetic(String notes) {
+            return new DemSource(Double.NaN, Double.NaN, "", "", notes);
+        }
+
+        /** Whether a real DEM exists for the setting. */
+        public boolean available() {
+            return Double.isFinite(lat) && Double.isFinite(lon);
+        }
+
         public static DemSource at(double lat, double lon, String notes) {
             return new DemSource(lat, lon, srtmTileFor(lat, lon), copernicusTileFor(lat, lon), notes);
         }

@@ -31,7 +31,7 @@ tasks.named<JavaExec>("run") {
 
 tasks.test {
     useJUnitPlatform {
-        excludeTags("perf", "slow", "validation")
+        excludeTags("perf", "slow", "validation", "flow")
     }
     // Real-scale presets (now with a full subsurface model each) run concurrently: 1 GB is too small.
     maxHeapSize = "4g"
@@ -51,6 +51,21 @@ val slowTest by tasks.registering(Test::class) {
     useJUnitPlatform {
         includeTags("perf", "slow")
     }
+    testLogging.showStandardStreams = true
+}
+
+// End-to-end flow on the island preset (create, terrain, water, eruption to the sea, live dial,
+// save/restore, thread count; prints a report): ./gradlew :simulator:islandFlow
+val islandFlow by tasks.registering(Test::class) {
+    description = "Runs the island test flow (tagged 'flow') and prints its report."
+    group = "verification"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform {
+        includeTags("flow")
+    }
+    maxHeapSize = "3g"
+    outputs.upToDateWhen { false } // a flow is run to be watched
     testLogging.showStandardStreams = true
 }
 
