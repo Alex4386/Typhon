@@ -59,6 +59,8 @@ final class FieldSampler {
         int t = map.tileSize;
         float[][] tiles = new float[map.tilesX * map.tilesY][];
         boolean noLava = lava.activeCellCount() == 0;
+        // unsimulated columns inside the mapping (after growth) show the generator's ground
+        me.alex4386.typhon.simulator.terrain.ContextTerrain context = field == Field.SURFACE_ELEVATION ? scenario.context() : null;
         // Runs between engine steps (nothing mutates the world meanwhile): tiles are sampled in
         // parallel, each into its own array.
         scenario.engine().parallel().forEach(tiles.length, index -> {
@@ -69,7 +71,9 @@ final class FieldSampler {
                 for (int c = 0; c < t; c++) {
                     int cx = Math.min(map.maxX, map.columnX(tx, c));
                     int cz = Math.max(map.minZ, map.columnZ(ty, r));
-                    v[r * t + c] = (float) value(field, world, lava, noLava, volcanoes, sub, cx, cz);
+                    double value = value(field, world, lava, noLava, volcanoes, sub, cx, cz);
+                    if (context != null && !world.isKnown(cx, cz)) value = context.elevation(cx + 0.5, cz + 0.5);
+                    v[r * t + c] = (float) value;
                 }
             }
             tiles[index] = v;

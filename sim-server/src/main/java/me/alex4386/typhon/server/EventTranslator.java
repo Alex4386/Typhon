@@ -209,6 +209,30 @@ final class EventTranslator {
                 default -> feature(e.time(), e.feature().name(), e.pos());
             };
             case GeyserFormed e -> feature(e.time(), HydrothermalFeature.GEYSER.name(), e.potentSulfur());
+            case me.alex4386.typhon.engine.expansion.ExpansionEvents.AreaExpanded e -> {
+                JsonObject o = new JsonObject();
+                o.addProperty("kind", "areaExpanded");
+                o.add("time", Json.num(e.time()));
+                o.addProperty("tiles", e.tiles().size());
+                o.addProperty("addedTiles", e.addedTiles());
+                o.add("areaKm2", Json.num(e.simulatedAreaKm2()));
+                // protocol bounding box (m) of the materialised tiles: [west, south, east, north]
+                int t = e.tileColumns();
+                int x0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, z0 = Integer.MAX_VALUE, z1 = Integer.MIN_VALUE;
+                for (var c : e.tiles()) {
+                    x0 = Math.min(x0, c.x() * t);
+                    x1 = Math.max(x1, (c.x() + 1) * t);
+                    z0 = Math.min(z0, c.z() * t);
+                    z1 = Math.max(z1, (c.z() + 1) * t);
+                }
+                com.google.gson.JsonArray box = new com.google.gson.JsonArray();
+                box.add(Json.num(x0 * map.cell));
+                box.add(Json.num(-z1 * map.cell));
+                box.add(Json.num(x1 * map.cell));
+                box.add(Json.num(-z0 * map.cell));
+                o.add("bbox", box);
+                yield o;
+            }
             case LavaEvents.LavaOceanEntry e -> {
                 JsonObject o = new JsonObject();
                 o.addProperty("kind", "oceanEntry");

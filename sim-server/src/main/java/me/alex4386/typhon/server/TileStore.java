@@ -43,7 +43,7 @@ final class TileStore {
      *     goes backwards for clients still holding the old tiles
      */
     TileStore(GridMapping map, long base) {
-        this(map, base, 0, 0, 0, map.tilesX, map.tilesY);
+        this(map, base, 0, map.minTx, map.minTy, map.tilesX, map.tilesY);
     }
 
     /** A store for level {@code level}, tiles {@code [minTx, minTx+tilesX) × [minTy, minTy+tilesY)}. */

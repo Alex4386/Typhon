@@ -80,7 +80,7 @@ final class Session implements AutoCloseable {
      * "key events" view is complete even after hours of quakes, bombs and plume updates.
      */
     static final Set<String> MILESTONES = Set.of("eruptionStarted", "eruptionEnded", "alertChanged", "regimeChanged",
-            "styleEstimated", "dikeStarted", "dikeStalled", "fissureOpened", "ventState", "message");
+            "styleEstimated", "dikeStarted", "dikeStalled", "fissureOpened", "ventState", "areaExpanded", "message");
     static final String SESSION_FILE = "session.json";
 
     enum Kind { PRESET, WORLD }
@@ -115,6 +115,8 @@ final class Session implements AutoCloseable {
     private volatile TileStore tiles;
     private volatile LodTiles lod;
     private volatile int[] tileOrder;
+    /** Expansion revision the mapping last covered (see {@link #checkExpansion}). */
+    private long expansionRevision = Long.MIN_VALUE;
     private final Map<Field, Long> lastRefreshNanos = new EnumMap<>(Field.class);
     private final Map<Field, Double> lastRefreshSim = new EnumMap<>(Field.class);
     private final Set<Field> forceRefresh = new HashSet<>();
@@ -236,6 +238,7 @@ final class Session implements AutoCloseable {
         this.tiles = new TileStore(map, base);
         this.lod = new LodTiles(scenario, map, base);
         this.tileOrder = order(map, scenario);
+        this.expansionRevision = Long.MIN_VALUE; // the next check covers whatever the scenario holds
         lastRefreshNanos.clear();
         lastRefreshSim.clear();
         forceRefresh.clear();
@@ -356,8 +359,8 @@ final class Session implements AutoCloseable {
         double[] dist = new double[n];
         for (int i = 0; i < n; i++) {
             idx[i] = i;
-            double cx = map.originX() + ((i % map.tilesX) + 0.5) * map.tileSize * map.cell;
-            double cy = map.originY() + ((i / map.tilesX) + 0.5) * map.tileSize * map.cell;
+            double cx = map.originX() + (map.minTx + (i % map.tilesX) + 0.5) * map.tileSize * map.cell;
+            double cy = map.originY() + (map.minTy + (i / map.tilesX) + 0.5) * map.tileSize * map.cell;
             double best = Double.POSITIVE_INFINITY;
             for (double[] v : vents) best = Math.min(best, Math.hypot(cx - v[0], cy - v[1]));
             dist[i] = best;
@@ -376,6 +379,68 @@ final class Session implements AutoCloseable {
     TileStore tiles() { return tiles; }
     LodTiles lod() { return lod; }
     int[] tileOrder() { return tileOrder; }
+
+    // ── Growth of the simulated area ──
+
+    /**
+     * If the scenario's simulated area grew since the last check, extends the tile mapping to cover it
+     * (same anchor: tile coordinates never change), replaces the tile stores and pyramid (versions keep
+     * rising, so clients just receive the new tiles) and returns the {@code worldExtent} message for
+     * the watchers; otherwise {@code null}. Called by the pump.
+     */
+    JsonObject checkExpansion() throws Exception {
+        Scenario sc = live;
+        var expansion = sc.expansion();
+        if (expansion == null) return null;
+        long revision = expansion.revision();
+        if (revision == expansionRevision) return null;
+        boolean first = expansionRevision == Long.MIN_VALUE;
+        expansionRevision = revision;
+        GridMapping old = map;
+        record Grown(GridMapping map, JsonArray simulated) {}
+        Grown grown = call(s -> {
+            int[] b = s.expansion().simulatedBounds();
+            GridMapping m = b == null ? old : old.covering(b[0], b[1], b[2], b[3]);
+            if (m != old && (m.tilesX != old.tilesX || m.tilesY != old.tilesY)) installDepthStretch(m, s);
+            else m = old;
+            return new Grown(m, Probe.simulatedTiles(s, m));
+        }).get(60, TimeUnit.SECONDS);
+        if (grown.map() != old) {
+            long base = tiles.maxVersion();
+            for (LodTiles.Level l : lod.levels().values()) base = Math.max(base, l.store.maxVersion());
+            this.map = grown.map();
+            this.tiles = new TileStore(grown.map(), base);
+            this.lod = new LodTiles(sc, grown.map(), base);
+            this.tileOrder = order(grown.map(), sc);
+        } else if (first) {
+            return null; // nothing new since the session started
+        }
+        return extentMessage(grown.simulated());
+    }
+
+    /** The {@code worldExtent} message (docs/protocol.md §4.6) for the current mapping. */
+    JsonObject extentMessage(JsonArray simulated) {
+        GridMapping m = map;
+        JsonObject o = Json.obj("worldExtent");
+        o.addProperty("sessionId", id);
+        JsonObject t = new JsonObject();
+        t.addProperty("minTx", m.minTx);
+        t.addProperty("minTy", m.minTy);
+        t.addProperty("maxTx", m.minTx + m.tilesX - 1);
+        t.addProperty("maxTy", m.minTy + m.tilesY - 1);
+        o.add("tiles", t);
+        o.add("simulated", simulated);
+        o.add("lod", lod.info());
+        var expansion = live.expansion();
+        if (expansion != null) {
+            JsonObject e = new JsonObject();
+            e.addProperty("addedTiles", expansion.addedTiles());
+            e.addProperty("maxTiles", expansion.expansionConfig().maxTiles());
+            e.addProperty("enabled", expansion.expansionConfig().enabled() && expansion.generator() != null);
+            o.add("expansion", e);
+        }
+        return o;
+    }
     boolean replay() { return replay; }
     EngineRunner runner() { return runner; }
     Scenario live() { return live; }

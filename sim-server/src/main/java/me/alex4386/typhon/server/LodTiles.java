@@ -22,7 +22,8 @@ import me.alex4386.typhon.simulator.terrain.ContextTerrain;
  * (cells of {@code 2^ℓ} columns) reaching out over the {@link ContextTerrain}, and fine levels
  * {@code ℓ < 0} (cells of {@code 2^ℓ} columns) over each volcano's {@link SurfaceDetail}.
  *
- * <p>Every level shares the core's origin and tile size, so level-ℓ cell {@code (i, j)} covers
+ * <p>Every level shares the core's origin (the session's fixed anchor, {@link GridMapping#anchorX}) and
+ * tile size, so level-ℓ cell {@code (i, j)} covers
  * {@code x ∈ origin.x + [i·c, (i+1)·c)}, {@code y ∈ origin.y + [j·c, (j+1)·c)} with
  * {@code c = cellSize·2^ℓ}, and tile {@code (tx, ty)} holds cells {@code i = tx·T + col},
  * {@code j = ty·T + row}. Coarse values are conservative: inside the core a coarse cell is the mean
@@ -99,12 +100,12 @@ final class LodTiles {
 
         /** Fractional column x of the west edge of cell column {@code i}. */
         double columnX(GridMapping map, double i) {
-            return map.minX + i * factor;
+            return map.anchorX + i * factor;
         }
 
         /** Fractional column z of the north edge (smallest z) of cell row {@code j}. */
         double columnZ(GridMapping map, double j) {
-            return map.maxZ + 1 - (j + 1) * factor;
+            return map.anchorMaxZ + 1 - (j + 1) * factor;
         }
     }
 
@@ -120,10 +121,10 @@ final class LodTiles {
         for (int level = 1; level <= context.levels(); level++) {
             double f = Math.scalb(1.0, level);
             double h = context.levelHalfColumns(level);
-            int minI = (int) Math.floor((context.centerX() - h - map.minX) / f);
-            int maxI = (int) Math.ceil((context.centerX() + h - map.minX) / f) - 1;
-            int minJ = (int) Math.floor((map.maxZ + 1 - (context.centerZ() + h)) / f);
-            int maxJ = (int) Math.ceil((map.maxZ + 1 - (context.centerZ() - h)) / f) - 1;
+            int minI = (int) Math.floor((context.centerX() - h - map.anchorX) / f);
+            int maxI = (int) Math.ceil((context.centerX() + h - map.anchorX) / f) - 1;
+            int minJ = (int) Math.floor((map.anchorMaxZ + 1 - (context.centerZ() + h)) / f);
+            int maxJ = (int) Math.ceil((map.anchorMaxZ + 1 - (context.centerZ() - h)) / f) - 1;
             Level l = new Level(level, minI, minJ, maxI, maxJ, COARSE_FIELDS, List.of(), map, base, centre);
             l.contextElevation = contextElevation(l);
             levels.put(level, l);
@@ -144,10 +145,10 @@ final class LodTiles {
             int maxJ = Integer.MIN_VALUE;
             double[] focus = null;
             for (SurfaceDetail d : e.getValue()) {
-                minI = Math.min(minI, (d.minColumnX() - map.minX) * r);
-                maxI = Math.max(maxI, (d.minColumnX() + d.columns() - map.minX) * r - 1);
-                minJ = Math.min(minJ, (map.maxZ + 1 - (d.minColumnZ() + d.columns())) * r);
-                maxJ = Math.max(maxJ, (map.maxZ + 1 - d.minColumnZ()) * r - 1);
+                minI = Math.min(minI, (d.minColumnX() - map.anchorX) * r);
+                maxI = Math.max(maxI, (d.minColumnX() + d.columns() - map.anchorX) * r - 1);
+                minJ = Math.min(minJ, (map.anchorMaxZ + 1 - (d.minColumnZ() + d.columns())) * r);
+                maxJ = Math.max(maxJ, (map.anchorMaxZ + 1 - d.minColumnZ()) * r - 1);
                 if (focus == null) {
                     focus = new double[] {map.x(d.minColumnX() + d.columns() / 2.0 - 0.5),
                             map.y(d.minColumnZ() + d.columns() / 2.0 - 0.5)};
@@ -358,10 +359,10 @@ final class LodTiles {
         int w = l.width();
         float[] all = new float[w * l.height()];
         float[] cells = new float[r * r];
-        int colX0 = Math.floorDiv(map.minX * r + l.minI, r);
-        int colX1 = Math.floorDiv(map.minX * r + l.maxI, r);
-        int colZ0 = Math.floorDiv((map.maxZ + 1) * r - l.maxJ - 1, r);
-        int colZ1 = Math.floorDiv((map.maxZ + 1) * r - l.minJ - 1, r);
+        int colX0 = Math.floorDiv(map.anchorX * r + l.minI, r);
+        int colX1 = Math.floorDiv(map.anchorX * r + l.maxI, r);
+        int colZ0 = Math.floorDiv((map.anchorMaxZ + 1) * r - l.maxJ - 1, r);
+        int colZ1 = Math.floorDiv((map.anchorMaxZ + 1) * r - l.minJ - 1, r);
         for (int z = colZ0; z <= colZ1; z++) {
             for (int x = colX0; x <= colX1; x++) {
                 double surface = world.surfaceZ(x, z);
@@ -377,8 +378,8 @@ final class LodTiles {
                 double base = Double.isNaN(surface) ? context.elevation(x + 0.5, z + 0.5) : surface + uplift;
                 for (int b = 0; b < r; b++) {
                     for (int a = 0; a < r; a++) {
-                        int i = x * r + a - map.minX * r - l.minI;
-                        int j = (map.maxZ + 1) * r - (z * r + b) - 1 - l.minJ;
+                        int i = x * r + a - map.anchorX * r - l.minI;
+                        int j = (map.anchorMaxZ + 1) * r - (z * r + b) - 1 - l.minJ;
                         if (i < 0 || i >= w || j < 0 || j >= l.height()) continue;
                         double e = detailed && !Float.isNaN(cells[b * r + a]) ? cells[b * r + a] + uplift : base;
                         all[j * w + i] = (float) e;

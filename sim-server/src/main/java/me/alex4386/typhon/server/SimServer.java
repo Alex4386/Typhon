@@ -893,6 +893,8 @@ public final class SimServer implements AutoCloseable {
         long now = System.nanoTime();
         long[] times = pumpTimes.computeIfAbsent(s.id, k -> new long[] {0, 0, 0, 0});
         List<ClientConnection> watchers = clientsOf(s);
+        JsonObject extent = s.checkExpansion();
+        if (extent != null) for (ClientConnection c : watchers) c.send(extent);
         s.updateRate();
         s.maybeKeyframe();
 

@@ -24,6 +24,8 @@ final class TestClient implements AutoCloseable {
     }
 
     final BlockingQueue<Msg> inbox = new LinkedBlockingQueue<>();
+    /** Binary frames received so far (for flow-control acknowledgements). */
+    final java.util.concurrent.atomic.AtomicLong binaries = new java.util.concurrent.atomic.AtomicLong();
     private final WebSocket ws;
 
     TestClient(int port, String subprotocol) throws Exception {
@@ -50,6 +52,7 @@ final class TestClient implements AutoCloseable {
                 data.get(chunk);
                 bin.writeBytes(chunk);
                 if (last) {
+                    binaries.incrementAndGet();
                     inbox.add(new Msg(null, bin.toByteArray()));
                     bin.reset();
                 }

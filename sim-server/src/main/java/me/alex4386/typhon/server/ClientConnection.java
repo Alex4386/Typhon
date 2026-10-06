@@ -136,8 +136,8 @@ final class ClientConnection {
         GridMapping map = store.map();
         int sent = 0;
         for (int tile : order) {
-            int tx = tile % map.tilesX;
-            int ty = tile / map.tilesX;
+            int tx = map.minTx + tile % map.tilesX; // protocol coordinates, as the client subscribed
+            int ty = map.minTy + tile / map.tilesX;
             if (tx < minTx || tx > maxTx || ty < minTy || ty > maxTy) continue;
             for (Field field : fields) {
                 if (tilesSent - tilesAcked >= TILE_WINDOW) return sent;

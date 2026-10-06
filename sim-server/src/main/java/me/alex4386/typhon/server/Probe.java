@@ -40,6 +40,32 @@ final class Probe {
         return worldInfo(s, map, name, null);
     }
 
+    /**
+     * Protocol level-0 tiles holding simulated columns, as {@code [tx, ty]} pairs (the rest of the
+     * mapping's rectangle is generated, unsimulated ground). Cheap: one terrain lookup per 16×16 chunk.
+     */
+    static com.google.gson.JsonArray simulatedTiles(Scenario s, GridMapping map) {
+        com.google.gson.JsonArray out = new com.google.gson.JsonArray();
+        var terrain = s.terrain();
+        int t = map.tileSize;
+        for (int ty = 0; ty < map.tilesY; ty++) {
+            for (int tx = 0; tx < map.tilesX; tx++) {
+                boolean any = false;
+                for (int dz = 0; dz < t && !any; dz += 16) {
+                    for (int dx = 0; dx < t && !any; dx += 16) {
+                        any = terrain.isKnown(map.columnX(tx, dx), map.columnZ(ty, dz));
+                    }
+                }
+                if (!any) continue;
+                com.google.gson.JsonArray c = new com.google.gson.JsonArray();
+                c.add(map.minTx + tx);
+                c.add(map.minTy + ty);
+                out.add(c);
+            }
+        }
+        return out;
+    }
+
     static JsonObject worldInfo(Scenario s, GridMapping map, String name, LodTiles lod) {
         WorldModel world = s.terrain().world();
         JsonObject w = new JsonObject();
@@ -48,11 +74,12 @@ final class Probe {
         w.add("cellSize", Json.num(map.cell));
         w.addProperty("tileSize", map.tileSize);
         JsonObject tiles = new JsonObject();
-        tiles.addProperty("minTx", 0);
-        tiles.addProperty("minTy", 0);
-        tiles.addProperty("maxTx", map.tilesX - 1);
-        tiles.addProperty("maxTy", map.tilesY - 1);
+        tiles.addProperty("minTx", map.minTx);
+        tiles.addProperty("minTy", map.minTy);
+        tiles.addProperty("maxTx", map.minTx + map.tilesX - 1);
+        tiles.addProperty("maxTy", map.minTy + map.tilesY - 1);
         w.add("tiles", tiles);
+        w.add("simulated", simulatedTiles(s, map));
 
         double lo = Double.POSITIVE_INFINITY;
         double hi = Double.NEGATIVE_INFINITY;

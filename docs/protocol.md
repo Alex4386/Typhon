@@ -223,10 +223,11 @@ for `SteamFraction`; section pixels for unmodelled quantities are 0 (saturation,
 | field | type | meaning |
 |---|---|---|
 | `name` | string | Display name. |
-| `origin` | XY | World coordinates of the south-west corner of tile (0, 0). |
+| `origin` | XY | World coordinates of the south-west corner of tile (0, 0): the initial core's corner, fixed for the session (tile coordinates never change when the simulated area grows). |
 | `cellSize` | number | Surface column size `dxS` (m). |
 | `tileSize` | int | Columns per tile edge (`T`); tiles are `T × T`. The engine's `ColumnStacks` tiles are 32×32; the server may stream 32 or 64. |
-| `tiles` | `{minTx,minTy,maxTx,maxTy}` | Inclusive tile range of the world. |
+| `tiles` | `{minTx,minTy,maxTx,maxTy}` | Inclusive level-0 tile range the server streams. It starts as the initial core and grows with the simulated area (`worldExtent`, §4.6); after growth west or north the minima are negative. |
+| `simulated` | `[tx, ty][]` | Level-0 tiles that hold simulated columns. Elsewhere inside `tiles` the ground is the terrain generator's (`SurfaceElevation` is the generated surface, other fields 0) and nothing happens there until activity reaches it. |
 | `seaLevel` | number | m. Without a sea (`hasSea` false) the lowest ground, as the base of colour ramps. |
 | `hasSea` | boolean | Whether the world has a sea or standing water level; when false nothing below `seaLevel` is water (context terrain may lie lower). |
 | `elevationRange` | `[min,max]` | Initial elevation range (m), for colour ramps. |
@@ -310,7 +311,7 @@ This is a snapshot of 0D state per volcano (from `runner` snapshots), sent ≥ 2
 
 On attach the server sends a backlog, in time order up to the session time: every **milestone**
 (`eruptionStarted`, `eruptionEnded`, `alertChanged`, `regimeChanged`, `styleEstimated`, `dikeStarted`,
-`dikeStalled`, `fissureOpened`, `message`, the first `oceanEntry` and the first `geothermalFeature` of
+`dikeStalled`, `fissureOpened`, `ventState`, `areaExpanded`, `message`, the first `oceanEntry` and the first `geothermalFeature` of
 each feature type per volcano; the last 4000), the most recent ~1500 other non-seismic events, and the
 most recent ~600 seismic events and bombs. Milestones are kept apart from the rolling event log so a
 late client always learns that an eruption started, however many quakes and plume updates followed. Every event has `kind` and `time` (s):
@@ -337,6 +338,7 @@ late client always learns that an eruption started, however many quakes and plum
 | `craterExcavated` | `volcanoId`, `at`, `radiusM`, `depthM` | `GeomorphEvents.CraterExcavated`: an explosion dug or enlarged a crater (the first per volcano is a milestone). |
 | `calderaCollapse` | `volcanoId`, `at`, `radiusM`, `subsidenceM` (total so far) | `GeomorphEvents.CalderaCollapse`: the chamber roof sinking as a piston (the first per volcano is a milestone). |
 | `oceanEntry` | `at`, `powerMW`, `littoralExplosion` | `LavaOceanEntry` |
+| `areaExpanded` | `tiles` (count), `addedTiles` (total so far), `areaKm2` (simulated area after it), `bbox` [west, south, east, north] (m) of the new ground | `ExpansionEvents.AreaExpanded`: activity near the edge of the simulated area (lava, flows, dikes, thick ash, running water) materialised generated ground around it (`expansion:` in world.yaml). |
 | `message` | `text` | free-form server notices |
 
 Clients draw ballistic bombs from `start`, `velocity` and `dragK` (`a = g − k|v|v`). The landing point
@@ -350,6 +352,7 @@ is authoritative.
 | `error` | `code` (`protocol`, `badRequest`, `noSession`, `unknownVolcano`, `unsupported`, `internal`), `message`, `requestId?` |
 | `replayInfo` | `start`, `end` (s): the recorded range; `keyframes`: times (s) of stored keyframes |
 | `replayReset` | `time`: the session jumped to `time` (seek, replay exit or load). Clients drop history newer than `time`; fresh tiles, state and events follow. |
+| `worldExtent` | `sessionId`, `tiles` (`TileBounds`), `simulated` (`[tx, ty][]`), `lod` (`LodInfo`), `expansion?` `{addedTiles, maxTiles, enabled}`: the simulated area grew (or, after attach to a restored world, already had). Replaces `WorldInfo.tiles`, `simulated` and `lod`; the origin and every tile coordinate stay valid. Tiles of the new range follow at higher versions (all level-0 tiles are re-sent once). |
 
 ### 4.7 `schema`
 
