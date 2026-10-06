@@ -270,6 +270,23 @@ public final class SimServer implements AutoCloseable {
             ws.onError(ctx -> disconnect(ctx.sessionId()));
         });
         app.get("/health", ctx -> ctx.result("ok"));
+        // Configuration API (docs/protocol.md §9): read, patch or replace a world session's definitions;
+        // the server decides how each change is applied.
+        app.get("/api/sessions/{id}/config", ctx -> {
+            Session s = session(ctx.pathParam("id"));
+            if (s == null) {
+                ctx.status(404).contentType("application/json").result(Json.GSON.toJson(httpError("noSession", "No session " + ctx.pathParam("id"))));
+                return;
+            }
+            if (s.live().session() == null) {
+                ctx.status(409).contentType("application/json").result(Json.GSON.toJson(httpError("unsupported",
+                        "This world runs in memory only; start it from the Worlds page to change its settings")));
+                return;
+            }
+            ctx.contentType("application/json").result(Json.GSON.toJson(ConfigApi.current(s.live().session())));
+        });
+        app.patch("/api/sessions/{id}/config", ctx -> httpConfig(ctx, false));
+        app.put("/api/sessions/{id}/config", ctx -> httpConfig(ctx, true));
         app.start(config.host(), config.port());
         pump.scheduleWithFixedDelay(this::pumpAll, PUMP_MILLIS, PUMP_MILLIS, TimeUnit.MILLISECONDS);
         if (AUTOSAVE_SECONDS > 0) {
@@ -399,6 +416,7 @@ public final class SimServer implements AutoCloseable {
                     c.send(r);
                 });
                 case "setParams" -> setParams(c, msg, requestId);
+                case "setConfig" -> setConfig(c, msg, requestId);
                 case "replay" -> replay(c, msg, requestId);
                 case "seek" -> seek(c, msg, requestId);
                 default -> c.send(Json.error("badRequest", "Unknown message type '" + type + "'", requestId));
@@ -746,49 +764,130 @@ public final class SimServer implements AutoCloseable {
      * state; {@code restart} changes reset the affected volcanoes. Every attached client is
      * re-attached (fresh tiles and state) and receives the new schema.
      */
+    /** WS {@code setConfig}: the configuration API over the socket; answered with {@code configResult}. */
+    private void setConfig(ClientConnection c, JsonObject msg, Long requestId) throws Exception {
+        Session s = c.session;
+        if (s == null) {
+            c.send(Json.error("noSession", "Attach to a session first", requestId));
+            return;
+        }
+        boolean replace = msg.has("replace") && msg.get("replace").getAsBoolean();
+        boolean dryRun = msg.has("dryRun") && msg.get("dryRun").getAsBoolean();
+        String confirm = msg.has("confirm") && !msg.get("confirm").isJsonNull() ? msg.get("confirm").getAsString() : null;
+        Session.ConfigOutcome outcome = s.applyConfig(ConfigApi.Request.from(msg, replace, dryRun, confirm));
+        JsonObject reply = outcome.response().deepCopy();
+        reply.addProperty("type", "configResult");
+        if (requestId != null) reply.addProperty("requestId", requestId);
+        c.send(reply);
+        configApplied(s, outcome);
+    }
+
+    /** HTTP PATCH/PUT of a session's configuration. */
+    private void httpConfig(io.javalin.http.Context ctx, boolean replace) {
+        Session s = session(ctx.pathParam("id"));
+        ctx.contentType("application/json");
+        if (s == null) {
+            ctx.status(404).result(Json.GSON.toJson(httpError("noSession", "No session " + ctx.pathParam("id"))));
+            return;
+        }
+        JsonObject body;
+        try {
+            JsonElement e = Json.GSON.fromJson(ctx.body(), JsonElement.class);
+            if (e == null || !e.isJsonObject()) throw new JsonParseException("not an object");
+            body = e.getAsJsonObject();
+        } catch (RuntimeException e) {
+            ctx.status(400).result(Json.GSON.toJson(httpError("badRequest", "Expected a JSON object")));
+            return;
+        }
+        boolean dryRun = "true".equalsIgnoreCase(ctx.queryParam("dryRun"))
+                || (body.has("dryRun") && body.get("dryRun").getAsBoolean());
+        String confirm = ctx.queryParam("confirm");
+        if (confirm == null && body.has("confirm") && !body.get("confirm").isJsonNull()) confirm = body.get("confirm").getAsString();
+        try {
+            Session.ConfigOutcome outcome = s.applyConfig(ConfigApi.Request.from(body, replace, dryRun, confirm));
+            JsonObject r = outcome.response();
+            int status = r.get("ok").getAsBoolean() ? 200 : r.has("needsConfirmation") ? 409 : 422;
+            ctx.status(status).result(Json.GSON.toJson(r));
+            configApplied(s, outcome);
+        } catch (UnsupportedOperationException | IllegalStateException e) {
+            ctx.status(409).result(Json.GSON.toJson(httpError("unsupported", e.getMessage())));
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "config request failed", e);
+            ctx.status(500).result(Json.GSON.toJson(httpError("internal", e.getMessage())));
+        }
+    }
+
+    private static JsonObject httpError(String code, String message) {
+        JsonObject o = new JsonObject();
+        o.addProperty("ok", false);
+        o.addProperty("code", code);
+        o.addProperty("message", message);
+        return o;
+    }
+
+    /** After a configuration change: a rebuilt world re-attaches its clients, a live one sends the new schema. */
+    private void configApplied(Session s, Session.ConfigOutcome outcome) {
+        if (!outcome.changed()) return;
+        if (outcome.rebuilt()) {
+            for (ClientConnection other : clientsOf(s)) {
+                other.forgetTiles();
+                attach(other, s);
+            }
+            sessionsChanged();
+        } else {
+            JsonObject schema = schemaOrError(s);
+            for (ClientConnection other : clientsOf(s)) other.send(schema);
+        }
+    }
+
+    /**
+     * Legacy {@code setParams}: parameter ids → values, applied through the configuration API. A change
+     * that resets state is refused unless {@code restart: true} (which confirms it).
+     */
     private void setParams(ClientConnection c, JsonObject msg, Long requestId) throws Exception {
         Session s = c.session;
         if (s == null) {
             c.send(Json.error("noSession", "Attach to a session first", requestId));
             return;
         }
-        Path dir = s.worldDir();
-        if (dir == null) {
+        if (s.worldDir() == null) {
             c.send(Json.error("unsupported", "This world runs in memory only; start it from the Worlds page to change"
                     + " its settings", requestId));
             return;
         }
         JsonObject values = msg.has("values") && msg.get("values").isJsonObject() ? msg.getAsJsonObject("values") : null;
+        if (values == null || values.isEmpty()) throw new IllegalArgumentException("setParams needs values");
         boolean restart = msg.has("restart") && msg.get("restart").getAsBoolean();
-        Tuning.Plan plan = Tuning.plan(dir, values, restart, s.time());
-        if (plan.isEmpty()) {
-            if (requestId != null) ack(c, requestId, true, "No changes");
-            c.send(schemaOrError(s));
-            return;
+        ConfigApi.Request request;
+        try {
+            request = ConfigApi.Request.fromParams(values, false, restart ? Session.CONFIRMED : null);
+        } catch (ConfigApi.Rejected e) {
+            throw new IllegalArgumentException(e.getMessage());
         }
-        s.reopenWorld(plan.restart ? World.ChangePolicy.RESET_CHANGED : World.ChangePolicy.ACCEPT,
-                new Session.DefinitionEdit() {
-                    @Override
-                    public void apply() throws Exception {
-                        plan.write();
-                    }
-
-                    @Override
-                    public void revert() throws Exception {
-                        plan.revert();
-                    }
-                });
-        plan.log();
+        Session.ConfigOutcome outcome = s.applyConfig(request);
+        JsonObject r = outcome.response();
+        if (!r.get("ok").getAsBoolean()) {
+            if (r.has("needsConfirmation")) {
+                String what = r.getAsJsonArray("consequences").get(0).getAsJsonObject().get("message").getAsString();
+                throw new IllegalArgumentException(what + " Send restart: true to go ahead.");
+            }
+            JsonObject err = r.getAsJsonArray("errors").get(0).getAsJsonObject();
+            throw new IllegalArgumentException(err.get("path").getAsString() + ": " + err.get("message").getAsString());
+        }
         if (requestId != null) {
-            ack(c, requestId, true, (plan.restart ? "Restarted with " : "Applied ") + plan.audit.size() + " change"
-                    + (plan.audit.size() == 1 ? "" : "s")
-                    + (plan.warnings.isEmpty() ? "" : ". Warning: " + String.join(" ", plan.warnings)));
+            int n = r.getAsJsonArray("changes").size();
+            String applied = r.has("applied") ? r.get("applied").getAsString() : null;
+            StringBuilder m = new StringBuilder(n == 0 ? "No changes"
+                    : ("reinit".equals(applied) ? "Restarted with " : "Applied ") + n + " change" + (n == 1 ? "" : "s"));
+            if (r.has("warnings")) {
+                List<String> w = new ArrayList<>();
+                for (JsonElement e : r.getAsJsonArray("warnings")) w.add(e.getAsString());
+                m.append(". Warning: ").append(String.join(" ", w));
+            }
+            ack(c, requestId, true, m.toString());
         }
-        for (ClientConnection other : clientsOf(s)) {
-            other.forgetTiles();
-            attach(other, s);
-        }
-        sessionsChanged();
+        if (!outcome.changed()) c.send(schemaOrError(s));
+        configApplied(s, outcome);
     }
 
     private void replay(ClientConnection c, JsonObject msg, Long requestId) throws Exception {

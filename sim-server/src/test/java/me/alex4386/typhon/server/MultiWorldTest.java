@@ -74,9 +74,9 @@ class MultiWorldTest {
             String vid = server.session(id).live().volcanoes().get(0).volcanoId();
             JsonObject supply = param(schema, "volcano." + vid + ".magma.chamber.supplyRate");
             assertNotNull(supply, "supply rate is tunable");
-            assertEquals("hot", supply.get("apply").getAsString());
-            assertEquals("hot", param(schema, "volcano." + vid + ".magma.chamber.rechargeSilicaWt").get("apply").getAsString());
-            assertEquals("restart", param(schema, "volcano." + vid + ".magma.chamber.volume").get("apply").getAsString());
+            assertEquals("live", supply.get("apply").getAsString());
+            assertEquals("live", param(schema, "volcano." + vid + ".magma.chamber.rechargeSilicaWt").get("apply").getAsString());
+            assertEquals("reinit", param(schema, "volcano." + vid + ".magma.chamber.volume").get("apply").getAsString());
             assertNotNull(param(schema, "world.scaling.dormantTimeCompression"));
             JsonArray inject = schema.getAsJsonObject("commands").getAsJsonArray("injectMagma");
             assertTrue(inject.toString().contains("\"temperatureC\""), inject.toString());
@@ -114,7 +114,7 @@ class MultiWorldTest {
             assertTrue(auto.get("auto").getAsBoolean(), auto.toString());
             assertTrue(computed(auto), auto.toString());
             assertEquals(2.0, auto.get("computed").getAsDouble(), 1e-9);
-            assertEquals("hot", auto.get("apply").getAsString());
+            assertEquals("live", auto.get("apply").getAsString());
             c.send("{\"type\":\"setParams\",\"requestId\":51,\"values\":{\"" + wall + "\":1.5}}");
             JsonObject ack51 = ack(c, 51, 120);
             assertTrue(ack51.has("ok") && ack51.get("ok").getAsBoolean(), ack51.toString());

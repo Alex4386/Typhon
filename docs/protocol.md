@@ -126,38 +126,62 @@ volcano, out of world, …).
 | `replay` | `action: "enter" \| "exit"` | Enter or leave replay mode (§7). |
 | `seek` | `time` (s) | In replay mode only: jump to the state at `time` (§7). |
 
-### 3.5 Parameters
+### 3.5 Configuration
 
 | type | fields | reply |
 |---|---|---|
 | `getSchema` | — | `schema` (§4.7) of the attached session. It is also sent at the end of every attach burst. |
-| `setParams` | `requestId?`, `values: {[paramId]: number \| boolean \| null}`, `restart?: boolean` | Changes definition values of the attached world session; `null` restores a parameter's default (for `auto` parameters: computed again). |
+| `setConfig` | `requestId?`, `world?`, `volcanoes?: {[id]: …}`, `replace?: boolean`, `dryRun?: boolean`, `confirm?: string` | `configResult` (below). The configuration API; same semantics as HTTP `PATCH`/`PUT /api/sessions/{id}/config`. |
+| `setParams` | `requestId?`, `values: {[paramId]: number \| boolean \| null}`, `restart?: boolean` | Legacy alias of `setConfig` by parameter id. `restart: true` confirms a reset; without it a reset is refused with `error{badRequest}` carrying the server's description. Replies `ack{message: "Applied n changes" \| "Restarted with n changes"}`. |
 
-Parameter ids are dotted paths into the world's definition files: `world.<path>` for `world.yaml`
-(e.g. `world.climate.rainfallMmPerHour`) and `volcano.<id>.<path>` for `volcanoes/<id>.yaml` (e.g.
-`volcano.kilauea.magma.chamber.supplyRate`). Every numeric or boolean value of the definitions is a
-parameter, except volcano identity and geometry (`id`, chamber centre, vents, edifice) and world
-values that would need a new world (grid, geology, seed, terrain generator).
+**The client says what it wants; the server decides how.** A request is a patch of the world
+and/or volcano definitions: `world` and each `volcanoes[id]` are objects of dotted paths (or nested
+objects) into `world.yaml` / `volcanoes/<id>.yaml`, e.g.
+`{"volcanoes":{"kilauea":{"magma.chamber.supplyRate":4,"dikes":{"maxSpeed":3}}},"world":{"climate.rainfallMmPerHour":2}}`.
+A value `null` goes back to the parameter's default (the definitions before the first change,
+`<world>/tuning/baseline.json`) or, for an `auto` parameter, to the engine's computed value. With
+`replace: true` they are full definitions instead (as returned by `GET`).
 
-Whether a change can be applied to the running simulation is the rule of the engine's
-`ConfigChanges` (the same one that applies when YAML is edited by hand between runs):
+The server validates everything first (unknown paths, types, ranges, the parsed definitions); on
+any error nothing is applied and the answer lists them per field. Then it diffs the result against
+what is running and classifies every change with one rule set (the engine's `ConfigImpact`; the
+schema's `apply`/`impact`, the response and the audit all come from it):
 
-- `apply: "hot"` (climate, time compression, magma supply rate and the properties of supplied
-  magma, feature rates, solver tuning, …): the server saves the session, writes the YAML and reopens
-  the world keeping all state.
-- `apply: "restart"` (chamber size and depth, roof strength, initial magma, conduit and dike
-  parameters, …): refused with `error{badRequest}` unless `restart:true`; then the affected volcanoes
-  restart from their definitions (`World.ChangePolicy.RESET_CHANGED`). Terrain, deposits and other
-  volcanoes are kept.
+| kind | what the server does | e.g. |
+|---|---|---|
+| `live` | changes the running subsystems' configuration in place at the next step boundary; nothing restarts, the answer comes in milliseconds. The definition files are written in the background. | every physical parameter: magma supply and properties, rock and wall strength, conduit, dikes, flows, ash, hot springs, time compression, weather, solver tuning |
+| `reload` | saves, rebuilds the world from the new definitions and resumes the saved state (a short pause; clients get a new attach burst). | inputs only read when ground is generated or the world assembled: geology, geotherm, aquifer, terrain source, a volcano's edifice |
+| `reinit` | as `reload`, but the affected part starts over from its new definition: only the ash grid (`tephra.cellSize`/`gridCells`/`worldTopY`), only the hot springs (`geothermal.center`/`radius`/`cellSize`), only the crater surface (`detail.*`), or the whole volcano (initial conditions `magma.chamber.initial*`, chamber `volume` and `center`, `magma.conduit.initialOpenness`, vents, adding or removing dikes/hot springs/flows/deformation). The landscape and other volcanoes are kept. | |
 
-Values are validated by parsing the new definitions before anything is written; if the world cannot
-be reopened, the files are restored. On success: `ack{ok:true, message:"Applied n changes" |
-"Restarted with n changes"}`, then every client attached to the session gets a full attach burst
-(the engine was rebuilt) ending with the new `schema`. In-memory sessions reply
-`error{unsupported}`.
+World-level changes that a running world cannot take (seed, base step, grid, sea level, the
+subsurface solver's levels, the expansion tile size) are rejected; they need a new world.
 
-Defaults are the definitions as they were before the first change (`<world>/tuning/baseline.json`);
-each change is appended to `<world>/tuning/audit.json` (last 200).
+A request containing a `reinit` change needs confirmation: the first answer has
+`needsConfirmation: true`, a `token` and the `consequences`; the client shows them and re-sends
+the same request with `confirm: <token>` (a token only confirms that exact set of changes).
+`dryRun: true` returns the plan without applying anything.
+
+`configResult` (WS; also the HTTP response body):
+
+| field | meaning |
+|---|---|
+| `ok` | false for validation errors (`errors: [{path, message}]`, HTTP 422) and pending confirmations (HTTP 409). |
+| `plan` | the most disruptive kind among the changes; `applied`: what was done (absent on dry runs and confirmations). A `live` plan that a subsystem unexpectedly refuses in place is rebuilt instead (`applied: "reload"`, `note` says why). |
+| `changes[]` | per changed path: `id` (parameter id), `scope`, `volcanoId?`, `path`, `from`, `to`, `impact: {kind, target, message, reason?}`, `applied?`. |
+| `consequences[]` | the distinct impacts, most disruptive first: what a confirmation shows. `message` is written for users (e.g. "Restarts Kilauea from its new settings (an initial condition of the chamber): …"); clients show it as is. |
+| `warnings[]` | values outside their physically sensible range (accepted). |
+| `needsConfirmation`, `token` | see above. |
+| `ms` | how long applying took. |
+
+After a `live` change every client of the session gets the new `schema`; after a `reload` or
+`reinit` every client gets a full attach burst. Every applied change is appended to
+`<world>/tuning/audit.json` (last 200). In-memory sessions cannot be changed.
+
+**HTTP.** `GET /api/sessions/{id}/config` returns `{world, volcanoes: {[id]: …}}` (the running
+definitions, as editable trees). `PATCH /api/sessions/{id}/config` takes a patch,
+`PUT` full definitions; both accept `?dryRun=true` and `?confirm=<token>` (or the same fields in
+the body) and answer like `configResult`: 200 applied or dry run, 409 confirmation needed,
+422 rejected, 404 unknown session.
 
 ### 3.6 Inspection
 
@@ -363,22 +387,26 @@ The tunable parameters and command fields of a session (§3.5):
  "params":[
   {"id":"volcano.kilauea.magma.chamber.supplyRate","label":"Magma supply rate","unit":"m³/s",
    "group":"Kīlauea · Magma supply","type":"number","min":0,"max":100,"log":true,
-   "value":0.2,"default":0.15,"apply":"hot","volcanoId":"kilauea",
+   "value":0.2,"default":0.15,"apply":"live","impact":{"kind":"live","target":"none","message":"Applies at once; the simulation carries on."},"volcanoId":"kilauea",
    "help":"Magma rising into the chamber from below. Kīlauea ~0.1–0.2 m³/s."},
-  {"id":"volcano.kilauea.magma.chamber.volume","label":"Chamber volume","unit":"m³", …,"apply":"restart"}],
+  {"id":"volcano.kilauea.magma.chamber.volume","label":"Chamber volume","unit":"m³", …,"apply":"reinit",
+   "impact":{"kind":"reinit","target":"volcano","reason":"the chamber's starting size; …","message":"Restarts Kīlauea from its new settings (…): …"}}],
+ "panels":{"chamber":{"kilauea":["volcano.kilauea.magma.chamber.supplyRate", …]}},
  "commands":{"injectMagma":[
-  {"id":"volumeM3","label":"Volume","unit":"m³","group":"Batch","type":"number","min":1000,"max":1e10,"log":true,"default":5e6,"apply":"hot"},
-  {"id":"temperatureC","label":"Temperature","unit":"°C","group":"Magma","type":"number","min":650,"max":1350,"default":1150,"apply":"hot"}, …]},
+  {"id":"volumeM3","label":"Volume","unit":"m³","group":"Batch","type":"number","min":1000,"max":1e10,"log":true,"default":5e6,"apply":"live"},
+  {"id":"temperatureC","label":"Temperature","unit":"°C","group":"Magma","type":"number","min":650,"max":1350,"default":1150,"apply":"live"}, …]},
  "audit":[{"at":1791000000000,"simTime":3600,"id":"volcano.kilauea.magma.chamber.supplyRate",
-           "label":"Kīlauea: Magma supply rate","from":0.15,"to":0.2,"apply":"hot"}]}
+           "label":"Kīlauea: Magma supply rate","from":0.15,"to":0.2,"apply":"live",
+           "message":"Applies at once; the simulation carries on."}]}
 ```
 
 | field | meaning |
 |---|---|
 | `tunable` | False for in-memory sessions (`reason` says why); `params` is then empty but `commands` is still filled. |
-| `params[]` | `ParamSpec`: `id`, `label`, `unit?`, `help?`, `group` (heading), `type` (`number`/`boolean`/`choice`), `min?`/`max?` (validated by the server), `step?` (1 for integers), `log?` (slider hint), `choices?`, `value`, `default`, `apply` (`hot`/`restart`), `volcanoId?`. `recommended?: {min?, max?}` is the physically sensible part of the range with `warning` explaining what goes wrong outside it; `outOfRange: true` marks a current value outside it. `auto: true` marks a value the engine computes from physics unless overridden (wall rupture limit, wall yielding): `value` is null or absent while computed, `computed` is the value in use, a number overrides it and `null` in `setParams` returns it to computing (the audit records it as `"auto"`). Out-of-range values are accepted, and the `setParams` ack message then ends with `Warning: …`. Parameters without curated metadata get a label and unit derived from their name and no range. |
+| `params[]` | `ParamSpec`: `id`, `label`, `unit?`, `help?`, `group` (heading), `type` (`number`/`boolean`/`choice`), `min?`/`max?` (validated by the server), `step?` (1 for integers), `log?` (slider hint), `choices?`, `value`, `default`, `apply` (`live`/`reload`/`reinit`: the server's prediction of how a change is applied, from the same rules as §3.5) with `impact: {kind, target, message, reason?}` (the consequence in words, to show as is), `volcanoId?`. `recommended?: {min?, max?}` is the physically sensible part of the range with `warning` explaining what goes wrong outside it; `outOfRange: true` marks a current value outside it. `auto: true` marks a value the engine computes from physics unless overridden (wall rupture limit, wall yielding): `value` is null or absent while computed, `computed` is the value in use, a number overrides it and `null` in `setConfig` returns it to computing (the audit records it as `"auto"`). Out-of-range values are accepted, and the answer then carries `warnings`. Parameters without curated metadata get a label and unit derived from their name and no range. |
 | `commands` | Fields of commands, as `ParamSpec`s with defaults (`injectMagma`: the first volcano's recharge magma; `injectMagma@<volcanoId>`: the same fields with that volcano's own recharge magma as defaults; `volumeM3.recommended.max` is 10 % of the chamber volume — larger batches rupture the chamber walls, and the command's ack carries a note saying so). |
-| `audit` | Recent changes, oldest first: `at` (wall ms), `simTime`, `id`, `label`, `from`, `to` (null = back to default), `apply`. |
+| `panels` | Parameter ids the server shows in Inspector panels: `chamber: {[volcanoId]: ids}` (a chamber's live supply, wall and dike settings). |
+| `audit` | Recent changes, oldest first: `at` (wall ms), `simTime`, `id`, `label`, `from`, `to` (null = back to default), `apply` (what was done: `live`/`reload`/`reinit`; `hot`/`restart` in older entries), `message`. |
 
 ### 4.8 `entities`
 

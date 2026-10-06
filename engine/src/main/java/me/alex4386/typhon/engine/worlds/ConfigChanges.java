@@ -127,6 +127,22 @@ public final class ConfigChanges {
 
     // ── Diffing ──
 
+    /** The changes from one set of definitions to another (volcanoes matched by id). */
+    public static ConfigChanges between(me.alex4386.typhon.engine.config.WorldDefinition worldBefore,
+            java.util.Collection<me.alex4386.typhon.engine.config.VolcanoDefinition> before,
+            me.alex4386.typhon.engine.config.WorldDefinition worldAfter,
+            java.util.Collection<me.alex4386.typhon.engine.config.VolcanoDefinition> after) {
+        Map<String, JsonObject> a = new java.util.TreeMap<>();
+        for (var v : before) a.put(v.id(), tree(v.toTree()));
+        Map<String, JsonObject> b = new java.util.TreeMap<>();
+        for (var v : after) b.put(v.id(), tree(v.toTree()));
+        return compare(tree(worldBefore.toTree()), tree(worldAfter.toTree()), a, b);
+    }
+
+    private static JsonObject tree(Map<String, Object> tree) {
+        return me.alex4386.typhon.engine.save.SaveFormat.gson().toJsonTree(tree).getAsJsonObject();
+    }
+
     static ConfigChanges compare(JsonObject worldBefore, JsonObject worldAfter, Map<String, JsonObject> before,
             Map<String, JsonObject> after) {
         List<Change> out = new ArrayList<>();

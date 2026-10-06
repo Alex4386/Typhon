@@ -1124,6 +1124,128 @@ final class Session implements AutoCloseable {
         return Double.NaN;
     }
 
+    // ── Configuration API ──
+
+    /** Writes definition files after live changes, in order and off the caller's thread. */
+    private final ExecutorService definitionWriter = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "typhon-definitions");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /** Waits until queued definition writes are on disk (before saves and rebuilds read them). */
+    void flushDefinitions() {
+        try {
+            definitionWriter.submit(() -> { }).get(30, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "waiting for definition writes failed", e);
+        }
+    }
+
+    /**
+     * What {@link #applyConfig} did.
+     *
+     * @param response the API response ({@link ConfigApi#result} and friends)
+     * @param rebuilt the world was reopened (clients must re-attach)
+     * @param changed anything was applied
+     */
+    record ConfigOutcome(JsonObject response, boolean rebuilt, boolean changed) {}
+
+    /** Confirms whatever the plan is (the legacy {@code setParams restart: true}). */
+    static final String CONFIRMED = "*";
+
+    /**
+     * Applies a configuration request the least disruptive way {@link me.alex4386.typhon.engine.worlds.ConfigImpact}
+     * allows: all-live changes in place at a step boundary (definition files written in the background),
+     * otherwise one rebuild that keeps state (reload) or resets only the affected parts (reinit). Validates
+     * first and applies nothing on an error; a reset needs the plan's confirmation token.
+     */
+    synchronized ConfigOutcome applyConfig(ConfigApi.Request request) throws Exception {
+        long start = System.nanoTime();
+        Source src = source;
+        if (src.kind() != Kind.WORLD) {
+            throw new UnsupportedOperationException("This world runs in memory only; start it from the Worlds page to change its settings");
+        }
+        if (replay) throw new IllegalStateException("Leave replay mode before changing settings");
+        Scenario scenario = live;
+        World world = scenario.session();
+        double simTime = scenario.engine().time();
+        ConfigApi.Plan plan;
+        try {
+            plan = ConfigApi.plan(world, src.worldDir(), request, simTime);
+        } catch (ConfigApi.Rejected e) {
+            return new ConfigOutcome(ConfigApi.rejected(e), false, false);
+        }
+        if (plan.isEmpty()) {
+            return new ConfigOutcome(ConfigApi.result(plan, null, request.dryRun(), (System.nanoTime() - start) / 1000, "No changes"),
+                    false, false);
+        }
+        if (request.dryRun()) {
+            return new ConfigOutcome(ConfigApi.result(plan, null, true, (System.nanoTime() - start) / 1000, null), false, false);
+        }
+        if (plan.needsConfirmation() && !CONFIRMED.equals(request.confirm()) && !plan.token().equals(request.confirm())) {
+            return new ConfigOutcome(ConfigApi.needsConfirmation(plan), false, false);
+        }
+
+        me.alex4386.typhon.engine.worlds.ConfigImpact.Kind applied = plan.strongest();
+        String note = null;
+        if (applied == me.alex4386.typhon.engine.worlds.ConfigImpact.Kind.LIVE) {
+            try {
+                runner.onEngineThread(e -> {
+                    world.reconfigureLive(plan.world, plan.volcanoes);
+                    return null;
+                }).get(30, TimeUnit.SECONDS);
+            } catch (java.util.concurrent.ExecutionException e) {
+                if (!(e.getCause() instanceof IllegalArgumentException cause)) throw e;
+                // a subsystem refused in place: rebuild it instead, keeping state
+                applied = me.alex4386.typhon.engine.worlds.ConfigImpact.Kind.RELOAD;
+                note = "Could not apply in place (" + cause.getMessage() + "); rebuilt instead.";
+                LOG.log(Level.WARNING, "live reconfigure refused: " + cause.getMessage());
+            }
+        }
+        Path dir = src.worldDir();
+        List<JsonObject> audit = ConfigApi.auditEntries(plan, applied, simTime);
+        if (applied == me.alex4386.typhon.engine.worlds.ConfigImpact.Kind.LIVE) {
+            definitionWriter.submit(() -> {
+                try {
+                    writeDefinitions(dir, plan, null);
+                    Tuning.appendAudit(dir, audit);
+                } catch (Exception e) {
+                    LOG.log(Level.WARNING, "writing definitions failed", e);
+                }
+            });
+        } else {
+            flushDefinitions();
+            Map<Path, byte[]> previous = new HashMap<>();
+            reopenWorld(World.ChangePolicy.RESET_CHANGED, new DefinitionEdit() {
+                @Override
+                public void apply() throws Exception {
+                    writeDefinitions(dir, plan, previous);
+                }
+
+                @Override
+                public void revert() throws Exception {
+                    for (Map.Entry<Path, byte[]> f : previous.entrySet()) Files.write(f.getKey(), f.getValue());
+                }
+            });
+            Tuning.appendAudit(dir, audit);
+        }
+        JsonObject response = ConfigApi.result(plan, applied, false, (System.nanoTime() - start) / 1000, note);
+        return new ConfigOutcome(response, applied != me.alex4386.typhon.engine.worlds.ConfigImpact.Kind.LIVE, true);
+    }
+
+    /** Writes the plan's changed definition files ({@code previous}: keeps the old bytes for a revert). */
+    private static void writeDefinitions(Path dir, ConfigApi.Plan plan, Map<Path, byte[]> previous) throws java.io.IOException {
+        WorldDirectory wd = new WorldDirectory(dir);
+        Map<Path, Map<String, Object>> files = new java.util.LinkedHashMap<>();
+        if (plan.worldChanged) files.put(wd.worldFile(), plan.worldTree);
+        for (String id : plan.changedVolcanoes) files.put(wd.volcanoFile(id), plan.volcanoTrees.get(id));
+        for (Map.Entry<Path, Map<String, Object>> f : files.entrySet()) {
+            if (previous != null && Files.exists(f.getKey())) previous.put(f.getKey(), Files.readAllBytes(f.getKey()));
+            me.alex4386.typhon.engine.config.Yaml.write(f.getKey(), WorldFiles.header(f.getKey()), f.getValue());
+        }
+    }
+
     /** Changes the files of a world between saving and reopening it. */
     interface DefinitionEdit {
         void apply() throws Exception;
@@ -1170,6 +1292,7 @@ final class Session implements AutoCloseable {
         EngineRunner r = runner;
         Scenario s = live;
         if (src.kind() == Kind.WORLD) {
+            flushDefinitions(); // the state records the definitions it runs; the files must say the same
             r.onEngineThread(e -> {
                 drainFramesNow(r, s);
                 s.saveWorld();
@@ -1358,6 +1481,8 @@ final class Session implements AutoCloseable {
     @Override
     public void close() {
         stopRunner();
+        flushDefinitions();
+        definitionWriter.shutdown();
         viewExec.shutdownNow();
     }
 

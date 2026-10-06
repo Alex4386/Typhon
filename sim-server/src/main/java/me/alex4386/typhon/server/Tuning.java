@@ -24,6 +24,7 @@ import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaCommands;
 import me.alex4386.typhon.engine.worlds.ConfigChanges;
+import me.alex4386.typhon.engine.worlds.ConfigImpact;
 import me.alex4386.typhon.engine.worlds.WorldDirectory;
 
 /**
@@ -31,14 +32,15 @@ import me.alex4386.typhon.engine.worlds.WorldDirectory;
  *
  * <p>Parameters are not a hand-maintained list: every numeric or boolean leaf of the world's
  * definition trees ({@link WorldDefinition#toTree()}, {@link VolcanoDefinition#toTree()}) is one,
- * with id {@code world.<path>} or {@code volcano.<id>.<path>}. Whether a change is live ("hot") or
- * restarts the volcano comes from {@link ConfigChanges}, the same rule that governs editing the
- * YAML by hand. {@link #META} only adds labels, units, ranges and help to the important ones; a
- * new config field shows up automatically with a label derived from its name.
+ * with id {@code world.<path>} or {@code volcano.<id>.<path>}. How a change is applied (live,
+ * reload, reinit) and what it means for users comes from {@link ConfigImpact}, the engine's single
+ * rule set; the schema publishes that prediction per parameter. {@link #META} only adds labels,
+ * units, ranges and help to the important ones; a new config field shows up automatically with a
+ * label derived from its name.
  *
- * <p>Changes are written to the world's YAML and applied by saving the session and reopening the
- * world ({@link Session#reopenWorld}). Defaults are the definitions as they were before the first
- * change ({@code tuning/baseline.json}); every change is logged in {@code tuning/audit.json}.
+ * <p>Changes go through the configuration API ({@link ConfigApi}, {@link Session#applyConfig}).
+ * Defaults are the definitions as they were before the first change ({@code tuning/baseline.json});
+ * every change is logged in {@code tuning/audit.json}.
  */
 final class Tuning {
     static final String DIR = "tuning";
@@ -193,10 +195,20 @@ final class Tuning {
     /** Volcano paths never offered (identity, geometry the client cannot sensibly edit). */
     private static final List<String> VOLCANO_SKIP = List.of("id", "magma.chamber.center.", "edifice.", "vents");
 
-    /** World paths offered: hot ones only (world-level re-init changes need a new world). */
+    /** World paths offered: all but those a running world cannot take (they need a new world). */
     private static boolean worldOffered(String path) {
-        return !path.equals("name") && !path.startsWith("terrain") && ConfigChanges.worldKind(path) == ConfigChanges.Kind.HOT;
+        ConfigImpact.Impact i = ConfigImpact.world(path);
+        return !path.equals("name") && !path.startsWith("terrain")
+                && !(i.kind() == ConfigImpact.Kind.REINIT && i.target() == ConfigImpact.Target.WORLD);
     }
+
+    /**
+     * Settings the chamber Inspector shows for a volcano (by path prefix, live ones only): its magma
+     * supply and recharge magma, the walls' mechanics and the dikes. The client shows what the schema
+     * lists here and decides nothing itself.
+     */
+    private static final List<String> CHAMBER_PANEL = List.of("magma.chamber.supply", "magma.chamber.recharge",
+            "magma.chamber.wall", "dikes.");
 
     // ── Injection fields ──
 
@@ -286,12 +298,23 @@ final class Tuning {
         if (min != null) j.add("min", Json.num(min));
         if (max != null) j.add("max", Json.num(max));
         if (log) j.addProperty("log", true);
-        j.addProperty("apply", "hot");
+        j.addProperty("apply", "live");
         return j;
     }
 
     /** Current definitions of a world directory. */
     record Definitions(Map<String, Object> world, Map<String, Map<String, Object>> volcanoes, Map<String, String> names) {
+        /** The definitions a running world runs (the files can trail live changes by a moment). */
+        static Definitions of(me.alex4386.typhon.engine.worlds.World w) {
+            Map<String, Map<String, Object>> vs = new TreeMap<>();
+            Map<String, String> names = new TreeMap<>();
+            for (VolcanoDefinition v : w.volcanoDefinitions()) {
+                vs.put(v.id(), v.toTree());
+                names.put(v.id(), v.name());
+            }
+            return new Definitions(w.definition().toTree(), vs, names);
+        }
+
         static Definitions read(Path dir) {
             WorldDirectory wd = new WorldDirectory(dir);
             Map<String, Map<String, Object>> vs = new TreeMap<>();
@@ -306,8 +329,9 @@ final class Tuning {
 
     /** A parameter found in the definitions. */
     record Leaf(String id, String scope, String volcanoId, String path, Object value) {
-        boolean hot() {
-            return (volcanoId == null ? ConfigChanges.worldKind(path) : ConfigChanges.volcanoKind(path)) == ConfigChanges.Kind.HOT;
+        /** What changing it needs ({@link ConfigImpact}, the only source of these rules). */
+        ConfigImpact.Impact impact() {
+            return volcanoId == null ? ConfigImpact.world(path) : ConfigImpact.volcano(path);
         }
 
         String metaKey() {
@@ -414,7 +438,7 @@ final class Tuning {
             return o;
         }
         o.addProperty("tunable", true);
-        Definitions now = Definitions.read(dir);
+        Definitions now = s.live().session() != null ? Definitions.of(s.live().session()) : Definitions.read(dir);
         Map<String, Object> defaults = baselineValues(dir, now);
         List<Leaf> leaves = new ArrayList<>(leaves(now));
         List<String> metaOrder = new ArrayList<>(META.keySet());
@@ -440,11 +464,22 @@ final class Tuning {
             }
             params.add(spec);
         }
+        JsonObject chamberPanel = new JsonObject();
+        for (Leaf l : leaves) {
+            if (l.volcanoId() == null || l.impact().kind() != ConfigImpact.Kind.LIVE) continue;
+            if (CHAMBER_PANEL.stream().noneMatch(prefix -> l.path().startsWith(prefix))) continue;
+            if (!chamberPanel.has(l.volcanoId())) chamberPanel.add(l.volcanoId(), new JsonArray());
+            chamberPanel.getAsJsonArray(l.volcanoId()).add(l.id());
+        }
+        JsonObject panels = new JsonObject();
+        panels.add("chamber", chamberPanel);
+        o.add("panels", panels);
         o.add("audit", readAudit(dir));
         return o;
     }
 
     private static JsonObject paramSpec(Leaf l, Map<String, String> names, Object def) {
+        ConfigImpact.Impact impact = l.impact();
         Meta meta = META.get(l.metaKey());
         String[] h = humanize(l.path());
         JsonObject j = spec(l.id(), meta != null ? meta.label() : h[0], meta != null ? meta.unit() : h[1], group(l, names),
@@ -460,7 +495,9 @@ final class Tuning {
             if (def instanceof Number d) j.add("default", Json.num(d.doubleValue()));
             if (n instanceof Integer || n instanceof Long) j.add("step", Json.num(1));
         }
-        j.addProperty("apply", l.hot() ? "hot" : "restart");
+        // a prediction of what a change does; the response to the actual change is authoritative
+        j.addProperty("apply", ConfigApi.kindName(impact.kind()));
+        j.add("impact", ConfigApi.impactJson(impact, l.volcanoId() == null ? null : names.getOrDefault(l.volcanoId(), l.volcanoId())));
         if (l.volcanoId() != null) j.addProperty("volcanoId", l.volcanoId());
         Advice a = ADVICE.get(l.metaKey());
         if (a != null) {
@@ -506,10 +543,14 @@ final class Tuning {
         return out;
     }
 
-    private static Map<String, Object> toJava(JsonObject o) {
+    static Map<String, Object> toJava(JsonObject o) {
         Map<String, Object> m = new LinkedHashMap<>();
         for (Map.Entry<String, JsonElement> e : o.entrySet()) m.put(e.getKey(), toJava(e.getValue()));
         return m;
+    }
+
+    static Object toJavaValue(JsonElement e) {
+        return toJava(e);
     }
 
     private static Object toJava(JsonElement e) {
@@ -536,7 +577,7 @@ final class Tuning {
         }
     }
 
-    private static void appendAudit(Path dir, List<JsonObject> entries) {
+    static void appendAudit(Path dir, List<JsonObject> entries) {
         JsonArray all = readAudit(dir);
         for (JsonObject e : entries) all.add(e);
         while (all.size() > AUDIT_LIMIT) all.remove(0);
@@ -548,153 +589,4 @@ final class Tuning {
         }
     }
 
-    // ── Changes ──
-
-    /**
-     * A validated set of changes: new definition files ready to write, and whether a volcano must
-     * be restarted. Nothing touches the disk until {@link #write}.
-     */
-    static final class Plan {
-        final Path dir;
-        final boolean restart;
-        final Map<Path, Map<String, Object>> files = new LinkedHashMap<>();
-        final Map<Path, byte[]> previous = new LinkedHashMap<>();
-        final List<JsonObject> audit = new ArrayList<>();
-        /** Values outside their physically sensible range ({@link #ADVICE}), readable sentences. */
-        final List<String> warnings = new ArrayList<>();
-
-        Plan(Path dir, boolean restart) {
-            this.dir = dir;
-            this.restart = restart;
-        }
-
-        boolean isEmpty() {
-            return files.isEmpty();
-        }
-
-        void write() throws IOException {
-            for (Map.Entry<Path, Map<String, Object>> f : files.entrySet()) {
-                previous.put(f.getKey(), Files.readAllBytes(f.getKey()));
-                Yaml.write(f.getKey(), WorldFiles.header(f.getKey()), f.getValue());
-            }
-        }
-
-        /** Puts the previous files back (the reopen failed). */
-        void revert() throws IOException {
-            for (Map.Entry<Path, byte[]> f : previous.entrySet()) Files.write(f.getKey(), f.getValue());
-        }
-
-        void log() {
-            appendAudit(dir, audit);
-        }
-    }
-
-    /**
-     * Validates {@code values} (id → new value, JSON null = default) against the world's
-     * definitions. Throws {@link IllegalArgumentException} with a readable message on unknown ids,
-     * bad values, or re-init changes without {@code restart}.
-     */
-    static Plan plan(Path dir, JsonObject values, boolean restart, double simTime) {
-        if (values == null || values.isEmpty()) throw new IllegalArgumentException("setParams needs values");
-        Definitions now = Definitions.read(dir);
-        Map<String, Object> defaults = baselineValues(dir, now);
-        Map<String, Leaf> byId = new LinkedHashMap<>();
-        for (Leaf l : leaves(now)) byId.put(l.id(), l);
-        Map<String, Object> world = now.world();
-        Map<String, Map<String, Object>> volcanoes = new TreeMap<>(now.volcanoes());
-        boolean worldChanged = false;
-        Map<String, Boolean> volcanoChanged = new TreeMap<>();
-        List<JsonObject> audit = new ArrayList<>();
-        List<String> warnings = new ArrayList<>();
-        boolean anyRestart = false;
-        for (Map.Entry<String, JsonElement> e : values.entrySet()) {
-            Leaf l = byId.get(e.getKey());
-            if (l == null) throw new IllegalArgumentException("Unknown parameter '" + e.getKey() + "'");
-            Object v = e.getValue().isJsonNull()
-                    ? (AUTO.contains(l.metaKey()) ? (Object) Double.NaN : defaults.get(l.id()))
-                    : coerce(l, e.getValue());
-            if (v == null) throw new IllegalArgumentException(l.id() + " has no default");
-            if (equal(v, l.value())) continue;
-            Meta meta = META.get(l.metaKey());
-            if (meta != null && v instanceof Number n) {
-                double d = n.doubleValue();
-                if ((meta.min() != null && d < meta.min()) || (meta.max() != null && d > meta.max())) {
-                    throw new IllegalArgumentException(meta.label() + " must be between " + meta.min() + " and " + meta.max());
-                }
-            }
-            if (v instanceof Number n) {
-                String w = advise(l.metaKey(), meta != null ? meta.label() : humanize(l.path())[0], n.doubleValue());
-                if (w != null) warnings.add(w);
-            }
-            if (!l.hot()) {
-                if (!restart) {
-                    throw new IllegalArgumentException("Changing " + l.id() + " restarts the volcano; send restart: true");
-                }
-                anyRestart = true;
-            }
-            Map<String, Object> tree = l.volcanoId() == null ? world : volcanoes.get(l.volcanoId());
-            put(tree, l.path(), v);
-            if (l.volcanoId() == null) worldChanged = true;
-            else volcanoChanged.put(l.volcanoId(), true);
-            JsonObject a = new JsonObject();
-            a.addProperty("at", System.currentTimeMillis());
-            a.add("simTime", Json.num(simTime));
-            a.addProperty("id", l.id());
-            Meta m = META.get(l.metaKey());
-            a.addProperty("label", (l.volcanoId() == null ? "" : now.names().getOrDefault(l.volcanoId(), l.volcanoId()) + ": ")
-                    + (m != null ? m.label() : humanize(l.path())[0]));
-            a.add("from", auditValue(l.value()));
-            a.add("to", e.getValue().isJsonNull() ? null : auditValue(v));
-            a.addProperty("apply", l.hot() ? "hot" : "restart");
-            audit.add(a);
-        }
-        Plan plan = new Plan(dir, anyRestart);
-        plan.audit.addAll(audit);
-        plan.warnings.addAll(warnings);
-        WorldDirectory wd = new WorldDirectory(dir);
-        if (worldChanged) {
-            WorldDefinition.parse(ConfigNode.root("world.yaml", world)); // validates
-            plan.files.put(wd.worldFile(), world);
-        }
-        for (String id : volcanoChanged.keySet()) {
-            Map<String, Object> tree = volcanoes.get(id);
-            VolcanoDefinition.parse(id, ConfigNode.root("volcanoes/" + id + ".yaml", tree)); // validates
-            plan.files.put(wd.volcanoFile(id), tree);
-        }
-        return plan;
-    }
-
-    /** An audit entry's value; a computed (NaN) value is recorded as {@code "auto"}. */
-    private static JsonElement auditValue(Object v) {
-        if (v instanceof Double d && d.isNaN()) return new JsonPrimitive("auto");
-        return Json.GSON.toJsonTree(v);
-    }
-
-    private static Object coerce(Leaf l, JsonElement e) {
-        if (!e.isJsonPrimitive()) throw new IllegalArgumentException(l.id() + ": expected a value");
-        JsonPrimitive p = e.getAsJsonPrimitive();
-        if (l.value() instanceof Boolean) {
-            if (!p.isBoolean()) throw new IllegalArgumentException(l.id() + ": expected true or false");
-            return p.getAsBoolean();
-        }
-        if (!p.isNumber()) throw new IllegalArgumentException(l.id() + ": expected a number");
-        double d = p.getAsDouble();
-        if (!Double.isFinite(d)) throw new IllegalArgumentException(l.id() + ": expected a finite number");
-        if (l.value() instanceof Integer) return (int) Math.round(d);
-        if (l.value() instanceof Long) return Math.round(d);
-        return d;
-    }
-
-    private static boolean equal(Object a, Object b) {
-        if (a instanceof Number x && b instanceof Number y) return Double.compare(x.doubleValue(), y.doubleValue()) == 0;
-        return a.equals(b);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static void put(Map<String, Object> tree, String path, Object value) {
-        String[] parts = path.split("\\.");
-        Map<String, Object> m = tree;
-        for (int i = 0; i < parts.length - 1; i++) m = (Map<String, Object>) m.get(parts[i]);
-        m.put(parts[parts.length - 1], value);
-    }
 }
