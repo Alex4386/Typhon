@@ -24,6 +24,9 @@ public final class MassFlowPalette {
     public static final BlockState LAHAR_THIN_VENEER = BlockState.minecraft("coarse_dirt");
     public static final BlockState LAHAR_VENEER = MUD;
 
+    public static final BlockState DEBRIS = BlockState.minecraft("cobblestone");
+    public static final BlockState DEBRIS_VENEER = BlockState.minecraft("gravel");
+
     public static final BlockState AIR = BlockState.minecraft("air");
     public static final BlockState WATER = BlockState.minecraft("water");
 

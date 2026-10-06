@@ -207,6 +207,16 @@ public final class SeismicityModel implements Subsystem {
         explosions.add(new QueuedExplosion(hypocenter, m));
     }
 
+    private java.util.function.Consumer<SeismicEvent> quakeListener;
+
+    /**
+     * Receives every discrete earthquake (VT, LP, explosion quake) as it is emitted, e.g. for slopes to
+     * feel the shaking. Called on this subsystem's step; the listener must only queue the event.
+     */
+    public void setQuakeListener(java.util.function.Consumer<SeismicEvent> listener) {
+        this.quakeListener = listener;
+    }
+
     /** Fraction of an explosion's kinetic energy radiated seismically (observed ~1e-5–1e-3). */
     public static final double EXPLOSION_SEISMIC_EFFICIENCY = 1e-4;
 
@@ -242,6 +252,7 @@ public final class SeismicityModel implements Subsystem {
     private double emit(StepContext context, SeismicEventType type, double magnitude, BlockPos hypocenter, double durationSeconds, boolean swarm) {
         SeismicEvent event = new SeismicEvent(context.time(), config.volcanoId(), type, magnitude, hypocenter, durationSeconds, swarm);
         context.outbox().emit(event);
+        if (quakeListener != null && type != SeismicEventType.TREMOR) quakeListener.accept(event);
         return event.amplitude();
     }
 

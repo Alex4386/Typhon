@@ -45,6 +45,7 @@ public final class BlockMaterialPalette {
         p.both("light_gray_concrete_powder", MaterialTable.ASH);
         p.map("gray_concrete_powder", MaterialTable.ASH);
         p.both("gravel", MaterialTable.SCORIA);
+        p.block(MaterialTable.DEBRIS, "cobblestone");
         p.block(MaterialTable.PUMICE, "white_concrete_powder");
         p.map("white_concrete_powder", MaterialTable.PUMICE);
         p.both("mud", MaterialTable.LAHAR_DEPOSIT);

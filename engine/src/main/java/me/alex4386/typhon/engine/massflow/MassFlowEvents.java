@@ -16,7 +16,9 @@ public final class MassFlowEvents {
         RAIN,
         MELTWATER,
         LAKE_BREAKOUT,
-        MANUAL
+        MANUAL,
+        /** A slope failed (see {@code geomorph.Geomorphology}). */
+        SLOPE_FAILURE
     }
 
     /**
@@ -65,6 +67,22 @@ public final class MassFlowEvents {
 
     /** Lahar material deposited during one step. */
     public record LaharDeposit(double time, String flowId, int cells, double volumeM3, int blocks) implements EngineEvent {}
+
+    /** A debris avalanche started. */
+    public record AvalancheStarted(double time, String flowId, Trigger trigger, BlockPos position, double volumeM3)
+            implements HistoricalEvent {}
+
+    /** Periodic debris-avalanche telemetry; same layout as {@link PdcFront} ({@code tracer} unused). */
+    public record AvalancheFront(double time, String flowId, BlockPos front, double runoutM, int activeCells,
+            double volumeM3, double maxSpeed, List<FlowCell> cells) implements EngineEvent {
+        public AvalancheFront {
+            cells = List.copyOf(cells);
+        }
+    }
+
+    /** Debris-avalanche material deposited during one step. */
+    public record AvalancheDeposit(double time, String flowId, int cells, double volumeM3, int blocks)
+            implements EngineEvent {}
 
     /** The flow reached chunks the host has not sent terrain for; they act as walls until it does. */
     public record TerrainNeeded(double time, String flowId, List<ChunkCoord> chunks) implements EngineEvent {

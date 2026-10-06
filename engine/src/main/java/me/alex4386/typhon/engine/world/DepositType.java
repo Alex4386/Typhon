@@ -14,5 +14,11 @@ public enum DepositType {
     HYALOCLASTITE,
     INTRUSION,
     /** A cavity (lava tube, tunnel, collapse pit); the unit of a VOID layer. */
-    CAVITY
+    CAVITY,
+    /** Talus, rockfall and slump debris moved a short way downslope by slope failure. */
+    LANDSLIDE,
+    /** Deposit of a debris avalanche (long-runout rock/debris flow from a large slope failure). */
+    DEBRIS_AVALANCHE,
+    /** Breccia thrown out of an explosion crater (ejecta blanket and rim). */
+    EJECTA
 }

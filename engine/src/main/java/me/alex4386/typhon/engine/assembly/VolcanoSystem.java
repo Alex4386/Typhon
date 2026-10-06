@@ -10,6 +10,10 @@ import me.alex4386.typhon.engine.deformation.DeformationModel;
 import me.alex4386.typhon.engine.dike.DikeConfig;
 import me.alex4386.typhon.engine.dike.DikeMagmaSource;
 import me.alex4386.typhon.engine.dike.DikePropagation;
+import me.alex4386.typhon.engine.geomorph.ChamberRoof;
+import me.alex4386.typhon.engine.geomorph.GeomorphConfig;
+import me.alex4386.typhon.engine.geomorph.Geomorphology;
+import me.alex4386.typhon.engine.geomorph.GroundState;
 import me.alex4386.typhon.engine.geothermal.BlockPalette;
 import me.alex4386.typhon.engine.geothermal.Geothermal;
 import me.alex4386.typhon.engine.subsurface.Subsurface;
@@ -19,6 +23,7 @@ import me.alex4386.typhon.engine.geothermal.GeothermalConfig;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
+import me.alex4386.typhon.engine.massflow.DebrisAvalanches;
 import me.alex4386.typhon.engine.massflow.Lahars;
 import me.alex4386.typhon.engine.massflow.MassFlowConfig;
 import me.alex4386.typhon.engine.massflow.PyroclasticFlows;
@@ -67,6 +72,8 @@ public final class VolcanoSystem {
     private final boolean ownsSubsurface;
     private final PyroclasticFlows pdc;
     private final Lahars lahars;
+    private final DebrisAvalanches avalanches;
+    private final Geomorphology geomorphology;
     private final DeformationModel deformation;
     private final VolcanoUnits units;
     private final VolcanoDetail detail;
@@ -158,9 +165,14 @@ public final class VolcanoSystem {
             this.pdc = new PyroclasticFlows(PyroclasticFlows.defaultId(volcanoId), b.terrain, pdcConfig);
             this.lahars = new Lahars(Lahars.defaultId(volcanoId), b.terrain, laharConfig);
             // loose ignimbrite and tephra in the world model are lahar source material automatically
+            MassFlowConfig avalancheConfig = b.avalancheConfig != null ? b.avalancheConfig.copy() : MassFlowConfig.debrisAvalanche();
+            avalancheConfig.metersPerBlock = scaling.metersPerBlock();
+            this.avalanches = b.geomorphology
+                    ? new DebrisAvalanches(DebrisAvalanches.defaultId(volcanoId), b.terrain, avalancheConfig) : null;
         } else {
             this.pdc = null;
             this.lahars = null;
+            this.avalanches = null;
         }
 
         if (b.deformation) {
@@ -194,6 +206,24 @@ public final class VolcanoSystem {
             pdc.setUnits(units);
             lahars.setUnits(units);
         }
+        if (avalanches != null) avalanches.setUnits(units);
+
+        // Slopes, craters and collapse: fed by explosions and earthquakes, acting on the world model.
+        if (b.geomorphology) {
+            this.geomorphology = new Geomorphology(Geomorphology.defaultId(volcanoId), volcanoId, b.terrain,
+                    b.geomorphConfig != null ? b.geomorphConfig : new GeomorphConfig());
+            geomorphology.setUnits(units);
+            geomorphology.setGround(GroundState.of(subsurface));
+            geomorphology.setFlows(avalanches, lahars, pdc);
+            geomorphology.setChamber(ChamberRoof.of(chamber));
+            geomorphology.setTimeScale(() -> clockChamber.erupting() ? eruptive : dormant);
+            geomorphology.setVents(vents, clockChamber::erupting);
+            Geomorphology g = geomorphology;
+            seismicity.setQuakeListener(e -> g.queueQuake(e.hypocenter(), e.magnitude()));
+            coupler.setExplosionListener(g::queueExplosion);
+        } else {
+            this.geomorphology = null;
+        }
 
         // Surface processes exchange heat and water with the ground model (when there is one):
         // cooling lava and hot deposits heat it, dikes heat it at depth, lava boils standing water.
@@ -204,6 +234,7 @@ public final class VolcanoSystem {
                 pdc.setGround(subsurface);
                 lahars.setGround(subsurface);
             }
+            if (avalanches != null) avalanches.setGround(subsurface);
         }
     }
 
@@ -228,7 +259,8 @@ public final class VolcanoSystem {
 
     /**
      * Registers this volcano's subsystems in dependency order (chamber → dikes → seismicity → alert →
-     * coupler → style estimate → tephra → mass flows → geothermal → deformation). Listeners between subsystems are
+     * coupler → style estimate → tephra → mass flows → geomorphology → debris avalanches → geothermal →
+     * deformation). Listeners between subsystems are
      * attached at construction, so a restored engine must be built from a fresh {@code VolcanoSystem}.
      */
     public Engine.Builder addTo(Engine.Builder engine) {
@@ -251,6 +283,8 @@ public final class VolcanoSystem {
             list.add(pdc);
             list.add(lahars);
         }
+        if (geomorphology != null) list.add(geomorphology);
+        if (avalanches != null) list.add(avalanches);
         if (geothermal != null) list.add(geothermal);
         if (deformation != null) list.add(deformation);
         if (detail != null) list.add(detail);
@@ -280,6 +314,10 @@ public final class VolcanoSystem {
     public PyroclasticFlows pyroclasticFlows() { return pdc; }
     /** {@code null} when mass flows are disabled. */
     public Lahars lahars() { return lahars; }
+    /** {@code null} when mass flows or geomorphology are disabled. */
+    public DebrisAvalanches debrisAvalanches() { return avalanches; }
+    /** Slope failure, craters and collapse; {@code null} when disabled. */
+    public Geomorphology geomorphology() { return geomorphology; }
     /** {@code null} when deformation is disabled. */
     public DeformationModel deformation() { return deformation; }
     public SeismicityModel seismicity() { return seismicity; }
@@ -313,6 +351,9 @@ public final class VolcanoSystem {
         private boolean dikes = true;
         private boolean massFlows = true;
         private boolean deformation = true;
+        private boolean geomorphology = true;
+        private GeomorphConfig geomorphConfig;
+        private MassFlowConfig avalancheConfig;
         private List<me.alex4386.typhon.engine.deformation.GeodeticStation> stations = List.of();
         private DikeConfig dikeConfig;
         private MassFlowConfig pdcConfig;
@@ -385,6 +426,11 @@ public final class VolcanoSystem {
         public Builder dikesEnabled(boolean enabled) { this.dikes = enabled; return this; }
         public Builder massFlowsEnabled(boolean enabled) { this.massFlows = enabled; return this; }
         public Builder deformationEnabled(boolean enabled) { this.deformation = enabled; return this; }
+        /** Slope stability, mass wasting, craters and caldera collapse (on by default). */
+        public Builder geomorphologyEnabled(boolean enabled) { this.geomorphology = enabled; return this; }
+        public Builder geomorphology(GeomorphConfig config) { this.geomorphConfig = config; return this; }
+        /** Debris-avalanche parameters; {@code metersPerBlock} is overridden by {@link #scaling}. */
+        public Builder debrisAvalanches(MassFlowConfig config) { this.avalancheConfig = config; return this; }
         /** Virtual GNSS/tilt stations sampled by the deformation model (world columns). */
         public Builder stations(List<me.alex4386.typhon.engine.deformation.GeodeticStation> stations) {
             this.stations = List.copyOf(stations);

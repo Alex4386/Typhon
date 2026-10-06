@@ -679,6 +679,7 @@ public final class VolcanoCoupler implements Subsystem {
         }
         double energy = 0.5 * burst.ejectaMassKg() * speed * speed;
         if (seismicity != null) seismicity.queueExplosion(vent.position().offset(0, -2, 0), energy);
+        if (explosionListener != null) explosionListener.accept(vent.position(), energy);
         context.outbox().emit(new SurfaceEvents.ExplosiveBurst(context.time(), volcanoId,
                 slug ? BurstKind.STROMBOLIAN : BurstKind.VULCANIAN, vent.position(), burst.ejectaMassKg(),
                 burst.gasMassKg(), speed, energy));
@@ -689,8 +690,16 @@ public final class VolcanoCoupler implements Subsystem {
         tephra.launchSalvo(vent, mass, speed, 40, 15, chamber.silicaWt(), MAX_BOMBS_PER_SALVO);
         double energy = 0.5 * mass * speed * speed;
         if (seismicity != null) seismicity.queueExplosion(vent.position(), energy);
+        if (explosionListener != null) explosionListener.accept(vent.position(), energy);
         context.outbox().emit(new SurfaceEvents.ExplosiveBurst(context.time(), volcanoId, BurstKind.SURTSEYAN_JET,
                 vent.position(), mass, 0, speed, energy));
+    }
+
+    private java.util.function.BiConsumer<BlockPos, Double> explosionListener;
+
+    /** Receives each discrete vent explosion (position, kinetic energy J), e.g. to excavate a crater. */
+    public void setExplosionListener(java.util.function.BiConsumer<BlockPos, Double> listener) {
+        this.explosionListener = listener;
     }
 
     private void startAshPuff(double now, VentSite vent, double ashMassKg, double durationSeconds, double gasFraction,

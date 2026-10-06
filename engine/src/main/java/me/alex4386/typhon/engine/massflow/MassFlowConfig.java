@@ -109,6 +109,24 @@ public final class MassFlowConfig {
         return c;
     }
 
+    /**
+     * Debris avalanche (dry rock avalanche). Voellmy μ = 0.1, ξ = 500 m/s² are the values Hungr &amp;
+     * Evans (1996, "Rock avalanche runout prediction using a dynamic model") back-fitted to 23 rock
+     * avalanches; the turbulent term makes thick (large) avalanches run proportionally farther, the
+     * volume effect of Scheidegger (1973). The deposit is the moving debris itself.
+     */
+    public static MassFlowConfig debrisAvalanche() {
+        MassFlowConfig c = new MassFlowConfig();
+        c.frictionCoefficient = 0.1;
+        c.frictionAtMaxSediment = c.frictionCoefficient;
+        c.turbulenceCoefficient = 500;
+        c.sedimentationTimescale = 3600;
+        c.stopTimescale = 3;
+        c.stopSpeed = 1.5;
+        c.depositThicknessFactor = 1.0;
+        return c;
+    }
+
     public MassFlowConfig copy() {
         MassFlowConfig c = new MassFlowConfig();
         c.metersPerBlock = metersPerBlock;

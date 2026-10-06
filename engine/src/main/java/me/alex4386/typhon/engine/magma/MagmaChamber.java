@@ -767,6 +767,19 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return drop;
     }
 
+    /**
+     * The chamber roof subsided into the chamber by {@code volume} (piston caldera or pit collapse):
+     * the reverse of {@link #withdraw}, overpressure rises by {@code volume / (V β)}.
+     *
+     * @return the overpressure rise (MPa)
+     */
+    public double compress(double volume) {
+        if (!(volume > 0)) return 0;
+        double rise = volume / (config.volume() * effectiveCompressibility());
+        overpressure += rise;
+        return rise;
+    }
+
     // ── Derived physics ──
 
     /** Lithostatic pressure at the chamber's physical depth (MPa). */

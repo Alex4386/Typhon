@@ -209,6 +209,33 @@ public abstract class MassFlowField implements Subsystem {
         return true;
     }
 
+    /**
+     * Releases flow at rest on exactly the listed columns (each {@code {x, z, volumeM3}}), e.g. the
+     * cells of a failed slope. Columns the field does not know are skipped (and requested). Returns the
+     * volume injected.
+     */
+    public double releaseCells(BlockPos origin, List<double[]> cells, double temperatureC, double sedimentFraction,
+            Trigger trigger) {
+        double total = 0;
+        for (double[] cell : cells) {
+            int x = (int) cell[0];
+            int z = (int) cell[1];
+            if (!(cell[2] > 0)) continue;
+            if (!knownColumn(x, z)) {
+                neededTerrain.add(MassFlowChunk.key(x >> 4, z >> 4));
+                continue;
+            }
+            inject(x, z, cell[2], temperatureC, sedimentFraction);
+            total += cell[2];
+        }
+        if (total > 0) {
+            released += total;
+            addOrigin(origin);
+            pendingStarts.add(new PendingStart(trigger, origin, total, 0, temperatureC));
+        }
+        return total;
+    }
+
     public void addSource(FlowSource source, Trigger trigger) {
         boolean fresh = !sources.containsKey(source.id());
         sources.put(source.id(), source);

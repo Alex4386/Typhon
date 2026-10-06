@@ -56,6 +56,12 @@ public final class MaterialTable {
      * basins (White et al. 1975, USGS PP 892): K ≈ 10⁻⁴–10⁻² m/s (Freeze &amp; Cherry 1979, Table 2.2).
      */
     public static final Material GRAVEL = add("gravel", MaterialClass.SOIL, 2000, 1.5, 900, -3.5, 0.30, NA, NA, 0.6, true);
+    /**
+     * Unsorted rock debris of landslides, debris avalanches and explosion breccia: a poorly sorted
+     * block-in-matrix mixture, bulk density ≈ 2000 kg/m³ and porosity ≈ 0.3 (Glicken 1996, USGS OFR
+     * 96-677, for the 1980 Mount St. Helens avalanche deposit).
+     */
+    public static final Material DEBRIS = add("debris", MaterialClass.SOIL, 2000, 1.2, 900, -4, 0.30, NA, NA, 0.5, true);
 
     private MaterialTable() {}
 
