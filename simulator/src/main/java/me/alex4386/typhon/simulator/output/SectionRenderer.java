@@ -46,6 +46,9 @@ public final class SectionRenderer {
         COLORS.put(DepositType.LAHAR, new Color(140, 110, 70));
         COLORS.put(DepositType.INTRUSION, new Color(170, 40, 60));
         COLORS.put(DepositType.CAVITY, new Color(10, 10, 10));
+        COLORS.put(DepositType.LANDSLIDE, new Color(120, 150, 70));
+        COLORS.put(DepositType.DEBRIS_AVALANCHE, new Color(60, 130, 60));
+        COLORS.put(DepositType.EJECTA, new Color(200, 110, 160));
     }
     static final Color SKY = new Color(236, 242, 248);
     static final Color WATER = new Color(80, 130, 210);
@@ -384,8 +387,8 @@ public final class SectionRenderer {
     private void legend(Graphics2D g, int width, int top) {
         Map<String, Color> entries = new LinkedHashMap<>();
         for (DepositType t : List.of(DepositType.LAVA, DepositType.TUBE_ROOF, DepositType.CAVITY, DepositType.HYALOCLASTITE,
-                DepositType.FALL, DepositType.PDC, DepositType.LAHAR, DepositType.INTRUSION, DepositType.EDIFICE,
-                DepositType.BASEMENT)) {
+                DepositType.FALL, DepositType.PDC, DepositType.LAHAR, DepositType.LANDSLIDE, DepositType.DEBRIS_AVALANCHE,
+                DepositType.EJECTA, DepositType.INTRUSION, DepositType.EDIFICE, DepositType.BASEMENT)) {
             entries.put(t.name().toLowerCase(), COLORS.get(t));
         }
         g.setColor(Color.WHITE);

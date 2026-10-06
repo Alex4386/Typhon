@@ -17,7 +17,7 @@ public final class GeomorphConfig {
     /** Relaxation passes per step (failures cascading up- and downslope continue next step). */
     public int maxIterations = 6;
     /** Columns evaluated per step at most; the rest stay queued (deterministically, by key). */
-    public int maxColumnsPerStep = 60_000;
+    public int maxColumnsPerStep = 16_384;
     /** World-model tiles (32×32 columns) re-examined per step by the background sweep. */
     public int sweepTilesPerStep = 4;
     /** Downslope steps followed to measure a slope's relief (Culmann analysis). */

@@ -577,8 +577,9 @@ public final class Geomorphology implements Subsystem {
         double tanSum = 0;
         double satSum = 0;
         double minFs = Double.POSITIVE_INFINITY;
-        Failure shallow = null;
         Assessment shallowA = null;
+        LayerView critPlane = null;
+        double critGamma = 0;
         for (int k = n - 1; k >= 0 && depthTop < reach; k--) {
             LayerView layer = world.layer(x, z, k);
             Material m = layer.materialInfo();
@@ -628,16 +629,26 @@ public final class Geomorphology implements Subsystem {
                 double fs = SlopeStability.infiniteSlope(st.cohesionPa(), st.tanPhi(), gammaEff, zp, beta, ru, kh);
                 if (fs < minFs) {
                     minFs = fs;
-                    double crit = SlopeStability.criticalAngle(st.cohesionPa(), st.tanPhi(), gammaEff, zp, ru, kh);
-                    shallowA = new Assessment(x, z, fs, zp, false, Math.toDegrees(beta), relief, Math.toDegrees(crit),
+                    shallowA = new Assessment(x, z, fs, zp, false, Math.toDegrees(beta), relief, Double.NaN,
                             st.cohesionPa(), Math.toDegrees(st.frictionRad()), ru, kh, a, temperature,
                             satSum / zEnd, planeLayer.material());
-                    shallow = fs < 1 ? shallowMove(x, z, drop, dist, crit, zp, shallowA, planeLayer, gammaEff) : null;
+                    critPlane = planeLayer;
+                    critGamma = gammaEff;
                 }
             }
             depthTop = zBot;
         }
         if (shallowA == null) return null;
+        // the critical angle (bisection) only where the slab actually fails
+        Failure shallow = null;
+        if (shallowA.factorOfSafety() < 1) {
+            double crit = SlopeStability.criticalAngle(shallowA.cohesionPa(), Math.tan(Math.toRadians(shallowA.frictionDeg())),
+                    critGamma, shallowA.slipDepthM(), shallowA.ru(), kh);
+            shallowA = new Assessment(x, z, shallowA.factorOfSafety(), shallowA.slipDepthM(), false, shallowA.slopeDeg(),
+                    relief, Math.toDegrees(crit), shallowA.cohesionPa(), shallowA.frictionDeg(), shallowA.ru(), kh,
+                    shallowA.alteration(), shallowA.temperatureC(), shallowA.saturation(), shallowA.material());
+            shallow = shallowMove(x, z, drop, dist, crit, shallowA.slipDepthM(), shallowA, critPlane, critGamma);
+        }
 
         // Culmann wedge of the whole slope (only where the face is steeper than friction alone holds)
         Assessment best = shallowA;
@@ -889,7 +900,7 @@ public final class Geomorphology implements Subsystem {
         }
         if (!deposits.isEmpty()) {
             int unit = units.unit(DepositType.LANDSLIDE, now, Double.NaN);
-            double n = config.debrisPorosity;
+            double n = storedPorosity(config.debrisPorosity);
             for (Map.Entry<Long, TreeMap<Short, Double>> e : deposits.entrySet()) {
                 int x = keyX(e.getKey());
                 int z = keyZ(e.getKey());
@@ -939,7 +950,7 @@ public final class Geomorphology implements Subsystem {
             }
         }
         if (avalanches != null) {
-            List<double[]> bulk = scale(cells, 1 / (1 - config.debrisPorosity));
+            List<double[]> bulk = scale(cells, 1 / (1 - storedPorosity(MaterialTable.DEBRIS.porosity())));
             if (avalanches.releaseCells(origin, bulk, avalanches.config().ambientC, 0,
                     MassFlowEvents.Trigger.SLOPE_FAILURE) > 0) {
                 return FailureStyle.DEBRIS_AVALANCHE;
@@ -1054,7 +1065,7 @@ public final class Geomorphology implements Subsystem {
         }
         if (wSum > 0 && solid > 0) {
             int unit = units.unit(DepositType.EJECTA, now, Double.NaN);
-            double n = config.debrisPorosity;
+            double n = storedPorosity(config.debrisPorosity);
             for (int i = 0; i < ring.size(); i++) {
                 int x = (int) ring.get(i)[0];
                 int z = (int) ring.get(i)[1];
@@ -1261,6 +1272,14 @@ public final class Geomorphology implements Subsystem {
 
     static int keyZ(long key) {
         return (int) key;
+    }
+
+    /**
+     * The porosity a layer actually gets: the world model stores it in 8 bits, so solid volumes are
+     * converted with the stored value to conserve mass exactly.
+     */
+    private static double storedPorosity(double n) {
+        return Math.round(RockStrength.clamp01(n) * 255) / 255.0;
     }
 
     private static long tileKey(int x, int z) {

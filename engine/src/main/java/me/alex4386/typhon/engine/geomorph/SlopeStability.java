@@ -85,15 +85,27 @@ public final class SlopeStability {
     }
 
     /**
-     * Steepest infinite-slope angle (rad) a slab of depth {@code depth} holds at ({@code FS = 1}),
-     * found by bisection; {@code π/2} if it stands vertically.
+     * Gentlest infinite-slope angle (rad) at which a slab of depth {@code depth} fails ({@code FS = 1}),
+     * or {@code π/2} if it holds at every angle. The infinite-slope FS is not monotonic near vertical
+     * (the slab's driving stress {@code ∝ sinβ cosβ} vanishes there), so the first crossing is found by
+     * scanning up from flat, then refined by bisection.
      */
     public static double criticalAngle(double cohesionPa, double tanPhi, double unitWeight, double depth, double ru,
             double kh) {
+        int n = 90;
+        double step = (Math.PI / 2) / n;
         double lo = 0;
-        double hi = Math.PI / 2 - 1e-6;
-        if (infiniteSlope(cohesionPa, tanPhi, unitWeight, depth, hi, ru, kh) >= 1) return Math.PI / 2;
-        for (int i = 0; i < 40; i++) {
+        double hi = -1;
+        for (int i = 1; i < n; i++) {
+            double b = i * step;
+            if (infiniteSlope(cohesionPa, tanPhi, unitWeight, depth, b, ru, kh) < 1) {
+                hi = b;
+                break;
+            }
+            lo = b;
+        }
+        if (hi < 0) return Math.PI / 2;
+        for (int i = 0; i < 30; i++) {
             double mid = 0.5 * (lo + hi);
             if (infiniteSlope(cohesionPa, tanPhi, unitWeight, depth, mid, ru, kh) >= 1) lo = mid;
             else hi = mid;

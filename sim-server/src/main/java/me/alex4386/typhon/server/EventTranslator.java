@@ -13,6 +13,7 @@ import java.util.function.Function;
 import me.alex4386.typhon.engine.alert.AlertEvents;
 import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.dike.DikeEvents;
+import me.alex4386.typhon.engine.geomorph.GeomorphEvents;
 import me.alex4386.typhon.engine.geothermal.GeyserFormed;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeature;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeatureFormed;
@@ -167,6 +168,31 @@ final class EventTranslator {
             case MassFlowEvents.PdcFront e -> front("PDC", e.time(), e.flowId(), e.cells(), e.maxSpeed(),
                     e.maxTemperatureC());
             case MassFlowEvents.LaharFront e -> front("LAHAR", e.time(), e.flowId(), e.cells(), e.maxSpeed(), 15);
+            case MassFlowEvents.AvalancheFront e -> front("DEBRIS_AVALANCHE", e.time(), e.flowId(), e.cells(),
+                    e.maxSpeed(), 15);
+            case GeomorphEvents.SlopeFailure e -> {
+                JsonObject o = base("slopeFailure", e.time(), e.volcanoId());
+                o.add("at", Json.xyz(map.point(e.position())));
+                o.add("volumeM3", Json.num(e.volumeM3()));
+                o.addProperty("style", e.style().name());
+                o.addProperty("trigger", e.trigger().name());
+                o.add("factorOfSafety", Json.num(e.minFactorOfSafety()));
+                yield o;
+            }
+            case GeomorphEvents.CraterExcavated e -> {
+                JsonObject o = base("craterExcavated", e.time(), e.volcanoId());
+                o.add("at", Json.xyz(map.point(e.center())));
+                o.add("radiusM", Json.num(e.radiusM()));
+                o.add("depthM", Json.num(e.depthM()));
+                yield o;
+            }
+            case GeomorphEvents.CalderaCollapse e -> {
+                JsonObject o = base("calderaCollapse", e.time(), e.volcanoId());
+                o.add("at", Json.xyz(map.point(e.center())));
+                o.add("radiusM", Json.num(e.radiusM()));
+                o.add("subsidenceM", Json.num(e.totalSubsidenceM()));
+                yield o;
+            }
             // Alteration, sinter and cinnabar are diffuse surface changes (hundreds of blocks), not point
             // features: they show up through the TopUnit field instead of as markers.
             case HydrothermalFeatureFormed e -> switch (e.feature()) {
@@ -272,6 +298,7 @@ final class EventTranslator {
         for (VolcanoSystem v : volcanoes) {
             if (v.pyroclasticFlows() != null && v.pyroclasticFlows().id().equals(flowId)) return v.volcanoId();
             if (v.lahars() != null && v.lahars().id().equals(flowId)) return v.volcanoId();
+            if (v.debrisAvalanches() != null && v.debrisAvalanches().id().equals(flowId)) return v.volcanoId();
         }
         return strip(flowId);
     }
