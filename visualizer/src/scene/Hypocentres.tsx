@@ -2,6 +2,7 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { SimEvent } from '../protocol/messages';
+import { filterQuakes, quakeFade, QUAKE_COUNT_MAX } from '../store/quakeFilter';
 import { simNow, useStore } from '../store/store';
 import { sceneProbe } from './Terrain';
 
@@ -16,9 +17,7 @@ function quakeLabel(q: Quake): { label: string; detail: string } {
   return { label: `M ${q.magnitude.toFixed(1)} ${q.type} earthquake`, detail: `${Math.round(-q.hypocenter[2])} m below sea level` };
 }
 
-const MAX = 3000;
-/** How long (simulated seconds) hypocentres stay visible. */
-const WINDOW = 3 * 3600;
+const MAX = QUAKE_COUNT_MAX;
 /** Re-layout interval (ms): sizes and fading follow the camera, but not every frame. */
 const RELAYOUT_MS = 200;
 /** A sphere never covers more than this fraction of its distance (≈ 1.7° radius on screen). */
@@ -46,8 +45,9 @@ export function Hypocentres() {
   const events = useStore((s) => s.events);
   const ref = useRef<THREE.InstancedMesh>(null);
   const material = useMemo(() => new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.6, depthTest: false, depthWrite: false }), []);
-  const quakes = useMemo(() => events.filter((e): e is Quake => e.kind === 'seismic').slice(-MAX), [events]);
-  const last = useRef({ at: 0, quakes: null as unknown, vExag: 0 });
+  const filter = useStore((s) => s.quakeFilter);
+  const quakes = useMemo(() => events.filter((e): e is Quake => e.kind === 'seismic'), [events]);
+  const last = useRef({ at: 0, quakes: null as unknown, vExag: 0, filter: null as unknown, time: Number.NaN });
   const drawn = useRef<Quake[]>([]);
   const m = useMemo(() => new THREE.Matrix4(), []);
   const c = useMemo(() => new THREE.Color(), []);
@@ -58,29 +58,31 @@ export function Hypocentres() {
     if (!mesh) return;
     const nowMs = performance.now();
     const l = last.current;
-    if (l.quakes === quakes && l.vExag === vExag && nowMs - l.at < RELAYOUT_MS) return;
+    if (l.quakes === quakes && l.vExag === vExag && l.filter === filter && nowMs - l.at < RELAYOUT_MS) return;
     l.at = nowMs;
     l.quakes = quakes;
     l.vExag = vExag;
+    l.filter = filter;
 
     const st = useStore.getState();
     const groundBelow = Number.isFinite(sceneProbe.cameraGround) ? camera.position.y - sceneProbe.cameraGround : 1e4;
     material.opacity = hypocentreOpacity(groundBelow / Math.max(1e-6, vExag), st.underground);
 
+    // the last N as of now (never quakes after a replay cursor), optionally windowed / magnitude-limited
     const now = simNow();
+    const shown = filterQuakes(quakes, now, filter);
     let n = 0;
     drawn.current = [];
-    for (const q of quakes) {
+    for (let rank = 0; rank < shown.length; rank++) {
+      const q = shown[rank];
       const age = now - q.time;
-      if (age > WINDOW) continue;
       p.set(q.hypocenter[0], q.hypocenter[2] * vExag, -q.hypocenter[1]);
       const dist = p.distanceTo(camera.position);
       // magnitude-sized, but never a screen-filling ball next to the camera
       const r = Math.min(7 * Math.pow(1.8, q.magnitude), Math.max(0.5, dist * MAX_ANGULAR));
       m.makeScale(r, r, r).setPosition(p);
       mesh.setMatrixAt(n, m);
-      const fade = 1 - Math.max(0, age) / WINDOW;
-      c.copy(TYPE_COLOR[q.type] ?? TYPE_COLOR.VT).multiplyScalar(0.35 + 0.65 * fade);
+      c.copy(TYPE_COLOR[q.type] ?? TYPE_COLOR.VT).multiplyScalar(quakeFade(filter, age, rank, shown.length));
       mesh.setColorAt(n, c);
       drawn.current[n] = q;
       n++;

@@ -2,6 +2,7 @@
 // draw calls/triangles, long tasks and main-thread busy time over a measuring window, plus a
 // screenshot. Optionally reports lava-film statistics (cool thin lava cells).
 // Usage: node scripts/perf-probe.mjs [url] [--seconds N] [--shot file.png] [--lava] [--view summit|top]
+//          [--set '{"showAtmosphere":false}'] [--tiles minTilesBeforeMeasuring]
 import { chromium } from 'playwright';
 
 const argv = process.argv.slice(2);
@@ -15,7 +16,8 @@ const shot = opt('--shot', null);
 const view = opt('--view', null);
 
 const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-precise-memory-info'] });
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+const [vw, vh] = String(opt('--size', '1440x900')).split('x').map(Number);
+const page = await browser.newPage({ viewport: { width: vw, height: vh }, deviceScaleFactor: 1 });
 page.setDefaultTimeout(600000);
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
@@ -26,15 +28,20 @@ for (let i = 0; i < 240; i++) {
   await page.waitForTimeout(1000);
   const b = await ev(() => window.__typhonMessages?.binary ?? 0).catch(() => 0);
   const tiles = await ev(() => Object.keys(window.__typhon?.getState().tileRevision ?? {}).length).catch(() => 0);
-  if (b > 40 && tiles > 20) break;
+  if (b > 40 && tiles > Number(opt('--tiles', 20))) break;
 }
 await ev(() => window.__typhon.getState().set({ guideOpen: false }));
+// extra store settings for A/B runs, e.g. --set '{"showAtmosphere":false}'
+const extra = opt('--set', null);
+if (extra) await ev((s) => window.__typhon.getState().set(JSON.parse(s)), extra);
 if (view === 'top') {
-  await ev(() => {
+  // --alt: camera height (scene units), --dx/--dy: offset from the first vent (m)
+  const cam = { alt: Number(opt('--alt', 6500)), dx: Number(opt('--dx', 0)), dy: Number(opt('--dy', 0)) };
+  await ev((c) => {
     const w = window.__typhon.getState().world;
     const v = w.volcanoes[0].vents[0].at;
-    window.__typhonCamera.getState().requestCamera({ kind: 'pose', instant: true, pose: { mode: 'orbit', position: [v[0], 6500, -v[1] + 600], heading: 0, pitch: -1.45, distance: 5500 } });
-  }).catch((e) => errors.push(String(e)));
+    window.__typhonCamera.getState().requestCamera({ kind: 'pose', instant: true, pose: { mode: 'orbit', position: [v[0] + c.dx, c.alt, -(v[1] + c.dy) + c.alt * 0.09], heading: 0, pitch: -1.45 } });
+  }, cam).catch((e) => errors.push(String(e)));
 }
 await page.waitForTimeout(8000); // let tiles build
 
@@ -89,6 +96,8 @@ const result = await ev(async (secs) => {
     timerLagMs: lag / Math.max(1, lagN),
     heapMB: performance.memory ? performance.memory.usedJSHeapSize / 1e6 : null,
     entities: Object.keys(st.entities).length,
+    dpr: perf.dpr,
+    markersDrawn: perf.entities,
     tiles: Object.keys(st.tileRevision).length,
   };
 }, seconds);

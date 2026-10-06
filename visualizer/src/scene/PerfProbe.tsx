@@ -15,11 +15,12 @@ interface RenderInfo {
 export function PerfProbe() {
   const gl = useThree((s) => s.gl);
   const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
   const frameStart = useRef(0);
   const window1s = useRef({ t0: performance.now(), frames: 0, cpu: 0 });
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).has('debug')) (window as unknown as { __typhonScene: unknown }).__typhonScene = scene;
+    if (new URLSearchParams(window.location.search).has('debug')) Object.assign(window, { __typhonScene: scene, __typhonGl: gl, __typhonCam: camera });
     const prev = scene.onAfterRender;
     scene.onAfterRender = (...args) => {
       prev.apply(scene, args);
@@ -35,7 +36,7 @@ export function PerfProbe() {
     return () => {
       scene.onAfterRender = prev;
     };
-  }, [gl, scene]);
+  }, [gl, scene, camera]);
 
   useFrame(() => {
     const now = performance.now();

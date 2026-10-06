@@ -18,6 +18,8 @@ import type {
   WorldInfo,
   XY,
 } from '../protocol/messages';
+import { isBool, isFlags, loadPref, PREF_KEYS, savePref } from './prefs';
+import { loadQuakeFilter, saveQuakeFilter, type QuakeFilter } from './quakeFilter';
 import { applyEntities, pruneEntities, type EntityMap, type EntityView, type Selection } from './entities';
 
 /** Side drawer pages; only one is open at a time (progressive disclosure). */
@@ -159,6 +161,14 @@ interface Store {
   /** Smooth block-quantised elevations for display (terrace removal). */
   smoothTerrain: boolean;
   toolboxOpen: boolean;
+  /** Which earthquakes are drawn and listed (persisted). */
+  quakeFilter: QuakeFilter;
+  /** Entity categories hidden in the 3D view (persisted). */
+  hiddenCategories: Record<string, boolean>;
+  /** Frame statistics overlay (persisted). */
+  showPerf: boolean;
+  /** Lower the resolution (and then quality) when frames get slow (persisted). */
+  autoQuality: boolean;
 
   set: (partial: Partial<Store>) => void;
   setStatus: (s: ConnectionStatus) => void;
@@ -232,6 +242,10 @@ export const useStore = create<Store>((set, get) => ({
   quality: initialQuality(),
   smoothTerrain: true,
   toolboxOpen: false,
+  quakeFilter: loadQuakeFilter(),
+  hiddenCategories: loadPref(PREF_KEYS.hiddenCategories, {}, isFlags),
+  showPerf: loadPref(PREF_KEYS.showPerf, false, isBool),
+  autoQuality: loadPref(PREF_KEYS.autoQuality, true, isBool),
 
   set: (partial) => set(partial),
   setStatus: (status) => set({ status }),
@@ -370,6 +384,16 @@ if (typeof window !== 'undefined') {
   }, 1000);
 }
 
+/** View preferences are remembered across visits. */
+if (typeof window !== 'undefined') {
+  useStore.subscribe((s, prev) => {
+    if (s.quakeFilter !== prev.quakeFilter) saveQuakeFilter(s.quakeFilter);
+    if (s.hiddenCategories !== prev.hiddenCategories) savePref(PREF_KEYS.hiddenCategories, s.hiddenCategories);
+    if (s.showPerf !== prev.showPerf) savePref(PREF_KEYS.showPerf, s.showPerf);
+    if (s.autoQuality !== prev.autoQuality) savePref(PREF_KEYS.autoQuality, s.autoQuality);
+  });
+}
+
 const GUIDE_KEY = 'typhon.guideSeen';
 const DRAWER_KEY = 'typhon.drawerWidth';
 
@@ -454,11 +478,13 @@ export function rememberQuality(q: Quality): void {
 
 /** Per-quality rendering settings. */
 /** `glow`: halo sprites over incandescent lava (0 = off). */
-export const QUALITY: Record<Quality, { smoothRadius: number; shadows: boolean; plume: number; ash: number; glow: number; dpr: [number, number] }> = {
-  low: { smoothRadius: 2, shadows: false, plume: 500, ash: 300, glow: 0, dpr: [1, 1] },
-  medium: { smoothRadius: 4, shadows: false, plume: 1200, ash: 800, glow: 2000, dpr: [1, 1.5] },
-  high: { smoothRadius: 5, shadows: true, plume: 2400, ash: 1600, glow: 6000, dpr: [1, 2] },
+/** `ambientFps`: frame rate of ambient animation (plumes, pulses) while nothing else asks for frames. */
+export const QUALITY: Record<Quality, { smoothRadius: number; shadows: boolean; plume: number; ash: number; glow: number; dpr: [number, number]; ambientFps: number }> = {
+  low: { smoothRadius: 2, shadows: false, plume: 500, ash: 300, glow: 0, dpr: [1, 1], ambientFps: 15 },
+  medium: { smoothRadius: 4, shadows: false, plume: 1200, ash: 800, glow: 1200, dpr: [1, 1.5], ambientFps: 30 },
+  high: { smoothRadius: 5, shadows: true, plume: 2400, ash: 1600, glow: 3000, dpr: [1, 2], ambientFps: 60 },
 };
+
 
 function defaultServerUrl(): string {
   const q = new URLSearchParams(window.location.search).get('server');

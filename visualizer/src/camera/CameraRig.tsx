@@ -71,7 +71,7 @@ interface Transition {
  */
 export function CameraRig({ world }: { world: WorldInfo }) {
   const controls = useRef<OrbitControlsImpl>(null);
-  const { camera, gl, size, scene } = useThree();
+  const { camera, gl, size, scene, invalidate } = useThree();
   const cam = camera as THREE.PerspectiveCamera;
 
   // ── persistent per-frame state (no allocations in useFrame) ──
@@ -234,6 +234,15 @@ export function CameraRig({ world }: { world: WorldInfo }) {
     };
     const onKeyUp = (e: KeyboardEvent) => held.delete(e.code);
     const onBlur = () => held.clear();
+    // on-demand rendering: any input may move the camera, so draw (the frame loop keeps going while it moves)
+    const wake = () => invalidate();
+    el.addEventListener('pointerdown', wake);
+    el.addEventListener('wheel', wake, { passive: true });
+    window.addEventListener('keydown', wake);
+    const dragWake = (e: PointerEvent) => {
+      if (e.buttons !== 0 || document.pointerLockElement === el) invalidate();
+    };
+    window.addEventListener('pointermove', dragWake);
     el.addEventListener('pointerdown', onDown);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointermove', onMove);
@@ -247,6 +256,10 @@ export function CameraRig({ world }: { world: WorldInfo }) {
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointermove', onMove);
       el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('pointerdown', wake);
+      el.removeEventListener('wheel', wake);
+      window.removeEventListener('keydown', wake);
+      window.removeEventListener('pointermove', dragWake);
       document.removeEventListener('pointerlockchange', onLock);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
@@ -531,6 +544,9 @@ export function CameraRig({ world }: { world: WorldInfo }) {
         fog.far = Math.max(span * 3.2, view * 3);
       }
     }
+
+    // on-demand rendering: keep drawing while the camera moves by itself
+    if (s.transition || s.awaitingGround || s.mode !== 'orbit' || held.size > 0 || s.speed > 0.05) state.invalidate();
 
     // HUD readout (a few times a second)
     if (now >= s.readoutNext) {

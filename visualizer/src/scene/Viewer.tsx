@@ -12,7 +12,8 @@ import { Atmosphere } from './Atmosphere';
 import { Hypocentres } from './Hypocentres';
 import { LavaGlow } from './LavaGlow';
 import { LavaHalo } from './LavaHalo';
-import { EntityMarkers, type PickData } from './EntityMarkers';
+import { EntityMarkers, pickDataOf } from './EntityMarkers';
+import { FrameScheduler } from './FrameScheduler';
 import { Markers } from './Markers';
 import { PerfProbe } from './PerfProbe';
 import { nearestSurfaceEntity, pickRadius } from './picking';
@@ -121,7 +122,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
       case 'orbit': {
         // x-ray markers (dikes, quakes) drawn over the ground win; then a marker next to the click; else the ground
         for (const hit of e.intersections) {
-          const data = hit.object.userData.pickData as PickData | undefined;
+          const data = pickDataOf(hit);
           if (data?.xray) return s.select(data.pick);
           const quakes = hit.object.userData.quakes as { current: Extract<SimEvent, { kind: 'seismic' }>[] } | undefined;
           if (quakes && hit.instanceId !== undefined && quakes.current[hit.instanceId]) return s.select({ type: 'quake', event: quakes.current[hit.instanceId] });
@@ -153,6 +154,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
       gl={createRenderer as never}
       shadows={q.shadows}
       dpr={q.dpr}
+      frameloop="demand"
       camera={{ position, fov: 38, near: 5, far: span * 20 }}
       style={{ cursor: tool !== 'orbit' ? 'crosshair' : camMode === 'fly' || camMode === 'walk' ? 'crosshair' : 'default', touchAction: 'none' }}
     >
@@ -176,6 +178,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
       <Atmosphere world={world} />
       <CameraRig world={world} />
       <PerfProbe />
+      <FrameScheduler world={world} />
     </Canvas>
   );
 }
