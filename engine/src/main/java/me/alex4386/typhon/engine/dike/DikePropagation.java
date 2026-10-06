@@ -200,7 +200,7 @@ public final class DikePropagation implements Subsystem {
     @Override
     public void step(StepContext context) {
         SimRandom random = context.random();
-        double dtPhysical = context.dtSeconds();
+        double stepDt = context.dtSeconds();
 
         while (forcedPending > 0) {
             forcedPending--;
@@ -233,7 +233,7 @@ public final class DikePropagation implements Subsystem {
         }
 
         for (Dike dike : dikes) {
-            if (dike.propagating()) advance(dike, dtPhysical, context);
+            if (dike.propagating()) advance(dike, stepDt, context);
         }
         prune();
     }
@@ -264,9 +264,9 @@ public final class DikePropagation implements Subsystem {
         return dike;
     }
 
-    private void advance(Dike dike, double dtPhysical, StepContext context) {
+    private void advance(Dike dike, double stepDt, StepContext context) {
         SimRandom random = context.random();
-        double remaining = dtPhysical;
+        double remaining = stepDt;
         double travelled = 0;
         StallReason stall = null;
         List<BlockPos> hypocenters = new ArrayList<>();

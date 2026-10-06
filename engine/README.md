@@ -23,29 +23,42 @@ feed it commands and terrain snapshots and apply the block changes and events it
 
 ## Time model
 
-Simulation time is an exact `long` count of microseconds. The engine advances in fixed **base
-steps** (`Engine.builder(seed).baseStepMicros(...)`, default 50 ms). The base step is a simulator
-accuracy/performance setting, not a game tick: hosts convert simulation time to their own clock.
-Subsystem periods and phases are rounded to whole base steps (minimum one step; `∞` = command-driven,
-never stepped). Events carry `time()` in simulated seconds; frames carry the step index and
-`timeMicros`. Results are invariant to the base step where physics allows
-(`BaseStepInvarianceTest`) and bit-identical for a fixed base step.
+There is **one clock**: time is an exact count of microseconds and every subsystem works in
+seconds of physical time. Nothing is compressed or sped up inside the model; how fast the clock
+runs against the wall clock is playback (the runner's speed, §Runner), which never changes the
+physics. Compact worlds scale *lengths* only (`VolcanoScaling`: metres per block, with velocities
+and the times derived from them following Froude similarity).
 
-Physical time compression (dormancy ×5000, eruptions ×20 by default) lives in `VolcanoScaling` and
-is part of the model; how fast simulation time runs against the wall clock is the runner's job.
+**Adaptive steps.** Time advances in quanta of the **base step** (`baseStepMicros`, default 50 ms).
+With `Engine.builder(seed).adaptive(maxSeconds)` (hosts use `Engine.DEFAULT_MAX_STEP_SECONDS`, a
+day) each step is a power-of-two number of quanta: the largest that is at most every subsystem's
+`Subsystem.maxStepSeconds()` (and the engine maximum) and divides the current time, so steps stay
+aligned. A subsystem is stepped when its schedule point `phase + n·period` falls in the step, with
+`dt` covering the time since its last step. The choice depends on the state only, so runs are
+deterministic, thread-invariant and resume bit for bit across a change of step length
+(`AdaptiveClockTest`). Without `adaptive` every step is one base step. Results are invariant to
+the base step where physics allows (`BaseStepInvarianceTest`).
 
-**Lava runs on its volcanoes' clocks.** Each `VolcanoSystem` registers its clock with the shared
-`LavaFlow` (`registerClock`: eruptive compression while erupting, dormant otherwise), and lava
-sources take *physical* rates (m³/s). Per step the field advances `dt × C` physical seconds, where
-`C` is the largest compression of the volcanoes currently effusing into it, otherwise the smallest
-current compression of all registered volcanoes (no volcano's flows run ahead of its own clock);
-each source still injects exactly what its volcano erupted, so mass is conserved whichever clock
-the field follows. Flow emplacement, cooling, crust growth and solidification all follow that
-clock: after an eruption the dormant compression freezes the flows within engine minutes and
-stratigraphy appears. Flow is sub-stepped (`Δt ≤ relaxation·L²/D`, `D = ρgh³/3η` for the most
-fluid moving lava at `substepFlowThicknessM`, at most `maxSubsteps`), and cooling integrates each
-column in sub-iterations of at most `coolingStepK`. Without registered clocks (standalone use)
-`LavaConfig.timeScale` is the compression.
+Step limits (`maxStepSeconds`) while something happens, otherwise unlimited:
+
+| subsystem | limit |
+|---|---|
+| magma chamber | 20 s while erupting or about to; a quarter of the time to failure while pressurising; ≤ 1 day |
+| volcano coupler | 20 s while erupting |
+| tephra | `ashStepSeconds` while a column or airborne ash exists; 1 s while bombs fly |
+| lava | while any cell is molten or a source flows: ≤ 120 s and ≤ `maxSubsteps` stable sub-steps |
+| mass flows | their step period while a flow is active |
+| dikes | 20 s while a dike rises |
+| subsurface | 30 s while surface water moves (macro steps themselves are split into ≤ 7-day spans) |
+| geothermal | 1 day |
+
+A quiet volcano therefore takes steps of most of a day (a year ≈ 600 steps); an eruption runs at
+about a second per step. Events carry `time()` in seconds (random events of a long step, such as
+quakes, are spread over it); frames carry the step index and `timeMicros`.
+
+Lava sources take eruption rates (m³/s DRE). Flow is sub-stepped (`Δt ≤ relaxation·L²/D`,
+`D = ρgh³/3η` for the most fluid moving lava at `substepFlowThicknessM`, at most `maxSubsteps`),
+and cooling integrates each column in sub-iterations of at most `coolingStepK`.
 
 ## Runner
 
@@ -53,14 +66,16 @@ column in sub-iterations of at most `coolingStepK`. Without registered clocks (s
 
 | Mode | Behaviour |
 |---|---|
-| `REALTIME` | simulation time = speed × wall time (speed adjustable while running, e.g. 0.1–1000×); catches up at most `maxCatchUpSteps` steps, then lets time slip |
+| `REALTIME` | the clock runs at speed × wall time (seconds per wall second, adjustable while running, e.g. 1–10⁷×); a step runs once the wall clock reaches its end, whatever its length (`playbackMicros()` interpolates the clock inside a long step); catches up at most `maxCatchUpSteps` steps, then lets time slip |
 | `UNBOUNDED` | as fast as the CPU allows |
-| `PAUSED` | no steps; `step(n)` runs n steps; `pauseAtStep` / `pauseAtTime` pause automatically |
+| `PAUSED` | no steps; `step(n)` runs n steps, `stepFor(seconds)` until the clock has advanced that far; `pauseAtStep` / `pauseAtTime` pause automatically |
 
 Output: an optional **lossless** frame queue (back-pressure; hosts that must apply every block
 change), a bounded **lossy** event ring with a dropped-event count (UIs), and a throttled
 `EngineSnapshot`. Saves and inspection run between steps via `onEngineThread`. The mode never
-changes results (`EngineRunnerTest.resultsDoNotDependOnRunnerSpeed`).
+changes results (`EngineRunnerTest.resultsDoNotDependOnRunnerSpeed`). A frame observer
+(`setFrameObserver`) sees every frame on the engine thread and may switch the speed there: the
+sim-server's playback policy slows down to an eruption speed at the very step an eruption starts.
 
 ## Threading
 
@@ -190,7 +205,7 @@ on the world model:
   cavities insulate and carry no water. Level of detail per 16×16 chunk: HOT (anomaly > 2 °C, a
   vent, or pending heat, or next to such a chunk), WARM (within two chunks: every 10th macro step),
   DORMANT (not stepped). Heat crosses faces only between chunks stepped together.
-- **Heat** (`SubsurfaceHeat`, every `macroStepSeconds × timeScale`): explicit lateral conduction and
+- **Heat** (`SubsurfaceHeat`, every `macroStepSeconds`): explicit lateral conduction and
   Darcy advection (sub-stepped), then implicit vertical conduction (Thomas) with porous-convection
   Nusselt enhancement (`Ra > 40`), latent heat of melting, a Robin surface boundary (ground or
   water) and a bottom boundary from the background geotherm plus each chamber's steady conductive
@@ -226,7 +241,7 @@ worlds/<world>/
   world.yaml                     grid, scaling, sea level, climate, geology, geotherm, aquifer,
                                  terrain source (host-interpreted), lava and subsurface parameters
   volcanoes/<id>.yaml            vents, magma chamber + conduit, dikes, geothermal, mass flows,
-                                 deformation, tephra, time-compression overrides, active flag
+                                 deformation, tephra, active flag
   state/                         engine save (above) + world.json (definitions it ran with,
                                  runtime additions/removals/activity)
   history/world.ndjson

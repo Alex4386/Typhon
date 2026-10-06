@@ -299,9 +299,9 @@ public final class VolcanoCoupler implements Subsystem {
         lastPartition = p;
         // The chamber's actual outflow (linearised between conduit solutions) sets the totals; the
         // partition sets the shares.
-        double physicalMass = chamber.eruptionRate() * ExplosivePhase.DRE_DENSITY;
-        double scale = p.magmaMassFlux() > 0 ? physicalMass / p.magmaMassFlux() : 0;
-        double physicalSeconds = context.dtSeconds();
+        double magmaMassRate = chamber.eruptionRate() * ExplosivePhase.DRE_DENSITY;
+        double scale = p.magmaMassFlux() > 0 ? magmaMassRate / p.magmaMassFlux() : 0;
+        double stepSeconds = context.dtSeconds();
 
         double lavaRate = p.lavaMassFlux() * scale / ExplosivePhase.DRE_DENSITY;
         if (lavaRate > MIN_LAVA_RATE) updateLava(vents, weights, lavaRate);
@@ -312,7 +312,7 @@ public final class VolcanoCoupler implements Subsystem {
         if (sustained) updateExplosive(main, p, column);
         else stopExplosive();
 
-        double ballistic = p.ballisticMassFlux() * scale * physicalSeconds;
+        double ballistic = p.ballisticMassFlux() * scale * stepSeconds;
         if (ballistic > 0) {
             // Cooled fall-back of the fountain: its whole mass lands as loose scoria lapilli around the vent
             // (and back into it); a few tracked bombs show the larger clasts.
@@ -325,8 +325,8 @@ public final class VolcanoCoupler implements Subsystem {
         double wetShare = p.magmaMassFlux() > 0 ? p.waterFragmentedMassFlux() / p.magmaMassFlux() : 0;
         setPhreatomagmatic(context, phreatomagmatic ? wetShare >= PHREATOMAGMATIC_STOP_SHARE
                 : wetShare >= PHREATOMAGMATIC_START_SHARE, main);
-        if (p.jetMassFlux() > 0) fireJets(context, main, p.jetMassFlux() * scale * physicalSeconds, p.jetSpeed());
-        if (p.wetFalloutMassFlux() > 0) buildTuffRing(context, main, p.wetFalloutMassFlux() * scale * physicalSeconds);
+        if (p.jetMassFlux() > 0) fireJets(context, main, p.jetMassFlux() * scale * stepSeconds, p.jetSpeed());
+        if (p.wetFalloutMassFlux() > 0) buildTuffRing(context, main, p.wetFalloutMassFlux() * scale * stepSeconds);
         if (p.steamMassFlux() > 0 && context.time() >= nextSteamEventTime) {
             context.outbox().emit(new SurfaceEvents.PhreatomagmaticSteam(
                     context.time(), volcanoId, main.position(), p.steamMassFlux() * scale, waterDepthM));
@@ -386,11 +386,11 @@ public final class VolcanoCoupler implements Subsystem {
      * eruption stopped) and reports vent state changes.
      */
     private void updateFeeders(StepContext context) {
-        double physicalDt = context.dtSeconds();
+        double stepDt = context.dtSeconds();
         for (Map.Entry<String, FissureFeeder> e : feeders.entrySet()) {
             FissureFeeder feeder = e.getValue();
             if (feeder.frozen()) continue;
-            feeder.advance(physicalDt, ventFlux.getOrDefault(e.getKey(), 0.0), chamber.temperatureC(), chamber.silicaWt());
+            feeder.advance(stepDt, ventFlux.getOrDefault(e.getKey(), 0.0), chamber.temperatureC(), chamber.silicaWt());
         }
         pushOutlets();
         reportStates(context);
@@ -551,12 +551,12 @@ public final class VolcanoCoupler implements Subsystem {
 
     // ── Lava ──
 
-    private void updateLava(List<VentSite> vents, double[] shares, double physicalRate) {
+    private void updateLava(List<VentSite> vents, double[] shares, double totalRate) {
         // Lava sources take the eruption rate (m³/s DRE), split across the vents.
         Set<String> wanted = new TreeSet<>();
         for (int i = 0; i < vents.size(); i++) {
             VentSite vent = vents.get(i);
-            double perVent = physicalRate * shares[i];
+            double perVent = totalRate * shares[i];
             if (perVent <= MIN_LAVA_RATE) continue;
             String sourceId = sourceId(vent);
             wanted.add(sourceId);
@@ -588,14 +588,13 @@ public final class VolcanoCoupler implements Subsystem {
 
     // ── Sustained columns ──
 
-    private void updateExplosive(VentSite vent, VentPartition.Result p, double physicalColumn) {
-        double simulated = physicalColumn;
+    private void updateExplosive(VentSite vent, VentPartition.Result p, double columnMassRate) {
         boolean restart = explosiveRate <= 0
-                || Math.abs(simulated - explosiveRate) > PHASE_UPDATE_THRESHOLD * explosiveRate
+                || Math.abs(columnMassRate - explosiveRate) > PHASE_UPDATE_THRESHOLD * explosiveRate
                 || Math.abs(p.collapseFraction() - explosiveCollapse) > 0.1
                 || Math.abs(p.columnGasFraction() - explosiveGas) > PHASE_UPDATE_THRESHOLD * explosiveGas;
         if (!restart) return;
-        explosiveRate = simulated;
+        explosiveRate = columnMassRate;
         explosiveCollapse = p.collapseFraction();
         explosiveGas = p.columnGasFraction();
         burstPhaseUntil = -1; // the sustained column takes over any ash puff
@@ -603,10 +602,10 @@ public final class VolcanoCoupler implements Subsystem {
         // The phase's gas thrust is set by the jet: an equivalent overpressure that expands the
         // column's gas to its exit velocity.
         double overpressure = equivalentOverpressureMPa(p.columnVelocity(), p.columnGasFraction(), p.columnTemperatureC());
-        ExplosivePhase phase = new ExplosivePhase(vent, simulated, Math.min(1, p.columnGasFraction()), overpressure,
+        ExplosivePhase phase = new ExplosivePhase(vent, columnMassRate, Math.min(1, p.columnGasFraction()), overpressure,
                 p.columnTemperatureC(), chamber.silicaWt(), 0, p.grainSize());
-        tephra.startPhase(phase.withMassEruptionRate(simulated * (1 - p.collapseFraction())));
-        updateCollapse(vent, simulated * p.collapseFraction(), p.columnTemperatureC());
+        tephra.startPhase(phase.withMassEruptionRate(columnMassRate * (1 - p.collapseFraction())));
+        updateCollapse(vent, columnMassRate * p.collapseFraction(), p.columnTemperatureC());
     }
 
     /** Overpressure (MPa) whose isothermal expansion drives gas fraction {@code n} to speed {@code u}. */

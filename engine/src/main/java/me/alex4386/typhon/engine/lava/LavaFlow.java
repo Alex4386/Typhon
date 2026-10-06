@@ -203,7 +203,7 @@ public final class LavaFlow implements Subsystem {
     private int heatCell = 1; // columns per side of the blocks heat is summed over
     private double lastMaxDiffusivity;
     private int lastSubsteps = 1;
-    private double eventPhysicalSeconds;
+    private double eventSeconds;
     private long chunkGeneration = 1; // bumped whenever a lava chunk is created (neighbour-cache validity)
 
     public LavaFlow(TerrainModel terrain) {
@@ -530,7 +530,7 @@ public final class LavaFlow implements Subsystem {
         currentTime = now;
         stamp = context.step();
         double dt = context.dtSeconds();
-        eventPhysicalSeconds += dt;
+        eventSeconds += dt;
         Outbox outbox = context.outbox();
         neededTerrain.clear();
 
@@ -919,8 +919,8 @@ public final class LavaFlow implements Subsystem {
     /** One {@link LavaEvents.LavaOceanEntry} per zone with molten lava in water, then resets. */
     private void emitOceanEntries(double now, double interval, Outbox outbox) {
         if (oceanEntries.isEmpty()) return;
-        double seconds = eventPhysicalSeconds;
-        eventPhysicalSeconds = 0;
+        double seconds = eventSeconds;
+        eventSeconds = 0;
         double minVolume = config.waterEntryMinVolumeM3();
         int emitted = 0;
         for (Map.Entry<Long, OceanEntry> entry : oceanEntries.entrySet()) {
@@ -1714,7 +1714,7 @@ public final class LavaFlow implements Subsystem {
         out.addProperty("emitted", emittedVolume);
         out.addProperty("solidified", solidifiedVolume);
         out.addProperty("lastMaxDiffusivity", lastMaxDiffusivity);
-        out.addProperty("eventPhysicalSeconds", eventPhysicalSeconds);
+        out.addProperty("eventSeconds", eventSeconds);
         JsonArray solidAccArray = new JsonArray();
         solidAccArray.add(solidAcc.cells);
         solidAccArray.add(solidAcc.blocks);
@@ -1815,7 +1815,8 @@ public final class LavaFlow implements Subsystem {
         emittedVolume = in.get("emitted").getAsDouble();
         solidifiedVolume = in.get("solidified").getAsDouble();
         lastMaxDiffusivity = in.has("lastMaxDiffusivity") ? in.get("lastMaxDiffusivity").getAsDouble() : 0;
-        eventPhysicalSeconds = in.has("eventPhysicalSeconds") ? in.get("eventPhysicalSeconds").getAsDouble() : 0;
+        eventSeconds = in.has("eventSeconds") ? in.get("eventSeconds").getAsDouble()
+                : in.has("eventPhysicalSeconds") ? in.get("eventPhysicalSeconds").getAsDouble() : 0; // older saves
         solidAcc.clear();
         oceanEntries.clear();
         oceanGeneration++;

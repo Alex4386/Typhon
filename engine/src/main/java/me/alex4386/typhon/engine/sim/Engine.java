@@ -257,6 +257,13 @@ public final class Engine {
      * Quanta the next step spans: the largest power of two that divides the current time (steps stay
      * aligned) and fits every stepping subsystem's {@link Subsystem#maxStepSeconds()} and the maximum.
      */
+    /** Each stepped subsystem's current {@link Subsystem#maxStepSeconds()} (diagnostics), in order. */
+    public java.util.Map<String, Double> stepLimits() {
+        java.util.Map<String, Double> out = new java.util.LinkedHashMap<>();
+        for (Registered r : subsystems) if (r.periodSteps != 0) out.put(r.subsystem.id(), r.subsystem.maxStepSeconds());
+        return out;
+    }
+
     private long chooseStride() {
         if (maxStrideQuanta <= 1) return 1;
         double limit = Double.POSITIVE_INFINITY;

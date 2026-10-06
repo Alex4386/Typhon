@@ -420,12 +420,10 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
 
     /**
      * Definition of an assembled volcano, e.g. to write a world template from a built-in scenario.
-     * Values the scaling derives are left out; time compressions are recorded only where they differ
-     * from {@code world}.
+     * Values the scaling derives are left out.
      */
     public static VolcanoDefinition fromSystem(VolcanoSystem system, VolcanoScaling world) {
         MagmaChamberConfig chamber = system.chamber().config();
-        VolcanoScaling own = system.scaling();
         return new VolcanoDefinition(
                 system.volcanoId(), system.volcanoId(), true, system.vents(), chamber,
                 system.dikes() != null ? system.dikes().config().copy() : null,

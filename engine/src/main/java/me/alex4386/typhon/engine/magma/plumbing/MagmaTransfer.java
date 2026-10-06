@@ -58,7 +58,7 @@ public final class MagmaTransfer implements Subsystem {
         boolean frozen;
     }
 
-    /** Flow along one pathway (volcano time). */
+    /** Flow along one pathway (m³/s). */
     public record Flow(String id, String from, String to, double rateM3PerS, double transferredM3, boolean open, boolean frozen,
             double drivingPressureMPa, double lengthM) {}
 

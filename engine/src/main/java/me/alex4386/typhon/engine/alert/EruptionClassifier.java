@@ -114,14 +114,14 @@ public final class EruptionClassifier implements Subsystem {
     @Override
     public void step(StepContext context) {
         boolean erupting = chamber.erupting() && chamber.conduitFlow() != null;
-        double physicalDt = context.dtSeconds();
-        observeBursts(physicalDt, physicalDt);
+        double stepDt = context.dtSeconds();
+        observeBursts(stepDt, stepDt);
         // Explosions from an open vent between eruptions are activity in their own right (Stromboli).
         boolean active = erupting || slugPerHour + plugPerHour >= 0.5;
         EnumMap<EruptionStyle, Double> memberships;
         int nextVei;
         if (active) {
-            if (erupting) observe(physicalDt);
+            if (erupting) observe(stepDt);
             else resetFlowWindow();
             double k = windowWeight > 0 ? 1 / windowWeight : 0;
             memberships = memberships(magmaRate * k, lavaRate * k, columnRate * k, collapseRate * k, ballisticRate * k,
@@ -150,7 +150,7 @@ public final class EruptionClassifier implements Subsystem {
         publish(context, memberships, nextVei, !active);
     }
 
-    private void observe(double physicalDt) {
+    private void observe(double stepDt) {
         if (chamber.eruptionCount() != eruption) {
             eruption = chamber.eruptionCount();
             tephraMassKg = 0;
@@ -158,7 +158,7 @@ public final class EruptionClassifier implements Subsystem {
             resetFlowWindow();
         }
         VentPartition.Result p = coupler.partition();
-        double w = 1 - Math.exp(-physicalDt / WINDOW_SECONDS);
+        double w = 1 - Math.exp(-stepDt / WINDOW_SECONDS);
         double actual = chamber.eruptionRate() * DRE_DENSITY;
         double scale = p != null && p.magmaMassFlux() > 0 ? actual / p.magmaMassFlux() : 0;
         double lava = p == null ? actual : p.lavaMassFlux() * scale;
@@ -180,18 +180,18 @@ public final class EruptionClassifier implements Subsystem {
             viscosityLog10 = Double.isNaN(viscosityLog10) ? eta : viscosityLog10 + w * (eta - viscosityLog10);
         }
         double tephra = column + ballistic + (p == null ? 0 : (p.wetFalloutMassFlux()) * scale);
-        tephraMassKg += tephra * physicalDt;
+        tephraMassKg += tephra * stepDt;
         maxColumnKm = Math.max(maxColumnKm, columnHeightKm(column));
     }
 
     /** Rates of discrete explosions (per physical hour), averaged over the window. */
-    private void observeBursts(double physicalDt, double surfaceDt) {
+    private void observeBursts(double stepDt, double surfaceDt) {
         long slugs = coupler.slugBursts();
         long plugs = coupler.plugBursts();
         double ws = 1 - Math.exp(-surfaceDt / WINDOW_SECONDS);
         slugPerHour += ws * ((slugs - seenSlugs) / Math.max(surfaceDt / 3600, 1e-9) - slugPerHour);
-        double w = 1 - Math.exp(-physicalDt / WINDOW_SECONDS);
-        plugPerHour += w * ((plugs - seenPlugs) / Math.max(physicalDt / 3600, 1e-9) - plugPerHour);
+        double w = 1 - Math.exp(-stepDt / WINDOW_SECONDS);
+        plugPerHour += w * ((plugs - seenPlugs) / Math.max(stepDt / 3600, 1e-9) - plugPerHour);
         seenSlugs = slugs;
         seenPlugs = plugs;
     }

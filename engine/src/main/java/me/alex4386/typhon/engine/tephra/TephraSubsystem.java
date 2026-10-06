@@ -647,8 +647,7 @@ public final class TephraSubsystem implements Subsystem {
     }
 
     private void lightning(StepContext context, BlockPos base, double height, double sigma, double dt) {
-        // Flash rate scales with the physical intensity; per second there are
-        // timeCompression times as many physical seconds.
+        // Flash rate scales with the column's mass eruption rate.
         double rate = phase.massEruptionRate();
         if (rate < config.lightningMinMassEruptionRate || height < 1) return;
         double flashesPerSecond = Math.min(config.maxLightningPerSecond,

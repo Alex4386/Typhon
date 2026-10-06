@@ -312,15 +312,14 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         // model) stays around the chamber: the walls yield and the chamber grows instead.
         absorbRuptureExcess();
 
-        double physicalDt = dt;
         double supply = currentSupply(context.random());
-        double inflow = supply * physicalDt;
+        double inflow = supply * dt;
 
         mix(inflow, rechargeTemperature, rechargeSilica, rechargeWater, rechargeCo2, rechargeCrystals);
         temperature = config.wallTemperatureC()
-                + (temperature - config.wallTemperatureC()) * Math.exp(-physicalDt / config.coolingTimescale());
+                + (temperature - config.wallTemperatureC()) * Math.exp(-dt / config.coolingTimescale());
         double phi = crystalFraction();
-        double vented = 1 - Math.exp(-physicalDt / config.degassingTimescale());
+        double vented = 1 - Math.exp(-dt / config.degassingTimescale());
         double ventedWater = exsolvedWaterWt() * (1 - phi) * vented;
         double ventedCo2 = exsolvedCo2Wt() * (1 - phi) * vented;
         bulkWater -= ventedWater;
@@ -361,7 +360,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
                 if (conductance > 0) {
                     double equilibrium = base + supply / conductance;
                     double tau = stiffness / conductance;
-                    overpressure = equilibrium + (overpressure - equilibrium) * Math.exp(-physicalDt / tau);
+                    overpressure = equilibrium + (overpressure - equilibrium) * Math.exp(-dt / tau);
                 } else {
                     overpressure += inflow / stiffness;
                 }
@@ -369,7 +368,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
                 erupted = Math.max(0, inflow - stored - stiffness * (overpressure - previous));
                 eruptedVolume += erupted;
 
-                runConduitGas(context, flow, physicalDt, gasWater, gasCo2);
+                runConduitGas(context, flow, dt, gasWater, gasCo2);
                 setRegime(context, describe(flow));
                 if (overpressure <= config.eruptionEndOverpressureMPa()) {
                     endEruption(context, Cause.AUTOMATIC);
@@ -377,8 +376,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             }
         } else {
             balanceOverpressure = Double.NaN;
-            percolateGas(context, physicalDt, gasWater, gasCo2);
-            conduitOpenness *= Math.exp(-physicalDt / config.conduit().conduitSealTimescale());
+            percolateGas(context, dt, gasWater, gasCo2);
+            conduitOpenness *= Math.exp(-dt / config.conduit().conduitSealTimescale());
             overpressure += inflow / stiffness;
             relieveRupture(supply);
             if (eruptive && !summitBlocked && overpressure >= failureOverpressureMPa()) {
@@ -604,7 +603,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      * plus chamber gas rising through it, coalesce and burst; gas outgassed from stiff lava is trapped
      * beneath its plug until the plug fails.
      */
-    private void runConduitGas(StepContext context, ConduitSolution flow, double physicalDt, double chamberWaterKg,
+    private void runConduitGas(StepContext context, ConduitSolution flow, double dt, double chamberWaterKg,
             double chamberCo2Kg) {
         ConduitConfig c = config.conduit();
         double r = config.conduitRadius();
@@ -612,7 +611,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         // In a fragmenting flow the segregated gas streams up with the jet (churn flow): no discrete slugs.
         double coalescing = flow.fragmented() ? 0 : coalescence(Math.pow(10, flow.exitMeltViscosityLog10()));
         double chamberGas = (chamberWaterKg + chamberCo2Kg) * coalescing;
-        double slugGasKg = flow.fragmented() ? 0 : flow.slugGasFluxKgPerS() * physicalDt + chamberGas;
+        double slugGasKg = flow.fragmented() ? 0 : flow.slugGasFluxKgPerS() * dt + chamberGas;
         double gasConstant = flow.slugGasFluxKgPerS() > 0 || chamberGas <= 0 ? flow.exitGasConstant()
                 : gasConstant(chamberWaterKg, chamberCo2Kg);
         accumulateSlugs(context, slugGasKg, gasConstant);
@@ -622,9 +621,9 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         double stiffness = plugStiffness(flow);
         if (stiffness > 0.01) {
             if (resealRemaining > 0) {
-                resealRemaining = Math.max(0, resealRemaining - physicalDt); // gas escapes the broken plug
+                resealRemaining = Math.max(0, resealRemaining - dt); // gas escapes the broken plug
             } else {
-                double passive = flow.passiveGasFluxKgPerS() * physicalDt + (chamberWaterKg + chamberCo2Kg) - chamberGas;
+                double passive = flow.passiveGasFluxKgPerS() * dt + (chamberWaterKg + chamberCo2Kg) - chamberGas;
                 plugGas += stiffness * passive;
             }
             double strength = stiffness * c.plugStrengthMPa();
@@ -648,7 +647,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      * it coalesces into slugs that burst at the surface (persistent open-vent activity); otherwise it
      * escapes passively.
      */
-    private void percolateGas(StepContext context, double physicalDt, double waterKg, double co2Kg) {
+    private void percolateGas(StepContext context, double dt, double waterKg, double co2Kg) {
         plugGas = 0;
         resealRemaining = 0;
         double gas = (waterKg + co2Kg) * coalescence(Math.pow(10, viscosityLog10()));

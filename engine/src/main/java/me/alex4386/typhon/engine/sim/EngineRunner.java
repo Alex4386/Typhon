@@ -106,6 +106,9 @@ public final class EngineRunner implements AutoCloseable {
     private final AtomicLong pendingSteps = new AtomicLong();
     private volatile boolean idle;
     private volatile long pauseAtStep = Long.MAX_VALUE;
+    private volatile long pauseAtMicros = Long.MAX_VALUE;
+    /** While paused, steps run until the time reaches this (µs; see {@link #stepFor}). */
+    private volatile long stepUntilMicros = Long.MIN_VALUE;
     private volatile EngineSnapshot snapshot;
     private volatile long completedStep;
     private volatile long snapshotTimeMicros;
@@ -210,15 +213,33 @@ public final class EngineRunner implements AutoCloseable {
         wake();
     }
 
-    /** Pauses automatically before simulating step {@code step} (i.e. once {@code step} steps ran). */
-    public void pauseAtStep(long step) {
-        this.pauseAtStep = step;
+    /**
+     * Runs steps while paused until the time has advanced by at least {@code seconds} (pauses first
+     * if needed). Steps keep the lengths the engine picks.
+     */
+    public void stepFor(double seconds) {
+        if (!(seconds >= 0)) throw new IllegalArgumentException("seconds must be non-negative");
+        this.mode = Mode.PAUSED;
+        this.stepUntilMicros = snapshotTimeMicros + SimTime.micros(seconds);
         wake();
     }
 
-    /** Pauses automatically once simulation time reaches {@code seconds}. */
+    /** Pauses automatically before simulating step {@code step} (i.e. once {@code step} steps ran). */
+    public void pauseAtStep(long step) {
+        this.pauseAtStep = step;
+        this.pauseAtMicros = Long.MAX_VALUE;
+        wake();
+    }
+
+    /** Pauses automatically once the time reaches {@code seconds} (at the end of the step crossing it). */
     public void pauseAtTime(double seconds) {
-        pauseAtStep(Math.ceilDiv(SimTime.micros(seconds), engine.baseStepMicros()));
+        this.pauseAtStep = Long.MAX_VALUE;
+        this.pauseAtMicros = SimTime.micros(seconds);
+        wake();
+    }
+
+    private boolean pauseDue() {
+        return engine.currentStep() >= pauseAtStep || engine.timeMicros() >= pauseAtMicros;
     }
 
     /** Number of steps completed so far. */
@@ -229,7 +250,7 @@ public final class EngineRunner implements AutoCloseable {
     /** Waits until the runner is paused with no requested steps outstanding. */
     public boolean awaitPaused(long timeout, TimeUnit unit) throws InterruptedException {
         long deadline = System.nanoTime() + unit.toNanos(timeout);
-        while (!(mode == Mode.PAUSED && pendingSteps.get() == 0 && idle)) {
+        while (!(mode == Mode.PAUSED && pendingSteps.get() == 0 && stepUntilMicros <= snapshotTimeMicros && idle)) {
             if (!running || System.nanoTime() > deadline) return false;
             Thread.sleep(1);
         }
@@ -325,18 +346,23 @@ public final class EngineRunner implements AutoCloseable {
         try {
             while (running) {
                 runTasks();
-                if (engine.currentStep() >= pauseAtStep && mode != Mode.PAUSED) {
+                if (pauseDue() && mode != Mode.PAUSED) {
                     mode = Mode.PAUSED;
                     pendingSteps.set(0);
+                    stepUntilMicros = Long.MIN_VALUE;
                 }
                 switch (mode) {
                     case PAUSED -> {
-                        if (pendingSteps.get() > 0 && engine.currentStep() < pauseAtStep) {
+                        if (pendingSteps.get() > 0 && !pauseDue()) {
                             idle = false;
                             doStep();
                             pendingSteps.decrementAndGet();
+                        } else if (engine.timeMicros() < stepUntilMicros && !pauseDue()) {
+                            idle = false;
+                            doStep();
                         } else {
                             pendingSteps.set(0);
+                            stepUntilMicros = Long.MIN_VALUE;
                             publishSnapshot(true);
                             idle = true;
                             reanchor = true;
@@ -379,7 +405,7 @@ public final class EngineRunner implements AutoCloseable {
         int ran = 0;
         while (running && mode == Mode.REALTIME && speed == startSpeed && !reanchor
                 && engine.timeMicros() + nextStep() <= targetMicros
-                && ran < options.maxCatchUpSteps() && engine.currentStep() < pauseAtStep) {
+                && ran < options.maxCatchUpSteps() && !pauseDue()) {
             doStep();
             ran++;
         }
