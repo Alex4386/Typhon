@@ -244,10 +244,30 @@ javadoc of both definition classes for annotated examples.
 per-volcano subsystems), saves state and per-volcano history, and adds/removes/sleeps volcanoes at
 runtime by rebuilding the engine from an in-memory save (definition files stay untouched; runtime
 changes go to `state/world.json`). When a saved world is reopened its definitions are diffed against
-the saved ones (`ConfigChanges`): *hot* changes (climate, time compression, magma supply, feature
-caps/rates, names, `active`, new volcanoes) apply; *re-init* changes (grid, geology, chamber
-geometry, vents, removed volcanoes) need `ChangePolicy.ACCEPT` (keep state) or `RESET_CHANGED`
-(restart the changed volcanoes).
+the saved ones (`ConfigChanges`). Changes that keep the saved state valid apply; the others need
+`ChangePolicy.ACCEPT` (keep state anyway) or `RESET_CHANGED` (reset what they affect).
+
+### Changing definitions while running (`ConfigImpact`)
+
+One rule set, `worlds.ConfigImpact`, decides what any change of a definition needs; reopen
+compatibility (`ConfigChanges`), live retuning and hosts' plans, schemas and messages all derive
+from it. The rule: **every physical parameter is live**; only these are not:
+
+| kind | what | why |
+|---|---|---|
+| **reinit** of the whole volcano | `magma.chamber.initial*`, chamber `volume` and `center`, `magma.conduit.initialOpenness`, `vents`, adding/removing `dikes`, `geothermal`, `massFlows`, `deformation`, adding/removing a volcano | initial conditions, geometry or the presence of subsystems define the state |
+| **reinit** of one part | `tephra.cellSize`/`gridCells`/`worldTopY` (ash grid), `geothermal.center`/`radius`/`cellSize` (hot-spring grid), `detail.*` (crater surface) | the part's saved state is laid out on them; only that part starts over |
+| **reload** (state kept) | world `geology`, `geotherm`, `aquifer`, `terrain`; a volcano's `edifice` | read only when ground is generated or the world assembled |
+| refused for a running world | `seed`, `baseStepMs`, `grid.*`, `seaLevel`, `subsurface.levels`/`firstLevelM`/`levelGrowth`, `expansion.tileColumns` | the whole world is laid out on them |
+
+Live changes are applied in place: `World.reconfigureLive(world, volcanoes)` derives every
+subsystem's configuration from the new definitions (`VolcanoSystem.Builder.subsystemConfigs`, the
+same pure step assembly uses) and hands the changed ones to `Engine.reconfigure(id, config)` between
+steps. Each subsystem's `Subsystem.reconfigure` takes the new configuration keeping its state (mutable
+configuration classes are copied into the instance its helpers share, records swapped) and refuses
+layout changes. The engine updates the subsystem's schedule and recorded configuration hash, and the
+world records the new definitions, so a save after a live change restores bit for bit with them and
+runs are unchanged by thread count (`LiveRetuneTest`).
 
 ### Generation vs simulation (on-demand growth)
 
