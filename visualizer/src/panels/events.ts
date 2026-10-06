@@ -219,12 +219,6 @@ function groupKey(e: SimEvent): string | null {
     case 'lightning':
     case 'massFlowFront':
     case 'oceanEntry':
-    case 'styleEstimated':
-      return `${e.forecast ? 'Forecast style' : 'Eruption style'}: ${STYLE_LABEL[e.current] ?? e.current}${e.vei > 0 ? ` · VEI ${e.vei}` : ''}${e.previous && e.previous !== e.current ? ` (was ${(STYLE_LABEL[e.previous] ?? e.previous).split(' (')[0]})` : ''}`;
-    case 'dikeStarted':
-      return `Magma intrusion (dike ${e.dikeId}) started rising from the chamber`;
-    case 'dikeStalled':
-      return `Dike ${e.dikeId} stalled ${(e.depthM / 1000).toFixed(2)} km down — ${STALL_LABEL[e.reason] ?? e.reason.toLowerCase().replaceAll('_', ' ')}`;
     case 'dikeAdvanced':
       return `${e.kind}:${'volcanoId' in e ? e.volcanoId : ''}`;
     default:

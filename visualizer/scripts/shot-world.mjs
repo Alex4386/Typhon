@@ -20,7 +20,8 @@ const problems = [];
 page.on('pageerror', (e) => problems.push(e.message));
 await page.goto(url, { waitUntil: 'commit' });
 const ev = (fn, a) => page.evaluate(fn, a);
-for (let i = 0; i < 300; i++) {
+const maxWait = Number(opt('--max-wait', 240));
+for (let i = 0; i < maxWait / 2; i++) {
   await page.waitForTimeout(2000);
   const r = await ev(() => {
     const s = window.__typhon?.getState();
