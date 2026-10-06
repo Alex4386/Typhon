@@ -74,6 +74,13 @@ public final class SimServer implements AutoCloseable {
         return t;
     });
     private final Map<String, long[]> pumpTimes = new ConcurrentHashMap<>();
+    /** World sessions are saved this often (seconds; system property {@code typhon.autosaveSeconds}, 0 = off). */
+    static final long AUTOSAVE_SECONDS = Long.getLong("typhon.autosaveSeconds", 300);
+    private final ScheduledExecutorService autosave = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "typhon-autosave");
+        t.setDaemon(true);
+        return t;
+    });
     private Javalin app;
 
     public SimServer(Config config) {
@@ -265,6 +272,9 @@ public final class SimServer implements AutoCloseable {
         app.get("/health", ctx -> ctx.result("ok"));
         app.start(config.host(), config.port());
         pump.scheduleWithFixedDelay(this::pumpAll, PUMP_MILLIS, PUMP_MILLIS, TimeUnit.MILLISECONDS);
+        if (AUTOSAVE_SECONDS > 0) {
+            autosave.scheduleWithFixedDelay(this::saveWorlds, AUTOSAVE_SECONDS, AUTOSAVE_SECONDS, TimeUnit.SECONDS);
+        }
         return this;
     }
 
@@ -281,10 +291,24 @@ public final class SimServer implements AutoCloseable {
 
     @Override
     public void close() {
+        autosave.shutdownNow();
         pump.shutdownNow();
         if (app != null) app.stop();
         for (ExecutorService q : clientQueues.values()) q.shutdownNow();
+        saveWorlds(); // a stopped server keeps its worlds' progress
         for (Session s : sessions()) s.close();
+    }
+
+    /** Saves every world session (not in-memory ones, not while replaying); failures are logged. */
+    void saveWorlds() {
+        for (Session s : sessions()) {
+            if (s.worldDir() == null || s.replay()) continue;
+            try {
+                s.save(config.worldsDir(), null);
+            } catch (Exception e) {
+                LOG.log(Level.WARNING, "Saving session " + s.id + " failed", e);
+            }
+        }
     }
 
     // ── Message handling (§3) ──
