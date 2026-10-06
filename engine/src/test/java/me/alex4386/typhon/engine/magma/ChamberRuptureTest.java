@@ -26,7 +26,7 @@ class ChamberRuptureTest {
 
     @Test
     void injectionBeyondTheWallsGrowsTheChamberInsteadOfThePressure() {
-        MagmaChamberConfig config = stromboli().supplyRate(0).build();
+        MagmaChamberConfig config = stromboli().supplyRate(0).stepPeriodSeconds(1).build();
         MagmaChamber chamber = new MagmaChamber(config);
         Engine engine = Engine.builder(0).add(chamber).build();
         double cap = chamber.ruptureOverpressureMPa();

@@ -36,7 +36,7 @@ class AlertLevelEstimatorTest {
     @Test
     void levelsFollowOverpressureAndEruption() {
         StubMagmaState magma = StubMagmaState.basalt();
-        AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v"), magma, null);
+        AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v").withStepPeriodSeconds(1), magma, null);
         Engine engine = engine(estimator);
         assertNull(estimator.level());
 
@@ -61,7 +61,7 @@ class AlertLevelEstimatorTest {
     void hysteresisPreventsFlickerAroundAThreshold() {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.overpressure = 0.65 * STRENGTH;
-        AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v"), magma, null);
+        AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v").withStepPeriodSeconds(1), magma, null);
         Engine engine = engine(estimator);
 
         List<AlertLevelChanged> changes = new ArrayList<>(advance(engine, 1));
@@ -77,7 +77,7 @@ class AlertLevelEstimatorTest {
     void downgradesStepOneLevelPerDwell() {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.overpressure = 0.65 * STRENGTH;
-        AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v"), magma, null);
+        AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v").withStepPeriodSeconds(1), magma, null);
         Engine engine = engine(estimator);
         advance(engine, 1);
 
@@ -101,7 +101,7 @@ class AlertLevelEstimatorTest {
     void endedEruptionWindsDownGradually() {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.eruptionRate = 10;
-        AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v").withDowngradeDwellSeconds(10), magma, null);
+        AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v").withStepPeriodSeconds(1).withDowngradeDwellSeconds(10), magma, null);
         Engine engine = engine(estimator);
         advance(engine, 1);
         assertEquals(AlertLevel.ERUPTING, estimator.level());
@@ -117,7 +117,7 @@ class AlertLevelEstimatorTest {
     void crystallisedQuietSystemIsExtinct() {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.crystals = 0.58;
-        AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v"), magma, null);
+        AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v").withStepPeriodSeconds(1), magma, null);
         advance(engine(estimator), 1);
         assertEquals(AlertLevel.EXTINCT, estimator.level());
     }
@@ -128,7 +128,7 @@ class AlertLevelEstimatorTest {
         magma.overpressureRate = 0.3; // fast pressurisation, but overpressure itself still low
         SeismicityModel seismic = new SeismicityModel(
                 SeismicConfig.builder("v", new BlockPos(0, 100, 0)).swarmTriggerProbability(0).build(), magma);
-        AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v"), magma, seismic);
+        AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v").withStepPeriodSeconds(1), magma, seismic);
         Engine engine = Engine.builder(1).add(seismic).add(estimator).build();
 
         advance(engine, 600);
@@ -139,13 +139,13 @@ class AlertLevelEstimatorTest {
     void pendingDowngradeSurvivesSaveAndRestore() {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.overpressure = 0.65 * STRENGTH;
-        AlertLevelEstimator original = new AlertLevelEstimator(AlertConfig.defaults("v"), magma, null);
+        AlertLevelEstimator original = new AlertLevelEstimator(AlertConfig.defaults("v").withStepPeriodSeconds(1), magma, null);
         Engine engine = engine(original);
         advance(engine, 1);
         magma.overpressure = 0;
         advance(engine, 100);
 
-        AlertLevelEstimator restored = new AlertLevelEstimator(AlertConfig.defaults("v"), magma, null);
+        AlertLevelEstimator restored = new AlertLevelEstimator(AlertConfig.defaults("v").withStepPeriodSeconds(1), magma, null);
         Engine resumed = Engine.builder(0).add(restored)
                 .restore(Saves.save(engine)).build();
         assertEquals(AlertLevel.MAJOR_ACTIVITY, restored.level());

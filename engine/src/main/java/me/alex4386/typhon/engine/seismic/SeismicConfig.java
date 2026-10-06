@@ -125,7 +125,7 @@ public record SeismicConfig(
         private double hypocenterSpread = 20;
         private double rsamWindowSeconds = 60;
         private double rateWindowSeconds = 120;
-        private double stepPeriodSeconds = 10;
+        private double stepPeriodSeconds = 0.5;
         private double samplePeriodSeconds = 5.0;
 
         private Builder(String volcanoId, BlockPos conduitTop) {

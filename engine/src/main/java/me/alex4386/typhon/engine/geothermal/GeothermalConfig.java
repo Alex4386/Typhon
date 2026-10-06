@@ -17,7 +17,7 @@ public final class GeothermalConfig {
     /** Edge length of one grid cell, in blocks. */
     public int cellSize = 4;
     /** Seconds between steps. */
-    public double stepSeconds = 40;
+    public double stepSeconds = 2.0;
 
     // ── Heat supplied to the subsurface model ──
     /** Reference ground temperature (°C) for the excess temperatures reported on the feature grid. */

@@ -56,6 +56,7 @@ class GeomorphologyTest {
 
     private static GeomorphConfig config() {
         GeomorphConfig c = new GeomorphConfig();
+        c.stepPeriodSeconds = 1; // relaxation passes every second: the cascades below are counted in steps
         c.sweepTilesPerStep = 0; // tests activate what they build
         c.reportMinVolumeM3 = 0; // report every failure as a SlopeFailure
         return c;

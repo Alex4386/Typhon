@@ -71,4 +71,10 @@ public record AlertConfig(
                 imminentPressureRatio, minorVtPerMinute, majorVtPerMinute, imminentVtPerMinute, minorRsam, majorRsam,
                 imminentRsam, downgradeFactor, seconds, extinctCrystalFraction, stepPeriodSeconds);
     }
+
+    public AlertConfig withStepPeriodSeconds(double seconds) {
+        return new AlertConfig(volcanoId, failureOverpressureMPa, minorPressureRatio, majorPressureRatio,
+                imminentPressureRatio, minorVtPerMinute, majorVtPerMinute, imminentVtPerMinute, minorRsam, majorRsam,
+                imminentRsam, downgradeFactor, downgradeDwellSeconds, extinctCrystalFraction, seconds);
+    }
 }
