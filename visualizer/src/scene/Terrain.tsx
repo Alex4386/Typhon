@@ -106,6 +106,12 @@ const pendingSea = waterMaterial({ perVertexDepth: false, depthM: 60 });
 const mudMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
 /** Lahar sheet: shown from this depth (m), lifted at least this much over the ground (m). */
 const LAHAR_MIN_M = 0.05;
+/**
+ * A tile whose sea is at least this deep everywhere (m) draws its sea as the tile's single quad instead
+ * of a full grid: through 35 m of water almost nothing of the bed shows (transmittance e^−3.5 ≈ 0.03),
+ * so the flat 2-triangle surface looks the same at a 4000th of the triangles.
+ */
+const DEEP_SEA_M = 35;
 const LAHAR_LIFT_M = 0.35;
 
 /** Groundwater table: a translucent cyan sheet `depth` below the ground. */
@@ -431,6 +437,9 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       const c: RGB = [0, 0, 0];
       let anyLava = false;
       let anyWater = false;
+      let shallowest = Infinity;
+      let anyPond = false;
+      let maxLift = 0;
       let anyFlow = false;
       const wetL = new Uint8Array(n * n);
       const wetW = new Uint8Array(n * n);
@@ -507,6 +516,8 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           // Ponds and rivers above sea level keep their own surface.
           const seaDepth = seaOn ? world.seaLevel - elev : 0;
           const pond = waterR(a, b);
+          shallowest = Math.min(shallowest, seaDepth);
+          maxLift = Math.max(maxLift, Math.abs(seaZ - world.seaLevel * vExag));
           if (seaDepth > 0 && seaDepth >= pond) {
             anyWater = true;
             wetW[v] = SEA;
@@ -515,6 +526,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           } else if (pond > 0.25) {
             // ignore thin sheet flow (rain films); show ponded and flowing water
             anyWater = true;
+            anyPond = true;
             wetW[v] = POND;
             wp.setXYZ(v, x, base + pond * vExag, -y);
             wdA.setX(v, pond);
@@ -566,6 +578,13 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
         ground.userData.cut = keepG !== null;
       }
       if (anyLava) compactIndex(lava, wetL, n, true);
+      // deep open sea over the whole tile: its quad stands in for the full water grid
+      const deepQuad = seaOn && anyWater && !anyPond && shallowest >= DEEP_SEA_M && maxLift < 0.5 * vExag;
+      if (deepQuad) anyWater = false;
+      if (fillMesh.current) {
+        fillMesh.current.visible = deepQuad;
+        fillMesh.current.position.y = world.seaLevel * vExag;
+      }
       if (anyWater) {
         compactWater(water, wetW, n);
         wdA.needsUpdate = true;

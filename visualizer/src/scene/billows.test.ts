@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { billowLight } from './Billows';
+import { billowLight } from './billowMath';
 
 describe('billow lighting', () => {
   const n = Math.hypot(0.4, 0.8, 0.3);

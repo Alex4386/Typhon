@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { billowLight } from './billowMath';
 import { waterUniforms } from './water';
 
 /**
@@ -70,26 +71,34 @@ export function billowTexture(): THREE.Texture {
 }
 
 /**
- * Light reaching a billow: ambient sky plus sun on the side of the mass facing the sun, so a cloud
- * is bright where the sun hits it and darker in its core and underside (cheap self-shading: the mass
- * shadows its own far side). 0..~1.1.
- */
-export function billowLight(dx: number, dy: number, dz: number, sx: number, sy: number, sz: number): number {
-  const len = Math.hypot(dx, dy, dz);
-  const facing = len > 1e-6 ? (dx * sx + dy * sy + dz * sz) / len : 0;
-  // −1 (far side, in shadow) … +1 (facing the sun); the core (len→0) sits in between
-  return 0.42 + 0.38 * Math.max(-0.4, facing) + 0.22 * Math.max(0, sy);
-}
-
-/**
  * Draws billows from `source()` every frame: one instanced draw call, at most `max` billboards, no
  * custom shader (WebGPU and WebGL2 alike). Instance colours carry each billow's base colour times its
  * sun shading; billboards face the camera and roll only slightly, so the texture's top-lit lobes stay
  * consistent with the sun above.
  */
 export function BillowLayer({ source, max, opacity = 0.82, renderOrder = 8 }: { source: () => Billow[]; max: number; opacity?: number; renderOrder?: number }) {
-  const mesh = useRef<THREE.InstancedMesh>(null);
-  const tex = useMemo(() => billowTexture(), []);
+  // built by hand so the instance-colour attribute exists before the material is first compiled
+  // (created lazily by setColorAt, a program compiled without it ignores the colours)
+  const instanced = useMemo(() => {
+    const geo = new THREE.PlaneGeometry(1, 1);
+    const mat = new THREE.MeshBasicMaterial({ map: billowTexture(), transparent: true, opacity, depthWrite: false });
+    const im = new THREE.InstancedMesh(geo, mat, max);
+    im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3).fill(1), 3);
+    im.count = 0;
+    im.frustumCulled = false;
+    im.renderOrder = renderOrder;
+    return im;
+  }, [max, opacity, renderOrder]);
+  useEffect(
+    () => () => {
+      instanced.geometry.dispose();
+      (instanced.material as THREE.MeshBasicMaterial).map?.dispose();
+      (instanced.material as THREE.Material).dispose();
+    },
+    [instanced],
+  );
+  const mesh = useRef<THREE.InstancedMesh>(instanced);
+  mesh.current = instanced;
   const m = useMemo(() => new THREE.Matrix4(), []);
   const p = useMemo(() => new THREE.Vector3(), []);
   const s = useMemo(() => new THREE.Vector3(), []);
@@ -122,10 +131,5 @@ export function BillowLayer({ source, max, opacity = 0.82, renderOrder = 8 }: { 
     if (im.instanceColor) im.instanceColor.needsUpdate = true;
   });
 
-  return (
-    <instancedMesh ref={mesh} args={[undefined, undefined, max]} frustumCulled={false} renderOrder={renderOrder}>
-      <planeGeometry args={[1, 1]} />
-      <meshBasicMaterial map={tex} transparent opacity={opacity} depthWrite={false} />
-    </instancedMesh>
-  );
+  return <primitive object={instanced} />;
 }

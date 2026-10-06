@@ -16,8 +16,9 @@ const SPREAD = 0.12;
 /** Neutral-buoyancy height as a share of the column top: H_T ≈ 1.32·H_B (Sparks 1986). */
 const NEUTRAL = 0.76;
 
-const ASH: [number, number, number] = [0.3, 0.27, 0.25];
-const STEAM: [number, number, number] = [0.86, 0.88, 0.9];
+/** Base colours in linear RGB: ash ≈ 30 % grey (sRGB), steam near white. */
+const ASH: [number, number, number] = [0.075, 0.066, 0.06];
+const STEAM: [number, number, number] = [0.72, 0.75, 0.78];
 
 function hash(i: number): number {
   const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
@@ -110,11 +111,12 @@ export function EruptionColumn({ world }: { world: WorldInfo }) {
       for (let i = 0; i < DRIFT && billows.length < MAX_BILLOWS && s < 0.5; i++, seed++) {
         const f = (i / DRIFT + t * 0.004) % 1;
         const d = Ru + f * Math.max(3000, 12 * Ru);
-        const lateral = (hash(seed + 21) - 0.5) * (Ru + d * 0.3);
+        const lateral = (hash(seed + 21) - 0.5) * (Ru * 0.8 + d * 0.12);
         const x = ux + wx * d - wy * lateral;
         const y = uy + wy * d + wx * lateral;
         const zz = base + Hnb * (1 - 0.25 * f) * vExag;
-        billows.push({ x, y: zz, z: -y, size: bTop * (1.2 + f * 2), flat: 0.45, cx: x, cy: zz - bTop * vExag, cz: -y, r: col[0] * 1.15, g: col[1] * 1.15, b: col[2] * 1.15, fade: 0.85 - 0.45 * f, seed });
+        // overlapping, widening and thinning downwind: a continuous drifting cloud, not separate puffs
+        billows.push({ x, y: zz, z: -y, size: Ru * (0.7 + f * 1.3), flat: 0.42, cx: x, cy: zz - bTop * vExag, cz: -y, r: col[0] * 1.3, g: col[1] * 1.3, b: col[2] * 1.3, fade: 0.9 - 0.5 * f, seed });
       }
     }
   });
