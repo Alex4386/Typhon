@@ -54,6 +54,10 @@ public final class ConfigChanges {
             // properties of magma added from now on (the supply and injections); the chamber's own
             // magma is state and stays as it is
             "magma.chamber.recharge*",
+            // wall and dike mechanics: read every step, the chamber state stays valid
+            "magma.chamber.wallRuptureRatio", "magma.chamber.wallYieldFraction",
+            "dikes.ruptureNucleation", "dikes.nucleateDuringEruption", "dikes.initiationPressureRatio",
+            "dikes.maxInitiationRate", "dikes.maxConcurrentDikes", "dikes.conduitSealing",
             "geothermal.timeScale", "geothermal.prewarmSeconds", "geothermal.max*", "geothermal.*PerHour",
             "tephra.initialWind*", "tephra.max*", "deformation.stations*");
 

@@ -108,6 +108,25 @@ class MultiWorldTest {
                     param(after, "volcano." + vid + ".magma.chamber.supplyRate").get("default").getAsDouble(), 1e-12);
             assertTrue(server.session(id).time() >= before - 1e-9, "state was kept");
 
+            // Computed parameters: null while the engine computes them, a number overrides, null goes back.
+            String wall = "volcano." + vid + ".magma.chamber.wallRuptureRatio";
+            JsonObject auto = param(after, wall);
+            assertTrue(auto.get("auto").getAsBoolean(), auto.toString());
+            assertTrue(computed(auto), auto.toString());
+            assertEquals(2.0, auto.get("computed").getAsDouble(), 1e-9);
+            assertEquals("hot", auto.get("apply").getAsString());
+            c.send("{\"type\":\"setParams\",\"requestId\":51,\"values\":{\"" + wall + "\":1.5}}");
+            JsonObject ack51 = ack(c, 51, 120);
+            assertTrue(ack51.has("ok") && ack51.get("ok").getAsBoolean(), ack51.toString());
+            JsonObject overridden = c.await(m -> m.type().equals("schema")
+                    && !computed(param(m.json(), wall)), 60).json();
+            assertEquals(1.5, param(overridden, wall).get("value").getAsDouble(), 1e-12);
+            assertEquals(1.5, param(overridden, wall).get("computed").getAsDouble(), 1e-12, "the limit in use");
+            c.send("{\"type\":\"setParams\",\"requestId\":52,\"values\":{\"" + wall + "\":null}}");
+            JsonObject ack52 = ack(c, 52, 120);
+            assertTrue(ack52.has("ok") && ack52.get("ok").getAsBoolean(), ack52.toString());
+            c.await(m -> m.type().equals("schema") && computed(param(m.json(), wall)), 60);
+
             // Re-init changes need an explicit restart.
             c.send("{\"type\":\"setParams\",\"requestId\":6,\"values\":{\"volcano." + vid
                     + ".magma.chamber.initialTemperatureC\":1100}}");
@@ -129,6 +148,11 @@ class MultiWorldTest {
             assertTrue(ack(c, 10, 30).get("ok").getAsBoolean());
             assertFalse(Files.exists(worlds.resolve("alpha")));
         }
+    }
+
+    /** A computed (auto) parameter has no value (null or absent) while the engine computes it. */
+    private static boolean computed(JsonObject spec) {
+        return !spec.has("value") || spec.get("value").isJsonNull();
     }
 
     @Test

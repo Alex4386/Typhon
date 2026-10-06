@@ -99,6 +99,25 @@ final class Tuning {
         META.put("volcano:magma.chamber.coolingTimescale", m("Cooling time", "s", null, null, true, "e-folding time of chamber cooling into the wall rock."));
         META.put("volcano:magma.chamber.degassingTimescale", m("Degassing time", "s", null, null, true, null));
         META.put("volcano:ballisticFraction", m("Share of erupted mass as bombs", null, 0.0, 1.0, false, null));
+        META.put("volcano:magma.chamber.wallRuptureRatio", m("Wall rupture limit", "× roof strength", 1.0, 10.0, false,
+                "Overpressure at which the chamber walls break, as a multiple of the roof strength (or eruption threshold)."
+                        + " The chamber never holds more; magma beyond it leaves through a dike."));
+        META.put("volcano:magma.chamber.wallYieldFraction", m("Wall yielding", "fraction", 0.0, 1.0, false,
+                "Share of the magma beyond the rupture limit that the walls absorb by deforming (the chamber grows,"
+                        + " the ground inflates) instead of feeding a dike. 0 = all into dikes, 1 = chamber growth only."));
+        META.put("volcano:dikes.ruptureNucleation", m("Wall rupture opens a dike", null, null, null, false,
+                "When the walls rupture, a dike opens at once and carries the excess magma, even during an eruption."
+                        + " Off: the chamber grows instead and dikes only form at random."));
+        META.put("volcano:dikes.nucleateDuringEruption", m("Dikes during eruptions", null, null, null, false,
+                "Allow random dike nucleation while the summit erupts (flank fissures mid-eruption)."));
+        META.put("volcano:dikes.initiationPressureRatio", m("Dike onset", "× roof strength", 0.05, 0.99, false,
+                "Random dike nucleation starts once overpressure passes this share of the roof strength."));
+        META.put("volcano:dikes.maxInitiationRate", m("Dike rate at roof strength", "/s", 1e-6, 1.0, true,
+                "Random nucleation rate (per simulated second) at full roof strength and a fully sealed conduit."));
+        META.put("volcano:dikes.maxConcurrentDikes", m("Dikes at once", null, 0.0, 10.0, false,
+                "How many dikes may rise at the same time. 0 = no dikes at all (rupture magma grows the chamber)."));
+        META.put("volcano:dikes.conduitSealing", m("Summit conduit sealing", "fraction", 0.0, 1.0, false,
+                "0 = open summit conduit (pressure vents there, no random dikes); 1 = sealed (dikes likely)."));
     }
 
     /**
@@ -127,6 +146,8 @@ final class Tuning {
                 "Measured rock tensile strengths are 0.5–9 MPa (in situ ~3); stronger roofs store implausible pressure."));
         ADVICE.put("volcano:magma.chamber.volume", new Advice(1e7, 1e12,
                 "Shallow chambers are ~0.01–1000 km³ (10⁷–10¹² m³)."));
+        ADVICE.put("volcano:magma.chamber.wallRuptureRatio", new Advice(1.0, 3.0,
+                "Chamber walls fail at a few times the tensile strength at most; higher limits store implausible pressure."));
         ADVICE.put("volcano:magma.chamber.maxEruptionRate", new Advice(null, 1e5,
                 "Only the largest Plinian eruptions exceed ~10⁵ m³/s (Pinatubo 1991 peaked near 10⁵–10⁶)."));
     }
@@ -138,6 +159,14 @@ final class Tuning {
         if ((a.low() != null && value < a.low()) || (a.high() != null && value > a.high())) return label + ": " + a.warning();
         return null;
     }
+
+    /**
+     * Parameters the engine computes from physics unless the definition overrides them: their value is
+     * {@code null} (NaN in the definition) while computed, and the schema carries {@code auto:true} plus
+     * the live {@code computed} value; {@code setParams} with {@code null} goes back to computing.
+     */
+    static final java.util.Set<String> AUTO = java.util.Set.of(
+            "volcano:magma.chamber.wallRuptureRatio", "volcano:magma.chamber.wallYieldFraction");
 
     /** An {@code injectMagma} batch beyond this share of the chamber volume ruptures the walls. */
     static final double INJECT_RUPTURE_SHARE = 0.1;
@@ -312,6 +341,7 @@ final class Tuning {
             Object v = e.getValue();
             if (v instanceof Map<?, ?> m) flatten(path, (Map<String, Object>) m, out);
             else if (v instanceof Number || v instanceof Boolean) out.put(path, v);
+            else if (".nan".equalsIgnoreCase(String.valueOf(v))) out.put(path, Double.NaN); // a computed (auto) value
         }
     }
 
@@ -402,7 +432,14 @@ final class Tuning {
             if (ib < 0) ib = Integer.MAX_VALUE;
             return ia != ib ? Integer.compare(ia, ib) : a.path().compareTo(b.path());
         });
-        for (Leaf l : leaves) params.add(paramSpec(l, now.names(), defaults.get(l.id())));
+        for (Leaf l : leaves) {
+            JsonObject spec = paramSpec(l, now.names(), defaults.get(l.id()));
+            if (AUTO.contains(l.metaKey())) {
+                spec.addProperty("auto", true);
+                spec.add("computed", Json.num(s.computedParam(l.volcanoId(), l.metaKey())));
+            }
+            params.add(spec);
+        }
         o.add("audit", readAudit(dir));
         return o;
     }
@@ -573,7 +610,9 @@ final class Tuning {
         for (Map.Entry<String, JsonElement> e : values.entrySet()) {
             Leaf l = byId.get(e.getKey());
             if (l == null) throw new IllegalArgumentException("Unknown parameter '" + e.getKey() + "'");
-            Object v = e.getValue().isJsonNull() ? defaults.get(l.id()) : coerce(l, e.getValue());
+            Object v = e.getValue().isJsonNull()
+                    ? (AUTO.contains(l.metaKey()) ? (Object) Double.NaN : defaults.get(l.id()))
+                    : coerce(l, e.getValue());
             if (v == null) throw new IllegalArgumentException(l.id() + " has no default");
             if (equal(v, l.value())) continue;
             Meta meta = META.get(l.metaKey());
@@ -604,8 +643,8 @@ final class Tuning {
             Meta m = META.get(l.metaKey());
             a.addProperty("label", (l.volcanoId() == null ? "" : now.names().getOrDefault(l.volcanoId(), l.volcanoId()) + ": ")
                     + (m != null ? m.label() : humanize(l.path())[0]));
-            a.add("from", Json.GSON.toJsonTree(l.value()));
-            a.add("to", e.getValue().isJsonNull() ? null : Json.GSON.toJsonTree(v));
+            a.add("from", auditValue(l.value()));
+            a.add("to", e.getValue().isJsonNull() ? null : auditValue(v));
             a.addProperty("apply", l.hot() ? "hot" : "restart");
             audit.add(a);
         }
@@ -623,6 +662,12 @@ final class Tuning {
             plan.files.put(wd.volcanoFile(id), tree);
         }
         return plan;
+    }
+
+    /** An audit entry's value; a computed (NaN) value is recorded as {@code "auto"}. */
+    private static JsonElement auditValue(Object v) {
+        if (v instanceof Double d && d.isNaN()) return new JsonPrimitive("auto");
+        return Json.GSON.toJsonTree(v);
     }
 
     private static Object coerce(Leaf l, JsonElement e) {

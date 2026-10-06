@@ -33,6 +33,16 @@ public interface DikeMagmaSource {
     /** Removes {@code volume} m³ from the chamber; returns the overpressure drop (MPa). */
     double withdraw(double volume);
 
+    /** Magma pushed out of the ruptured chamber walls, waiting for a dike (m³). */
+    default double ruptureExcessM3() {
+        return 0;
+    }
+
+    /** Hands the waiting rupture magma to a dike; returns its volume (m³). */
+    default double takeRuptureExcess() {
+        return 0;
+    }
+
     /** Magma temperature (°C) at intrusion; basaltic by default. */
     default double temperatureC() {
         return 1150;
@@ -51,6 +61,8 @@ public interface DikeMagmaSource {
             @Override public boolean erupting() { return chamber.erupting(); }
             @Override public double withdraw(double volume) { return chamber.withdraw(volume); }
             @Override public double temperatureC() { return chamber.temperatureC(); }
+            @Override public double ruptureExcessM3() { return chamber.ruptureExcessM3(); }
+            @Override public double takeRuptureExcess() { return chamber.takeRuptureExcess(); }
         };
     }
 }

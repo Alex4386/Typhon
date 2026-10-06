@@ -1039,6 +1039,22 @@ final class Session implements AutoCloseable {
         return vs.isEmpty() ? null : vs.get(0).chamber().config();
     }
 
+    /** Held by a pump cycle of this session and by a client joining it (see {@code SimServer#attach}). */
+    final Object pumpLock = new Object();
+
+    /** The value the engine computes for an {@link Tuning#AUTO} parameter of a volcano (NaN if unknown). */
+    double computedParam(String volcanoId, String metaKey) {
+        for (VolcanoSystem v : live.volcanoes()) {
+            if (volcanoId != null && !v.volcanoId().equals(volcanoId)) continue;
+            return switch (metaKey) {
+                case "volcano:magma.chamber.wallRuptureRatio" -> v.chamber().wallRuptureRatio();
+                case "volcano:magma.chamber.wallYieldFraction" -> v.chamber().wallYieldFraction();
+                default -> Double.NaN;
+            };
+        }
+        return Double.NaN;
+    }
+
     /** Changes the files of a world between saving and reopening it. */
     interface DefinitionEdit {
         void apply() throws Exception;

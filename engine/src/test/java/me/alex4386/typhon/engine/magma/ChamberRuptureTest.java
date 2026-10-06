@@ -31,7 +31,7 @@ class ChamberRuptureTest {
         MagmaChamber chamber = new MagmaChamber(config);
         Engine engine = Engine.builder(0).add(chamber).build();
         double cap = chamber.ruptureOverpressureMPa();
-        assertTrue(cap >= config.tensileStrengthMPa() && cap < 2 * config.tensileStrengthMPa());
+        assertTrue(cap >= config.tensileStrengthMPa() && cap <= 2 * config.tensileStrengthMPa() + 1e-9);
 
         double injected = 1e9; // 20 chamber volumes: the live session's "add magma" spam
         engine.submit(new InjectRecharge("v", injected, 1150, 50, 1.0));

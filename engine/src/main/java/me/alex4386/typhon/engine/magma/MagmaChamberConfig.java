@@ -42,6 +42,10 @@ import me.alex4386.typhon.engine.math.BlockPos;
  * @param eruptiveTimeScale physical seconds per simulated second while erupting
  * @param stepPeriodSeconds how often the chamber steps (simulated seconds)
  * @param samplePeriodSeconds how often a {@link MagmaEvents.ChamberSample} is emitted (0 = never)
+  * @param wallRuptureRatio override for the overpressure at which the chamber walls rupture, as a multiple of
+ *     the larger of {@code tensileStrengthMPa} and the eruption threshold; NaN = computed (hoop stress, 2)
+ * @param wallYieldFraction override for the share of magma beyond the rupture limit taken up by the walls
+ *     yielding (inelastic growth) instead of a dike; NaN = computed from wall-rock relaxation vs. charging time
  */
 public record MagmaChamberConfig(
         String volcanoId,
@@ -73,7 +77,9 @@ public record MagmaChamberConfig(
         double dormantTimeScale,
         double eruptiveTimeScale,
         double stepPeriodSeconds,
-        double samplePeriodSeconds) {
+        double samplePeriodSeconds,
+        double wallRuptureRatio,
+        double wallYieldFraction) {
 
     public MagmaChamberConfig {
         Objects.requireNonNull(volcanoId, "volcanoId");
@@ -99,6 +105,12 @@ public record MagmaChamberConfig(
         requirePositive("eruptiveTimeScale", eruptiveTimeScale);
         if (!(stepPeriodSeconds > 0)) throw new IllegalArgumentException("stepPeriodSeconds must be > 0");
         if (!(samplePeriodSeconds >= 0)) throw new IllegalArgumentException("samplePeriodSeconds must be >= 0");
+        if (!Double.isNaN(wallRuptureRatio) && !(wallRuptureRatio >= 1)) {
+            throw new IllegalArgumentException("wallRuptureRatio must be >= 1 (or NaN = computed): " + wallRuptureRatio);
+        }
+        if (!Double.isNaN(wallYieldFraction) && !(wallYieldFraction >= 0 && wallYieldFraction <= 1)) {
+            throw new IllegalArgumentException("wallYieldFraction must be in [0, 1] (or NaN = computed): " + wallYieldFraction);
+        }
     }
 
     /**
@@ -144,6 +156,8 @@ public record MagmaChamberConfig(
         b.eruptiveTimeScale = eruptiveTimeScale;
         b.stepPeriodSeconds = stepPeriodSeconds;
         b.samplePeriodSeconds = samplePeriodSeconds;
+        b.wallRuptureRatio = wallRuptureRatio;
+        b.wallYieldFraction = wallYieldFraction;
         return b;
     }
 
@@ -182,6 +196,8 @@ public record MagmaChamberConfig(
         private double eruptiveTimeScale = 1;
         private double stepPeriodSeconds = 1.0;
         private double samplePeriodSeconds = 5.0;
+        private double wallRuptureRatio = Double.NaN; // computed (MagmaChamber#wallRuptureRatio)
+        private double wallYieldFraction = Double.NaN; // computed (MagmaChamber#wallYieldFraction)
 
         private Builder(String volcanoId, BlockPos center) {
             this.volcanoId = volcanoId;
@@ -216,6 +232,8 @@ public record MagmaChamberConfig(
         public Builder eruptiveTimeScale(double v) { eruptiveTimeScale = v; return this; }
         public Builder stepPeriodSeconds(double v) { stepPeriodSeconds = v; return this; }
         public Builder samplePeriodSeconds(double v) { samplePeriodSeconds = v; return this; }
+        public Builder wallRuptureRatio(double v) { wallRuptureRatio = v; return this; }
+        public Builder wallYieldFraction(double v) { wallYieldFraction = v; return this; }
 
         public MagmaChamberConfig build() {
             return new MagmaChamberConfig(volcanoId, center, volume, compressibilityPerMPa, lithostaticDepth,
@@ -224,7 +242,7 @@ public record MagmaChamberConfig(
                     initialTemperatureC, initialSilicaWt, initialWaterWt, initialCo2Wt, initialOverpressureMPa,
                     wallTemperatureC, coolingTimescale, degassingTimescale, crystalSilicaWt, conduit, maxEruptionRate,
                     dormantTimeScale,
-                    eruptiveTimeScale, stepPeriodSeconds, samplePeriodSeconds);
+                    eruptiveTimeScale, stepPeriodSeconds, samplePeriodSeconds, wallRuptureRatio, wallYieldFraction);
         }
     }
 }

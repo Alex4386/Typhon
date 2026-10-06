@@ -198,8 +198,19 @@ public final class DikePropagation implements Subsystem {
         }
         pendingArrests.clear();
 
-        if (!nucleationBlocked && !magma.erupting() && activeCount() < config.maxConcurrentDikes
-                && random.chance(nucleationProbability(context))) {
+        if (config.ruptureNucleation && !nucleationBlocked && magma.ruptureExcessM3() > 0) {
+            // Ruptured walls: the magma they could not hold leaves through a dike (a rising one, or a new one).
+            Dike carrier = null;
+            for (Dike dike : dikes) {
+                if (dike.propagating()) {
+                    carrier = dike;
+                    break;
+                }
+            }
+            if (carrier == null && activeCount() < config.maxConcurrentDikes) carrier = start(context);
+            if (carrier != null) carrier.volume += magma.takeRuptureExcess();
+        } else if (!nucleationBlocked && (config.nucleateDuringEruption || !magma.erupting())
+                && activeCount() < config.maxConcurrentDikes && random.chance(nucleationProbability(context))) {
             start(context);
         }
 
@@ -219,7 +230,7 @@ public final class DikePropagation implements Subsystem {
         return 1 - StrictMath.exp(-rate * context.dtSeconds());
     }
 
-    private void start(StepContext context) {
+    private Dike start(StepContext context) {
         SimRandom random = context.random();
         BlockPos center = magma.chamberCenter();
         double angle = random.nextDouble() * 2 * Math.PI;
@@ -232,6 +243,7 @@ public final class DikePropagation implements Subsystem {
         dikes.add(dike);
         context.outbox().emit(new DikeEvents.DikeStarted(context.time(), volcanoId, dike.id, dike.origin(),
                 magma.overpressureMPa()));
+        return dike;
     }
 
     private void advance(Dike dike, double dtPhysical, StepContext context) {

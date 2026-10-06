@@ -131,7 +131,7 @@ volcano, out of world, …).
 | type | fields | reply |
 |---|---|---|
 | `getSchema` | — | `schema` (§4.7) of the attached session. It is also sent at the end of every attach burst. |
-| `setParams` | `requestId?`, `values: {[paramId]: number \| boolean \| null}`, `restart?: boolean` | Changes definition values of the attached world session; `null` restores a parameter's default. |
+| `setParams` | `requestId?`, `values: {[paramId]: number \| boolean \| null}`, `restart?: boolean` | Changes definition values of the attached world session; `null` restores a parameter's default (for `auto` parameters: computed again). |
 
 Parameter ids are dotted paths into the world's definition files: `world.<path>` for `world.yaml`
 (e.g. `world.climate.rainfallMmPerHour`) and `volcano.<id>.<path>` for `volcanoes/<id>.yaml` (e.g.
@@ -365,7 +365,7 @@ The tunable parameters and command fields of a session (§3.5):
 | field | meaning |
 |---|---|
 | `tunable` | False for in-memory sessions (`reason` says why); `params` is then empty but `commands` is still filled. |
-| `params[]` | `ParamSpec`: `id`, `label`, `unit?`, `help?`, `group` (heading), `type` (`number`/`boolean`/`choice`), `min?`/`max?` (validated by the server), `step?` (1 for integers), `log?` (slider hint), `choices?`, `value`, `default`, `apply` (`hot`/`restart`), `volcanoId?`. `recommended?: {min?, max?}` is the physically sensible part of the range with `warning` explaining what goes wrong outside it; `outOfRange: true` marks a current value outside it. Out-of-range values are accepted, and the `setParams` ack message then ends with `Warning: …`. Parameters without curated metadata get a label and unit derived from their name and no range. |
+| `params[]` | `ParamSpec`: `id`, `label`, `unit?`, `help?`, `group` (heading), `type` (`number`/`boolean`/`choice`), `min?`/`max?` (validated by the server), `step?` (1 for integers), `log?` (slider hint), `choices?`, `value`, `default`, `apply` (`hot`/`restart`), `volcanoId?`. `recommended?: {min?, max?}` is the physically sensible part of the range with `warning` explaining what goes wrong outside it; `outOfRange: true` marks a current value outside it. `auto: true` marks a value the engine computes from physics unless overridden (wall rupture limit, wall yielding): `value` is null or absent while computed, `computed` is the value in use, a number overrides it and `null` in `setParams` returns it to computing (the audit records it as `"auto"`). Out-of-range values are accepted, and the `setParams` ack message then ends with `Warning: …`. Parameters without curated metadata get a label and unit derived from their name and no range. |
 | `commands` | Fields of commands, as `ParamSpec`s with defaults (`injectMagma`: the first volcano's recharge magma; `injectMagma@<volcanoId>`: the same fields with that volcano's own recharge magma as defaults; `volumeM3.recommended.max` is 10 % of the chamber volume — larger batches rupture the chamber walls, and the command's ack carries a note saying so). |
 | `audit` | Recent changes, oldest first: `at` (wall ms), `simTime`, `id`, `label`, `from`, `to` (null = back to default), `apply`. |
 

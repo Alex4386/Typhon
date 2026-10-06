@@ -26,6 +26,14 @@ public final class DikeConfig {
     /** Nucleation rate (per simulated second) at full strength and full sealing; grows quadratically. */
     public double maxInitiationRate = 1.0 / 60.0;
     public int maxConcurrentDikes = 1;
+    /**
+     * When the chamber walls rupture (overpressure at the chamber's rupture limit), a dike opens at once and
+     * carries the magma the walls could not hold, even during an eruption. Off: rupture magma only grows the
+     * chamber, and dikes form only by the random nucleation above.
+     */
+    public boolean ruptureNucleation = true;
+    /** Random nucleation also while the chamber erupts through its summit (flank dikes mid-eruption). */
+    public boolean nucleateDuringEruption = false;
     /** Dikes nucleate within this horizontal distance of the chamber centre (blocks). */
     public double startOffsetBlocks = 8;
 
@@ -97,6 +105,8 @@ public final class DikeConfig {
         c.initiationPressureRatio = initiationPressureRatio;
         c.maxInitiationRate = maxInitiationRate;
         c.maxConcurrentDikes = maxConcurrentDikes;
+        c.ruptureNucleation = ruptureNucleation;
+        c.nucleateDuringEruption = nucleateDuringEruption;
         c.startOffsetBlocks = startOffsetBlocks;
         c.shearModulusPa = shearModulusPa;
         c.poissonRatio = poissonRatio;

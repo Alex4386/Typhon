@@ -99,7 +99,6 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      * fails, magma beyond what the walls can store elastically leaves the elastic budget (it inflates
      * the chamber inelastically, intrudes or erupts) instead of raising the pressure further.
      */
-    static final double RUPTURE_MARGIN = 1.25;
 
     private final MagmaChamberConfig config;
 
@@ -107,6 +106,10 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private double volume;
     /** Magma accommodated beyond the walls' elastic capacity (m³; chamber growth after wall failure). */
     private double inelasticGrowth;
+    /** Magma pushed out of the ruptured walls and not yet claimed by a dike (m³). */
+    private double ruptureExcess;
+    /** The waiting rupture magma has been offered to dikes for a full chamber step. */
+    private boolean ruptureOffered;
     private double overpressure;
     private double temperature;
     private double bulkSilica;
@@ -236,6 +239,9 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         double dt = context.dtSeconds();
 
         applyOverrides(context);
+        // Wall magma that no dike claimed since the last step (dikes blocked, none could start, no dike
+        // model) stays around the chamber: the walls yield and the chamber grows instead.
+        absorbRuptureExcess();
 
         double scale = erupting ? config.eruptiveTimeScale() : config.dormantTimeScale();
         double physicalDt = dt * scale;
@@ -290,7 +296,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
                 } else {
                     overpressure += inflow / stiffness;
                 }
-                double stored = relieveRupture();
+                double stored = relieveRupture(supply);
                 erupted = Math.max(0, inflow - stored - stiffness * (overpressure - previous));
                 eruptedVolume += erupted;
 
@@ -304,7 +310,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             percolateGas(context, physicalDt, gasWater, gasCo2);
             conduitOpenness *= Math.exp(-physicalDt / config.conduit().conduitSealTimescale());
             overpressure += inflow / stiffness;
-            relieveRupture();
+            relieveRupture(supply);
             if (!summitBlocked && overpressure >= failureOverpressureMPa()) {
                 startEruption(context, Cause.AUTOMATIC);
             }
@@ -678,38 +684,113 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         double stiffness = this.volume * effectiveCompressibility();
         mix(volume, temperatureC, silicaWt, waterWt, co2Wt, crystals);
         overpressure += volume / stiffness;
-        relieveRupture();
+        relieveRupture(Double.POSITIVE_INFINITY); // an injected batch arrives at once
     }
 
     /** Overpressure (MPa) at which the chamber walls rupture; never exceeded. */
     public double ruptureOverpressureMPa() {
-        return RUPTURE_MARGIN * Math.max(config.tensileStrengthMPa(), failureOverpressureMPa());
+        return wallRuptureRatio(config) * Math.max(config.tensileStrengthMPa(), failureOverpressureMPa());
     }
 
     private static double ruptureCap(MagmaChamberConfig c) {
-        return RUPTURE_MARGIN * Math.max(c.tensileStrengthMPa(), c.conduit().reopenOverpressureMPa());
+        return wallRuptureRatio(c) * Math.max(c.tensileStrengthMPa(), c.conduit().reopenOverpressureMPa());
     }
 
     /**
-     * Wall failure: overpressure above {@link #ruptureOverpressureMPa()} cannot be stored elastically.
-     * The excess magma is accommodated by inelastic chamber growth (the volume it would have taken to
-     * reach that pressure), which the deformation model sees as inflation, and the pressure stays at
-     * the rupture limit, where dikes nucleate and eruptions start. Returns the volume moved (m³).
+     * Hoop stress at the wall of a pressurised spherical cavity is half its overpressure, so the walls fail in
+     * tension at twice the tensile strength (Tait, Jaupart & Vergniolle 1989) — unless the config overrides it.
      */
-    private double relieveRupture() {
+    static final double HOOP_RUPTURE_RATIO = 2.0;
+
+    /** The rupture limit in use, as a multiple of the roof strength or eruption threshold (override or computed). */
+    public double wallRuptureRatio() {
+        return wallRuptureRatio(config);
+    }
+
+    static double wallRuptureRatio(MagmaChamberConfig c) {
+        return Double.isNaN(c.wallRuptureRatio()) ? HOOP_RUPTURE_RATIO : c.wallRuptureRatio();
+    }
+
+    /** Wall-rock creep: Arrhenius viscosity η = η₀·exp(E/R·(1/T − 1/T₀)) (crustal rock near a chamber). */
+    static final double WALL_VISCOSITY_REF_PAS = 1e19; // at 700 °C (Jellinek & DePaolo 2003)
+    static final double WALL_VISCOSITY_REF_K = 973.15;
+    static final double WALL_ACTIVATION_J_MOL = 3.0e5;
+
+    /** Viscosity of the wall rock (Pa·s) at the configured wall temperature, clamped to 10¹⁶–10²⁵. */
+    public double wallViscosityPaS() {
+        double t = config.wallTemperatureC() + 273.15;
+        double eta = WALL_VISCOSITY_REF_PAS * StrictMath.exp(WALL_ACTIVATION_J_MOL / GAS_CONSTANT
+                * (1 / Math.max(t, 200) - 1 / WALL_VISCOSITY_REF_K));
+        return Math.min(1e25, Math.max(1e16, eta));
+    }
+
+    /**
+     * Share of rupture magma the walls absorb by yielding. Computed unless overridden: walls relax viscously
+     * over {@code τ_r = η / ΔP}; recharge brings the chamber to its rupture limit over {@code τ_c = ΔP_c·dV/dP / Q}.
+     * When {@code τ_c ≫ τ_r} the hot walls creep and the chamber grows; when {@code τ_c ≪ τ_r} they fracture and
+     * dikes carry the magma (Jellinek & DePaolo 2003): {@code f = τ_c / (τ_c + τ_r)}.
+     */
+    public double wallYieldFraction() {
+        return wallYieldFraction(supplyRate);
+    }
+
+    /** {@link #wallYieldFraction()} for a chamber charged at {@code chargeRate} (m³/s; infinite = a sudden batch). */
+    double wallYieldFraction(double chargeRate) {
+        if (!Double.isNaN(config.wallYieldFraction())) return config.wallYieldFraction();
+        if (!(chargeRate < Double.POSITIVE_INFINITY)) return 0;
+        double cap = ruptureOverpressureMPa();
+        double relax = wallViscosityPaS() / (cap * 1e6);
+        double charge = cap * volume * effectiveCompressibility() / Math.max(chargeRate, 1e-12);
+        return charge / (charge + relax);
+    }
+
+    /**
+     * Wall failure: overpressure above {@link #ruptureOverpressureMPa()} cannot be stored elastically and
+     * the pressure stays at that limit. The excess magma leaves the chamber: {@code wallYieldFraction} of it
+     * is taken up by the walls yielding (inelastic growth); the rest fractures its way out and waits for a
+     * dike to carry it ({@link #takeRuptureExcess()}). Returns the volume that left the elastic chamber (m³).
+     */
+    private double relieveRupture(double chargeRate) {
         double cap = ruptureOverpressureMPa();
         if (!(overpressure > cap)) return 0;
         double excess = (overpressure - cap) * volume * effectiveCompressibility();
         overpressure = cap;
-        volume += excess;
-        inelasticGrowth += excess;
+        double yielded = wallYieldFraction(chargeRate) * excess;
+        volume += yielded;
+        inelasticGrowth += yielded;
+        ruptureExcess += excess - yielded;
         return excess;
+    }
+
+    private void absorbRuptureExcess() {
+        if (!(ruptureExcess > 0)) return;
+        if (!ruptureOffered) {
+            ruptureOffered = true; // dikes step before the chamber's next step and may still take it
+            return;
+        }
+        ruptureOffered = false;
+        volume += ruptureExcess;
+        inelasticGrowth += ruptureExcess;
+        ruptureExcess = 0;
+    }
+
+    /** Magma beyond the rupture limit waiting for a dike (m³); a dike that starts now carries it. */
+    public double ruptureExcessM3() {
+        return ruptureExcess;
+    }
+
+    /** Hands the waiting rupture magma to a dike; returns its volume (m³). */
+    public double takeRuptureExcess() {
+        double v = ruptureExcess;
+        ruptureExcess = 0;
+        ruptureOffered = false;
+        return v;
     }
 
     /** Magma stored by inelastic growth after wall failure (m³). */
     @Override
     public double inelasticVolumeChangeM3() {
-        return inelasticGrowth;
+        return inelasticGrowth + ruptureExcess;
     }
 
     /**
@@ -1050,6 +1131,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         out.addProperty("overpressure", overpressure);
         out.addProperty("volume", volume);
         out.addProperty("inelasticGrowth", inelasticGrowth);
+        out.addProperty("ruptureExcess", ruptureExcess);
+        out.addProperty("ruptureOffered", ruptureOffered);
         out.addProperty("temperature", temperature);
         out.addProperty("bulkSilica", bulkSilica);
         out.addProperty("bulkWater", bulkWater);
@@ -1109,6 +1192,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         overpressure = in.get("overpressure").getAsDouble();
         volume = in.has("volume") ? in.get("volume").getAsDouble() : config.volume();
         inelasticGrowth = in.has("inelasticGrowth") ? in.get("inelasticGrowth").getAsDouble() : 0;
+        ruptureExcess = in.has("ruptureExcess") ? in.get("ruptureExcess").getAsDouble() : 0;
+        ruptureOffered = in.has("ruptureOffered") && in.get("ruptureOffered").getAsBoolean();
         temperature = in.get("temperature").getAsDouble();
         bulkSilica = in.get("bulkSilica").getAsDouble();
         bulkWater = in.get("bulkWater").getAsDouble();
