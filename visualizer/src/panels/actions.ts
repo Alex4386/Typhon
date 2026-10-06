@@ -122,23 +122,8 @@ export function contextToggles(sel: Selection | null, entities: EntityMap): Cont
   return [];
 }
 
-/**
- * Settings shown in a chamber's Settings tab: its magma supply and recharge magma, the walls' and
- * dikes' mechanics. Only live (hot) ones: restart changes stay on the Settings page.
- */
-export function volcanoSettings(schema: SchemaMessage | null, volcanoId: string): ParamSpec[] {
-  if (!schema) return [];
-  return schema.params.filter((p) => p.volcanoId === volcanoId && p.apply === 'hot' && /supply|recharge|wall|dikes\./i.test(p.id));
-}
-
 /** Injection fields for a volcano: its own (defaults from its supply magma), else the generic ones. */
 export function injectFieldsFor(schema: SchemaMessage | null, volcanoId: string | null | undefined): ParamSpec[] | undefined {
   if (!schema) return undefined;
   return (volcanoId ? schema.commands[`injectMagma@${volcanoId}`] : undefined) ?? schema.commands.injectMagma;
-}
-
-/** The volcano's magma-supply settings (rate, variability, recharge temperature and composition). */
-export function supplyParams(schema: SchemaMessage | null, volcanoId: string): ParamSpec[] {
-  if (!schema) return [];
-  return schema.params.filter((p) => p.volcanoId === volcanoId && /supply|recharge/i.test(p.id) && p.apply === 'hot');
 }

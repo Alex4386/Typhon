@@ -9,7 +9,7 @@ const chamber = (over: Partial<VolcanoState['chamber']> = {}): VolcanoState =>
     chamber: { overpressureMPa: 1, tensileStrengthMPa: 10, temperatureC: 1150, silicaWt: 50, waterWt: 0.5, crystalFraction: 0, eruptionRate: 0, regime: 'NONE', volumeM3: 9e6, ...over },
   }) as VolcanoState;
 
-const spec = (o: Partial<ParamSpec>): ParamSpec => ({ id: 'x', label: 'x', group: 'g', type: 'number', apply: 'hot', ...o });
+const spec = (o: Partial<ParamSpec>): ParamSpec => ({ id: 'x', label: 'x', group: 'g', type: 'number', apply: 'live', ...o });
 
 describe('time formatting', () => {
   it('reads like a person would say it', () => {

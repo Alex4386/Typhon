@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ParamSpec, SchemaMessage, VolcanoState } from '../protocol/messages';
 import type { EntityMap, EntityView } from '../store/entities';
-import { contextActions, contextToggles, dikeNumber, injectFieldsFor, selectionVolcano, supplyParams, ventLifecycle, volcanoSettings } from './actions';
+import { contextActions, contextToggles, dikeNumber, injectFieldsFor, selectionVolcano, ventLifecycle } from './actions';
 
 const ent = (id: string, kind: string, volcanoId?: string): EntityView => ({ id, kind, volcanoId, label: id, at: [0, 0, 0], props: {}, createdAt: 0, updatedAt: 0, seenAt: 0, fresh: false });
 const entities: EntityMap = Object.fromEntries(
@@ -31,16 +31,14 @@ describe('inspector actions', () => {
     expect(selectionVolcano({ type: 'point', at: [0, 0] }, entities)).toBeNull();
   });
 
-  it('uses the volcano’s own injection defaults and supply settings', () => {
-    const f = (id: string, extra: Partial<ParamSpec> = {}): ParamSpec => ({ id, label: id, group: 'g', type: 'number', apply: 'hot', ...extra });
+  it('uses the volcano’s own injection defaults', () => {
+    const f = (id: string, extra: Partial<ParamSpec> = {}): ParamSpec => ({ id, label: id, group: 'g', type: 'number', apply: 'live', ...extra });
     const schema = {
       commands: { injectMagma: [f('volumeM3'), f('temperatureC', { default: 1150 })], 'injectMagma@b': [f('volumeM3'), f('temperatureC', { default: 900 })] },
       params: [f('b:magma.chamber.supplyRate', { volcanoId: 'b' }), f('a:magma.chamber.supplyRate', { volcanoId: 'a' }), f('b:magma.chamber.rechargeSilicaWt', { volcanoId: 'b' }), f('b:dikes.x', { volcanoId: 'b' })],
     } as unknown as SchemaMessage;
     expect(injectFieldsFor(schema, 'b')?.[1].default).toBe(900);
     expect(injectFieldsFor(schema, 'a')?.[1].default).toBe(1150);
-    expect(supplyParams(schema, 'b').map((p) => p.id)).toEqual(['b:magma.chamber.supplyRate', 'b:magma.chamber.rechargeSilicaWt']);
-    expect(volcanoSettings(schema, 'b').map((p) => p.id)).toEqual(['b:magma.chamber.supplyRate', 'b:magma.chamber.rechargeSilicaWt', 'b:dikes.x']);
   });
 
   it('removes vents and dikes; seals and dike blocking are checkboxes', () => {

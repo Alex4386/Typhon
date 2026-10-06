@@ -2,7 +2,7 @@ import type { ParamSpec, ParamValue, VolcanoState } from '../protocol/messages';
 
 /** Injection fields used when the server sends no schema (older servers): volume only. */
 export const FALLBACK_INJECT_FIELDS: ParamSpec[] = [
-  { id: 'volumeM3', label: 'Volume', unit: 'm³', group: 'Batch', type: 'number', min: 1e3, max: 1e10, log: true, default: 5e6, apply: 'hot' },
+  { id: 'volumeM3', label: 'Volume', unit: 'm³', group: 'Batch', type: 'number', min: 1e3, max: 1e10, log: true, default: 5e6, apply: 'live' },
 ];
 
 /** Typical magmas (Wilson 1989; Sparks et al. 1998): composition and eruption temperature. */

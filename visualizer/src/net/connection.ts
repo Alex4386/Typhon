@@ -4,6 +4,7 @@ import {
   PROTOCOL_VERSION,
   WS_SUBPROTOCOL,
   type ClientMessage,
+  type ConfigResult,
   type ParamValue,
   type SectionDatum,
   type ServerMessage,
@@ -179,6 +180,38 @@ export function deleteWorld(name: string): void {
 /** Changes tunable parameters of the attached session (`null` = back to default). */
 export function setParams(values: Record<string, ParamValue | null>, restart = false): void {
   send({ type: 'setParams', requestId: requestSeq++, values, ...(restart ? { restart } : {}) });
+}
+
+const configWaiters = new Map<number, (r: ConfigResult) => void>();
+
+/**
+ * Sends parameter changes (schema id → value; `null` = back to the default or computed value) through the
+ * configuration API. The server decides how each is applied; the promise resolves with its answer, which
+ * may ask for confirmation (re-send with `confirm: token`).
+ */
+export function setConfig(values: Record<string, ParamValue | null>, opts: { confirm?: string; dryRun?: boolean } = {}): Promise<ConfigResult> {
+  const world: Record<string, ParamValue | null> = {};
+  const volcanoes: Record<string, Record<string, ParamValue | null>> = {};
+  for (const [id, v] of Object.entries(values)) {
+    if (id.startsWith('world.')) world[id.slice(6)] = v;
+    else if (id.startsWith('volcano.')) {
+      const rest = id.slice(8);
+      const dot = rest.indexOf('.');
+      (volcanoes[rest.slice(0, dot)] ??= {})[rest.slice(dot + 1)] = v;
+    }
+  }
+  const requestId = requestSeq++;
+  return new Promise((resolve) => {
+    configWaiters.set(requestId, resolve);
+    send({
+      type: 'setConfig',
+      requestId,
+      ...(Object.keys(world).length ? { world } : {}),
+      ...(Object.keys(volcanoes).length ? { volcanoes } : {}),
+      ...(opts.confirm ? { confirm: opts.confirm } : {}),
+      ...(opts.dryRun ? { dryRun: true } : {}),
+    });
+  });
 }
 
 export function refreshCatalog(): void {
@@ -366,6 +399,14 @@ function onText(m: ServerMessage): void {
       const units = m.replace ? {} : { ...s.units };
       for (const u of m.units) units[u.id] = u;
       s.set({ units });
+      return;
+    }
+    case 'configResult': {
+      const waiter = m.requestId !== undefined ? configWaiters.get(m.requestId) : undefined;
+      if (waiter && m.requestId !== undefined) {
+        configWaiters.delete(m.requestId);
+        waiter(m);
+      }
       return;
     }
     case 'ack':

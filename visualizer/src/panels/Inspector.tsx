@@ -17,7 +17,7 @@ import { KIND_LABEL, entityColor, formatPlace, type EntityView, type Selection }
 import { useStore } from '../store/store';
 import { FEATURE_COLORS } from '../util/color';
 import { formatSimTime, worldExtent } from '../util/world';
-import { DESTRUCTIVE, contextActions, contextToggles, ventLifecycle, volcanoSettings, type ContextAction, type ContextToggle, type VentLifecycle } from './actions';
+import { DESTRUCTIVE, contextActions, contextToggles, ventLifecycle, type ContextAction, type ContextToggle, type VentLifecycle } from './actions';
 import { budgetVerdict, type BudgetState } from './budget';
 import { formatVolume } from './events';
 import { OVERLAY } from './Overlay';
@@ -500,7 +500,9 @@ function SettingsTab({ toggles, volcanoId }: { toggles: ContextToggle[]; volcano
   const replay = useStore((s) => s.clock?.replay ?? false);
   const schema = useStore((s) => s.schema);
   const { pending, edit } = useParamEdits();
-  const params = volcanoId ? volcanoSettings(schema, volcanoId) : [];
+  // the server lists what a chamber's panel shows; the client decides nothing about it
+  const ids = volcanoId ? (schema?.panels?.chamber?.[volcanoId] ?? []) : [];
+  const params = ids.map((id) => schema?.params.find((p) => p.id === id)).filter((p): p is NonNullable<typeof p> => !!p);
   const flip = (t: ContextToggle, on: boolean) => {
     if (t.id === 'blockDikes') command({ kind: 'blockDikes', volcanoId: t.volcanoId, blocked: on });
     else command({ kind: on ? 'sealVent' : 'unsealVent', volcanoId: t.volcanoId, ventId: t.ventId });

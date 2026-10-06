@@ -146,6 +146,8 @@ interface Store {
   /** Show the minimap (off by default to keep the view clean). */
   showMinimap: boolean;
   toasts: HudToast[];
+  /** A change the server wants confirmed (it resets something), with what to do on each answer. */
+  configPrompt: { result: import('../protocol/messages').ConfigResult; confirm: () => void; cancel: () => void } | null;
   dismissToast: (id: string) => void;
   /** Show the full camera toolbar (follow, tour, bookmarks, framing). */
   showCameraTools: boolean;
@@ -255,6 +257,7 @@ export const useStore = create<Store>((set, get) => ({
   hoverId: null,
   showMinimap: false,
   toasts: [],
+  configPrompt: null,
   showCameraTools: false,
   guideOpen: !guideSeen(),
   paletteOpen: false,

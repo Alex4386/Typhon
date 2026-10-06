@@ -5,30 +5,32 @@ import { Tip } from '@/components/tip';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { setParams } from '../net/connection';
-import type { ParamSpec, ParamValue } from '../protocol/messages';
+import { setConfig } from '../net/connection';
+import type { ApplyKind, ConfigResult, Impact, ParamSpec, ParamValue } from '../protocol/messages';
 import { useStore } from '../store/store';
 import { fieldError } from './inject';
 import { ParamInput, formatParam } from './ParamInput';
 import { atRest, editApplied, isComputed, overrideSeed, shownValue } from './paramState';
 
-/** Live (hot) edits are sent this long after the last keystroke/slider move. */
-const LIVE_DEBOUNCE_MS = 400;
+/** Edits are sent this long after the last keystroke/slider move. */
+const SEND_DEBOUNCE_MS = 200;
 
 /**
  * Edits of world/volcano settings: pending values per parameter id (null = back to the default, or
- * to the computed value of an auto parameter). Live ones are sent debounced; restart ones wait for
- * an explicit apply. Pending edits disappear once the server's schema reports them applied.
+ * to the computed value of an auto parameter), sent to the server as they are made (debounced). The
+ * server decides how each is applied and may ask for confirmation first; pending edits disappear once
+ * the schema reports them applied, or when they are refused or the user cancels.
  */
 export function useParamEdits() {
   const schema = useStore((s) => s.schema);
   const [pending, setPending] = useState<Record<string, ParamValue | null>>({});
-  const liveQueue = useRef<Record<string, ParamValue | null>>({});
-  const liveTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(liveTimer.current), []);
+  const queue = useRef<Record<string, ParamValue | null>>({});
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
   useEffect(() => {
     if (!schema) return;
     setPending((p) => {
@@ -41,27 +43,116 @@ export function useParamEdits() {
       return next;
     });
   }, [schema]);
+  const drop = (ids: string[]) =>
+    setPending((p) => {
+      const next = { ...p };
+      for (const id of ids) delete next[id];
+      return next;
+    });
   const edit = (p: ParamSpec, v: ParamValue | null) => {
     setPending((x) => ({ ...x, [p.id]: v }));
-    if (p.apply !== 'hot') return;
     if (v !== null && p.type === 'number' && fieldError(p, v) !== null) return;
-    liveQueue.current[p.id] = v;
-    window.clearTimeout(liveTimer.current);
-    liveTimer.current = window.setTimeout(() => {
-      const batch = liveQueue.current;
-      liveQueue.current = {};
-      setParams(batch);
-    }, LIVE_DEBOUNCE_MS);
+    queue.current[p.id] = v;
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      const batch = queue.current;
+      queue.current = {};
+      void setConfig(batch).then((r) => showConfigResult(r, batch, drop));
+    }, SEND_DEBOUNCE_MS);
   };
   return { pending, setPending, edit };
 }
 
-/** "live" / "restart" marker of a setting. */
-export function ApplyBadge({ apply }: { apply: 'hot' | 'restart' }) {
+/**
+ * Shows what the server did with a change, in its own words; when it wants confirmation (a reset), asks
+ * the user with the server's description of the consequences.
+ */
+export function showConfigResult(r: ConfigResult, batch: Record<string, ParamValue | null>, drop: (ids: string[]) => void) {
+  const s = useStore.getState();
+  if (r.needsConfirmation && r.token) {
+    const token = r.token;
+    s.set({
+      configPrompt: {
+        result: r,
+        confirm: () => void setConfig(batch, { confirm: token }).then((x) => showConfigResult(x, batch, drop)),
+        cancel: () => drop(Object.keys(batch)),
+      },
+    });
+    return;
+  }
+  if (!r.ok) {
+    for (const e of r.errors ?? []) s.toast(`${e.path}: ${e.message}`, 'alert');
+    drop(Object.keys(batch));
+    return;
+  }
+  if (r.applied && r.applied !== 'live') {
+    const c = r.consequences?.[0];
+    if (c) s.toast(c.message, r.applied === 'reinit' ? 'warn' : 'info');
+  }
+  if (r.note) s.toast(r.note, 'warn');
+  for (const w of r.warnings ?? []) s.toast(w, 'warn');
+}
+
+/** The server's confirmation request for a change that resets something, with its own description. */
+export function ConfigConfirm() {
+  const prompt = useStore((s) => s.configPrompt);
+  const close = () => useStore.getState().set({ configPrompt: null });
+  if (!prompt) return null;
+  const changes = prompt.result.changes ?? [];
   return (
-    <Badge variant={apply === 'hot' ? 'secondary' : 'outline'} className={apply === 'hot' ? 'text-emerald-400' : 'text-amber-400'}>
-      {apply === 'hot' ? 'live' : 'restart'}
-    </Badge>
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!o) {
+          prompt.cancel();
+          close();
+        }
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Apply {changes.length === 1 ? 'this change' : `these ${changes.length} changes`}?</DialogTitle>
+          <DialogDescription>The server needs to do the following to apply it.</DialogDescription>
+        </DialogHeader>
+        <ul className="list-disc pl-5 text-sm">
+          {(prompt.result.consequences ?? []).map((c) => (
+            <li key={c.message}>{c.message}</li>
+          ))}
+        </ul>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              prompt.cancel();
+              close();
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              prompt.confirm();
+              close();
+            }}
+          >
+            Apply
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** The server's prediction of what changing a setting does (shown only when it is more than "live"). */
+export function ApplyBadge({ impact, kind }: { impact?: Impact; kind: ApplyKind | 'hot' | 'restart' }) {
+  if (kind === 'live' || kind === 'hot') return null;
+  return (
+    <Tip content={impact?.message ?? kind}>
+      <Badge variant="outline" className={kind === 'reload' ? 'text-sky-400' : 'text-amber-400'}>
+        {kind}
+      </Badge>
+    </Tip>
   );
 }
 
@@ -84,7 +175,8 @@ export function ParamRow({ p, pending, onEdit, compact = false }: { p: ParamSpec
               {p.label}
             </Label>
           </Tip>
-          {!compact && <ApplyBadge apply={p.apply === 'hot' ? 'hot' : 'restart'} />}
+          {changed && <span className="text-xs text-muted-foreground" role="status">applying…</span>}
+          {!compact && <ApplyBadge impact={p.impact} kind={p.apply} />}
           <Tip content={resetTip}>
             <Button variant="ghost" size="icon-xs" disabled={atDefault} aria-label={`Reset ${p.label} to default`} onClick={() => onEdit(p, null)}>
               <RotateCcw />
@@ -103,7 +195,8 @@ export function ParamRow({ p, pending, onEdit, compact = false }: { p: ParamSpec
             {p.label}
           </Label>
         </Tip>
-        {!compact && <ApplyBadge apply={p.apply === 'hot' ? 'hot' : 'restart'} />}
+        {changed && <span className="text-xs text-muted-foreground" role="status">applying…</span>}
+        {!compact && <ApplyBadge impact={p.impact} kind={p.apply} />}
         <Tip content={resetTip}>
           <Button variant="ghost" size="icon-xs" disabled={atDefault} aria-label={`Reset ${p.label} to ${p.auto ? 'computed' : 'default'}`} onClick={() => onEdit(p, null)}>
             <RotateCcw />

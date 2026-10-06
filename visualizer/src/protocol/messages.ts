@@ -70,12 +70,23 @@ export type ClientMessage =
   | { type: 'seek'; time: number }
   /** Asks for the attached session's parameter schema (also pushed on attach and after every change). */
   | { type: 'getSchema' }
-  /**
-   * Changes parameters of the attached session by schema id; `null` resets one to its default.
-   * Values whose spec says `apply: 'restart'` are refused unless `restart` is true (the affected
-   * volcanoes, or the whole world for world-level ones, are rebuilt from their definition).
-   */
+  /** Legacy alias of `setConfig` by schema id; `restart: true` confirms a reset. Prefer `setConfig`. */
   | { type: 'setParams'; requestId?: number; values: Record<string, ParamValue | null>; restart?: boolean }
+  /**
+   * The configuration API (docs/protocol.md §9): a patch of the world and/or volcano definitions
+   * (dotted paths; `null` = back to the default or computed value), or full definitions with `replace`.
+   * The server decides how to apply each change and answers with `configResult`.
+   */
+  | {
+      type: 'setConfig';
+      requestId?: number;
+      world?: Record<string, ParamValue | null>;
+      volcanoes?: Record<string, Record<string, ParamValue | null>>;
+      replace?: boolean;
+      dryRun?: boolean;
+      /** The `token` of a `needsConfirmation` answer the user confirmed. */
+      confirm?: string;
+    }
   /** Everything known about the column at (x, y); answered with an `inspection` (§3.7). */
   | { type: 'inspect'; requestId: number; x: number; y: number };
 
@@ -120,6 +131,7 @@ export type SessionAction = 'pause' | 'resume' | 'close' | 'closeWithoutSaving';
 
 export type ServerMessage =
   | WelcomeMessage
+  | (ConfigResult & { type: 'configResult' })
   /** Sent on request and pushed to every client whenever the list changes (and every few seconds). */
   | { type: 'sessions'; sessions: SessionInfo[]; server?: ServerInfo }
   | CatalogMessage
@@ -241,10 +253,57 @@ export interface ParamSpec {
   auto?: boolean;
   /** For an auto parameter: what the engine computes now (null when it cannot say). */
   computed?: number | null;
-  /** `hot`: applies to the running simulation; `restart`: rebuilds the volcano (or world). */
-  apply: 'hot' | 'restart';
+  /** The server's prediction of how a change is applied (a hint: `configResult` says what happened). */
+  apply: ApplyKind;
+  /** The server's prediction of the consequence, in words to show as they are. */
+  impact?: Impact;
   /** Volcano the parameter belongs to (absent for world-level ones). */
   volcanoId?: string;
+}
+
+/** How the server applies a change: in place, rebuilt keeping state, or reset to its new initial state. */
+export type ApplyKind = 'live' | 'reload' | 'reinit';
+
+/** A consequence the server describes; clients show `message` and decide nothing from field names. */
+export interface Impact {
+  kind: ApplyKind;
+  target: string;
+  message: string;
+  reason?: string;
+}
+
+/** One change in a `configResult`. */
+export interface ConfigChangeReport {
+  id: string;
+  scope: string;
+  volcanoId?: string;
+  path: string;
+  from: ParamValue | string | null;
+  to: ParamValue | string | null;
+  impact: Impact;
+  /** What was actually done (absent on dry runs and confirmations). */
+  applied?: ApplyKind;
+}
+
+/** The answer to `setConfig` (also the body of HTTP PATCH/PUT /api/sessions/{id}/config). */
+export interface ConfigResult {
+  type?: 'configResult';
+  requestId?: number;
+  ok: boolean;
+  dryRun?: boolean;
+  /** The most disruptive kind among the changes. */
+  plan?: ApplyKind;
+  applied?: ApplyKind;
+  changes?: ConfigChangeReport[];
+  /** Distinct consequences, most disruptive first. */
+  consequences?: Impact[];
+  warnings?: string[];
+  /** A reset the user must confirm: re-send with `confirm: token`. */
+  needsConfirmation?: boolean;
+  token?: string;
+  errors?: { path: string; message: string }[];
+  note?: string;
+  ms?: number;
 }
 
 export interface ParamChange {
@@ -255,7 +314,9 @@ export interface ParamChange {
   label: string;
   from: ParamValue | null;
   to: ParamValue | null;
-  apply: 'hot' | 'restart';
+  apply: ApplyKind | 'hot' | 'restart';
+  /** The consequence as the server described it. */
+  message?: string;
 }
 
 export interface SchemaMessage {
@@ -269,6 +330,8 @@ export interface SchemaMessage {
   commands: Record<string, ParamSpec[]>;
   /** Recent changes, newest last. */
   audit: ParamChange[];
+  /** Parameter ids the server shows in Inspector panels (e.g. a chamber's settings, by volcano id). */
+  panels?: { chamber?: Record<string, string[]> };
 }
 
 export type ErrorCode =

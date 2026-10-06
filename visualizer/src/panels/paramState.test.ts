@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ParamSpec } from '../protocol/messages';
 import { atRest, editApplied, isComputed, overrideSeed, shownValue } from './paramState';
 
-const spec = (o: Partial<ParamSpec>): ParamSpec => ({ id: 'x', label: 'x', group: 'g', type: 'number', apply: 'hot', ...o });
+const spec = (o: Partial<ParamSpec>): ParamSpec => ({ id: 'x', label: 'x', group: 'g', type: 'number', apply: 'live', ...o });
 
 describe('auto parameters', () => {
   const wall = spec({ id: 'volcano:magma.chamber.wallRuptureRatio', auto: true, computed: 2, value: null, min: 1, max: 10 });

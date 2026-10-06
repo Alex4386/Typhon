@@ -3,15 +3,12 @@ import { ChevronRight } from 'lucide-react';
 import { Hint, SliderRow } from '@/components/fields';
 import { PanelSection } from '@/components/tip';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { command, setParams } from '../net/connection';
-import type { ParamSpec, ParamValue } from '../protocol/messages';
+import { command } from '../net/connection';
+import type { ParamSpec } from '../protocol/messages';
 import { useStore } from '../store/store';
-import { fieldError } from './inject';
 import { formatParam } from './ParamInput';
 import { ApplyBadge, ParamRow, useParamEdits } from './ParamRow';
 
@@ -36,25 +33,15 @@ export function Params() {
   const schema = useStore((s) => s.schema);
   const [filter, setFilter] = useState('');
   const [tab, setTab] = useState('weather');
-  const [confirming, setConfirming] = useState(false);
-  const { pending, setPending, edit } = useParamEdits();
+  const { pending, edit } = useParamEdits();
 
   const specs = schema?.params ?? [];
-  const byId = useMemo(() => new Map(specs.map((p) => [p.id, p])), [specs]);
   const searching = filter.trim() !== '';
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
     return q ? specs.filter((p) => `${p.label} ${p.group} ${p.id} ${p.help ?? ''}`.toLowerCase().includes(q)) : specs;
   }, [specs, filter]);
   const topics = useMemo(() => PARAM_TOPICS.filter(([key]) => key === 'weather' || specs.some((p) => paramTopic(p.group) === key)), [specs]);
-
-  const restartEdits = Object.entries(pending).filter(([id]) => byId.get(id)?.apply === 'restart');
-  const restartInvalid = restartEdits.some(([id, v]) => {
-    const p = byId.get(id)!;
-    return v !== null && fieldError(p, v) !== null;
-  });
-  const describe = (p: ParamSpec, v: ParamValue | null | undefined) => (v === null && p.auto ? 'auto' : formatParam(v === null ? p.default : v, p));
-  const restartWho = [...new Set(restartEdits.map(([id]) => byId.get(id)?.volcanoId ?? 'world'))];
 
   const groupsOf = (list: ParamSpec[]) => [...new Set(list.map((p) => p.group))];
   const renderGroups = (list: ParamSpec[]) =>
@@ -102,56 +89,8 @@ export function Params() {
         </Tabs>
       )}
       {schema && specs.length > 0 && (
-        <Hint>
-          <ApplyBadge apply="hot" /> changes apply at once. <ApplyBadge apply="restart" /> changes rebuild the volcano from its settings (its magma and surroundings start over; the landscape is kept).
-        </Hint>
+        <Hint>Changes apply as you make them. The server decides how; anything that would reset part of a volcano asks first and says what it does.</Hint>
       )}
-      {restartEdits.length > 0 && (
-        <div className="sticky bottom-0 flex items-center gap-2 rounded-lg border bg-card p-3 text-sm shadow-lg" role="region" aria-label="Changes waiting for a restart">
-          <span className="flex-1">
-            {restartEdits.length} change{restartEdits.length > 1 ? 's' : ''} need{restartEdits.length > 1 ? '' : 's'} a restart of {restartWho.join(', ')}.
-          </span>
-          <Button variant="ghost" size="sm" onClick={() => setPending(Object.fromEntries(Object.entries(pending).filter(([id]) => byId.get(id)?.apply !== 'restart')))}>
-            Discard
-          </Button>
-          <Button size="sm" disabled={restartInvalid} onClick={() => setConfirming(true)}>
-            Apply and restart…
-          </Button>
-        </div>
-      )}
-      <Dialog open={confirming} onOpenChange={setConfirming}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Restart {restartWho.join(', ')}?</DialogTitle>
-            <DialogDescription>
-              {restartWho.length > 1 ? 'Their magma systems start' : 'Its magma system starts'} over from the new settings: chamber pressure, recharge and alert history reset. The terrain, lava already on the
-              ground and the replay up to now are kept.
-            </DialogDescription>
-          </DialogHeader>
-          <ul className="list-disc pl-5 text-sm">
-            {restartEdits.map(([id, v]) => {
-              const p = byId.get(id)!;
-              return (
-                <li key={id}>
-                  {p.label}: {describe(p, p.value ?? (p.auto ? null : undefined))} → {describe(p, v)}
-                </li>
-              );
-            })}
-          </ul>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                setParams(Object.fromEntries(restartEdits), true);
-                setConfirming(false);
-              }}
-            >
-              Apply and restart
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <Audit />
     </div>
   );
@@ -200,10 +139,10 @@ function Audit() {
           {[...audit].reverse().map((a, k) => (
             <li key={k}>
               <time className="text-muted-foreground tabular-nums">{new Date(a.at).toLocaleTimeString()}</time> {a.label}: {formatParam(a.from)} → {a.to === null ? 'default' : formatParam(a.to)}
-              {a.apply === 'restart' && (
+              {a.apply !== 'live' && a.apply !== 'hot' && (
                 <>
                   {' '}
-                  <ApplyBadge apply="restart" />
+                  <ApplyBadge kind={a.apply} impact={a.message ? { kind: a.apply === 'restart' ? 'reinit' : a.apply, target: '', message: a.message } : undefined} />
                 </>
               )}
             </li>

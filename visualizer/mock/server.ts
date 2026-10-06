@@ -189,7 +189,7 @@ function attach(c: Client) {
 /** The mock world is not tunable; it still describes the injection fields. */
 function schema(): ServerMessage {
   const field = (id: string, label: string, unit: string, min: number, max: number, def: number, log = false) =>
-    ({ id, label, unit, min, max, default: def, log, group: id === 'volumeM3' ? 'Batch' : 'Magma', type: 'number', apply: 'hot' }) as const;
+    ({ id, label, unit, min, max, default: def, log, group: id === 'volumeM3' ? 'Batch' : 'Magma', type: 'number', apply: 'live' }) as const;
   return {
     type: 'schema',
     sessionId: session.id,
@@ -253,6 +253,9 @@ function handle(c: Client, msg: ClientMessage) {
     case 'deleteWorld':
     case 'setParams':
       send(c, { type: 'error', code: 'unsupported', message: 'The mock server has no world files', requestId: msg.requestId });
+      return;
+    case 'setConfig':
+      send(c, { type: 'configResult', requestId: msg.requestId, ok: false, errors: [{ path: 'world', message: 'The mock server has no world files' }] });
       return;
     case 'getSchema':
       send(c, schema());
