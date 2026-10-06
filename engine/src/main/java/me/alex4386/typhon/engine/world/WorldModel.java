@@ -45,6 +45,12 @@ public final class WorldModel implements WorldQuery, WorldEdit {
     private final List<DepositObserver> depositObservers = new ArrayList<>();
     /** Keeps loose deposits at or below their angle of repose (null until a host enables it). */
     private ReposeRelaxation repose;
+    /**
+     * Version of the repose rule this world's loose deposits already obey. Fresh worlds start current; a
+     * state saved before the rule (no version) gets one deterministic sweep of every loose column on load.
+     */
+    public static final int REPOSE_VERSION = 1;
+    private int reposeVersion = REPOSE_VERSION;
 
     public WorldModel(WorldSpec spec) {
         this.spec = Objects.requireNonNull(spec);
@@ -366,7 +372,37 @@ public final class WorldModel implements WorldQuery, WorldEdit {
      */
     public ReposeRelaxation enableReposeRelaxation() {
         if (repose == null) repose = new ReposeRelaxation(this);
+        upgradeRepose();
         return repose;
+    }
+
+    /** The repose rule version the loose deposits obey (see {@link #REPOSE_VERSION}). */
+    public int reposeVersion() {
+        return reposeVersion;
+    }
+
+    /** Marks the deposits as made before the repose rule (tests of the migration sweep). */
+    void markPreRepose() {
+        reposeVersion = 0;
+    }
+
+    /**
+     * One-time migration: deposits saved before the repose rule (e.g. single-column tephra towers) relax once,
+     * every column in tile and column order, then the version is recorded so it never runs again.
+     */
+    private void upgradeRepose() {
+        if (repose == null || reposeVersion >= REPOSE_VERSION) return;
+        long[] keys = stacks.tileKeys();
+        java.util.Arrays.sort(keys);
+        for (long key : keys) {
+            int x0 = ColumnStacks.keyTileX(key) * ColumnStacks.TILE;
+            int z0 = ColumnStacks.keyTileZ(key) * ColumnStacks.TILE;
+            for (int dz = 0; dz < ColumnStacks.TILE; dz++) {
+                for (int dx = 0; dx < ColumnStacks.TILE; dx++) repose.enqueue(x0 + dx, z0 + dz);
+            }
+        }
+        repose.drain();
+        reposeVersion = REPOSE_VERSION;
     }
 
     /** The repose relaxation, or {@code null} when not enabled. */
@@ -515,6 +551,7 @@ public final class WorldModel implements WorldQuery, WorldEdit {
             water.add(entry);
         }
         world.add("pendingWater", water);
+        world.addProperty("reposeVersion", reposeVersion);
         out.json().add("world", world);
     }
 
@@ -525,6 +562,7 @@ public final class WorldModel implements WorldQuery, WorldEdit {
         JsonObject world = in.json().getAsJsonObject("world");
         if (world == null) return;
         units.load(world.getAsJsonArray("units"));
+        reposeVersion = world.has("reposeVersion") ? world.get("reposeVersion").getAsInt() : 0;
         basementUnit = world.get("basementUnit").getAsInt();
         edificeUnit = world.get("edificeUnit").getAsInt();
         if (world.has("volcanoEdificeUnits")) {
@@ -564,5 +602,6 @@ public final class WorldModel implements WorldQuery, WorldEdit {
             System.arraycopy(data.ints("version"), 0, t.version, 0, t.version.length);
             stacks.putTile(t);
         }
+        upgradeRepose();
     }
 }

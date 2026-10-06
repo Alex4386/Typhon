@@ -89,6 +89,11 @@ public final class ReposeRelaxation {
         if (!running) drain();
     }
 
+    /** Queues a column for examination at the next {@link #drain()} (bulk sweeps). */
+    void enqueue(int x, int z) {
+        queue.add(pack(x, z));
+    }
+
     /** Relaxes everything queued. */
     public void drain() {
         if (running) return;
