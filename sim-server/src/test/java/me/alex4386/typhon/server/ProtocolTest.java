@@ -248,6 +248,64 @@ class ProtocolTest {
     }
 
     @Test
+    void ventAndDikeControls() throws Exception {
+        try (TestClient c = attached()) {
+            var volcano = server.session("s1").live().volcanoes().get(0);
+            String vid = volcano.volcanoId();
+            String vent = volcano.vents().get(0).id();
+            java.util.function.BiFunction<Integer, String, JsonObject> command = (id, body) -> {
+                c.send("{\"type\":\"command\",\"requestId\":" + id + ",\"command\":{" + body + "}}");
+                try {
+                    return c.await(m -> m.type().equals("ack") && m.json().get("requestId").getAsLong() == id, 10).json();
+                } catch (Exception e) {
+                    throw new AssertionError(e);
+                }
+            };
+            String target = "\"volcanoId\":\"" + vid + "\"";
+
+            JsonObject sealed = command.apply(41, "\"kind\":\"sealVent\"," + target + ",\"ventId\":\"" + vent + "\"");
+            assertTrue(sealed.get("ok").getAsBoolean(), sealed.toString());
+            JsonObject entity = c.await(m -> m.type().equals("entities") && ventProps(m.json(), vid, vent) != null
+                    && ventProps(m.json(), vid, vent).get("sealed").getAsBoolean(), 30).json();
+            JsonObject props = ventProps(entity, vid, vent);
+            assertEquals("sealed", props.get("state").getAsString());
+            assertTrue(props.has("fluxM3PerS"), props.toString());
+
+            assertFalse(command.apply(42, "\"kind\":\"sealVent\"," + target + ",\"ventId\":\"nope\"")
+                    .get("ok").getAsBoolean());
+            assertEquals("unknownVent", c.awaitType("error", 5).json().get("code").getAsString());
+            assertFalse(command.apply(43, "\"kind\":\"removeVent\"," + target + ",\"ventId\":\"" + vent + "\"")
+                    .get("ok").getAsBoolean(), "summit vents are sealed, not removed");
+            assertTrue(command.apply(44, "\"kind\":\"unsealVent\"," + target + ",\"ventId\":\"" + vent + "\"")
+                    .get("ok").getAsBoolean());
+            assertFalse(command.apply(45, "\"kind\":\"unsealVent\"," + target + ",\"ventId\":\"" + vent + "\"")
+                    .get("ok").getAsBoolean(), "not sealed any more");
+
+            if (volcano.dikes() != null) {
+                assertTrue(command.apply(46, "\"kind\":\"blockDikes\"," + target + ",\"blocked\":true")
+                        .get("ok").getAsBoolean());
+                assertFalse(command.apply(47, "\"kind\":\"blockDikes\"," + target).get("ok").getAsBoolean());
+                assertFalse(command.apply(48, "\"kind\":\"removeDike\"," + target + ",\"dikeId\":99999")
+                        .get("ok").getAsBoolean());
+                assertFalse(command.apply(49, "\"kind\":\"arrestDike\"," + target + ",\"dikeId\":1.5")
+                        .get("ok").getAsBoolean());
+                assertTrue(command.apply(50, "\"kind\":\"blockDikes\"," + target + ",\"blocked\":false")
+                        .get("ok").getAsBoolean());
+            }
+        }
+    }
+
+    /** Props of the vent entity in an {@code entities} message, or null if it is not upserted there. */
+    private static JsonObject ventProps(JsonObject entities, String vid, String ventId) {
+        if (!entities.has("upsert")) return null;
+        for (JsonElement e : entities.getAsJsonArray("upsert")) {
+            JsonObject o = e.getAsJsonObject();
+            if (o.get("id").getAsString().equals("vent:" + vid + ":" + ventId)) return o.getAsJsonObject("props");
+        }
+        return null;
+    }
+
+    @Test
     void transportPauseAndStepAdvanceExactly() throws Exception {
         try (TestClient c = attached()) {
             c.send("{\"type\":\"transport\",\"mode\":\"PAUSED\"}");

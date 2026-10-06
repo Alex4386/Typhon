@@ -25,7 +25,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import me.alex4386.typhon.engine.assembly.VolcanoCoupler;
 import me.alex4386.typhon.engine.assembly.VolcanoSystem;
+import me.alex4386.typhon.engine.dike.Dike;
 import me.alex4386.typhon.engine.dike.DikeCommands;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaCommands;
@@ -44,7 +46,9 @@ import me.alex4386.typhon.engine.tephra.TephraCommands;
 import me.alex4386.typhon.engine.tephra.WindField;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
+import me.alex4386.typhon.engine.volcano.VentCommands;
 import me.alex4386.typhon.engine.volcano.VentSite;
+import me.alex4386.typhon.engine.volcano.VentStatus;
 import me.alex4386.typhon.engine.worlds.World;
 import me.alex4386.typhon.server.protocol.Field;
 import me.alex4386.typhon.simulator.scenario.Preset;
@@ -751,6 +755,76 @@ final class Session implements AutoCloseable {
                         }
                     }
                     return done(CommandResult.ok(null));
+                }
+                case "sealVent", "unsealVent", "removeVent" -> {
+                    String vid = Json.str(cmd, "volcanoId");
+                    String ventId = Json.str(cmd, "ventId");
+                    VolcanoSystem v = volcano(s, vid);
+                    if (v == null) return done(CommandResult.error("unknownVolcano", "Unknown volcano " + vid));
+                    if (ventId == null) return done(CommandResult.error("badRequest", "ventId is required"));
+                    return r.onEngineThread(e -> {
+                        VolcanoCoupler c = v.coupler();
+                        VentStatus status = c.ventStatus(ventId);
+                        if (status == null) return CommandResult.error("unknownVent", "Unknown vent " + ventId);
+                        boolean crater = v.vents().stream().anyMatch(vent -> vent.id().equals(ventId));
+                        switch (kind) {
+                            case "sealVent" -> {
+                                if (c.sealed(ventId)) return CommandResult.ok("Already sealed");
+                                e.submit(new VentCommands.SealVent(vid, ventId));
+                            }
+                            case "unsealVent" -> {
+                                if (!c.sealed(ventId)) return CommandResult.error("badRequest", "Vent " + ventId + " is not sealed");
+                                e.submit(new VentCommands.UnsealVent(vid, ventId));
+                                if (!Double.isNaN(c.feederWidthM(ventId)) && c.feederWidthM(ventId) <= 0) {
+                                    return CommandResult.ok("Unsealed, but its feeder is frozen: it stays extinct");
+                                }
+                            }
+                            default -> {
+                                if (crater) {
+                                    return CommandResult.error("unsupported", "Summit vents can be sealed, not removed");
+                                }
+                                e.submit(new VentCommands.RemoveVent(vid, ventId));
+                            }
+                        }
+                        return CommandResult.ok(null);
+                    });
+                }
+                case "arrestDike", "removeDike", "blockDikes" -> {
+                    String vid = Json.str(cmd, "volcanoId");
+                    VolcanoSystem v = volcano(s, vid);
+                    if (v == null) return done(CommandResult.error("unknownVolcano", "Unknown volcano " + vid));
+                    if (v.dikes() == null) {
+                        return done(CommandResult.error("unsupported", "Volcano " + vid + " has dikes disabled"));
+                    }
+                    if (kind.equals("blockDikes")) {
+                        if (!cmd.has("blocked") || !cmd.get("blocked").isJsonPrimitive()
+                                || !cmd.get("blocked").getAsJsonPrimitive().isBoolean()) {
+                            return done(CommandResult.error("badRequest", "blocked (boolean) is required"));
+                        }
+                        r.submit(new DikeCommands.BlockDikes(vid, cmd.get("blocked").getAsBoolean()));
+                        return done(CommandResult.ok(null));
+                    }
+                    Double raw = Json.dbl(cmd, "dikeId");
+                    if (raw == null || raw != Math.rint(raw)) {
+                        return done(CommandResult.error("badRequest", "dikeId (integer) is required"));
+                    }
+                    int dikeId = raw.intValue();
+                    return r.onEngineThread(e -> {
+                        Dike dike = null;
+                        for (Dike d : v.dikes().dikes()) if (d.id() == dikeId) dike = d;
+                        if (dike == null || dike.removed()) {
+                            return CommandResult.error("unknownDike", "Unknown dike " + dikeId);
+                        }
+                        if (kind.equals("arrestDike")) {
+                            if (!dike.propagating()) {
+                                return CommandResult.error("badRequest", "Dike " + dikeId + " is no longer propagating");
+                            }
+                            e.submit(new DikeCommands.ArrestDike(vid, dikeId));
+                        } else {
+                            e.submit(new DikeCommands.RemoveDike(vid, dikeId));
+                        }
+                        return CommandResult.ok(null);
+                    });
                 }
                 case "rain" -> {
                     Double mm = Json.dbl(cmd, "mmPerHour");

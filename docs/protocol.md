@@ -104,6 +104,12 @@ volcano, out of world, …).
 | `startEruption` | `volcanoId` | Forced eruption start (`MagmaCommands.StartEruption`). |
 | `stopEruption` | `volcanoId` | Forced stop. |
 | `forceDike` | `volcanoId` | `DikeCommands.ForceDike`. |
+| `arrestDike` | `volcanoId`, `dikeId` (integer) | `DikeCommands.ArrestDike`: a propagating dike stops where it is and freezes into an intrusion (`DikeStalled` with reason `ARRESTED`). Rejected (`unknownDike`, `badRequest`) for unknown or no longer propagating dikes. |
+| `removeDike` | `volcanoId`, `dikeId` (integer) | `DikeCommands.RemoveDike`: deletes the dike (arresting it if still rising). Its fissure stops being a vent (`ventState` → `removed`); the intrusion stays in the rock and deformation. The `dike:` entity is removed. |
+| `blockDikes` | `volcanoId`, `blocked` (boolean) | `DikeCommands.BlockDikes`: stops (or allows again) spontaneous dike nucleation; `forceDike` still works. Shown as the chamber's `dikesBlocked`. |
+| `sealVent` | `volcanoId`, `ventId` | `VentCommands.SealVent`: plug a summit vent or a fissure. Magma leaves through the remaining open vents; with none left the eruption ends (`eruptionEnded` cause `SEALED`) and the chamber keeps its pressure. A sealed summit cannot fail, so pressure builds until a dike opens a flank path. Error `unknownVent` for an unknown id. |
+| `unsealVent` | `volcanoId`, `ventId` | `VentCommands.UnsealVent`. A frozen fissure stays frozen (the ack carries a note). |
+| `removeVent` | `volcanoId`, `ventId` | `VentCommands.RemoveVent`: delete a dike-fed fissure (same as `removeDike` on its dike). Summit vents are rejected (`unsupported`): seal them instead. |
 | `injectMagma` | `volcanoId`, `volumeM3` (0–1e12), `temperatureC?` (650–1350), `silicaWt?` (42–78), `waterWt?` (0–8), `co2Wt?` (0–3), `crystalFraction?` (0–0.6) | Recharge pulse (`MagmaCommands.InjectRecharge`). Omitted properties take the magma the deep supply delivers now; out-of-range values are rejected. The accepted fields, their ranges and defaults are listed in `schema.commands.injectMagma` (§4.7), so clients build their form from it and pick up new fields without changes. |
 | `rain` | `mmPerHour` | World rainfall rate; 0 stops it. |
 | `addWater` | `at: XY`, `volumeM3`, `seconds?` | Pour water at a point, released over `seconds` (default 600). This is surface-water input that can infiltrate to the water table (plan §3-1). |
@@ -299,7 +305,8 @@ at least the most recent ~500 seismic events. Every event has `kind` and `time` 
 |---|---|---|
 | `seismic` | `volcanoId`, `type` (`VT`/`LP`/`TREMOR`/`EXPLOSION`), `magnitude`, `hypocenter` [x,y,z], `durationSeconds`, `swarm` | `SeismicEvent` |
 | `eruptionStarted` | `volcanoId`, `cause` (`AUTOMATIC`/`FORCED`/`DIKE`), `ventIds` | `MagmaEvents.EruptionStarted` + coupler vents |
-| `eruptionEnded` | `volcanoId`, `eruptedVolumeM3` | `MagmaEvents.EruptionEnded` |
+| `eruptionEnded` | `volcanoId`, `eruptedVolumeM3`, `cause` (`AUTOMATIC`/`FORCED`/`SEALED`) | `MagmaEvents.EruptionEnded` |
+| `ventState` | `volcanoId`, `ventId`, `previous`, `state` (`idle`/`active`/`waning`/`frozen`/`sealed`/`removed`), `feederWidthM?` (fissures) | `VentEvents.VentStateChanged`: a fissure's feeder froze or is narrowing, a vent started or stopped erupting, or the user sealed/unsealed/removed it |
 | `alertChanged` | `volcanoId`, `previous` (or null), `current` | `AlertEvents.AlertLevelChanged` |
 | `regimeChanged` | `volcanoId`, `regime` | eruptive-regime change |
 | `styleEstimated` | `volcanoId`, `previous`, `current`, `vei`, `forecast`, `probabilities` | the estimated eruption style or VEI changed (`probabilities`: style → probability) |
@@ -380,9 +387,9 @@ when it went away:
 
 | kind | id | lifetime | props |
 |---|---|---|---|
-| `chamber` | `chamber:<volcano>` | always | `overpressureMPa`, `tensileStrengthMPa`, `temperatureC`, `silicaWt`, `waterWt`, `crystalFraction`, `volumeM3`, `depthM`, `eruptionRateM3PerS`, `regime`, `styleEstimate?`, `vei`, `radiusM` |
-| `vent`, `fissure` | `vent:<volcano>:<ventId>` | while the vent exists (fissures appear when a dike breaks the surface) | `ventId`, `shape`, `craterRadiusM`, `lengthM?`, `strikeDeg?` (clockwise from east), `erupting` |
-| `dike` | `dike:<volcano>:<n>` | from nucleation until the engine forgets it (it keeps the latest few, stalled or erupted) | `status` (`PROPAGATING`/`STALLED`/`ERUPTED`), `startedAt`, `tipDepthM`, `heightM`, `openingM`, `strikeLengthM`, `speedMPerS`, `volumeM3`, `fissure?` |
+| `chamber` | `chamber:<volcano>` | always | `overpressureMPa`, `tensileStrengthMPa`, `temperatureC`, `silicaWt`, `waterWt`, `crystalFraction`, `volumeM3`, `depthM`, `eruptionRateM3PerS`, `regime`, `styleEstimate?`, `vei`, `radiusM`, `dikesBlocked?` (when dikes are simulated) |
+| `vent`, `fissure` | `vent:<volcano>:<ventId>` | while the vent exists (fissures appear when a dike breaks the surface and disappear when removed) | `ventId`, `shape`, `craterRadiusM`, `lengthM?`, `strikeDeg?` (clockwise from east), `erupting`, `state` (`idle`/`active`/`waning`/`frozen`/`sealed`), `sealed`, `fluxM3PerS` (DRE through this vent, 2 significant digits), fissures only: `feederWidthM` (widest open feeder segment, cm precision; 0 once frozen), `segmentsOpen`, `segmentsTotal` |
+| `dike` | `dike:<volcano>:<n>` | from nucleation until removed or the engine forgets it (it keeps the latest few, stalled or erupted) | `status` (`PROPAGATING`/`STALLED`/`ERUPTED`), `startedAt`, `tipDepthM`, `heightM`, `openingM`, `strikeLengthM`, `speedMPerS`, `volumeM3`, `fissure?` |
 | `feature` | `feature:<volcano>:<KIND>:<x>:<z>` | while the geothermal model keeps the feature | `feature` (`HOT_SPRING`, `GEYSER`, `FUMAROLE`, `MUD_POT`, `SULFUR_SPRING`, `SUBMARINE_VENT`, `SULFUR_DEPOSIT`, `ACID_ALTERATION`, `SINTER`, `CINNABAR`), `groundTemperatureC` (whole degrees), `level?` |
 | `plume` | `plume:<volcano>` | while an eruption column stands | `topZ`, `heightM`, `massRateKgS` |
 | `station` | `station:<volcano>:<name>` | always | `station` |

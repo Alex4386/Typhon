@@ -6,8 +6,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import me.alex4386.typhon.engine.assembly.VolcanoCoupler;
 import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.deformation.GeodeticStation;
 import me.alex4386.typhon.engine.dike.Dike;
@@ -26,6 +28,7 @@ import me.alex4386.typhon.engine.tephra.ExplosivePhase;
 import me.alex4386.typhon.engine.tephra.TephraSubsystem;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
+import me.alex4386.typhon.engine.volcano.VentStatus;
 import me.alex4386.typhon.engine.world.WorldModel;
 import me.alex4386.typhon.simulator.scenario.Scenario;
 
@@ -189,12 +192,26 @@ final class EntityTracker {
                     p.add("strikeDeg", Json.num(Math.toDegrees(vent.fissureAngleRad())));
                 }
                 p.addProperty("erupting", erupting && active.contains(vent.id()));
+                VolcanoCoupler c = v.coupler();
+                VentStatus status = c.ventStatus(vent.id());
+                if (status != null) p.addProperty("state", status.name().toLowerCase(Locale.ROOT));
+                p.addProperty("sealed", c.sealed(vent.id()));
+                // Rounded: these drift every step and would otherwise re-send the vent each frame.
+                p.add("fluxM3PerS", Json.num(roundSignificant(c.ventFluxM3PerS(vent.id()), 2)));
+                int[] segments = c.feederSegments(vent.id());
+                if (segments != null) {
+                    p.add("feederWidthM", Json.num(Math.round(c.feederWidthM(vent.id()) * 100) / 100.0));
+                    p.addProperty("segmentsOpen", segments[0]);
+                    p.addProperty("segmentsTotal", segments[1]);
+                }
                 out.put(o.get("id").getAsString(), o);
             }
 
             DikePropagation dikes = v.dikes();
             if (dikes != null) {
+                cp.addProperty("dikesBlocked", dikes.nucleationBlocked());
                 for (Dike d : dikes.dikes()) {
+                    if (d.removed()) continue;
                     JsonObject o = entity("dike:" + vid + ":" + d.id(), "dike", vid, "Dike " + d.id(), map.point(d.tip()));
                     JsonArray path = new JsonArray();
                     path.add(Json.xyz(map.point(d.origin())));
@@ -276,6 +293,13 @@ final class EntityTracker {
             return "Fissure from dike " + ventId.substring(k + 6);
         }
         return "Fissure " + ventId;
+    }
+
+    /** {@code v} rounded to {@code digits} significant digits (0 stays 0). */
+    static double roundSignificant(double v, int digits) {
+        if (v == 0 || !Double.isFinite(v)) return v;
+        double scale = Math.pow(10, digits - 1 - (int) Math.floor(Math.log10(Math.abs(v))));
+        return Math.round(v * scale) / scale;
     }
 
     static String featureLabel(HydrothermalFeature kind) {

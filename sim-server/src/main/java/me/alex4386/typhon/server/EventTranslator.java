@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -25,6 +26,7 @@ import me.alex4386.typhon.engine.tephra.TephraEvents;
 import me.alex4386.typhon.engine.tephra.Vec3d;
 import me.alex4386.typhon.engine.volcano.EruptiveRegime;
 import me.alex4386.typhon.engine.volcano.VentKind;
+import me.alex4386.typhon.engine.volcano.VentEvents;
 import me.alex4386.typhon.engine.volcano.VentSite;
 
 /**
@@ -76,6 +78,7 @@ final class EventTranslator {
             case MagmaEvents.EruptionEnded e -> {
                 JsonObject o = base("eruptionEnded", e.time(), e.volcanoId());
                 o.add("eruptedVolumeM3", Json.num(e.eruptedVolume()));
+                o.addProperty("cause", e.cause().name());
                 yield o;
             }
             case MagmaEvents.EruptiveRegimeChanged e -> {
@@ -127,6 +130,14 @@ final class EventTranslator {
                 finishedDikes.add(e.volcanoId() + "#" + e.dikeId());
                 JsonObject o = base("fissureOpened", e.time(), e.volcanoId());
                 o.add("vent", vent(e.vent()));
+                yield o;
+            }
+            case VentEvents.VentStateChanged e -> {
+                JsonObject o = base("ventState", e.time(), e.volcanoId());
+                o.addProperty("ventId", e.ventId());
+                o.addProperty("previous", e.previous().name().toLowerCase(Locale.ROOT));
+                o.addProperty("state", e.current().name().toLowerCase(Locale.ROOT));
+                if (!Double.isNaN(e.feederWidthM())) o.add("feederWidthM", Json.num(e.feederWidthM()));
                 yield o;
             }
             case TephraEvents.BombLaunched e -> {
