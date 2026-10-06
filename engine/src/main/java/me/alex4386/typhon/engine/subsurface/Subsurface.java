@@ -960,5 +960,9 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
         }
         grid.invalidate();
         preparedEdits = Long.MIN_VALUE;
+        // Rebuild the derived grid geometry (which columns exist, their surface and rock) now rather than on
+        // the first step: subsystems stepping before this one query temperature and water right after a restore.
+        // If the world model loads after this, its edit count moves and the next step prepares again.
+        prepare();
     }
 }

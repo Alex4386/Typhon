@@ -293,8 +293,8 @@ class ProtocolTest {
             String vid = volcano.volcanoId();
             String vent = volcano.vents().get(0).id();
             java.util.function.BiFunction<Integer, String, JsonObject> command = (id, body) -> {
-                c.send("{\"type\":\"command\",\"requestId\":" + id + ",\"command\":{" + body + "}}");
                 try {
+                    c.send("{\"type\":\"command\",\"requestId\":" + id + ",\"command\":{" + body + "}}");
                     return c.await(m -> m.type().equals("ack") && m.json().get("requestId").getAsLong() == id, 10).json();
                 } catch (Exception e) {
                     throw new AssertionError(e);
