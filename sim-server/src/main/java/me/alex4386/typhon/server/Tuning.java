@@ -101,6 +101,47 @@ final class Tuning {
         META.put("volcano:ballisticFraction", m("Share of erupted mass as bombs", null, 0.0, 1.0, false, null));
     }
 
+    /**
+     * The physically sensible part of a range: values outside {@code [low, high]} are accepted (the
+     * hard {@link Meta} range still applies) but the schema flags them and {@code setParams} warns.
+     */
+    record Advice(Double low, Double high, String warning) {}
+
+    /** Advice by scope:path, like {@link #META}. */
+    static final Map<String, Advice> ADVICE = new LinkedHashMap<>();
+
+    static {
+        String fast = "Above ~100× lava, fountains and ash advance hundreds of metres per tick and the chamber drains in"
+                + " a few steps; results stay bounded but look unrealistic.";
+        ADVICE.put("world:scaling.eruptiveTimeCompression", new Advice(1.0, 100.0, fast));
+        ADVICE.put("volcano:timeCompression.eruptive", new Advice(1.0, 100.0, fast));
+        String quiet = "Above ~10⁵× a year of recharge passes in minutes; dikes and unrest are skipped over.";
+        ADVICE.put("world:scaling.dormantTimeCompression", new Advice(null, 1e5, quiet));
+        ADVICE.put("volcano:timeCompression.dormant", new Advice(null, 1e5, quiet));
+        ADVICE.put("volcano:magma.chamber.supplyRate", new Advice(null, 5.0,
+                "Long-term supply above ~5 m³/s is beyond any measured volcano (Kīlauea ~0.1–0.2, Etna ~0.8); the chamber"
+                        + " stays at its rupture limit and grows."));
+        ADVICE.put("volcano:magma.chamber.supplyVariability", new Advice(null, 0.6,
+                "Large pulses make the supply intermittent; eruptions will start and stop abruptly."));
+        ADVICE.put("volcano:magma.chamber.tensileStrengthMPa", new Advice(0.5, 20.0,
+                "Measured rock tensile strengths are 0.5–9 MPa (in situ ~3); stronger roofs store implausible pressure."));
+        ADVICE.put("volcano:magma.chamber.volume", new Advice(1e7, 1e12,
+                "Shallow chambers are ~0.01–1000 km³ (10⁷–10¹² m³)."));
+        ADVICE.put("volcano:magma.chamber.maxEruptionRate", new Advice(null, 1e5,
+                "Only the largest Plinian eruptions exceed ~10⁵ m³/s (Pinatubo 1991 peaked near 10⁵–10⁶)."));
+    }
+
+    /** Warning for {@code value} at a scope:path, or null when it is in the sensible range. */
+    static String advise(String metaKey, String label, double value) {
+        Advice a = ADVICE.get(metaKey);
+        if (a == null) return null;
+        if ((a.low() != null && value < a.low()) || (a.high() != null && value > a.high())) return label + ": " + a.warning();
+        return null;
+    }
+
+    /** An {@code injectMagma} batch beyond this share of the chamber volume ruptures the walls. */
+    static final double INJECT_RUPTURE_SHARE = 0.1;
+
     /** Group headings by scope:path prefix (first match wins, in order). */
     private static final List<String[]> GROUPS = List.of(
             new String[] {"world:climate", "Weather"},
@@ -158,9 +199,15 @@ final class Tuning {
     /** {@code injectMagma} fields with defaults from the volcano's configured supply magma. */
     static JsonArray injectSchema(MagmaChamberConfig c) {
         JsonArray out = new JsonArray();
+        double sensible = INJECT_RUPTURE_SHARE * c.volume();
         JsonObject vol = spec("volumeM3", "Volume", "m³", "Batch", 1e3, 1e10, true,
                 "How much magma to add. A large eruption is 10⁷–10⁹ m³.");
-        vol.add("default", Json.num(INJECT_DEFAULT_M3));
+        vol.add("default", Json.num(Math.min(INJECT_DEFAULT_M3, sensible)));
+        JsonObject r = new JsonObject();
+        r.add("max", Json.num(sensible));
+        vol.add("recommended", r);
+        vol.addProperty("warning", "Batches above ~" + (int) (INJECT_RUPTURE_SHARE * 100) + "% of the chamber volume crack"
+                + " its walls: the pressure stops at the rupture limit and the excess grows the chamber (and the ground).");
         out.add(vol);
         for (InjectField f : INJECT_FIELDS) {
             JsonObject j = spec(f.id(), f.label(), f.unit(), "Magma", f.min(), f.max(), f.log(), f.help());
@@ -187,6 +234,13 @@ final class Tuning {
             }
         }
         return new MagmaCommands.InjectRecharge(volcanoId, vol, v[0], v[1], v[2], v[3], v[4]);
+    }
+
+    /** The note acknowledging an injection, or null when the batch is small enough for the walls. */
+    static String injectionWarning(double volumeM3, MagmaChamber chamber) {
+        if (volumeM3 <= INJECT_RUPTURE_SHARE * chamber.volumeM3()) return null;
+        return String.format(java.util.Locale.ROOT, "%.3g m³ is %.0f%% of the chamber: its walls rupture at %.1f MPa and"
+                + " the rest grows the chamber", volumeM3, 100 * volumeM3 / chamber.volumeM3(), chamber.ruptureOverpressureMPa());
     }
 
     // ── Schema ──
@@ -369,6 +423,18 @@ final class Tuning {
         }
         j.addProperty("apply", l.hot() ? "hot" : "restart");
         if (l.volcanoId() != null) j.addProperty("volcanoId", l.volcanoId());
+        Advice a = ADVICE.get(l.metaKey());
+        if (a != null) {
+            JsonObject r = new JsonObject();
+            if (a.low() != null) r.add("min", Json.num(a.low()));
+            if (a.high() != null) r.add("max", Json.num(a.high()));
+            j.add("recommended", r);
+            j.addProperty("warning", a.warning());
+            if (l.value() instanceof Number n) {
+                String w = advise(l.metaKey(), meta != null ? meta.label() : h[0], n.doubleValue());
+                if (w != null) j.addProperty("outOfRange", true);
+            }
+        }
         return j;
     }
 
@@ -455,6 +521,8 @@ final class Tuning {
         final Map<Path, Map<String, Object>> files = new LinkedHashMap<>();
         final Map<Path, byte[]> previous = new LinkedHashMap<>();
         final List<JsonObject> audit = new ArrayList<>();
+        /** Values outside their physically sensible range ({@link #ADVICE}), readable sentences. */
+        final List<String> warnings = new ArrayList<>();
 
         Plan(Path dir, boolean restart) {
             this.dir = dir;
@@ -498,6 +566,7 @@ final class Tuning {
         boolean worldChanged = false;
         Map<String, Boolean> volcanoChanged = new TreeMap<>();
         List<JsonObject> audit = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
         boolean anyRestart = false;
         for (Map.Entry<String, JsonElement> e : values.entrySet()) {
             Leaf l = byId.get(e.getKey());
@@ -511,6 +580,10 @@ final class Tuning {
                 if ((meta.min() != null && d < meta.min()) || (meta.max() != null && d > meta.max())) {
                     throw new IllegalArgumentException(meta.label() + " must be between " + meta.min() + " and " + meta.max());
                 }
+            }
+            if (v instanceof Number n) {
+                String w = advise(l.metaKey(), meta != null ? meta.label() : humanize(l.path())[0], n.doubleValue());
+                if (w != null) warnings.add(w);
             }
             if (!l.hot()) {
                 if (!restart) {
@@ -536,6 +609,7 @@ final class Tuning {
         }
         Plan plan = new Plan(dir, anyRestart);
         plan.audit.addAll(audit);
+        plan.warnings.addAll(warnings);
         WorldDirectory wd = new WorldDirectory(dir);
         if (worldChanged) {
             WorldDefinition.parse(ConfigNode.root("world.yaml", world)); // validates

@@ -752,6 +752,7 @@ final class Session implements AutoCloseable {
                                 return done(CommandResult.error("badRequest", e.getMessage()));
                             }
                             r.submit(inject);
+                            return done(CommandResult.ok(Tuning.injectionWarning(inject.volume(), v.chamber())));
                         }
                     }
                     return done(CommandResult.ok(null));

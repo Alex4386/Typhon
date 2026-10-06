@@ -747,7 +747,8 @@ public final class SimServer implements AutoCloseable {
         plan.log();
         if (requestId != null) {
             ack(c, requestId, true, (plan.restart ? "Restarted with " : "Applied ") + plan.audit.size() + " change"
-                    + (plan.audit.size() == 1 ? "" : "s"));
+                    + (plan.audit.size() == 1 ? "" : "s")
+                    + (plan.warnings.isEmpty() ? "" : ". Warning: " + String.join(" ", plan.warnings)));
         }
         for (ClientConnection other : clientsOf(s)) {
             other.forgetTiles();

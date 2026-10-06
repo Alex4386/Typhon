@@ -358,8 +358,8 @@ The tunable parameters and command fields of a session (§3.5):
 | field | meaning |
 |---|---|
 | `tunable` | False for in-memory sessions (`reason` says why); `params` is then empty but `commands` is still filled. |
-| `params[]` | `ParamSpec`: `id`, `label`, `unit?`, `help?`, `group` (heading), `type` (`number`/`boolean`/`choice`), `min?`/`max?` (validated by the server), `step?` (1 for integers), `log?` (slider hint), `choices?`, `value`, `default`, `apply` (`hot`/`restart`), `volcanoId?`. Parameters without curated metadata get a label and unit derived from their name and no range. |
-| `commands` | Fields of commands, as `ParamSpec`s with defaults (`injectMagma`: the volcano's recharge magma). |
+| `params[]` | `ParamSpec`: `id`, `label`, `unit?`, `help?`, `group` (heading), `type` (`number`/`boolean`/`choice`), `min?`/`max?` (validated by the server), `step?` (1 for integers), `log?` (slider hint), `choices?`, `value`, `default`, `apply` (`hot`/`restart`), `volcanoId?`. `recommended?: {min?, max?}` is the physically sensible part of the range with `warning` explaining what goes wrong outside it; `outOfRange: true` marks a current value outside it. Out-of-range values are accepted, and the `setParams` ack message then ends with `Warning: …`. Parameters without curated metadata get a label and unit derived from their name and no range. |
+| `commands` | Fields of commands, as `ParamSpec`s with defaults (`injectMagma`: the volcano's recharge magma; `volumeM3.recommended.max` is 10 % of the chamber volume — larger batches rupture the chamber walls, and the command's ack carries a note saying so). |
 | `audit` | Recent changes, oldest first: `at` (wall ms), `simTime`, `id`, `label`, `from`, `to` (null = back to default), `apply`. |
 
 ### 4.8 `entities`
