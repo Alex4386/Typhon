@@ -24,4 +24,4 @@ build/
 sim-out/
 
 # simulator/sim-server runtime worlds (state, saves, history)
-worlds/
+/worlds/
