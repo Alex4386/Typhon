@@ -40,6 +40,37 @@ export function cancelRebuild(key: string): void {
   rebuildQueue.delete(key);
 }
 
+/** The latest rebuild of each core tile, so a crater-detail tile can requeue the core under it. */
+const coreJobs = new Map<string, PendingRebuild>();
+
+/**
+ * Requeues core tile `key`'s rebuild: its lava, lahar and water sheets sit on the drawn ground, which
+ * under crater detail is the detail mesh, so they follow when a detail tile is rebuilt.
+ */
+export function requeueCore(key: string): void {
+  const job = coreJobs.get(key);
+  if (job) rebuildQueue.set(key, job);
+}
+
+/**
+ * Height of the drawn crater-detail ground at world (x, y) (scene units), or undefined where no
+ * detail tile is built (with these exaggerations).
+ */
+export function detailGroundAt(world: WorldInfo, x: number, y: number, vExag: number, dExag: number): number | undefined {
+  if (detailHeights.size === 0) return undefined;
+  const t = world.tileSize;
+  for (const l of detailLevels(world)) {
+    const c = world.cellSize / refinement(world, l);
+    const di = (x - world.origin[0]) / c - 0.5;
+    const dj = (y - world.origin[1]) / c - 0.5;
+    const dtx = Math.floor(di / t);
+    const dty = Math.floor(dj / t);
+    const d = detailHeights.get(lodKey(l.level, dtx, dty));
+    if (d && d.vExag === vExag && d.dExag === dExag) return interpolateGrid(d.z, t, di - dtx * t, dj - dty * t);
+  }
+  return undefined;
+}
+
 /**
  * Displayed ground heights per tile (scene units, after smoothing and exaggeration), by tile key:
  * vertex (a, b) ∈ [0, T]² sits on column (tx·T + a, ty·T + b). Camera collision and overlay placement
@@ -66,6 +97,16 @@ const LAVA_SHEET_TUCK_M = 0.5;
 
 /** Ponded and flowing water: depth-aware water shading (see water.ts). */
 const pondWater = waterMaterial({ perVertexDepth: true });
+/**
+ * Open sea over a core tile whose meshes are not built yet (at load, or while the rebuild queue
+ * catches up): without it the background showed through in tile-shaped holes.
+ */
+const pendingSea = waterMaterial({ perVertexDepth: false, depthM: 60 });
+/** Lahar: opaque mud (a translucent sheet only added overdraw and sorting trouble). */
+const mudMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
+/** Lahar sheet: shown from this depth (m), lifted at least this much over the ground (m). */
+const LAHAR_MIN_M = 0.05;
+const LAHAR_LIFT_M = 0.35;
 
 /** Groundwater table: a translucent cyan sheet `depth` below the ground. */
 const waterTableMaterial = new THREE.MeshBasicMaterial({
@@ -292,6 +333,16 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
   const waterMesh = useRef<THREE.Mesh>(null);
   const flowMesh = useRef<THREE.Mesh>(null);
   const groundMesh = useRef<THREE.Mesh>(null);
+  const fillMesh = useRef<THREE.Mesh>(null);
+  // a flat piece of sea over the tile's footprint (vertex range: column centres tx·T … (tx+1)·T)
+  const fillGeo = useMemo(() => {
+    const span = t * world.cellSize;
+    const g = new THREE.PlaneGeometry(span, span);
+    g.rotateX(-Math.PI / 2);
+    g.translate(world.origin[0] + (tx * t + 0.5) * world.cellSize + span / 2, 0, -(world.origin[1] + (ty * t + 0.5) * world.cellSize + span / 2));
+    return g;
+  }, [t, world, tx, ty]);
+  useEffect(() => () => fillGeo.dispose(), [fillGeo]);
 
   const rev = useStore((s) => {
     const r = s.tileRevision;
@@ -315,11 +366,25 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
   useEffect(() => {
     const key = tileKey(tx, ty);
     const span = world.tileSize * world.cellSize;
-    queueRebuild(key, () => {
+    // until the rebuild below has run, open sea stands in where the tile has (or may have) sea
+    const fill = fillMesh.current;
+    if (fill && world.hasSea !== false && Number.isFinite(world.seaLevel) && !fill.userData.built) {
+      const values = getTile(Field.SurfaceElevation, tx, ty)?.values;
+      let low = values ? Infinity : world.elevationRange[0];
+      if (values) for (let k = 0; k < values.length; k++) if (values[k] < low) low = values[k];
+      fill.position.y = world.seaLevel * vExag;
+      fill.visible = low < world.seaLevel;
+    }
+    const job: PendingRebuild = { run: () => {}, at: [world.origin[0] + (tx + 0.5) * span, world.origin[1] + (ty + 0.5) * span] };
+    job.run = () => {
       // nothing to draw until this tile's elevation has arrived
       const loaded = getTile(Field.SurfaceElevation, tx, ty) !== undefined;
       if (groundMesh.current) groundMesh.current.visible = loaded;
       if (!loaded) return;
+      if (fillMesh.current) {
+        fillMesh.current.visible = false;
+        fillMesh.current.userData.built = true;
+      }
       const [eLo, eHi] = world.elevationRange;
       const R = (f: FieldId, fb = 0) => reader(f, tx, ty, t, fb);
       const rawElev = R(Field.SurfaceElevation, 0);
@@ -387,10 +452,15 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           const elev = elevR(a, b);
           const up = upR(a, b);
           const z = groundZ(elev, up, dExag, vExag);
-          const seaZ = seaSurfaceZ(world.seaLevel, up, dExag, vExag);
+          // the far-field sea has no deformation: the uplift on the sea surface tapers to 0 over the
+          // outermost four columns, so the two surfaces meet at the same height
+          const edgeCols = Math.min(i - world.tiles.minTx * t, j - world.tiles.minTy * t, maxI - i, maxJ - j);
+          const seaZ = seaSurfaceZ(world.seaLevel, up * Math.min(1, Math.max(0, edgeCols / 4)), dExag, vExag);
           gp.setXYZ(v, x, z, -y);
           shown[v] = z;
           if (keepG && !detailCovers(world, levels, hasLod, i, j)) keepG[v] = 1;
+          // overlays sit on the ground that is drawn: under crater detail that is the detail mesh
+          const base = keepG && !keepG[v] ? (detailGroundAt(world, x, y, vExag, dExag) ?? z) : z;
           // normal from central differences across tile edges (no seams)
           const hx = ((elevR(a + 1, b) - elevR(a - 1, b)) * vExag) / (2 * world.cellSize);
           const hy = ((elevR(a, b + 1) - elevR(a, b - 1)) * vExag) / (2 * world.cellSize);
@@ -415,7 +485,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
             // with the logarithmic depth buffer, so a thin lift z-fights into stripes)
             anyLava = true;
             wetL[v] = 1;
-            lp.setXYZ(v, x, z + (ld + LAVA_SHEET_LIFT_M) * vExag, -y);
+            lp.setXYZ(v, x, base + (ld + LAVA_SHEET_LIFT_M) * vExag, -y);
             lavaSurfaceColor(weightedTemperature(lavaTD(a, b), ld), crust, light, c, crackPattern(x, y));
           } else {
             // thin films tint the ground instead of floating a sheet over it
@@ -425,7 +495,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
               gc.setXYZ(v, lin(g0 + (c[0] - g0) * f), lin(g1 + (c[1] - g1) * f), lin(g2 + (c[2] - g2) * f));
             }
             // sheet margin vertices tuck under the ground: the sheet meets it at a clean intersection
-            lp.setXYZ(v, x, z - LAVA_SHEET_TUCK_M * vExag, -y);
+            lp.setXYZ(v, x, base - LAVA_SHEET_TUCK_M * vExag, -y);
             c[0] = Math.min(1, g0 * light);
             c[1] = Math.min(1, g1 * light);
             c[2] = Math.min(1, g2 * light);
@@ -446,12 +516,12 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
             // ignore thin sheet flow (rain films); show ponded and flowing water
             anyWater = true;
             wetW[v] = POND;
-            wp.setXYZ(v, x, z + pond * vExag, -y);
+            wp.setXYZ(v, x, base + pond * vExag, -y);
             wdA.setX(v, pond);
           } else {
             // dry: a sea triangle that reaches it keeps it at sea level (the ground's depth test
             // draws the coastline); pond triangles never use dry vertices
-            wp.setXYZ(v, x, seaOn ? seaZ : z - 2, -y);
+            wp.setXYZ(v, x, seaOn ? seaZ : base - 2, -y);
             wdA.setX(v, 0);
           }
           wc.setXYZ(v, 0.2, 0.45, 0.65);
@@ -465,17 +535,26 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
             tp.setXYZ(v, x, z - 2, -y);
           }
 
+          // A pyroclastic flow is shown by its ash cloud (SurgeClouds); on the ground it only greys
+          // the surface it runs over, fading with depth (no flat sheet floating over the terrain).
           const pdc = pdcR(a, b);
+          if (pdc > 0.05) {
+            const f = Math.min(0.65, pdc / 3);
+            const [r0, r1, r2] = [g0 + (0.5 - g0) * f, g1 + (0.46 - g1) * f, g2 + (0.42 - g2) * f];
+            gc.setXYZ(v, lin(r0), lin(r1), lin(r2));
+          }
+          // A lahar is a mud sheet on the drawn ground; its margin vertices tuck under the ground, so
+          // it ends in a smooth intersection instead of cell steps.
           const lah = laharR(a, b);
-          if (pdc > 0.05 || lah > 0.05) {
+          if (lah > LAHAR_MIN_M) {
             anyFlow = true;
             wetF[v] = 1;
-            fp.setXYZ(v, x, z + Math.max(pdc, lah) * vExag + 1, -y);
-            if (pdc >= lah) fc.setXYZ(v, lin(0.62), lin(0.55), lin(0.5));
-            else fc.setXYZ(v, lin(0.45), lin(0.33), lin(0.2));
+            fp.setXYZ(v, x, base + Math.max(lah, LAHAR_LIFT_M) * vExag, -y);
+            const wet = Math.min(1, lah / 2);
+            fc.setXYZ(v, lin(0.42 - 0.08 * wet), lin(0.32 - 0.06 * wet), lin(0.2 - 0.04 * wet));
           } else {
-            fp.setXYZ(v, x, z - 2, -y);
-            fc.setXYZ(v, 0.5, 0.45, 0.4);
+            fp.setXYZ(v, x, base - LAVA_SHEET_TUCK_M * vExag, -y);
+            fc.setXYZ(v, lin(0.4), lin(0.31), lin(0.2));
           }
         }
       }
@@ -491,7 +570,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
         compactWater(water, wetW, n);
         wdA.needsUpdate = true;
       }
-      if (anyFlow) compactIndex(flow, wetF, n);
+      if (anyFlow) compactIndex(flow, wetF, n, true);
       if (anyTable) {
         compactIndex(table, wetT, n);
         tp.needsUpdate = true;
@@ -518,12 +597,15 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       if (lavaMesh.current) lavaMesh.current.visible = anyLava;
       if (waterMesh.current) waterMesh.current.visible = anyWater;
       if (flowMesh.current) flowMesh.current.visible = anyFlow;
-    }, [world.origin[0] + (tx + 0.5) * span, world.origin[1] + (ty + 0.5) * span]);
+    };
+    coreJobs.set(key, job);
+    queueRebuild(key, job.run, job.at);
   }, [rev, vExag, dExag, mode, units, world, tx, ty, t, n, ground, lava, water, flow, smoothR, covered, levels]);
 
   useEffect(
     () => () => {
       rebuildQueue.delete(tileKey(tx, ty));
+      coreJobs.delete(tileKey(tx, ty));
       displayHeights.delete(tileKey(tx, ty));
       elevationCache.delete(tileKey(tx, ty));
     },
@@ -551,9 +633,8 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       <mesh ref={lavaMesh} geometry={lava} visible={false} renderOrder={1}>
         <meshBasicMaterial vertexColors toneMapped={false} polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2} />
       </mesh>
-      <mesh ref={flowMesh} geometry={flow} visible={false} renderOrder={3}>
-        <meshStandardMaterial vertexColors transparent opacity={0.85} roughness={1} />
-      </mesh>
+      <mesh ref={flowMesh} geometry={flow} visible={false} material={mudMaterial} />
+      <mesh ref={fillMesh} geometry={fillGeo} visible={false} renderOrder={2} material={pendingSea} raycast={() => null} />
     </group>
   );
 }
@@ -730,17 +811,8 @@ export function Terrain({ world, onPick }: { world: WorldInfo; onPick: TileProps
  */
 export function displayedGround(world: WorldInfo, x: number, y: number, vExag: number, dExag: number): number | undefined {
   const t = world.tileSize;
-  if (detailHeights.size > 0) {
-    for (const l of detailLevels(world)) {
-      const c = world.cellSize / refinement(world, l);
-      const di = (x - world.origin[0]) / c - 0.5;
-      const dj = (y - world.origin[1]) / c - 0.5;
-      const dtx = Math.floor(di / t);
-      const dty = Math.floor(dj / t);
-      const d = detailHeights.get(lodKey(l.level, dtx, dty));
-      if (d && d.vExag === vExag && d.dExag === dExag) return interpolateGrid(d.z, t, di - dtx * t, dj - dty * t);
-    }
-  }
+  const detail = detailGroundAt(world, x, y, vExag, dExag);
+  if (detail !== undefined) return detail;
   const fi = (x - world.origin[0]) / world.cellSize - 0.5;
   const fj = (y - world.origin[1]) / world.cellSize - 0.5;
   const tx = Math.floor(fi / t);

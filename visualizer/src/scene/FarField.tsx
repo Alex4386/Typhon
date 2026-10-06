@@ -36,11 +36,11 @@ function lin(c: number): number {
 
 /** Far ground: shares the look of the domain's ground but sits behind it where they overlap. */
 const farMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });
-/** The open sea beyond the simulated domain: deep water shading (see water.ts). */
-const seaMaterial = waterMaterial({ perVertexDepth: false, depthM: 300 });
-seaMaterial.polygonOffset = true;
-seaMaterial.polygonOffsetFactor = 2;
-seaMaterial.polygonOffsetUnits = 4;
+/**
+ * The open sea beyond the simulated domain: the same water as the core's sea, with the depth over the
+ * far ground per vertex, so the two meet at the domain edge without a change in shade.
+ */
+const seaMaterial = waterMaterial({ perVertexDepth: true });
 
 /** The displayed-vertex rectangle of the domain (cell centres of its outermost columns). */
 export function domainOf(world: WorldInfo): Domain {
@@ -134,6 +134,7 @@ export function FarField({ world }: { world: WorldInfo }) {
   const sea = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * N * 3), 3));
+    g.setAttribute('depth', new THREE.BufferAttribute(new Float32Array(N * N), 1));
     g.setIndex(geo.getIndex());
     return g;
   }, [geo, N]);
@@ -212,6 +213,7 @@ function build(world: WorldInfo, geo: THREE.BufferGeometry, sea: THREE.BufferGeo
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   const col = geo.getAttribute('color') as THREE.BufferAttribute;
   const sp = sea.getAttribute('position') as THREE.BufferAttribute;
+  const sd = sea.getAttribute('depth') as THREE.BufferAttribute;
   const seaZ = world.seaLevel * vExag;
   const c: RGB = [0, 0, 0];
   let anySea = false;
@@ -245,6 +247,7 @@ function build(world: WorldInfo, geo: THREE.BufferGeometry, sea: THREE.BufferGeo
       }
       col.setXYZ(v, lin(c[0]), lin(c[1]), lin(c[2]));
       sp.setXYZ(v, x, seaZ, -y);
+      sd.setX(v, Math.max(0, world.seaLevel - h));
     }
   }
   // normals from the height grid (non-uniform spacing)
@@ -265,6 +268,7 @@ function build(world: WorldInfo, geo: THREE.BufferGeometry, sea: THREE.BufferGeo
   col.needsUpdate = true;
   nrm.needsUpdate = true;
   sp.needsUpdate = true;
+  sd.needsUpdate = true;
   geo.computeBoundingSphere();
   sea.computeBoundingSphere();
   sea.userData.any = anySea;

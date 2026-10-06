@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { abs, attribute, cameraPosition, clamp, cos, dot, exp, float, fwidth, length, max, normalize, positionWorld, pow, smoothstep, uniform, vec3 } from 'three/tsl';
+
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 
 /**
@@ -45,6 +46,13 @@ const WAVE_FADE_NEAR = 250;
 const WAVE_FADE_FAR = 2500;
 /** Share of the sky reflection kept (the Fresnel term alone over-brightens grazing views). */
 const REFLECT = 0.7;
+/**
+ * Shoreline foam: where the water is shallower than FOAM_DEPTH (m) a subtle broken white band, drifting
+ * slowly, up to FOAM_MAX coverage; faded out beyond FOAM_FAR (m) where it would only shimmer.
+ */
+const FOAM_DEPTH = 1.2;
+const FOAM_MAX = 0.5;
+const FOAM_FAR = 3000;
 
 /**
  * A water material. With `perVertexDepth` the geometry carries a `depth` attribute (metres of
@@ -91,10 +99,21 @@ function nodeWater(opts: { perVertexDepth: boolean; depthM?: number; opacity?: n
   const body: N = vec3(BODY.x, BODY.y, BODY.z).mul(float(0.55).add(clamp(sun.y, 0, 1).mul(0.45)));
   // premultiplied: reflected sky + scattered body + glint, over the transmitted bed
   const alpha: N = clamp(float(1).sub(transmit.mul(float(1).sub(fresnel))).mul(opts.opacity ?? 1), 0.0, 1);
-  const lit: N = u.uSky.mul(fresnel.mul(REFLECT)).add(body.mul(float(1).sub(fresnel)).mul(float(1).sub(transmit))).add(u.uSunColor.mul(spec));
+  let lit: N = u.uSky.mul(fresnel.mul(REFLECT)).add(body.mul(float(1).sub(fresnel)).mul(float(1).sub(transmit))).add(u.uSunColor.mul(spec));
+  let a: N = alpha;
+  if (opts.perVertexDepth) {
+    const ripple: N = cos(p.x.mul(0.33).add(u.uTime.mul(0.9))).mul(cos(p.y.mul(0.29).sub(u.uTime.mul(0.7)))).mul(0.5).add(0.5);
+    const foam: N = float(1)
+      .sub(smoothstep(0, FOAM_DEPTH, d))
+      .mul(ripple.mul(0.65).add(0.35))
+      .mul(FOAM_MAX)
+      .mul(float(1).sub(smoothstep(FOAM_FAR * 0.5, FOAM_FAR, dist)));
+    lit = lit.add(vec3(0.8, 0.82, 0.84).mul(foam));
+    a = clamp(alpha.add(foam.mul(float(1).sub(alpha))), 0, 1);
+  }
   const m = new MeshBasicNodeMaterial();
-  m.colorNode = lit.div(max(alpha, 0.001));
-  m.opacityNode = alpha;
+  m.colorNode = lit.div(max(a, 0.001));
+  m.opacityNode = a;
   m.transparent = true;
   m.depthWrite = false;
   return m;
@@ -137,6 +156,7 @@ const fragment = /* glsl */ `
   uniform vec3 uSky;
   uniform float uClarity;
   uniform float uOpacity;
+  uniform float uUseDepthAttr;
   varying float vDepth;
   varying vec3 vWorld;
   #include <common>
@@ -159,6 +179,13 @@ ${waveGlsl}
     vec3 body = vec3(${BODY.x}, ${BODY.y}, ${BODY.z}) * (0.55 + 0.45 * clamp(sun.y, 0.0, 1.0));
     float alpha = clamp((1.0 - transmit * (1.0 - fresnel)) * uOpacity, 0.0, 1.0);
     vec3 lit = uSky * fresnel * ${REFLECT.toFixed(2)} + body * (1.0 - fresnel) * (1.0 - transmit) + uSunColor * spec;
+    if (uUseDepthAttr > 0.5) {
+      float ripple = cos(p.x * 0.33 + uTime * 0.9) * cos(p.y * 0.29 - uTime * 0.7) * 0.5 + 0.5;
+      float foam = (1.0 - smoothstep(0.0, ${FOAM_DEPTH.toFixed(2)}, d)) * (0.35 + 0.65 * ripple) * ${FOAM_MAX.toFixed(2)}
+        * (1.0 - smoothstep(${(FOAM_FAR * 0.5).toFixed(1)}, ${FOAM_FAR.toFixed(1)}, length(toCam)));
+      lit += vec3(0.8, 0.82, 0.84) * foam;
+      alpha = clamp(alpha + foam * (1.0 - alpha), 0.0, 1.0);
+    }
     gl_FragColor = vec4(lit / max(alpha, 0.001), alpha);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>

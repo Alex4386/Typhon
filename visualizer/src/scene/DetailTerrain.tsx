@@ -7,9 +7,10 @@ import type { LodLevelInfo, WorldInfo, XY } from '../protocol/messages';
 import { QUALITY, getLodTile, getTile, lodKey, tileKey, useStore } from '../store/store';
 import type { RGB } from '../util/color';
 import { sampleColumn } from '../util/world';
+import { CRUST_RGB, crackPattern, crustLight, lavaSurfaceColor } from './lavaColor';
 
 import { detailHeights, detailLevels, levelRect, refinement, wantsDetail } from './detail';
-import { cachedElevation, cancelRebuild, colourGround, forgetElevation, gridGeometry, groundMaterial, lin, queueRebuild, sceneProbe, worldQuantum, type GroundFields } from './Terrain';
+import { cachedElevation, cancelRebuild, colourGround, forgetElevation, gridGeometry, groundMaterial, lin, queueRebuild, requeueCore, sceneProbe, worldQuantum, type GroundFields } from './Terrain';
 
 /** How often (ms) the camera's distance to the crater regions is checked. */
 const CHECK_MS = 500;
@@ -152,6 +153,10 @@ function DetailTile({ world, level, tx, ty, onPick }: { world: WorldInfo; level:
         uplift: smooth(Field.Uplift),
         steam: smooth(Field.SteamFraction),
       };
+      // lava films tint the detail ground as they tint the core's (thicker lava is the core's sheet)
+      const lavaD = smooth(Field.LavaDepth);
+      const lavaT = smooth(Field.LavaTemperature);
+      const lavaRgb: RGB = [0, 0, 0];
       const [eLo, eHi] = world.elevationRange;
       const gp = geo.getAttribute('position') as THREE.BufferAttribute;
       const gc = geo.getAttribute('color') as THREE.BufferAttribute;
@@ -174,6 +179,12 @@ function DetailTile({ world, level, tx, ty, onPick }: { world: WorldInfo; level:
           const inv = 1 / Math.hypot(hx, 1, hy);
           gn.setXYZ(v, -hx * inv, inv, hy * inv);
           colourGround(mode, world, fields, a, b, elev, eLo, eHi, maxUplift, units, rgb);
+          const ld = mode === 'natural' ? lavaD(a, b) : 0;
+          if (ld > 0.02) {
+            lavaSurfaceColor(lavaT(a, b), CRUST_RGB, crustLight(-hx * inv, inv, hy * inv), lavaRgb, crackPattern(x, y));
+            const f = Math.min(1, ld / 0.5);
+            for (let k = 0; k < 3; k++) rgb[k] += (lavaRgb[k] - rgb[k]) * f;
+          }
           gc.setXYZ(v, lin(rgb[0]), lin(rgb[1]), lin(rgb[2]));
         }
       }
@@ -183,6 +194,8 @@ function DetailTile({ world, level, tx, ty, onPick }: { world: WorldInfo; level:
       geo.computeBoundingSphere();
       geo.computeBoundingBox();
       detailHeights.set(key, { z: shown, vExag, dExag });
+      // the core tile's lava, lahar and water sheets sit on this ground: let them follow
+      requeueCore(coreKey);
     });
   }, [rev, coreRev, vExag, dExag, mode, units, world, level, tx, ty, t, n, r, geo, key]);
 
