@@ -4,9 +4,10 @@ import * as THREE from 'three';
 import { Field, type FieldId } from '../protocol/fields';
 import type { WorldInfo, XY } from '../protocol/messages';
 import { QUALITY, getTile, tileKey, useStore, type SurfaceColorMode } from '../store/store';
-import { BATHY, BLACKBODY, DIVERGING, HYPSO, THERMAL, hexToRgb, ramp, shadeFor, type RGB } from '../util/color';
+import { BATHY, DIVERGING, HYPSO, THERMAL, hexToRgb, ramp, shadeFor, type RGB } from '../util/color';
 import { interpolateGrid } from '../util/grid';
 import { sampleColumn } from '../util/world';
+import { CRUST_RGB, crustLight, lavaSurfaceColor, weightedTemperature } from './lavaColor';
 
 /** Tiles rebuilt per rendered frame, to keep the UI responsive while data streams in. */
 const REBUILDS_PER_FRAME = 8;
@@ -22,9 +23,10 @@ const displayHeights = new Map<string, { z: Float32Array; vExag: number; dExag: 
 /**
  * Shared ground material. Double-sided so the surface stays visible from below; while the camera
  * is underground and x-ray is on it turns translucent so the chamber, conduits, dikes, hypocentres
- * and water table behind it can be seen.
+ * and water table behind it can be seen. Lambert (diffuse only): the ground is rough rock and soil,
+ * and per-pixel PBR shading of a screen-filling terrain was the largest fill cost of a frame.
  */
-const groundMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+const groundMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
 /** Per-frame facts about the camera that other scene parts read without store traffic. */
 export const sceneProbe = { cameraGround: Number.NaN };
 
@@ -135,15 +137,16 @@ function gridGeometry(t: number): THREE.BufferGeometry {
 
 /**
  * Rewrites an overlay's index buffer to the triangles whose three vertices are all "wet" (lava,
- * water, flow present). Mixed wet/dry triangles would otherwise slant from the surface down into
- * the ground and show as spikes along shorelines. Unused slots become degenerate triangles.
+ * water, flow present), or with `margin` every triangle touching a wet vertex (its dry vertices must
+ * then sit on the ground). Mixed wet/dry triangles over vertices sunk below the ground would slant
+ * into it and show as spikes along shorelines. Unused slots become degenerate triangles.
  */
-function compactIndex(geo: THREE.BufferGeometry, wet: Uint8Array, n: number): void {
+export function compactIndex(geo: THREE.BufferGeometry, wet: Uint8Array, n: number, margin = false): void {
   const index = geo.getIndex()!;
   const idx = index.array as Uint32Array;
   let o = 0;
   const tri = (p: number, q: number, r: number) => {
-    if (wet[p] && wet[q] && wet[r]) {
+    if (margin ? wet[p] || wet[q] || wet[r] : wet[p] && wet[q] && wet[r]) {
       idx[o++] = p;
       idx[o++] = q;
       idx[o++] = r;
@@ -169,6 +172,11 @@ interface TileProps {
 }
 
 const DEPOSIT_RGB = new Map<number, RGB>();
+
+/** Id of the lava deposit type (its colour is the colour of cooled crust). */
+function lavaDepositId(world: WorldInfo): number {
+  return world.depositTypes.find((d) => d.name === 'LAVA')?.id ?? -1;
+}
 
 function depositRgb(world: WorldInfo, depositType: number): RGB {
   let c = DEPOSIT_RGB.get(depositType);
@@ -217,8 +225,15 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       const elevR = smoothedReader(rawElev, n, smoothR);
       const upR = R(Field.Uplift);
       // lava thickness varies by tens of metres between cells; smooth it lightly so the lake/flow top is not jagged
-      const lavaR = smoothedReader(R(Field.LavaDepth), n, smoothR > 0 ? 1 : 0);
-      const lavaT = R(Field.LavaTemperature);
+      const lavaRaw = R(Field.LavaDepth);
+      const lavaTRaw = R(Field.LavaTemperature);
+      const lavaSmooth = smoothR > 0 ? 1 : 0;
+      const lavaR = smoothedReader(lavaRaw, n, lavaSmooth);
+      // temperature averaged with the same kernel, weighted by thickness: cells the smoothing spreads
+      // the sheet into (no lava of their own, temperature 0) take their neighbours' temperature
+      const lavaTD = smoothedReader((a, b) => lavaRaw(a, b) * lavaTRaw(a, b), n, lavaSmooth);
+      const lavaId = lavaDepositId(world);
+      const crust = lavaId >= 0 ? depositRgb(world, lavaId) : CRUST_RGB;
       const waterR = R(Field.WaterDepth);
       const pdcR = R(Field.PdcDepth);
       const laharR = R(Field.LaharDepth);
@@ -273,17 +288,23 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           colourGround(mode, world, fields, a, b, elev, eLo, eHi, maxUplift, units, c);
           gc.setXYZ(v, lin(c[0]), lin(c[1]), lin(c[2]));
 
+          // Lava: lit crust blending into incandescence by temperature. Vertices just outside the sheet
+          // sit on the ground in the ground's colour, so the margin fades into the terrain over one cell
+          // instead of ending in a cell-stepped edge (the overlay draws every triangle touching lava).
           const ld = lavaR(a, b);
+          const light = crustLight(-hx * inv, inv, hy * inv);
           if (ld > 0.02) {
             anyLava = true;
             wetL[v] = 1;
             lp.setXYZ(v, x, z + (ld + 0.3) * vExag, -y);
-            ramp(BLACKBODY, lavaT(a, b), c);
-            lc.setXYZ(v, lin(c[0]), lin(c[1]), lin(c[2]));
+            lavaSurfaceColor(weightedTemperature(lavaTD(a, b), ld), crust, light, c);
           } else {
-            lp.setXYZ(v, x, z - 2, -y);
-            lc.setXYZ(v, 0.1, 0.05, 0.04);
+            lp.setXYZ(v, x, z + 0.05 * vExag, -y);
+            c[0] = Math.min(1, c[0] * light);
+            c[1] = Math.min(1, c[1] * light);
+            c[2] = Math.min(1, c[2] * light);
           }
+          lc.setXYZ(v, lin(c[0]), lin(c[1]), lin(c[2]));
 
           const wd = waterR(a, b);
           // ignore thin sheet flow (rain films); show ponded and flowing water
@@ -324,7 +345,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       }
       gn.needsUpdate = true;
       displayHeights.set(key, { z: shown, vExag, dExag });
-      if (anyLava) compactIndex(lava, wetL, n);
+      if (anyLava) compactIndex(lava, wetL, n, true);
       if (anyWater) compactIndex(water, wetW, n);
       if (anyFlow) compactIndex(flow, wetF, n);
       if (anyTable) {
@@ -385,7 +406,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
         <meshStandardMaterial vertexColors transparent opacity={0.82} roughness={0.06} metalness={0.35} depthWrite={false} />
       </mesh>
       <mesh ref={lavaMesh} geometry={lava} visible={false} renderOrder={1}>
-        <meshBasicMaterial vertexColors toneMapped={false} />
+        <meshBasicMaterial vertexColors toneMapped={false} polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2} />
       </mesh>
       <mesh ref={flowMesh} geometry={flow} visible={false} renderOrder={3}>
         <meshStandardMaterial vertexColors transparent opacity={0.85} roughness={1} />
@@ -503,7 +524,8 @@ function colourGround(
 
 export function Terrain({ world, onPick }: { world: WorldInfo; onPick: TileProps['onPick'] }) {
   const group = useRef<THREE.Group>(null);
-  useFrame(({ camera }) => {
+  const lastTable = useRef<boolean | null>(null);
+  useFrame(({ camera, invalidate }) => {
     const st = useStore.getState();
     const g = displayedGround(world, camera.position.x, -camera.position.z, st.verticalExaggeration, st.deformationExaggeration);
     sceneProbe.cameraGround = g ?? Number.NaN;
@@ -518,15 +540,21 @@ export function Terrain({ world, onPick }: { world: WorldInfo; onPick: TileProps
     }
     // water-table sheets: shown on request, and always while underground
     const showTable = st.showWaterTable || under;
-    group.current?.traverse((o) => {
-      if (o instanceof THREE.Mesh && o.material === waterTableMaterial) o.visible = showTable && o.userData.has === true;
-    });
     let k = 0;
     for (const [key, rebuild] of rebuildQueue) {
       rebuildQueue.delete(key);
       rebuild();
       if (++k >= REBUILDS_PER_FRAME) break;
     }
+    // (only when toggled or after rebuilds, not a scene-graph walk every frame)
+    if (showTable !== lastTable.current || k > 0) {
+      lastTable.current = showTable;
+      group.current?.traverse((o) => {
+        if (o instanceof THREE.Mesh && o.material === waterTableMaterial) o.visible = showTable && o.userData.has === true;
+      });
+    }
+    // on-demand rendering: keep drawing until the rebuild backlog is done
+    if (rebuildQueue.size > 0 || k > 0) invalidate();
   });
   const tiles: [number, number][] = [];
   for (let ty = world.tiles.minTy; ty <= world.tiles.maxTy; ty++) for (let tx = world.tiles.minTx; tx <= world.tiles.maxTx; tx++) tiles.push([tx, ty]);

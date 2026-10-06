@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { Field } from '../protocol/fields';
 import type { WorldInfo } from '../protocol/messages';
@@ -35,47 +35,57 @@ export function haloStrength(t: number): number {
   return Math.max(0, Math.min(1, (t - GLOW_MIN_C) / 500));
 }
 
+function hash(i: number): number {
+  const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
 /**
  * Bloom-like glow over incandescent lava without a post-processing pass (so it works the same on
- * the WebGPU and WebGL paths): additive, depth-tested halo sprites sampled over the lava field,
- * coloured and sized by temperature. The sprite budget comes from the quality preset (off on low).
+ * the WebGPU and WebGL paths): additive, depth-tested halo quads lying on the lava, sampled over the
+ * glowing cells, coloured by temperature. Quads rather than points: WebGPU draws points one pixel
+ * wide, which turned the glow into a polka-dot grid. Sample positions are jittered within their
+ * stride cell so no lattice shows. Rebuilt only when tiles or exaggerations change; the sprite
+ * budget comes from the quality preset (off on low).
  */
 export function LavaHalo({ world }: { world: WorldInfo }) {
   const budget = useStore((s) => QUALITY[s.quality].glow);
-  const geometry = useMemo(() => {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(Math.max(1, budget) * 3), 3));
-    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(Math.max(1, budget) * 3), 3));
-    g.setDrawRange(0, 0);
-    return g;
-  }, [budget]);
   const material = useMemo(
     () =>
-      new THREE.PointsMaterial({
+      new THREE.MeshBasicMaterial({
         map: haloTexture(),
-        size: world.cellSize * 3.5,
-        sizeAttenuation: true,
-        vertexColors: true,
         transparent: true,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
         toneMapped: false,
       }),
-    [world.cellSize],
+    [],
   );
-  const last = useRef(0);
+  const geometry = useMemo(() => new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), []);
+  const ref = useRef<THREE.InstancedMesh>(null);
+  const last = useRef({ at: 0, rev: null as unknown, vExag: 0, dExag: 0 });
   const c: RGB = useMemo(() => [0, 0, 0], []);
+  const m = useMemo(() => new THREE.Matrix4(), []);
+  const col = useMemo(() => new THREE.Color(), []);
+
+  useLayoutEffect(() => {
+    // instance colours exist before the first draw, so the material is compiled with them
+    const mesh = ref.current;
+    if (mesh && !mesh.instanceColor) mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(budget * 3), 3);
+  }, [budget]);
 
   useFrame(() => {
-    if (budget <= 0) return;
+    const mesh = ref.current;
+    if (budget <= 0 || !mesh) return;
     const now = performance.now();
-    if (now - last.current < REBUILD_MS) return;
-    last.current = now;
     const st = useStore.getState();
-    const vExag = st.verticalExaggeration;
-    const dExag = st.deformationExaggeration;
-    const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
-    const col = geometry.getAttribute('color') as THREE.BufferAttribute;
+    const l = last.current;
+    if (now - l.at < REBUILD_MS) return;
+    if (l.rev === st.tileRevision && l.vExag === st.verticalExaggeration && l.dExag === st.deformationExaggeration) return;
+    l.at = now;
+    l.rev = st.tileRevision;
+    const vExag = (l.vExag = st.verticalExaggeration);
+    const dExag = (l.dExag = st.deformationExaggeration);
     const t = world.tileSize;
     // count glowing cells first to choose a sampling stride that fits the budget
     let hot = 0;
@@ -88,37 +98,41 @@ export function LavaHalo({ world }: { world: WorldInfo }) {
       }
     }
     const stride = Math.max(1, Math.ceil(Math.sqrt(hot / budget)));
+    const size = world.cellSize * 2.4 * stride;
     let n = 0;
     for (let ty = world.tiles.minTy; ty <= world.tiles.maxTy && n < budget; ty++) {
       for (let tx = world.tiles.minTx; tx <= world.tiles.maxTx && n < budget; tx++) {
         const d = getTile(Field.LavaDepth, tx, ty)?.values;
         const T = getTile(Field.LavaTemperature, tx, ty)?.values;
         if (!d || !T) continue;
-        for (let b = 0; b < t && n < budget; b += stride) {
-          for (let a = 0; a < t && n < budget; a += stride) {
+        for (let b0 = 0; b0 < t && n < budget; b0 += stride) {
+          for (let a0 = 0; a0 < t && n < budget; a0 += stride) {
+            // one jittered sample per stride block
+            const seed = (tx * 7919 + ty * 104729 + b0 * 131 + a0) | 0;
+            const a = Math.min(t - 1, a0 + Math.floor(hash(seed) * stride));
+            const b = Math.min(t - 1, b0 + Math.floor(hash(seed + 17) * stride));
             const k = b * t + a;
             const s = d[k] > 0.05 ? haloStrength(T[k]) : 0;
             if (s <= 0) continue;
-            const x = world.origin[0] + (tx * t + a + 0.5) * world.cellSize;
-            const y = world.origin[1] + (ty * t + b + 0.5) * world.cellSize;
+            const x = world.origin[0] + (tx * t + a + hash(seed + 31)) * world.cellSize;
+            const y = world.origin[1] + (ty * t + b + hash(seed + 43)) * world.cellSize;
             const z = displayZ(world, x, y, vExag, dExag) + (d[k] + 1.5) * vExag;
-            pos.setXYZ(n, x, z, -y);
+            const sz = size * (0.8 + 0.4 * hash(seed + 59));
+            m.makeScale(sz, 1, sz).setPosition(x, z, -y);
+            mesh.setMatrixAt(n, m);
             ramp(BLACKBODY, T[k], c);
-            // sparser sampling → brighter sprites, so the total glow does not depend on the stride
-            const gain = 0.35 * s * Math.min(3, stride);
-            col.setXYZ(n, c[0] * gain, c[1] * gain * 0.8, c[2] * gain * 0.6);
+            const gain = 0.2 * s;
+            mesh.setColorAt(n, col.setRGB(c[0] * gain, c[1] * gain * 0.8, c[2] * gain * 0.6));
             n++;
           }
         }
       }
     }
-    geometry.setDrawRange(0, n);
-    pos.needsUpdate = true;
-    col.needsUpdate = true;
-    geometry.computeBoundingSphere();
-    material.size = world.cellSize * 3.5 * Math.min(2.5, stride);
+    mesh.count = n;
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   });
 
   if (budget <= 0) return null;
-  return <points geometry={geometry} material={material} renderOrder={6} frustumCulled={false} />;
+  return <instancedMesh ref={ref} args={[geometry, material, budget]} renderOrder={6} frustumCulled={false} raycast={() => null} />;
 }
