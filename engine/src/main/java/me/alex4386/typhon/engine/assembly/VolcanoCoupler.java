@@ -710,6 +710,9 @@ public final class VolcanoCoupler implements Subsystem {
 
     /** Cock's-tail jets of water-fragmented magma: one salvo of the coarse wet ejecta of this step. */
     private void fireJets(StepContext context, VentSite vent, double mass, double speed) {
+        // the jets' coarse wet ejecta land around the vent with their whole mass; a few tracked bombs show them
+        tephra.proximalFallout(vent, mass, speed, 40, 15, Math.max(LAPILLI_MIN_M, 4 * LAPILLI_MIN_M), LAPILLI_MIN_M,
+                VentPartition.BALLISTIC_SIZE);
         tephra.launchSalvo(vent, mass, speed, 40, 15, chamber.silicaWt(), MAX_BOMBS_PER_SALVO);
         double energy = 0.5 * mass * speed * speed;
         if (seismicity != null) seismicity.queueExplosion(vent.position(), energy);
@@ -792,7 +795,10 @@ public final class VolcanoCoupler implements Subsystem {
         }
         boolean wet = ventColumns > 0 && ventSubmerged * 2 >= ventColumns;
         waterDepthM = wet ? depthSum / ventSubmerged : 0;
-        openWaterFraction = wet && rimColumns > 0 ? rimSubmerged / (double) rimColumns : 0;
+        // Open water reaches the vent freely only if the crater's water connects to the open sea; a lagoon
+        // closed off by the ring is refilled only by seepage.
+        openWaterFraction = wet && rimColumns > 0 && connectedToOpenWater(world, c, crater + MAX_RING_COLUMNS)
+                ? Math.max(rimSubmerged / (double) rimColumns, 1.0 / rimColumns) : 0;
 
         // The vent's fill of loose tephra, and how much of its mouth is water-saturated (a slurry).
         double top = world.surfaceZ(c.x(), c.z());
@@ -815,6 +821,32 @@ public final class VolcanoCoupler implements Subsystem {
     }
 
     /**
+     * Whether water standing at {@code c} connects through submerged columns (8-connected) to water beyond
+     * {@code radius} columns, i.e. to the open sea or a lake, rather than being a lagoon enclosed by land.
+     */
+    static boolean connectedToOpenWater(WorldModel world, BlockPos c, int radius) {
+        java.util.ArrayDeque<long[]> queue = new java.util.ArrayDeque<>();
+        java.util.HashSet<Long> seen = new java.util.HashSet<>();
+        queue.add(new long[] {c.x(), c.z()});
+        seen.add(BlockPos.pack(c.x(), 0, c.z()));
+        while (!queue.isEmpty()) {
+            long[] p = queue.poll();
+            int x = (int) p[0];
+            int z = (int) p[1];
+            if ((x - c.x()) * (x - c.x()) + (z - c.z()) * (z - c.z()) > radius * radius) return true;
+            for (int d = 0; d < 8; d++) {
+                int nx = x + RING_DX[d];
+                int nz = z + RING_DZ[d];
+                if (!seen.add(BlockPos.pack(nx, 0, nz))) continue;
+                if (!world.isKnown(nx, nz)) return true; // water running off the simulated area: the open sea
+                double level = world.waterZ(nx, nz);
+                if (Double.isFinite(level) && level > world.surfaceZ(nx, nz)) queue.add(new long[] {nx, nz});
+            }
+        }
+        return false;
+    }
+
+    /**
      * Sea water seeping through the saturated edifice into a crater drawn down to {@code floorZ} (kg/s):
      * Darcy flow {@code ρ K Δh / L} through the crater wall below sea level ({@code 2π r Δh}), with
      * {@code L} the ring's mean width at sea level and {@code K} the hydraulic conductivity of its
@@ -829,16 +861,24 @@ public final class VolcanoCoupler implements Subsystem {
         double conductivity = 0;
         int rays = 0;
         for (int d = 0; d < 8; d++) {
+            // across the lagoon (if any) to the ring, then across the land of the ring to the sea
             int steps = 0;
+            int first = -1;
             for (int r = crater + 1; r <= crater + MAX_RING_COLUMNS; r++) {
-                int x = c.x() + RING_DX[d] * r;
-                int z = c.z() + RING_DZ[d] * r;
-                if (!world.isKnown(x, z) || world.surfaceZ(x, z) < sea) break;
-                steps++;
+                int rx = c.x() + RING_DX[d] * r;
+                int rz = c.z() + RING_DZ[d] * r;
+                if (!world.isKnown(rx, rz)) break;
+                boolean land = world.surfaceZ(rx, rz) >= sea;
+                if (land) {
+                    if (first < 0) first = r;
+                    steps++;
+                } else if (first >= 0) {
+                    break;
+                }
             }
-            int x = c.x() + RING_DX[d] * (crater + 1);
-            int z = c.z() + RING_DZ[d] * (crater + 1);
-            if (!world.isKnown(x, z)) continue;
+            if (first < 0) continue;
+            int x = c.x() + RING_DX[d] * first;
+            int z = c.z() + RING_DZ[d] * first;
             int n = world.layerCount(x, z);
             if (n == 0) continue;
             conductivity += Math.pow(10, world.layer(x, z, n - 1).materialInfo().log10HydraulicConductivity());
