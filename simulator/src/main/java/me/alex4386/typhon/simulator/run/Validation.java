@@ -6,6 +6,9 @@ import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryPoolMXBean;
+import java.lang.management.MemoryType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -40,7 +43,7 @@ public final class Validation {
 
     /** One preset's validation run. */
     public record PresetResult(String preset, String title, long seed, double hours, double wallSeconds,
-            List<Check> checks, List<RunSummary.Eruption> eruptions) {
+            List<Check> checks, List<RunSummary.Eruption> eruptions, double buildSeconds, double peakHeapMB) {
         public long failures() {
             return checks.stream().filter(Check::failed).count();
         }
@@ -70,8 +73,17 @@ public final class Validation {
             throws IOException {
         double h = Double.isNaN(hours) ? preset.validationHours() : hours;
         log.accept(String.format(Locale.ROOT, "validate %s for %s h ...", preset.name(), fmt(h)));
+        System.gc();
+        for (MemoryPoolMXBean pool : ManagementFactory.getMemoryPoolMXBeans()) pool.resetPeakUsage();
+        long built = System.nanoTime();
         Scenario scenario = preset.build(seed);
+        double buildSeconds = (System.nanoTime() - built) * 1e-9;
         Simulation.Result result = new Simulation(scenario, 10).run(h);
+        double peakHeapMB = ManagementFactory.getMemoryPoolMXBeans().stream()
+                .filter(pool -> pool.getType() == MemoryType.HEAP)
+                .mapToLong(pool -> pool.getPeakUsage().getUsed()).sum() / 1048576.0;
+        log.accept(String.format(Locale.ROOT, "  build %.1f s, run %.1f s wall, peak heap %.0f MB (sum of pool peaks)",
+                buildSeconds, result.wallSeconds(), peakHeapMB));
         List<Check> checks = new ArrayList<>();
         for (ReferenceComparison.Row row : ReferenceComparison.compare(preset, result)) {
             checks.add(new Check(row, outcome(row.reference(), row.verdict())));
@@ -83,7 +95,7 @@ public final class Validation {
             ReportWriter.write(outDir.resolve("report.html"), preset, result, maps, outDir);
         }
         PresetResult r = new PresetResult(preset.name(), preset.title(), seed, h, result.wallSeconds(), checks,
-                List.copyOf(result.summary().eruptionRecords));
+                List.copyOf(result.summary().eruptionRecords), buildSeconds, peakHeapMB);
         for (Check c : checks) {
             log.accept(String.format(Locale.ROOT, "  %-13s %-30s %-24s model %s", c.outcome(),
                     c.row().reference().quantity(), c.row().reference().referenceText(), c.row().modelText()));
@@ -105,6 +117,8 @@ public final class Validation {
             p.addProperty("seed", r.seed());
             p.addProperty("hours", r.hours());
             p.addProperty("wallSeconds", r.wallSeconds());
+            p.addProperty("buildSeconds", r.buildSeconds());
+            p.addProperty("peakHeapMB", r.peakHeapMB());
             p.addProperty("failures", r.failures());
             JsonArray checks = new JsonArray();
             for (Check c : r.checks()) {
