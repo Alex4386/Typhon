@@ -305,17 +305,17 @@ waterWt, co2Wt, crystalFraction, variability)`).
 | `config` | `WorldDefinition`, `VolcanoDefinition` (YAML), `ConfigBinder`, `ConfigNode`, `Yaml` |
 | `worlds` | `World` (multi-volcano assembly, saves, runtime changes), `WorldDirectory`, `ConfigChanges`, `HistoryRouter` |
 | `terrain` | `TerrainModel` (block-level bridge over the world model), `TerrainSnapshot` command |
-| `volcano` | Shared volcano model: `VentSite`, `MagmaState`, `VolcanoScaling` |
+| `volcano` | Shared volcano model: `VentSite`, `VentStatus`, `VentEvents`, `VentCommands` (seal/unseal/remove vents), `MagmaState`, `VolcanoScaling` |
 | `magma` | `MagmaChamber` (lumped chamber: recharge by mass and enthalpy, overpressure, crystallisation, H₂O/CO₂ exsolution, open/closed conduit, slug bursts, plug failures), `MagmaCommands`, `MeltViscosity`; `magma.conduit`: `ConduitModel` (steady 1-D two-phase conduit flow: exsolution, outgassing, microlites, fragmentation, choking, multiple steady states), `ConduitSolution` |
 | `seismic` | `SeismicityModel` (VT/LP/tremor/explosion, Gutenberg–Richter, RSAM), `SeismicIntensity` |
 | `alert` | `AlertLevelEstimator` (status with hysteresis), `EruptionClassifier` (style probabilities and VEI estimated from the eruption's observables; output only) |
 | `lava` | `LavaFlow` (MAGFLOW-style Bingham cellular automaton on an 8-neighbour L-metre grid in real units, cooling, crust and lava tubes, ocean-entry deltas) |
-| `dike` | `DikePropagation` (buoyancy/stress-driven dike ascent, flank fissures, induced VT hypocentres) |
+| `dike` | `DikePropagation` (buoyancy/stress-driven dike ascent, flank fissures, induced VT hypocentres; user arrest/remove/block via `DikeCommands`) |
 | `deformation` | `DeformationModel` (Mogi chamber source + dike dislocation, virtual GNSS/tilt stations) |
 | `massflow` | `PyroclasticFlows`, `Lahars` (Voellmy–Salm depth-averaged flows), `ColumnCollapse` (Woods 1988) |
 | `tephra` | `TephraSubsystem` (drag ballistics, Mastin plume, ash advection–diffusion and fall) |
 | `subsurface` | `Subsurface` (world-level heat conduction, Dupuit groundwater, boiling, surface water, water budget), `HydrothermalField`, `HeatSources` |
 | `geothermal` | `Geothermal` (supplies volcano heat to the subsurface; fumaroles, sulfur, geysers, springs, alteration from its fields) |
-| `assembly` | `VolcanoSystem` (wires one volcano together), `VolcanoCoupler` (vent selection, eruption → lava/tephra/PDC, magma–water), `VentPartition` (continuous partition of the conduit flow at the vent) |
+| `assembly` | `VolcanoSystem` (wires one volcano together), `VolcanoCoupler` (vent selection, eruption → lava/tephra/PDC, magma–water), `FissureFeeder` (thermal life of a fissure's feeder: conductance-weighted flow, localisation, freezing; Bruce & Huppert 1989, Wylie et al. 1999), `VentPartition` (continuous partition of the conduit flow at the vent) |
 
 Build and test: `./gradlew :engine:test` (performance smoke tests: `./gradlew :engine:perfTest`).

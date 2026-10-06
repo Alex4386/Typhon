@@ -68,6 +68,10 @@ public final class DikePropagation implements Subsystem {
     private final List<Dike> dikes = new ArrayList<>();
     private int nextId = 1;
     private int forcedPending;
+    /** Dikes the user asked to stop, arrested at the next step. */
+    private final TreeSet<Integer> pendingArrests = new TreeSet<>();
+    /** Spontaneous nucleation blocked by the user. */
+    private boolean nucleationBlocked;
 
     /**
      * @param terrain surface model for slopes and fissure elevation; may be {@code null} (flat world
@@ -109,6 +113,57 @@ public final class DikePropagation implements Subsystem {
         bus.register(DikeCommands.ForceDike.class, c -> {
             if (c.volcanoId().equals(volcanoId)) forcedPending++;
         });
+        bus.register(DikeCommands.ArrestDike.class, c -> {
+            if (c.volcanoId().equals(volcanoId)) arrest(c.dikeId());
+        });
+        bus.register(DikeCommands.RemoveDike.class, c -> {
+            if (c.volcanoId().equals(volcanoId)) remove(c.dikeId());
+        });
+        bus.register(DikeCommands.BlockDikes.class, c -> {
+            if (c.volcanoId().equals(volcanoId)) nucleationBlocked = c.blocked();
+        });
+    }
+
+    /** Stops the propagating dike {@code dikeId} at the next step; false if there is no such dike. */
+    public boolean arrest(int dikeId) {
+        Dike dike = find(dikeId);
+        if (dike == null || !dike.propagating()) return false;
+        pendingArrests.add(dikeId);
+        return true;
+    }
+
+    /**
+     * Deletes the dike {@code dikeId} (arresting it first if it is still rising); false if there is no
+     * such dike. Its fissure, if any, stops being a vent.
+     */
+    public boolean remove(int dikeId) {
+        Dike dike = find(dikeId);
+        if (dike == null) return false;
+        if (dike.propagating()) pendingArrests.add(dikeId);
+        dike.removed = true;
+        return true;
+    }
+
+    /** Deletes the dike that opened the fissure {@code ventId}; false if no recorded dike opened it. */
+    public boolean removeFissure(String ventId) {
+        for (Dike d : dikes) {
+            if (d.fissure != null && d.fissure.id().equals(ventId)) return remove(d.id);
+        }
+        return false;
+    }
+
+    /** Blocks or allows spontaneous dike nucleation (forced dikes still start). */
+    public void setNucleationBlocked(boolean blocked) {
+        this.nucleationBlocked = blocked;
+    }
+
+    public boolean nucleationBlocked() {
+        return nucleationBlocked;
+    }
+
+    private Dike find(int dikeId) {
+        for (Dike d : dikes) if (d.id == dikeId) return d;
+        return null;
     }
 
     /** Nucleates a dike at the next step (same as {@link DikeCommands.ForceDike}). */
@@ -133,7 +188,18 @@ public final class DikePropagation implements Subsystem {
             forcedPending--;
             start(context);
         }
-        if (!magma.erupting() && activeCount() < config.maxConcurrentDikes && random.chance(nucleationProbability(context))) {
+        for (int id : pendingArrests) {
+            Dike dike = find(id);
+            if (dike == null || !dike.propagating()) continue;
+            dike.status = DikeStatus.STALLED;
+            emplaceIntrusion(dike, context.time());
+            context.outbox().emit(new DikeEvents.DikeStalled(context.time(), volcanoId, dike.id, dike.tip(), dike.depth,
+                    dike.volume, StallReason.ARRESTED));
+        }
+        pendingArrests.clear();
+
+        if (!nucleationBlocked && !magma.erupting() && activeCount() < config.maxConcurrentDikes
+                && random.chance(nucleationProbability(context))) {
             start(context);
         }
 
@@ -371,14 +437,22 @@ public final class DikePropagation implements Subsystem {
         return Math.max(dike.chamberY, Math.min(surface, y));
     }
 
+    /**
+     * Forgets the oldest finished dikes beyond {@link DikeConfig#maxRecordedDikes}: stalled and removed
+     * ones first, so fissures that may still be erupting are the last to go.
+     */
     private void prune() {
         int excess = dikes.size() - config.maxRecordedDikes;
-        for (int i = 0; i < dikes.size() && excess > 0; ) {
-            if (!dikes.get(i).propagating()) {
-                dikes.remove(i);
-                excess--;
-            } else {
-                i++;
+        for (int pass = 0; pass < 2 && excess > 0; pass++) {
+            for (int i = 0; i < dikes.size() && excess > 0; ) {
+                Dike d = dikes.get(i);
+                boolean vent = d.fissure != null && !d.removed;
+                if (!d.propagating() && (pass == 1 || !vent)) {
+                    dikes.remove(i);
+                    excess--;
+                } else {
+                    i++;
+                }
             }
         }
     }
@@ -405,10 +479,10 @@ public final class DikePropagation implements Subsystem {
         return n;
     }
 
-    /** Fissures opened by recorded dikes, oldest first. */
+    /** Fissures opened by recorded dikes the user has not removed, oldest first. */
     public List<VentSite> openedVents() {
         List<VentSite> vents = new ArrayList<>();
-        for (Dike d : dikes) if (d.fissure != null) vents.add(d.fissure);
+        for (Dike d : dikes) if (d.fissure != null && !d.removed) vents.add(d.fissure);
         return vents;
     }
 
@@ -428,6 +502,10 @@ public final class DikePropagation implements Subsystem {
         JsonObject out = writer.json();
         out.addProperty("nextId", nextId);
         out.addProperty("forcedPending", forcedPending);
+        out.addProperty("nucleationBlocked", nucleationBlocked);
+        JsonArray arrests = new JsonArray();
+        pendingArrests.forEach(arrests::add);
+        out.add("pendingArrests", arrests);
         JsonArray array = new JsonArray();
         for (Dike d : dikes) array.add(d.save());
         out.add("dikes", array);
@@ -438,6 +516,11 @@ public final class DikePropagation implements Subsystem {
         JsonObject in = reader.json();
         nextId = in.get("nextId").getAsInt();
         forcedPending = in.get("forcedPending").getAsInt();
+        nucleationBlocked = in.has("nucleationBlocked") && in.get("nucleationBlocked").getAsBoolean();
+        pendingArrests.clear();
+        if (in.has("pendingArrests")) {
+            for (JsonElement e : in.getAsJsonArray("pendingArrests")) pendingArrests.add(e.getAsInt());
+        }
         dikes.clear();
         for (JsonElement e : in.getAsJsonArray("dikes")) dikes.add(Dike.load(e.getAsJsonObject()));
     }

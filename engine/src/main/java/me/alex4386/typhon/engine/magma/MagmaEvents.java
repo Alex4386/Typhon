@@ -14,7 +14,12 @@ public final class MagmaEvents {
         /** Started or stopped by a command. */
         FORCED,
         /** Started because a dike reached the surface and opened a flank vent. */
-        DIKE
+        DIKE,
+        /**
+         * Ended because every outlet closed (feeders froze or vents were sealed) while the chamber was
+         * still pressurised: the pressure is kept and the conduit is left sealed.
+         */
+        SEALED
     }
 
     public record EruptionStarted(double time, String volcanoId, double overpressureMPa, Cause cause)

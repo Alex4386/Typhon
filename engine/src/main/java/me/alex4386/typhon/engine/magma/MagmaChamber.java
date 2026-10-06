@@ -117,6 +117,10 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private boolean pendingStart;
     private boolean pendingStop;
     private boolean pendingFlank;
+    /** Share of the conduit's conductance the open vents can take (fissure feeders, seals); 1 = unrestricted. */
+    private double outletCapacity = 1;
+    /** True while the summit vent is sealed: the roof cannot fail there, only a dike can open a path. */
+    private boolean summitBlocked;
     private EruptiveRegime regime = EruptiveRegime.QUIESCENT;
     private double conduitOpenness;
     private double ventAmbientPa = ConduitInput.ATMOSPHERE_PA;
@@ -248,6 +252,10 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             ConduitSolution flow = updateConduit();
             if (flow == null) {
                 endEruption(context, Cause.AUTOMATIC); // the conduit can no longer carry magma
+            } else if (outletCapacity <= 0) {
+                // Every outlet froze or was sealed: the chamber stops venting but keeps its pressure.
+                endEruption(context, Cause.SEALED);
+                overpressure += inflow / stiffness;
             } else {
                 // Outflow linearised about the last solutions: Q = k (P − P₀).
                 double solvedAt = solvedOverpressureMPa();
@@ -260,6 +268,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
                 }
                 double base = solvedAt - flow.dreRateM3PerS() / conductance;
                 conductance = Math.min(conductance, config.maxEruptionRate() / Math.max(1e-6, overpressure - base));
+                // Fissure feeders narrowing as they freeze throttle the outflow.
+                conductance *= outletCapacity;
                 if (conductance > 0) {
                     double equilibrium = base + supply / conductance;
                     double tau = stiffness / conductance;
@@ -280,7 +290,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             percolateGas(context, physicalDt, gasWater, gasCo2);
             conduitOpenness *= Math.exp(-physicalDt / config.conduit().conduitSealTimescale());
             overpressure += inflow / stiffness;
-            if (overpressure >= failureOverpressureMPa()) {
+            if (!summitBlocked && overpressure >= failureOverpressureMPa()) {
                 startEruption(context, Cause.AUTOMATIC);
             }
         }
@@ -299,6 +309,32 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      */
     public void requestFlankEruption() {
         pendingFlank = true;
+    }
+
+    /**
+     * Share (0–1) of the conduit's hydraulic conductance the open vents can carry, reported by the
+     * surface coupling: 1 for an open summit, less while flow is squeezed through narrowing fissure
+     * feeders, 0 once every outlet froze or was sealed (the eruption then ends with the chamber still
+     * pressurised). Used from the next step.
+     */
+    public void setOutletCapacity(double capacity) {
+        this.outletCapacity = Math.max(0, Math.min(1, capacity));
+    }
+
+    public double outletCapacity() {
+        return outletCapacity;
+    }
+
+    /**
+     * Marks the summit vent sealed: no automatic or forced onset through the roof; pressure builds
+     * until a dike opens a flank path.
+     */
+    public void setSummitBlocked(boolean blocked) {
+        this.summitBlocked = blocked;
+    }
+
+    public boolean summitBlocked() {
+        return summitBlocked;
     }
 
     /**
@@ -327,7 +363,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         }
         if (pendingStart) {
             pendingStart = false;
-            if (!erupting) {
+            if (!erupting && !summitBlocked) {
                 overpressure = Math.max(overpressure, config.tensileStrengthMPa());
                 startEruption(context, Cause.FORCED);
             }
@@ -359,7 +395,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private void endEruption(StepContext context, Cause cause) {
         erupting = false;
         eruptionRate = 0;
-        conduitOpenness = 1;
+        // A plugged outlet leaves the conduit sealed; otherwise it stays open for a while.
+        conduitOpenness = cause == Cause.SEALED ? 0 : 1;
         conduit = null;
         conduitInput = null;
         context.outbox().emit(new MagmaEvents.EruptionEnded(
@@ -948,6 +985,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         out.addProperty("pendingStart", pendingStart);
         out.addProperty("pendingStop", pendingStop);
         out.addProperty("pendingFlank", pendingFlank);
+        out.addProperty("outletCapacity", outletCapacity);
+        out.addProperty("summitBlocked", summitBlocked);
         out.addProperty("overpressure", overpressure);
         out.addProperty("temperature", temperature);
         out.addProperty("bulkSilica", bulkSilica);
@@ -1003,6 +1042,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         pendingStart = in.has("pendingStart") && in.get("pendingStart").getAsBoolean();
         pendingStop = in.has("pendingStop") && in.get("pendingStop").getAsBoolean();
         pendingFlank = in.has("pendingFlank") && in.get("pendingFlank").getAsBoolean();
+        outletCapacity = number(in, "outletCapacity", 1);
+        summitBlocked = in.has("summitBlocked") && in.get("summitBlocked").getAsBoolean();
         overpressure = in.get("overpressure").getAsDouble();
         temperature = in.get("temperature").getAsDouble();
         bulkSilica = in.get("bulkSilica").getAsDouble();

@@ -39,6 +39,8 @@ public final class Dike {
     double travelZ;
     int tipY;
     VentSite fissure;
+    /** Deleted by the user: its fissure is no longer a vent; the intrusion stays in the rock. */
+    boolean removed;
 
     Dike(int id, double startTime, double x, double z, int surfaceStartY, int chamberY, double chamberDepth) {
         this.id = id;
@@ -75,6 +77,8 @@ public final class Dike {
     public BlockPos tip() { return new BlockPos((int) Math.floor(x), tipY, (int) Math.floor(z)); }
     /** The fissure this dike opened, or {@code null}. */
     public VentSite fissure() { return fissure; }
+    /** True once the user deleted the dike: it is kept only as an intrusion (deformation, rock). */
+    public boolean removed() { return removed; }
 
     /** Horizontal distance travelled from the nucleation point (blocks). */
     public double horizontalOffsetBlocks() {
@@ -108,6 +112,7 @@ public final class Dike {
         o.addProperty("travelX", travelX);
         o.addProperty("travelZ", travelZ);
         o.addProperty("tipY", tipY);
+        if (removed) o.addProperty("removed", true);
         if (fissure != null) {
             JsonObject f = new JsonObject();
             f.addProperty("id", fissure.id());
@@ -143,6 +148,7 @@ public final class Dike {
         d.travelX = o.get("travelX").getAsDouble();
         d.travelZ = o.get("travelZ").getAsDouble();
         d.tipY = o.get("tipY").getAsInt();
+        d.removed = o.has("removed") && o.get("removed").getAsBoolean();
         if (o.has("fissure")) {
             JsonObject f = o.getAsJsonObject("fissure");
             d.fissure = new VentSite(

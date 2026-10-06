@@ -12,6 +12,8 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import me.alex4386.typhon.engine.assembly.SurfaceEvents.BurstKind;
+import me.alex4386.typhon.engine.command.CommandBus;
+import me.alex4386.typhon.engine.dike.Dike;
 import me.alex4386.typhon.engine.dike.DikePropagation;
 import me.alex4386.typhon.engine.geothermal.Geothermal;
 import me.alex4386.typhon.engine.lava.LavaFlow;
@@ -36,7 +38,11 @@ import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.UnitSource;
+import me.alex4386.typhon.engine.volcano.VentCommands;
+import me.alex4386.typhon.engine.volcano.VentEvents;
+import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
+import me.alex4386.typhon.engine.volcano.VentStatus;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
@@ -47,6 +53,13 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * <ul>
  *   <li>Chooses the erupting vents: the summit vents, or the flank fissures a dike opened (a fissure
  *       opening while the chamber is quiet starts a flank eruption at the current pressure).
+ *   <li>Follows each dike-fed fissure's feeder thermally ({@link FissureFeeder}): the flow shares out
+ *       by feeder conductance, narrow segments freeze, the eruption localises to a few vents and, once
+ *       the flux falls, the feeder freezes and the fissure goes extinct. A frozen fissure is never an
+ *       outlet again; later eruptions start from the vents still open. Narrowing feeders throttle the
+ *       chamber's outflow ({@link MagmaChamber#setOutletCapacity}).
+ *   <li>Applies the user's vent controls ({@link VentCommands}): sealed vents carry no magma, a sealed
+ *       summit keeps the roof from failing, removed fissures leave the vent set.
  *   <li>Partitions the steady conduit flow continuously ({@link VentPartition}) into lava (coherent
  *       effusion and clastogenic lava from hot fountain fall-back), ballistic fall-back, an eruption
  *       column and the share of it that collapses into pyroclastic density currents. Nothing selects a
@@ -95,6 +108,8 @@ public final class VolcanoCoupler implements Subsystem {
      */
     static final double LAPILLI_MIN_M = 2e-3;
     static final double PLUG_CLAST_M = 2e-3;
+    /** Most segments a fissure feeder is resolved into along strike. */
+    static final int MAX_FEEDER_SEGMENTS = 16;
 
     private final String volcanoId;
     private final MagmaChamber chamber;
@@ -112,7 +127,16 @@ public final class VolcanoCoupler implements Subsystem {
 
     private final TreeSet<String> activeLavaSources = new TreeSet<>();
     private final Set<String> eruptionVents = new LinkedHashSet<>();
-    private int knownFissures;
+    /** Fissure vent ids already picked up from the dikes. */
+    private final TreeSet<String> knownFissures = new TreeSet<>();
+    /** Thermal state of each dike-fed fissure's feeder, by vent id. */
+    private final TreeMap<String, FissureFeeder> feeders = new TreeMap<>();
+    /** Vents sealed by the user. */
+    private final TreeSet<String> sealed = new TreeSet<>();
+    /** Last reported state of each vent. */
+    private final TreeMap<String, VentStatus> ventStates = new TreeMap<>();
+    /** Physical magma flux (m³/s DRE) leaving through each outlet at the last step. */
+    private final TreeMap<String, Double> ventFlux = new TreeMap<>();
     private boolean flankPending;
     /** Column in progress: simulated mass rate (kg per simulated s), collapse share, gas fraction. */
     private double explosiveRate;
@@ -171,11 +195,49 @@ public final class VolcanoCoupler implements Subsystem {
     }
 
     @Override
+    public void registerCommands(CommandBus bus) {
+        bus.register(VentCommands.SealVent.class, c -> {
+            if (c.volcanoId().equals(volcanoId)) seal(c.ventId());
+        });
+        bus.register(VentCommands.UnsealVent.class, c -> {
+            if (c.volcanoId().equals(volcanoId)) unseal(c.ventId());
+        });
+        bus.register(VentCommands.RemoveVent.class, c -> {
+            if (c.volcanoId().equals(volcanoId)) removeVent(c.ventId());
+        });
+    }
+
+    /** Plugs vent {@code ventId}; false if this volcano has no such vent. */
+    public boolean seal(String ventId) {
+        if (find(ventId) == null) return false;
+        sealed.add(ventId);
+        pushOutlets();
+        return true;
+    }
+
+    /** Reopens a sealed vent (a frozen fissure stays frozen); false if it was not sealed. */
+    public boolean unseal(String ventId) {
+        boolean was = sealed.remove(ventId);
+        pushOutlets();
+        return was;
+    }
+
+    /**
+     * Deletes the dike-fed fissure {@code ventId} (its dike stays as an intrusion); false for a summit
+     * vent or an unknown id.
+     */
+    public boolean removeVent(String ventId) {
+        if (dikes == null) return false;
+        for (VentSite vent : baseVents) if (vent.id().equals(ventId)) return false;
+        return dikes.removeFissure(ventId);
+    }
+
+    @Override
     public void step(StepContext context) {
-        watchFissures();
+        watchFissures(context);
         List<ConduitBurst> bursts = chamber.drainBursts();
 
-        List<VentSite> vents = eruptionVents.isEmpty() ? baseVents : activeVents();
+        List<VentSite> vents = outlets();
         VentSite main = vents.isEmpty() ? baseVents.get(0) : vents.get(0);
         VentPartition.Water water = surveyWater(main);
         chamber.setVentEnvironment(VentPartition.ambientPressurePa(water.surfaceDepthM()),
@@ -183,22 +245,30 @@ public final class VolcanoCoupler implements Subsystem {
 
         double rate = chamber.eruptionRate();
         ConduitSolution flow = chamber.conduitFlow();
-        if (rate <= 0 || flow == null) {
+        if (rate <= 0 || flow == null || vents.isEmpty()) {
             stopLava();
             stopExplosive();
             endBurstPhaseIfDue(context.time(), false);
             setPhreatomagmatic(context, false, null);
             lastPartition = null;
-            if (!flankPending) eruptionVents.clear();
+            if (!flankPending && !chamber.erupting()) eruptionVents.clear();
+            ventFlux.clear();
+            updateFeeders(context);
             for (ConduitBurst burst : bursts) fireBurst(context, main, burst, false);
             return;
         }
         flankPending = false;
         if (eruptionVents.isEmpty()) {
-            for (VentSite vent : baseVents) eruptionVents.add(vent.id());
+            for (VentSite vent : vents) eruptionVents.add(vent.id());
         }
-        vents = activeVents();
+        vents = outlets();
         main = vents.get(0);
+        double[] weights = shares(vents);
+        ventFlux.clear();
+        for (int i = 0; i < vents.size(); i++) {
+            ventFlux.put(vents.get(i).id(), chamber.physicalEruptionRate() * weights[i]);
+        }
+        updateFeeders(context);
 
         VentPartition.Result p = VentPartition.partition(flow, chamber.ventAmbientPressurePa(),
                 chamber.config().conduitRadius(), chamber.silicaWt(), water, this::criticalGasFraction);
@@ -211,7 +281,7 @@ public final class VolcanoCoupler implements Subsystem {
         double physicalSeconds = context.dtSeconds() * compression;
 
         double lavaRate = p.lavaMassFlux() * scale / ExplosivePhase.DRE_DENSITY;
-        if (lavaRate > MIN_LAVA_RATE) updateLava(vents, lavaRate);
+        if (lavaRate > MIN_LAVA_RATE) updateLava(vents, weights, lavaRate);
         else stopLava();
 
         double column = p.columnMassFlux() * scale;
@@ -239,12 +309,19 @@ public final class VolcanoCoupler implements Subsystem {
         endBurstPhaseIfDue(context.time(), sustained);
     }
 
-    /** Picks up fissures opened by dikes since the last step. */
-    private void watchFissures() {
+    /** Picks up fissures opened by dikes since the last step, and drops removed ones. */
+    private void watchFissures(StepContext context) {
         if (dikes == null) return;
-        List<VentSite> opened = dikes.openedVents();
-        if (opened.size() <= knownFissures) return;
-        for (VentSite vent : opened.subList(knownFissures, opened.size())) {
+        TreeSet<String> present = new TreeSet<>();
+        for (Dike dike : dikes.dikes()) {
+            VentSite vent = dike.fissure();
+            if (vent == null || dike.removed()) continue;
+            present.add(vent.id());
+            if (!knownFissures.add(vent.id())) {
+                if (!feeders.containsKey(vent.id())) feeders.put(vent.id(), openFeeder(dike, vent, context));
+                continue;
+            }
+            feeders.put(vent.id(), openFeeder(dike, vent, context));
             if (!chamber.erupting()) {
                 // A fresh flank eruption is fed through the new fissures, not the summit.
                 if (!flankPending) eruptionVents.clear();
@@ -253,23 +330,189 @@ public final class VolcanoCoupler implements Subsystem {
             }
             eruptionVents.add(vent.id());
         }
-        knownFissures = opened.size();
+        for (String id : new ArrayList<>(knownFissures)) {
+            if (present.contains(id)) continue;
+            // Removed by the user (or forgotten as an old record): no longer a vent.
+            knownFissures.remove(id);
+            FissureFeeder feeder = feeders.remove(id);
+            // Kept in eruptionVents: an eruption fed only through it loses its outlet and ends.
+            sealed.remove(id);
+            ventFlux.remove(id);
+            VentStatus previous = ventStates.remove(id);
+            if (previous != null) {
+                context.outbox().emit(new VentEvents.VentStateChanged(context.time(), volcanoId, id, previous,
+                        VentStatus.REMOVED, feeder == null ? Double.NaN : feeder.widestWidth()));
+            }
+        }
+        pushOutlets();
     }
 
-    /** All vents of this volcano: the configured ones plus fissures opened by dikes. */
+    private FissureFeeder openFeeder(Dike dike, VentSite vent, StepContext context) {
+        double length = vent.fissureLength() * scaling.metersPerBlock();
+        int segments = Math.max(1, Math.min(MAX_FEEDER_SEGMENTS, vent.fissureLength() / 2));
+        return FissureFeeder.open(dike.openingM(), length, dike.heightM(), segments, context.random());
+    }
+
+    /**
+     * Advances every fissure feeder by this step (carrying its share of the flow, nothing once the
+     * eruption stopped) and reports vent state changes.
+     */
+    private void updateFeeders(StepContext context) {
+        double compression = chamber.erupting() ? scaling.eruptiveTimeCompression() : scaling.dormantTimeCompression();
+        double physicalDt = context.dtSeconds() * compression;
+        for (Map.Entry<String, FissureFeeder> e : feeders.entrySet()) {
+            FissureFeeder feeder = e.getValue();
+            if (feeder.frozen()) continue;
+            feeder.advance(physicalDt, ventFlux.getOrDefault(e.getKey(), 0.0), chamber.temperatureC(), chamber.silicaWt());
+        }
+        pushOutlets();
+        reportStates(context);
+    }
+
+    /** Tells the chamber how much of its conduit's conductance the open outlets can carry. */
+    private void pushOutlets() {
+        redirectIfStranded();
+        boolean summitOpen = false;
+        for (VentSite vent : baseVents) summitOpen |= !sealed.contains(vent.id());
+        chamber.setSummitBlocked(!summitOpen);
+        chamber.setOutletCapacity(outletCapacity());
+    }
+
+    /**
+     * When every vent of an ongoing eruption froze, was sealed or was removed, the pressurised magma
+     * takes the path left open: the summit vents, unless they are sealed too (then the eruption ends
+     * with its pressure kept, {@link MagmaChamber#setOutletCapacity}).
+     */
+    private void redirectIfStranded() {
+        if (!chamber.erupting() || eruptionVents.isEmpty()) return;
+        for (VentSite vent : allVents()) if (eruptionVents.contains(vent.id()) && open(vent.id())) return;
+        for (VentSite vent : baseVents) if (!sealed.contains(vent.id())) eruptionVents.add(vent.id());
+    }
+
+    /**
+     * Share of the chamber's conduit conductance the outlets can carry: 1 while an open summit vent
+     * takes part, otherwise the fissure feeders' conductance relative to when they opened (the conduit
+     * model describes the freshly opened dike), 0 when no outlet is left.
+     */
+    double outletCapacity() {
+        double now = 0;
+        double initial = 0;
+        for (VentSite vent : outlets()) {
+            FissureFeeder feeder = feeders.get(vent.id());
+            if (feeder == null) return 1; // a summit vent
+            now += feeder.conductance();
+            initial += feeder.initialConductance;
+        }
+        if (initial <= 0) return 0;
+        return Math.min(1, now / initial);
+    }
+
+    private void reportStates(StepContext context) {
+        boolean erupting = chamber.erupting();
+        Set<String> outlets = new TreeSet<>();
+        for (VentSite vent : outlets()) outlets.add(vent.id());
+        for (VentSite vent : allVents()) {
+            VentStatus status = statusOf(vent.id(), erupting && !eruptionVents.isEmpty() && outlets.contains(vent.id()));
+            VentStatus previous = ventStates.put(vent.id(), status);
+            if (previous != null && previous != status) {
+                FissureFeeder feeder = feeders.get(vent.id());
+                context.outbox().emit(new VentEvents.VentStateChanged(context.time(), volcanoId, vent.id(), previous,
+                        status, feeder == null ? Double.NaN : feeder.widestWidth()));
+            }
+        }
+    }
+
+    private VentStatus statusOf(String ventId, boolean outlet) {
+        if (sealed.contains(ventId)) return VentStatus.SEALED;
+        FissureFeeder feeder = feeders.get(ventId);
+        if (feeder != null && feeder.frozen()) return VentStatus.FROZEN;
+        if (!outlet) return VentStatus.IDLE;
+        return feeder != null && feeder.waning() ? VentStatus.WANING : VentStatus.ACTIVE;
+    }
+
+    /** True if magma can leave through {@code ventId}: not sealed and, for a fissure, not frozen. */
+    private boolean open(String ventId) {
+        if (sealed.contains(ventId)) return false;
+        FissureFeeder feeder = feeders.get(ventId);
+        return feeder == null || !feeder.frozen();
+    }
+
+    /**
+     * Shares of the flow through each outlet, by hydraulic conductance: a summit conduit as a pipe
+     * (π r⁴ / 8), a fissure feeder as the slots still open (Σ w³ ℓ / 12).
+     */
+    private double[] shares(List<VentSite> vents) {
+        double[] w = new double[vents.size()];
+        double r = chamber.config().conduitRadius();
+        double sum = 0;
+        for (int i = 0; i < w.length; i++) {
+            FissureFeeder feeder = feeders.get(vents.get(i).id());
+            w[i] = feeder == null ? Math.PI * r * r * r * r / 8 : feeder.conductance();
+            sum += w[i];
+        }
+        for (int i = 0; i < w.length; i++) w[i] = sum > 0 ? w[i] / sum : 1.0 / w.length;
+        return w;
+    }
+
+    private VentSite find(String ventId) {
+        for (VentSite vent : allVents()) if (vent.id().equals(ventId)) return vent;
+        return null;
+    }
+
+    /** All vents of this volcano: the configured ones plus fissures opened by dikes (not removed). */
     public List<VentSite> allVents() {
         List<VentSite> all = new ArrayList<>(baseVents);
         if (dikes != null) all.addAll(dikes.openedVents());
         return all;
     }
 
-    /** Vents currently erupting (or about to). */
-    public List<VentSite> activeVents() {
-        List<VentSite> active = new ArrayList<>();
+    /**
+     * Vents magma leaves through (or will at the next onset): the current eruption's vents still open,
+     * or between eruptions every open vent (open summit vents and fissures whose feeders are still hot).
+     */
+    List<VentSite> outlets() {
+        List<VentSite> out = new ArrayList<>();
         for (VentSite vent : allVents()) {
-            if (eruptionVents.contains(vent.id())) active.add(vent);
+            if (!open(vent.id())) continue;
+            if (eruptionVents.isEmpty() ? vent.kind() != VentKind.FISSURE || feeders.containsKey(vent.id())
+                    : eruptionVents.contains(vent.id())) {
+                out.add(vent);
+            }
         }
-        return active;
+        return out;
+    }
+
+    /** Vents currently erupting (or about to): open outlets of the current eruption. */
+    public List<VentSite> activeVents() {
+        return eruptionVents.isEmpty() ? List.of() : outlets();
+    }
+
+    /** Lifecycle state of {@code ventId} at the last step ({@code null} if unknown). */
+    public VentStatus ventStatus(String ventId) {
+        VentStatus known = ventStates.get(ventId);
+        if (known != null) return known;
+        return find(ventId) == null ? null : statusOf(ventId, false);
+    }
+
+    public boolean sealed(String ventId) {
+        return sealed.contains(ventId);
+    }
+
+    /** Physical magma flux (m³/s DRE) through {@code ventId} at the last step; 0 if none. */
+    public double ventFluxM3PerS(String ventId) {
+        return ventFlux.getOrDefault(ventId, 0.0);
+    }
+
+    /** Widest open width (m) of a fissure's feeder; NaN for summit vents, 0 once frozen. */
+    public double feederWidthM(String ventId) {
+        FissureFeeder feeder = feeders.get(ventId);
+        return feeder == null ? Double.NaN : feeder.widestWidth();
+    }
+
+    /** {open segments, total segments} of a fissure's feeder, or {@code null} for summit vents. */
+    public int[] feederSegments(String ventId) {
+        FissureFeeder feeder = feeders.get(ventId);
+        return feeder == null ? null : new int[] {feeder.openSegments(), feeder.width.length};
     }
 
     /** The partition of the current eruption's flow at the vent; {@code null} when not erupting. */
@@ -279,12 +522,14 @@ public final class VolcanoCoupler implements Subsystem {
 
     // ── Lava ──
 
-    private void updateLava(List<VentSite> vents, double physicalRate) {
+    private void updateLava(List<VentSite> vents, double[] shares, double physicalRate) {
         // Lava sources take the physical rate; the lava field (on this volcano's clock) re-applies the
         // eruptive compression.
-        double perVent = physicalRate / vents.size();
         Set<String> wanted = new TreeSet<>();
-        for (VentSite vent : vents) {
+        for (int i = 0; i < vents.size(); i++) {
+            VentSite vent = vents.get(i);
+            double perVent = physicalRate * shares[i];
+            if (perVent <= MIN_LAVA_RATE) continue;
             String sourceId = sourceId(vent);
             wanted.add(sourceId);
             if (activeLavaSources.add(sourceId)) {
@@ -615,7 +860,21 @@ public final class VolcanoCoupler implements Subsystem {
         JsonArray vents = new JsonArray();
         eruptionVents.forEach(vents::add);
         out.add("eruptionVents", vents);
-        out.addProperty("knownFissures", knownFissures);
+        JsonArray known = new JsonArray();
+        knownFissures.forEach(known::add);
+        out.add("knownFissureIds", known);
+        JsonObject feederState = new JsonObject();
+        for (Map.Entry<String, FissureFeeder> e : feeders.entrySet()) feederState.add(e.getKey(), e.getValue().save());
+        out.add("feeders", feederState);
+        JsonArray sealedVents = new JsonArray();
+        sealed.forEach(sealedVents::add);
+        out.add("sealedVents", sealedVents);
+        JsonObject states = new JsonObject();
+        for (Map.Entry<String, VentStatus> e : ventStates.entrySet()) states.addProperty(e.getKey(), e.getValue().name());
+        out.add("ventStates", states);
+        JsonObject flux = new JsonObject();
+        for (Map.Entry<String, Double> e : ventFlux.entrySet()) flux.addProperty(e.getKey(), e.getValue());
+        out.add("ventFlux", flux);
         out.addProperty("flankPending", flankPending);
         out.addProperty("explosiveRate", explosiveRate);
         out.addProperty("explosiveCollapse", explosiveCollapse);
@@ -642,7 +901,37 @@ public final class VolcanoCoupler implements Subsystem {
         if (in.has("eruptionVents")) {
             for (JsonElement e : in.getAsJsonArray("eruptionVents")) eruptionVents.add(e.getAsString());
         }
-        knownFissures = in.has("knownFissures") ? in.get("knownFissures").getAsInt() : 0;
+        knownFissures.clear();
+        feeders.clear();
+        sealed.clear();
+        ventStates.clear();
+        ventFlux.clear();
+        if (in.has("knownFissureIds")) {
+            for (JsonElement e : in.getAsJsonArray("knownFissureIds")) knownFissures.add(e.getAsString());
+        } else if (in.has("knownFissures") && dikes != null) {
+            // Older saves counted fissures; their feeders open afresh on the next step.
+            List<VentSite> opened = dikes.openedVents();
+            int n = Math.min(opened.size(), in.get("knownFissures").getAsInt());
+            for (VentSite vent : opened.subList(0, n)) knownFissures.add(vent.id());
+        }
+        if (in.has("feeders")) {
+            for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("feeders").entrySet()) {
+                feeders.put(e.getKey(), FissureFeeder.load(e.getValue().getAsJsonObject()));
+            }
+        }
+        if (in.has("sealedVents")) {
+            for (JsonElement e : in.getAsJsonArray("sealedVents")) sealed.add(e.getAsString());
+        }
+        if (in.has("ventStates")) {
+            for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("ventStates").entrySet()) {
+                ventStates.put(e.getKey(), VentStatus.valueOf(e.getValue().getAsString()));
+            }
+        }
+        if (in.has("ventFlux")) {
+            for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("ventFlux").entrySet()) {
+                ventFlux.put(e.getKey(), e.getValue().getAsDouble());
+            }
+        }
         flankPending = in.has("flankPending") && in.get("flankPending").getAsBoolean();
         explosiveRate = in.get("explosiveRate").getAsDouble();
         explosiveCollapse = in.has("explosiveCollapse") ? in.get("explosiveCollapse").getAsDouble() : 0;

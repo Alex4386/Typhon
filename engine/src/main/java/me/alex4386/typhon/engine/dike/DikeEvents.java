@@ -14,7 +14,9 @@ public final class DikeEvents {
         /** Driving pressure (chamber overpressure + buoyancy) fell below the stall threshold. */
         INSUFFICIENT_PRESSURE,
         /** The tip became too slow: magma froze against the cold wall rock. */
-        FROZE
+        FROZE,
+        /** Stopped by the user ({@link DikeCommands.ArrestDike} or {@link DikeCommands.RemoveDike}). */
+        ARRESTED
     }
 
     public record DikeStarted(double time, String volcanoId, int dikeId, BlockPos origin, double overpressureMPa)
