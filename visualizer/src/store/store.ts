@@ -52,7 +52,7 @@ export interface Hover {
   y: number;
 }
 
-export type Tool = 'orbit' | 'section' | 'water' | 'dig';
+export type Tool = 'orbit' | 'section' | 'water' | 'dig' | 'chamber';
 export type SurfaceColorMode =
   | 'natural'
   | 'surfaceTemperature'
@@ -148,6 +148,8 @@ interface Store {
   toasts: HudToast[];
   /** A change the server wants confirmed (it resets something), with what to do on each answer. */
   configPrompt: { result: import('../protocol/messages').ConfigResult; confirm: () => void; cancel: () => void } | null;
+  /** Where the user clicked with the chamber tool: the placement dialog is open for it. */
+  placeAt: XY | null;
   dismissToast: (id: string) => void;
   /** Show the full camera toolbar (follow, tour, bookmarks, framing). */
   showCameraTools: boolean;
@@ -258,6 +260,7 @@ export const useStore = create<Store>((set, get) => ({
   showMinimap: false,
   toasts: [],
   configPrompt: null,
+  placeAt: null,
   showCameraTools: false,
   guideOpen: !guideSeen(),
   paletteOpen: false,

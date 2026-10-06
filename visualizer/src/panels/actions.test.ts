@@ -12,7 +12,7 @@ const vs = (rate: number) => ({ chamber: { eruptionRate: rate }, alert: { level:
 describe('inspector actions', () => {
   it('offers a chamber its own volcano’s magma, eruption and dike actions', () => {
     const acts = contextActions({ type: 'entity', id: 'c2' }, entities, { a: vs(0), b: vs(0) });
-    expect(acts.map((a) => a.id)).toEqual(['inject', 'startEruption', 'forceDike', 'section']);
+    expect(acts.map((a) => a.id)).toEqual(['inject', 'startEruption', 'forceDike', 'section', 'removeVolcano']);
     expect(acts.filter((a) => 'volcanoId' in a).every((a) => 'volcanoId' in a && a.volcanoId === 'b')).toBe(true);
     expect(contextActions({ type: 'entity', id: 'c2' }, entities, { b: vs(5) })[1].id).toBe('stopEruption');
   });

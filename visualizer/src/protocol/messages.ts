@@ -29,6 +29,10 @@ export type ClientMessage =
   | {
       type: 'createSession';
       requestId?: number;
+      /** An empty world (terrain and sea only) from a server template: `ocean`, `flat`, `slope`. */
+      template?: string;
+      /** The template's fields (defaults from the catalog). */
+      params?: Record<string, number>;
       preset?: string;
       world?: string;
       seed?: number;
@@ -70,6 +74,13 @@ export type ClientMessage =
   | { type: 'seek'; time: number }
   /** Asks for the attached session's parameter schema (also pushed on attach and after every change). */
   | { type: 'getSchema' }
+  /**
+   * Places a magma chamber below the ground at `at`: a new volcano whose vent forms where magma first
+   * reaches the surface. Omitted fields take the server's defaults (`schema.commands.placeChamber`).
+   */
+  | { type: 'placeChamber'; requestId?: number; at: XY; name?: string; fields?: Record<string, number>; dryRun?: boolean }
+  /** Removes a volcano (a reset: the first reply asks to confirm with a token). */
+  | { type: 'removeVolcano'; requestId?: number; volcanoId: string; confirm?: string; dryRun?: boolean }
   /** Legacy alias of `setConfig` by schema id; `restart: true` confirms a reset. Prefer `setConfig`. */
   | { type: 'setParams'; requestId?: number; values: Record<string, ParamValue | null>; restart?: boolean }
   /**
@@ -304,6 +315,8 @@ export interface ConfigResult {
   errors?: { path: string; message: string }[];
   note?: string;
   ms?: number;
+  /** The volcano a `placeChamber` created. */
+  volcanoId?: string;
 }
 
 export interface ParamChange {
@@ -384,6 +397,15 @@ export interface ServerInfo {
   worldsDir: string;
 }
 
+/** An empty-world template: terrain and sea only; the user places magma chambers into it. */
+export interface TemplateInfo {
+  name: string;
+  title: string;
+  description: string;
+  /** Its parameters, with the server's defaults. */
+  fields: ParamSpec[];
+}
+
 export interface PresetInfo {
   name: string;
   title: string;
@@ -408,7 +430,12 @@ export interface WorldListing {
 
 export interface CatalogMessage {
   type: 'catalog';
+  /** Empty-world templates, offered first (the world-builder path). */
+  templates?: TemplateInfo[];
+  defaultTemplate?: string;
   presets: PresetInfo[];
+  /** The preset new worlds start from unless the user picks another (the server's choice). */
+  defaultPreset?: string;
   worlds: WorldListing[];
   server?: ServerInfo;
 }
@@ -495,6 +522,8 @@ export interface VentInfo {
   radius: number;
   /** Fissure end points (fissures only). */
   line?: [XY, XY];
+  /** Not formed yet: where a placed chamber's conduit will meet the ground. */
+  emergent?: boolean;
 }
 
 export interface MaterialInfo {

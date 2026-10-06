@@ -142,6 +142,8 @@ export function attachSession(sessionId: string): void {
 }
 
 export interface NewSessionOptions {
+  template?: string;
+  params?: Record<string, number>;
   preset?: string;
   world?: string;
   name?: string;
@@ -159,6 +161,7 @@ export function createSession(o: NewSessionOptions): void {
   send({
     type: 'createSession',
     requestId: requestSeq++,
+    ...(o.template ? { template: o.template, params: o.params ?? {} } : {}),
     preset: o.preset,
     world: o.world,
     name: o.name,
@@ -211,6 +214,24 @@ export function setConfig(values: Record<string, ParamValue | null>, opts: { con
       ...(opts.confirm ? { confirm: opts.confirm } : {}),
       ...(opts.dryRun ? { dryRun: true } : {}),
     });
+  });
+}
+
+/** Places a magma chamber at `at` (map metres); resolves with what the server did. */
+export function placeChamber(at: XY, fields: Record<string, number>, name?: string): Promise<ConfigResult> {
+  const requestId = requestSeq++;
+  return new Promise((resolve) => {
+    configWaiters.set(requestId, resolve);
+    send({ type: 'placeChamber', requestId, at, fields, ...(name ? { name } : {}) });
+  });
+}
+
+/** Removes a volcano; the server answers `needsConfirmation` first (send its token as `confirm`). */
+export function removeVolcano(volcanoId: string, confirm?: string): Promise<ConfigResult> {
+  const requestId = requestSeq++;
+  return new Promise((resolve) => {
+    configWaiters.set(requestId, resolve);
+    send({ type: 'removeVolcano', requestId, volcanoId, ...(confirm ? { confirm } : {}) });
   });
 }
 

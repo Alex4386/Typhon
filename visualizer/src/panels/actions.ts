@@ -9,7 +9,8 @@ export type ContextAction =
   | { id: 'section'; label: string }
   | { id: 'water' | 'dig'; label: string }
   | { id: 'removeVent'; label: string; volcanoId: string; ventId: string }
-  | { id: 'removeDike'; label: string; volcanoId: string; dikeId: number };
+  | { id: 'removeDike'; label: string; volcanoId: string; dikeId: number }
+  | { id: 'removeVolcano'; label: string; volcanoId: string };
 
 /** A state the Inspector shows as a checkbox (a setting that stays, unlike a one-off action). */
 export type ContextToggle =
@@ -72,6 +73,8 @@ export function contextActions(sel: Selection | null, entities: EntityMap, volca
         out.push({ id: 'inject', label: 'Add magma…', volcanoId: v }, eruptionToggle(v, volcanoes?.[v]), { id: 'forceDike', label: 'Push magma up (dike)', volcanoId: v });
       }
       out.push({ id: 'section', label: 'Cross-section' });
+      // removal is a reset: the server describes it and asks to confirm
+      if (v) out.push({ id: 'removeVolcano', label: 'Remove volcano…', volcanoId: v });
       return out;
     case 'vent':
     case 'fissure': {

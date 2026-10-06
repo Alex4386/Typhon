@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowUpFromDot, ChevronDown, ChevronUp, Droplets, Pickaxe, Plus, Ruler, Square, Triangle, Wrench } from 'lucide-react';
+import { ArrowUpFromDot, ChevronDown, ChevronUp, Droplets, Flame, Pickaxe, Plus, Ruler, Square, Triangle, Wrench } from 'lucide-react';
 import { SimpleSelect } from '@/components/fields';
 import { Tip } from '@/components/tip';
 import { Badge } from '@/components/ui/badge';
@@ -45,11 +45,25 @@ function StatRow({ label, help, children }: { label: string; help: string; child
 /** Compact summary of the selected volcano, top-left over the 3D view. */
 export function StatusCard({ world }: { world: WorldInfo }) {
   const { id, name, vs } = useVolcano(world);
+  const setStore = useStore((s) => s.set);
   const set = useStore((s) => s.set);
   const short = useMediaQuery(SHORT_VIEWPORT);
   const [collapsed, setCollapsed] = useState(short);
   useEffect(() => setCollapsed(short), [short]); // short viewports start with the one-line summary
-  if (!id) return null;
+  if (!id) {
+    // an empty world: nothing here until the user places a magma chamber
+    return (
+      <section className={`${OVERLAY} flex w-72 max-w-full flex-col gap-2 p-3 text-sm`} aria-label="Empty world">
+        <strong>Nothing here yet</strong>
+        <p className="text-muted-foreground">
+          This world has no volcano. Place a magma chamber below the ground (or the sea floor) and let its eruptions build whatever forms.
+        </p>
+        <Button size="sm" onClick={() => setStore({ tool: 'chamber' })}>
+          <Plus /> Place magma chamber
+        </Button>
+      </section>
+    );
+  }
   const level = vs?.alert.level ?? 'DORMANT';
   const erupting = (vs?.chamber.eruptionRate ?? 0) > 0 || level === 'ERUPTING';
   const pressure = vs && vs.chamber.tensileStrengthMPa > 0 ? vs.chamber.overpressureMPa / vs.chamber.tensileStrengthMPa : null;
@@ -283,6 +297,7 @@ const TOOL_HINT: Partial<Record<Tool, string>> = {
   water: 'Click the map to pour water there.',
   dig: 'Click the map to dig a pit there.',
   section: 'Click points on the map to draw a cross-section line, then open “Section” and press Cut.',
+  chamber: 'Click the map where the magma chamber should be: it goes below that point, at the depth you choose next.',
 };
 
 /** Volcano actions and map tools, bottom-left over the 3D view. */
@@ -294,11 +309,10 @@ export function ActionBar({ world }: { world: WorldInfo }) {
   const injectFor = useStore((s) => s.injectFor);
   const erupting = (vs?.chamber.eruptionRate ?? 0) > 0 || vs?.alert.level === 'ERUPTING';
   const pick = (t: Tool) => set({ tool: tool === t ? 'orbit' : t });
-  if (!id) return null;
   return (
     <>
       <div className={`${OVERLAY} flex max-w-full shrink-0 flex-wrap gap-1.5 p-1.5`} role="toolbar" aria-label="Volcano actions">
-        {erupting ? (
+        {!id ? null : erupting ? (
           <Tip content="End the eruption now" side="top">
             <Button variant="destructive" size="sm" disabled={replay} onClick={() => command({ kind: 'stopEruption', volcanoId: id })}>
               <Square /> <span className="short:hidden">Stop eruption</span>
@@ -311,11 +325,13 @@ export function ActionBar({ world }: { world: WorldInfo }) {
             </Button>
           </Tip>
         )}
-        <Tip content="Add a batch of magma with chosen temperature and composition" side="top">
-          <Button variant="secondary" size="sm" disabled={replay} onClick={() => set({ injectFor: id })}>
-            <Plus /> <span className="short:hidden">Add magma…</span>
-          </Button>
-        </Tip>
+        {id && (
+          <Tip content="Add a batch of magma with chosen temperature and composition" side="top">
+            <Button variant="secondary" size="sm" disabled={replay} onClick={() => set({ injectFor: id })}>
+              <Plus /> <span className="short:hidden">Add magma…</span>
+            </Button>
+          </Tip>
+        )}
         <DropdownMenu>
           <Tip content="More actions and map tools" side="top">
             <DropdownMenuTrigger render={<Button variant="secondary" size="sm" />}>
@@ -323,9 +339,14 @@ export function ActionBar({ world }: { world: WorldInfo }) {
             </DropdownMenuTrigger>
           </Tip>
           <DropdownMenuContent side="top" className="w-auto min-w-60">
-            <DropdownMenuItem disabled={replay} onClick={() => command({ kind: 'forceDike', volcanoId: id })}>
-              <ArrowUpFromDot /> Push magma up (dike)
-            </DropdownMenuItem>
+            <DropdownMenuCheckboxItem checked={tool === 'chamber'} disabled={replay} onClick={() => pick('chamber')}>
+              <Flame /> Place magma chamber
+            </DropdownMenuCheckboxItem>
+            {id && (
+              <DropdownMenuItem disabled={replay} onClick={() => command({ kind: 'forceDike', volcanoId: id })}>
+                <ArrowUpFromDot /> Push magma up (dike)
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuCheckboxItem checked={tool === 'water'} disabled={replay} onClick={() => pick('water')}>
               <Droplets /> Pour water
@@ -339,7 +360,7 @@ export function ActionBar({ world }: { world: WorldInfo }) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <InjectDialog world={world} volcanoId={injectFor} open={injectFor !== null} onOpenChange={(o) => !o && set({ injectFor: null })} />
+      {id && <InjectDialog world={world} volcanoId={injectFor} open={injectFor !== null} onOpenChange={(o) => !o && set({ injectFor: null })} />}
     </>
   );
 }

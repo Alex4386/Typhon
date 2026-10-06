@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { useCamera } from '../camera/cameraStore';
-import { command, inspect } from '../net/connection';
+import { command, inspect, removeVolcano } from '../net/connection';
 import type { EntityProp, InspectionMessage, WorldInfo } from '../protocol/messages';
 import { sectionThrough, selectionAnchor } from '../scene/picking';
 import { KIND_LABEL, entityColor, formatPlace, type EntityView, type Selection } from '../store/entities';
@@ -21,6 +21,7 @@ import { DESTRUCTIVE, contextActions, contextToggles, ventLifecycle, type Contex
 import { budgetVerdict, type BudgetState } from './budget';
 import { formatVolume } from './events';
 import { OVERLAY } from './Overlay';
+import { showServerResult } from './PlaceChamber';
 import { ParamRow, useParamEdits } from './ParamRow';
 import { HIDDEN_PROPS, formatProp, propLabel } from './props';
 
@@ -372,6 +373,7 @@ const ACTION_ICON: Record<ContextAction['id'], ReactNode> = {
   dig: <Pickaxe />,
   removeVent: <Trash2 />,
   removeDike: <Trash2 />,
+  removeVolcano: <Trash2 />,
 };
 
 const ACTION_TIP: Partial<Record<ContextAction['id'], ReactNode>> = {
@@ -389,6 +391,7 @@ const ACTION_TIP: Partial<Record<ContextAction['id'], ReactNode>> = {
   dig: 'Dig a pit at this point',
   removeVent: 'Delete this fissure and its dike: it stops being a vent; the intrusion stays in the rock',
   removeDike: 'Delete this dike (arresting it if still rising); its fissure stops being a vent',
+  removeVolcano: 'Remove this volcano: its chamber and activity go; what it built stays in the landscape',
 };
 
 /** The selection's one-off actions (see {@link contextActions}); lasting states are in the Settings tab. */
@@ -422,6 +425,11 @@ function ActionRow({ onFrame, onSection }: { onFrame: () => void; onSection: () 
       case 'removeVent':
         setArmed(null);
         return command({ kind: a.id, volcanoId: a.volcanoId, ventId: a.ventId });
+      case 'removeVolcano': {
+        const vid = a.volcanoId;
+        void removeVolcano(vid).then((r) => showServerResult(r, (token) => removeVolcano(vid, token), () => s.select(null)));
+        return;
+      }
       case 'removeDike':
         setArmed(null);
         return command({ kind: 'removeDike', volcanoId: a.volcanoId, dikeId: a.dikeId });

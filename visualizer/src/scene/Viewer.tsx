@@ -147,6 +147,10 @@ export function Viewer({ world }: { world: WorldInfo }) {
       case 'dig':
         command({ kind: 'dig', at: xy, radius: s.digRadius, depth: s.digDepth });
         return;
+      case 'chamber':
+        // the placement dialog asks for depth and magma (fields and defaults from the server)
+        s.set({ placeAt: xy, tool: 'orbit' });
+        return;
       default:
         return;
     }
