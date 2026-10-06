@@ -473,7 +473,10 @@ export interface VolcanoState {
     waterWt: number;
     crystalFraction: number;
     /** DRE m³/s, 0 when not erupting. */
+    /** m³/s per simulated second (time-compressed): what the scene shows flowing. */
     eruptionRate: number;
+    /** m³/s of volcano time: comparable with real volcanoes. */
+    physicalEruptionRate?: number;
     /** Magma volume in the chamber (m³). */
     volumeM3?: number;
     regime: EruptiveRegime;
