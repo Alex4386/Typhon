@@ -249,6 +249,36 @@ caps/rates, names, `active`, new volcanoes) apply; *re-init* changes (grid, geol
 geometry, vents, removed volcanoes) need `ChangePolicy.ACCEPT` (keep state) or `RESET_CHANGED`
 (restart the changed volcanoes).
 
+### Generation vs simulation (on-demand growth)
+
+Like a Minecraft world, a Typhon world is unbounded but only partly *loaded*. Unlike Minecraft, what
+loads ground is physics, never a viewer.
+
+- **Generation.** The host attaches a `terrain.TerrainGenerator` (`World.setTerrainGenerator`, on every
+  open): the column at any (x, z) as a pure function of the world definition (preset generator and
+  seed, or DEM). It is not saved; it is regenerated from `world.yaml`. The initial core
+  (`terrain.coreExtentM` for the simulator's hosts) is just a window onto it.
+- **Simulation.** Only columns in the `TerrainModel` are simulated. `expansion.WorldExpansion` (last
+  subsystem, every `expansion.periodSeconds`) asks its `ExpansionActivity` sources where something is
+  happening: molten lava and flows blocked by unknown ground (`LavaFlow`), moving pyroclastic flows,
+  lahars and debris avalanches (`MassFlowField`), rising dike tips, explosion craters and caldera
+  collapse (`Geomorphology`; slope failures report through the avalanches they become), tephra fall at
+  least `ashThresholdM` thick, and running water at least `waterThresholdM` deep that reached the edge.
+  Every expansion tile (`tileColumns`, aligned to multiples of it) within `marginTiles` of an active
+  tile that is not fully simulated is generated and imported through `TerrainModel.apply`, exactly
+  like the initial terrain (geology, edifices, continuous relief). Background processes (ravelling,
+  settling lakes, thin ash) do not grow the world.
+- **Hand-over.** New columns are initialised by the subsurface on its next step (their aquifer enters
+  the water budget as `initialGroundwater`; the groundwater fixed-head edge moves with the area). The
+  tephra ash grid keeps fall on unsimulated ground and lays it down when the ground materialises
+  (`ExpansionActivity.Listener`). Lava and mass flows simply see new known chunks.
+- **Determinism.** Activity is read from saved state inside the step, tiles are materialised in key
+  order and the generator is pure: runs are identical for any thread count and a restore mid-growth
+  continues bit for bit (`WorldExpansionTest`). Materialised tiles are saved with the terrain.
+- **Bounds.** `maxExtentM` (a square around x = z = 0) and `maxTiles` cap growth; one 64×64 tile of
+  20 m columns costs about 0.8 MB of heap (≈0.2 KB per column), so the default 400 tiles add ≤ ~0.35 GB.
+  All `expansion:` parameters are hot.
+
 ## Units and scaling
 
 Physics runs in real units: metres, seconds, MPa, °C, wt%, m³/s. Outputs reach the Minecraft world
