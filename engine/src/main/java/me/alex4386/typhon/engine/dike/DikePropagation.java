@@ -123,7 +123,11 @@ public final class DikePropagation implements Subsystem {
 
     @Override
     public double maxStepSeconds() {
-        return activeCount() > 0 ? RISING_STEP_SECONDS : Double.POSITIVE_INFINITY;
+        if (activeCount() > 0 || forcedPending > 0) return RISING_STEP_SECONDS;
+        // Keep a spontaneous dike unlikely within one step (≤ 10 %), so it starts, rises and erupts in
+        // steps of its own rather than all inside a day-long quiet step.
+        double rate = nucleationBlocked ? 0 : nucleationRate();
+        return rate > 0 ? Math.max(RISING_STEP_SECONDS, 0.1 / rate) : Double.POSITIVE_INFINITY;
     }
 
     @Override
@@ -240,12 +244,16 @@ public final class DikePropagation implements Subsystem {
 
     /** Probability that a dike nucleates during a step of this length. */
     double nucleationProbability(StepContext context) {
+        return 1 - StrictMath.exp(-nucleationRate() * context.dtSeconds());
+    }
+
+    /** Spontaneous nucleation rate (per second) at the current overpressure. */
+    double nucleationRate() {
         double ratio = magma.overpressureMPa() / magma.tensileStrengthMPa();
         double f0 = config.initiationPressureRatio;
         if (ratio < f0) return 0;
         double x = Math.min(1, (ratio - f0) / (1 - f0));
-        double rate = config.maxInitiationRate * config.conduitSealing * x * x;
-        return 1 - StrictMath.exp(-rate * context.dtSeconds());
+        return config.maxInitiationRate * config.conduitSealing * x * x;
     }
 
     private Dike start(StepContext context) {

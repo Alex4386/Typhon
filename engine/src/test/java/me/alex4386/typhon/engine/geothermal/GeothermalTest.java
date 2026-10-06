@@ -606,7 +606,8 @@ class GeothermalTest {
                 List.of(VentSite.crater("main", CENTER, 3), VentSite.fissure("rift", new BlockPos(12, 64, 0), 0.5, 20)),
                 liveSubsurface());
         Engine after = engine(second, 5).restore(saved).build();
-        resumed.addAll(run(after, second, half));
+        // to the same absolute end as the reference (the first half may end past its mark)
+        resumed.addAll(me.alex4386.typhon.engine.testing.Runs.until(after, 2 * half * STEP_TIME.get(config)));
 
         assertEquals(reference, resumed);
         assertFalse(straight.featuresByColumn().isEmpty());

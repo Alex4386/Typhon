@@ -73,6 +73,9 @@ class FissureLifecycleTest {
 
     /** Forces a dike and runs until its fissure erupts; returns the fissure's id. */
     static String flankEruption(World w, List<EngineFrame> frames) {
+        // Only the forced dike: it takes hours to rise, long enough for the chamber (above the nucleation
+        // threshold) to start dikes of its own.
+        w.engine().submit(new DikeCommands.BlockDikes("test", true));
         w.engine().step();
         w.engine().submit(new DikeCommands.ForceDike("test"));
         for (double end = w.engine().time() + 30 * MINUTE; w.engine().time() < end; ) {
@@ -105,7 +108,7 @@ class FissureLifecycleTest {
 
         // The eruption stops: no more heat reaches the feeder and it freezes into the wall rock.
         w.engine().submit(new MagmaCommands.StopEruption("test"));
-        frames.addAll(run(w.engine(), 30 * MINUTE));
+        frames.addAll(run(w.engine(), 120 * 86_400)); // a dike-fed feeder freezes over months of repose
         assertFalse(w.volcano().chamber().erupting());
         assertEquals(VentStatus.FROZEN, w.coupler().ventStatus(fissure), "the idle feeder should freeze");
         assertTrue(states(frames, fissure).stream().anyMatch(e -> e.current() == VentStatus.FROZEN));
@@ -156,7 +159,7 @@ class FissureLifecycleTest {
     void sealedSummitCannotFailButAFlankDikeCanStillOpen() {
         MagmaChamberConfig atFailure = VolcanoSystemTest.basalt(); // fails through the summit within minutes
         World w = world(1, atFailure, null, 1);
-        w.engine().step();
+        // sealed and blocked before the first step: at failure, a dike could nucleate in the very first one
         w.engine().submit(new VentCommands.SealVent("test", CRATER.id()));
         w.engine().submit(new DikeCommands.BlockDikes("test", true));
         w.engine().submit(new MagmaCommands.StartEruption("test"));
@@ -205,6 +208,7 @@ class FissureLifecycleTest {
     @Test
     void arrestedDikeStallsAndNeverOpensAFissure() {
         World w = world(3, flank(), null, 1);
+        w.engine().submit(new DikeCommands.BlockDikes("test", true));
         w.engine().step();
         w.engine().submit(new DikeCommands.ForceDike("test"));
         for (double end = w.engine().time() + MINUTE; w.engine().time() < end && w.volcano().dikes().dikes().isEmpty(); ) {
@@ -238,6 +242,7 @@ class FissureLifecycleTest {
         assertEquals(referenceFrames, threadedFrames, "thread count must not matter");
 
         World first = world(3, flank(), null, 1);
+        first.engine().submit(new DikeCommands.BlockDikes("test", true)); // as flankEruption does
         first.engine().step();
         first.engine().submit(new DikeCommands.ForceDike("test"));
         VolcanoSystemTest.until(first.engine(), save);
