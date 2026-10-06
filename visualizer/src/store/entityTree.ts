@@ -33,6 +33,7 @@ const kind = (k: string) => (e: Pick<Entity, 'kind' | 'props'>) => e.kind === k;
  */
 export const CATEGORIES: EntityCategory[] = [
   { key: 'chambers', label: 'Magma chambers', tab: 'volcano', match: kind('chamber'), drawn: false },
+  { key: 'pathways', label: 'Magma pathways', tab: 'volcano', match: kind('connection'), drawn: false },
   { key: 'vents', label: 'Vents', tab: 'volcano', match: kind('vent'), drawn: true },
   { key: 'fissures', label: 'Fissures', tab: 'volcano', match: kind('fissure'), drawn: true },
   { key: 'dikes', label: 'Dikes', tab: 'volcano', match: kind('dike'), drawn: true },

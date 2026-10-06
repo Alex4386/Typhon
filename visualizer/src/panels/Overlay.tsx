@@ -13,7 +13,7 @@ import { command } from '../net/connection';
 import type { ParamSpec, ParamValue, SimCommand, VolcanoState, WorldInfo } from '../protocol/messages';
 import { useStore, type Tool } from '../store/store';
 import { ALERT_COLORS } from '../util/color';
-import { formatDuration, formatFactor } from '../util/world';
+import { formatDuration, formatFactor, worldExtent } from '../util/world';
 import { SHORT_VIEWPORT, useMediaQuery } from '../util/useMediaQuery';
 import { ALERT_LABEL, REGIME_LABEL, STYLE_LABEL } from './events';
 import { FALLBACK_INJECT_FIELDS, MAGMA_PRESETS, fieldError, formatVolume, injectWarnings, mixPreview } from './inject';
@@ -58,9 +58,16 @@ export function StatusCard({ world }: { world: WorldInfo }) {
         <p className="text-muted-foreground">
           This world has no volcano. Place a magma chamber below the ground (or the sea floor) and let its eruptions build whatever forms.
         </p>
-        <Button size="sm" onClick={() => setStore({ tool: 'chamber' })}>
-          <Plus /> Place magma chamber
+        <Button
+          size="sm"
+          onClick={() => {
+            const e = worldExtent(world);
+            setStore({ buildDraft: { kind: 'chamber', volcanoId: null, at: [(e.minX + e.maxX) / 2, (e.minY + e.maxY) / 2], values: {} }, drawer: 'build', tool: 'chamber' });
+          }}
+        >
+          <Plus /> Place a magma chamber to start
         </Button>
+        <p className="text-xs text-muted-foreground">Then click the map to move it, or type its position; set its depth, size and magma in the Build panel.</p>
       </section>
     );
   }

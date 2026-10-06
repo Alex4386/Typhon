@@ -81,6 +81,24 @@ export type ClientMessage =
   | { type: 'placeChamber'; requestId?: number; at: XY; name?: string; fields?: Record<string, number>; dryRun?: boolean }
   /** Removes a volcano (a reset: the first reply asks to confirm with a token). */
   | { type: 'removeVolcano'; requestId?: number; volcanoId: string; confirm?: string; dryRun?: boolean }
+  /** One edit of a volcano's magma plumbing (docs/protocol.md §3.5.1); answered by `configResult`. */
+  | {
+      type: 'plumbing';
+      requestId?: number;
+      volcanoId: string;
+      op: PlumbingOpName;
+      chamberId?: string;
+      connectionId?: string;
+      at?: XY;
+      from?: string;
+      to?: string;
+      kind?: 'conduit' | 'dike';
+      fields?: Record<string, ParamValue>;
+      dryRun?: boolean;
+      confirm?: string;
+    }
+  /** The attached world's current definitions; answered by `config`. */
+  | { type: 'getConfig'; requestId?: number }
   /** Legacy alias of `setConfig` by schema id; `restart: true` confirms a reset. Prefer `setConfig`. */
   | { type: 'setParams'; requestId?: number; values: Record<string, ParamValue | null>; restart?: boolean }
   /**
@@ -92,7 +110,8 @@ export type ClientMessage =
       type: 'setConfig';
       requestId?: number;
       world?: Record<string, ParamValue | null>;
-      volcanoes?: Record<string, Record<string, ParamValue | null>>;
+      /** Per volcano: dotted paths, or nested trees (plumbing lists are set whole), or `null` to remove it. */
+      volcanoes?: Record<string, Record<string, unknown> | null>;
       replace?: boolean;
       dryRun?: boolean;
       /** The `token` of a `needsConfirmation` answer the user confirmed. */
@@ -143,6 +162,7 @@ export type SessionAction = 'pause' | 'resume' | 'close' | 'closeWithoutSaving';
 export type ServerMessage =
   | WelcomeMessage
   | (ConfigResult & { type: 'configResult' })
+  | ConfigMessage
   /** Sent on request and pushed to every client whenever the list changes (and every few seconds). */
   | { type: 'sessions'; sessions: SessionInfo[]; server?: ServerInfo }
   | CatalogMessage
@@ -317,6 +337,27 @@ export interface ConfigResult {
   ms?: number;
   /** The volcano a `placeChamber` created. */
   volcanoId?: string;
+  /** The chamber or pathway a `plumbing` edit created or changed. */
+  chamberId?: string;
+  connectionId?: string;
+}
+
+export type PlumbingOpName = 'addChamber' | 'editChamber' | 'removeChamber' | 'connect' | 'editConnection' | 'removeConnection';
+
+/** A typical magma (the server's presets): starting values for chamber and injection forms. */
+export interface MagmaPreset {
+  id: string;
+  name: string;
+  help: string;
+  values: Record<string, number>;
+}
+
+/** The `config` reply: a world's current definitions as editable trees. */
+export interface ConfigMessage {
+  type: 'config';
+  requestId?: number;
+  world: Record<string, unknown>;
+  volcanoes: Record<string, Record<string, unknown>>;
 }
 
 export interface ParamChange {
@@ -345,6 +386,10 @@ export interface SchemaMessage {
   audit: ParamChange[];
   /** Parameter ids the server shows in Inspector panels (e.g. a chamber's settings, by volcano id). */
   panels?: { chamber?: Record<string, string[]> };
+  /** Forms of builder parts with server defaults: a further chamber, a pathway between chambers. */
+  components?: { chamber?: ParamSpec[]; connection?: ParamSpec[] };
+  /** Typical magmas for chamber and injection forms. */
+  magmaPresets?: MagmaPreset[];
 }
 
 export type ErrorCode =

@@ -21,7 +21,7 @@ import { DESTRUCTIVE, contextActions, contextToggles, ventLifecycle, type Contex
 import { budgetVerdict, type BudgetState } from './budget';
 import { formatVolume } from './events';
 import { OVERLAY } from './Overlay';
-import { showServerResult } from './PlaceChamber';
+import { showServerResult } from './serverResult';
 import { ParamRow, useParamEdits } from './ParamRow';
 import { HIDDEN_PROPS, formatProp, propLabel } from './props';
 

@@ -4,6 +4,7 @@ import {
   PROTOCOL_VERSION,
   WS_SUBPROTOCOL,
   type ClientMessage,
+  type ConfigMessage,
   type ConfigResult,
   type ParamValue,
   type SectionDatum,
@@ -226,6 +227,38 @@ export function placeChamber(at: XY, fields: Record<string, number>, name?: stri
   });
 }
 
+/**
+ * One edit of a volcano's plumbing (add/edit/remove a chamber, connect/edit/remove a pathway); the server
+ * builds and classifies it and resolves with what it did (or asks to confirm a reset).
+ */
+export function plumbing(o: Omit<Extract<ClientMessage, { type: 'plumbing' }>, 'type' | 'requestId'>): Promise<ConfigResult> {
+  const requestId = requestSeq++;
+  return new Promise((resolve) => {
+    configWaiters.set(requestId, resolve);
+    send({ type: 'plumbing', requestId, ...o });
+  });
+}
+
+const definitionWaiters = new Map<number, (m: ConfigMessage) => void>();
+
+/** The attached world's current definitions (for undo snapshots). */
+export function getConfig(): Promise<ConfigMessage> {
+  const requestId = requestSeq++;
+  return new Promise((resolve) => {
+    definitionWaiters.set(requestId, resolve);
+    send({ type: 'getConfig', requestId });
+  });
+}
+
+/** Sends definition trees through the configuration API (`null` removes a volcano, a new id adds one). */
+export function setConfigTrees(volcanoes: Record<string, Record<string, unknown> | null>, opts: { confirm?: string; dryRun?: boolean } = {}): Promise<ConfigResult> {
+  const requestId = requestSeq++;
+  return new Promise((resolve) => {
+    configWaiters.set(requestId, resolve);
+    send({ type: 'setConfig', requestId, volcanoes, ...(opts.confirm ? { confirm: opts.confirm } : {}), ...(opts.dryRun ? { dryRun: true } : {}) });
+  });
+}
+
 /** Removes a volcano; the server answers `needsConfirmation` first (send its token as `confirm`). */
 export function removeVolcano(volcanoId: string, confirm?: string): Promise<ConfigResult> {
   const requestId = requestSeq++;
@@ -426,6 +459,14 @@ function onText(m: ServerMessage): void {
       const waiter = m.requestId !== undefined ? configWaiters.get(m.requestId) : undefined;
       if (waiter && m.requestId !== undefined) {
         configWaiters.delete(m.requestId);
+        waiter(m);
+      }
+      return;
+    }
+    case 'config': {
+      const waiter = m.requestId !== undefined ? definitionWaiters.get(m.requestId) : undefined;
+      if (waiter && m.requestId !== undefined) {
+        definitionWaiters.delete(m.requestId);
         waiter(m);
       }
       return;

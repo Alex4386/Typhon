@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, ChevronDown, Globe, History, List, Pause, Play, Plus, ScrollText, Settings2, SkipForward, SlidersHorizontal, SquareSplitVertical, type LucideIcon } from 'lucide-react';
+import { Activity, ChevronDown, Globe, Hammer, History, List, Pause, Play, Plus, ScrollText, Settings2, SkipForward, SlidersHorizontal, SquareSplitVertical, type LucideIcon } from 'lucide-react';
 import { SimpleSelect } from '@/components/fields';
 import { Tip } from '@/components/tip';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +17,7 @@ const SPEEDS = [0.5, 1, 5, 20, 100, 1000];
 /** Side panel pages reachable from the header, in order. */
 export const DRAWER_TABS: { tab: DrawerTab; label: string; title: string; icon: LucideIcon; key?: string }[] = [
   { tab: 'sims', label: 'Worlds', title: 'Start, open, switch, pause and close simulated worlds', icon: Globe },
+  { tab: 'build', label: 'Build', title: 'Place and edit magma chambers and the pathways between them; undo and redo', icon: Hammer, key: 'B' },
   { tab: 'entities', label: 'Entities', title: 'Everything on and under the volcano: vents, dikes, hot springs, flows, stations; click one to fly there', icon: List, key: 'E' },
   { tab: 'monitor', label: 'Monitor', title: 'Instruments: earthquakes, magma, ground motion, status history', icon: Activity },
   { tab: 'events', label: 'Events', title: 'What happened, newest first; show it on the map or replay from it', icon: ScrollText },

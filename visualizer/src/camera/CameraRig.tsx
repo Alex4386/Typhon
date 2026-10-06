@@ -455,7 +455,7 @@ export function CameraRig({ world }: { world: WorldInfo }) {
       }
     }
 
-    if (ctl) ctl.enabled = !s.transition && (s.mode === 'orbit' || s.mode === 'follow');
+    if (ctl) ctl.enabled = !s.transition && !c.gizmoDrag && (s.mode === 'orbit' || s.mode === 'follow');
 
     // transition between poses
     if (s.transition) {

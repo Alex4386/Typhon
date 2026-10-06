@@ -1,4 +1,6 @@
 import { useEffect } from 'react';
+import { BuildPanel } from './BuildPanel';
+import { redoBuild, removeChamber, removeConnection, undoBuild } from './buildActions';
 import { X } from 'lucide-react';
 import { Tip } from '@/components/tip';
 import { Button } from '@/components/ui/button';
@@ -42,6 +44,7 @@ export function SidePanel({ world }: { world: WorldInfo | null }) {
       <div className={`@container min-h-0 flex-1 overflow-y-auto p-4 drawer-${drawer}`}>
         {needsWorld && !world && <p className="text-sm text-muted-foreground">Open a world first (Worlds).</p>}
         {drawer === 'sims' && <SessionManager />}
+        {world && drawer === 'build' && <BuildPanel world={world} />}
         {drawer === 'view' && <ViewSettings />}
         {world && drawer === 'entities' && <EntitiesPanel world={world} />}
         {world && drawer === 'monitor' && <Observatory world={world} />}
@@ -144,6 +147,20 @@ export function useGlobalKeys(): void {
         s.set({ paletteOpen: !s.paletteOpen });
         return;
       }
+      // builder undo/redo (when there is something to undo or redo, so the browser's own stays otherwise)
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        const z = e.key === 'z' || e.key === 'Z';
+        if (z && !e.shiftKey && s.buildHistory.undo.length > 0) {
+          e.preventDefault();
+          void undoBuild();
+          return;
+        }
+        if (((z && e.shiftKey) || e.key === 'y' || e.key === 'Y') && s.buildHistory.redo.length > 0) {
+          e.preventDefault();
+          void redoBuild();
+          return;
+        }
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       // dialogs and menus handle their own Escape
       if (document.querySelector('[role="dialog"], [role="menu"], [role="listbox"][data-open]')) return;
@@ -155,9 +172,19 @@ export function useGlobalKeys(): void {
         if (clock && !clock.replay) send({ type: 'step', steps: 1 });
       } else if (e.key === 'e' || e.key === 'E') {
         if (s.world && useCamera.getState().mode === 'orbit') s.openDrawer('entities');
+      } else if (e.key === 'b' || e.key === 'B') {
+        if (s.world && useCamera.getState().mode === 'orbit') s.openDrawer('build');
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        // Build mode: Delete removes the selected chamber or pathway (the server asks first when it resets something)
+        const sel = s.selection;
+        const ent = sel?.type === 'entity' ? s.entities[sel.id] : undefined;
+        if (!ent?.volcanoId || s.drawer !== 'build') return;
+        if (ent.kind === 'chamber') void removeChamber(ent.volcanoId, String(ent.props.chamberId ?? 'main'));
+        else if (ent.kind === 'connection') void removeConnection(ent.volcanoId, String(ent.props.connectionId));
       } else if (e.key === 'Escape') {
         if (useCamera.getState().helpOpen || document.pointerLockElement) return;
-        if (s.tool !== 'orbit') s.set({ tool: 'orbit' });
+        if (s.buildDraft || s.connectDraft) s.set({ buildDraft: null, connectDraft: null, ...(s.tool === 'chamber' ? { tool: 'orbit' as const } : {}) });
+        else if (s.tool !== 'orbit') s.set({ tool: 'orbit' });
         else if (s.selection) s.select(null);
         else if (s.drawer) s.set({ drawer: null });
       }

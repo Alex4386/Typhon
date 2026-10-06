@@ -18,6 +18,8 @@ import { FarField } from './FarField';
 import { FrameScheduler } from './FrameScheduler';
 import { Markers } from './Markers';
 import { PerfProbe } from './PerfProbe';
+import { Plumbing } from './Plumbing';
+import { draftAtClick } from '../panels/builder';
 import { nearestSurfaceEntity, pickRadius } from './picking';
 import { DetailTerrain } from './DetailTerrain';
 import { Terrain, displayZ } from './Terrain';
@@ -180,8 +182,8 @@ export function Viewer({ world }: { world: WorldInfo }) {
         command({ kind: 'dig', at: xy, radius: s.digRadius, depth: s.digDepth });
         return;
       case 'chamber':
-        // the placement dialog asks for depth and magma (fields and defaults from the server)
-        s.set({ placeAt: xy, tool: 'orbit' });
+        // Build mode: the click sets (or moves) the chamber draft; its form and ghost follow
+        s.set(draftAtClick(s, xy));
         return;
       default:
         return;
@@ -213,6 +215,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
       >
         <Terrain world={world} onPick={onPick} />
         <PickPlane world={world} onPick={onPick} />
+        <Plumbing world={world} />
         <DetailTerrain world={world} onPick={onPick} />
       </group>
       <FarField world={world} />

@@ -17,7 +17,6 @@ import { Clock, DrawerButtons, Playback, WorldSwitcher } from '../panels/Header'
 import { Inspector } from '../panels/Inspector';
 import { ActionBar, StatusCard, ToolHint } from '../panels/Overlay';
 import { ConfigConfirm } from '../panels/ParamRow';
-import { PlaceChamberDialog } from '../panels/PlaceChamber';
 import { PerfHud } from '../scene/PerfHud';
 import { Viewer } from '../scene/Viewer';
 import { rememberDrawerWidth, useStore } from '../store/store';
@@ -175,7 +174,6 @@ export function App() {
         <Guide />
         <CommandPalette />
         <ConfigConfirm />
-        <PlaceChamberDialog />
         <HoverLabel />
       </div>
     </TooltipProvider>

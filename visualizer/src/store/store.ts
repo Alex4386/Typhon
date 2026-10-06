@@ -24,7 +24,7 @@ import { isImportant, mergeByTime } from '../panels/events';
 import { applyEntities, pruneEntities, type EntityMap, type EntityView, type Selection } from './entities';
 
 /** Side drawer pages; only one is open at a time (progressive disclosure). */
-export type DrawerTab = 'sims' | 'entities' | 'monitor' | 'events' | 'section' | 'view' | 'tune';
+export type DrawerTab = 'sims' | 'build' | 'entities' | 'monitor' | 'events' | 'section' | 'view' | 'tune';
 
 export type ToastTone = 'info' | 'warn' | 'alert';
 export interface ToastAction {
@@ -149,7 +149,12 @@ interface Store {
   /** A change the server wants confirmed (it resets something), with what to do on each answer. */
   configPrompt: { result: import('../protocol/messages').ConfigResult; confirm: () => void; cancel: () => void } | null;
   /** Where the user clicked with the chamber tool: the placement dialog is open for it. */
-  placeAt: XY | null;
+  /** Build mode: the chamber being placed or edited (its ghost is drawn; fields and gizmos stay in sync). */
+  buildDraft: import('../panels/builder').BuildDraft | null;
+  /** Build mode: the pathway being drawn between two chambers. */
+  connectDraft: import('../panels/builder').ConnectDraft | null;
+  /** Build mode's undo/redo history (definition snapshots replayed through the configuration API). */
+  buildHistory: import('../panels/builder').BuildHistory;
   dismissToast: (id: string) => void;
   /** Show the full camera toolbar (follow, tour, bookmarks, framing). */
   showCameraTools: boolean;
@@ -260,7 +265,9 @@ export const useStore = create<Store>((set, get) => ({
   showMinimap: false,
   toasts: [],
   configPrompt: null,
-  placeAt: null,
+  buildDraft: null,
+  connectDraft: null,
+  buildHistory: { undo: [], redo: [] },
   showCameraTools: false,
   guideOpen: !guideSeen(),
   paletteOpen: false,

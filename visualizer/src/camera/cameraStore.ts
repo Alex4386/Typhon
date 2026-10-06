@@ -42,6 +42,8 @@ interface CameraStore {
   bookmarks: Bookmark[];
   helpOpen: boolean;
   pointerLocked: boolean;
+  /** A builder gizmo is being dragged: the orbit controls hold still. */
+  gizmoDrag: boolean;
   readout: CameraReadout | null;
   request: CameraRequest | null;
   requestSeq: number;
@@ -89,6 +91,7 @@ function loadSettings(): Settings {
 const initial = loadSettings();
 
 export const useCamera = create<CameraStore>((set, get) => ({
+  gizmoDrag: false,
   mode: 'orbit',
   followTarget: 'vent',
   speedMultiplier: initial.speedMultiplier,

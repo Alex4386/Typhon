@@ -88,6 +88,7 @@ export const KIND_LABEL: Record<string, string> = {
   vent: 'Vent',
   fissure: 'Fissure',
   dike: 'Dike',
+  connection: 'Magma pathway',
   feature: 'Geothermal feature',
   lavaFront: 'Lava front',
   lavaField: 'Lava field',
