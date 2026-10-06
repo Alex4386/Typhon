@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { abs, attribute, cameraPosition, clamp, cos, dot, exp, float, fwidth, length, max, normalize, positionWorld, pow, smoothstep, uniform, vec3 } from 'three/tsl';
+import { abs, attribute, cameraPosition, clamp, cos, dot, exp, float, fwidth, length, max, mix, normalize, positionWorld, pow, smoothstep, uniform, vec3 } from 'three/tsl';
 
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 
@@ -46,8 +46,8 @@ const WAVES: [number, number, number, number][] = [
 /** Water's own (back-scattered) colour, linear RGB. */
 const BODY = new THREE.Vector3(0.012, 0.075, 0.11);
 /** Waves fade out between these camera distances (m). */
-const WAVE_FADE_NEAR = 250;
-const WAVE_FADE_FAR = 2500;
+const WAVE_FADE_NEAR = 150;
+const WAVE_FADE_FAR = 1500;
 /** Share of the sky reflection kept (the Fresnel term alone over-brightens grazing views). */
 const REFLECT = 0.7;
 /**
@@ -85,7 +85,8 @@ function nodeWater(opts: { perVertexDepth: boolean; depthM?: number; opacity?: n
     const w = Math.sqrt(9.81 * k);
     const ph: N = p.x.mul(dx * k).add(p.y.mul(dy * k)).sub(u.uTime.mul(w));
     // band limit: drop the wave once it changes by more than ~π across a pixel
-    const aa: N = float(1).sub(smoothstep(0.25, 0.5, fwidth(ph).div(Math.PI)));
+    // band limit: a wave is drawn only while it spans ≥ ~10 pixels (beyond that it aliases into stripes)
+    const aa: N = float(1).sub(smoothstep(0.08, 0.2, fwidth(ph).div(Math.PI)));
     const a: N = cos(ph).mul(amp * k).mul(aa).mul(farFade);
     sx = sx.add(a.mul(dx));
     sy = sy.add(a.mul(dy));
@@ -99,7 +100,12 @@ function nodeWater(opts: { perVertexDepth: boolean; depthM?: number; opacity?: n
   const transmit: N = exp(path.negate().div(u.uClarity));
   const sun: N = normalize(u.uSunDir);
   const h: N = normalize(sun.add(v));
-  const spec: N = pow(max(dot(n, h), 0), 140).mul(1.1).mul(farFade.mul(0.7).add(0.3));
+  // the glint uses a normal that flattens with distance and a highlight that broadens with it: far
+  // away the sun's path is one smooth bright band instead of a grid of aliased sparkles
+  const near: N = float(1).sub(smoothstep(80, 600, dist));
+  const ns: N = normalize(mix(vec3(0, 1, 0), n, near));
+  const shine: N = mix(float(24), float(140), near);
+  const spec: N = pow(max(dot(ns, h), 0), shine).mul(mix(float(0.35), float(1.1), near));
   const body: N = vec3(BODY.x, BODY.y, BODY.z).mul(float(0.55).add(clamp(sun.y, 0, 1).mul(0.45)));
   // premultiplied: reflected sky + scattered body + glint, over the transmitted bed
   const alpha: N = clamp(float(1).sub(transmit.mul(float(1).sub(fresnel))).mul(opts.opacity ?? 1), 0.0, 1);
@@ -149,7 +155,7 @@ const vertex = /* glsl */ `
 const waveGlsl = WAVES.map(([dx, dy, len, amp]) => {
   const k = (2 * Math.PI) / len;
   return `    { float ph = ${(dx * k).toFixed(6)} * p.x + ${(dy * k).toFixed(6)} * p.y - ${Math.sqrt(9.81 * k).toFixed(6)} * uTime;
-      float aa = 1.0 - smoothstep(0.25, 0.5, fwidth(ph) / 3.14159265);
+      float aa = 1.0 - smoothstep(0.08, 0.2, fwidth(ph) / 3.14159265);
       g += vec2(${dx.toFixed(4)}, ${dy.toFixed(4)}) * (${(amp * k).toFixed(6)} * cos(ph) * aa * farFade); }`;
 }).join('\n');
 
@@ -179,7 +185,9 @@ ${waveGlsl}
     float d = max(vDepth, 0.0);
     float transmit = exp(-(d / max(abs(v.y), 0.2)) / uClarity);
     vec3 sun = normalize(uSunDir);
-    float spec = pow(max(dot(n, normalize(sun + v)), 0.0), 140.0) * 1.1 * (0.3 + 0.7 * farFade);
+    float near = 1.0 - smoothstep(80.0, 600.0, length(toCam));
+    vec3 ns = normalize(mix(vec3(0.0, 1.0, 0.0), n, near));
+    float spec = pow(max(dot(ns, normalize(sun + v)), 0.0), mix(24.0, 140.0, near)) * mix(0.35, 1.1, near);
     vec3 body = vec3(${BODY.x}, ${BODY.y}, ${BODY.z}) * (0.55 + 0.45 * clamp(sun.y, 0.0, 1.0));
     float alpha = clamp((1.0 - transmit * (1.0 - fresnel)) * uOpacity, 0.0, 1.0);
     vec3 lit = uSky * fresnel * ${REFLECT.toFixed(2)} + body * (1.0 - fresnel) * (1.0 - transmit) + uSunColor * spec;

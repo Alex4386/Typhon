@@ -116,7 +116,9 @@ export function EruptionColumn({ world }: { world: WorldInfo }) {
         const y = uy + wy * d + wx * lateral;
         const zz = base + Hnb * (1 - 0.25 * f) * vExag;
         // overlapping, widening and thinning downwind: a continuous drifting cloud, not separate puffs
-        billows.push({ x, y: zz, z: -y, size: Ru * (0.7 + f * 1.3), flat: 0.42, cx: x, cy: zz - bTop * vExag, cz: -y, r: col[0] * 1.3, g: col[1] * 1.3, b: col[2] * 1.3, fade: 0.9 - 0.5 * f, seed });
+        // diluting downwind: lighter and thinner
+        const lift = 0.1 * f;
+        billows.push({ x, y: zz, z: -y, size: Ru * (1 + f * 1.6), flat: 0.42, cx: x, cy: zz - bTop * vExag, cz: -y, r: col[0] * 1.3 + lift, g: col[1] * 1.3 + lift, b: col[2] * 1.3 + lift, fade: 0.9 - 0.45 * f, seed });
       }
     }
   });
