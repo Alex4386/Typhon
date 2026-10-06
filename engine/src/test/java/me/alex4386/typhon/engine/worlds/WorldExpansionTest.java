@@ -172,6 +172,13 @@ class WorldExpansionTest {
     }
 
     @Test
+    void expansionSettingsAreHotIncludingOnWorldsSavedWithoutThem() {
+        // a world saved before expansion existed diffs the whole section ("expansion: null -> {...}")
+        assertEquals(ConfigChanges.Kind.HOT, ConfigChanges.worldKind("expansion"));
+        assertEquals(ConfigChanges.Kind.HOT, ConfigChanges.worldKind("expansion.maxTiles"));
+    }
+
+    @Test
     void withoutAGeneratorTheAreaStaysPut() {
         World w = World.create(world(GROW), quiet(), core());
         w.lava().addSource(LavaSource.at("test/vent", new BlockPos(24, 58, 0), 1, 1150, 50, 0.1));
