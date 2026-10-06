@@ -19,7 +19,7 @@ ws.onmessage = (e) => {
     return;
   }
   const m = JSON.parse(e.data);
-  if (m.type === 'sessions' && m.sessions.length && !attached && (attached = true)) ws.send(JSON.stringify({ type: 'attach', sessionId: m.sessions[0].id }));
+  if (m.type === 'sessions' && m.sessions.length && !attached && (attached = true)) ws.send(JSON.stringify({ type: 'attach', sessionId: process.env.SESSION ?? m.sessions[0].id }));
   if (m.type === 'attached') {
     world = m.world;
     const detail = world.lod.levels.filter((l) => l.kind === 'detail').map((l) => l.level);
