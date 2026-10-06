@@ -105,11 +105,28 @@ public final class DeformationModel implements Subsystem {
                 + magma.inelasticVolumeChangeM3();
     }
 
+    /**
+     * A further pressure source of the plumbing (a deeper or side chamber), as a Mogi point source: its
+     * volume change (m³), physical depth (m) and centre column.
+     */
+    public record Source(double volumeChangeM3, double depthM, double centerX, double centerZ) {}
+
+    private Supplier<List<Source>> extraSources = List::of;
+
+    /** The plumbing's further chambers; their Mogi fields add to the main chamber's (superposition). */
+    public void setExtraSources(Supplier<List<Source>> sources) {
+        this.extraSources = java.util.Objects.requireNonNull(sources);
+    }
+
     /** Surface displacement (real metres) at world position ({@code x}, {@code z}). */
     public Displacement displacementAt(double x, double z) {
         double l = config.metersPerBlock;
         Displacement total = Mogi.displacement(chamberVolumeChange(), config.sourceDepth,
                 (x - (config.centerX + 0.5)) * l, -(z - (config.centerZ + 0.5)) * l, config.poissonRatio);
+        for (Source s : extraSources.get()) {
+            total = total.plus(Mogi.displacement(s.volumeChangeM3(), s.depthM(), (x - (s.centerX() + 0.5)) * l,
+                    -(z - (s.centerZ() + 0.5)) * l, config.poissonRatio));
+        }
         if (dikes != null) {
             for (DikeGeometry dike : dikes.get()) {
                 total = total.plus(DikeDislocation.displacement(dike, (x - dike.centerX()) * l, -(z - dike.centerZ()) * l));

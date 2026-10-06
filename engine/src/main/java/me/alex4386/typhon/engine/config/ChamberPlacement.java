@@ -117,6 +117,53 @@ public final class ChamberPlacement {
         return VolcanoDefinition.parse(id, ConfigNode.root("volcanoes/" + id + ".yaml", root));
     }
 
+    /**
+     * A further chamber of an existing volcano's plumbing for {@code r}: the {@code magma.chambers} element
+     * (YAML tree) at column ({@code r.x}, {@code r.z}), {@code r.depthM} below ground at {@code groundZ}.
+     * Fields left unset are not written, so they follow the volcano's main chamber; it gets no deep supply
+     * unless {@code r} sets one. The server's one mapping from placement fields to definitions.
+     */
+    public static Map<String, Object> chamberElement(String chamberId, Request r, double groundZ, double metersPerColumn) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", chamberId);
+        m.put("center", WorldDefinition.map("x", r.x(), "y", block(groundZ - r.depthM(), metersPerColumn), "z", r.z()));
+        m.put("lithostaticDepth", r.depthM());
+        if (r.volumeM3() != null) m.put("volume", r.volumeM3());
+        if (r.tensileStrengthMPa() != null) m.put("tensileStrengthMPa", r.tensileStrengthMPa());
+        m.put("supplyRate", r.supplyRateM3PerS() != null ? r.supplyRateM3PerS() : 0.0);
+        if (r.initialOverpressureMPa() != null) m.put("initialOverpressureMPa", r.initialOverpressureMPa());
+        if (r.temperatureC() != null) {
+            m.put("initialTemperatureC", r.temperatureC());
+            m.put("rechargeTemperatureC", r.temperatureC());
+        }
+        if (r.silicaWt() != null) {
+            m.put("initialSilicaWt", r.silicaWt());
+            m.put("rechargeSilicaWt", r.silicaWt());
+        }
+        if (r.waterWt() != null) {
+            m.put("initialWaterWt", r.waterWt());
+            m.put("rechargeWaterWt", r.waterWt());
+        }
+        if (r.co2Wt() != null) {
+            m.put("initialCo2Wt", r.co2Wt());
+            m.put("rechargeCo2Wt", r.co2Wt());
+        }
+        if (r.crystalFraction() != null) m.put("rechargeCrystalFraction", r.crystalFraction());
+        return m;
+    }
+
+    /** A {@code magma.connections} element (YAML tree): a conduit or dike from chamber {@code from} to {@code to}. */
+    public static Map<String, Object> connectionElement(String id, String from, String to, boolean dike, Double radiusM, Double widthM) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", id);
+        m.put("from", from);
+        m.put("to", to);
+        m.put("kind", dike ? "dike" : "conduit");
+        if (radiusM != null) m.put("radiusM", radiusM);
+        if (widthM != null) m.put("widthM", widthM);
+        return m;
+    }
+
     /** Index of the block whose top is at or just above {@code z} (m). */
     static int block(double z, double l) {
         return (int) Math.ceil(z / l - 1e-6) - 1;

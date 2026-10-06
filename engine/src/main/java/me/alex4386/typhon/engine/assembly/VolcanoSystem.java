@@ -60,6 +60,10 @@ public final class VolcanoSystem {
     private final List<VentSite> vents;
     private VolcanoScaling scaling;
     private final MagmaChamber chamber;
+    /** Every chamber by id, the main one included (in id order). */
+    private final java.util.Map<String, MagmaChamber> chambers;
+    /** Magma moving between chambers; {@code null} for a single-chamber volcano. */
+    private final me.alex4386.typhon.engine.magma.plumbing.MagmaTransfer plumbing;
     private final DikePropagation dikes;
     private final SeismicityModel seismicity;
     private final AlertLevelEstimator alert;
@@ -92,6 +96,17 @@ public final class VolcanoSystem {
         Derived d = derive(b);
         MagmaChamberConfig chamberConfig = d.chamber();
         this.chamber = new MagmaChamber(chamberConfig);
+        java.util.Map<String, MagmaChamber> all = new java.util.TreeMap<>();
+        all.put(MagmaChamberConfig.MAIN, chamber);
+        for (MagmaChamberConfig extra : d.extraChambers()) {
+            MagmaChamber c = new MagmaChamber(extra);
+            c.setEruptive(false); // only the main chamber feeds the summit conduit; deeper ones feed it
+            all.put(extra.chamberId(), c);
+        }
+        this.chambers = java.util.Collections.unmodifiableMap(all);
+        this.plumbing = all.size() > 1 || !d.connections().isEmpty()
+                ? new me.alex4386.typhon.engine.magma.plumbing.MagmaTransfer(volcanoId, all, chamber, d.connections(), scaling.metersPerBlock())
+                : null;
         // The lava this volcano erupts lives on the volcano's clock: emplaced at the eruptive time
         // compression, cooling on afterwards at the dormant one. Read live, so a retuned time
         // compression applies at once.
@@ -151,6 +166,16 @@ public final class VolcanoSystem {
             this.deformation = null;
         }
 
+        if (deformation != null && chambers.size() > 1) {
+            List<MagmaChamber> extras = chambers.values().stream().filter(c -> c != chamber).toList();
+            double shear = d.deformation().shearModulusPa;
+            deformation.setExtraSources(() -> extras.stream()
+                    .map(c -> new DeformationModel.Source(
+                            me.alex4386.typhon.engine.deformation.Mogi.volumeChange(c.volumeM3() - c.wallGrowthM3(), c.overpressureMPa(), shear)
+                                    + c.inelasticVolumeChangeM3(),
+                            c.config().lithostaticDepth(), c.config().center().x(), c.config().center().z()))
+                    .toList());
+        }
         this.coupler = new VolcanoCoupler(volcanoId, chamber, seismicity, vents, dikes, b.terrain, b.lava, tephra, pdc,
                 geothermal, scaling, b.ballisticFraction);
 
@@ -207,7 +232,8 @@ public final class VolcanoSystem {
      * and the volcano's scaling. Pure: it touches no shared world objects, so a live retune can derive
      * the configurations of a changed definition and hand them to the running subsystems.
      */
-    record Derived(MagmaChamberConfig chamber, SeismicConfig seismic, AlertConfig alert, DikeConfig dike,
+    record Derived(MagmaChamberConfig chamber, List<MagmaChamberConfig> extraChambers,
+            List<me.alex4386.typhon.engine.magma.plumbing.ConnectionConfig> connections, SeismicConfig seismic, AlertConfig alert, DikeConfig dike,
             TephraConfig tephra, GeothermalConfig geothermal, BlockPos geothermalCenter, MassFlowConfig pdc,
             MassFlowConfig lahar, MassFlowConfig avalanche, DeformationConfig deformation, GeomorphConfig geomorph,
             me.alex4386.typhon.engine.world.SurfaceDetailConfig detail) {}
@@ -225,6 +251,15 @@ public final class VolcanoSystem {
         if (!chamberConfig.volcanoId().equals(volcanoId)) {
             throw new IllegalArgumentException("Chamber config is for volcano " + chamberConfig.volcanoId());
         }
+        if (!chamberConfig.isMain()) throw new IllegalArgumentException("The main chamber's id must be " + MagmaChamberConfig.MAIN);
+        List<MagmaChamberConfig> extraChambers = new java.util.ArrayList<>();
+        for (MagmaChamberConfig extra : b.plumbing.chambers()) {
+            if (!extra.volcanoId().equals(volcanoId)) throw new IllegalArgumentException("Chamber config is for volcano " + extra.volcanoId());
+            // one clock for the whole plumbing: the volcano's time scales
+            extraChambers.add(extra.toBuilder().dormantTimeScale(scaling.dormantTimeCompression())
+                    .eruptiveTimeScale(scaling.eruptiveTimeCompression()).build());
+        }
+        extraChambers.sort(java.util.Comparator.comparing(MagmaChamberConfig::chamberId));
         double failure = chamberConfig.tensileStrengthMPa();
         SeismicConfig seismic = SeismicConfig.builder(volcanoId, primary).failureOverpressureMPa(failure).build();
         AlertConfig alert = AlertConfig.defaults(volcanoId).withFailureOverpressure(failure);
@@ -280,7 +315,7 @@ public final class VolcanoSystem {
         me.alex4386.typhon.engine.world.SurfaceDetailConfig detail = b.detailConfig != null ? b.detailConfig
                 : me.alex4386.typhon.engine.world.SurfaceDetailConfig.defaults(scaling.metersPerBlock(),
                         b.vents.get(0).craterRadius() * scaling.metersPerBlock());
-        return new Derived(chamberConfig, seismic, alert, dike, tephra, geothermal, geothermalCenter, pdc, lahar,
+        return new Derived(chamberConfig, List.copyOf(extraChambers), b.plumbing.connections(), seismic, alert, dike, tephra, geothermal, geothermalCenter, pdc, lahar,
                 avalanche, deformation, geomorph, detail);
     }
 
@@ -319,6 +354,8 @@ public final class VolcanoSystem {
         List<Subsystem> list = new java.util.ArrayList<>();
         if (ownsSubsurface) list.add(subsurface);
         list.add(chamber);
+        for (MagmaChamber c : chambers.values()) if (c != chamber) list.add(c);
+        if (plumbing != null) list.add(plumbing);
         if (dikes != null) list.add(dikes);
         list.add(seismicity);
         list.add(alert);
@@ -352,6 +389,10 @@ public final class VolcanoSystem {
     public List<VentSite> vents() { return vents; }
     public VolcanoScaling scaling() { return scaling; }
     public MagmaChamber chamber() { return chamber; }
+    /** Every chamber of the plumbing by id (the main, eruptive one under {@link MagmaChamberConfig#MAIN}). */
+    public java.util.Map<String, MagmaChamber> chambers() { return chambers; }
+    /** Magma moving between chambers; {@code null} for a single-chamber volcano. */
+    public me.alex4386.typhon.engine.magma.plumbing.MagmaTransfer plumbing() { return plumbing; }
     /** Attributes this volcano's deposits to its eruptions. */
     public VolcanoUnits units() { return units; }
     /** {@code null} when dikes are disabled. */
@@ -390,6 +431,7 @@ public final class VolcanoSystem {
         private final LavaFlow lava;
         private VolcanoScaling scaling = VolcanoScaling.DEFAULT;
         private MagmaChamberConfig chamberConfig;
+        private me.alex4386.typhon.engine.magma.plumbing.PlumbingConfig plumbing = me.alex4386.typhon.engine.magma.plumbing.PlumbingConfig.NONE;
         private TephraConfig tephraConfig;
         private GeothermalConfig geothermalConfig;
         private BlockPalette palette = GeothermalBlocks.installFallbacks(BlockPalette.unrestricted());
@@ -427,6 +469,11 @@ public final class VolcanoSystem {
         public Builder scaling(VolcanoScaling scaling) { this.scaling = Objects.requireNonNull(scaling); return this; }
         /** Chamber parameters; its time scales are overridden by {@link #scaling}. */
         public Builder chamber(MagmaChamberConfig config) { this.chamberConfig = config; return this; }
+        /** Further chambers and the pathways between them (none: a single-chamber volcano). */
+        public Builder plumbing(me.alex4386.typhon.engine.magma.plumbing.PlumbingConfig plumbing) {
+            this.plumbing = Objects.requireNonNull(plumbing);
+            return this;
+        }
         /** Tephra parameters; its scale factors are overridden by {@link #scaling}. */
         public Builder tephra(TephraConfig config) { this.tephraConfig = config; return this; }
         public Builder geothermal(GeothermalConfig config) { this.geothermalConfig = config; return this; }
@@ -511,6 +558,10 @@ public final class VolcanoSystem {
             Derived d = derive(this);
             java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
             out.put("magma:" + volcanoId, d.chamber());
+            for (MagmaChamberConfig extra : d.extraChambers()) out.put(MagmaChamber.id(volcanoId, extra.chamberId()), extra);
+            if (!d.extraChambers().isEmpty() || !d.connections().isEmpty()) {
+                out.put(me.alex4386.typhon.engine.magma.plumbing.MagmaTransfer.defaultId(volcanoId), d.connections());
+            }
             if (d.dike() != null) out.put("dike:" + volcanoId, d.dike());
             out.put("seismic:" + volcanoId, d.seismic());
             out.put("alert:" + volcanoId, d.alert());

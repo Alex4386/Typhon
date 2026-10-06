@@ -112,6 +112,14 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private boolean ruptureOffered;
     /** Magma that left the chamber into dikes, from rupture and as dikes grew (m³, cumulative). */
     private double intrudedVolume;
+    /** Magma received from / sent to other chambers of the plumbing (m³, cumulative). */
+    private double transferredIn;
+    private double transferredOut;
+    /**
+     * Whether this chamber feeds the surface itself (the main chamber); a deeper or side chamber only
+     * exchanges magma with the others and intrudes dikes. Set by the volcano's assembly, not saved.
+     */
+    private boolean eruptive = true;
     /**
      * Overpressure the erupting chamber relaxes towards, where outflow equals supply
      * ({@code P₀ + Q_in/k}); NaN while not erupting. Reporting only, recomputed every step.
@@ -188,7 +196,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     @Override
     public boolean reconfigure(Object c) {
         if (!(c instanceof MagmaChamberConfig n) || !n.volcanoId().equals(config.volcanoId())) return false;
-        if (!n.center().equals(config.center()) || n.volume() != config.volume()
+        if (!n.chamberId().equals(config.chamberId()) || !n.center().equals(config.center()) || n.volume() != config.volume()
                 || n.initialTemperatureC() != config.initialTemperatureC() || n.initialSilicaWt() != config.initialSilicaWt()
                 || n.initialWaterWt() != config.initialWaterWt() || n.initialCo2Wt() != config.initialCo2Wt()
                 || n.initialOverpressureMPa() != config.initialOverpressureMPa()
@@ -207,7 +215,12 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     @Override
     public String id() {
-        return "magma:" + config.volcanoId();
+        return id(config.volcanoId(), config.chamberId());
+    }
+
+    /** Subsystem id of chamber {@code chamberId} of a volcano ({@code magma:<volcano>} for its main chamber). */
+    public static String id(String volcanoId, String chamberId) {
+        return MagmaChamberConfig.MAIN.equals(chamberId) ? "magma:" + volcanoId : "magma:" + volcanoId + ":" + chamberId;
     }
 
     /** 0D, touches only this volcano's magma/seismic/alert chain: may run beside other volcanoes'. */
@@ -233,10 +246,16 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         bus.register(InjectRecharge.class, this::handleIfTargeted);
         bus.register(StartEruption.class, this::handleIfTargeted);
         bus.register(StopEruption.class, this::handleIfTargeted);
+        bus.register(MagmaCommands.ChamberCommand.class, this::handleIfTargeted);
     }
 
     private void handleIfTargeted(MagmaCommand command) {
-        if (command.volcanoId().equals(config.volcanoId())) handle(command);
+        if (!command.volcanoId().equals(config.volcanoId())) return;
+        if (command instanceof MagmaCommands.ChamberCommand c) {
+            if (c.chamberId().equals(config.chamberId())) handle(c.command());
+        } else if (config.isMain()) {
+            handle(command); // volcano-wide commands address the main chamber
+        }
     }
 
     void handle(MagmaCommand command) {
@@ -254,6 +273,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             case InjectRecharge c -> inject(c.volume(), c.temperatureC(), c.silicaWt(), c.waterWt(),
                     c.co2Wt() != null ? c.co2Wt() : rechargeCo2,
                     c.crystalFraction() != null ? c.crystalFraction() : rechargeCrystals);
+            case MagmaCommands.ChamberCommand c -> handle(c.command());
             case StartEruption c -> {
                 pendingStart = true;
                 pendingStop = false;
@@ -275,8 +295,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         // model) stays around the chamber: the walls yield and the chamber grows instead.
         absorbRuptureExcess();
 
-        double scale = erupting ? config.eruptiveTimeScale() : config.dormantTimeScale();
-        double physicalDt = dt * scale;
+        double physicalDt = physicalSeconds(dt);
         double supply = currentSupply(context.random());
         double inflow = supply * physicalDt;
 
@@ -345,7 +364,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             conduitOpenness *= Math.exp(-physicalDt / config.conduit().conduitSealTimescale());
             overpressure += inflow / stiffness;
             relieveRupture(supply);
-            if (!summitBlocked && overpressure >= failureOverpressureMPa()) {
+            if (eruptive && !summitBlocked && overpressure >= failureOverpressureMPa()) {
                 startEruption(context, Cause.AUTOMATIC);
             }
         }
@@ -418,7 +437,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         }
         if (pendingStart) {
             pendingStart = false;
-            if (!erupting && !summitBlocked) {
+            if (eruptive && !erupting && !summitBlocked) {
                 overpressure = Math.max(overpressure, config.tensileStrengthMPa());
                 startEruption(context, Cause.FORCED);
             }
@@ -894,6 +913,66 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      *
      * @return the overpressure drop (MPa)
      */
+    /**
+     * Physical (volcano-time) seconds of a step of {@code dtSeconds} simulated seconds. The one place a
+     * chamber, and the plumbing around it, converts step time to physical time.
+     */
+    public double physicalSeconds(double dtSeconds) {
+        return dtSeconds * (erupting ? config.eruptiveTimeScale() : config.dormantTimeScale());
+    }
+
+    /** Lets this chamber erupt through the summit conduit (the main chamber) or not (deeper or side chambers). */
+    public void setEruptive(boolean eruptive) {
+        this.eruptive = eruptive;
+    }
+
+    public boolean eruptive() {
+        return eruptive;
+    }
+
+    /**
+     * Magma arriving from another chamber of the plumbing at {@code rateM3PerS}: mixed in, raising the
+     * overpressure by {@code volume / (V β)}; beyond the walls' limit it ruptures them like recharge does.
+     */
+    public void transferIn(double volume, double rateM3PerS, double temperatureC, double silicaWt, double waterWt, double co2Wt,
+            double crystals) {
+        if (!(volume > 0)) return;
+        double stiffness = this.volume * effectiveCompressibility();
+        mix(volume, temperatureC, silicaWt, waterWt, co2Wt, crystals);
+        overpressure += volume / stiffness;
+        relieveRupture(rateM3PerS);
+        transferredIn += volume;
+    }
+
+    /** Magma leaving for another chamber: overpressure drops by {@code volume / (V β)}. Returns the drop (MPa). */
+    public double transferOut(double volume) {
+        if (!(volume > 0)) return 0;
+        double drop = volume / (this.volume * effectiveCompressibility());
+        overpressure -= drop;
+        transferredOut += volume;
+        return drop;
+    }
+
+    /** Magma received from other chambers so far (m³). */
+    public double transferredInM3() {
+        return transferredIn;
+    }
+
+    /** Magma sent to other chambers so far (m³). */
+    public double transferredOutM3() {
+        return transferredOut;
+    }
+
+    /** Magma density used for magmastatic heads (kg/m³). */
+    public static double magmaDensity() {
+        return MAGMA_DENSITY;
+    }
+
+    /** Country-rock density for lithostatic pressure (kg/m³). */
+    public static double rockDensity() {
+        return ROCK_DENSITY;
+    }
+
     public double withdraw(double volume) {
         if (!(volume > 0)) return 0;
         intrudedVolume += volume;
@@ -1188,6 +1267,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         out.addProperty("ruptureExcess", ruptureExcess);
         out.addProperty("ruptureOffered", ruptureOffered);
         out.addProperty("intrudedVolume", intrudedVolume);
+        out.addProperty("transferredIn", transferredIn);
+        out.addProperty("transferredOut", transferredOut);
         out.addProperty("temperature", temperature);
         out.addProperty("bulkSilica", bulkSilica);
         out.addProperty("bulkWater", bulkWater);
@@ -1250,6 +1331,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         ruptureExcess = in.has("ruptureExcess") ? in.get("ruptureExcess").getAsDouble() : 0;
         ruptureOffered = in.has("ruptureOffered") && in.get("ruptureOffered").getAsBoolean();
         intrudedVolume = in.has("intrudedVolume") ? in.get("intrudedVolume").getAsDouble() : 0;
+        transferredIn = in.has("transferredIn") ? in.get("transferredIn").getAsDouble() : 0;
+        transferredOut = in.has("transferredOut") ? in.get("transferredOut").getAsDouble() : 0;
         temperature = in.get("temperature").getAsDouble();
         bulkSilica = in.get("bulkSilica").getAsDouble();
         bulkWater = in.get("bulkWater").getAsDouble();

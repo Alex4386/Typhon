@@ -46,6 +46,7 @@ import me.alex4386.typhon.engine.math.BlockPos;
  *     the larger of {@code tensileStrengthMPa} and the eruption threshold; NaN = computed (hoop stress, 2)
  * @param wallYieldFraction override for the share of magma beyond the rupture limit taken up by the walls
  *     yielding (inelastic growth) instead of a dike; NaN = computed from wall-rock relaxation vs. charging time
+ * @param chamberId this chamber within its volcano's plumbing; {@link #MAIN} is the eruptive one
  */
 public record MagmaChamberConfig(
         String volcanoId,
@@ -79,7 +80,8 @@ public record MagmaChamberConfig(
         double stepPeriodSeconds,
         double samplePeriodSeconds,
         double wallRuptureRatio,
-        double wallYieldFraction) {
+        double wallYieldFraction,
+        String chamberId) {
 
     public MagmaChamberConfig {
         Objects.requireNonNull(volcanoId, "volcanoId");
@@ -105,6 +107,8 @@ public record MagmaChamberConfig(
         requirePositive("eruptiveTimeScale", eruptiveTimeScale);
         if (!(stepPeriodSeconds > 0)) throw new IllegalArgumentException("stepPeriodSeconds must be > 0");
         if (!(samplePeriodSeconds >= 0)) throw new IllegalArgumentException("samplePeriodSeconds must be >= 0");
+        Objects.requireNonNull(chamberId, "chamberId");
+        if (!chamberId.matches("[a-z0-9][a-z0-9_-]*")) throw new IllegalArgumentException("chamberId must be [a-z0-9_-]: " + chamberId);
         if (!Double.isNaN(wallRuptureRatio) && !(wallRuptureRatio >= 1)) {
             throw new IllegalArgumentException("wallRuptureRatio must be >= 1 (or NaN = computed): " + wallRuptureRatio);
         }
@@ -120,6 +124,14 @@ public record MagmaChamberConfig(
     public double reopenOverpressureMPa() {
         double low = Math.min(tensileStrengthMPa, eruptionEndOverpressureMPa + 0.5);
         return Math.max(low, Math.min(tensileStrengthMPa, conduit.reopenOverpressureMPa()));
+    }
+
+    /** Id of a volcano's main (eruptive) chamber, the one its summit conduit and vents draw from. */
+    public static final String MAIN = "main";
+
+    /** Whether this is the volcano's main (eruptive) chamber. */
+    public boolean isMain() {
+        return MAIN.equals(chamberId);
     }
 
     public static Builder builder(String volcanoId, BlockPos center) {
@@ -158,6 +170,7 @@ public record MagmaChamberConfig(
         b.samplePeriodSeconds = samplePeriodSeconds;
         b.wallRuptureRatio = wallRuptureRatio;
         b.wallYieldFraction = wallYieldFraction;
+        b.chamberId = chamberId;
         return b;
     }
 
@@ -167,7 +180,7 @@ public record MagmaChamberConfig(
 
     public static final class Builder {
         private final String volcanoId;
-        private final BlockPos center;
+        private BlockPos center;
         private double volume = 1e10; // 10 km³; real chambers are ~1–100 km³
         private double compressibilityPerMPa = 2e-4;
         private double lithostaticDepth = 4000;
@@ -198,6 +211,7 @@ public record MagmaChamberConfig(
         private double samplePeriodSeconds = 5.0;
         private double wallRuptureRatio = Double.NaN; // computed (MagmaChamber#wallRuptureRatio)
         private double wallYieldFraction = Double.NaN; // computed (MagmaChamber#wallYieldFraction)
+        private String chamberId = MAIN;
 
         private Builder(String volcanoId, BlockPos center) {
             this.volcanoId = volcanoId;
@@ -234,6 +248,8 @@ public record MagmaChamberConfig(
         public Builder samplePeriodSeconds(double v) { samplePeriodSeconds = v; return this; }
         public Builder wallRuptureRatio(double v) { wallRuptureRatio = v; return this; }
         public Builder wallYieldFraction(double v) { wallYieldFraction = v; return this; }
+        public Builder chamberId(String v) { chamberId = v; return this; }
+        public Builder center(BlockPos v) { center = Objects.requireNonNull(v); return this; }
 
         public MagmaChamberConfig build() {
             return new MagmaChamberConfig(volcanoId, center, volume, compressibilityPerMPa, lithostaticDepth,
@@ -242,7 +258,7 @@ public record MagmaChamberConfig(
                     initialTemperatureC, initialSilicaWt, initialWaterWt, initialCo2Wt, initialOverpressureMPa,
                     wallTemperatureC, coolingTimescale, degassingTimescale, crystalSilicaWt, conduit, maxEruptionRate,
                     dormantTimeScale,
-                    eruptiveTimeScale, stepPeriodSeconds, samplePeriodSeconds, wallRuptureRatio, wallYieldFraction);
+                    eruptiveTimeScale, stepPeriodSeconds, samplePeriodSeconds, wallRuptureRatio, wallYieldFraction, chamberId);
         }
     }
 }

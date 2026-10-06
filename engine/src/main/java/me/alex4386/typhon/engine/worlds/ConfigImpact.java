@@ -39,14 +39,23 @@ public final class ConfigImpact {
         /** The volcano's hot springs, fumaroles and their grid. */
         GEOTHERMAL,
         /** The volcano's fine crater surface. */
-        DETAIL;
+        DETAIL,
+        /** One further chamber of the volcano's plumbing (the impact's {@code subject}). */
+        CHAMBER,
+        /** The pathways between the volcano's chambers. */
+        PLUMBING;
 
-        /** Subsystem ids of {@code volcanoId} a reset of this target clears (empty for whole volcanoes and non-resets). */
-        public List<String> subsystemIds(String volcanoId) {
+        /**
+         * Subsystem ids of {@code volcanoId} a reset of this target clears (empty for whole volcanoes and
+         * non-resets); {@code subject} names the chamber of a {@link #CHAMBER} target.
+         */
+        public List<String> subsystemIds(String volcanoId, String subject) {
             return switch (this) {
                 case TEPHRA -> List.of("tephra:" + volcanoId);
                 case GEOTHERMAL -> List.of("geothermal:" + volcanoId);
                 case DETAIL -> List.of("detail:" + volcanoId);
+                case CHAMBER -> List.of(me.alex4386.typhon.engine.magma.MagmaChamber.id(volcanoId, subject));
+                case PLUMBING -> List.of(me.alex4386.typhon.engine.magma.plumbing.MagmaTransfer.defaultId(volcanoId));
                 default -> List.of();
             };
         }
@@ -56,9 +65,14 @@ public final class ConfigImpact {
      * What a change needs.
      *
      * @param reason why it is not live (shown to users), {@code null} for live changes
+     * @param subject the part it concerns where the target needs one (a chamber id), else {@code null}
      */
-    public record Impact(Kind kind, Target target, String reason) {
-        public static final Impact LIVE = new Impact(Kind.LIVE, Target.NONE, null);
+    public record Impact(Kind kind, Target target, String reason, String subject) {
+        public static final Impact LIVE = new Impact(Kind.LIVE, Target.NONE, null, null);
+
+        public Impact(Kind kind, Target target, String reason) {
+            this(kind, target, reason, null);
+        }
 
         /** Whether this state survives the change (live or reload). */
         public boolean keepsState() {
@@ -68,9 +82,14 @@ public final class ConfigImpact {
         /** A sentence for users about the consequence, for a volcano called {@code name} (or the world). */
         public String message(String name) {
             String who = name == null ? "the world" : name;
+            String chamber = subject == null ? "a chamber" : "chamber " + subject;
+            String whoseChamber = subject == null ? "one of " + who + "'s chambers" : who + "'s chamber " + subject;
             return switch (kind) {
                 case LIVE -> "Applies at once; the simulation carries on.";
                 case RELOAD -> switch (target) {
+                    case CHAMBER -> "Adds " + chamber + " to " + who + " after a short pause; everything already simulated carries on.";
+                    case PLUMBING -> "Rebuilds " + who + "'s magma pathways" + (reason == null ? "" : " (" + reason + ")")
+                            + " after a short pause; every chamber keeps its magma.";
                     case VOLCANO -> ADDED.equals(reason)
                             ? "Adds " + who + " after a short pause; everything already simulated carries on."
                             : "Rebuilds " + who + " (" + reason + ") after a short pause; everything simulated is kept.";
@@ -80,6 +99,10 @@ public final class ConfigImpact {
                             + " everything simulated is kept (only ground generated from now on uses it).";
                 };
                 case REINIT -> switch (target) {
+                    case CHAMBER -> REMOVED.equals(reason)
+                            ? "Removes " + whoseChamber + ": its magma is gone; the other chambers carry on."
+                            : "Restarts " + whoseChamber + " from its new settings (" + reason + "); the other chambers carry on.";
+                    case PLUMBING -> "Restarts " + who + "'s magma pathways (" + reason + "); every chamber keeps its magma.";
                     case WORLD -> "Cannot change in a running world (" + reason + "); create a new world with it.";
                     case TEPHRA -> "Clears " + who + "'s airborne ash and restarts its ash grid at the new size (" + reason
                             + "); ash already on the ground stays.";
@@ -154,7 +177,48 @@ public final class ConfigImpact {
     /** What a change to a volcano definition at dotted {@code path} needs. */
     public static Impact volcano(String path) {
         if (path.equals("*")) return volcanoRemoved(); // the whole volcano (an added one is diffed as such)
+        if (path.startsWith(CHAMBERS + "[")) return chamber(subjectOf(path), afterSubject(path));
+        if (path.startsWith(CONNECTIONS + "[")) return connection(afterSubject(path));
         return classify(path, VOLCANO);
+    }
+
+    /** List paths keyed by element id (diffed element by element: {@code magma.chambers[deep].volume}). */
+    public static final String CHAMBERS = "magma.chambers";
+    public static final String CONNECTIONS = "magma.connections";
+
+    /** Whether the list at {@code path} is diffed by its elements' {@code id}. */
+    public static boolean keyedList(String path) {
+        return path.equals(CHAMBERS) || path.equals(CONNECTIONS);
+    }
+
+    /** An element of a keyed list added ({@code before} absent) or removed. */
+    public static Impact listElement(String listPath, String id, boolean added) {
+        if (listPath.equals(CHAMBERS)) return added ? new Impact(Kind.RELOAD, Target.CHAMBER, ADDED, id) : new Impact(Kind.REINIT, Target.CHAMBER, REMOVED, id);
+        return new Impact(Kind.RELOAD, Target.PLUMBING, added ? "a pathway added" : "a pathway removed", null);
+    }
+
+    /** A further chamber: its position, starting size and initial magma reset it alone; the rest is live. */
+    private static Impact chamber(String id, String field) {
+        if (field.startsWith("center") || field.equals("lithostaticDepth")) return new Impact(Kind.REINIT, Target.CHAMBER, "its position", id);
+        if (field.equals("volume")) return new Impact(Kind.REINIT, Target.CHAMBER, "its starting size", id);
+        if (field.startsWith("initial")) return new Impact(Kind.REINIT, Target.CHAMBER, "an initial condition", id);
+        if (field.isEmpty()) return new Impact(Kind.REINIT, Target.CHAMBER, "replaced", id);
+        return Impact.LIVE;
+    }
+
+    /** A pathway: re-wiring its ends rebuilds the pathways (chambers keep their magma); its size and state are live. */
+    private static Impact connection(String field) {
+        if (field.equals("from") || field.equals("to") || field.isEmpty()) return new Impact(Kind.RELOAD, Target.PLUMBING, "re-wired", null);
+        return Impact.LIVE;
+    }
+
+    private static String subjectOf(String path) {
+        return path.substring(path.indexOf('[') + 1, path.indexOf(']'));
+    }
+
+    private static String afterSubject(String path) {
+        int close = path.indexOf(']');
+        return close + 2 <= path.length() ? path.substring(Math.min(path.length(), close + 2)) : "";
     }
 
     /** Reason of {@link #volcanoAdded()}. */

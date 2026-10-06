@@ -10,8 +10,20 @@ public final class MagmaCommands {
     private MagmaCommands() {}
 
     public sealed interface MagmaCommand extends EngineCommand
-            permits SetSupplyRate, SetSupplyMagma, InjectRecharge, StartEruption, StopEruption {
+            permits SetSupplyRate, SetSupplyMagma, InjectRecharge, StartEruption, StopEruption, ChamberCommand {
         String volcanoId();
+    }
+
+    /**
+     * A command for one chamber of a volcano's plumbing ({@code chamberId}); the plain commands address the
+     * volcano's main (eruptive) chamber. Starting or stopping eruptions applies only to the main chamber.
+     */
+    public record ChamberCommand(String volcanoId, String chamberId, MagmaCommand command) implements MagmaCommand {
+        public ChamberCommand {
+            java.util.Objects.requireNonNull(chamberId, "chamberId");
+            if (command instanceof ChamberCommand) throw new IllegalArgumentException("nested chamber command");
+            if (!command.volcanoId().equals(volcanoId)) throw new IllegalArgumentException("volcano mismatch");
+        }
     }
 
     /** Changes the steady deep supply rate (m³ per physical second). */

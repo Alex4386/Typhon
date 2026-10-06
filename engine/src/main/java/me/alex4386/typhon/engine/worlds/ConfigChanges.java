@@ -95,7 +95,7 @@ public final class ConfigChanges {
         Set<String> ids = new TreeSet<>();
         for (Change c : changes) {
             if (c.kind() != Kind.REINIT || !c.scope().equals("volcano:" + volcanoId)) continue;
-            List<String> partial = c.impact().target().subsystemIds(volcanoId);
+            List<String> partial = c.impact().target().subsystemIds(volcanoId, c.impact().subject());
             if (partial.isEmpty()) return null;
             ids.addAll(partial);
         }
@@ -166,9 +166,28 @@ public final class ConfigChanges {
         return new ConfigChanges(out);
     }
 
-    /** Leaf-by-leaf differences; lists compare as a whole. */
+    /**
+     * Leaf-by-leaf differences; lists compare as a whole, except those {@link ConfigImpact#keyedList keyed}
+     * by their elements' {@code id} ({@code magma.chambers[deep].volume}).
+     */
     static void diff(String scope, String path, JsonElement before, JsonElement after,
             java.util.function.Function<String, ConfigImpact.Impact> rules, List<Change> out) {
+        if (ConfigImpact.keyedList(path) && (before == null || before.isJsonArray()) && (after == null || after.isJsonArray())) {
+            java.util.Map<String, JsonElement> a = byId(before);
+            java.util.Map<String, JsonElement> b = byId(after);
+            Set<String> ids = new TreeSet<>(a.keySet());
+            ids.addAll(b.keySet());
+            for (String id : ids) {
+                String element = path + "[" + id + "]";
+                if (a.containsKey(id) && b.containsKey(id)) {
+                    diff(scope, element, a.get(id), b.get(id), rules, out);
+                } else {
+                    ConfigImpact.Impact impact = ConfigImpact.listElement(path, id, !a.containsKey(id));
+                    out.add(new Change(scope, element, impact.keepsState() ? Kind.HOT : Kind.REINIT, text(a.get(id)), text(b.get(id)), impact));
+                }
+            }
+            return;
+        }
         if (before != null && after != null && before.isJsonObject() && after.isJsonObject()) {
             Set<String> keys = new TreeSet<>(before.getAsJsonObject().keySet());
             keys.addAll(after.getAsJsonObject().keySet());
@@ -182,6 +201,15 @@ public final class ConfigChanges {
             ConfigImpact.Impact impact = rules.apply(path);
             out.add(new Change(scope, path, impact.keepsState() ? Kind.HOT : Kind.REINIT, text(before), text(after), impact));
         }
+    }
+
+    private static java.util.Map<String, JsonElement> byId(JsonElement list) {
+        java.util.Map<String, JsonElement> out = new java.util.TreeMap<>();
+        if (list == null) return out;
+        for (JsonElement e : list.getAsJsonArray()) {
+            if (e.isJsonObject() && e.getAsJsonObject().has("id")) out.put(e.getAsJsonObject().get("id").getAsString(), e);
+        }
+        return out;
     }
 
     private static boolean equal(JsonElement a, JsonElement b) {
