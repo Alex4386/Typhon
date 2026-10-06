@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { distanceOutside, farFieldElevation, median, sampleLevel, stackedContext, stretch, type Extrapolation, type LevelGrid } from './farFieldMath';
-import { bakedReader, clampedReader, elevationQuantum, gridReader } from './terrainMath';
+import { bakedReader, clampedReader, elevationQuantum, gridReader, rayGround, rebuildOrder, viewFocus } from './terrainMath';
 
 describe('display smoothing', () => {
   it('finds the block step of stepped elevations, none for continuous ones', () => {
@@ -81,5 +81,32 @@ describe('context levels', () => {
     expect(ctx.sample(100, 100)).toBe(1);
     expect(ctx.sample(-200, -200)).toBeCloseTo(-600);
     expect(ctx.version).toBe(3);
+  });
+});
+
+describe('picking and rebuild order', () => {
+  it('finds where a view ray meets uneven ground', () => {
+    // ground in scene coordinates: a slope rising to the east (x), y up
+    const ground = (x: number) => -100 + 0.1 * x;
+    const p = rayGround({ x: 0, y: 1000, z: 0 }, { x: 0.6, y: -0.8, z: 0 }, (x) => ground(x), 0)!;
+    expect(p[1]).toBeCloseTo(ground(p[0]), 1);
+    // on the ray: x / (1000 - y) = 0.6 / 0.8
+    expect(p[0] / (1000 - p[1])).toBeCloseTo(0.75, 3);
+    expect(rayGround({ x: 0, y: 10, z: 0 }, { x: 1, y: 0.2, z: 0 }, () => 0, 0)).toBeNull();
+  });
+
+  it('looks at the point under the view, nearest tiles rebuild first', () => {
+    const below = viewFocus({ x: 5, y: 100, z: -7 }, { x: 0, y: -1, z: 0 }, 0);
+    expect(below[0]).toBeCloseTo(5, 9);
+    expect(below[1]).toBeCloseTo(7, 9);
+    const f = viewFocus({ x: 0, y: 100, z: 0 }, { x: Math.SQRT1_2, y: -Math.SQRT1_2, z: 0 }, 0);
+    expect(f[0]).toBeCloseTo(100, 6);
+    const q = new Map<string, { at?: [number, number] }>([
+      ['far', { at: [1000, 0] }],
+      ['near', { at: [90, 0] }],
+      ['detail', {}],
+      ['mid', { at: [400, 0] }],
+    ]);
+    expect(rebuildOrder(q, [100, 0])).toEqual(['detail', 'near', 'mid', 'far']);
   });
 });

@@ -20,7 +20,8 @@ import { Markers } from './Markers';
 import { PerfProbe } from './PerfProbe';
 import { nearestSurfaceEntity, pickRadius } from './picking';
 import { DetailTerrain } from './DetailTerrain';
-import { Terrain } from './Terrain';
+import { Terrain, displayZ } from './Terrain';
+import { rayGround } from './terrainMath';
 
 const FORCE_WEBGL = new URLSearchParams(window.location.search).get('renderer') === 'webgl';
 
@@ -107,6 +108,37 @@ function Sun({ position, target, span, shadows }: { position: [number, number, n
   );
 }
 
+/**
+ * Picking where no ground mesh is (yet): an invisible plane below all terrain catches clicks that hit
+ * nothing nearer, and the ground point is found along the view ray from the elevation data. Built tile
+ * meshes are always nearer, so they keep the click; this only fills the gaps (tiles still queued for
+ * building, ground under open water drawn by the far field).
+ */
+function PickPlane({ world, onPick }: { world: WorldInfo; onPick: (xy: XY, e: ThreeEvent<MouseEvent>) => void }) {
+  const vExag = useStore((s) => s.verticalExaggeration);
+  const ext = world.lod?.extent ?? (() => { const e = worldExtent(world); return [e.minX, e.minY, e.maxX, e.maxY]; })();
+  const below = (Math.min(world.elevationRange[0], world.seaLevel ?? 0) - 2000) * vExag;
+  const w = ext[2] - ext[0];
+  const h = ext[3] - ext[1];
+  return (
+    <mesh
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[(ext[0] + ext[2]) / 2, below, -(ext[1] + ext[3]) / 2]}
+      onClick={(e) => {
+        if (e.delta > 4) return;
+        e.stopPropagation();
+        const st = useStore.getState();
+        const mid = ((world.elevationRange[0] + world.elevationRange[1]) / 2) * st.verticalExaggeration;
+        const p = rayGround(e.ray.origin, e.ray.direction, (x, z) => displayZ(world, x, -z, st.verticalExaggeration, st.deformationExaggeration), mid);
+        if (p) onPick([p[0], -p[2]], e);
+      }}
+    >
+      <planeGeometry args={[w, h]} />
+      <meshBasicMaterial visible={false} />
+    </mesh>
+  );
+}
+
 export function Viewer({ world }: { world: WorldInfo }) {
   const tool = useStore((s) => s.tool);
   const showHypo = useStore((s) => s.showHypocentres);
@@ -180,6 +212,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
         }}
       >
         <Terrain world={world} onPick={onPick} />
+        <PickPlane world={world} onPick={onPick} />
         <DetailTerrain world={world} onPick={onPick} />
       </group>
       <FarField world={world} />

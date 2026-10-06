@@ -8,7 +8,7 @@ import { BATHY, DIVERGING, HYPSO, THERMAL, hexToRgb, ramp, shadeFor, type RGB } 
 import { interpolateGrid } from '../util/grid';
 import { sampleColumn } from '../util/world';
 import type { TileFrame } from '../protocol/frames';
-import { bakedReader, clampedReader, elevationQuantum, gridReader } from './terrainMath';
+import { bakedReader, clampedReader, elevationQuantum, gridReader, rebuildOrder, viewFocus } from './terrainMath';
 import { perfStats } from './perf';
 import { CRUST_RGB, crustLight, lavaSurfaceColor, weightedTemperature } from './lavaColor';
 import { detailCovers, detailHeights, detailLevels, overlappingDetailTiles, refinement } from './detail';
@@ -19,11 +19,19 @@ import { detailCovers, detailHeights, detailLevels, overlappingDetailTiles, refi
  * dropping frames.
  */
 const REBUILD_BUDGET_MS = 4;
-const rebuildQueue = new Map<string, () => void>();
+/** A pending mesh rebuild and where it is on the map (world metres; nearest the view first). */
+interface PendingRebuild {
+  run: () => void;
+  at?: [number, number];
+}
+const rebuildQueue = new Map<string, PendingRebuild>();
 
-/** Queues a mesh rebuild (replacing any pending one for `key`); drained within a time budget per frame. */
-export function queueRebuild(key: string, rebuild: () => void): void {
-  rebuildQueue.set(key, rebuild);
+/**
+ * Queues a mesh rebuild (replacing any pending one for `key`); drained within a time budget per frame,
+ * nearest to where the camera looks first, so the ground the user sees and clicks is built first.
+ */
+export function queueRebuild(key: string, rebuild: () => void, at?: [number, number]): void {
+  rebuildQueue.set(key, { run: rebuild, at });
 }
 
 export function cancelRebuild(key: string): void {
@@ -289,7 +297,8 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
 
   useEffect(() => {
     const key = tileKey(tx, ty);
-    rebuildQueue.set(key, () => {
+    const span = world.tileSize * world.cellSize;
+    queueRebuild(key, () => {
       // nothing to draw until this tile's elevation has arrived
       const loaded = getTile(Field.SurfaceElevation, tx, ty) !== undefined;
       if (groundMesh.current) groundMesh.current.visible = loaded;
@@ -463,7 +472,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       if (lavaMesh.current) lavaMesh.current.visible = anyLava;
       if (waterMesh.current) waterMesh.current.visible = anyWater;
       if (flowMesh.current) flowMesh.current.visible = anyFlow;
-    });
+    }, [world.origin[0] + (tx + 0.5) * span, world.origin[1] + (ty + 0.5) * span]);
   }, [rev, vExag, dExag, mode, units, world, tx, ty, t, n, ground, lava, water, flow, smoothR, covered, levels]);
 
   useEffect(
@@ -616,6 +625,8 @@ export function colourGround(
   }
 }
 
+const focusDir = new THREE.Vector3();
+
 export function Terrain({ world, onPick }: { world: WorldInfo; onPick: TileProps['onPick'] }) {
   const group = useRef<THREE.Group>(null);
   const lastTable = useRef<boolean | null>(null);
@@ -636,11 +647,15 @@ export function Terrain({ world, onPick }: { world: WorldInfo; onPick: TileProps
     const showTable = st.showWaterTable || under;
     let k = 0;
     const t0 = performance.now();
-    for (const [key, rebuild] of rebuildQueue) {
-      rebuildQueue.delete(key);
-      rebuild();
-      k++;
-      if (performance.now() - t0 >= REBUILD_BUDGET_MS) break;
+    if (rebuildQueue.size > 0) {
+      const focus = viewFocus(camera.position, camera.getWorldDirection(focusDir), ((world.elevationRange[0] + world.elevationRange[1]) / 2) * st.verticalExaggeration);
+      for (const key of rebuildOrder(rebuildQueue, focus)) {
+        const pending = rebuildQueue.get(key)!;
+        rebuildQueue.delete(key);
+        pending.run();
+        k++;
+        if (performance.now() - t0 >= REBUILD_BUDGET_MS) break;
+      }
     }
     perfStats.rebuildMs = performance.now() - t0;
     perfStats.rebuildQueue = rebuildQueue.size;

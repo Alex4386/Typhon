@@ -53,3 +53,45 @@ export function clampedReader(raw: Reader, smooth: Reader, q: number): Reader {
   };
 }
 
+/**
+ * Map point (world x, y) the camera looks at: where its view ray meets the horizontal plane at scene
+ * height `planeY`; straight below the camera when it looks up or level.
+ */
+export function viewFocus(pos: { x: number; y: number; z: number }, dir: { x: number; y: number; z: number }, planeY: number): [number, number] {
+  if (dir.y < -1e-3) {
+    const t = (planeY - pos.y) / dir.y;
+    if (t > 0) return [pos.x + t * dir.x, -(pos.z + t * dir.z)];
+  }
+  return [pos.x, -pos.z];
+}
+
+/** Keys of pending rebuilds, nearest to `focus` first (entries without a place first: they are cheap detail updates). */
+export function rebuildOrder(queue: ReadonlyMap<string, { at?: [number, number] }>, focus: [number, number]): string[] {
+  const d = (at?: [number, number]) => (at ? (at[0] - focus[0]) ** 2 + (at[1] - focus[1]) ** 2 : -1);
+  return [...queue.entries()].sort((a, b) => d(a[1].at) - d(b[1].at)).map(([k]) => k);
+}
+
+/**
+ * Where a view ray meets the ground (scene coordinates, y up), by marching from a plane below all
+ * terrain: `groundY(x, z)` is the displayed ground height at scene point (x, z). Used to pick the map
+ * before (or without) the tile meshes: a few fixed-point steps between the ray and the ground height.
+ */
+export function rayGround(
+  origin: { x: number; y: number; z: number },
+  dir: { x: number; y: number; z: number },
+  groundY: (x: number, z: number) => number,
+  startY: number,
+): [number, number, number] | null {
+  if (!(dir.y < -1e-6)) return null;
+  let y = startY;
+  let p: [number, number, number] = [origin.x, y, origin.z];
+  for (let k = 0; k < 8; k++) {
+    const t = (y - origin.y) / dir.y;
+    if (t < 0) return null;
+    p = [origin.x + t * dir.x, y, origin.z + t * dir.z];
+    const g = groundY(p[0], p[2]);
+    if (!Number.isFinite(g) || Math.abs(g - y) < 0.01) break;
+    y = g;
+  }
+  return p;
+}
