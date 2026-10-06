@@ -89,6 +89,11 @@ public final class VolcanoCoupler implements Subsystem {
     static final BlockId WATER = BlockId.minecraft("water");
     /** Median clast (m) of a slug burst tearing fluid magma, and of a plug shattering. */
     static final double SLUG_CLAST_M = 0.03;
+    /**
+     * Ash/lapilli boundary (m): 2 mm (White and Houghton 2006). A discrete explosion's clasts above it
+     * are thrown out ballistically and land around the vent; only the ash rises with its cloud.
+     */
+    static final double LAPILLI_MIN_M = 2e-3;
     static final double PLUG_CLAST_M = 2e-3;
 
     private final String volcanoId;
@@ -409,12 +414,21 @@ public final class VolcanoCoupler implements Subsystem {
         double gasDensity = VentPartition.ambientPressurePa(0) / (461.5 * (burst.temperatureC() + 273.15));
         double supported = 3 * VentPartition.DRAG_COEFFICIENT * gasDensity * speed * speed
                 / (4 * VentPartition.CLAST_DENSITY * VentPartition.GRAVITY);
-        double ballisticShare = 1 - VentPartition.lognormalCdf(Math.min(supported, VentPartition.BALLISTIC_SIZE), median);
-        tephra.launchSalvo(vent, burst.ejectaMassKg() * ballisticShare, speed, 0, slug ? 20 : 30,
+        // A burst is momentary: the gas jet decelerates within tens of metres and its cloud rises as a
+        // thermal, so it cannot carry lapilli the way a sustained column does. Clasts the jet could not
+        // support fly as tracked bombs; lapilli fall around the vent; only ash goes up with the cloud.
+        double bombCut = Math.max(LAPILLI_MIN_M, Math.min(supported, VentPartition.BALLISTIC_SIZE));
+        double ballisticShare = 1 - VentPartition.lognormalCdf(bombCut, median);
+        double ashShare = VentPartition.lognormalCdf(LAPILLI_MIN_M, median);
+        double lapilliShare = Math.max(0, 1 - ballisticShare - ashShare);
+        double zenithSigma = slug ? 20 : 30;
+        tephra.launchSalvo(vent, burst.ejectaMassKg() * ballisticShare, speed, 0, zenithSigma,
                 burst.silicaWt(), slug ? 40 : 120);
-        if (!sustained && ballisticShare < 1) {
-            double[] f = VentPartition.grainFractions(median, Math.min(supported, VentPartition.BALLISTIC_SIZE));
-            startAshPuff(context.time(), vent, burst.ejectaMassKg() * (1 - ballisticShare), burst.durationSeconds(),
+        tephra.proximalFallout(vent, burst.ejectaMassKg() * lapilliShare, speed, 0, zenithSigma, median,
+                LAPILLI_MIN_M, bombCut);
+        if (!sustained && ashShare > 0) {
+            double[] f = VentPartition.grainFractions(median, LAPILLI_MIN_M);
+            startAshPuff(context.time(), vent, burst.ejectaMassKg() * ashShare, burst.durationSeconds(),
                     burst.gasMassFraction(), burst.overpressureMPa(), burst.temperatureC(), burst.silicaWt(),
                     GrainSizeDistribution.of(f[0] + 1e-6, f[1] + 1e-6, f[2] + 1e-6, f[3] + 1e-6));
         }
