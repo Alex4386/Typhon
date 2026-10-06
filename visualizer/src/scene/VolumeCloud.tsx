@@ -22,8 +22,6 @@ export interface CloudShape {
   ground: (x: number, y: number) => number;
   /** 0..1: fades the whole cloud (appearing, dissipating). */
   opacity: number;
-  /** Base colour (sRGB hex). */
-  color: string;
 }
 
 /** Billows per cloud at most, and in total. */
@@ -43,7 +41,9 @@ function billowTexture(): THREE.Texture {
     const x = Math.sin(i * 91.7 + 17.3) * 43758.5453;
     return x - Math.floor(x);
   };
-  for (let k = 0; k < 26; k++) {
+  // lobes are drawn blurred so their edges never show as rings
+  g.filter = 'blur(7px)';
+  for (let k = 0; k < 34; k++) {
     // lobes cluster towards the middle, larger at the bottom (the base of a billowing cloud)
     const a = rnd(k) * Math.PI * 2;
     const r = Math.sqrt(rnd(k + 40)) * size * 0.28;
@@ -51,16 +51,16 @@ function billowTexture(): THREE.Texture {
     const y = size / 2 + Math.sin(a) * r * 0.8;
     const lobe = size * (0.12 + rnd(k + 80) * 0.14);
     const grad = g.createRadialGradient(x - lobe * 0.3, y - lobe * 0.35, lobe * 0.1, x, y, lobe);
-    grad.addColorStop(0, 'rgba(255,255,255,0.95)');
-    grad.addColorStop(0.55, 'rgba(205,205,205,0.8)');
-    grad.addColorStop(0.85, 'rgba(150,150,150,0.35)');
-    grad.addColorStop(1, 'rgba(120,120,120,0)');
+    grad.addColorStop(0, 'rgba(255,255,255,0.7)');
+    grad.addColorStop(0.5, 'rgba(210,210,210,0.5)');
+    grad.addColorStop(1, 'rgba(150,150,150,0)');
     g.fillStyle = grad;
     g.beginPath();
     g.arc(x, y, lobe, 0, Math.PI * 2);
     g.fill();
   }
   // soft overall edge
+  g.filter = 'none';
   g.globalCompositeOperation = 'destination-in';
   const mask = g.createRadialGradient(size / 2, size / 2, size * 0.25, size / 2, size / 2, size / 2);
   mask.addColorStop(0, 'rgba(0,0,0,1)');
@@ -78,7 +78,7 @@ function billowTexture(): THREE.Texture {
  * call for all clouds; no custom shader, so WebGPU and WebGL2 alike. Reusable for any cloud with a
  * footprint (pyroclastic surges now; ocean-entry steam or ash clouds later).
  */
-export function VolumeCloud({ clouds }: { clouds: () => CloudShape[] }) {
+export function VolumeCloud({ clouds, color = '#857868' }: { clouds: () => CloudShape[]; color?: string }) {
   const mesh = useRef<THREE.InstancedMesh>(null);
   const tex = useMemo(() => billowTexture(), []);
   const m = useMemo(() => new THREE.Matrix4(), []);
@@ -116,7 +116,7 @@ export function VolumeCloud({ clouds }: { clouds: () => CloudShape[] }) {
         m.compose(p, q, s);
         im.setMatrixAt(n, m);
         // darker, dustier at the base of the tail; lighter where the cloud rises at the head
-        c.set(cl.color).multiplyScalar((0.7 + 0.35 * u) * (0.35 + 0.65 * cl.opacity));
+        c.setScalar((0.65 + 0.35 * u) * (0.35 + 0.65 * cl.opacity));
         im.setColorAt(n, c);
         n++;
       }
@@ -129,7 +129,8 @@ export function VolumeCloud({ clouds }: { clouds: () => CloudShape[] }) {
   return (
     <instancedMesh ref={mesh} args={[undefined, undefined, MAX_BILLOWS]} frustumCulled={false} renderOrder={8}>
       <planeGeometry args={[1, 1]} />
-      <meshBasicMaterial map={tex} transparent opacity={0.82} depthWrite={false} />
+      {/* the cloud's colour is the material's; instance colours only shade it (base darker, head lighter) */}
+      <meshBasicMaterial map={tex} color={color} transparent opacity={0.78} depthWrite={false} />
     </instancedMesh>
   );
 }

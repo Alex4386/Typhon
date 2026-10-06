@@ -75,13 +75,13 @@ export function SurgeClouds({ world }: { world: WorldInfo }) {
           return world.hasSea === false ? g : Math.max(g, world.seaLevel * vExag);
         },
         opacity: c.opacity,
-        color: '#9a8f80',
       });
     }
     shapes.current = out;
   });
 
-  return <VolumeCloud clouds={() => shapes.current} />;
+  // grey-brown ash, dustier than the eruption column
+  return <VolumeCloud clouds={() => shapes.current} color="#7f7264" />;
 }
 
 /** The end of the cluster's axis farther from the nearest vent leads the flow. */

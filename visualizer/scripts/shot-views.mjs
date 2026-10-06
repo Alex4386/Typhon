@@ -19,6 +19,7 @@ const VIEWS = {
 
 const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+page.setDefaultTimeout(180000);
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
@@ -27,6 +28,42 @@ await page.waitForSelector('[data-hud]', { timeout: 180000 });
 // close the first-visit guide through the store (a click can stall while tiles are being built)
 await page.evaluate(() => window.__typhon.getState().set({ guideOpen: false }));
 await page.waitForTimeout(20000);
+if (process.env.SURGE === '1') {
+  // a synthetic pyroclastic surge: a 1.2 km tongue running north-east from the vent, 1–6 m deep,
+  // injected as PDC depth tiles (the shape the server streams), to look at the cloud renderer
+  await page.evaluate(() => {
+    const s = window.__typhon.getState();
+    const w = s.world;
+    const v = w.volcanoes[0];
+    const vent = v.vents[0]?.at ?? v.chamber.center;
+    const t = w.tileSize;
+    const frames = [];
+    for (let ty = w.tiles.minTy; ty <= w.tiles.maxTy; ty++) {
+      for (let tx = w.tiles.minTx; tx <= w.tiles.maxTx; tx++) {
+        const values = new Float32Array(t * t);
+        let any = false;
+        for (let r = 0; r < t; r++) {
+          for (let c = 0; c < t; c++) {
+            const x = w.origin[0] + (tx * t + c + 0.5) * w.cellSize - vent[0];
+            const y = w.origin[1] + (ty * t + r + 0.5) * w.cellSize - vent[1];
+            const along = (x + y) / Math.SQRT2;
+            const across = (x - y) / Math.SQRT2;
+            if (along < 80 || along > 1300) continue;
+            const half = 90 + along * 0.12;
+            if (Math.abs(across) > half) continue;
+            values[r * t + c] = 1 + 5 * (1 - Math.abs(across) / half) * (along / 1300);
+            any = true;
+          }
+        }
+        if (any) frames.push({ level: 0, field: 5, codec: 0, tileX: tx, tileY: ty, version: 1e9, width: t, height: t, time: 0, values });
+      }
+    }
+    s.applyTiles(frames);
+  });
+  await page.waitForTimeout(3000);
+  VIEWS.surge = [-900, 300, 250, 60];
+  VIEWS.surgeFar = [-3500, -2500, 1800, 0];
+}
 for (const [name, [de, dn, h, lookH]] of Object.entries(VIEWS)) {
   await page.evaluate(
     ({ de, dn, h, lookH }) => {
