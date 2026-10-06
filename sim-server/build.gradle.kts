@@ -37,4 +37,18 @@ tasks.test {
     useJUnitPlatform {
         excludeTags("perf", "slow")
     }
+    // world sessions (and the config API test's rebuilds) need more than the 512 MB default
+    maxHeapSize = "1g"
+}
+
+// Long tests (e.g. every configuration change applied for real): ./gradlew :sim-server:slowTest
+val slowTest by tasks.registering(Test::class) {
+    description = "Runs long sim-server tests (tagged 'slow')."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    maxHeapSize = "1g"
+    useJUnitPlatform {
+        includeTags("slow")
+    }
 }
