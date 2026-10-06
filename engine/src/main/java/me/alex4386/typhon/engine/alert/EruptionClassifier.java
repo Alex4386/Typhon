@@ -116,7 +116,9 @@ public final class EruptionClassifier implements Subsystem {
         boolean erupting = chamber.erupting() && chamber.conduitFlow() != null;
         double physicalDt = context.dtSeconds()
                 * (erupting ? chamber.config().eruptiveTimeScale() : chamber.config().dormantTimeScale());
-        observeBursts(physicalDt);
+        // Slug bursts are surface activity in volcano time (MagmaChamber bursts only the eruptive-time share
+        // of percolating gas), so their rate is per hour at the eruptive scale.
+        observeBursts(physicalDt, context.dtSeconds() * chamber.config().eruptiveTimeScale());
         // Explosions from an open vent between eruptions are activity in their own right (Stromboli).
         boolean active = erupting || slugPerHour + plugPerHour >= 0.5;
         EnumMap<EruptionStyle, Double> memberships;
@@ -186,13 +188,13 @@ public final class EruptionClassifier implements Subsystem {
     }
 
     /** Rates of discrete explosions (per physical hour), averaged over the window. */
-    private void observeBursts(double physicalDt) {
+    private void observeBursts(double physicalDt, double surfaceDt) {
         long slugs = coupler.slugBursts();
         long plugs = coupler.plugBursts();
+        double ws = 1 - Math.exp(-surfaceDt / WINDOW_SECONDS);
+        slugPerHour += ws * ((slugs - seenSlugs) / Math.max(surfaceDt / 3600, 1e-9) - slugPerHour);
         double w = 1 - Math.exp(-physicalDt / WINDOW_SECONDS);
-        double hours = physicalDt / 3600;
-        slugPerHour += w * ((slugs - seenSlugs) / Math.max(hours, 1e-9) - slugPerHour);
-        plugPerHour += w * ((plugs - seenPlugs) / Math.max(hours, 1e-9) - plugPerHour);
+        plugPerHour += w * ((plugs - seenPlugs) / Math.max(physicalDt / 3600, 1e-9) - plugPerHour);
         seenSlugs = slugs;
         seenPlugs = plugs;
     }

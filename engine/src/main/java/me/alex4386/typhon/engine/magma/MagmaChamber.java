@@ -523,7 +523,13 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private void percolateGas(StepContext context, double physicalDt, double waterKg, double co2Kg) {
         plugGas = 0;
         resealRemaining = 0;
-        double gas = (waterKg + co2Kg) * coalescence(Math.pow(10, viscosityLog10()));
+        // Between eruptions the chamber's budget runs at the dormant time scale (years per hour of
+        // play), but open-vent explosions are surface activity watched in volcano time at the eruptive
+        // scale. Bursting every slug of the compressed budget would fire them thousands of times too
+        // often (a near-continuous ash column); only the eruptive-time share bursts, the rest of the
+        // gas escapes passively as it would between the explosions an observer sees.
+        double surfaceShare = Math.min(1, config.eruptiveTimeScale() / config.dormantTimeScale());
+        double gas = (waterKg + co2Kg) * coalescence(Math.pow(10, viscosityLog10())) * surfaceShare;
         if (gas > 0) accumulateSlugs(context, gas, gasConstant(waterKg, co2Kg));
         else slugGas = 0;
     }
