@@ -82,7 +82,7 @@ public final class EruptionClassifier implements Subsystem {
 
     @Override
     public double periodSeconds() {
-        return 1.0;
+        return 20;
     }
 
     /** Current estimate for dashboards. */

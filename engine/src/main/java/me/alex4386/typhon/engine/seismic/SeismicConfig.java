@@ -11,11 +11,12 @@ import me.alex4386.typhon.engine.math.BlockPos;
  *     and this point
  * @param failureOverpressureMPa roof strength; VT rates accelerate as overpressure approaches it
  *     (should match the chamber's tensile strength)
- * @param backgroundVtRate VT rate of a quiet volcano
- * @param vtPerMPa VT events per MPa of pressurisation (rate ∝ dP/dt)
+ * @param backgroundVtRate VT rate of a quiet volcano (events/s; ~1 a day above the minimum magnitude)
+ * @param vtPerMPa VT events per MPa of pressurisation (rate ∝ dP/dt): precursory swarms count
+ *     hundreds to thousands of located VTs over the few MPa before failure
  * @param maxAcceleration cap on the failure-forecast acceleration factor {@code 1 / (1 − P/P_f)}
  * @param maxEventRate cap on any single event rate
- * @param backgroundLpRate LP rate of a quiet volcano
+ * @param backgroundLpRate LP rate of a quiet volcano (events/s)
  * @param lpPerEruptionRate LP events/s per m³/s of erupting magma
  * @param tremorEpisodeRate tremor episode onset rate per √(m³/s) of eruption rate
  * @param tremorMeanDurationSeconds mean tremor episode length (exponential)
@@ -99,11 +100,11 @@ public record SeismicConfig(
         private final String volcanoId;
         private final BlockPos conduitTop;
         private double failureOverpressureMPa = 15;
-        private double backgroundVtRate = 2e-4;
-        private double vtPerMPa = 1.5;
+        private double backgroundVtRate = 1e-5;
+        private double vtPerMPa = 50;
         private double maxAcceleration = 20;
         private double maxEventRate = 2;
-        private double backgroundLpRate = 1e-4;
+        private double backgroundLpRate = 5e-6;
         private double lpPerEruptionRate = 0.01;
         private double tremorEpisodeRate = 0.02;
         private double tremorMeanDurationSeconds = 60;
@@ -124,7 +125,7 @@ public record SeismicConfig(
         private double hypocenterSpread = 20;
         private double rsamWindowSeconds = 60;
         private double rateWindowSeconds = 120;
-        private double stepPeriodSeconds = 0.5;
+        private double stepPeriodSeconds = 10;
         private double samplePeriodSeconds = 5.0;
 
         private Builder(String volcanoId, BlockPos conduitTop) {

@@ -196,7 +196,7 @@ public record MagmaChamberConfig(
         private double crystalSilicaWt = 47;
         private ConduitConfig conduit = ConduitConfig.DEFAULT;
         private double maxEruptionRate = 1e6;
-        private double stepPeriodSeconds = 1.0;
+        private double stepPeriodSeconds = 20;
         private double samplePeriodSeconds = 5.0;
         private double wallRuptureRatio = Double.NaN; // computed (MagmaChamber#wallRuptureRatio)
         private double wallYieldFraction = Double.NaN; // computed (MagmaChamber#wallYieldFraction)

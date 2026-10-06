@@ -57,7 +57,7 @@ public record AlertConfig(
     }
 
     public static AlertConfig defaults(String volcanoId) {
-        return new AlertConfig(volcanoId, 15, 0.3, 0.6, 0.9, 0.5, 3, 10, 2, 10, 50, 0.7, 120, 0.55, 1.0);
+        return new AlertConfig(volcanoId, 15, 0.3, 0.6, 0.9, 0.5, 3, 10, 2, 10, 50, 0.7, 120, 0.55, 20);
     }
 
     public AlertConfig withFailureOverpressure(double mpa) {

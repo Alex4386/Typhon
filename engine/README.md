@@ -44,7 +44,7 @@ Step limits (`maxStepSeconds`) while something happens, otherwise unlimited:
 | subsystem | limit |
 |---|---|
 | magma chamber | 20 s while erupting or about to; a quarter of the time to failure while pressurising; ≤ 1 day |
-| volcano coupler | 20 s while erupting |
+| volcano coupler | 1 s while erupting (fountains, bombs and flow fronts) |
 | tephra | `ashStepSeconds` while a column or airborne ash exists; 1 s while bombs fly |
 | lava | while any cell is molten or a source flows: ≤ 120 s and ≤ `maxSubsteps` stable sub-steps |
 | mass flows | their step period while a flow is active |
@@ -52,8 +52,12 @@ Step limits (`maxStepSeconds`) while something happens, otherwise unlimited:
 | subsurface | 30 s while surface water moves (macro steps themselves are split into ≤ 7-day spans) |
 | geothermal | 1 day |
 
-A quiet volcano therefore takes steps of most of a day (a year ≈ 600 steps); an eruption runs at
-about a second per step. Events carry `time()` in seconds (random events of a long step, such as
+A quiet volcano therefore takes steps of most of a day (a year ≈ 600 steps, ≈ 20 s on one core for
+the test cone); an eruption runs at about a second per step (an hour ≈ 4500 steps, ≈ 50 s). The
+slow subsystems keep physical periods (chamber, coupler, alert, style, detail, geomorphology,
+deformation and ash 20 s; seismicity 10 s; geothermal 40 s), so a 1-s eruption step stays cheap.
+Surface water sub-steps at its CFL step but routes at most `surfaceWaterRoutingSeconds` per step
+(and stops once quasi-steady); a spring-fed crater pond still makes quiet years cost minutes. Events carry `time()` in seconds (random events of a long step, such as
 quakes, are spread over it); frames carry the step index and `timeMicros`.
 
 Lava sources take eruption rates (m³/s DRE). Flow is sub-stepped (`Δt ≤ relaxation·L²/D`,

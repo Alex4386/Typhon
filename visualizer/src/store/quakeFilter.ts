@@ -1,5 +1,5 @@
 /**
- * Which earthquakes are shown: the most recent N as of the current simulation time (count-based,
+ * Which earthquakes are shown: the most recent N as of the current clock time (count-based,
  * the default), optionally also limited to a time window and a minimum magnitude, optionally fading
  * with age. Quakes after the current time (a replay cursor moved back) are never shown.
  */

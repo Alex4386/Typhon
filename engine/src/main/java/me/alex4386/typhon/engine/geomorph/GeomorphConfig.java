@@ -7,7 +7,7 @@ package me.alex4386.typhon.engine.geomorph;
  */
 public final class GeomorphConfig {
     /** Seconds between steps. */
-    public double stepPeriodSeconds = 1.0;
+    public double stepPeriodSeconds = 20;
 
     // ── Slope stability ──
     /** Deepest slip plane examined by the shallow (infinite-slope) analysis (m). */

@@ -8,7 +8,7 @@ import me.alex4386.typhon.engine.volcano.VolcanoScaling;
  */
 public final class DikeConfig {
     /** Seconds between steps. */
-    public double stepPeriodSeconds = 1.0;
+    public double stepPeriodSeconds = DikePropagation.RISING_STEP_SECONDS;
     /** Real metres per block of horizontal model geometry (see {@link VolcanoScaling}). */
     public double metersPerBlock = VolcanoScaling.DEFAULT.metersPerBlock();
 

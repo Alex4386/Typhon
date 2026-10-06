@@ -15,7 +15,7 @@ interface Props {
   series: SeriesSpec[];
   data: uPlot.AlignedData;
   height?: number;
-  /** x is simulation time in seconds (formatted as hh:mm:ss). */
+  /** x is the clock in seconds (formatted as the world clock). */
   timeAxis?: boolean;
   logY?: boolean;
   xLabel?: string;

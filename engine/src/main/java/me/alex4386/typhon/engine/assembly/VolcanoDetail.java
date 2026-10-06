@@ -50,7 +50,7 @@ public final class VolcanoDetail implements Subsystem {
 
     @Override
     public double periodSeconds() {
-        return 1;
+        return 20;
     }
 
     @Override

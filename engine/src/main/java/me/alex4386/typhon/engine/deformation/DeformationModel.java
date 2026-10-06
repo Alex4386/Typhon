@@ -35,7 +35,7 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * lowers terrain columns — rate-limited and compare-and-set against the surface.
  */
 public final class DeformationModel implements Subsystem {
-    static final double STEP_SECONDS = 1.0;
+    static final double STEP_SECONDS = 20;
     private static final BlockId WATER = BlockId.minecraft("water");
 
     private final DeformationConfig config;

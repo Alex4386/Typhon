@@ -24,14 +24,14 @@ public final class DeformationConfig {
 
     public List<GeodeticStation> stations = new ArrayList<>();
     /** Seconds between {@link DeformationEvents.DeformationSample}s. */
-    public double samplePeriodSeconds = 10;
+    public double samplePeriodSeconds = 200;
 
     /** Turn whole blocks of accumulated uplift/subsidence into terrain changes. */
     public boolean applyToTerrain = true;
     /** Columns within this radius of the centre are adjusted (blocks). */
     public int terrainRadiusBlocks = 48;
     /** Seconds between terrain checks. */
-    public double terrainPeriodSeconds = 30;
+    public double terrainPeriodSeconds = 600;
     /** At most this many column changes per check. */
     public int maxTerrainChangesPerCheck = 256;
 

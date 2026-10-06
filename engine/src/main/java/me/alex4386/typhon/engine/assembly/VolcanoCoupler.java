@@ -196,15 +196,22 @@ public final class VolcanoCoupler implements Subsystem {
 
     @Override
     public double periodSeconds() {
-        return 1.0;
+        return ERUPTING_STEP_SECONDS;
     }
 
-    /** Longest step while the volcano erupts (s): vent partition, bursts, jets and fall-back are resolved this often. */
+    /** Coupling period while erupting (s): the vent partition, bursts, jets and fall-back are updated this often. */
     public static final double ERUPTING_STEP_SECONDS = 20;
+
+    /**
+     * Longest engine step while the volcano erupts (s): fountains, ballistics and flow fronts move on
+     * second timescales, so the surface (lava, tephra) is resolved at this; the slower subsystems keep
+     * their own, longer periods.
+     */
+    public static final double ERUPTION_RESOLUTION_SECONDS = 1;
 
     @Override
     public double maxStepSeconds() {
-        return chamber.erupting() ? ERUPTING_STEP_SECONDS : Double.POSITIVE_INFINITY;
+        return chamber.erupting() ? ERUPTION_RESOLUTION_SECONDS : Double.POSITIVE_INFINITY;
     }
 
     /** Groundwater model the conduit draws aquifer water from (optional). */
