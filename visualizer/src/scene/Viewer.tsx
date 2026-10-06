@@ -13,6 +13,7 @@ import { Hypocentres } from './Hypocentres';
 import { LavaGlow } from './LavaGlow';
 import { LavaHalo } from './LavaHalo';
 import { EntityMarkers, pickDataOf } from './EntityMarkers';
+import { FarField } from './FarField';
 import { FrameScheduler } from './FrameScheduler';
 import { Markers } from './Markers';
 import { PerfProbe } from './PerfProbe';
@@ -170,6 +171,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
       >
         <Terrain world={world} onPick={onPick} />
       </group>
+      <FarField world={world} />
       <LavaGlow world={world} />
       <LavaHalo world={world} />
       <Markers world={world} />

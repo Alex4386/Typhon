@@ -16,6 +16,7 @@ import { Guide, SidePanel, useGlobalKeys } from '../panels/Drawer';
 import { Clock, DrawerButtons, Playback, WorldSwitcher } from '../panels/Header';
 import { Inspector } from '../panels/Inspector';
 import { ActionBar, StatusCard } from '../panels/Overlay';
+import { PerfHud } from '../scene/PerfHud';
 import { Viewer } from '../scene/Viewer';
 import { rememberDrawerWidth, useStore } from '../store/store';
 
@@ -98,6 +99,7 @@ export function App() {
                 {world ? (
                   <>
                     <Viewer world={world} />
+                    <PerfHud />
                     <StatusCard world={world} />
                     <ActionBar world={world} />
                     <Inspector world={world} />

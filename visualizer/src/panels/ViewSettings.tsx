@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useCamera } from '../camera/cameraStore';
+import type { QuakeFilter } from '../store/quakeFilter';
 import { rememberQuality, useStore, type Quality, type SurfaceColorMode } from '../store/store';
 
 const COLOR_MODES: [SurfaceColorMode, string, string][] = [
@@ -57,6 +58,7 @@ export function ViewSettings() {
           />
         </div>
       </PanelSection>
+      <QuakeSettings />
       <PanelSection title="Exaggeration">
         <SliderRow
           label="Height"
@@ -100,6 +102,20 @@ export function ViewSettings() {
           />
         </div>
         <SwitchRow id="smooth" label="Smooth terrain" help="Smooth the stepped block elevations for display" checked={s.smoothTerrain} onChange={(v) => s.set({ smoothTerrain: v })} />
+        <SwitchRow
+          id="auto-quality"
+          label="Adapt resolution to keep it smooth"
+          help="Render at a lower resolution while frames fall behind, and back up when there is headroom"
+          checked={s.autoQuality}
+          onChange={(v) => s.set({ autoQuality: v })}
+        />
+        <SwitchRow
+          id="perf-hud"
+          label="Frame statistics"
+          help="Frames per second, frame and script time, draw calls, triangles and markers drawn, over the view"
+          checked={s.showPerf}
+          onChange={(v) => s.set({ showPerf: v })}
+        />
         <Hint>
           Renderer: {s.renderer}.{' '}
           <Button variant="link" size="xs" className="h-auto p-0" onClick={help}>
@@ -108,5 +124,57 @@ export function ViewSettings() {
         </Hint>
       </PanelSection>
     </div>
+  );
+}
+
+const QUAKE_COUNTS = [0, 10, 20, 50, 100, 200, 500, 1000, 2000];
+const QUAKE_WINDOWS: [string, string][] = [
+  ['off', 'Any time'],
+  ['600', 'Last 10 minutes'],
+  ['3600', 'Last hour'],
+  ['21600', 'Last 6 hours'],
+  ['86400', 'Last day'],
+  ['604800', 'Last week'],
+];
+const QUAKE_MAGS: [string, string][] = [
+  ['off', 'All'],
+  ['1', 'M 1 and up'],
+  ['2', 'M 2 and up'],
+  ['3', 'M 3 and up'],
+  ['4', 'M 4 and up'],
+];
+
+/** How many earthquakes the view, the Entities panel and the event lists show (last N as of now). */
+function QuakeSettings() {
+  const f = useStore((s) => s.quakeFilter);
+  const set = useStore((s) => s.set);
+  const put = (o: Partial<QuakeFilter>) => set({ quakeFilter: { ...f, ...o } });
+  const idx = QUAKE_COUNTS.reduce((best, c, k) => (Math.abs(c - f.count) < Math.abs(QUAKE_COUNTS[best] - f.count) ? k : best), 0);
+  return (
+    <PanelSection title="Earthquakes">
+      <SliderRow
+        label="Show the last"
+        help="Only the most recent earthquakes as of the current time (in a replay, as of the replay cursor)"
+        value={idx}
+        display={f.count === 0 ? 'none' : `${f.count} quakes`}
+        min={0}
+        max={QUAKE_COUNTS.length - 1}
+        step={1}
+        onChange={(v) => put({ count: QUAKE_COUNTS[v] })}
+      />
+      <div className="flex items-center justify-between gap-3">
+        <Label htmlFor="quake-window" className="font-normal">
+          Within
+        </Label>
+        <SimpleSelect id="quake-window" label="Time window" value={f.windowS == null ? 'off' : String(f.windowS)} onChange={(v) => put({ windowS: v === 'off' ? null : Number(v) })} options={QUAKE_WINDOWS} />
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <Label htmlFor="quake-mag" className="font-normal">
+          Magnitude
+        </Label>
+        <SimpleSelect id="quake-mag" label="Minimum magnitude" value={f.minMagnitude == null ? 'off' : String(f.minMagnitude)} onChange={(v) => put({ minMagnitude: v === 'off' ? null : Number(v) })} options={QUAKE_MAGS} />
+      </div>
+      <SwitchRow id="quake-fade" label="Fade older quakes" help="Older quakes are drawn dimmer" checked={f.fade} onChange={(v) => put({ fade: v })} />
+    </PanelSection>
   );
 }

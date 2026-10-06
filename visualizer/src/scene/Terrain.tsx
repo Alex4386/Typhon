@@ -7,6 +7,7 @@ import { QUALITY, getTile, tileKey, useStore, type SurfaceColorMode } from '../s
 import { BATHY, DIVERGING, HYPSO, THERMAL, hexToRgb, ramp, shadeFor, type RGB } from '../util/color';
 import { interpolateGrid } from '../util/grid';
 import { sampleColumn } from '../util/world';
+import { clampedReader, elevationQuantum } from './terrainMath';
 import { CRUST_RGB, crustLight, lavaSurfaceColor, weightedTemperature } from './lavaColor';
 
 /** Tiles rebuilt per rendered frame, to keep the UI responsive while data streams in. */
@@ -103,6 +104,16 @@ export function smoothedReader(raw: Reader, n: number, r: number): Reader {
     const cb = Math.min(outN - 1, Math.max(0, b + 1));
     return out[cb * outN + ca];
   };
+}
+
+/** One quantum per world (estimated from the first tile that shows one), so tile seams agree. */
+const QUANTUM = new Map<string, number>();
+function worldQuantum(world: WorldInfo, values: Float32Array | undefined): number {
+  const known = QUANTUM.get(world.name);
+  if (known !== undefined) return known;
+  const q = elevationQuantum(values);
+  if (q > 0) QUANTUM.set(world.name, q);
+  return q;
 }
 
 /** sRGB → linear, so ramps defined in sRGB display as intended. */
@@ -222,7 +233,10 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       const [eLo, eHi] = world.elevationRange;
       const R = (f: FieldId, fb = 0) => reader(f, tx, ty, t, fb);
       const rawElev = R(Field.SurfaceElevation, 0);
-      const elevR = smoothedReader(rawElev, n, smoothR);
+      // smoothing only removes the block terraces: the shown height stays within one elevation step of
+      // the data, so crater rims, vents and scarps keep their real shape
+      const q = worldQuantum(world, getTile(Field.SurfaceElevation, tx, ty)?.values);
+      const elevR = smoothR > 0 && q > 0 ? clampedReader(rawElev, smoothedReader(rawElev, n, smoothR), q) : rawElev;
       const upR = R(Field.Uplift);
       // lava thickness varies by tens of metres between cells; smooth it lightly so the lake/flow top is not jagged
       const lavaRaw = R(Field.LavaDepth);
@@ -291,7 +305,10 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           // Lava: lit crust blending into incandescence by temperature. Vertices just outside the sheet
           // sit on the ground in the ground's colour, so the margin fades into the terrain over one cell
           // instead of ending in a cell-stepped edge (the overlay draws every triangle touching lava).
-          const ld = lavaR(a, b);
+          // the domain's outermost columns hold no lava sheet: a lake reaching the edge slopes down to
+          // the ground there instead of ending in a cliff (the far field continues the ground)
+          const atEdge = i <= world.tiles.minTx * t || j <= world.tiles.minTy * t || i >= maxI || j >= maxJ;
+          const ld = atEdge ? 0 : lavaR(a, b);
           const light = crustLight(-hx * inv, inv, hy * inv);
           if (ld > 0.02) {
             anyLava = true;

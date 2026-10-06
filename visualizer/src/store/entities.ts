@@ -84,19 +84,6 @@ export function pulsePhase(e: Pick<EntityView, 'seenAt' | 'fresh' | 'removedAt'>
   return (age % 1600) / 1600;
 }
 
-/** Display grouping for the Entities panel. */
-export const KIND_GROUPS: { key: string; label: string; kinds: string[]; match?: (e: Entity) => boolean }[] = [
-  { key: 'vents', label: 'Vents and fissures', kinds: ['vent', 'fissure'] },
-  { key: 'dikes', label: 'Dikes', kinds: ['dike'] },
-  { key: 'features', label: 'Hot springs, fumaroles, geysers', kinds: ['feature'], match: (e) => !isDeposit(e) },
-  { key: 'deposits', label: 'Ground deposits (sulfur, sinter, alteration)', kinds: ['feature'], match: (e) => isDeposit(e) },
-  { key: 'flows', label: 'Lava, pyroclastic flows, lahars', kinds: ['lavaFront', 'pdc', 'lahar'] },
-  { key: 'plumes', label: 'Eruption columns', kinds: ['plume'] },
-  { key: 'chambers', label: 'Magma chambers', kinds: ['chamber'] },
-  { key: 'stations', label: 'GNSS stations', kinds: ['station'] },
-  { key: 'quakes', label: 'Notable earthquakes', kinds: ['quake'] },
-];
-
 export const KIND_LABEL: Record<string, string> = {
   vent: 'Vent',
   fissure: 'Fissure',
