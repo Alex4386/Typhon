@@ -138,6 +138,12 @@ public final class Geomorphology implements Subsystem {
     /** Real-clock time each world tile was last swept (alteration integrates from there). */
     private final TreeMap<Long, Double> tileClock = new TreeMap<>();
     private long sweepCursor = Long.MIN_VALUE;
+    /**
+     * Elevation of each vent's conduit mouth (m), by vent id: it starts at the vent's ground and rises
+     * with whatever fills the vent between eruptions (fall-back, slumped tephra, lava), so a growing
+     * cone's vent rises with it. An open conduit only swallows what falls in above it.
+     */
+    private final TreeMap<String, Double> ventFloors = new TreeMap<>();
     private double realClock;
     private double calderaSubsidenceM;
     private final Stats stats = new Stats();
@@ -329,6 +335,7 @@ public final class Geomorphology implements Subsystem {
         for (double[] e : pendingExplosions) excavate(e, outbox);
         pendingExplosions.clear();
         if (ventsOpen.getAsBoolean()) clearVents();
+        else settleVentFloors();
         if (roof != null) pistonCollapse(outbox);
         shake(pendingQuakes);
         pendingQuakes.clear();
@@ -1130,11 +1137,28 @@ public final class Geomorphology implements Subsystem {
         }
     }
 
-    /** Open conduits swallow whatever falls or slides into them. */
+    /** The elevation of a vent's conduit mouth (m). */
+    public double ventFloorZ(VentSite vent) {
+        Double f = ventFloors.get(vent.id());
+        return f != null ? f : world.spec().blockTop(vent.position().y());
+    }
+
+    /** Between eruptions the vent's fill becomes its new floor: the next eruption starts from there. */
+    private void settleVentFloors() {
+        for (VentSite vent : vents) {
+            int x = vent.position().x();
+            int z = vent.position().z();
+            if (!world.isKnown(x, z)) continue;
+            double surface = world.surfaceZ(x, z);
+            if (surface > ventFloorZ(vent) + MIN_MOVE) ventFloors.put(vent.id(), surface);
+        }
+    }
+
+    /** Open conduits swallow whatever falls or slides into them, down to the conduit mouth. */
     private void clearVents() {
         double l = world.spec().metersPerColumn();
         for (VentSite vent : vents) {
-            double floor = world.spec().blockTop(vent.position().y());
+            double floor = ventFloorZ(vent);
             for (long[] c : conduitColumns(vent)) {
                 int x = (int) c[0];
                 int z = (int) c[1];
@@ -1360,6 +1384,9 @@ public final class Geomorphology implements Subsystem {
         o.addProperty("sweepCursor", sweepCursor);
         o.addProperty("realClock", realClock);
         o.addProperty("calderaSubsidenceM", calderaSubsidenceM);
+        JsonObject floors = new JsonObject();
+        for (Map.Entry<String, Double> e : ventFloors.entrySet()) floors.addProperty(e.getKey(), e.getValue());
+        o.add("ventFloors", floors);
         JsonObject s = new JsonObject();
         stats.save(s);
         o.add("stats", s);
@@ -1393,6 +1420,12 @@ public final class Geomorphology implements Subsystem {
         sweepCursor = o.get("sweepCursor").getAsLong();
         realClock = o.get("realClock").getAsDouble();
         calderaSubsidenceM = o.get("calderaSubsidenceM").getAsDouble();
+        ventFloors.clear();
+        if (o.has("ventFloors")) {
+            for (Map.Entry<String, JsonElement> e : o.getAsJsonObject("ventFloors").entrySet()) {
+                ventFloors.put(e.getKey(), e.getValue().getAsDouble());
+            }
+        }
         stats.load(o.getAsJsonObject("stats"));
         tileClock.clear();
         for (JsonElement e : o.getAsJsonArray("tileClock")) {

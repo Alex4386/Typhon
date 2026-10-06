@@ -298,7 +298,7 @@ final class RealPresets {
                             .chamber(chamber)
                             .subsurfaceConfig(subsurface(setting, L))
                             .stations(List.of(Stations.at("STR-N", vent, 0, 1200, L), Stations.at("STR-E", vent, 1500, 0, L),
-                                    Stations.at("STR-S", vent, 0, -1500, L))).scaling(new VolcanoScaling(L, L, 1, 1)) // persistently active: nothing to fast-forward.tephra(tephra())
+                                    Stations.at("STR-S", vent, 0, -1500, L))).scaling(new VolcanoScaling(L, L, 1, 1)).tephra(tephra()) // persistently active: nothing to fast-forward
                             .wind(8, 1.2, Presets.WIND_VARIABILITY).build());
                 });
     }

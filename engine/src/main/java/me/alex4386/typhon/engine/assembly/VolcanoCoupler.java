@@ -37,6 +37,10 @@ import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.DepositType;
+import me.alex4386.typhon.engine.world.LayerFlags;
+import me.alex4386.typhon.engine.world.LayerView;
+import me.alex4386.typhon.engine.world.MaterialTable;
+import me.alex4386.typhon.engine.world.WorldModel;
 import me.alex4386.typhon.engine.world.UnitSource;
 import me.alex4386.typhon.engine.volcano.VentCommands;
 import me.alex4386.typhon.engine.volcano.VentEvents;
@@ -97,6 +101,12 @@ public final class VolcanoCoupler implements Subsystem {
     /** Width (blocks) of the tuff ring beyond the crater rim. */
     static final int TUFF_RING_WIDTH = 6;
     static final int MAX_TUFF_BLOCKS_PER_STEP = 64;
+    /** Porosity of fresh, wet Surtseyan tephra (ash and lapilli; ~0.4–0.5, Jakobsson &amp; Moore 1986). */
+    static final double WET_TEPHRA_POROSITY = 0.45;
+    /** Furthest a crater's ring is followed outwards when measuring its width at sea level (columns). */
+    static final int MAX_RING_COLUMNS = 64;
+    private static final int[] RING_DX = {1, 1, 0, -1, -1, -1, 0, 1};
+    private static final int[] RING_DZ = {0, 1, 1, 1, 0, -1, -1, -1};
     static final int MAX_BOMBS_PER_SALVO = 10;
     static final BlockId TUFF = BlockId.minecraft("tuff");
     static final BlockId WATER = BlockId.minecraft("water");
@@ -153,8 +163,6 @@ public final class VolcanoCoupler implements Subsystem {
     /** Discrete explosions fired so far, by mechanism (for observers such as the style estimate). */
     private long slugBursts;
     private long plugBursts;
-    /** Fractional tuff thickness (blocks) waiting to become whole blocks, keyed by packed x/z. */
-    private final TreeMap<Long, Double> tuffDebt = new TreeMap<>();
     /** Collapse thresholds by rounded column parameters: a pure function, not saved. */
     private final Map<Long, Double> collapseThresholds = new HashMap<>();
 
@@ -296,6 +304,11 @@ public final class VolcanoCoupler implements Subsystem {
 
         double ballistic = p.ballisticMassFlux() * scale * physicalSeconds;
         if (ballistic > 0) {
+            // Cooled fall-back of the fountain: its whole mass lands as loose scoria lapilli around the vent
+            // (and back into it); a few tracked bombs show the larger clasts.
+            double median = Double.isFinite(p.medianClastM()) ? Math.max(p.medianClastM(), LAPILLI_MIN_M) : LAPILLI_MIN_M;
+            tephra.proximalFallout(main, ballistic, p.ballisticSpeed(), 0, 15, median, LAPILLI_MIN_M,
+                    Math.max(2 * LAPILLI_MIN_M, VentPartition.BALLISTIC_SIZE));
             tephra.launchSalvo(main, ballistic, p.ballisticSpeed(), 0, 15, chamber.silicaWt(), MAX_BOMBS_PER_SALVO);
         }
 
@@ -737,15 +750,18 @@ public final class VolcanoCoupler implements Subsystem {
         BlockPos c = vent.position();
         double table = ground != null && ground.known(c.x(), c.z())
                 ? ground.waterTableDepthM(c.x(), c.z()) : Double.POSITIVE_INFINITY;
-        if (terrain == null) {
+        WorldModel world = terrain == null ? null : terrain.world();
+        if (world == null || !world.isKnown(c.x(), c.z())) {
             waterDepthM = 0;
             openWaterFraction = 0;
             return new VentPartition.Water(0, 0, table);
         }
+        double l = world.spec().metersPerColumn();
         int crater = Math.max(1, vent.craterRadius());
         int ventColumns = 0;
         int ventSubmerged = 0;
         double depthSum = 0;
+        double levelSum = 0;
         int rimColumns = 0;
         int rimSubmerged = 0;
         int outer = crater + 3;
@@ -753,32 +769,96 @@ public final class VolcanoCoupler implements Subsystem {
             for (int dx = -outer; dx <= outer; dx++) {
                 int d2 = dx * dx + dz * dz;
                 if (d2 > outer * outer) continue;
-                TerrainColumn column = terrain.column(c.x() + dx, c.z() + dz);
-                if (column == null) continue;
+                int x = c.x() + dx;
+                int z = c.z() + dz;
+                if (!world.isKnown(x, z)) continue;
+                double level = world.waterZ(x, z);
+                double depth = Double.isFinite(level) ? Math.max(0, level - world.surfaceZ(x, z)) : 0;
                 if (d2 <= crater * crater) {
                     ventColumns++;
-                    if (column.submerged()) {
+                    if (depth > 0) {
                         ventSubmerged++;
-                        depthSum += column.waterDepth();
+                        depthSum += depth;
+                        levelSum += level;
                     }
                 } else {
                     rimColumns++;
-                    if (column.submerged()) rimSubmerged++;
+                    if (depth > 0) rimSubmerged++;
                 }
             }
         }
         boolean wet = ventColumns > 0 && ventSubmerged * 2 >= ventColumns;
-        waterDepthM = wet ? depthSum / ventSubmerged * scaling.metersPerBlock() : 0;
+        waterDepthM = wet ? depthSum / ventSubmerged : 0;
         openWaterFraction = wet && rimColumns > 0 ? rimSubmerged / (double) rimColumns : 0;
-        return new VentPartition.Water(waterDepthM, openWaterFraction, table);
+
+        // The vent's fill of loose tephra, and how much of its mouth is water-saturated (a slurry).
+        double top = world.surfaceZ(c.x(), c.z());
+        double fill = 0;
+        double pores = 0;
+        for (int k = world.layerCount(c.x(), c.z()) - 1; k > 0; k--) {
+            LayerView layer = world.layer(c.x(), c.z(), k);
+            if (!layer.loose() || !layer.materialInfo().solid()) break;
+            fill += layer.thickness();
+            pores += layer.thickness() * layer.porosity();
+        }
+        double level = wet ? levelSum / ventSubmerged : Double.isFinite(table) ? top - table : Double.NaN;
+        double mouth = crater * l;
+        double band = Math.min(fill, mouth);
+        double slurry = band > 0 && Double.isFinite(level) ? Math.max(0, Math.min(band, level - (top - band))) / mouth : 0;
+        double porosity = fill > 0 ? pores / fill : 0;
+        // Water drawn out of a crater cut off from open water comes back only by seepage through the edifice.
+        double seepage = wet && openWaterFraction > 0 ? Double.NaN : seepageIntoCrater(world, c, crater, top - band);
+        return new VentPartition.Water(waterDepthM, openWaterFraction, table, slurry, porosity, seepage);
     }
 
     /**
-     * Wet jet and base-surge fallout around a water-fragmenting vent: the wet tephra settles as tuff in a
-     * ring peaking just outside the crater rim, raising the ground block by block.
+     * Sea water seeping through the saturated edifice into a crater drawn down to {@code floorZ} (kg/s):
+     * Darcy flow {@code ρ K Δh / L} through the crater wall below sea level ({@code 2π r Δh}), with
+     * {@code L} the ring's mean width at sea level and {@code K} the hydraulic conductivity of its
+     * surface deposits (Freeze &amp; Cherry 1979; Surtsey's tephra ~10⁻⁴ m/s, Jakobsson &amp; Moore 1986).
+     */
+    static double seepageIntoCrater(WorldModel world, BlockPos c, int crater, double floorZ) {
+        double sea = world.spec().seaLevelZ();
+        if (!Double.isFinite(sea) || !(sea > floorZ)) return 0;
+        double l = world.spec().metersPerColumn();
+        double head = sea - floorZ;
+        double width = 0;
+        double conductivity = 0;
+        int rays = 0;
+        for (int d = 0; d < 8; d++) {
+            int steps = 0;
+            for (int r = crater + 1; r <= crater + MAX_RING_COLUMNS; r++) {
+                int x = c.x() + RING_DX[d] * r;
+                int z = c.z() + RING_DZ[d] * r;
+                if (!world.isKnown(x, z) || world.surfaceZ(x, z) < sea) break;
+                steps++;
+            }
+            int x = c.x() + RING_DX[d] * (crater + 1);
+            int z = c.z() + RING_DZ[d] * (crater + 1);
+            if (!world.isKnown(x, z)) continue;
+            int n = world.layerCount(x, z);
+            if (n == 0) continue;
+            conductivity += Math.pow(10, world.layer(x, z, n - 1).materialInfo().log10HydraulicConductivity());
+            width += Math.max(1, steps) * l * (Math.abs(RING_DX[d]) + Math.abs(RING_DZ[d]) == 2 ? Math.sqrt(2) : 1);
+            rays++;
+        }
+        if (rays == 0) return 0;
+        double k = conductivity / rays;
+        double length = width / rays;
+        double area = 2 * Math.PI * crater * l * head;
+        return VentPartition.WATER_DENSITY * k * head / length * area;
+    }
+
+    /**
+     * Wet jet and base-surge fallout around a water-fragmenting vent: loose wet tephra (and quench-granulated
+     * lava) of physical thickness, in a ring peaking just outside the crater rim; some falls back into the
+     * crater and fills the vent as a slurry (Kokelaar 1983). Slopes relax to the angle of repose in
+     * geomorphology. The block view gets a tuff block once a block is more than half full.
      */
     private void buildTuffRing(StepContext context, VentSite vent, double massKg) {
         if (terrain == null) return;
+        WorldModel world = terrain.world();
+        double mpb = scaling.metersPerBlock();
         double bulkBlocks = massKg / TUFF_BULK_DENSITY * scaling.volumeScale();
         int crater = Math.max(1, vent.craterRadius());
         int outer = crater + TUFF_RING_WIDTH;
@@ -790,7 +870,7 @@ public final class VolcanoCoupler implements Subsystem {
         for (int dz = -outer; dz <= outer; dz++) {
             for (int dx = -outer; dx <= outer; dx++) {
                 double r = Math.sqrt(dx * dx + dz * dz);
-                if (r <= crater || r > outer) continue;
+                if (r > outer || !world.isKnown(c.x() + dx, c.z() + dz)) continue;
                 double w = Math.exp(-(r - peak) * (r - peak) / 8.0);
                 cells.add(new long[] {c.x() + dx, c.z() + dz});
                 weights.add(w);
@@ -798,24 +878,34 @@ public final class VolcanoCoupler implements Subsystem {
             }
         }
         if (total <= 0) return;
+        int unit = units.unit(DepositType.FALL, context.time(), Double.NaN);
         int placed = 0;
         for (int i = 0; i < cells.size(); i++) {
             int x = (int) cells.get(i)[0];
             int z = (int) cells.get(i)[1];
-            long key = BlockPos.pack(x, 0, z);
-            double debt = tuffDebt.getOrDefault(key, 0.0) + bulkBlocks * weights.get(i) / total;
-            TerrainColumn column = terrain.column(x, z);
-            while (debt >= 1 && column != null && placed < MAX_TUFF_BLOCKS_PER_STEP) {
-                int y = column.groundY() + 1;
-                BlockId expected = column.waterY() != TerrainColumn.NO_WATER && column.waterY() >= y ? WATER : BlockId.AIR;
-                context.outbox().setBlock(BlockChange.replace(new BlockPos(x, y, z), expected, TUFF));
-                terrain.setGround(x, z, y, TUFF, units.unit(DepositType.FALL, context.time(), Double.NaN));
-                column = terrain.column(x, z);
-                debt -= 1;
-                placed++;
-            }
-            if (debt > 1e-9) tuffDebt.put(key, debt); else tuffDebt.remove(key);
+            double thickness = bulkBlocks * weights.get(i) / total * mpb;
+            if (!(thickness > 0)) continue;
+            world.deposit(x, z, thickness, MaterialTable.ASH, unit, LayerFlags.LOOSE, WET_TEPHRA_POROSITY, 0);
+            placed += mirrorTuff(context, world, x, z, MAX_TUFF_BLOCKS_PER_STEP - placed);
         }
+    }
+
+    /** Raises the block view of a column to its surface (whole blocks more than half full); returns blocks placed. */
+    private int mirrorTuff(StepContext context, WorldModel world, int x, int z, int budget) {
+        TerrainColumn column = terrain.column(x, z);
+        if (column == null || budget <= 0) return 0;
+        double l = world.spec().metersPerColumn();
+        int target = (int) Math.floor(world.surfaceZ(x, z) / l - 0.5);
+        int placed = 0;
+        while (column.groundY() < target && placed < budget) {
+            int y = column.groundY() + 1;
+            BlockId expected = column.waterY() != TerrainColumn.NO_WATER && column.waterY() >= y ? WATER : BlockId.AIR;
+            context.outbox().setBlock(BlockChange.replace(new BlockPos(x, y, z), expected, TUFF));
+            terrain.updateBlockCache(x, z, y, TUFF);
+            column = terrain.column(x, z);
+            placed++;
+        }
+        return placed;
     }
 
     private void setPhreatomagmatic(StepContext context, boolean active, VentSite vent) {
@@ -903,9 +993,6 @@ public final class VolcanoCoupler implements Subsystem {
         out.addProperty("nextSteamEventTime", nextSteamEventTime);
         out.addProperty("slugBursts", slugBursts);
         out.addProperty("plugBursts", plugBursts);
-        JsonObject debt = new JsonObject();
-        for (Map.Entry<Long, Double> e : tuffDebt.entrySet()) debt.addProperty(Long.toString(e.getKey()), e.getValue());
-        out.add("tuffDebt", debt);
     }
 
     @Override
@@ -961,11 +1048,5 @@ public final class VolcanoCoupler implements Subsystem {
         slugBursts = in.has("slugBursts") ? in.get("slugBursts").getAsLong() : 0;
         plugBursts = in.has("plugBursts") ? in.get("plugBursts").getAsLong() : 0;
         lastPartition = null;
-        tuffDebt.clear();
-        if (in.has("tuffDebt")) {
-            for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("tuffDebt").entrySet()) {
-                tuffDebt.put(Long.parseLong(e.getKey()), e.getValue().getAsDouble());
-            }
-        }
     }
 }

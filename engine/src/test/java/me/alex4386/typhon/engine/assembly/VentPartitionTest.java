@@ -115,6 +115,37 @@ class VentPartitionTest {
     }
 
     @Test
+    void magmaRisingIntoAWaterSaturatedVentFillMixesWithItsPoreWater() {
+        // Kokelaar (1983): a vent full of wet tephra slurry gives R ≈ φ ρ_w / ρ_m, near the efficiency peak
+        VentPartition.Water slurry = new VentPartition.Water(5, 1, 0, 1, 0.45, Double.NaN);
+        double r = VentPartition.slurryRatio(slurry, 2, 3e4);
+        assertEquals(0.45 * 1000 / 2500, r, 1e-12);
+        // a crater cut off from the sea: only what seeps back in can mix
+        VentPartition.Water sealed = new VentPartition.Water(5, 0, 1000, 1, 0.45, 300);
+        assertEquals(300 / 3e4, VentPartition.slurryRatio(sealed, 2, 3e4), 1e-12);
+        assertTrue(VentPartition.interactionEfficiency(r) > 0.6, "near the optimum: " + VentPartition.interactionEfficiency(r));
+        assertTrue(VentPartition.interactionEfficiency(300 / 3e4) < 0.15, "starved of water: mostly dry");
+        assertTrue(VentPartition.interactionEfficiency(20) < 1e-20, "flooded: water quenches without exploding");
+    }
+
+    @Test
+    void shallowWetVentFillIsSurtseyanDeepOrSealedIsNot() {
+        ConduitSolution f = flow(11.8, 3000, 2, 1170, 46.5, 0.7, 0.2, 0, Branch.FASTEST);
+        double shallow = wetShare(f, new VentPartition.Water(5, 1, 0, 1, 0.45, Double.NaN));
+        double deep = wetShare(f, new VentPartition.Water(140, 1, 0, 1, 0.45, Double.NaN));
+        double sealed = wetShare(f, new VentPartition.Water(0, 0, 50, 1, 0.45, 50));
+        assertTrue(shallow > 0.4, "shallow slurry-filled vent: Surtseyan jets " + shallow);
+        assertTrue(deep < 0.05, "deep water suppresses steam expansion: " + deep);
+        assertTrue(sealed < 0.15, "a sealed crater dries out: " + sealed);
+    }
+
+    private static double wetShare(ConduitSolution f, VentPartition.Water water) {
+        VentPartition.Result p = VentPartition.partition(f, VentPartition.ambientPressurePa(water.surfaceDepthM()), 2, 46.5,
+                water, WOODS);
+        return p.waterFragmentedMassFlux() / p.magmaMassFlux();
+    }
+
+    @Test
     void groundwaterMattersOnlyForSmallMagmaFluxes() {
         VentPartition.Water aquifer = new VentPartition.Water(0, 0, 10);
         assertTrue(VentPartition.waterMagmaRatio(aquifer, 2, 1e3) > 0.05, "a trickle of magma meets a wet aquifer");

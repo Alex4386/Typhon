@@ -1,6 +1,7 @@
 package me.alex4386.typhon.engine.assembly;
 
 import me.alex4386.typhon.engine.magma.conduit.ConduitInput;
+import me.alex4386.typhon.engine.magma.conduit.ConduitModel;
 import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.magma.conduit.ConduitSolution.Fragmentation;
 import me.alex4386.typhon.engine.tephra.GrainSizeDistribution;
@@ -74,12 +75,22 @@ public final class VentPartition {
     /**
      * Water that can reach the magma at the vent.
      *
-     * @param surfaceDepthM water standing over the vent (m)
-     * @param openFraction share of the crater rim open to that water (0–1)
+     * @param surfaceDepthM water standing over the vent floor (m)
+     * @param openFraction share of the crater rim open to that water (0–1): open water is resupplied freely
      * @param waterTableDepthM depth of the water table below the vent (m; ≤ 0 when it stands above)
+     * @param slurryFraction how much of the vent mouth is filled with water-saturated loose tephra (0–1)
+     * @param slurryPorosity porosity of that fill
+     * @param seepageKgPerS water that can seep into a crater cut off from open water, through the
+     *     saturated edifice (kg/s); NaN when the crater is open to the sea or a lake (no limit)
      */
-    public record Water(double surfaceDepthM, double openFraction, double waterTableDepthM) {
+    public record Water(double surfaceDepthM, double openFraction, double waterTableDepthM, double slurryFraction,
+            double slurryPorosity, double seepageKgPerS) {
         public static final Water DRY = new Water(0, 0, Double.POSITIVE_INFINITY);
+
+        /** Open water and groundwater only (no vent fill). */
+        public Water(double surfaceDepthM, double openFraction, double waterTableDepthM) {
+            this(surfaceDepthM, openFraction, waterTableDepthM, 0, 0, Double.NaN);
+        }
     }
 
     /**
@@ -155,14 +166,18 @@ public final class VentPartition {
         double tC = flow.exitTemperatureC();
         double tK = tC + 273.15;
 
-        // Water–magma interaction.
-        double ratio = waterMagmaRatio(water, conduitRadiusM, magma);
+        // Water–magma interaction: open water reaching the conduit, and (Surtseyan) magma rising into a vent
+        // filled with water-saturated tephra.
+        double openRatio = waterMagmaRatio(water, conduitRadiusM, magma);
+        double slurry = Math.max(0, Math.min(1, water.slurryFraction()));
+        double slurryRatio = slurry > 0 ? slurryRatio(water, conduitRadiusM, magma) : 0;
+        double ratio = slurry * slurryRatio + (1 - slurry) * openRatio;
         double submergence = Math.min(1, Math.max(0, water.surfaceDepthM()) / SUPPRESSION_DEPTH_M);
         double suppression = (1 - submergence) * (1 - submergence);
-        // Clasts falling back into water standing in an open crater are quenched, never welded into lava.
-        boolean flooded = water.surfaceDepthM() > 0 && water.openFraction() > 0;
-        double efficiency = ratio > 0
-                ? ratio / OPTIMAL_WATER_RATIO * Math.exp(1 - ratio / OPTIMAL_WATER_RATIO) * suppression : 0;
+        // Clasts falling back into water standing in the crater are quenched, never welded into lava.
+        boolean flooded = water.surfaceDepthM() > 0;
+        double efficiency = (slurry * interactionEfficiency(slurryRatio) + (1 - slurry) * interactionEfficiency(openRatio))
+                * suppression;
         double wetShare = Math.min(1, efficiency);
         double wetMagma = magma * wetShare;
         double dryMagma = magma - wetMagma;
@@ -289,6 +304,32 @@ public final class VentPartition {
     }
 
     /**
+     * Fragmentation efficiency of magma meeting water at mass ratio {@code r}: peaks at {@link
+     * #OPTIMAL_WATER_RATIO} and falls off on both sides, too little water to drive steam explosions, too much
+     * quenching the melt without explosive expansion (Wohletz &amp; Sheridan 1983; Wohletz 1986).
+     */
+    static double interactionEfficiency(double r) {
+        return r > 0 ? r / OPTIMAL_WATER_RATIO * Math.exp(1 - r / OPTIMAL_WATER_RATIO) : 0;
+    }
+
+    /**
+     * Water/magma mass ratio of magma rising into a vent filled with water-saturated tephra (a slurry):
+     * each volume of magma mixes with a comparable volume of slurry and so with its pore water,
+     * {@code R = φ ρ_w / ρ_m} (bulk interaction; Kokelaar 1983, 1986), unless the water drawn out cannot be
+     * replaced: a crater cut off from open water is refilled only by seepage through the edifice and
+     * groundwater flowing into the conduit.
+     */
+    static double slurryRatio(Water water, double conduitRadiusM, double magmaMassFlux) {
+        if (!(magmaMassFlux > 0)) return 0;
+        double porosity = Math.max(0, Math.min(0.9, water.slurryPorosity()));
+        double mixing = porosity * WATER_DENSITY / ConduitModel.MAGMA_DENSITY;
+        double seepage = water.seepageKgPerS();
+        if (Double.isNaN(seepage)) return mixing;
+        double resupply = (Math.max(0, seepage) + aquiferInflow(water, conduitRadiusM)) / magmaMassFlux;
+        return Math.min(mixing, resupply);
+    }
+
+    /**
      * Water/magma mass ratio at the vent. Sea or lake water flows into an open crater under its
      * hydrostatic head through a band one conduit radius deep around the conduit; groundwater seeps in
      * by Darcy flow from the aquifer the conduit crosses below the water table.
@@ -303,13 +344,17 @@ public final class VentPartition {
             double band = Math.min(depth, conduitRadiusM);
             inflow += WATER_DENSITY * speed * 2 * Math.PI * conduitRadiusM * band * open;
         }
-        double table = water.waterTableDepthM();
-        if (table < AQUIFER_INTERACTION_DEPTH_M) {
-            double saturated = AQUIFER_INTERACTION_DEPTH_M - Math.max(0, table);
-            double darcy = AQUIFER_PERMEABILITY / WATER_VISCOSITY * WATER_DENSITY * GRAVITY; // m/s under a unit gradient
-            inflow += WATER_DENSITY * darcy * 2 * Math.PI * conduitRadiusM * saturated;
-        }
+        inflow += aquiferInflow(water, conduitRadiusM);
         return inflow / magmaMassFlux;
+    }
+
+    /** Groundwater seeping into the conduit by Darcy flow from the aquifer below the water table (kg/s). */
+    static double aquiferInflow(Water water, double conduitRadiusM) {
+        double table = water.waterTableDepthM();
+        if (!(table < AQUIFER_INTERACTION_DEPTH_M)) return 0;
+        double saturated = AQUIFER_INTERACTION_DEPTH_M - Math.max(0, table);
+        double darcy = AQUIFER_PERMEABILITY / WATER_VISCOSITY * WATER_DENSITY * GRAVITY; // m/s under a unit gradient
+        return WATER_DENSITY * darcy * 2 * Math.PI * conduitRadiusM * saturated;
     }
 
     /**

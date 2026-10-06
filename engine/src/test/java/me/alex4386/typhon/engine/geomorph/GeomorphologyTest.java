@@ -15,6 +15,7 @@ import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.testing.Saves;
 import me.alex4386.typhon.engine.volcano.VentSite;
+import me.alex4386.typhon.engine.world.LayerFlags;
 import me.alex4386.typhon.engine.world.MaterialTable;
 import me.alex4386.typhon.engine.world.UnitTable;
 import org.junit.jupiter.api.Test;
@@ -262,6 +263,59 @@ class GeomorphologyTest {
                 assertTrue(g.recycledM3() > 0);
             } else {
                 assertEquals(0, crater.depthM(), 1e-9, "a plugged vent is buried under a plain cone: " + crater);
+            }
+        }
+    }
+
+    @Test
+    void ventFloorRisesWithWhatFillsItBetweenEruptions() {
+        GeoWorld w = GeoWorld.flat(5, BASE_Y);
+        Geomorphology g = geo(w, GroundState.DRY);
+        boolean[] open = {false};
+        VentSite vent = VentSite.crater("main", new BlockPos(40, BASE_Y, 40), 2);
+        g.setVents(List.of(vent), () -> open[0]);
+        Engine engine = w.engine(1, 1, g);
+        assertEquals(BASE_Z, g.ventFloorZ(vent), 1e-9, "the conduit mouth starts at the vent's ground");
+        // a quiet spell: fall-back and slumped tephra fill the vent 3 m deep
+        fillDisc(w, 40, 40, 8, 3);
+        w.run(engine, 3);
+        assertEquals(BASE_Z + 3, g.ventFloorZ(vent), 1e-3, "the fill is the new conduit mouth");
+        // erupting again: what falls into the conduit is swallowed down to that mouth, not to the old ground
+        open[0] = true;
+        fillDisc(w, 40, 40, 8, 1);
+        w.run(engine, 3);
+        assertEquals(BASE_Z + 3, w.world.surfaceZ(40, 40), 0.05, "cleared to the risen floor: " + w.world.surfaceZ(40, 40));
+        assertTrue(g.ventFloorZ(vent) >= BASE_Z + 3 - 1e-6, "an open vent keeps its floor");
+    }
+
+    @Test
+    void wetTephraSpikeRelaxesToItsAngleOfRepose() {
+        GeoWorld w = GeoWorld.flat(5, BASE_Y);
+        for (int x = 0; x < w.size; x++) {
+            for (int z = 0; z < w.size; z++) {
+                double h = 25 - 2.5 * Math.hypot(x - 40, z - 40); // ~68° flanks, the spikes block-wise deposits made
+                if (h > 0) w.world.deposit(x, z, h, MaterialTable.ASH, UnitTable.UNATTRIBUTED, LayerFlags.LOOSE, 0.45, 0);
+            }
+        }
+        double before = w.solid(MaterialTable.ASH, BASE_Z - 1e-9);
+        Geomorphology g = geo(w, GroundState.DRY);
+        g.activateArea(0, 0, w.size - 1, w.size - 1);
+        Engine engine = w.engine(1, 1, g);
+        w.settle(engine, g, 400);
+        double slope = w.maxSlopeDeg(5, 5, w.size - 6, w.size - 6);
+        // fine ash: φ = 33° with ~1 kPa of interlocking/suction cohesion, which holds metre-high steps a few
+        // degrees steeper on these 1 m columns (negligible at real-scale columns of 10 m and more)
+        assertTrue(slope <= 42, "loose wet tephra relaxes to about its angle of repose: " + slope);
+        double after = w.solid(MaterialTable.ASH, BASE_Z - 1e-9);
+        assertEquals(before, after, 1e-4 * before, "solid volume is conserved");
+    }
+
+    private static void fillDisc(GeoWorld w, int cx, int cz, int radius, double thickness) {
+        for (int x = cx - radius; x <= cx + radius; x++) {
+            for (int z = cz - radius; z <= cz + radius; z++) {
+                if (Math.hypot(x - cx, z - cz) <= radius) {
+                    w.world.deposit(x, z, thickness, MaterialTable.SCORIA, UnitTable.UNATTRIBUTED);
+                }
             }
         }
     }
