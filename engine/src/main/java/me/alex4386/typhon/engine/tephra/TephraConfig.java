@@ -168,7 +168,7 @@ public final class TephraConfig {
         return c;
     }
 
-    void validate() {
+    public void validate() {
         if (!(massScale > 0)) throw new IllegalArgumentException("massScale must be > 0");
         if (!(ashEventRefreshSeconds > 0)) throw new IllegalArgumentException("ashEventRefreshSeconds must be > 0");
         if (!(maxIntegrationStepSeconds > 0)) throw new IllegalArgumentException("maxIntegrationStepSeconds must be > 0");

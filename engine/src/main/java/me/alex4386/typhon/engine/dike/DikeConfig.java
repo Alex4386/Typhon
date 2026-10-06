@@ -132,7 +132,7 @@ public final class DikeConfig {
         return c;
     }
 
-    void validate() {
+    public void validate() {
         requirePositive("stepPeriodSeconds", stepPeriodSeconds);
         requirePositive("timeScale", timeScale);
         requirePositive("metersPerBlock", metersPerBlock);

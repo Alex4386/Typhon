@@ -123,7 +123,7 @@ public final class VolcanoCoupler implements Subsystem {
     private final TephraSubsystem tephra;
     private final PyroclasticFlows pdc;
     private final Geothermal geothermal;
-    private final VolcanoScaling scaling;
+    private VolcanoScaling scaling;
 
     private final TreeSet<String> activeLavaSources = new TreeSet<>();
     private final Set<String> eruptionVents = new LinkedHashSet<>();
@@ -190,6 +190,11 @@ public final class VolcanoCoupler implements Subsystem {
     }
 
     /** Groundwater model the conduit draws aquifer water from (optional). */
+    /** Live retune: the volcano's scaling (time compressions) from the next step. */
+    public void setScaling(VolcanoScaling scaling, double ballisticFraction) {
+        this.scaling = java.util.Objects.requireNonNull(scaling);
+    }
+
     public void setGround(HydrothermalField ground) {
         this.ground = ground;
     }

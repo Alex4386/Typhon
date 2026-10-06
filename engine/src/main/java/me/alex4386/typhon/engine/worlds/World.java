@@ -78,7 +78,7 @@ public final class World {
     private final WorldDirectory directory;
     private final SaveStore stateStore;
     private final SaveStore historyStore;
-    private final WorldDefinition definition;
+    private WorldDefinition definition;
     private final TreeMap<String, VolcanoDefinition> declared = new TreeMap<>();
     private final TreeMap<String, VolcanoDefinition> added = new TreeMap<>();
     private final TreeSet<String> removed = new TreeSet<>();
@@ -117,7 +117,7 @@ public final class World {
     public static World create(WorldDefinition definition, Collection<VolcanoDefinition> volcanoes, TerrainSnapshot terrain,
             SaveStore state, SaveStore history) {
         World world = new World(null, state, history, definition, volcanoes);
-        world.build(null, Set.of(), Set.of());
+        world.build(null, Map.of(), Set.of());
         world.engine.submit(terrain);
         return world;
     }
@@ -135,7 +135,7 @@ public final class World {
             ChangePolicy policy) {
         World world = new World(dir, state, history, dir.readWorld(), dir.readVolcanoes());
         if (state.read(SaveFormat.META) == null) {
-            world.build(null, Set.of(), Set.of());
+            world.build(null, Map.of(), Set.of());
             world.engine.submit(terrain.initialTerrain(world.definition, world.volcanoDefinitions()));
             return world;
         }
@@ -186,7 +186,7 @@ public final class World {
         changes = saved == null ? ConfigChanges.NONE
                 : ConfigChanges.compare(savedWorld, json(definition.toTree()), savedVolcanoes, current);
 
-        Set<String> reset = Set.of();
+        Map<String, Set<String>> reset = Map.of();
         if (changes.requiresReinit()) {
             switch (policy) {
                 case REJECT -> throw new ConfigException("definitions changed since the last save in ways that do not fit"
@@ -197,7 +197,12 @@ public final class World {
                         throw new ConfigException("world-level changes cannot be reset per volcano:" + changes
                                 + "\nAccept them or delete state/ to start over.");
                     }
-                    reset = changes.reinitVolcanoes();
+                    Map<String, Set<String>> targets = new TreeMap<>();
+                    for (String id : changes.reinitVolcanoes()) {
+                        Set<String> subsystems = changes.reinitSubsystems(id);
+                        targets.put(id, subsystems == null ? ALL : subsystems);
+                    }
+                    reset = targets;
                 }
             }
         }
@@ -241,7 +246,14 @@ public final class World {
      * fresh) and re-applies the definition's magma supply (rate and magma) to {@code resyncSupply} (supply is state:
      * a changed definition or activity flag must override the saved value).
      */
-    private void build(SaveStore restore, Set<String> resetVolcanoes, Set<String> resyncSupply) {
+    /** Marks a whole-volcano reset in {@link #build}'s reset map. */
+    private static final Set<String> ALL = Set.of("*");
+
+    /**
+     * @param resets volcanoes to (partly) start fresh: volcano id → subsystem ids whose saved state is
+     *     ignored, or {@link #ALL} for every subsystem of the volcano
+     */
+    private void build(SaveStore restore, Map<String, Set<String>> resets, Set<String> resyncSupply) {
         terrain = new TerrainModel(new WorldModel(definition.spec()));
         List<Edifice> edifices = new ArrayList<>();
         for (VolcanoDefinition v : volcanoDefinitions()) {
@@ -259,8 +271,11 @@ public final class World {
             VolcanoSystem system = v.assemble(terrain, lava, definition, subsurface);
             systems.put(v.id(), system);
             system.addTo(builder);
-            if (resetVolcanoes.contains(v.id())) {
+            Set<String> reset = resets.get(v.id());
+            if (reset == ALL) {
                 for (Subsystem s : system.subsystems()) hidden.add(s.id());
+            } else if (reset != null) {
+                hidden.addAll(reset);
             }
         }
         builder.add(lava);
@@ -275,11 +290,10 @@ public final class World {
             VolcanoSystem system = systems.get(id);
             if (system != null) system.chamber().resetSupplyFromConfig();
         }
-        if (!resetVolcanoes.isEmpty()) {
+        for (Map.Entry<String, Set<String>> e : resets.entrySet()) {
+            if (e.getValue() != ALL) continue; // partial resets leave the volcano's lava alone
             for (LavaSource source : List.copyOf(lava.sources())) {
-                for (String id : resetVolcanoes) {
-                    if (source.id().startsWith(id + "/")) lava.removeSource(source.id());
-                }
+                if (source.id().startsWith(e.getKey() + "/")) lava.removeSource(source.id());
             }
         }
     }
@@ -308,11 +322,74 @@ public final class World {
         return expansion;
     }
 
+
+    /**
+     * Retunes the running world to changed definitions in place, keeping all state: every subsystem whose
+     * configuration the new definitions change takes it at the next step (see {@link Engine#reconfigure}).
+     * Only for changes {@link ConfigImpact} classifies as {@link ConfigImpact.Kind#LIVE}; call on the engine
+     * thread between steps. Saves from now on record the new definitions, so a reopen sees no change.
+     *
+     * @throws IllegalArgumentException if a subsystem cannot take its change in place (nothing further
+     *     is applied; the caller rebuilds instead)
+     */
+    public void reconfigureLive(WorldDefinition world, Collection<VolcanoDefinition> volcanoes) {
+        Map<String, VolcanoDefinition> next = new TreeMap<>();
+        for (VolcanoDefinition v : volcanoes) next.put(v.id(), v);
+        if (!next.keySet().equals(systems.keySet())) {
+            throw new IllegalArgumentException("volcanoes were added or removed; the world must be rebuilt");
+        }
+        reconfigureIfChanged(LavaFlow.ID, world.lava());
+        reconfigureIfChanged(subsurface.id(), world.subsurfaceConfig());
+        reconfigureIfChanged(expansion.id(), world.expansion());
+        for (Map.Entry<String, VolcanoDefinition> e : next.entrySet()) {
+            VolcanoDefinition v = e.getValue();
+            Boolean active = activeOverrides.get(v.id());
+            VolcanoDefinition effective = active == null || active == v.active() ? v : v.withActive(active);
+            systems.get(e.getKey()).reconfigure(engine, effective.builder(terrain, lava, world, subsurface));
+        }
+        this.definition = world;
+        for (VolcanoDefinition v : volcanoes) {
+            if (declared.containsKey(v.id())) declared.put(v.id(), v);
+            else if (added.containsKey(v.id())) added.put(v.id(), v);
+        }
+    }
+
+    /**
+     * The configuration every subsystem would have if the world were assembled from these definitions,
+     * by subsystem id (world-level ones and every volcano's); nothing is built. A running world whose
+     * engine records these hashes runs exactly these definitions.
+     */
+    public Map<String, Object> derivedConfigs(WorldDefinition world, Collection<VolcanoDefinition> volcanoes) {
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put(LavaFlow.ID, world.lava());
+        out.put(subsurface.id(), world.subsurfaceConfig());
+        out.put(expansion.id(), world.expansion());
+        for (VolcanoDefinition v : volcanoes) {
+            Boolean active = activeOverrides.get(v.id());
+            VolcanoDefinition effective = active == null || active == v.active() ? v : v.withActive(active);
+            out.putAll(effective.builder(terrain, lava, world, subsurface).subsystemConfigs());
+        }
+        return out;
+    }
+
+    /** Subsystems whose running configuration differs from what the definitions imply (empty: in sync). */
+    public List<String> configDrift(WorldDefinition world, Collection<VolcanoDefinition> volcanoes) {
+        List<String> drift = new ArrayList<>();
+        for (Map.Entry<String, Object> e : derivedConfigs(world, volcanoes).entrySet()) {
+            if (!Engine.configHash(e.getValue()).equals(engine.configHash(e.getKey()))) drift.add(e.getKey());
+        }
+        return drift;
+    }
+
+    private void reconfigureIfChanged(String id, Object config) {
+        if (!Engine.configHash(config).equals(engine.configHash(id))) engine.reconfigure(id, config);
+    }
+
     /** Rebuilds the engine with the current definitions, carrying all state over (between steps). */
     private void rebuild(Set<String> resyncSupply) {
         InMemorySaveStore snapshot = new InMemorySaveStore();
         engine.save(snapshot, pendingHistory::addAll);
-        build(snapshot, Set.of(), resyncSupply);
+        build(snapshot, Map.of(), resyncSupply);
     }
 
     // ── Runtime changes ──

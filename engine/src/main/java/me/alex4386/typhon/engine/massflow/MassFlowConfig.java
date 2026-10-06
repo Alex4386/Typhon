@@ -165,7 +165,7 @@ public final class MassFlowConfig {
         return c;
     }
 
-    void validate() {
+    public void validate() {
         requirePositive("metersPerBlock", metersPerBlock);
         requirePositive("timeScale", timeScale);
         requirePositive("gravity", gravity);

@@ -100,7 +100,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      * the chamber inelastically, intrudes or erupts) instead of raising the pressure further.
      */
 
-    private final MagmaChamberConfig config;
+    private MagmaChamberConfig config;
 
     /** Current chamber volume (m³): the configured volume plus magma stored inelastically. */
     private double volume;
@@ -178,6 +178,31 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     @Override
     public MagmaChamberConfig config() {
         return config;
+    }
+
+    /**
+     * Live retune: what acts from now on (supply and recharge magma, rock, wall and conduit properties,
+     * time scales) is taken at once. The chamber's initial state, size and position define its state and
+     * are refused (they need a reset).
+     */
+    @Override
+    public boolean reconfigure(Object c) {
+        if (!(c instanceof MagmaChamberConfig n) || !n.volcanoId().equals(config.volcanoId())) return false;
+        if (!n.center().equals(config.center()) || n.volume() != config.volume()
+                || n.initialTemperatureC() != config.initialTemperatureC() || n.initialSilicaWt() != config.initialSilicaWt()
+                || n.initialWaterWt() != config.initialWaterWt() || n.initialCo2Wt() != config.initialCo2Wt()
+                || n.initialOverpressureMPa() != config.initialOverpressureMPa()
+                || n.conduit().initialOpenness() != config.conduit().initialOpenness()) {
+            return false;
+        }
+        boolean supply = n.supplyRate() != config.supplyRate() || n.supplyVariability() != config.supplyVariability()
+                || n.rechargeTemperatureC() != config.rechargeTemperatureC() || n.rechargeSilicaWt() != config.rechargeSilicaWt()
+                || n.rechargeWaterWt() != config.rechargeWaterWt() || n.rechargeCo2Wt() != config.rechargeCo2Wt()
+                || n.rechargeCrystalFraction() != config.rechargeCrystalFraction();
+        config = n;
+        // the configured supply is the source of truth once it changes (as when a world reopens with it)
+        if (supply) resetSupplyFromConfig();
+        return true;
     }
 
     @Override

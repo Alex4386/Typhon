@@ -58,6 +58,17 @@ public interface Subsystem {
     }
 
     /**
+     * Takes a new configuration in place, keeping all state (live tuning). Called on the engine thread
+     * between steps via {@link Engine#reconfigure}. Return {@code false}, changing nothing, when the
+     * configuration is of another type or changes something the state depends on (grid sizes, layout,
+     * geometry); such changes need the subsystem rebuilt. Afterwards {@link #config()} must return the
+     * new configuration, and derived values must follow it.
+     */
+    default boolean reconfigure(Object config) {
+        return false;
+    }
+
+    /**
      * Writes this subsystem's persistent state: small values to {@link StateWriter#json()}, spatial
      * arrays to {@link StateWriter#field}. Together with the engine time and random states this must
      * be enough to resume the simulation bit-for-bit after {@link #loadState}.

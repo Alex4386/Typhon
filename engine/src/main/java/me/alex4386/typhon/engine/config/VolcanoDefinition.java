@@ -190,6 +190,11 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
         if (dikeNode.bool("enabled", true)) {
             dikes = DikeConfig.defaults();
             ConfigBinder.bindFields(dikeNode, dikes, Set.of("enabled"), DIKE_DERIVED);
+            try {
+                dikes.validate();
+            } catch (IllegalArgumentException e) {
+                throw dikeNode.error(e.getMessage());
+            }
         } else {
             dikeNode.asMap();
         }
@@ -218,6 +223,16 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
             ConfigBinder.bindFields(flows.child("pdc"), pdc, Set.of(), MASSFLOW_DERIVED);
             lahar = MassFlowConfig.lahar();
             ConfigBinder.bindFields(flows.child("lahar"), lahar, Set.of(), MASSFLOW_DERIVED);
+            try {
+                pdc.validate();
+            } catch (IllegalArgumentException e) {
+                throw flows.child("pdc").error(e.getMessage());
+            }
+            try {
+                lahar.validate();
+            } catch (IllegalArgumentException e) {
+                throw flows.child("lahar").error(e.getMessage());
+            }
             flows.finish();
         } else {
             flows.asMap();
@@ -313,6 +328,14 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
 
     /** {@link #assemble(TerrainModel, LavaFlow, WorldDefinition)} heating the world's shared subsurface model. */
     public VolcanoSystem assemble(TerrainModel terrain, LavaFlow lava, WorldDefinition world, Subsurface subsurface) {
+        return builder(terrain, lava, world, subsurface).build();
+    }
+
+    /**
+     * The builder {@link #assemble} builds: also what a live retune derives the running volcano's new
+     * configurations from ({@link VolcanoSystem.Builder#subsystemConfigs}).
+     */
+    public VolcanoSystem.Builder builder(TerrainModel terrain, LavaFlow lava, WorldDefinition world, Subsurface subsurface) {
         MagmaChamberConfig chamberConfig = active ? chamber : chamber.toBuilder().supplyRate(0).build();
         VolcanoSystem.Builder b = VolcanoSystem.builder(id, vents, terrain, lava)
                 .scaling(scaling(world.scaling()))
@@ -334,7 +357,7 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
             b.wind(world.climate().windSpeed(), Math.toRadians(world.climate().windBearingDeg()),
                     world.climate().windVariability());
         }
-        return b.build();
+        return b;
     }
 
     private static <T> T copyFields(T source, T target) {

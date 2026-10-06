@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.geomorph;
 
+import me.alex4386.typhon.engine.config.ConfigCopy;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -286,6 +287,13 @@ public final class Geomorphology implements Subsystem {
     }
 
     // ── Subsystem ──
+
+    @Override
+    public boolean reconfigure(Object c) {
+        if (!(c instanceof GeomorphConfig n)) return false;
+        ConfigCopy.into(n, config);
+        return true;
+    }
 
     @Override
     public String id() {

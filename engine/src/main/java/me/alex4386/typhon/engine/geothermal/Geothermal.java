@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.geothermal;
 
+import me.alex4386.typhon.engine.config.ConfigCopy;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -137,6 +138,15 @@ public final class Geothermal implements Subsystem, HeatSources {
     }
 
     // ── Subsystem ──
+
+    /** Live retune; the feature grid's layout (radius, cell size) is refused. */
+    @Override
+    public boolean reconfigure(Object c) {
+        if (!(c instanceof GeothermalConfig n) || !ConfigCopy.same(n, config, "radius", "cellSize")) return false;
+        n.validate();
+        ConfigCopy.into(n, config);
+        return true;
+    }
 
     @Override
     public String id() {

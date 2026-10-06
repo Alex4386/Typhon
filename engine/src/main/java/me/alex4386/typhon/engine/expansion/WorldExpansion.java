@@ -66,6 +66,14 @@ public final class WorldExpansion implements Subsystem {
         this.config = Objects.requireNonNull(config);
     }
 
+    /** Live retune; the tile size is refused. */
+    @Override
+    public boolean reconfigure(Object c) {
+        if (!(c instanceof ExpansionConfig n) || n.tileColumns() != config.tileColumns()) return false;
+        config = n;
+        return true;
+    }
+
     @Override
     public String id() {
         return ID;

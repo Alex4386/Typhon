@@ -37,6 +37,12 @@ public final class VolcanoDetail implements Subsystem {
         return detail;
     }
 
+    /** The fine-surface layout cannot change in place. */
+    @Override
+    public boolean reconfigure(Object c) {
+        return c instanceof me.alex4386.typhon.engine.world.SurfaceDetailConfig n && n.equals(config);
+    }
+
     @Override
     public String id() {
         return "detail:" + volcanoId;

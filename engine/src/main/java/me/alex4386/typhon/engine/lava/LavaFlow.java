@@ -136,7 +136,7 @@ public final class LavaFlow implements Subsystem {
     private static final Comparator<LavaChunk> BY_KEY = Comparator.comparingLong(c -> c.key);
 
     private final TerrainModel terrain;
-    private final LavaConfig config;
+    private LavaConfig config;
     private final LavaRheology rheology;
     private double metersPerBlock;
     private boolean scaleLocked;
@@ -222,6 +222,13 @@ public final class LavaFlow implements Subsystem {
         this.config = config;
         this.rheology = rheology;
         this.metersPerBlock = config.metersPerBlock();
+    }
+
+    @Override
+    public boolean reconfigure(Object c) {
+        if (!(c instanceof LavaConfig n)) return false;
+        config = n;
+        return true;
     }
 
     @Override

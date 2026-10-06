@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.massflow;
 
+import me.alex4386.typhon.engine.config.ConfigCopy;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -123,6 +124,15 @@ public abstract class MassFlowField implements Subsystem {
         this.dx = config.metersPerBlock;
         this.cellArea = dx * dx;
         this.units = UnitSource.typed(terrain.world());
+    }
+
+    /** Live retune; the cell size ({@code metersPerBlock}) is refused. */
+    @Override
+    public boolean reconfigure(Object c) {
+        if (!(c instanceof MassFlowConfig n) || !ConfigCopy.same(n, config, "metersPerBlock")) return false;
+        n.validate();
+        ConfigCopy.into(n, config);
+        return true;
     }
 
     @Override

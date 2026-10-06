@@ -23,7 +23,7 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * <p>References: Gardner &amp; Guffanti (2006), USGS Fact Sheet 2006-3139 (alert-level system); Endo &amp; Murray (1991), Bull. Volcanol. 53:533-545 (RSAM). See {@code docs/references.md}.
  */
 public final class AlertLevelEstimator implements Subsystem {
-    private final AlertConfig config;
+    private AlertConfig config;
     private final MagmaState magma;
     private final SeismicityModel seismicity;
 
@@ -37,6 +37,13 @@ public final class AlertLevelEstimator implements Subsystem {
         this.config = config;
         this.magma = magma;
         this.seismicity = seismicity;
+    }
+
+    @Override
+    public boolean reconfigure(Object c) {
+        if (!(c instanceof AlertConfig n) || !n.volcanoId().equals(config.volcanoId())) return false;
+        config = n;
+        return true;
     }
 
     @Override

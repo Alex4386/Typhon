@@ -105,6 +105,63 @@ public final class Engine {
         pendingCommands.add(command);
     }
 
+    /**
+     * Swaps the configuration of subsystem {@code id} in place, between steps on the engine thread: the
+     * subsystem keeps its state and continues with {@code config} from the next step (see
+     * {@link Subsystem#reconfigure}). Its schedule follows a changed period, and saves record the new
+     * configuration, so a restore built with it resumes exactly.
+     *
+     * @throws IllegalArgumentException for an unknown subsystem or a change it cannot take in place
+     */
+    public void reconfigure(String id, Object config) {
+        Registered r = registration(id);
+        if (r == null) throw new IllegalArgumentException("No subsystem " + id);
+        if (!r.subsystem.reconfigure(config)) {
+            throw new IllegalArgumentException("Subsystem " + id + " cannot take this configuration change in place");
+        }
+        // the declared schedule, exactly as a restore with this configuration computes it
+        long[] schedule = schedule(r.subsystem, baseStepMicros);
+        if (schedule[1] < 0 || (schedule[0] > 0 && schedule[1] >= schedule[0])) {
+            throw new IllegalStateException("Subsystem " + id + " phase must be in [0, period) after reconfiguring");
+        }
+        r.periodSteps = schedule[0];
+        r.phaseSteps = schedule[1];
+        r.dtMicros = (schedule[0] == 0 ? 1 : schedule[0]) * baseStepMicros;
+        r.configJson = configJson(r.subsystem);
+        r.configHash = hash(r.configJson);
+    }
+
+    /** Hash of subsystem {@code id}'s current configuration (as saves record it), or {@code null} if unknown. */
+    public String configHash(String id) {
+        Registered r = registration(id);
+        return r == null ? null : r.configHash;
+    }
+
+    /** The hash a subsystem with configuration {@code config} would be recorded with. */
+    public static String configHash(Object config) {
+        if (config == null) return hash(JsonNull.INSTANCE);
+        return hash(SaveFormat.gson().toJsonTree(config));
+    }
+
+    /** Whether subsystem {@code id} is registered. */
+    public boolean hasSubsystem(String id) {
+        return registration(id) != null;
+    }
+
+    private Registered registration(String id) {
+        for (Registered r : subsystems) if (r.subsystem.id().equals(id)) return r;
+        return null;
+    }
+
+    /** {period, phase} in base steps for a subsystem's declared period and phase. */
+    private static long[] schedule(Subsystem subsystem, long baseStepMicros) {
+        double period = subsystem.periodSeconds();
+        double phase = subsystem.phaseSeconds();
+        long periodSteps = Double.isInfinite(period) ? 0 : Math.max(1, Math.round(SimTime.micros(period) / (double) baseStepMicros));
+        long phaseSteps = Math.round(SimTime.micros(phase) / (double) baseStepMicros);
+        return new long[] {periodSteps, phaseSteps};
+    }
+
     public EngineFrame step() {
         long step = currentStep;
         long time = step * baseStepMicros;
@@ -293,8 +350,29 @@ public final class Engine {
         }
     }
 
-    private record Registered(Subsystem subsystem, long periodSteps, long phaseSteps, long dtMicros, SimRandom random,
-            JsonElement configJson, String configHash, String lane) {
+    /** A registered subsystem; its schedule and configuration change only through {@link #reconfigure}. */
+    private static final class Registered {
+        final Subsystem subsystem;
+        final SimRandom random;
+        final String lane;
+        long periodSteps;
+        long phaseSteps;
+        long dtMicros;
+        JsonElement configJson;
+        String configHash;
+
+        Registered(Subsystem subsystem, long periodSteps, long phaseSteps, long dtMicros, SimRandom random,
+                JsonElement configJson, String configHash, String lane) {
+            this.subsystem = subsystem;
+            this.periodSteps = periodSteps;
+            this.phaseSteps = phaseSteps;
+            this.dtMicros = dtMicros;
+            this.random = random;
+            this.configJson = configJson;
+            this.configHash = configHash;
+            this.lane = lane;
+        }
+
         boolean isDue(long step) {
             return periodSteps > 0 && step >= phaseSteps && (step - phaseSteps) % periodSteps == 0;
         }

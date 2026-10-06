@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.tephra;
 
+import me.alex4386.typhon.engine.config.ConfigCopy;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -104,6 +105,18 @@ public final class TephraSubsystem implements Subsystem {
 
     public TephraSubsystem(String id, TerrainModel terrain) {
         this(id, terrain, new TephraConfig());
+    }
+
+    /** Live retune; the ash grid's layout (cell size, cell count, top) is refused. A changed wind blows from now on. */
+    @Override
+    public boolean reconfigure(Object c) {
+        if (!(c instanceof TephraConfig n) || !ConfigCopy.same(n, config, "cellSize", "gridCells", "worldTopY")) return false;
+        TephraConfig next = n.copy();
+        next.validate();
+        boolean wind = !ConfigCopy.same(next, config, "initialWindSpeed", "initialWindDirectionRad", "initialWindVariability");
+        ConfigCopy.into(next, config);
+        if (wind) setWind(config.initialWindSpeed, config.initialWindDirectionRad, config.initialWindVariability);
+        return true;
     }
 
     @Override

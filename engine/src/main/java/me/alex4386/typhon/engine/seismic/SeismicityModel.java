@@ -38,7 +38,7 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * estimation and telemetry.
  */
 public final class SeismicityModel implements Subsystem {
-    private final SeismicConfig config;
+    private SeismicConfig config;
     private final MagmaState magma;
 
     private final List<BlockPos> induced = new ArrayList<>();
@@ -64,6 +64,13 @@ public final class SeismicityModel implements Subsystem {
     @Override
     public SeismicConfig config() {
         return config;
+    }
+
+    @Override
+    public boolean reconfigure(Object c) {
+        if (!(c instanceof SeismicConfig n) || !n.volcanoId().equals(config.volcanoId())) return false;
+        config = n;
+        return true;
     }
 
     @Override

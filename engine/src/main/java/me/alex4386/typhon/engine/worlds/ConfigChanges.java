@@ -14,12 +14,11 @@ import java.util.TreeSet;
  * they need:
  *
  * <ul>
- *   <li>{@link Kind#HOT}: applies to existing state as is (climate, time compression, magma supply,
- *       feature caps and rates, names, the active flag, new volcanoes).
- *   <li>{@link Kind#REINIT}: changes the meaning of saved state (grid, geology, chamber geometry,
- *       vents, removing a volcano). Applying it needs an explicit decision (see
- *       {@link World.ChangePolicy}).
+ *   <li>{@link Kind#HOT}: the saved state stays valid (live and reload changes).
+ *   <li>{@link Kind#REINIT}: changes the meaning of saved state; applying it needs an explicit
+ *       decision (see {@link World.ChangePolicy}).
  * </ul>
+ * Which is which is decided by {@link ConfigImpact}, the single source of these rules.
  */
 public final class ConfigChanges {
     public enum Kind { HOT, REINIT }
@@ -32,46 +31,24 @@ public final class ConfigChanges {
      * @param before previous value as JSON text, {@code null} if absent
      * @param after current value as JSON text, {@code null} if absent
      */
-    public record Change(String scope, String path, Kind kind, String before, String after) {
+    public record Change(String scope, String path, Kind kind, String before, String after, ConfigImpact.Impact impact) {
         @Override
         public String toString() {
             return scope + " " + path + ": " + before + " -> " + after + " (" + kind.name().toLowerCase() + ")";
         }
     }
 
-    /** Hot-reloadable world keys (exact paths, or patterns with one {@code *}). */
-    static final List<String> HOT_WORLD = List.of(
-            "name", "climate.*", "scaling.dormantTimeCompression", "scaling.eruptiveTimeCompression", "terrain*",
-            "subsurface.timeScale", "subsurface.macroStepSeconds", "subsurface.surfaceWaterStepSeconds",
-            "subsurface.hotChangeC", "subsurface.warmEvery", "subsurface.demoteAfter",
-            "subsurface.groundwaterIterations", "subsurface.sorOmega", "subsurface.manningN",
-            "subsurface.vadoseLagSeconds", "subsurface.threads", "expansion*");
-
-    /** Hot-reloadable volcano keys. */
-    static final List<String> HOT_VOLCANO = List.of(
-            "name", "active", "timeCompression*", "ballisticFraction",
-            "magma.chamber.supplyRate", "magma.chamber.supplyVariability",
-            // properties of magma added from now on (the supply and injections); the chamber's own
-            // magma is state and stays as it is
-            "magma.chamber.recharge*",
-            // wall and dike mechanics: read every step, the chamber state stays valid
-            "magma.chamber.wallRuptureRatio", "magma.chamber.wallYieldFraction",
-            "dikes.ruptureNucleation", "dikes.nucleateDuringEruption", "dikes.initiationPressureRatio",
-            "dikes.maxInitiationRate", "dikes.maxConcurrentDikes", "dikes.conduitSealing",
-            "geothermal.timeScale", "geothermal.prewarmSeconds", "geothermal.max*", "geothermal.*PerHour",
-            "tephra.initialWind*", "tephra.max*", "deformation.stations*");
-
     /**
      * How a change to the world definition at {@code path} (dotted, as in {@link Change#path()})
      * would be classified.
      */
     public static Kind worldKind(String path) {
-        return classify(path, HOT_WORLD);
+        return ConfigImpact.world(path).keepsState() ? Kind.HOT : Kind.REINIT;
     }
 
     /** How a change to a volcano definition at {@code path} would be classified. */
     public static Kind volcanoKind(String path) {
-        return classify(path, HOT_VOLCANO);
+        return ConfigImpact.volcano(path).keepsState() ? Kind.HOT : Kind.REINIT;
     }
 
     public static final ConfigChanges NONE = new ConfigChanges(List.of());
@@ -99,6 +76,28 @@ public final class ConfigChanges {
         Set<String> ids = new TreeSet<>();
         for (Change c : changes) {
             if (c.scope().startsWith("volcano:")) ids.add(c.scope().substring("volcano:".length()));
+        }
+        return ids;
+    }
+
+    /** The most disruptive change: what applying all of them needs. */
+    public ConfigImpact.Kind strongest() {
+        ConfigImpact.Kind k = ConfigImpact.Kind.LIVE;
+        for (Change c : changes) if (c.impact().kind().ordinal() > k.ordinal()) k = c.impact().kind();
+        return k;
+    }
+
+    /**
+     * Subsystem ids of {@code volcanoId} a reset clears: all of them ({@code null}) when a change resets the
+     * whole volcano, otherwise only those of its partial-reset targets (tephra, hot springs, crater detail).
+     */
+    public Set<String> reinitSubsystems(String volcanoId) {
+        Set<String> ids = new TreeSet<>();
+        for (Change c : changes) {
+            if (c.kind() != Kind.REINIT || !c.scope().equals("volcano:" + volcanoId)) continue;
+            List<String> partial = c.impact().target().subsystemIds(volcanoId);
+            if (partial.isEmpty()) return null;
+            ids.addAll(partial);
         }
         return ids;
     }
@@ -131,7 +130,7 @@ public final class ConfigChanges {
     static ConfigChanges compare(JsonObject worldBefore, JsonObject worldAfter, Map<String, JsonObject> before,
             Map<String, JsonObject> after) {
         List<Change> out = new ArrayList<>();
-        if (worldBefore != null) diff("world", "", worldBefore, worldAfter, HOT_WORLD, out);
+        if (worldBefore != null) diff("world", "", worldBefore, worldAfter, ConfigImpact::world, out);
         Set<String> ids = new TreeSet<>(before.keySet());
         ids.addAll(after.keySet());
         for (String id : ids) {
@@ -139,30 +138,33 @@ public final class ConfigChanges {
             JsonObject b = after.get(id);
             String scope = "volcano:" + id;
             if (a == null) {
-                out.add(new Change(scope, "*", Kind.HOT, null, "added"));
+                out.add(new Change(scope, "*", Kind.HOT, null, "added",
+                        new ConfigImpact.Impact(ConfigImpact.Kind.RELOAD, ConfigImpact.Target.VOLCANO, "a new volcano")));
             } else if (b == null) {
-                out.add(new Change(scope, "*", Kind.REINIT, "present", null));
+                out.add(new Change(scope, "*", Kind.REINIT, "present", null,
+                        new ConfigImpact.Impact(ConfigImpact.Kind.REINIT, ConfigImpact.Target.VOLCANO, "removed")));
             } else {
-                diff(scope, "", a, b, HOT_VOLCANO, out);
+                diff(scope, "", a, b, ConfigImpact::volcano, out);
             }
         }
         return new ConfigChanges(out);
     }
 
     /** Leaf-by-leaf differences; lists compare as a whole. */
-    static void diff(String scope, String path, JsonElement before, JsonElement after, List<String> hot,
-            List<Change> out) {
+    static void diff(String scope, String path, JsonElement before, JsonElement after,
+            java.util.function.Function<String, ConfigImpact.Impact> rules, List<Change> out) {
         if (before != null && after != null && before.isJsonObject() && after.isJsonObject()) {
             Set<String> keys = new TreeSet<>(before.getAsJsonObject().keySet());
             keys.addAll(after.getAsJsonObject().keySet());
             for (String k : keys) {
                 diff(scope, path.isEmpty() ? k : path + "." + k, before.getAsJsonObject().get(k),
-                        after.getAsJsonObject().get(k), hot, out);
+                        after.getAsJsonObject().get(k), rules, out);
             }
             return;
         }
         if (!equal(before, after)) {
-            out.add(new Change(scope, path, classify(path, hot), text(before), text(after)));
+            ConfigImpact.Impact impact = rules.apply(path);
+            out.add(new Change(scope, path, impact.keepsState() ? Kind.HOT : Kind.REINIT, text(before), text(after), impact));
         }
     }
 
@@ -176,13 +178,6 @@ public final class ConfigChanges {
 
     private static String text(JsonElement e) {
         return e == null ? null : e.toString();
-    }
-
-    static Kind classify(String path, List<String> hot) {
-        for (String pattern : hot) {
-            if (matches(pattern, path)) return Kind.HOT;
-        }
-        return Kind.REINIT;
     }
 
     /** Glob with at most one {@code *} matching any run of characters (dots included). */

@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.subsurface;
 
+import me.alex4386.typhon.engine.config.ConfigCopy;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -136,6 +137,15 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
     }
 
     // ── Subsystem ──
+
+    /** Live retune of the solver and hydrology; the vertical level layout is refused. */
+    @Override
+    public boolean reconfigure(Object c) {
+        if (!(c instanceof SubsurfaceConfig n) || !ConfigCopy.same(n, config, "levels", "firstLevelM", "levelGrowth")) return false;
+        n.validate();
+        ConfigCopy.into(n, config);
+        return true;
+    }
 
     @Override
     public String id() {

@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.deformation;
 
+import me.alex4386.typhon.engine.config.ConfigCopy;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -57,6 +58,17 @@ public final class DeformationModel implements Subsystem {
         this.magma = Objects.requireNonNull(magma, "magma");
         this.dikes = dikes;
         this.terrain = terrain;
+    }
+
+    /** Live retune; the source position and block size are refused. */
+    @Override
+    public boolean reconfigure(Object c) {
+        if (!(c instanceof DeformationConfig n) || !ConfigCopy.same(n, config, "volcanoId", "centerX", "centerZ", "metersPerBlock")) {
+            return false;
+        }
+        n.validate();
+        ConfigCopy.into(n, config);
+        return true;
     }
 
     @Override

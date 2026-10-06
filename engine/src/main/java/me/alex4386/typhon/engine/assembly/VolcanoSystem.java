@@ -58,7 +58,7 @@ import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 public final class VolcanoSystem {
     private final String volcanoId;
     private final List<VentSite> vents;
-    private final VolcanoScaling scaling;
+    private VolcanoScaling scaling;
     private final MagmaChamber chamber;
     private final DikePropagation dikes;
     private final SeismicityModel seismicity;
@@ -78,7 +78,7 @@ public final class VolcanoSystem {
     private final VolcanoUnits units;
     private final VolcanoDetail detail;
 
-    private final double ballisticFraction;
+    private double ballisticFraction;
 
     private VolcanoSystem(Builder b) {
         this.volcanoId = b.volcanoId;
@@ -89,47 +89,28 @@ public final class VolcanoSystem {
         b.terrain.setMetersPerBlock(scaling.metersPerBlock());
 
         BlockPos primary = vents.get(0).position();
-        MagmaChamberConfig chamberConfig = (b.chamberConfig != null
-                        ? b.chamberConfig.toBuilder()
-                        : MagmaChamberConfig.builder(volcanoId, defaultChamberCenter(primary)))
-                .dormantTimeScale(scaling.dormantTimeCompression())
-                .eruptiveTimeScale(scaling.eruptiveTimeCompression())
-                .build();
-        if (!chamberConfig.volcanoId().equals(volcanoId)) {
-            throw new IllegalArgumentException("Chamber config is for volcano " + chamberConfig.volcanoId());
-        }
+        Derived d = derive(b);
+        MagmaChamberConfig chamberConfig = d.chamber();
         this.chamber = new MagmaChamber(chamberConfig);
         // The lava this volcano erupts lives on the volcano's clock: emplaced at the eruptive time
-        // compression, cooling on afterwards at the dormant one.
+        // compression, cooling on afterwards at the dormant one. Read live, so a retuned time
+        // compression applies at once.
         MagmaChamber clockChamber = chamber;
-        double eruptive = chamberConfig.eruptiveTimeScale();
-        double dormant = chamberConfig.dormantTimeScale();
-        b.lava.registerClock(volcanoId, () -> clockChamber.erupting() ? eruptive : dormant);
+        java.util.function.DoubleSupplier clock = () -> clockChamber.erupting() ? clockChamber.config().eruptiveTimeScale()
+                : clockChamber.config().dormantTimeScale();
+        b.lava.registerClock(volcanoId, clock);
 
-        double failure = chamberConfig.tensileStrengthMPa();
-        SeismicConfig seismicConfig = SeismicConfig.builder(volcanoId, primary).failureOverpressureMPa(failure).build();
-        this.seismicity = new SeismicityModel(seismicConfig, chamber);
-        this.alert = new AlertLevelEstimator(AlertConfig.defaults(volcanoId).withFailureOverpressure(failure), chamber, seismicity);
+        this.seismicity = new SeismicityModel(d.seismic(), chamber);
+        this.alert = new AlertLevelEstimator(d.alert(), chamber, seismicity);
 
         if (b.dikes) {
-            DikeConfig dikeConfig = (b.dikeConfig != null ? b.dikeConfig : DikeConfig.defaults()).withScaling(scaling);
-            dikeConfig.timeScale = scaling.eruptiveTimeCompression();
-            this.dikes = new DikePropagation(dikeConfig, DikeMagmaSource.of(chamber), b.terrain);
+            this.dikes = new DikePropagation(d.dike(), DikeMagmaSource.of(chamber), b.terrain);
             dikes.setHypocenterListener(seismicity::queueInducedVt);
         } else {
             this.dikes = null;
         }
 
-        TephraConfig tephraConfig = b.tephraConfig != null ? b.tephraConfig.copy() : new TephraConfig();
-        tephraConfig.ballisticSpeedScale = scaling.velocityScale();
-        tephraConfig.plumeHeightScale = scaling.plumeHeightScale();
-        tephraConfig.massScale = scaling.volumeScale();
-        if (b.windSet) {
-            tephraConfig.initialWindSpeed = b.windSpeed * scaling.velocityScale();
-            tephraConfig.initialWindDirectionRad = b.windBearing;
-            tephraConfig.initialWindVariability = b.windVariability;
-        }
-        this.tephra = new TephraSubsystem("tephra:" + volcanoId, b.terrain, tephraConfig);
+        this.tephra = new TephraSubsystem("tephra:" + volcanoId, b.terrain, d.tephra());
 
         if (b.subsurface != null) {
             this.subsurface = b.subsurface;
@@ -144,31 +125,19 @@ public final class VolcanoSystem {
         }
 
         if (b.geothermal) {
-            GeothermalConfig geothermalConfig = b.geothermalConfig != null ? b.geothermalConfig : new GeothermalConfig();
-            if (b.geothermalPrewarmSeconds >= 0) geothermalConfig.prewarmSeconds = b.geothermalPrewarmSeconds;
-            BlockPos chamberCenter = chamberConfig.center();
-            BlockPos center = b.geothermalCenter != null
-                    ? b.geothermalCenter
-                    : new BlockPos(chamberCenter.x(), primary.y(), chamberCenter.z());
-            this.geothermal = new Geothermal(volcanoId, geothermalConfig, center, chamber, b.terrain, b.palette, vents,
-                    subsurface);
+            this.geothermal = new Geothermal(volcanoId, d.geothermal(), d.geothermalCenter(), chamber, b.terrain, b.palette,
+                    vents, subsurface);
             subsurface.setHeatSources(volcanoId, geothermal);
         } else {
             this.geothermal = null;
         }
 
         if (b.massFlows) {
-            MassFlowConfig pdcConfig = b.pdcConfig != null ? b.pdcConfig.copy() : MassFlowConfig.pdc();
-            pdcConfig.metersPerBlock = scaling.metersPerBlock();
-            MassFlowConfig laharConfig = b.laharConfig != null ? b.laharConfig.copy() : MassFlowConfig.lahar();
-            laharConfig.metersPerBlock = scaling.metersPerBlock();
-            this.pdc = new PyroclasticFlows(PyroclasticFlows.defaultId(volcanoId), b.terrain, pdcConfig);
-            this.lahars = new Lahars(Lahars.defaultId(volcanoId), b.terrain, laharConfig);
+            this.pdc = new PyroclasticFlows(PyroclasticFlows.defaultId(volcanoId), b.terrain, d.pdc());
+            this.lahars = new Lahars(Lahars.defaultId(volcanoId), b.terrain, d.lahar());
             // loose ignimbrite and tephra in the world model are lahar source material automatically
-            MassFlowConfig avalancheConfig = b.avalancheConfig != null ? b.avalancheConfig.copy() : MassFlowConfig.debrisAvalanche();
-            avalancheConfig.metersPerBlock = scaling.metersPerBlock();
             this.avalanches = b.geomorphology
-                    ? new DebrisAvalanches(DebrisAvalanches.defaultId(volcanoId), b.terrain, avalancheConfig) : null;
+                    ? new DebrisAvalanches(DebrisAvalanches.defaultId(volcanoId), b.terrain, d.avalanche()) : null;
         } else {
             this.pdc = null;
             this.lahars = null;
@@ -176,9 +145,7 @@ public final class VolcanoSystem {
         }
 
         if (b.deformation) {
-            DeformationConfig deformationConfig = DeformationConfig.forChamber(chamberConfig, scaling);
-            deformationConfig.stations = new java.util.ArrayList<>(b.stations);
-            this.deformation = new DeformationModel(deformationConfig, chamber,
+            this.deformation = new DeformationModel(d.deformation(), chamber,
                     dikes != null ? dikes::geometries : List::of, b.terrain);
         } else {
             this.deformation = null;
@@ -193,9 +160,7 @@ public final class VolcanoSystem {
 
         // Every deposit is attributed to this volcano's current eruption (stratigraphy).
         this.units = new VolcanoUnits(b.terrain.world(), volcanoId, chamber);
-        me.alex4386.typhon.engine.world.SurfaceDetailConfig detailConfig = b.detailConfig != null ? b.detailConfig
-                : me.alex4386.typhon.engine.world.SurfaceDetailConfig.defaults(scaling.metersPerBlock(),
-                        vents.get(0).craterRadius() * scaling.metersPerBlock());
+        me.alex4386.typhon.engine.world.SurfaceDetailConfig detailConfig = d.detail();
         this.detail = detailConfig.enabled()
                 ? new VolcanoDetail(volcanoId, detailConfig, b.terrain.world(), primary, b.detailRelief) : null;
         coupler.setUnits(units);
@@ -210,13 +175,12 @@ public final class VolcanoSystem {
 
         // Slopes, craters and collapse: fed by explosions and earthquakes, acting on the world model.
         if (b.geomorphology) {
-            this.geomorphology = new Geomorphology(Geomorphology.defaultId(volcanoId), volcanoId, b.terrain,
-                    b.geomorphConfig != null ? b.geomorphConfig : new GeomorphConfig());
+            this.geomorphology = new Geomorphology(Geomorphology.defaultId(volcanoId), volcanoId, b.terrain, d.geomorph());
             geomorphology.setUnits(units);
             geomorphology.setGround(GroundState.of(subsurface));
             geomorphology.setFlows(avalanches, lahars, pdc);
             geomorphology.setChamber(ChamberRoof.of(chamber));
-            geomorphology.setTimeScale(() -> clockChamber.erupting() ? eruptive : dormant);
+            geomorphology.setTimeScale(clock);
             geomorphology.setVents(vents, clockChamber::erupting);
             Geomorphology g = geomorphology;
             seismicity.setQuakeListener(e -> g.queueQuake(e.hypocenter(), e.magnitude()));
@@ -236,6 +200,88 @@ public final class VolcanoSystem {
             }
             if (avalanches != null) avalanches.setGround(subsurface);
         }
+    }
+
+    /**
+     * Every configuration this volcano's subsystems are built with, derived from a builder's settings
+     * and the volcano's scaling. Pure: it touches no shared world objects, so a live retune can derive
+     * the configurations of a changed definition and hand them to the running subsystems.
+     */
+    record Derived(MagmaChamberConfig chamber, SeismicConfig seismic, AlertConfig alert, DikeConfig dike,
+            TephraConfig tephra, GeothermalConfig geothermal, BlockPos geothermalCenter, MassFlowConfig pdc,
+            MassFlowConfig lahar, MassFlowConfig avalanche, DeformationConfig deformation, GeomorphConfig geomorph,
+            me.alex4386.typhon.engine.world.SurfaceDetailConfig detail) {}
+
+    static Derived derive(Builder b) {
+        VolcanoScaling scaling = b.scaling;
+        String volcanoId = b.volcanoId;
+        BlockPos primary = b.vents.get(0).position();
+        MagmaChamberConfig chamberConfig = (b.chamberConfig != null
+                        ? b.chamberConfig.toBuilder()
+                        : MagmaChamberConfig.builder(volcanoId, defaultChamberCenter(primary)))
+                .dormantTimeScale(scaling.dormantTimeCompression())
+                .eruptiveTimeScale(scaling.eruptiveTimeCompression())
+                .build();
+        if (!chamberConfig.volcanoId().equals(volcanoId)) {
+            throw new IllegalArgumentException("Chamber config is for volcano " + chamberConfig.volcanoId());
+        }
+        double failure = chamberConfig.tensileStrengthMPa();
+        SeismicConfig seismic = SeismicConfig.builder(volcanoId, primary).failureOverpressureMPa(failure).build();
+        AlertConfig alert = AlertConfig.defaults(volcanoId).withFailureOverpressure(failure);
+
+        DikeConfig dike = null;
+        if (b.dikes) {
+            dike = (b.dikeConfig != null ? b.dikeConfig : DikeConfig.defaults()).withScaling(scaling);
+            dike.timeScale = scaling.eruptiveTimeCompression();
+        }
+
+        TephraConfig tephra = b.tephraConfig != null ? b.tephraConfig.copy() : new TephraConfig();
+        tephra.ballisticSpeedScale = scaling.velocityScale();
+        tephra.plumeHeightScale = scaling.plumeHeightScale();
+        tephra.massScale = scaling.volumeScale();
+        if (b.windSet) {
+            tephra.initialWindSpeed = b.windSpeed * scaling.velocityScale();
+            tephra.initialWindDirectionRad = b.windBearing;
+            tephra.initialWindVariability = b.windVariability;
+        }
+
+        GeothermalConfig geothermal = null;
+        BlockPos geothermalCenter = null;
+        if (b.geothermal) {
+            geothermal = b.geothermalConfig != null ? b.geothermalConfig : new GeothermalConfig();
+            if (b.geothermalPrewarmSeconds >= 0) geothermal.prewarmSeconds = b.geothermalPrewarmSeconds;
+            BlockPos chamberCenter = chamberConfig.center();
+            geothermalCenter = b.geothermalCenter != null
+                    ? b.geothermalCenter
+                    : new BlockPos(chamberCenter.x(), primary.y(), chamberCenter.z());
+        }
+
+        MassFlowConfig pdc = null;
+        MassFlowConfig lahar = null;
+        MassFlowConfig avalanche = null;
+        if (b.massFlows) {
+            pdc = b.pdcConfig != null ? b.pdcConfig.copy() : MassFlowConfig.pdc();
+            pdc.metersPerBlock = scaling.metersPerBlock();
+            lahar = b.laharConfig != null ? b.laharConfig.copy() : MassFlowConfig.lahar();
+            lahar.metersPerBlock = scaling.metersPerBlock();
+            if (b.geomorphology) {
+                avalanche = b.avalancheConfig != null ? b.avalancheConfig.copy() : MassFlowConfig.debrisAvalanche();
+                avalanche.metersPerBlock = scaling.metersPerBlock();
+            }
+        }
+
+        DeformationConfig deformation = null;
+        if (b.deformation) {
+            deformation = DeformationConfig.forChamber(chamberConfig, scaling);
+            deformation.stations = new java.util.ArrayList<>(b.stations);
+        }
+
+        GeomorphConfig geomorph = b.geomorphology ? (b.geomorphConfig != null ? b.geomorphConfig : new GeomorphConfig()) : null;
+        me.alex4386.typhon.engine.world.SurfaceDetailConfig detail = b.detailConfig != null ? b.detailConfig
+                : me.alex4386.typhon.engine.world.SurfaceDetailConfig.defaults(scaling.metersPerBlock(),
+                        b.vents.get(0).craterRadius() * scaling.metersPerBlock());
+        return new Derived(chamberConfig, seismic, alert, dike, tephra, geothermal, geothermalCenter, pdc, lahar,
+                avalanche, deformation, geomorph, detail);
     }
 
     /**
@@ -455,5 +501,50 @@ public final class VolcanoSystem {
         public VolcanoSystem build() {
             return new VolcanoSystem(this);
         }
+
+        /**
+         * The configuration each subsystem of the volcano {@link #build} would assemble has, by subsystem
+         * id, without building anything (no shared world object is touched). Live retuning hands these to
+         * the running subsystems ({@link VolcanoSystem#reconfigure}).
+         */
+        public java.util.Map<String, Object> subsystemConfigs() {
+            Derived d = derive(this);
+            java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
+            out.put("magma:" + volcanoId, d.chamber());
+            if (d.dike() != null) out.put("dike:" + volcanoId, d.dike());
+            out.put("seismic:" + volcanoId, d.seismic());
+            out.put("alert:" + volcanoId, d.alert());
+            out.put("tephra:" + volcanoId, d.tephra());
+            if (d.pdc() != null) {
+                out.put(PyroclasticFlows.defaultId(volcanoId), d.pdc());
+                out.put(Lahars.defaultId(volcanoId), d.lahar());
+            }
+            if (d.geomorph() != null) out.put(Geomorphology.defaultId(volcanoId), d.geomorph());
+            if (d.avalanche() != null) out.put(DebrisAvalanches.defaultId(volcanoId), d.avalanche());
+            if (d.geothermal() != null) out.put("geothermal:" + volcanoId, d.geothermal());
+            if (d.deformation() != null) out.put("deformation:" + volcanoId, d.deformation());
+            if (d.detail().enabled()) out.put("detail:" + volcanoId, d.detail());
+            return out;
+        }
+    }
+
+    /**
+     * Retunes the running volcano to a changed definition's configurations ({@link Builder#subsystemConfigs}),
+     * in place and keeping all state: each subsystem whose configuration differs takes the new one
+     * (see {@link Engine#reconfigure}). Call on the engine thread between steps. Fails, changing
+     * nothing it could avoid, if a subsystem cannot take its change in place.
+     */
+    public void reconfigure(Engine engine, Builder changed) {
+        java.util.Map<String, Object> configs = changed.subsystemConfigs();
+        for (java.util.Map.Entry<String, Object> e : configs.entrySet()) {
+            if (!engine.hasSubsystem(e.getKey())) {
+                throw new IllegalArgumentException("Subsystem " + e.getKey() + " is not running; the volcano must be rebuilt");
+            }
+            if (Engine.configHash(e.getValue()).equals(engine.configHash(e.getKey()))) continue;
+            engine.reconfigure(e.getKey(), e.getValue());
+        }
+        this.ballisticFraction = changed.ballisticFraction;
+        this.scaling = changed.scaling;
+        coupler.setScaling(changed.scaling, changed.ballisticFraction);
     }
 }

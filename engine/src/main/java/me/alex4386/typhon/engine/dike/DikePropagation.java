@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.dike;
 
+import me.alex4386.typhon.engine.config.ConfigCopy;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -96,6 +97,15 @@ public final class DikePropagation implements Subsystem {
         this.terrain = terrain;
         this.volcanoId = magma.volcanoId();
         if (terrain != null) this.units = UnitSource.typed(terrain.world());
+    }
+
+    @Override
+    public boolean reconfigure(Object c) {
+        if (!(c instanceof DikeConfig n)) return false;
+        DikeConfig next = n.copy();
+        next.validate();
+        ConfigCopy.into(next, config);
+        return true;
     }
 
     @Override
