@@ -37,7 +37,8 @@ public final class WorldTemplates {
      * @param metersPerColumn column size (m)
      * @param depthM sea-floor depth below sea level at the centre ({@code ocean})
      * @param elevationM land elevation at the centre ({@code flat}, {@code slope})
-     * @param slope gradient (m per m): the sea floor deepens towards +x, land rises towards −x
+     * @param slope gradient (m per m): the sea floor deepens towards +x (and shoals towards −x without
+     *     ever surfacing), land rises towards −x
      * @param seaLevelZ sea level (m); {@code NaN} for no sea ({@code ocean} always has one, default 0)
      * @param roughnessM amplitude of gentle undulation (m)
      * @param eruptiveTimeCompression volcano time per simulated second while erupting
@@ -64,10 +65,15 @@ public final class WorldTemplates {
             };
         }
 
-        /** Elevation (m) at a point (m from the centre). */
+        /**
+         * Elevation (m) at a point (m from the centre). The same function is the context terrain and the
+         * ground new tiles are generated from, so it must hold for any distance: the ocean floor
+         * deepens linearly towards +x and shoals towards −x only asymptotically, d·exp(s·x/d) (the same
+         * depth and gradient at the centre), so open ocean never turns into land on the horizon.
+         */
         double elevation(double xm, double zm) {
             return switch (kind) {
-                case "ocean" -> seaLevelZ - depthM - slope * xm;
+                case "ocean" -> seaLevelZ - (xm >= 0 || depthM <= 0 ? depthM + slope * xm : depthM * Math.exp(slope * xm / depthM));
                 case "flat" -> elevationM;
                 default -> elevationM - slope * xm;
             };
