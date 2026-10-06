@@ -93,6 +93,8 @@ public final class World {
     private me.alex4386.typhon.engine.expansion.WorldExpansion expansion;
     /** The host's terrain generator (not persisted; re-attached on every open). */
     private me.alex4386.typhon.engine.terrain.TerrainGenerator generator;
+    /** The host's continuous initial surface (not persisted; re-attached on every open and rebuild). */
+    private java.util.function.DoubleBinaryOperator relief;
     private final TreeMap<String, VolcanoSystem> systems = new TreeMap<>();
     /** Worker threads for the engine (0 = the default); results are identical for every count. */
     private int threads;
@@ -276,6 +278,8 @@ public final class World {
         }
         terrain.world().setEdifices(edifices);
         lava = new LavaFlow(terrain, definition.lava());
+        // the field is in the world's columns from the start, also before any volcano exists
+        lava.setMetersPerBlock(definition.scaling().metersPerBlock());
         subsurface = new Subsurface(terrain.world(), definition.subsurfaceConfig());
         systems.clear();
         Engine.Builder builder = Engine.builder(definition.seed()).baseStepMicros(definition.baseStepMicros())
@@ -319,6 +323,7 @@ public final class World {
      */
     private void wireExpansion() {
         expansion.setGenerator(generator);
+        if (relief != null) terrain.world().setRelief(relief);
         me.alex4386.typhon.engine.expansion.ExpansionWiring.wire(expansion, lava, subsurface, systems.values());
     }
 
@@ -327,6 +332,15 @@ public final class World {
      * definition. With it the simulated area grows on demand ({@link me.alex4386.typhon.engine.expansion.WorldExpansion});
      * without it, it stays as imported. Call before stepping, after every open.
      */
+    /**
+     * Attaches the host's continuous description of the initial surface ({@link
+     * me.alex4386.typhon.engine.world.WorldModel#setRelief}); kept across rebuilds (adding a volcano).
+     */
+    public void setRelief(java.util.function.DoubleBinaryOperator relief) {
+        this.relief = relief;
+        if (terrain != null) terrain.world().setRelief(relief);
+    }
+
     public void setTerrainGenerator(me.alex4386.typhon.engine.terrain.TerrainGenerator generator) {
         this.generator = generator;
         if (expansion != null) expansion.setGenerator(generator);

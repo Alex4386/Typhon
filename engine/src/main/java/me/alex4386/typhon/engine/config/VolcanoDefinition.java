@@ -291,7 +291,8 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
         VentSite vent;
         try {
             vent = switch (kind) {
-                case "crater" -> VentSite.crater(ventId, position, v.integer("radius", 4));
+                case "crater" -> v.bool("emergent", false) ? VentSite.emergent(ventId, position, v.integer("radius", 1))
+                        : VentSite.crater(ventId, position, v.integer("radius", 4));
                 case "fissure" -> new VentSite(ventId, position, VentKind.FISSURE, v.integer("radius", 1),
                         Math.toRadians(v.number("angleDeg", 0)), v.integer("length", 10));
                 default -> throw v.error("kind", "expected crater or fissure, got '" + kind + "'");
@@ -417,6 +418,7 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
             m.put("y", v.position().y());
             m.put("z", v.position().z());
             m.put("radius", v.craterRadius());
+            if (v.emergent()) m.put("emergent", true);
             if (v.kind() == VentKind.FISSURE) {
                 m.put("angleDeg", Math.toDegrees(v.fissureAngleRad()));
                 m.put("length", v.fissureLength());

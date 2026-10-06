@@ -111,13 +111,16 @@ public final class WorldScenarios {
                     throw new UncheckedIOException(e);
                 }
             }
+            case "template" -> {
+                return WorldTemplates.terrain(definition);
+            }
             case "twin-cones" -> {
                 return twinCones(number(t, "halfExtent", 192).intValue(), number(t, "separation", 160).intValue(),
                         number(t, "height", 60).intValue(), number(t, "radius", 140).intValue(),
                         number(t, "craterRadius", 5).intValue());
             }
             default -> throw new ConfigException("world.yaml: terrain.source: unknown source '" + source
-                    + "'; expected preset, dem or twin-cones");
+                    + "'; expected preset, template, dem or twin-cones");
         }
     }
 

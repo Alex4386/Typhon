@@ -100,7 +100,11 @@ public final class Scenario {
         this.afterFirstTick = List.of();
         this.engine = session.engine();
         this.world = new VoxelWorld(initialTerrain);
-        attachRelief(terrain, initialTerrain);
+        ColumnGrid.Relief relief = initialTerrain.relief();
+        if (relief != null) {
+            double size = terrain.world().spec().metersPerColumn();
+            session.setRelief((xm, zm) -> relief.topBlocks(xm / size, zm / size) * size);
+        }
         if (initialTerrain.source() != null) session.setTerrainGenerator(initialTerrain.source());
         this.expansion = session.expansion();
         this.restored = restored;
@@ -116,7 +120,6 @@ public final class Scenario {
      * simulator; {@code initialTerrain} must be the terrain the world was created on.
      */
     public static Scenario fromWorld(String name, World session, ColumnGrid initialTerrain, boolean restored) {
-        if (session.volcanoes().isEmpty()) throw new IllegalStateException("A world needs at least one volcano to run");
         return new Scenario(name, session, initialTerrain, restored);
     }
 
@@ -190,15 +193,20 @@ public final class Scenario {
     public String presetName() { return presetName; }
     public long seed() { return seed; }
     public ColumnGrid initialTerrain() { return initialTerrain; }
-    public TerrainModel terrain() { return terrain; }
-    public LavaFlow lava() { return lava; }
-    public List<VolcanoSystem> volcanoes() { return volcanoes; }
-    /** The first (primary) volcano; presets put the main subject first. */
-    public VolcanoSystem volcano() { return volcanoes.get(0); }
-    public Engine engine() { return engine; }
+    // A world session rebuilds its engine when volcanoes are added or removed: read through to it.
+    public TerrainModel terrain() { return session != null ? session.terrain() : terrain; }
+    public LavaFlow lava() { return session != null ? session.lava() : lava; }
+    public List<VolcanoSystem> volcanoes() { return session != null ? List.copyOf(session.volcanoes().values()) : volcanoes; }
+    /** The first volcano, or {@code null} in an empty world (no chamber placed yet). */
+    public VolcanoSystem volcano() {
+        List<VolcanoSystem> vs = volcanoes();
+        return vs.isEmpty() ? null : vs.get(0);
+    }
+
+    public Engine engine() { return session != null ? session.engine() : engine; }
     public VoxelWorld world() { return world; }
     /** On-demand growth of the simulated area. */
-    public me.alex4386.typhon.engine.expansion.WorldExpansion expansion() { return expansion; }
+    public me.alex4386.typhon.engine.expansion.WorldExpansion expansion() { return session != null ? session.expansion() : expansion; }
 
     /** Runs set-up hooks that need the terrain snapshot applied (called once after the first tick). */
     public void runAfterFirstTick() {
