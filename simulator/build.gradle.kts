@@ -54,8 +54,8 @@ val slowTest by tasks.registering(Test::class) {
     testLogging.showStandardStreams = true
 }
 
-// End-to-end flow on the island preset (create, terrain, water, eruption to the sea, live dial,
-// save/restore, thread count; prints a report): ./gradlew :simulator:islandFlow
+// End-to-end world-builder flow (empty ocean, a placed chamber, the island it builds, live dial,
+// save/restore, thread count; prints a report): ./gradlew :simulator:islandFlow [-Dflow.steps=N]
 val islandFlow by tasks.registering(Test::class) {
     description = "Runs the island test flow (tagged 'flow') and prints its report."
     group = "verification"
@@ -67,6 +67,7 @@ val islandFlow by tasks.registering(Test::class) {
     maxHeapSize = "3g"
     outputs.upToDateWhen { false } // a flow is run to be watched
     testLogging.showStandardStreams = true
+    systemProperty("flow.steps", System.getProperty("flow.steps", "300000"))
 }
 
 // Validation against observations (real-scale presets at their reference horizons, ~20 min):
