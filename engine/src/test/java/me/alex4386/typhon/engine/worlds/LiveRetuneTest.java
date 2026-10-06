@@ -13,6 +13,7 @@ import me.alex4386.typhon.engine.config.VolcanoDefinition;
 import me.alex4386.typhon.engine.config.WorldDefinition;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
+import me.alex4386.typhon.engine.testing.Runs;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -182,15 +183,16 @@ class LiveRetuneTest {
             List<VolcanoDefinition> vs2 = retunedTwins();
             world.reconfigureLive(w2, vs2);
             List<EngineFrame> frames = new ArrayList<>();
+            double t0 = world.engine().time(); // absolute ends: steps vary in length
             if (saveAfter >= 0) {
-                frames.addAll(world.engine().runFor(saveAfter));
+                frames.addAll(Runs.until(world.engine(), t0 + saveAfter));
                 world.save();
                 // the files now hold the retuned definitions: a strict reopen must see no change
                 world = World.reopen(w2, vs2, state, history, World.ChangePolicy.REJECT);
                 assertTrue(world.changes().isEmpty(), world.changes().toString());
-                frames.addAll(world.engine().runFor(10 - saveAfter));
+                frames.addAll(Runs.until(world.engine(), t0 + 10));
             } else {
-                frames.addAll(world.engine().runFor(10));
+                frames.addAll(Runs.until(world.engine(), t0 + 10));
             }
             return new Run(frames, world.engine().stateHash());
         } finally {
