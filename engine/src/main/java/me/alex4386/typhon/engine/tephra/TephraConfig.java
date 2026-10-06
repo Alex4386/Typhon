@@ -60,7 +60,7 @@ public final class TephraConfig {
     // ── Ash plume and fall ──
 
     /** Ash transport runs every this many seconds. */
-    public double ashStepSeconds = 20;
+    public double ashStepSeconds = 1.0;
     /** Horizontal size of an ash grid cell, blocks. */
     public int cellSize = 8;
     /** Grid width and depth in cells (domain is centred on the first vent). */

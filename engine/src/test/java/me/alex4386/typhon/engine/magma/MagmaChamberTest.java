@@ -30,7 +30,8 @@ class MagmaChamberTest {
 
     /** A small, weakly supplied chamber (0.05 km³) so mechanics tests cycle quickly. */
     private static MagmaChamberConfig.Builder steady() {
-        return MagmaChamberConfig.builder("v", CENTER).volume(5e7).supplyRate(0.01).supplyVariability(0);
+        return MagmaChamberConfig.builder("v", CENTER).volume(5e7).supplyRate(0.01).supplyVariability(0)
+                .stepPeriodSeconds(1); // these tests count 50-ms ticks
     }
 
     /** Steps until {@code seconds} have passed (adaptive engines take long quiet steps). */

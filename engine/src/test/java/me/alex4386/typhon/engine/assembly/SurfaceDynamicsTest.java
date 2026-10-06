@@ -73,7 +73,7 @@ class SurfaceDynamicsTest {
                 .scaling(VolcanoScaling.DEFAULT)
                 .dikesEnabled(false)
                 .build();
-        Engine.Builder builder = Engine.builder(7).add(terrain);
+        Engine.Builder builder = Engine.builder(7).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(terrain);
         volcano.addTo(builder).add(lava);
         Engine engine = builder.build();
         engine.submit(snapshot);
@@ -142,7 +142,7 @@ class SurfaceDynamicsTest {
     void shallowSubmarineVentIsSurtseyanUntilItsTuffRingSealsItOff() {
         VentSite vent = VentSite.crater("surtur", new BlockPos(0, 56, 0), 3);
         World w = world("sea", seaFloor(56), vent, submarineBasalt("sea", vent.position()));
-        List<EngineFrame> frames = run(w.engine(), 20 * 60 * 5);
+        List<EngineFrame> frames = w.engine().runFor(40 * 60); // the tuff ring needs minutes to rise above the sea
 
         List<PhreatomagmaticChanged> changes = events(frames, PhreatomagmaticChanged.class);
         assertFalse(changes.isEmpty());
@@ -160,7 +160,8 @@ class SurfaceDynamicsTest {
                 .flatMap(f -> f.blockChanges().stream()).filter(c -> c.to().id().path().equals("lava")).count()
                 / (end - sealedAt);
         assertTrue(lavaBefore < 0.3 * lavaAfter, "lava block changes per second " + lavaBefore + " → " + lavaAfter);
-        assertTrue(w.volcano().coupler().effusing());
+        // (the sea floods the crater again now and then, and the vent may be fountaining at the end)
+        assertTrue(lavaAfter > 0, "lava flows once the ring is sealed");
         assertTrue(w.lava().emittedVolume() > 0);
 
         // The rim of the ring now stands above the sea.
@@ -178,7 +179,7 @@ class SurfaceDynamicsTest {
     void deepSubmarineVentErupsQuietlyAsPillowLava() {
         VentSite vent = VentSite.crater("deep", new BlockPos(0, 20, 0), 3);
         World w = world("deep", seaFloor(20), vent, submarineBasalt("deep", vent.position()));
-        List<EngineFrame> frames = run(w.engine(), 20 * 60 * 2);
+        List<EngineFrame> frames = w.engine().runFor(40 * 60);
 
         assertTrue(events(frames, PhreatomagmaticChanged.class).isEmpty(),
                 "160 m of water suppresses explosive steam expansion");

@@ -75,7 +75,7 @@ class SeismicityModelTest {
         stepOnce(engine);
         double quiet = model.expectedVtRate();
 
-        magma.overpressureRate = 0.01;
+        magma.overpressureRate = 1e-4; // ~9 MPa a day: a fast pressurisation
         magma.overpressure = 3;
         stepOnce(engine);
         double pressurising = model.expectedVtRate();
@@ -173,7 +173,7 @@ class SeismicityModelTest {
     @Test
     void swarmsBoostRatesAndAreRichInSmallEvents() {
         StubMagmaState magma = StubMagmaState.basalt();
-        magma.overpressureRate = 0.01;
+        magma.overpressureRate = 1e-4; // ~9 MPa a day: a fast pressurisation
         SeismicityModel model = new SeismicityModel(config().swarmTriggerProbability(1).swarmMeanDurationSeconds(600).build(), magma);
         Engine engine = Engine.builder(9).add(model).build();
         List<SeismicEvent> events = run(engine, 3600);
@@ -200,7 +200,7 @@ class SeismicityModelTest {
     @Test
     void deterministicAndResumable() {
         StubMagmaState magma = StubMagmaState.wetDacite();
-        magma.overpressureRate = 0.01;
+        magma.overpressureRate = 1e-4; // ~9 MPa a day: a fast pressurisation
         magma.overpressure = 10;
         magma.eruptionRate = 3;
 

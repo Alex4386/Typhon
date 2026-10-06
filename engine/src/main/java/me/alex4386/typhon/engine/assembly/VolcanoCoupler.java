@@ -196,11 +196,8 @@ public final class VolcanoCoupler implements Subsystem {
 
     @Override
     public double periodSeconds() {
-        return ERUPTING_STEP_SECONDS;
+        return ERUPTION_RESOLUTION_SECONDS;
     }
-
-    /** Coupling period while erupting (s): the vent partition, bursts, jets and fall-back are updated this often. */
-    public static final double ERUPTING_STEP_SECONDS = 20;
 
     /**
      * Longest engine step while the volcano erupts (s): fountains, ballistics and flow fronts move on

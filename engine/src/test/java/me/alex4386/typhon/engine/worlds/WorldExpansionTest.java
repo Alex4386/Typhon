@@ -166,6 +166,7 @@ class WorldExpansionTest {
         var before = w.subsurface().budget();
         w.expansion().addSource(sink -> sink.active(40, 0));
         w.engine().runFor(10);
+        w.engine().step(); // a long quiet step may end with the growth: the solver takes the new columns next
         var after = w.subsurface().budget();
         assertTrue(w.expansion().addedTiles() > 0);
         assertTrue(w.subsurface().known(40, 0), "the solver initialised the new columns");

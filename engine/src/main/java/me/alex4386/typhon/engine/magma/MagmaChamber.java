@@ -239,16 +239,20 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     public static final double QUIET_STEP_SECONDS = 86_400;
 
     /**
-     * While erupting {@link #ERUPTING_STEP_SECONDS}; while quiet, a quarter of the time the current
-     * pressurisation needs to reach roof failure (so the eruption starts on time), at most
-     * {@link #QUIET_STEP_SECONDS}.
+     * While erupting (or at failure) {@link #ERUPTING_STEP_SECONDS}; while quiet, a quarter of the time
+     * the pressurisation needs to reach roof failure (so the eruption starts on time), at most
+     * {@link #QUIET_STEP_SECONDS}. The pressurisation is the larger of the last observed rate and the
+     * supply's elastic rate {@code Q / (V·β)}, so a fresh chamber is not stepped past its failure.
      */
     @Override
     public double maxStepSeconds() {
         if (erupting || pendingStart || pendingFlank) return ERUPTING_STEP_SECONDS;
-        if (!eruptive || summitBlocked || !(overpressureRate > 0)) return QUIET_STEP_SECONDS;
-        double toFailure = (failureOverpressureMPa() - overpressure) / overpressureRate;
-        return Math.max(config.stepPeriodSeconds(), Math.min(QUIET_STEP_SECONDS, 0.25 * Math.max(0, toFailure)));
+        if (!eruptive || summitBlocked) return QUIET_STEP_SECONDS;
+        double gap = failureOverpressureMPa() - overpressure;
+        if (gap <= 0) return ERUPTING_STEP_SECONDS;
+        double rate = Math.max(overpressureRate, Math.max(0, supplyRate) / (volume * effectiveCompressibility()));
+        if (!(rate > 0)) return QUIET_STEP_SECONDS;
+        return Math.max(config.stepPeriodSeconds(), Math.min(QUIET_STEP_SECONDS, 0.25 * gap / rate));
     }
 
     @Override
