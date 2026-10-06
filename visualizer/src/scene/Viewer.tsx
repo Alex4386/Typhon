@@ -12,6 +12,7 @@ import { Atmosphere } from './Atmosphere';
 import { Hypocentres } from './Hypocentres';
 import { LavaGlow } from './LavaGlow';
 import { LavaHalo } from './LavaHalo';
+import { SimulatedArea } from './SimulatedArea';
 import { EntityMarkers, pickDataOf, type PickData } from './EntityMarkers';
 import { FarField } from './FarField';
 import { FrameScheduler } from './FrameScheduler';
@@ -180,6 +181,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
       <FarField world={world} />
       <LavaGlow world={world} />
       <LavaHalo world={world} />
+      <SimulatedArea world={world} />
       <Markers world={world} />
       <EntityMarkers world={world} />
       {showHypo && <Hypocentres />}

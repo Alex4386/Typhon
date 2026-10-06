@@ -119,6 +119,8 @@ export function describeEvent(e: SimEvent): string {
       return `New ${e.feature.toLowerCase().replaceAll('_', ' ')}`;
     case 'oceanEntry':
       return `Lava entering the sea (${e.powerMW.toFixed(0)} MW)${e.littoralExplosion ? ' — steam explosion' : ''}`;
+    case 'areaExpanded':
+      return `Simulation area expanded: +${e.tiles} ${e.tiles === 1 ? 'tile' : 'tiles'}, now ${e.areaKm2.toFixed(0)} km²`;
     case 'message':
       return e.text;
     default:
@@ -152,6 +154,9 @@ export const NOTABLE_FEATURES = new Set(['GEYSER', 'HOT_SPRING', 'SULFUR_SPRING'
 /** Changes in what the volcano is doing: always their own row among the key events. */
 const MILESTONE_KINDS = new Set(['eruptionStarted', 'eruptionEnded', 'alertChanged', 'regimeChanged', 'styleEstimated', 'dikeStarted', 'dikeStalled', 'fissureOpened', 'ventState', 'message']);
 
+/** Key events that are aggregated rather than milestones (see {@link aggregateKey}). */
+const AGGREGATED_KINDS = new Set(['areaExpanded']);
+
 /** Slope failures from this volume are key events even as plain rockfalls (avalanches and flows always are). */
 export const NOTABLE_SLIDE_M3 = 10_000;
 
@@ -163,7 +168,7 @@ export const NOTABLE_QUAKE_M = 3;
  * (bombs), new geysers/springs and lava reaching the sea, which are aggregated (see {@link keyEventRows}).
  */
 export function isImportant(e: SimEvent): boolean {
-  if (MILESTONE_KINDS.has(e.kind)) return true;
+  if (MILESTONE_KINDS.has(e.kind) || AGGREGATED_KINDS.has(e.kind)) return true;
   switch (e.kind) {
     case 'geothermalFeature':
       return NOTABLE_FEATURES.has(e.feature);
@@ -203,6 +208,8 @@ function aggregateKey(e: SimEvent): string | null {
       return `craters:${v}`;
     case 'calderaCollapse':
       return `caldera:${v}`;
+    case 'areaExpanded':
+      return 'expansion';
     default:
       return null;
   }
@@ -238,6 +245,9 @@ export function keyEventRows(events: SimEvent[], limit: number): Row[] {
       } else if (e.kind === 'slopeFailure' && row.event.kind === 'slopeFailure') {
         row.total = (row.total ?? row.event.volumeM3) + e.volumeM3;
         if (e.volumeM3 >= row.event.volumeM3) row.event = e;
+      } else if (e.kind === 'areaExpanded' && row.event.kind === 'areaExpanded') {
+        row.total = (row.total ?? row.event.tiles) + e.tiles;
+        row.event = e;
       } else row.event = e;
       row.lastTime = e.time;
       continue;
@@ -269,6 +279,8 @@ export function describeRow(r: Row): string {
       return `${r.count} crater-forming explosions (latest ${Math.round(2 * e.radiusM)} m wide)`;
     case 'calderaCollapse':
       return `Crater floor collapsing: down ${e.subsidenceM.toFixed(e.subsidenceM < 10 ? 1 : 0)} m so far`;
+    case 'areaExpanded':
+      return `Simulation area expanded ${r.count} times: +${r.total ?? e.tiles} tiles, now ${e.areaKm2.toFixed(0)} km²`;
     default:
       return describeEvent(e);
   }
@@ -288,6 +300,7 @@ function groupKey(e: SimEvent): string | null {
     case 'slopeFailure':
     case 'craterExcavated':
     case 'calderaCollapse':
+    case 'areaExpanded':
       return `${e.kind}:${'volcanoId' in e ? e.volcanoId : ''}`;
     default:
       return null;

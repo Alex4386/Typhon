@@ -126,6 +126,7 @@ export type ServerMessage =
   /** The attached session was closed (by this or another client); attach to another one. */
   | { type: 'detached'; sessionId: string; reason: string }
   | AttachedMessage
+  | WorldExtentMessage
   | ClockMessage
   | StateMessage
   | EventsMessage
@@ -375,6 +376,29 @@ export interface WorldInfo {
   depositTypes: DepositTypeInfo[];
   /** The tile pyramid around the core (§5.5); absent on servers without one (the mock). */
   lod?: LodInfo;
+  /**
+   * Level-0 tiles holding simulated ground, as [tx, ty]; elsewhere inside `tiles` the ground is generated
+   * and nothing happens until activity reaches it. Absent: every tile is simulated.
+   */
+  simulated?: [number, number][];
+  /** On-demand growth of the simulated area (from `worldExtent`). */
+  expansion?: ExpansionInfo;
+}
+
+export interface ExpansionInfo {
+  addedTiles: number;
+  maxTiles: number;
+  enabled: boolean;
+}
+
+/** The simulated area grew: new tile range, simulated tiles and pyramid; origin and tile coordinates are unchanged. */
+export interface WorldExtentMessage {
+  type: 'worldExtent';
+  sessionId: string;
+  tiles: TileBounds;
+  simulated: [number, number][];
+  lod?: LodInfo;
+  expansion?: ExpansionInfo;
 }
 
 /** One level of the tile pyramid: coarse context (level > 0) or crater detail (level < 0). */
@@ -551,6 +575,8 @@ export type SimEvent =
   | { kind: 'calderaCollapse'; time: number; volcanoId: string; at: [number, number, number]; radiusM: number; subsidenceM: number }
   | { kind: 'geothermalFeature'; time: number; volcanoId: string; feature: string; at: [number, number, number] }
   | { kind: 'oceanEntry'; time: number; at: XY; powerMW: number; littoralExplosion: boolean }
+  /** Activity near the edge materialised generated ground: `bbox` [west, south, east, north] (m) of it. */
+  | { kind: 'areaExpanded'; time: number; tiles: number; addedTiles: number; areaKm2: number; bbox: [number, number, number, number] }
   | { kind: 'message'; time: number; text: string };
 
 export interface ReplayInfoMessage {

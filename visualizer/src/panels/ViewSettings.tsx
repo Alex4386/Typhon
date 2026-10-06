@@ -23,6 +23,7 @@ const LAYERS = [
   ['showAtmosphere', 'Plumes and gas', 'Eruption columns, ash and gas clouds'],
   ['showFeatures', 'Vents and springs', 'Vents, fumaroles, hot springs and geysers'],
   ['showWaterTable', 'Water table', 'The groundwater surface as a translucent sheet'],
+  ['showSimulatedArea', 'Simulated area', 'Outline of the ground being simulated; beyond it the landscape is generated and becomes simulated when lava, flows, ash or water reach it'],
   ['xray', 'See-through ground when underground', 'Make the ground translucent while the camera is below it'],
 ] as const;
 

@@ -18,6 +18,7 @@ import { rememberSession, rememberedSession, useStore } from '../store/store';
 import { formatPlace, KIND_LABEL, type EntityView } from '../store/entities';
 import { useCamera } from '../camera/cameraStore';
 import { NOTABLE_FEATURES, describeEvent, toastTone } from '../panels/events';
+import { applyWorldExtent } from '../util/extent';
 
 /** Fields the visualizer subscribes to. */
 export const SUBSCRIBED_FIELDS: FieldId[] = [
@@ -332,6 +333,16 @@ function onText(m: ServerMessage): void {
       const info = s.sessions.find((x) => x.id === m.sessionId);
       rememberSession(info ? sessionKey(info) : `name:${m.world.name}`);
       subscribedLevels = contextLevels(m.world);
+      subscribe();
+      return;
+    }
+    case 'worldExtent': {
+      if (m.sessionId !== s.sessionId || !s.world) return;
+      const world = applyWorldExtent(s.world, m);
+      s.set({ world });
+      // the pyramid may have changed: keep the crater-detail levels we asked for, take the new context levels
+      const detail = subscribedLevels.filter((l) => l < 0);
+      subscribedLevels = [...contextLevels(world), ...detail].sort((a, b) => a - b);
       subscribe();
       return;
     }

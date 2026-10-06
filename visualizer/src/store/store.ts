@@ -196,6 +196,8 @@ interface Store {
   showWaterTable: boolean;
   /** Make the ground translucent while the camera is below it. */
   xray: boolean;
+  /** Outline the simulated ground (the rest is generated landscape, simulated on demand; persisted). */
+  showSimulatedArea: boolean;
   /** Set by the scene: the camera is below the displayed ground. */
   underground: boolean;
   waterVolume: number;
@@ -288,6 +290,7 @@ export const useStore = create<Store>((set, get) => ({
   showFeatures: true,
   showWaterTable: false,
   xray: true,
+  showSimulatedArea: loadPref(PREF_KEYS.showSimulatedArea, true, isBool),
   underground: false,
   waterVolume: 50000,
   digRadius: 40,
@@ -510,6 +513,7 @@ if (typeof window !== 'undefined') {
     if (s.hiddenCategories !== prev.hiddenCategories) savePref(PREF_KEYS.hiddenCategories, s.hiddenCategories);
     if (s.showPerf !== prev.showPerf) savePref(PREF_KEYS.showPerf, s.showPerf);
     if (s.autoQuality !== prev.autoQuality) savePref(PREF_KEYS.autoQuality, s.autoQuality);
+    if (s.showSimulatedArea !== prev.showSimulatedArea) savePref(PREF_KEYS.showSimulatedArea, s.showSimulatedArea);
   });
 }
 
