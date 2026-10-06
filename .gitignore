@@ -25,3 +25,6 @@ sim-out/
 
 # simulator/sim-server runtime worlds (state, saves, history)
 /worlds/
+
+# private Gradle daemon registry of agent worktrees
+.gradle-registry/

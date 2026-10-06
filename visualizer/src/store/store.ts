@@ -339,6 +339,14 @@ export const useStore = create<Store>((set, get) => ({
           if (!(off <= DETAIL_TOLERANCE_M)) {
             detailRejected.count++;
             detailRejected.lastMismatchM = off;
+            // an older accepted tile there is now stale too: drop it, so the core ground (which is cut
+            // wherever detail is present) takes the area back instead of leaving holes or old ground
+            const held = lodStore.get(f.level);
+            const tk = tileKey(f.tileX, f.tileY);
+            if (held?.delete(tk)) {
+              lodRev ??= { ...get().lodRevision };
+              delete lodRev[lodKey(f.level, f.tileX, f.tileY)];
+            }
             continue;
           }
         }

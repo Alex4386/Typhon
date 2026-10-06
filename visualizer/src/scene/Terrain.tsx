@@ -11,7 +11,8 @@ import { sampleColumn } from '../util/world';
 import type { TileFrame } from '../protocol/frames';
 import { bakedReader, clampedReader, elevationQuantum, gridReader, rebuildOrder, viewFocus } from './terrainMath';
 import { perfStats } from './perf';
-import { CRUST_RGB, crustLight, lavaSurfaceColor, weightedTemperature } from './lavaColor';
+import { POND, SEA, compactWater, groundZ, seaSurfaceZ } from './waterIndex';
+import { CRUST_RGB, crackPattern, crustLight, lavaSurfaceColor, weightedTemperature } from './lavaColor';
 import { detailCovers, detailHeights, detailLevels, overlappingDetailTiles, refinement } from './detail';
 
 /**
@@ -55,6 +56,13 @@ const displayHeights = new Map<string, { z: Float32Array; vExag: number; dExag: 
 export const groundMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
 /** Per-frame facts about the camera that other scene parts read without store traffic. */
 export const sceneProbe = { cameraGround: Number.NaN };
+
+/** Lava thinner than this (m) tints the ground; thicker lava is drawn as a sheet over it. */
+const LAVA_SHEET_MIN_M = 0.5;
+/** Extra lift of the lava sheet above ground + thickness (m), so it never z-fights the ground. */
+const LAVA_SHEET_LIFT_M = 0.6;
+/** Sheet margin vertices sit this far under the ground (m). */
+const LAVA_SHEET_TUCK_M = 0.5;
 
 /** Ponded and flowing water: depth-aware water shading (see water.ts). */
 const pondWater = waterMaterial({ perVertexDepth: true });
@@ -324,7 +332,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       // lava thickness varies by tens of metres between cells; smooth it lightly so the lake/flow top is not jagged
       const lavaRaw = R(Field.LavaDepth);
       const lavaTRaw = R(Field.LavaTemperature);
-      const lavaSmooth = smoothR > 0 ? 1 : 0;
+      const lavaSmooth = smoothR > 0 ? 2 : 0;
       const lavaR = smoothedReader(lavaRaw, n, lavaSmooth);
       // temperature averaged with the same kernel, weighted by thickness: cells the smoothing spreads
       // the sheet into (no lava of their own, temperature 0) take their neighbours' temperature
@@ -377,7 +385,9 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           const x = world.origin[0] + (i + 0.5) * world.cellSize;
           const y = world.origin[1] + (j + 0.5) * world.cellSize;
           const elev = elevR(a, b);
-          const z = (elev + upR(a, b) * (dExag - 1)) * vExag;
+          const up = upR(a, b);
+          const z = groundZ(elev, up, dExag, vExag);
+          const seaZ = seaSurfaceZ(world.seaLevel, up, dExag, vExag);
           gp.setXYZ(v, x, z, -y);
           shown[v] = z;
           if (keepG && !detailCovers(world, levels, hasLod, i, j)) keepG[v] = 1;
@@ -387,7 +397,10 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           const inv = 1 / Math.hypot(hx, 1, hy);
           gn.setXYZ(v, -hx * inv, inv, hy * inv);
           colourGround(mode, world, fields, a, b, elev, eLo, eHi, maxUplift, units, c);
-          gc.setXYZ(v, lin(c[0]), lin(c[1]), lin(c[2]));
+          const g0 = c[0];
+          const g1 = c[1];
+          const g2 = c[2];
+          gc.setXYZ(v, lin(g0), lin(g1), lin(g2));
 
           // Lava: lit crust blending into incandescence by temperature. Vertices just outside the sheet
           // sit on the ground in the ground's colour, so the margin fades into the terrain over one cell
@@ -397,38 +410,51 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           const atEdge = i <= world.tiles.minTx * t || j <= world.tiles.minTy * t || i >= maxI || j >= maxJ;
           const ld = atEdge ? 0 : lavaR(a, b);
           const light = crustLight(-hx * inv, inv, hy * inv);
-          if (ld > 0.02) {
+          if (ld >= LAVA_SHEET_MIN_M) {
+            // a sheet clearly above the ground (no coplanar layers: polygon offset is ineffective
+            // with the logarithmic depth buffer, so a thin lift z-fights into stripes)
             anyLava = true;
             wetL[v] = 1;
-            lp.setXYZ(v, x, z + (ld + 0.3) * vExag, -y);
-            lavaSurfaceColor(weightedTemperature(lavaTD(a, b), ld), crust, light, c);
+            lp.setXYZ(v, x, z + (ld + LAVA_SHEET_LIFT_M) * vExag, -y);
+            lavaSurfaceColor(weightedTemperature(lavaTD(a, b), ld), crust, light, c, crackPattern(x, y));
           } else {
-            lp.setXYZ(v, x, z + 0.05 * vExag, -y);
-            c[0] = Math.min(1, c[0] * light);
-            c[1] = Math.min(1, c[1] * light);
-            c[2] = Math.min(1, c[2] * light);
+            // thin films tint the ground instead of floating a sheet over it
+            if (ld > 0.02) {
+              lavaSurfaceColor(weightedTemperature(lavaTD(a, b), ld), crust, light, c, crackPattern(x, y));
+              const f = Math.min(1, ld / LAVA_SHEET_MIN_M);
+              gc.setXYZ(v, lin(g0 + (c[0] - g0) * f), lin(g1 + (c[1] - g1) * f), lin(g2 + (c[2] - g2) * f));
+            }
+            // sheet margin vertices tuck under the ground: the sheet meets it at a clean intersection
+            lp.setXYZ(v, x, z - LAVA_SHEET_TUCK_M * vExag, -y);
+            c[0] = Math.min(1, g0 * light);
+            c[1] = Math.min(1, g1 * light);
+            c[2] = Math.min(1, g2 * light);
           }
           lc.setXYZ(v, lin(c[0]), lin(c[1]), lin(c[2]));
 
-          // open sea: wherever the ground lies below sea level the sea covers it, whether or not the
-          // surface-water field carries that column (it tracks ponds, rivers and poured water)
+          // Open sea: one flat surface at sea level wherever the ground is below it, whether or not
+          // the surface-water field carries that column (it tracks ponds, rivers and poured water).
+          // Ponds and rivers above sea level keep their own surface.
           const seaDepth = seaOn ? world.seaLevel - elev : 0;
           const pond = waterR(a, b);
-          const wd = Math.max(pond, seaDepth);
-          // ignore thin sheet flow (rain films); show ponded and flowing water
-          if (wd > 0.25) {
+          if (seaDepth > 0 && seaDepth >= pond) {
             anyWater = true;
-            wetW[v] = 1;
-            wp.setXYZ(v, x, (seaDepth >= pond ? world.seaLevel * vExag : z + wd * vExag), -y);
-            wdA.setX(v, wd);
-            // shallow turquoise → deep navy (Beer–Lambert-ish with depth)
-            const deep = 1 - Math.exp(-wd / 25);
-            wc.setXYZ(v, lin(0.22 - deep * 0.18), lin(0.52 - deep * 0.36), lin(0.6 - deep * 0.3));
+            wetW[v] = SEA;
+            wp.setXYZ(v, x, seaZ, -y);
+            wdA.setX(v, seaDepth);
+          } else if (pond > 0.25) {
+            // ignore thin sheet flow (rain films); show ponded and flowing water
+            anyWater = true;
+            wetW[v] = POND;
+            wp.setXYZ(v, x, z + pond * vExag, -y);
+            wdA.setX(v, pond);
           } else {
-            wp.setXYZ(v, x, z - 2, -y);
+            // dry: a sea triangle that reaches it keeps it at sea level (the ground's depth test
+            // draws the coastline); pond triangles never use dry vertices
+            wp.setXYZ(v, x, seaOn ? seaZ : z - 2, -y);
             wdA.setX(v, 0);
-            wc.setXYZ(v, 0.2, 0.45, 0.65);
           }
+          wc.setXYZ(v, 0.2, 0.45, 0.65);
 
           const wtd = fields.wt(a, b);
           if (Number.isFinite(wtd) && wtd > 0.5) {
@@ -462,7 +488,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       }
       if (anyLava) compactIndex(lava, wetL, n, true);
       if (anyWater) {
-        compactIndex(water, wetW, n);
+        compactWater(water, wetW, n);
         wdA.needsUpdate = true;
       }
       if (anyFlow) compactIndex(flow, wetF, n);

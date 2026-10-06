@@ -34,8 +34,12 @@ export function incandescence(tempC: number): number {
  * emission. Cool or unknown temperatures give crust, never black — molten lava is always skinned
  * by a dark grey crust at its margins, not a void.
  */
-export function lavaSurfaceColor(tempC: number, crust: RGB, light: number, out: RGB): RGB {
-  const k = Number.isFinite(tempC) ? incandescence(tempC) : 0;
+export function lavaSurfaceColor(tempC: number, crust: RGB, light: number, out: RGB, crack = 1): RGB {
+  // a cooling flow is skinned by crust broken by glowing cracks: below ~1050 °C only the cracks glow
+  // fully, above it the open channel glows everywhere
+  const known = Number.isFinite(tempC);
+  const open = known ? Math.min(1, Math.max(0, (tempC - 950) / 150)) : 0;
+  const k = (known ? incandescence(tempC) : 0) * (open + (1 - open) * crack);
   const r0 = Math.min(1, crust[0] * light);
   const g0 = Math.min(1, crust[1] * light);
   const b0 = Math.min(1, crust[2] * light);
@@ -60,4 +64,33 @@ export function lavaSurfaceColor(tempC: number, crust: RGB, light: number, out: 
  */
 export function weightedTemperature(tdSmoothed: number, dSmoothed: number): number {
   return dSmoothed > 1e-6 ? tdSmoothed / dSmoothed : 0;
+}
+
+/**
+ * Crack pattern at a map point (m), in [0.15, 1]: cell-scale value noise sharpened into a network of
+ * narrow bright seams, so cooling crust reads as broken plates rather than smooth bands.
+ */
+export function crackPattern(x: number, y: number): number {
+  const n = valueNoise(x / 37, y / 37) * 0.65 + valueNoise(x / 13, y / 13) * 0.35;
+  const seam = 1 - Math.min(1, Math.abs(n - 0.5) * 6);
+  return 0.15 + 0.85 * seam * seam;
+}
+
+function hash2(i: number, j: number): number {
+  const x = Math.sin(i * 127.1 + j * 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function valueNoise(x: number, y: number): number {
+  const i = Math.floor(x);
+  const j = Math.floor(y);
+  const fx = x - i;
+  const fy = y - j;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const a = hash2(i, j);
+  const b = hash2(i + 1, j);
+  const c = hash2(i, j + 1);
+  const d = hash2(i + 1, j + 1);
+  return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
 }
