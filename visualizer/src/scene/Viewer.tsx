@@ -10,6 +10,7 @@ import type { SimEvent, WorldInfo, XY } from '../protocol/messages';
 import { QUALITY, useStore } from '../store/store';
 import { worldExtent } from '../util/world';
 import { Atmosphere } from './Atmosphere';
+import { SurgeClouds } from './SurgeClouds';
 import { Hypocentres } from './Hypocentres';
 import { LavaGlow } from './LavaGlow';
 import { LavaHalo } from './LavaHalo';
@@ -233,6 +234,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
       <EntityMarkers world={world} />
       {showHypo && <Hypocentres />}
       <Atmosphere world={world} />
+      <SurgeClouds world={world} />
       <CameraRig world={world} />
       <PerfProbe />
       <FrameScheduler world={world} />

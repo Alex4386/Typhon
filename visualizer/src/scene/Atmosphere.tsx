@@ -10,11 +10,6 @@ const PLUME_PARTICLES = 2400;
 const ASH_PARTICLES = 1600;
 const MAX_BOMBS = 400;
 const FOUNTAIN_PARTICLES = 700;
-const MAX_FRONT = 220;
-/** Front cells closer than this (m) merge into one dust puff. */
-const FRONT_MERGE_M = 90;
-/** A front puff fades out over this long after its event (simulated s). */
-const FRONT_FADE_S = 300;
 const G = 9.81;
 
 /** Soft round puff (alpha falls off smoothly), drawn once into a canvas texture. */
@@ -53,7 +48,7 @@ function hash(i: number): number {
 
 /**
  * Event-driven atmosphere: eruption column and umbrella, downwind ash cloud, ballistic bombs,
- * lightning and PDC/lahar fronts. Everything translucent is a camera-facing soft sprite on an
+ * lightning (pyroclastic flows are SurgeClouds; lahars are the ground's flow layer). Everything translucent is a camera-facing soft sprite on an
  * instanced quad (WebGPU and WebGL2 alike); counts follow the quality setting and, for the column,
  * how much of the screen it covers, so overlapping puffs do not pile up overdraw close up.
  */
@@ -62,14 +57,12 @@ export function Atmosphere({ world }: { world: WorldInfo }) {
   const plumeRef = useRef<THREE.InstancedMesh>(null);
   const ashRef = useRef<THREE.InstancedMesh>(null);
   const bombRef = useRef<THREE.InstancedMesh>(null);
-  const frontRef = useRef<THREE.InstancedMesh>(null);
   const fountainRef = useRef<THREE.InstancedMesh>(null);
   const boltGroup = useRef<THREE.Group>(null);
   const seenBolts = useRef(new Map<string, number>());
 
   const bombs = useMemo(() => events.filter((e): e is Extract<SimEvent, { kind: 'bombLaunched' }> => e.kind === 'bombLaunched').slice(-MAX_BOMBS * 2), [events]);
   const bolts = useMemo(() => events.filter((e): e is Extract<SimEvent, { kind: 'lightning' }> => e.kind === 'lightning').slice(-40), [events]);
-  const fronts = useMemo(() => events.filter((e): e is Extract<SimEvent, { kind: 'massFlowFront' }> => e.kind === 'massFlowFront').slice(-20), [events]);
 
   const boltMat = useMemo(() => new THREE.LineBasicMaterial({ color: '#e8f0ff', transparent: true, depthTest: false }), []);
   const puff = useMemo(() => puffTexture(), []);
@@ -202,38 +195,6 @@ export function Atmosphere({ world }: { world: WorldInfo }) {
       bm.instanceMatrix.needsUpdate = true;
     }
 
-    // ── PDC / lahar fronts: soft dust puffs resting on the ground, one per merged cell group ──
-    const fm = frontRef.current;
-    if (fm) {
-      let nf = 0;
-      if (show) {
-        const seen = new Set<number>();
-        // newest first: a cell covered by a newer front keeps the newer puff
-        for (let fi = fronts.length - 1; fi >= 0 && nf < MAX_FRONT; fi--) {
-          const f = fronts[fi];
-          const age = now - f.time;
-          if (age < 0 || age > FRONT_FADE_S) continue;
-          const fade = 1 - age / FRONT_FADE_S;
-          const size = (f.flow === 'LAHAR' ? 70 : 140) * (0.6 + 0.4 * fade);
-          for (const c of f.cells) {
-            if (nf >= MAX_FRONT) break;
-            const key = Math.round(c[0] / FRONT_MERGE_M) * 73856093 + Math.round(c[1] / FRONT_MERGE_M) * 19349663;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            const ground = Math.max(displayZ(world, c[0], c[1], vExag, dExag), (world.hasSea === false ? -Infinity : world.seaLevel) * vExag);
-            m.compose(p.set(c[0], ground + size * 0.35, -c[1]), q, s.set(size, size * 0.7, size));
-            fm.setMatrixAt(nf, m);
-            tint.set(f.flow === 'LAHAR' ? '#6f5a44' : '#b9ab98').multiplyScalar(0.55 + 0.45 * fade);
-            fm.setColorAt(nf, tint);
-            nf++;
-          }
-        }
-      }
-      fm.count = nf;
-      if (fm.instanceColor) fm.instanceColor.needsUpdate = true;
-      fm.instanceMatrix.needsUpdate = true;
-    }
-
     // ── lightning: flash for 0.5 s of wall time after first sight ──
     const g = boltGroup.current;
     if (g) {
@@ -285,11 +246,6 @@ export function Atmosphere({ world }: { world: WorldInfo }) {
       <instancedMesh ref={bombRef} args={[undefined, undefined, MAX_BOMBS]} frustumCulled={false} renderOrder={9}>
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial map={puff} color="#ff8a3c" transparent opacity={0.95} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
-      </instancedMesh>
-      {/* pyroclastic-flow and lahar fronts: soft dust billows (instance colour carries kind and fade) */}
-      <instancedMesh ref={frontRef} args={[undefined, undefined, MAX_FRONT]} frustumCulled={false} renderOrder={8}>
-        <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial map={puff} transparent opacity={0.5} depthWrite={false} />
       </instancedMesh>
       <group ref={boltGroup} />
     </group>
