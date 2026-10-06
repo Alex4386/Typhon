@@ -137,6 +137,32 @@ public final class SurfaceDetail {
         return cells[fineIndex(fx, fz)] + (surface - seen[c]);
     }
 
+    /**
+     * Elevations (m, without uplift) of the {@code r × r} cells of column ({@code x}, {@code z}) into
+     * {@code out}, row-major from its north-west cell ({@code out[j·r + i]} is cell
+     * {@code (x·r + i, z·r + j)}); NaN outside the region or over an unknown column. Like
+     * {@link #elevation} for every cell, with one column lookup.
+     */
+    public void columnCells(int x, int z, float[] out) {
+        double surface = containsColumn(x, z) ? world.surfaceZ(x, z) : Double.NaN;
+        if (Double.isNaN(surface)) {
+            java.util.Arrays.fill(out, 0, r * r, Float.NaN);
+            return;
+        }
+        int c = columnIndex(x, z);
+        if (Double.isNaN(seen[c])) {
+            double[] offsets = new double[r * r];
+            initialOffsets(x, z, offsets);
+            for (int k = 0; k < r * r; k++) out[k] = (float) (surface + offsets[k]);
+            return;
+        }
+        double shift = surface - seen[c];
+        for (int j = 0; j < r; j++) {
+            int row = fineIndex(x * r, z * r + j);
+            for (int i = 0; i < r; i++) out[j * r + i] = (float) (cells[row + i] + shift);
+        }
+    }
+
     /** Mean of the detail cells of column ({@code x}, {@code z}) — equal to its surface (m). */
     public double columnMean(int x, int z) {
         double sum = 0;

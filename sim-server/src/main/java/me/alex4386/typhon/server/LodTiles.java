@@ -217,25 +217,46 @@ final class LodTiles {
         return out;
     }
 
+    /** What {@link #sampleEngine} read from the live simulation for one refresh. */
+    record EngineSample(Map<Integer, float[][]> fineElevation, Map<Integer, float[]> ashOutside) {}
+
     /**
-     * Samples the subscribed levels' fields. Runs on the engine thread: coarse levels restrict the
-     * level-0 tiles just sampled ({@code core}, per field), fine levels read the surface detail.
+     * The part of a refresh that reads live state, so it runs on the engine thread: fine-level
+     * elevations (when {@code SurfaceElevation} is due) and the tephra deposit at coarse cells
+     * reaching outside the core (when {@code AshDepth} is due). Cheap: one detail read per column.
      */
-    Map<Integer, Map<Field, float[][]>> sample(Scenario s, Map<Field, float[][]> core, Set<Integer> wanted) {
+    EngineSample sampleEngine(Scenario s, Set<Field> due, Set<Integer> wanted) {
+        Map<Integer, float[][]> fine = new TreeMap<>();
+        Map<Integer, float[]> ash = new TreeMap<>();
+        for (int level : wanted) {
+            Level l = levels.get(level);
+            if (l == null) continue;
+            if (l.level < 0 && due.contains(Field.SURFACE_ELEVATION)) fine.put(level, fine(s, l));
+            if (l.level > 0 && due.contains(Field.ASH_DEPTH)) ash.put(level, ashOutside(s, l));
+        }
+        return new EngineSample(fine, ash);
+    }
+
+    /**
+     * Builds the subscribed levels' tiles from the level-0 tiles of this refresh ({@code core}) and
+     * the engine sample. Pure arithmetic: runs off the engine thread.
+     */
+    Map<Integer, Map<Field, float[][]>> assemble(Map<Field, float[][]> core, EngineSample live, Set<Integer> wanted) {
         Map<Integer, Map<Field, float[][]>> out = new TreeMap<>();
         Map<Field, double[]> sat = new EnumMap<>(Field.class);
         for (int level : wanted) {
             Level l = levels.get(level);
             if (l == null) continue;
             Map<Field, float[][]> values = new EnumMap<>(Field.class);
-            for (Map.Entry<Field, float[][]> e : core.entrySet()) {
-                Field f = e.getKey();
-                if (!l.fields.contains(f)) continue;
-                if (l.level > 0) {
+            if (l.level < 0) {
+                float[][] e = live.fineElevation().get(level);
+                if (e != null) values.put(Field.SURFACE_ELEVATION, e);
+            } else {
+                for (Map.Entry<Field, float[][]> e : core.entrySet()) {
+                    Field f = e.getKey();
+                    if (!l.fields.contains(f)) continue;
                     double[] table = sat.computeIfAbsent(f, k -> summedArea(e.getValue()));
-                    values.put(f, coarse(s, l, f, table));
-                } else if (f == Field.SURFACE_ELEVATION) {
-                    values.put(f, fine(s, l));
+                    values.put(f, coarse(l, f, table, live.ashOutside().get(level)));
                 }
             }
             if (!values.isEmpty()) out.put(level, values);
@@ -265,12 +286,31 @@ final class LodTiles {
         return sat;
     }
 
-    private float[][] coarse(Scenario s, Level l, Field f, double[] sat) {
+    /** Tephra deposit (m) at the centre of every cell of a coarse level that reaches outside the core. */
+    private float[] ashOutside(Scenario s, Level l) {
+        int w = l.width();
+        int n = (int) l.factor;
+        float[] out = new float[w * l.height()];
+        List<VolcanoSystem> volcanoes = s.volcanoes();
+        for (int j = 0; j < l.height(); j++) {
+            for (int i = 0; i < w; i++) {
+                if (Float.isNaN(l.contextElevation[j * w + i])) continue; // inside the core
+                int cx = (int) l.columnX(map, l.minI + i) + n / 2;
+                int cz = (int) l.columnZ(map, l.minJ + j) + n / 2;
+                double d = 0;
+                for (VolcanoSystem v : volcanoes) d += v.tephra().depositThickness(cx, cz);
+                out[j * w + i] = (float) d;
+            }
+        }
+        return out;
+    }
+
+    private float[][] coarse(Level l, Field f, double[] sat, float[] ashOutside) {
         int t = map.tileSize;
         int w = map.maxX - map.minX + 1;
         int n = (int) l.factor;
+        double area = (double) n * n;
         float[][] tiles = new float[l.store.tileCount()][];
-        List<VolcanoSystem> volcanoes = s.volcanoes();
         for (int k = 0; k < tiles.length; k++) {
             int tx = k % l.store.tilesX();
             int ty = k / l.store.tilesX();
@@ -296,16 +336,11 @@ final class LodTiles {
                                 + sat[z1 * (w + 1) + x1];
                         count = (x2 - x1) * (z2 - z1);
                     }
-                    double area = (double) n * n;
                     double outside = 0;
                     if (count < area) {
-                        if (f == Field.SURFACE_ELEVATION) {
-                            outside = l.contextElevation[j * l.width() + i];
-                        } else if (f == Field.ASH_DEPTH) {
-                            int cx = x0 + n / 2;
-                            int cz = z0 + n / 2;
-                            for (VolcanoSystem vs : volcanoes) outside += vs.tephra().depositThickness(cx, cz);
-                        }
+                        int cell = j * l.width() + i;
+                        if (f == Field.SURFACE_ELEVATION) outside = l.contextElevation[cell];
+                        else if (f == Field.ASH_DEPTH && ashOutside != null) outside = ashOutside[cell];
                     }
                     v[r * t + c] = (float) ((inside + outside * (area - count)) / area);
                 }
@@ -315,36 +350,48 @@ final class LodTiles {
         return tiles;
     }
 
+    /** Fine-level elevations, column by column: one surface, uplift and detail read per column. */
     private float[][] fine(Scenario s, Level l) {
         WorldModel world = s.terrain().world();
         int t = map.tileSize;
         int r = (int) Math.round(1 / l.factor);
+        int w = l.width();
+        float[] all = new float[w * l.height()];
+        float[] cells = new float[r * r];
+        int colX0 = Math.floorDiv(map.minX * r + l.minI, r);
+        int colX1 = Math.floorDiv(map.minX * r + l.maxI, r);
+        int colZ0 = Math.floorDiv((map.maxZ + 1) * r - l.maxJ - 1, r);
+        int colZ1 = Math.floorDiv((map.maxZ + 1) * r - l.minJ - 1, r);
+        for (int z = colZ0; z <= colZ1; z++) {
+            for (int x = colX0; x <= colX1; x++) {
+                double surface = world.surfaceZ(x, z);
+                double uplift = Double.isNaN(surface) ? 0 : world.uplift(x, z);
+                boolean detailed = false;
+                for (SurfaceDetail d : l.details) {
+                    if (d.containsColumn(x, z)) {
+                        d.columnCells(x, z, cells);
+                        detailed = true;
+                        break;
+                    }
+                }
+                double base = Double.isNaN(surface) ? context.elevation(x + 0.5, z + 0.5) : surface + uplift;
+                for (int b = 0; b < r; b++) {
+                    for (int a = 0; a < r; a++) {
+                        int i = x * r + a - map.minX * r - l.minI;
+                        int j = (map.maxZ + 1) * r - (z * r + b) - 1 - l.minJ;
+                        if (i < 0 || i >= w || j < 0 || j >= l.height()) continue;
+                        double e = detailed && !Float.isNaN(cells[b * r + a]) ? cells[b * r + a] + uplift : base;
+                        all[j * w + i] = (float) e;
+                    }
+                }
+            }
+        }
         float[][] tiles = new float[l.store.tileCount()][];
         for (int k = 0; k < tiles.length; k++) {
             int tx = k % l.store.tilesX();
             int ty = k / l.store.tilesX();
             float[] v = new float[t * t];
-            for (int row = 0; row < t; row++) {
-                for (int c = 0; c < t; c++) {
-                    int i = l.minI + tx * t + c;
-                    int j = l.minJ + ty * t + row;
-                    int fx = map.minX * r + i;
-                    int fz = (map.maxZ + 1) * r - j - 1;
-                    int x = Math.floorDiv(fx, r);
-                    int z = Math.floorDiv(fz, r);
-                    double e = Double.NaN;
-                    for (SurfaceDetail d : l.details) {
-                        if (d.contains(fx, fz)) {
-                            e = d.elevation(fx, fz);
-                            break;
-                        }
-                    }
-                    if (Double.isNaN(e)) e = world.surfaceZ(x, z);
-                    if (Double.isNaN(e)) e = context.elevation(x + 0.5, z + 0.5);
-                    else e += world.uplift(x, z);
-                    v[row * t + c] = (float) e;
-                }
-            }
+            for (int row = 0; row < t; row++) System.arraycopy(all, (ty * t + row) * w + tx * t, v, row * t, t);
             tiles[k] = v;
         }
         return tiles;

@@ -652,11 +652,14 @@ final class Session implements AutoCloseable {
         if (due.isEmpty()) return 0;
         GridMapping m = map;
         TileStore store = tiles;
+        record Live(Map<Field, float[][]> values, LodTiles.EngineSample lod, double time) {}
+        Live live = call(s -> new Live(FieldSampler.sample(s, m, due),
+                levels.isEmpty() ? null : pyramid.sampleEngine(s, due, levels), s.engine().time()))
+                .get(10, TimeUnit.SECONDS);
+        // The pyramid's coarse levels are block means of the level-0 tiles: built off the engine thread.
         record Sampled(Map<Field, float[][]> values, Map<Integer, Map<Field, float[][]>> lod, double time) {}
-        Sampled sampled = call(s -> {
-            Map<Field, float[][]> core = FieldSampler.sample(s, m, due);
-            return new Sampled(core, levels.isEmpty() ? Map.of() : pyramid.sample(s, core, levels), s.engine().time());
-        }).get(10, TimeUnit.SECONDS);
+        Sampled sampled = new Sampled(live.values(),
+                live.lod() == null ? Map.of() : pyramid.assemble(live.values(), live.lod(), levels), live.time());
         int changed = 0;
         for (Map.Entry<Field, float[][]> e : sampled.values().entrySet()) {
             boolean force;
