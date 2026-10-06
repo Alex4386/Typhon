@@ -279,7 +279,11 @@ This is a snapshot of 0D state per volcano (from `runner` snapshots), sent ≥ 2
    "plume":{"topZ":9200,"massRateKgS":2.1e6}}}}
 ```
 
-- `eruptionRate` is DRE m³/s.
+- `eruptionRate` is DRE m³ per **simulated** second (it includes the eruptive time compression);
+  `physicalEruptionRate` is DRE m³/s of volcano time and is what a status display should show.
+- `ruptureOverpressureMPa` is the wall-rupture limit the chamber's overpressure never exceeds;
+  `failureOverpressureMPa` is where the conduit/roof fails and eruptions or dikes start. Show
+  "pressure % of limit" against `failureOverpressureMPa`.
 - `regime` is one of `NONE`, `FOUNTAINING`, `OPEN_VENT`, `EFFUSIVE`, `DOME`, `EXPLOSIVE`, `SURTSEYAN`: a descriptor
   derived from the conduit flow (never an input).
 - `alert.level` is one of the six alert levels; `alert.style` is the eruption style *estimated* from what the

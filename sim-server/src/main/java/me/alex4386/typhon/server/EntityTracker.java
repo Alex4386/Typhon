@@ -169,7 +169,7 @@ final class EntityTracker {
             cp.add("crystalFraction", Json.num(ch.crystalFraction()));
             cp.add("volumeM3", Json.num(ch.volumeM3()));
             cp.add("depthM", Json.num(ch.physicalDepthM()));
-            cp.add("eruptionRateM3PerS", Json.num(ch.eruptionRate()));
+            cp.add("eruptionRateM3PerS", Json.num(ch.physicalEruptionRate())); // volcano time
             cp.addProperty("regime", EventTranslator.regime(ch.eruptiveRegime()));
             var style = v.classifier().style();
             if (style != null) cp.addProperty("styleEstimate", style.name());

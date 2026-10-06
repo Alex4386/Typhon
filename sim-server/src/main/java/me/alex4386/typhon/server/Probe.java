@@ -267,7 +267,10 @@ final class Probe {
             chamber.add("silicaWt", Json.num(ch.silicaWt()));
             chamber.add("waterWt", Json.num(ch.waterWt()));
             chamber.add("crystalFraction", Json.num(ch.crystalFraction()));
-            chamber.add("eruptionRate", Json.num(ch.eruptionRate()));
+            chamber.add("eruptionRate", Json.num(ch.eruptionRate())); // per simulated second (time-compressed)
+            chamber.add("physicalEruptionRate", Json.num(ch.physicalEruptionRate())); // m³/s of volcano time
+            chamber.add("ruptureOverpressureMPa", Json.num(ch.ruptureOverpressureMPa()));
+            chamber.add("failureOverpressureMPa", Json.num(ch.failureOverpressureMPa()));
             chamber.add("volumeM3", Json.num(ch.volumeM3()));
             String regime = v.coupler().phreatomagmatic() ? "SURTSEYAN" : EventTranslator.regime(ch.eruptiveRegime());
             chamber.addProperty("regime", regime);

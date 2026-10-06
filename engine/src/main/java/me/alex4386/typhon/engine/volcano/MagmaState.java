@@ -44,6 +44,14 @@ public interface MagmaState {
     }
 
     /** Chamber volume (m³), {@code NaN} if unknown. */
+    /**
+     * Magma accommodated by inelastic chamber growth after wall rupture (m³), beyond what the
+     * elastic overpressure stores. Inflates the ground like any other volume change.
+     */
+    default double inelasticVolumeChangeM3() {
+        return 0;
+    }
+
     default double volumeM3() {
         return Double.NaN;
     }

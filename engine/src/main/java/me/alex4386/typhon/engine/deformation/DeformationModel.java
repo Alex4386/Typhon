@@ -89,7 +89,8 @@ public final class DeformationModel implements Subsystem {
 
     /** Chamber (Mogi) volume change relative to zero overpressure (m³). */
     public double chamberVolumeChange() {
-        return Mogi.volumeChange(config.chamberVolume, magma.overpressureMPa(), config.shearModulusPa);
+        return Mogi.volumeChange(config.chamberVolume, magma.overpressureMPa(), config.shearModulusPa)
+                + magma.inelasticVolumeChangeM3();
     }
 
     /** Surface displacement (real metres) at world position ({@code x}, {@code z}). */

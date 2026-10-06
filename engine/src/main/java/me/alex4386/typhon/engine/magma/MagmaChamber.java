@@ -92,9 +92,21 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     static final double RESOLVE_TOLERANCE = 0.02;
     /** Width (log10 Pa·s) of the transition from soft lava to a gas-tight plug. */
     static final double PLUG_TRANSITION_LOG10 = 0.5;
+    /**
+     * Highest overpressure the chamber walls sustain, as a multiple of the failure overpressure.
+     * Chambers rupture at overpressures of the order of the host rock's tensile strength, typically a
+     * few to ~20 MPa (Gudmundsson 2012, JVGR 237-238:19-41; Jellinek &amp; DePaolo 2003); once the wall
+     * fails, magma beyond what the walls can store elastically leaves the elastic budget (it inflates
+     * the chamber inelastically, intrudes or erupts) instead of raising the pressure further.
+     */
+    static final double RUPTURE_MARGIN = 1.25;
 
     private final MagmaChamberConfig config;
 
+    /** Current chamber volume (m³): the configured volume plus magma stored inelastically. */
+    private double volume;
+    /** Magma accommodated beyond the walls' elastic capacity (m³; chamber growth after wall failure). */
+    private double inelasticGrowth;
     private double overpressure;
     private double temperature;
     private double bulkSilica;
@@ -143,7 +155,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     public MagmaChamber(MagmaChamberConfig config) {
         this.config = config;
-        this.overpressure = config.initialOverpressureMPa();
+        this.volume = config.volume();
+        this.overpressure = Math.min(config.initialOverpressureMPa(), ruptureCap(config));
         this.temperature = config.initialTemperatureC();
         this.bulkSilica = config.initialSilicaWt();
         this.bulkWater = config.initialWaterWt();
@@ -239,12 +252,12 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         bulkWater -= ventedWater;
         bulkCo2 -= ventedCo2;
         // Free gas leaving the chamber rises through an open conduit (through the crust otherwise).
-        double magmaMass = config.volume() * MAGMA_DENSITY;
+        double magmaMass = volume * MAGMA_DENSITY;
         double conduitShare = erupting ? 1 : conduitOpenness;
         double gasWater = ventedWater / 100 * magmaMass * conduitShare;
         double gasCo2 = ventedCo2 / 100 * magmaMass * conduitShare;
 
-        double stiffness = config.volume() * effectiveCompressibility(); // m³ per MPa
+        double stiffness = volume * effectiveCompressibility(); // m³ per MPa
         double previous = overpressure;
         double erupted = 0;
 
@@ -277,7 +290,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
                 } else {
                     overpressure += inflow / stiffness;
                 }
-                erupted = Math.max(0, inflow - stiffness * (overpressure - previous));
+                double stored = relieveRupture();
+                erupted = Math.max(0, inflow - stored - stiffness * (overpressure - previous));
                 eruptedVolume += erupted;
 
                 runConduitGas(context, flow, physicalDt, gasWater, gasCo2);
@@ -290,6 +304,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             percolateGas(context, physicalDt, gasWater, gasCo2);
             conduitOpenness *= Math.exp(-physicalDt / config.conduit().conduitSealTimescale());
             overpressure += inflow / stiffness;
+            relieveRupture();
             if (!summitBlocked && overpressure >= failureOverpressureMPa()) {
                 startEruption(context, Cause.AUTOMATIC);
             }
@@ -660,9 +675,41 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     private void inject(double volume, double temperatureC, double silicaWt, double waterWt, double co2Wt,
             double crystals) {
-        double stiffness = config.volume() * effectiveCompressibility();
+        double stiffness = this.volume * effectiveCompressibility();
         mix(volume, temperatureC, silicaWt, waterWt, co2Wt, crystals);
         overpressure += volume / stiffness;
+        relieveRupture();
+    }
+
+    /** Overpressure (MPa) at which the chamber walls rupture; never exceeded. */
+    public double ruptureOverpressureMPa() {
+        return RUPTURE_MARGIN * Math.max(config.tensileStrengthMPa(), failureOverpressureMPa());
+    }
+
+    private static double ruptureCap(MagmaChamberConfig c) {
+        return RUPTURE_MARGIN * Math.max(c.tensileStrengthMPa(), c.conduit().reopenOverpressureMPa());
+    }
+
+    /**
+     * Wall failure: overpressure above {@link #ruptureOverpressureMPa()} cannot be stored elastically.
+     * The excess magma is accommodated by inelastic chamber growth (the volume it would have taken to
+     * reach that pressure), which the deformation model sees as inflation, and the pressure stays at
+     * the rupture limit, where dikes nucleate and eruptions start. Returns the volume moved (m³).
+     */
+    private double relieveRupture() {
+        double cap = ruptureOverpressureMPa();
+        if (!(overpressure > cap)) return 0;
+        double excess = (overpressure - cap) * volume * effectiveCompressibility();
+        overpressure = cap;
+        volume += excess;
+        inelasticGrowth += excess;
+        return excess;
+    }
+
+    /** Magma stored by inelastic growth after wall failure (m³). */
+    @Override
+    public double inelasticVolumeChangeM3() {
+        return inelasticGrowth;
     }
 
     /**
@@ -673,7 +720,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private void mix(double volume, double temperatureC, double silicaWt, double waterWt, double co2Wt,
             double crystals) {
         if (!(volume > 0)) return;
-        double f = volume / (config.volume() + volume);
+        double f = volume / (this.volume + volume);
         double melt = 1 - Math.max(0, Math.min(1, crystals));
         double enthalpy = enthalpy(temperature, crystalFraction());
         enthalpy += f * (enthalpy(temperatureC, crystals) - enthalpy);
@@ -715,7 +762,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      */
     public double withdraw(double volume) {
         if (!(volume > 0)) return 0;
-        double drop = volume / (config.volume() * effectiveCompressibility());
+        double drop = volume / (this.volume * effectiveCompressibility());
         overpressure -= drop;
         return drop;
     }
@@ -830,7 +877,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     @Override
     public double volumeM3() {
-        return config.volume();
+        return volume;
     }
 
     @Override
@@ -853,7 +900,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         if (temperature > SOLIDUS_C && temperature < liquidus && liquidus > SOLIDUS_C) {
             cEff += LATENT_HEAT_CRYSTALLISATION / (liquidus - SOLIDUS_C);
         }
-        return MAGMA_DENSITY * cEff * config.volume() * excess / config.coolingTimescale();
+        return MAGMA_DENSITY * cEff * volume * excess / config.coolingTimescale();
     }
 
     @Override
@@ -988,6 +1035,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         out.addProperty("outletCapacity", outletCapacity);
         out.addProperty("summitBlocked", summitBlocked);
         out.addProperty("overpressure", overpressure);
+        out.addProperty("volume", volume);
+        out.addProperty("inelasticGrowth", inelasticGrowth);
         out.addProperty("temperature", temperature);
         out.addProperty("bulkSilica", bulkSilica);
         out.addProperty("bulkWater", bulkWater);
@@ -1045,6 +1094,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         outletCapacity = number(in, "outletCapacity", 1);
         summitBlocked = in.has("summitBlocked") && in.get("summitBlocked").getAsBoolean();
         overpressure = in.get("overpressure").getAsDouble();
+        volume = in.has("volume") ? in.get("volume").getAsDouble() : config.volume();
+        inelasticGrowth = in.has("inelasticGrowth") ? in.get("inelasticGrowth").getAsDouble() : 0;
         temperature = in.get("temperature").getAsDouble();
         bulkSilica = in.get("bulkSilica").getAsDouble();
         bulkWater = in.get("bulkWater").getAsDouble();
