@@ -83,7 +83,9 @@ class KeyEventsBacklogTest {
             }
             try (TestClient late = attach(server)) {
                 JsonObject backlog = late.awaitType("events", 30).json();
-                assertTrue(hasKind(backlog, "eruptionStarted"), "the late client's backlog has the eruption start");
+                StringBuilder kinds = new StringBuilder();
+                for (var e : backlog.getAsJsonArray("events")) kinds.append(e.getAsJsonObject().get("kind").getAsString()).append(' ');
+                assertTrue(hasKind(backlog, "eruptionStarted"), "the late client's backlog has the eruption start: " + kinds);
             }
         } finally {
             server.close();

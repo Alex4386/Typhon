@@ -557,21 +557,23 @@ public final class SimServer implements AutoCloseable {
 
     /** Sends the attach burst (§2): attached, units, state, events backlog, replayInfo, clock. */
     void attach(ClientConnection c, Session s) {
-        c.session = s;
-        c.subscribe(Set.of(), null);
         try {
             JsonObject attached = Json.obj("attached");
             attached.addProperty("sessionId", s.id);
             attached.add("world", s.worldInfo());
-            c.send(attached);
-            JsonArray fresh = new JsonArray();
-            JsonObject state = s.state(fresh);
             JsonObject units = Json.obj("units");
-            units.add("units", s.allUnits());
+            units.add("units", s.allUnits()); // may wait for the engine: before joining the session
             units.addProperty("replace", true);
-            c.send(units);
-            c.send(state);
-            c.send(s.backlog(s.time()));
+            // Join and send the backlog between pump cycles: events the pump drained before are in the
+            // backlog, later ones arrive live after it — none twice, none lost, none ahead of the backlog.
+            synchronized (s.pumpLock) {
+                c.session = s;
+                c.subscribe(Set.of(), null);
+                c.send(attached);
+                c.send(units);
+                c.send(s.state(new JsonArray()));
+                c.send(s.backlog(s.time()));
+            }
             c.send(s.entitiesFull());
             c.send(s.replayInfo());
             c.send(s.clock());
@@ -845,7 +847,10 @@ public final class SimServer implements AutoCloseable {
         for (Session s : sessions()) {
             try {
                 s.refreshSummary();
-                pump(s);
+                // an attaching client joins between pump cycles, so its backlog and the live events meet exactly
+                synchronized (s.pumpLock) {
+                    pump(s);
+                }
             } catch (Exception e) {
                 LOG.log(Level.WARNING, "Pump of session " + s.id + " failed", e);
             }
