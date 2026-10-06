@@ -28,3 +28,4 @@ sim-out/
 
 # private Gradle daemon registry of agent worktrees
 .gradle-registry/
+/.gradle-reg-main/
