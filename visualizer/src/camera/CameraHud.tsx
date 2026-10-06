@@ -85,7 +85,7 @@ export function CameraBar({ world }: { world: WorldInfo }) {
   };
 
   return (
-    <div className={cn(OVERLAY, 'absolute right-3 bottom-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-col gap-1 p-1.5')}>
+    <div className={cn(OVERLAY, 'flex max-w-full shrink-0 flex-col gap-1 p-1.5')}>
       <div className="flex flex-wrap items-center justify-end gap-1" role="toolbar" aria-label="Camera">
         {modes.map((m) => (
           <Tip key={m} content={`${MODE_LABEL[m].title} [${MODE_LABEL[m].key}]`} side="top">
@@ -246,7 +246,7 @@ export function CameraReadoutPanel() {
   const deg = (r.heading * 180) / Math.PI;
   return (
     <Tip content="Camera position (world metres)" side="top">
-      <div className={cn(OVERLAY, 'absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 py-1.5 pr-3 pl-1.5 text-[11px] tabular-nums max-lg:bottom-16')}>
+      <div className={cn(OVERLAY, 'flex shrink-0 items-center gap-2 py-1.5 pr-3 pl-1.5 text-[11px] tabular-nums')}>
         <button
           type="button"
           className="relative size-11 shrink-0 rounded-full border bg-[radial-gradient(circle,#24303d_0%,#161b22_70%)]"
@@ -413,7 +413,7 @@ export function Minimap({ world }: { world: WorldInfo }) {
 
   if (!open) return null;
   return (
-    <div className={cn(OVERLAY, 'absolute right-3 bottom-14 z-10 p-1')} title="Click to fly there">
+    <div className={cn(OVERLAY, 'relative shrink-0 p-1 short:hidden')} title="Click to fly there">
       <div className="relative" style={{ width: MAP_PX, height: MAP_PX }}>
         <canvas ref={base} width={MAP_PX} height={MAP_PX} className="absolute inset-0 rounded-md" />
         <canvas

@@ -84,7 +84,7 @@ export function Inspector({ world }: { world: WorldInfo }) {
   const anchor = selectionAnchor(selection, useStore.getState().entities);
 
   return (
-    <aside className={cn(OVERLAY, 'absolute top-3 right-3 z-10 flex max-h-[calc(100%-5.5rem)] w-80 flex-col text-sm')} aria-label="Inspector">
+    <aside className={cn(OVERLAY, 'flex max-h-full min-h-0 w-80 max-w-full flex-col text-sm')} aria-label="Inspector">
       <div className="flex items-start gap-2 p-3 pb-2">
         <span className="mt-1 size-3 shrink-0 rounded-full ring-1 ring-black/40" style={{ background: color }} aria-hidden />
         <div className="min-w-0 flex-1">
@@ -104,7 +104,7 @@ export function Inspector({ world }: { world: WorldInfo }) {
       </div>
       <ActionRow world={world} onFrame={frame} onSection={cut} />
       <Separator />
-      <div className="flex min-h-0 flex-col gap-3 overflow-y-auto p-3">
+      <div className="flex min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain p-3">
         {selection.type === 'entity' && entity && <EntityProps e={entity} />}
         {selection.type === 'entity' && entity?.kind === 'chamber' && entity.volcanoId && <LandscapeSummary volcanoId={entity.volcanoId} />}
         {selection.type === 'entity' && !entity && <p className="text-muted-foreground">This no longer exists.</p>}

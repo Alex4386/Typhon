@@ -1,4 +1,3 @@
-import { toast as sonner } from 'sonner';
 import { create } from 'zustand';
 import { Field, type FieldId } from '../protocol/fields';
 import { DETAIL_TOLERANCE_M, detailMismatch } from '../scene/detail';
@@ -31,6 +30,18 @@ export type ToastTone = 'info' | 'warn' | 'alert';
 export interface ToastAction {
   label: string;
   onClick: () => void;
+}
+
+/** A notification shown over the 3D view (HUD toasts); the same text replaces an older one. */
+export interface HudToast {
+  id: string;
+  text: string;
+  tone: ToastTone;
+  action?: ToastAction;
+  /** How long it stays (ms). */
+  duration: number;
+  /** Bumped when the same text is raised again, so its timer restarts. */
+  serial: number;
 }
 
 /** What the pointer is over in the 3D view (label shown next to the cursor). */
@@ -134,6 +145,8 @@ interface Store {
   hoverId: string | null;
   /** Show the minimap (off by default to keep the view clean). */
   showMinimap: boolean;
+  toasts: HudToast[];
+  dismissToast: (id: string) => void;
   /** Show the full camera toolbar (follow, tour, bookmarks, framing). */
   showCameraTools: boolean;
   guideOpen: boolean;
@@ -239,6 +252,7 @@ export const useStore = create<Store>((set, get) => ({
   hover: null,
   hoverId: null,
   showMinimap: false,
+  toasts: [],
   showCameraTools: false,
   guideOpen: !guideSeen(),
   paletteOpen: false,
@@ -443,11 +457,14 @@ export const useStore = create<Store>((set, get) => ({
   openDrawer: (tab) => set({ drawer: get().drawer === tab ? null : tab }),
 
   toast: (text, tone = 'info', action) => {
-    const opts = { id: text, duration: tone === 'alert' ? 9000 : 6000, ...(action ? { action } : {}) };
-    if (tone === 'alert') sonner.error(text, opts);
-    else if (tone === 'warn') sonner.warning(text, opts);
-    else sonner(text, opts);
+    set((s) => {
+      const previous = s.toasts.find((t) => t.id === text);
+      const t: HudToast = { id: text, text, tone, action, duration: tone === 'alert' ? 9000 : 6000, serial: (previous?.serial ?? 0) + 1 };
+      return { toasts: [...s.toasts.filter((x) => x.id !== text), t].slice(-6) };
+    });
   },
+
+  dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
   applyEntities: (m) => {
     const u = applyEntities(get().entities, m, performance.now());

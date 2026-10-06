@@ -4,6 +4,8 @@
 @import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
+/* Short viewports (laptops with a docked browser bar, landscape tablets): the HUD condenses. */
+@custom-variant short (@media (max-height: 640px));
 
 @theme inline {
     --font-heading: var(--font-sans);

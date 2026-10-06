@@ -14,6 +14,7 @@ import type { ParamSpec, ParamValue, SimCommand, VolcanoState, WorldInfo } from 
 import { useStore, type Tool } from '../store/store';
 import { ALERT_COLORS } from '../util/color';
 import { formatDuration, formatFactor } from '../util/world';
+import { SHORT_VIEWPORT, useMediaQuery } from '../util/useMediaQuery';
 import { ALERT_LABEL, REGIME_LABEL, STYLE_LABEL } from './events';
 import { FALLBACK_INJECT_FIELDS, MAGMA_PRESETS, fieldError, formatVolume, injectWarnings, mixPreview } from './inject';
 import { injectFieldsFor } from './actions';
@@ -45,15 +46,17 @@ function StatRow({ label, help, children }: { label: string; help: string; child
 export function StatusCard({ world }: { world: WorldInfo }) {
   const { id, name, vs } = useVolcano(world);
   const set = useStore((s) => s.set);
-  const [collapsed, setCollapsed] = useState(false);
+  const short = useMediaQuery(SHORT_VIEWPORT);
+  const [collapsed, setCollapsed] = useState(short);
+  useEffect(() => setCollapsed(short), [short]); // short viewports start with the one-line summary
   if (!id) return null;
   const level = vs?.alert.level ?? 'DORMANT';
   const erupting = (vs?.chamber.eruptionRate ?? 0) > 0 || level === 'ERUPTING';
   const pressure = vs && vs.chamber.tensileStrengthMPa > 0 ? vs.chamber.overpressureMPa / vs.chamber.tensileStrengthMPa : null;
   const tc = vs?.timeCompression;
   return (
-    <section className={`${OVERLAY} absolute top-3 left-3 z-10 w-72 p-3 text-sm`} aria-label="Volcano status">
-      <div className="flex items-center gap-2">
+    <section className={`${OVERLAY} flex max-h-full min-h-0 w-72 max-w-full flex-col p-3 text-sm`} aria-label="Volcano status">
+      <div className="flex shrink-0 items-center gap-2">
         {world.volcanoes.length > 1 ? (
           <SimpleSelect label="Volcano" value={id} onChange={(v) => set({ selectedVolcano: v })} options={world.volcanoes.map((v) => [v.id, v.name] as const)} />
         ) : (
@@ -70,7 +73,7 @@ export function StatusCard({ world }: { world: WorldInfo }) {
         </Tip>
       </div>
       {!collapsed && vs && (
-        <>
+        <div className="-mr-2 min-h-0 overflow-y-auto overscroll-contain pr-2">
           <p className="mt-2 font-medium">
             {erupting
               ? vs.alert.style
@@ -84,8 +87,8 @@ export function StatusCard({ world }: { world: WorldInfo }) {
           </p>
           <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
             {erupting && (
-              <StatRow label="Lava output" help="Dense-rock-equivalent volume of magma leaving the vent">
-                {vs.chamber.eruptionRate >= 10 ? vs.chamber.eruptionRate.toFixed(0) : vs.chamber.eruptionRate.toFixed(1)} m³/s
+              <StatRow label="Lava output" help="Dense-rock-equivalent volume of magma leaving the vent, per second of volcano time (comparable with real eruptions)">
+                {formatRate(vs.chamber.physicalEruptionRate ?? vs.chamber.eruptionRate)} m³/s
               </StatRow>
             )}
             {vs.plume && vs.plume.topZ > 0 && (
@@ -125,7 +128,7 @@ export function StatusCard({ world }: { world: WorldInfo }) {
               Inspect chamber
             </Button>
           </div>
-        </>
+        </div>
       )}
     </section>
   );
@@ -286,9 +289,6 @@ const TOOL_HINT: Partial<Record<Tool, string>> = {
 export function ActionBar({ world }: { world: WorldInfo }) {
   const { id, vs } = useVolcano(world);
   const tool = useStore((s) => s.tool);
-  const waterVolume = useStore((s) => s.waterVolume);
-  const digRadius = useStore((s) => s.digRadius);
-  const digDepth = useStore((s) => s.digDepth);
   const set = useStore((s) => s.set);
   const replay = useStore((s) => s.clock?.replay ?? false);
   const injectFor = useStore((s) => s.injectFor);
@@ -297,29 +297,29 @@ export function ActionBar({ world }: { world: WorldInfo }) {
   if (!id) return null;
   return (
     <>
-      <div className={`${OVERLAY} absolute bottom-3 left-3 z-10 flex gap-1.5 p-1.5`} role="toolbar" aria-label="Volcano actions">
+      <div className={`${OVERLAY} flex max-w-full shrink-0 flex-wrap gap-1.5 p-1.5`} role="toolbar" aria-label="Volcano actions">
         {erupting ? (
           <Tip content="End the eruption now" side="top">
             <Button variant="destructive" size="sm" disabled={replay} onClick={() => command({ kind: 'stopEruption', volcanoId: id })}>
-              <Square /> Stop eruption
+              <Square /> <span className="short:hidden">Stop eruption</span>
             </Button>
           </Tip>
         ) : (
           <Tip content="Open a vent and start an eruption now, whatever the pressure" side="top">
             <Button size="sm" disabled={replay} onClick={() => command({ kind: 'startEruption', volcanoId: id })}>
-              <Triangle /> Start eruption
+              <Triangle /> <span className="short:hidden">Start eruption</span>
             </Button>
           </Tip>
         )}
         <Tip content="Add a batch of magma with chosen temperature and composition" side="top">
           <Button variant="secondary" size="sm" disabled={replay} onClick={() => set({ injectFor: id })}>
-            <Plus /> Add magma…
+            <Plus /> <span className="short:hidden">Add magma…</span>
           </Button>
         </Tip>
         <DropdownMenu>
           <Tip content="More actions and map tools" side="top">
             <DropdownMenuTrigger render={<Button variant="secondary" size="sm" />}>
-              <Wrench /> Tools <ChevronUp data-icon="inline-end" />
+              <Wrench /> <span className="short:hidden">Tools</span> <ChevronUp data-icon="inline-end" />
             </DropdownMenuTrigger>
           </Tip>
           <DropdownMenuContent side="top" className="w-auto min-w-60">
@@ -339,30 +339,44 @@ export function ActionBar({ world }: { world: WorldInfo }) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {tool !== 'orbit' && (
-        <div className={`${OVERLAY} absolute bottom-16 left-3 z-10 flex flex-wrap items-center gap-2 px-3 py-2 text-sm`} role="status">
-          <span>{TOOL_HINT[tool]}</span>
-          {tool === 'water' && (
-            <Label className="font-normal">
-              Volume <Input className="h-7 w-24" type="number" value={waterVolume} min={100} step={1000} onChange={(e) => set({ waterVolume: Number(e.target.value) })} /> m³
-            </Label>
-          )}
-          {tool === 'dig' && (
-            <>
-              <Label className="font-normal">
-                Radius <Input className="h-7 w-16" type="number" value={digRadius} min={5} step={5} onChange={(e) => set({ digRadius: Number(e.target.value) })} /> m
-              </Label>
-              <Label className="font-normal">
-                Depth <Input className="h-7 w-16" type="number" value={digDepth} min={1} step={5} onChange={(e) => set({ digDepth: Number(e.target.value) })} /> m
-              </Label>
-            </>
-          )}
-          <Button size="sm" variant="outline" onClick={() => set({ tool: 'orbit' })}>
-            Done <kbd className="text-xs text-muted-foreground">Esc</kbd>
-          </Button>
-        </div>
-      )}
       <InjectDialog world={world} volcanoId={injectFor} open={injectFor !== null} onOpenChange={(o) => !o && set({ injectFor: null })} />
     </>
   );
+}
+
+/** What the active map tool does, with its settings (above the action bar). */
+export function ToolHint() {
+  const tool = useStore((s) => s.tool);
+  const waterVolume = useStore((s) => s.waterVolume);
+  const digRadius = useStore((s) => s.digRadius);
+  const digDepth = useStore((s) => s.digDepth);
+  const set = useStore((s) => s.set);
+  if (tool === 'orbit') return null;
+  return (
+      <div className={`${OVERLAY} flex max-w-full shrink-0 flex-wrap items-center gap-2 px-3 py-2 text-sm`} role="status">
+        <span>{TOOL_HINT[tool]}</span>
+        {tool === 'water' && (
+          <Label className="font-normal">
+            Volume <Input className="h-7 w-24" type="number" value={waterVolume} min={100} step={1000} onChange={(e) => set({ waterVolume: Number(e.target.value) })} /> m³
+          </Label>
+        )}
+        {tool === 'dig' && (
+          <>
+            <Label className="font-normal">
+              Radius <Input className="h-7 w-16" type="number" value={digRadius} min={5} step={5} onChange={(e) => set({ digRadius: Number(e.target.value) })} /> m
+            </Label>
+            <Label className="font-normal">
+              Depth <Input className="h-7 w-16" type="number" value={digDepth} min={1} step={5} onChange={(e) => set({ digDepth: Number(e.target.value) })} /> m
+            </Label>
+          </>
+        )}
+        <Button size="sm" variant="outline" onClick={() => set({ tool: 'orbit' })}>
+          Done <kbd className="text-xs text-muted-foreground">Esc</kbd>
+        </Button>
+      </div>
+  );
+}
+
+function formatRate(r: number): string {
+  return r >= 10 ? r.toFixed(0) : r.toFixed(1);
 }

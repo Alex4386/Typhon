@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
-import { Toaster } from '@/components/ui/sonner';
+import { Hud, HudToasts } from './Hud';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { CameraBar, CameraHelp, CameraReadoutPanel, Minimap } from '../camera/CameraHud';
@@ -15,7 +15,7 @@ import { ReplayBar } from '../panels/Controls';
 import { Guide, SidePanel, useGlobalKeys } from '../panels/Drawer';
 import { Clock, DrawerButtons, Playback, WorldSwitcher } from '../panels/Header';
 import { Inspector } from '../panels/Inspector';
-import { ActionBar, StatusCard } from '../panels/Overlay';
+import { ActionBar, StatusCard, ToolHint } from '../panels/Overlay';
 import { PerfHud } from '../scene/PerfHud';
 import { Viewer } from '../scene/Viewer';
 import { rememberDrawerWidth, useStore } from '../store/store';
@@ -99,13 +99,29 @@ export function App() {
                 {world ? (
                   <>
                     <Viewer world={world} />
-                    <PerfHud />
-                    <StatusCard world={world} />
-                    <ActionBar world={world} />
-                    <Inspector world={world} />
-                    <CameraBar world={world} />
-                    {showCameraTools && <CameraReadoutPanel />}
-                    <Minimap world={world} />
+                    <Hud
+                      topLeft={<StatusCard world={world} />}
+                      bottomLeft={<ActionBar world={world} />}
+                      top={
+                        <>
+                          <PerfHud />
+                          <HudToasts />
+                        </>
+                      }
+                      bottom={
+                        <>
+                          <ToolHint />
+                          {showCameraTools && <CameraReadoutPanel />}
+                        </>
+                      }
+                      topRight={<Inspector world={world} />}
+                      bottomRight={
+                        <>
+                          <Minimap world={world} />
+                          <CameraBar world={world} />
+                        </>
+                      }
+                    />
                     <CameraHelp />
                   </>
                 ) : (
@@ -157,7 +173,6 @@ export function App() {
         <Guide />
         <CommandPalette />
         <HoverLabel />
-        <Toaster theme="dark" position="bottom-center" offset={{ bottom: 64 }} richColors closeButton visibleToasts={3} />
       </div>
     </TooltipProvider>
   );

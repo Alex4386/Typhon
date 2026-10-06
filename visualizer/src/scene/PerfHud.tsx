@@ -30,7 +30,7 @@ export function PerfHud() {
   ];
   return (
     <div
-      className="pointer-events-none absolute top-2 left-1/2 z-10 grid -translate-x-1/2 grid-cols-[auto_auto] gap-x-2 rounded-md border bg-background/80 px-2.5 py-1.5 font-mono text-[11px] leading-4 tabular-nums shadow-sm backdrop-blur-none"
+      className="pointer-events-none grid shrink-0 grid-cols-[auto_auto] gap-x-2 rounded-md border bg-background/80 px-2.5 py-1.5 font-mono text-[11px] leading-4 tabular-nums shadow-sm backdrop-blur-none"
       role="status"
       aria-label="Frame statistics"
     >
