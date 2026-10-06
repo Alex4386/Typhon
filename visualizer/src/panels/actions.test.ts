@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ParamSpec, SchemaMessage, VolcanoState } from '../protocol/messages';
 import type { EntityMap, EntityView } from '../store/entities';
-import { contextActions, dikeNumber, injectFieldsFor, selectionVolcano, supplyParams, ventLifecycle } from './actions';
+import { contextActions, contextToggles, dikeNumber, injectFieldsFor, selectionVolcano, supplyParams, ventLifecycle, volcanoSettings } from './actions';
 
 const ent = (id: string, kind: string, volcanoId?: string): EntityView => ({ id, kind, volcanoId, label: id, at: [0, 0, 0], props: {}, createdAt: 0, updatedAt: 0, seenAt: 0, fresh: false });
 const entities: EntityMap = Object.fromEntries(
@@ -10,9 +10,9 @@ const entities: EntityMap = Object.fromEntries(
 const vs = (rate: number) => ({ chamber: { eruptionRate: rate }, alert: { level: rate > 0 ? 'ERUPTING' : 'DORMANT' } }) as unknown as VolcanoState;
 
 describe('inspector actions', () => {
-  it('offers a chamber its own volcano’s magma, eruption, dike and supply actions', () => {
+  it('offers a chamber its own volcano’s magma, eruption and dike actions', () => {
     const acts = contextActions({ type: 'entity', id: 'c2' }, entities, { a: vs(0), b: vs(0) });
-    expect(acts.map((a) => a.id)).toEqual(['inject', 'startEruption', 'forceDike', 'supply', 'blockDikes', 'section']);
+    expect(acts.map((a) => a.id)).toEqual(['inject', 'startEruption', 'forceDike', 'section']);
     expect(acts.filter((a) => 'volcanoId' in a).every((a) => 'volcanoId' in a && a.volcanoId === 'b')).toBe(true);
     expect(contextActions({ type: 'entity', id: 'c2' }, entities, { b: vs(5) })[1].id).toBe('stopEruption');
   });
@@ -40,9 +40,10 @@ describe('inspector actions', () => {
     expect(injectFieldsFor(schema, 'b')?.[1].default).toBe(900);
     expect(injectFieldsFor(schema, 'a')?.[1].default).toBe(1150);
     expect(supplyParams(schema, 'b').map((p) => p.id)).toEqual(['b:magma.chamber.supplyRate', 'b:magma.chamber.rechargeSilicaWt']);
+    expect(volcanoSettings(schema, 'b').map((p) => p.id)).toEqual(['b:magma.chamber.supplyRate', 'b:magma.chamber.rechargeSilicaWt', 'b:dikes.x']);
   });
 
-  it('seals, unseals and removes vents and dikes', () => {
+  it('removes vents and dikes; seals and dike blocking are checkboxes', () => {
     const withProps = (e: EntityView, props: Record<string, unknown>): EntityView => ({ ...e, props: props as EntityView['props'] });
     const map: EntityMap = {
       summit: withProps(ent('vent:a:summit', 'vent', 'a'), { ventId: 'summit', state: 'active', sealed: false }),
@@ -51,11 +52,17 @@ describe('inspector actions', () => {
       ch: withProps(ent('chamber:a', 'chamber', 'a'), { dikesBlocked: true }),
     };
     const ids = (id: string) => contextActions({ type: 'entity', id }, map, {}).map((a) => a.id);
-    expect(ids('summit')).toEqual(['startEruption', 'sealVent', 'frame', 'section']); // a summit vent cannot be removed
-    expect(ids('fis')).toEqual(['startEruption', 'unsealVent', 'removeVent', 'frame', 'section']);
+    expect(ids('summit')).toEqual(['startEruption', 'frame', 'section']); // a summit vent cannot be removed
+    expect(ids('fis')).toEqual(['startEruption', 'removeVent', 'frame', 'section']);
     expect(ids('dike')).toEqual(['section', 'frame', 'removeDike']);
     expect(contextActions({ type: 'entity', id: 'dike' }, map, {}).find((a) => a.id === 'removeDike')).toMatchObject({ dikeId: 7, volcanoId: 'a' });
-    expect(ids('ch')).toContain('allowDikes');
+    const toggles = (id: string) => contextToggles({ type: 'entity', id }, map);
+    expect(toggles('ch')).toMatchObject([{ id: 'blockDikes', checked: true, volcanoId: 'a' }]);
+    expect(toggles('summit')).toMatchObject([{ id: 'sealVent', checked: false, ventId: 'summit' }]);
+    expect(toggles('fis')).toMatchObject([{ id: 'sealVent', checked: true, ventId: 'f1' }]);
+    expect(toggles('dike')).toEqual([]);
+    const frozen: EntityMap = { f: withProps(ent('vent:a:f2', 'fissure', 'a'), { ventId: 'f2', state: 'frozen' }) };
+    expect(contextToggles({ type: 'entity', id: 'f' }, frozen)[0]).toHaveProperty('disabled');
     expect(dikeNumber('dike:kilauea:12')).toBe(12);
     expect(ventLifecycle({ sealed: true })).toBe('sealed');
     expect(ventLifecycle({ state: 'frozen', sealed: false })).toBe('frozen');

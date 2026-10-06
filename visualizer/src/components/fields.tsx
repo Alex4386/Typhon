@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
@@ -51,6 +52,20 @@ export function SwitchRow({ checked, onChange, label, help, id }: { checked: boo
           {label}
         </Label>
         <Switch id={id} checked={checked} onCheckedChange={(v) => onChange(v)} />
+      </div>
+    </Tip>
+  );
+}
+
+/** An on/off setting: a checkbox and its label (the label toggles it too). */
+export function CheckboxRow({ checked, onChange, label, help, id }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; help?: string; id: string }) {
+  return (
+    <Tip content={help} side="left">
+      <div className="flex items-center gap-2 py-0.5">
+        <Checkbox id={id} checked={checked} onCheckedChange={(v) => onChange(v === true)} />
+        <Label htmlFor={id} className="flex-1 font-normal">
+          {label}
+        </Label>
       </div>
     </Tip>
   );

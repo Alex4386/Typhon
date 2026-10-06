@@ -8,10 +8,13 @@ export type ContextAction =
   | { id: 'frame'; label: string }
   | { id: 'section'; label: string }
   | { id: 'water' | 'dig'; label: string }
-  | { id: 'supply'; label: string; volcanoId: string }
-  | { id: 'sealVent' | 'unsealVent' | 'removeVent'; label: string; volcanoId: string; ventId: string }
-  | { id: 'removeDike'; label: string; volcanoId: string; dikeId: number }
-  | { id: 'blockDikes' | 'allowDikes'; label: string; volcanoId: string };
+  | { id: 'removeVent'; label: string; volcanoId: string; ventId: string }
+  | { id: 'removeDike'; label: string; volcanoId: string; dikeId: number };
+
+/** A state the Inspector shows as a checkbox (a setting that stays, unlike a one-off action). */
+export type ContextToggle =
+  | { id: 'blockDikes'; label: string; help: string; checked: boolean; volcanoId: string }
+  | { id: 'sealVent'; label: string; help: string; checked: boolean; volcanoId: string; ventId: string; disabled?: string };
 
 /** Actions that cannot be undone: the Inspector asks first. */
 export const DESTRUCTIVE: ReadonlySet<ContextAction['id']> = new Set(['removeVent', 'removeDike']);
@@ -47,9 +50,10 @@ function eruptionToggle(volcanoId: string, vs: VolcanoState | undefined): Contex
 }
 
 /**
- * Actions for a selection, in display order: a chamber offers magma (add a batch, its supply
- * settings), eruption control and a dike; a vent or fissure eruption control, framing and a section;
- * a dike a section along it; a ground point pouring water or digging there; everything framing.
+ * One-off actions for a selection, in display order: a chamber offers magma (add a batch), eruption
+ * control and a dike; a vent or fissure eruption control, framing and a section; a dike a section along
+ * it; a ground point pouring water or digging there; everything framing. Lasting states (dikes blocked,
+ * a vent sealed) are {@link contextToggles}.
  */
 export function contextActions(sel: Selection | null, entities: EntityMap, volcanoes: Record<string, VolcanoState> | undefined): ContextAction[] {
   if (!sel) return [];
@@ -65,8 +69,7 @@ export function contextActions(sel: Selection | null, entities: EntityMap, volca
   switch (e.kind) {
     case 'chamber':
       if (v) {
-        out.push({ id: 'inject', label: 'Add magma…', volcanoId: v }, eruptionToggle(v, volcanoes?.[v]), { id: 'forceDike', label: 'Push magma up (dike)', volcanoId: v }, { id: 'supply', label: 'Magma supply', volcanoId: v });
-        out.push(e.props.dikesBlocked === true ? { id: 'allowDikes', label: 'Allow new dikes', volcanoId: v } : { id: 'blockDikes', label: 'Block new dikes', volcanoId: v });
+        out.push({ id: 'inject', label: 'Add magma…', volcanoId: v }, eruptionToggle(v, volcanoes?.[v]), { id: 'forceDike', label: 'Push magma up (dike)', volcanoId: v });
       }
       out.push({ id: 'section', label: 'Cross-section' });
       return out;
@@ -75,11 +78,8 @@ export function contextActions(sel: Selection | null, entities: EntityMap, volca
       if (v) out.push(eruptionToggle(v, volcanoes?.[v]));
       const ventId = typeof e.props.ventId === 'string' ? e.props.ventId : null;
       const state = ventLifecycle(e.props);
-      if (v && ventId && state !== 'removed') {
-        out.push(state === 'sealed' ? { id: 'unsealVent', label: 'Unseal', volcanoId: v, ventId } : { id: 'sealVent', label: 'Seal', volcanoId: v, ventId });
-        // only dike-fed fissures can be deleted; a summit vent is sealed instead
-        if (e.kind === 'fissure') out.push({ id: 'removeVent', label: 'Remove…', volcanoId: v, ventId });
-      }
+      // only dike-fed fissures can be deleted; a summit vent is sealed instead
+      if (v && ventId && state !== 'removed' && e.kind === 'fissure') out.push({ id: 'removeVent', label: 'Remove…', volcanoId: v, ventId });
       out.push({ id: 'frame', label: 'Frame' }, { id: 'section', label: 'Cross-section' });
       return out;
     }
@@ -92,6 +92,43 @@ export function contextActions(sel: Selection | null, entities: EntityMap, volca
     default:
       return [{ id: 'frame', label: 'Frame' }, { id: 'section', label: 'Cross-section' }];
   }
+}
+
+/** Lasting states of a selection, shown as checkboxes: a chamber's dike blocking, a vent's seal. */
+export function contextToggles(sel: Selection | null, entities: EntityMap): ContextToggle[] {
+  if (!sel || sel.type !== 'entity') return [];
+  const e = entities[sel.id];
+  const v = e?.volcanoId;
+  if (!e || !v) return [];
+  if (e.kind === 'chamber') {
+    return [{ id: 'blockDikes', label: 'Block new dikes', help: 'No new dikes start from this chamber (rising ones go on); magma beyond the walls\' limit then grows the chamber.', checked: e.props.dikesBlocked === true, volcanoId: v }];
+  }
+  if (e.kind === 'vent' || e.kind === 'fissure') {
+    const ventId = typeof e.props.ventId === 'string' ? e.props.ventId : null;
+    const state = ventLifecycle(e.props);
+    if (!ventId || state === 'removed') return [];
+    return [
+      {
+        id: 'sealVent',
+        label: 'Sealed',
+        help: 'Plugged: magma leaves through the other open vents; with none left the eruption ends and pressure builds.',
+        checked: state === 'sealed',
+        volcanoId: v,
+        ventId,
+        ...(state === 'frozen' ? { disabled: 'Its feeder froze shut; a seal changes nothing' } : {}),
+      },
+    ];
+  }
+  return [];
+}
+
+/**
+ * Settings shown in a chamber's Settings tab: its magma supply and recharge magma, the walls' and
+ * dikes' mechanics. Only live (hot) ones: restart changes stay on the Settings page.
+ */
+export function volcanoSettings(schema: SchemaMessage | null, volcanoId: string): ParamSpec[] {
+  if (!schema) return [];
+  return schema.params.filter((p) => p.volcanoId === volcanoId && p.apply === 'hot' && /supply|recharge|wall|dikes\./i.test(p.id));
 }
 
 /** Injection fields for a volcano: its own (defaults from its supply magma), else the generic ones. */
