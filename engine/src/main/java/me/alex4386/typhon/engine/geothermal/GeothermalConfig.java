@@ -8,8 +8,7 @@ import me.alex4386.typhon.engine.world.BlockId;
  * {@link Geothermal} (it reads them on every step, so later changes also take effect).
  *
  * <p>Temperatures are absolute °C of the shallow reservoir sampled from the subsurface model.
- * Formation rates are expected occurrences per grid cell per hour at full strength; with the
- * default {@link #timeScale} of 1 features accumulate over hours of play, not seconds.
+ * Formation rates are expected occurrences per grid cell per hour at full strength.
  */
 public final class GeothermalConfig {
     // ── Grid & time ──
@@ -17,10 +16,8 @@ public final class GeothermalConfig {
     public int radius = 128;
     /** Edge length of one grid cell, in blocks. */
     public int cellSize = 4;
-    /** Simulated seconds between steps. */
+    /** Seconds between steps. */
     public double stepSeconds = 2.0;
-    /** Time compression of feature formation: every step forms features over {@code dt × timeScale}. */
-    public double timeScale = 1.0;
 
     // ── Heat supplied to the subsurface model ──
     /** Reference ground temperature (°C) for the excess temperatures reported on the feature grid. */
@@ -44,7 +41,7 @@ public final class GeothermalConfig {
     public double lavaConductivity = 1.5;
     /**
      * After lava last covered a column, no spring, geyser, mud pot or fumarole forms there for this
-     * long (s of volcano time): a fresh flow is dry, hot, fractured rock without a water table at its
+     * long (s): a fresh flow is dry, hot, fractured rock without a water table at its
      * surface. Features on a column that lava reaches are buried.
      */
     public double lavaExclusionSeconds = 30 * 86400.0;
@@ -185,7 +182,6 @@ public final class GeothermalConfig {
         if (radius < 1) throw new IllegalArgumentException("radius must be >= 1");
         if (cellSize < 1) throw new IllegalArgumentException("cellSize must be >= 1");
         if (stepSeconds <= 0) throw new IllegalArgumentException("stepSeconds must be > 0");
-        if (timeScale <= 0) throw new IllegalArgumentException("timeScale must be > 0");
         if (ventHeatPowerW < 0 || !(ventPipeDepthM > 0) || !(chamberRadiusM > 0)) {
             throw new IllegalArgumentException("bad heat source parameters");
         }

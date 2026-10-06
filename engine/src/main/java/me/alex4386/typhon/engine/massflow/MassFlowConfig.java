@@ -14,9 +14,7 @@ public final class MassFlowConfig {
     // ── Grid & time ──
     /** Real metres per block (cell width and block thickness). */
     public double metersPerBlock = 1.0;
-    /** Simulated seconds per engine second. */
-    public double timeScale = 1.0;
-    /** Simulated seconds between field steps (sub-stepped internally for CFL stability). */
+    /** Seconds between field steps (sub-stepped internally for CFL stability). */
     public double stepPeriodSeconds = 0.1;
     public double gravity = 9.81;
     /** Courant number for sub-stepping: {@code dt ≤ cfl · dx / (|u| + √(g h))}. */
@@ -81,7 +79,7 @@ public final class MassFlowConfig {
     public double rainMinErodible = 0.05;
 
     // ── Telemetry ──
-    /** Simulated seconds between front events (0 = never). */
+    /** Seconds between front events (0 = never). */
     public double frontEventPeriodSeconds = 1.0;
     public int maxReportedCells = 256;
 
@@ -130,7 +128,6 @@ public final class MassFlowConfig {
     public MassFlowConfig copy() {
         MassFlowConfig c = new MassFlowConfig();
         c.metersPerBlock = metersPerBlock;
-        c.timeScale = timeScale;
         c.stepPeriodSeconds = stepPeriodSeconds;
         c.gravity = gravity;
         c.cfl = cfl;
@@ -167,7 +164,6 @@ public final class MassFlowConfig {
 
     public void validate() {
         requirePositive("metersPerBlock", metersPerBlock);
-        requirePositive("timeScale", timeScale);
         requirePositive("gravity", gravity);
         requirePositive("cfl", cfl);
         requirePositive("maxSpeed", maxSpeed);

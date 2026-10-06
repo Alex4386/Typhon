@@ -20,7 +20,7 @@ import java.util.Objects;
  * @param downgradeFactor fraction of a threshold that must be undercut before stepping down
  * @param downgradeDwellSeconds time indicators must stay low before each one-level step down
  * @param extinctCrystalFraction crystal fraction above which a quiet system counts as EXTINCT
- * @param stepPeriodSeconds how often the estimator runs (simulated seconds)
+ * @param stepPeriodSeconds how often the estimator runs (seconds)
  */
 public record AlertConfig(
         String volcanoId,

@@ -4,7 +4,7 @@ import java.util.Objects;
 import me.alex4386.typhon.engine.math.BlockPos;
 
 /**
- * Parameters of a {@link SeismicityModel}. Rates are events per simulated second.
+ * Parameters of a {@link SeismicityModel}. Rates are events per second.
  *
  * @param volcanoId id of the owning volcano
  * @param conduitTop top of the conduit (vent floor); hypocentres are scattered between the chamber
@@ -36,7 +36,7 @@ import me.alex4386.typhon.engine.math.BlockPos;
  * @param hypocenterSpread lateral scatter of hypocentres (blocks, 1σ)
  * @param rsamWindowSeconds averaging time constant of RSAM
  * @param rateWindowSeconds averaging time constant of the event-rate estimates
- * @param stepPeriodSeconds how often the model steps (simulated seconds)
+ * @param stepPeriodSeconds how often the model steps (seconds)
  * @param samplePeriodSeconds how often an {@link RsamSample} is emitted (0 = never)
  */
 public record SeismicConfig(

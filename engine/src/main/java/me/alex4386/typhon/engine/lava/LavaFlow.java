@@ -198,13 +198,10 @@ public final class LavaFlow implements Subsystem {
     private long stamp = Long.MIN_VALUE + 1;
     private double currentTime;
 
-    // Time compression: volcano clocks (transient, re-registered when the engine is built) and the
-    // fluidity seen last step, which sizes this step's flow sub-steps (persisted).
-    private final Map<String, DoubleSupplier> clocks = new TreeMap<>();
+    // the fluidity seen last step, which sizes this step's flow sub-steps (persisted)
     private GroundCoupling ground = GroundCoupling.NONE; // transient
     private int heatCell = 1; // columns per side of the blocks heat is summed over
     private double lastMaxDiffusivity;
-    private double lastCompression = Double.NaN;
     private int lastSubsteps = 1;
     private double eventPhysicalSeconds;
     private long chunkGeneration = 1; // bumped whenever a lava chunk is created (neighbour-cache validity)
@@ -471,23 +468,6 @@ public final class LavaFlow implements Subsystem {
     // ── Step ──
 
     /**
-     * Registers the clock of a volcano that feeds this field: {@code compression} returns the
-     * volcano's current time compression (physical seconds per engine second — its eruptive value
-     * while erupting, its dormant value otherwise). Sources whose id starts with {@code id + "/"}
-     * belong to that volcano. Not persisted: register again when building the engine.
-     *
-     * <p>The shared field advances at one compression per step: the largest compression of the
-     * volcanoes whose sources are effusing (their lava is emplaced on their own clock), otherwise
-     * the smallest current compression of all registered volcanoes (no volcano's flows are
-     * fast-forwarded past its own clock while it cools). Each source still injects the volume its
-     * volcano erupted on its own clock, so mass is conserved whatever the rule picks. Without
-     * clocks the field runs at {@link LavaConfig#timeScale()}.
-     */
-    public void registerClock(String id, DoubleSupplier compression) {
-        clocks.put(id, compression);
-    }
-
-    /**
      * The ground model the field exchanges heat and water with (transient: re-attach when the engine
      * is built). Cooling lava conducts its base loss into the ground; lava in standing water (lakes,
      * ponds, the sea) is quenched and boils the water off; columns under such water count as
@@ -513,35 +493,33 @@ public final class LavaFlow implements Subsystem {
         return ground;
     }
 
-    /** Physical seconds the field advanced per engine second in the last step. */
-    public double lastCompression() {
-        return lastCompression;
-    }
-
     /** Flow sub-steps used in the last step. */
     public int lastSubsteps() {
         return lastSubsteps;
     }
 
-    private DoubleSupplier clockOf(LavaSource source) {
-        if (clocks.isEmpty()) return null;
-        int slash = source.id().indexOf('/');
-        return slash > 0 ? clocks.get(source.id().substring(0, slash)) : null;
+    /**
+     * While lava moves, the flux sub-steps ({@link LavaConfig#maxSubsteps()} at most) must stay within
+     * the explicit stability limit of the most fluid lava seen last step; while any lava is molten,
+     * cooling and crust growth are resolved at {@link #MOLTEN_STEP_SECONDS} at most.
+     */
+    @Override
+    public double maxStepSeconds() {
+        if (activeCellCount() == 0 && sourcesIdle()) return Double.POSITIVE_INFINITY;
+        double limit = MOLTEN_STEP_SECONDS;
+        if (lastMaxDiffusivity > 0) {
+            double stable = config.relaxation() * metersPerBlock * metersPerBlock / lastMaxDiffusivity;
+            limit = Math.min(limit, config.maxSubsteps() * stable);
+        }
+        return limit;
     }
 
-    /** Compression of the field for this step (see {@link #registerClock}), before {@code timeScale}. */
-    private double fieldCompression() {
-        if (clocks.isEmpty()) return 1;
-        double effusing = 0;
-        for (LavaSource source : sources.values()) {
-            if (source.rateM3PerS() <= 0) continue;
-            DoubleSupplier clock = clockOf(source);
-            if (clock != null) effusing = Math.max(effusing, clock.getAsDouble());
-        }
-        if (effusing > 0) return effusing;
-        double quiet = Double.POSITIVE_INFINITY;
-        for (DoubleSupplier clock : clocks.values()) quiet = Math.min(quiet, clock.getAsDouble());
-        return quiet;
+    /** Longest step while any lava is molten (s). */
+    static final double MOLTEN_STEP_SECONDS = 120;
+
+    private boolean sourcesIdle() {
+        for (LavaSource source : sources.values()) if (source.rateM3PerS() > 0) return false;
+        return true;
     }
 
     // ── Step ──
@@ -551,20 +529,15 @@ public final class LavaFlow implements Subsystem {
         double now = context.time();
         currentTime = now;
         stamp = context.step();
-        double engineDt = context.dtSeconds();
-        double compression = fieldCompression() * config.timeScale();
-        double dt = engineDt * compression; // physical seconds this step
-        lastCompression = compression;
+        double dt = context.dtSeconds();
         eventPhysicalSeconds += dt;
         Outbox outbox = context.outbox();
         neededTerrain.clear();
 
-        // 0. effusion: each source injects what its volcano erupted on its own clock
+        // 0. effusion: each source injects what its volcano erupted this step
         for (LavaSource source : sources.values()) {
             if (source.rateM3PerS() <= 0) continue;
-            DoubleSupplier clock = clockOf(source);
-            double sourceDt = clock != null ? engineDt * clock.getAsDouble() * config.timeScale() : dt;
-            double perCell = source.rateM3PerS() * sourceDt / source.cells().size();
+            double perCell = source.rateM3PerS() * dt / source.cells().size();
             for (BlockPos cell : source.cells()) {
                 if (!addLava(cell.x(), cell.z(), perCell, source.temperatureC(), source.silicaWt(), source.waterWt(),
                         source.unit())) {

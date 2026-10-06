@@ -114,11 +114,8 @@ public final class EruptionClassifier implements Subsystem {
     @Override
     public void step(StepContext context) {
         boolean erupting = chamber.erupting() && chamber.conduitFlow() != null;
-        double physicalDt = context.dtSeconds()
-                * (erupting ? chamber.config().eruptiveTimeScale() : chamber.config().dormantTimeScale());
-        // Slug bursts are surface activity in volcano time (MagmaChamber bursts only the eruptive-time share
-        // of percolating gas), so their rate is per hour at the eruptive scale.
-        observeBursts(physicalDt, context.dtSeconds() * chamber.config().eruptiveTimeScale());
+        double physicalDt = context.dtSeconds();
+        observeBursts(physicalDt, physicalDt);
         // Explosions from an open vent between eruptions are activity in their own right (Stromboli).
         boolean active = erupting || slugPerHour + plugPerHour >= 0.5;
         EnumMap<EruptionStyle, Double> memberships;
@@ -162,7 +159,7 @@ public final class EruptionClassifier implements Subsystem {
         }
         VentPartition.Result p = coupler.partition();
         double w = 1 - Math.exp(-physicalDt / WINDOW_SECONDS);
-        double actual = chamber.physicalEruptionRate() * DRE_DENSITY;
+        double actual = chamber.eruptionRate() * DRE_DENSITY;
         double scale = p != null && p.magmaMassFlux() > 0 ? actual / p.magmaMassFlux() : 0;
         double lava = p == null ? actual : p.lavaMassFlux() * scale;
         double column = p == null ? 0 : p.columnMassFlux() * scale;

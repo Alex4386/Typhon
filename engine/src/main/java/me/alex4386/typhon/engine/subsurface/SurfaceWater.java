@@ -396,6 +396,12 @@ final class SurfaceWater {
         void accept(int x, int z, double volumeM3);
     }
 
+    /** Whether any surface water moves (an unsettled tile): lakes at rest and the open sea do not. */
+    boolean moving() {
+        for (Tile t : tiles.values()) if (!t.settled) return true;
+        return false;
+    }
+
     void step(double dt, Infiltration infiltration) {
         if (tiles.isEmpty()) return;
         // Wet tiles get their 4 neighbours (transient dry halo) so water can spread. (Tiles are

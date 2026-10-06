@@ -4,9 +4,8 @@ import java.util.Objects;
 import me.alex4386.typhon.engine.math.BlockPos;
 
 /**
- * Parameters of a {@link MagmaChamber}. Defaults give a small basaltic-andesite system sized for a
- * Minecraft volcano: it recharges to failure in roughly an hour of play and an eruption drains it
- * over an hour or two.
+ * Parameters of a {@link MagmaChamber}, in physical units and physical time. Defaults give a small
+ * basaltic-andesite system.
  *
  * @param volcanoId id of the owning volcano; commands and events are keyed by it
  * @param center chamber centre in world coordinates
@@ -38,9 +37,7 @@ import me.alex4386.typhon.engine.math.BlockPos;
  *     cycles (see {@link ConduitConfig})
  * @param maxEruptionRate numerical safety cap on the eruption rate (m³ per physical second); the
  *     conduit model sets the actual rate
- * @param dormantTimeScale physical seconds per simulated second while not erupting
- * @param eruptiveTimeScale physical seconds per simulated second while erupting
- * @param stepPeriodSeconds how often the chamber steps (simulated seconds)
+ * @param stepPeriodSeconds how often the chamber steps (seconds)
  * @param samplePeriodSeconds how often a {@link MagmaEvents.ChamberSample} is emitted (0 = never)
   * @param wallRuptureRatio override for the overpressure at which the chamber walls rupture, as a multiple of
  *     the larger of {@code tensileStrengthMPa} and the eruption threshold; NaN = computed (hoop stress, 2)
@@ -75,8 +72,6 @@ public record MagmaChamberConfig(
         double crystalSilicaWt,
         ConduitConfig conduit,
         double maxEruptionRate,
-        double dormantTimeScale,
-        double eruptiveTimeScale,
         double stepPeriodSeconds,
         double samplePeriodSeconds,
         double wallRuptureRatio,
@@ -103,8 +98,6 @@ public record MagmaChamberConfig(
                 rechargeCrystalFraction);
         if (!(initialCo2Wt >= 0)) throw new IllegalArgumentException("initialCo2Wt must be >= 0");
         requirePositive("maxEruptionRate", maxEruptionRate);
-        requirePositive("dormantTimeScale", dormantTimeScale);
-        requirePositive("eruptiveTimeScale", eruptiveTimeScale);
         if (!(stepPeriodSeconds > 0)) throw new IllegalArgumentException("stepPeriodSeconds must be > 0");
         if (!(samplePeriodSeconds >= 0)) throw new IllegalArgumentException("samplePeriodSeconds must be >= 0");
         Objects.requireNonNull(chamberId, "chamberId");
@@ -164,8 +157,6 @@ public record MagmaChamberConfig(
         b.crystalSilicaWt = crystalSilicaWt;
         b.conduit = conduit;
         b.maxEruptionRate = maxEruptionRate;
-        b.dormantTimeScale = dormantTimeScale;
-        b.eruptiveTimeScale = eruptiveTimeScale;
         b.stepPeriodSeconds = stepPeriodSeconds;
         b.samplePeriodSeconds = samplePeriodSeconds;
         b.wallRuptureRatio = wallRuptureRatio;
@@ -205,8 +196,6 @@ public record MagmaChamberConfig(
         private double crystalSilicaWt = 47;
         private ConduitConfig conduit = ConduitConfig.DEFAULT;
         private double maxEruptionRate = 1e6;
-        private double dormantTimeScale = 5000;
-        private double eruptiveTimeScale = 1;
         private double stepPeriodSeconds = 1.0;
         private double samplePeriodSeconds = 5.0;
         private double wallRuptureRatio = Double.NaN; // computed (MagmaChamber#wallRuptureRatio)
@@ -242,8 +231,6 @@ public record MagmaChamberConfig(
         public Builder crystalSilicaWt(double v) { crystalSilicaWt = v; return this; }
         public Builder conduit(ConduitConfig v) { conduit = v; return this; }
         public Builder maxEruptionRate(double v) { maxEruptionRate = v; return this; }
-        public Builder dormantTimeScale(double v) { dormantTimeScale = v; return this; }
-        public Builder eruptiveTimeScale(double v) { eruptiveTimeScale = v; return this; }
         public Builder stepPeriodSeconds(double v) { stepPeriodSeconds = v; return this; }
         public Builder samplePeriodSeconds(double v) { samplePeriodSeconds = v; return this; }
         public Builder wallRuptureRatio(double v) { wallRuptureRatio = v; return this; }
@@ -257,8 +244,7 @@ public record MagmaChamberConfig(
                     rechargeTemperatureC, rechargeSilicaWt, rechargeWaterWt, rechargeCo2Wt, rechargeCrystalFraction,
                     initialTemperatureC, initialSilicaWt, initialWaterWt, initialCo2Wt, initialOverpressureMPa,
                     wallTemperatureC, coolingTimescale, degassingTimescale, crystalSilicaWt, conduit, maxEruptionRate,
-                    dormantTimeScale,
-                    eruptiveTimeScale, stepPeriodSeconds, samplePeriodSeconds, wallRuptureRatio, wallYieldFraction, chamberId);
+                    stepPeriodSeconds, samplePeriodSeconds, wallRuptureRatio, wallYieldFraction, chamberId);
         }
     }
 }

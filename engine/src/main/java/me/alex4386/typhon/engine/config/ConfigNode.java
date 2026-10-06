@@ -184,11 +184,27 @@ public final class ConfigNode {
         return new LinkedHashMap<>(values);
     }
 
+    /**
+     * Keys of the retired time compression (there is one physical clock; how fast time passes on screen
+     * is the playback speed). Definitions written before still load: these are ignored with a warning.
+     */
+    static final Set<String> RETIRED = Set.of("timeCompression", "dormantTimeCompression", "eruptiveTimeCompression",
+            "dormantTimeScale", "eruptiveTimeScale", "timeScale");
+
+    private static final java.util.logging.Logger LOG = java.util.logging.Logger.getLogger(ConfigNode.class.getName());
+
     /** Rejects keys that were never read; {@code valid} lists additional accepted keys for the message. */
     public void finish(Collection<String> valid) {
         List<String> unknown = new ArrayList<>();
         for (String key : values.keySet()) {
-            if (!used.contains(key)) unknown.add(key);
+            if (used.contains(key)) continue;
+            if (RETIRED.contains(key)) {
+                used.add(key);
+                LOG.warning(file + ": " + pathOf(key) + " is ignored: time compression was removed (one physical"
+                        + " clock; set the playback speed instead)");
+                continue;
+            }
+            unknown.add(key);
         }
         if (unknown.isEmpty()) return;
         Set<String> accepted = new TreeSet<>(used);

@@ -162,7 +162,7 @@ public final class MagmaTransfer implements Subsystem {
     @Override
     public void step(StepContext context) {
         lastTime = context.time();
-        double dt = clock.physicalSeconds(context.dtSeconds());
+        double dt = context.dtSeconds();
         if (!(dt > 0)) return;
         for (ConnectionConfig c : connections) {
             Link link = links.get(c.id());

@@ -94,7 +94,7 @@ public final class VolcanoCoupler implements Subsystem {
     static final double PHREATOMAGMATIC_STOP_SHARE = 0.1;
     /** Fine-ash-rich grain size of magma–water fragmentation (bursts of wet ash). */
     static final GrainSizeDistribution PHREATOMAGMATIC_GRAIN = GrainSizeDistribution.of(0.10, 0.20, 0.35, 0.35);
-    /** Simulated seconds between steam telemetry events. */
+    /** Seconds between steam telemetry events. */
     static final double STEAM_EVENT_SECONDS = 20;
     /** Bulk density of fresh wet tuff (kg/m³). */
     static final double TUFF_BULK_DENSITY = 1500;
@@ -148,7 +148,7 @@ public final class VolcanoCoupler implements Subsystem {
     /** Physical magma flux (m³/s DRE) leaving through each outlet at the last step. */
     private final TreeMap<String, Double> ventFlux = new TreeMap<>();
     private boolean flankPending;
-    /** Column in progress: simulated mass rate (kg per simulated s), collapse share, gas fraction. */
+    /** Column in progress: simulated mass rate (kg/s), collapse share, gas fraction. */
     private double explosiveRate;
     private double explosiveCollapse;
     private double explosiveGas;
@@ -199,8 +199,16 @@ public final class VolcanoCoupler implements Subsystem {
         return 1.0;
     }
 
+    /** Longest step while the volcano erupts (s): vent partition, bursts, jets and fall-back are resolved this often. */
+    public static final double ERUPTING_STEP_SECONDS = 20;
+
+    @Override
+    public double maxStepSeconds() {
+        return chamber.erupting() ? ERUPTING_STEP_SECONDS : Double.POSITIVE_INFINITY;
+    }
+
     /** Groundwater model the conduit draws aquifer water from (optional). */
-    /** Live retune: the volcano's scaling (time compressions) from the next step. */
+    /** Live retune: the volcano's scaling (length scales) from the next step. */
     public void setScaling(VolcanoScaling scaling, double ballisticFraction) {
         this.scaling = java.util.Objects.requireNonNull(scaling);
     }
@@ -282,7 +290,7 @@ public final class VolcanoCoupler implements Subsystem {
         double[] weights = shares(vents);
         ventFlux.clear();
         for (int i = 0; i < vents.size(); i++) {
-            ventFlux.put(vents.get(i).id(), chamber.physicalEruptionRate() * weights[i]);
+            ventFlux.put(vents.get(i).id(), chamber.eruptionRate() * weights[i]);
         }
         updateFeeders(context);
 
@@ -291,10 +299,9 @@ public final class VolcanoCoupler implements Subsystem {
         lastPartition = p;
         // The chamber's actual outflow (linearised between conduit solutions) sets the totals; the
         // partition sets the shares.
-        double physicalMass = chamber.physicalEruptionRate() * ExplosivePhase.DRE_DENSITY;
+        double physicalMass = chamber.eruptionRate() * ExplosivePhase.DRE_DENSITY;
         double scale = p.magmaMassFlux() > 0 ? physicalMass / p.magmaMassFlux() : 0;
-        double compression = scaling.eruptiveTimeCompression();
-        double physicalSeconds = context.dtSeconds() * compression;
+        double physicalSeconds = context.dtSeconds();
 
         double lavaRate = p.lavaMassFlux() * scale / ExplosivePhase.DRE_DENSITY;
         if (lavaRate > MIN_LAVA_RATE) updateLava(vents, weights, lavaRate);
@@ -379,8 +386,7 @@ public final class VolcanoCoupler implements Subsystem {
      * eruption stopped) and reports vent state changes.
      */
     private void updateFeeders(StepContext context) {
-        double compression = chamber.erupting() ? scaling.eruptiveTimeCompression() : scaling.dormantTimeCompression();
-        double physicalDt = context.dtSeconds() * compression;
+        double physicalDt = context.dtSeconds();
         for (Map.Entry<String, FissureFeeder> e : feeders.entrySet()) {
             FissureFeeder feeder = e.getValue();
             if (feeder.frozen()) continue;
@@ -546,8 +552,7 @@ public final class VolcanoCoupler implements Subsystem {
     // ── Lava ──
 
     private void updateLava(List<VentSite> vents, double[] shares, double physicalRate) {
-        // Lava sources take the physical rate; the lava field (on this volcano's clock) re-applies the
-        // eruptive compression.
+        // Lava sources take the eruption rate (m³/s DRE), split across the vents.
         Set<String> wanted = new TreeSet<>();
         for (int i = 0; i < vents.size(); i++) {
             VentSite vent = vents.get(i);
@@ -584,8 +589,7 @@ public final class VolcanoCoupler implements Subsystem {
     // ── Sustained columns ──
 
     private void updateExplosive(VentSite vent, VentPartition.Result p, double physicalColumn) {
-        double compression = scaling.eruptiveTimeCompression();
-        double simulated = physicalColumn * compression;
+        double simulated = physicalColumn;
         boolean restart = explosiveRate <= 0
                 || Math.abs(simulated - explosiveRate) > PHASE_UPDATE_THRESHOLD * explosiveRate
                 || Math.abs(p.collapseFraction() - explosiveCollapse) > 0.1
@@ -600,7 +604,7 @@ public final class VolcanoCoupler implements Subsystem {
         // column's gas to its exit velocity.
         double overpressure = equivalentOverpressureMPa(p.columnVelocity(), p.columnGasFraction(), p.columnTemperatureC());
         ExplosivePhase phase = new ExplosivePhase(vent, simulated, Math.min(1, p.columnGasFraction()), overpressure,
-                p.columnTemperatureC(), chamber.silicaWt(), 0, p.grainSize(), compression);
+                p.columnTemperatureC(), chamber.silicaWt(), 0, p.grainSize());
         tephra.startPhase(phase.withMassEruptionRate(simulated * (1 - p.collapseFraction())));
         updateCollapse(vent, simulated * p.collapseFraction(), p.columnTemperatureC());
     }
@@ -730,13 +734,10 @@ public final class VolcanoCoupler implements Subsystem {
 
     private void startAshPuff(double now, VentSite vent, double ashMassKg, double durationSeconds, double gasFraction,
             double overpressureMPa, double temperatureC, double silicaWt, GrainSizeDistribution grain) {
-        double compression = scaling.eruptiveTimeCompression();
-        double gameSeconds = durationSeconds / compression;
-        // The puff lasts durationSeconds of physical time, i.e. gameSeconds of simulated time: inject
-        // the whole ash mass over the simulated span, while the column sees the physical rate.
-        tephra.startPhase(new ExplosivePhase(vent, ashMassKg / gameSeconds, Math.min(1, gasFraction), overpressureMPa,
-                temperatureC, silicaWt, 0, grain, compression));
-        burstPhaseUntil = Math.max(burstPhaseUntil, now + gameSeconds);
+        // the puff injects its whole ash mass over its duration
+        tephra.startPhase(new ExplosivePhase(vent, ashMassKg / durationSeconds, Math.min(1, gasFraction), overpressureMPa,
+                temperatureC, silicaWt, 0, grain));
+        burstPhaseUntil = Math.max(burstPhaseUntil, now + durationSeconds);
     }
 
     private void endBurstPhaseIfDue(double now, boolean sustained) {

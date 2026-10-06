@@ -24,8 +24,6 @@ import me.alex4386.typhon.engine.world.WorldSpec;
  *   solverSpacing: 64         # dxG: heat/groundwater solver resolution (m)
  * scaling:
  *   plumeMetersPerBlock: 100
- *   dormantTimeCompression: 5000
- *   eruptiveTimeCompression: 20
  * seaLevel: .nan              # metres; .nan = no sea
  * climate:
  *   rainfallMmPerHour: 0
@@ -42,7 +40,7 @@ import me.alex4386.typhon.engine.world.WorldSpec;
  * aquifer: {waterTableDepth: 20, specificYield: 0.1, topographyFactor: 0.6, baseLevel: .nan, rechargeFraction: 0.3}
  * terrain: {source: preset, preset: kilauea}   # free-form, interpreted by the host
  * lava: {coolingScale: 1}                       # any LavaConfig component
- * subsurface: {timeScale: 5000, macroStepSeconds: 60}   # any SubsurfaceConfig field except those
+ * subsurface: {macroStepSeconds: 60}   # any SubsurfaceConfig field except those
  *                                                     # set from climate/geotherm/aquifer
  * expansion: {enabled: true, marginTiles: 2, maxExtentM: 40000}   # on-demand growth (ExpansionConfig)
  * }</pre>
@@ -52,7 +50,7 @@ import me.alex4386.typhon.engine.world.WorldSpec;
  * @param scaling Froude scaling (its {@code metersPerBlock} is {@code grid.metersPerColumn})
  * @param terrain free-form initial-terrain description for the host (generator, DEM, ...)
  * @param subsurface heat/groundwater/surface-water parameters, with the climate, geotherm and aquifer
- *     values filled in; its {@code timeScale} defaults to the dormant time compression
+ *     values filled in
  * @param expansion on-demand growth of the simulated area
  */
 public record WorldDefinition(String name, long seed, double baseStepMs, WorldSpec spec, VolcanoScaling scaling,
@@ -162,9 +160,7 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
             "waterTableTopographyFactor", "waterTableBaseLevelM", "rechargeFraction");
 
     static SubsurfaceConfig defaultSubsurface(VolcanoScaling scaling) {
-        SubsurfaceConfig c = new SubsurfaceConfig();
-        c.timeScale = scaling.dormantTimeCompression();
-        return c;
+        return new SubsurfaceConfig();
     }
 
     private static SubsurfaceConfig withDerived(SubsurfaceConfig base, Climate climate, Geotherm geotherm,
@@ -216,10 +212,7 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
         VolcanoScaling base = VolcanoScaling.DEFAULT;
         VolcanoScaling scaling;
         try {
-            scaling = new VolcanoScaling(dxS,
-                    scalingNode.number("plumeMetersPerBlock", base.plumeMetersPerBlock()),
-                    scalingNode.number("dormantTimeCompression", base.dormantTimeCompression()),
-                    scalingNode.number("eruptiveTimeCompression", base.eruptiveTimeCompression()));
+            scaling = new VolcanoScaling(dxS, scalingNode.number("plumeMetersPerBlock", base.plumeMetersPerBlock()));
         } catch (IllegalArgumentException e) {
             throw scalingNode.error(e.getMessage());
         }
@@ -316,9 +309,7 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
         root.put("seed", seed);
         root.put("baseStepMs", baseStepMs);
         root.put("grid", map("metersPerColumn", spec.metersPerColumn(), "solverSpacing", spec.solverSpacing()));
-        root.put("scaling", map("plumeMetersPerBlock", scaling.plumeMetersPerBlock(),
-                "dormantTimeCompression", scaling.dormantTimeCompression(),
-                "eruptiveTimeCompression", scaling.eruptiveTimeCompression()));
+        root.put("scaling", map("plumeMetersPerBlock", scaling.plumeMetersPerBlock()));
         root.put("seaLevel", ConfigBinder.export(spec.seaLevelZ()));
         Map<String, Object> climateTree = map("rainfallMmPerHour", climate.rainfallMmPerHour(),
                 "evaporationMmPerHour", climate.evaporationMmPerHour());

@@ -145,6 +145,12 @@ public abstract class MassFlowField implements Subsystem {
         return config.stepPeriodSeconds;
     }
 
+    /** While a flow moves, one field step per engine step (the field sub-steps by CFL within it). */
+    @Override
+    public double maxStepSeconds() {
+        return activeCellCount() > 0 ? config.stepPeriodSeconds : Double.POSITIVE_INFINITY;
+    }
+
     @Override
     public void registerCommands(CommandBus bus) {
         bus.register(MassFlowCommands.ReleaseFlow.class, c -> {
@@ -380,7 +386,7 @@ public abstract class MassFlowField implements Subsystem {
         double time = context.time();
         currentTime = time;
         stamp = context.step();
-        double dt = context.dtSeconds() * config.timeScale;
+        double dt = context.dtSeconds();
         Outbox outbox = context.outbox();
         stats.reset();
 

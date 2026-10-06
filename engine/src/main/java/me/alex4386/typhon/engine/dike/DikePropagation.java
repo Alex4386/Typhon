@@ -118,6 +118,14 @@ public final class DikePropagation implements Subsystem {
         return config.stepPeriodSeconds;
     }
 
+    /** Longest step while a dike rises (s); propagation sub-steps by distance inside it. */
+    public static final double RISING_STEP_SECONDS = 20;
+
+    @Override
+    public double maxStepSeconds() {
+        return activeCount() > 0 ? RISING_STEP_SECONDS : Double.POSITIVE_INFINITY;
+    }
+
     @Override
     public void registerCommands(CommandBus bus) {
         bus.register(DikeCommands.ForceDike.class, c -> {
@@ -192,7 +200,7 @@ public final class DikePropagation implements Subsystem {
     @Override
     public void step(StepContext context) {
         SimRandom random = context.random();
-        double dtPhysical = context.dtSeconds() * config.timeScale;
+        double dtPhysical = context.dtSeconds();
 
         while (forcedPending > 0) {
             forcedPending--;

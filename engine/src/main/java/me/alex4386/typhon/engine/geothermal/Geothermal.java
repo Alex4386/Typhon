@@ -162,6 +162,14 @@ public final class Geothermal implements Subsystem, HeatSources {
         return config.stepSeconds;
     }
 
+    /** Longest step (s): feature formation and the shallow reservoir are integrated over at most this. */
+    public static final double MAX_STEP_SECONDS = 86_400;
+
+    @Override
+    public double maxStepSeconds() {
+        return MAX_STEP_SECONDS;
+    }
+
     @Override
     public Object config() {
         return config;
@@ -172,7 +180,7 @@ public final class Geothermal implements Subsystem, HeatSources {
         parallel = context.parallel();
         now = context.time();
         buryUnderLava(context);
-        double dt = context.dtSeconds() * config.timeScale;
+        double dt = context.dtSeconds();
         sampleTerrain();
         if (!prewarmed && config.prewarmSeconds > 0 && knownFraction() >= 0.5) {
             equilibrate(config.prewarmSeconds);
@@ -240,7 +248,7 @@ public final class Geothermal implements Subsystem, HeatSources {
                 0,
                 1.5);
         double pressure = 1 + clamp(magma.overpressureMPa() / config.overpressureFullMPa, 0, 1);
-        double eruption = magma.erupting() ? 1 + Math.min(1, magma.physicalEruptionRate() / config.eruptionRateFull) : 1;
+        double eruption = magma.erupting() ? 1 + Math.min(1, magma.eruptionRate() / config.eruptionRateFull) : 1;
         return thermal * pressure * eruption;
     }
 
@@ -900,11 +908,11 @@ public final class Geothermal implements Subsystem, HeatSources {
 
     /**
      * True while lava covers column (x, z) or covered it within {@link GeothermalConfig#lavaExclusionSeconds}
-     * of volcano time: no surface feature belongs on a fresh flow.
+     * (s): no surface feature belongs on a fresh flow.
      */
     boolean lavaCovered(int x, int z) {
         Double at = lavaCover.get(PlacedFeature.key(x, z));
-        return at != null && (now - at) * config.timeScale <= config.lavaExclusionSeconds;
+        return at != null && now - at <= config.lavaExclusionSeconds;
     }
 
     /**
@@ -915,7 +923,7 @@ public final class Geothermal implements Subsystem, HeatSources {
         if (lavaCover.isEmpty()) return;
         List<Long> stale = new ArrayList<>();
         for (Map.Entry<Long, Double> e : lavaCover.entrySet()) {
-            if ((now - e.getValue()) * config.timeScale > config.lavaExclusionSeconds) {
+            if (now - e.getValue() > config.lavaExclusionSeconds) {
                 stale.add(e.getKey());
                 continue;
             }

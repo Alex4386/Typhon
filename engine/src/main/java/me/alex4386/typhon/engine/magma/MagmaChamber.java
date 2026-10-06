@@ -60,9 +60,8 @@ import me.alex4386.typhon.engine.volcano.MagmaState;
  * residual melt in SiO₂, H₂O and CO₂; volatiles beyond solubility ({@code 0.411 √P} wt% H₂O, Henry's
  * law for CO₂) exsolve and slowly vent.
  *
- * <p><b>Time.</b> Physical time runs {@code dormantTimeScale} times faster than simulated time while
- * the chamber is quiet and {@code eruptiveTimeScale} times faster during eruptions. All {@link
- * MagmaState} rates are per simulated second unless named physical.
+ * <p><b>Time.</b> All {@link MagmaState} rates are per second. The chamber asks for short steps
+ * ({@link #maxStepSeconds()}) while erupting or about to, and long ones while it recharges quietly.
  *
  * <p>References: Blake (1981), Nature 289:783-785; Huppert &amp; Woods (2002), Nature 420:493-495;
  * Wilson &amp; Head (1981), JGR 86:2971-3001; Melnik &amp; Sparks (1999), Nature 402:37-41. See {@code
@@ -234,6 +233,24 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return config.stepPeriodSeconds();
     }
 
+    /** Longest step while erupting (s): the conduit solution and gas budget are relinearised this often. */
+    public static final double ERUPTING_STEP_SECONDS = 20;
+    /** Longest step of a quiet chamber (s). */
+    public static final double QUIET_STEP_SECONDS = 86_400;
+
+    /**
+     * While erupting {@link #ERUPTING_STEP_SECONDS}; while quiet, a quarter of the time the current
+     * pressurisation needs to reach roof failure (so the eruption starts on time), at most
+     * {@link #QUIET_STEP_SECONDS}.
+     */
+    @Override
+    public double maxStepSeconds() {
+        if (erupting || pendingStart || pendingFlank) return ERUPTING_STEP_SECONDS;
+        if (!eruptive || summitBlocked || !(overpressureRate > 0)) return QUIET_STEP_SECONDS;
+        double toFailure = (failureOverpressureMPa() - overpressure) / overpressureRate;
+        return Math.max(config.stepPeriodSeconds(), Math.min(QUIET_STEP_SECONDS, 0.25 * Math.max(0, toFailure)));
+    }
+
     @Override
     public MagmaEvents.ChamberSample snapshot() {
         return sample(lastTime);
@@ -295,7 +312,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         // model) stays around the chamber: the walls yield and the chamber grows instead.
         absorbRuptureExcess();
 
-        double physicalDt = physicalSeconds(dt);
+        double physicalDt = dt;
         double supply = currentSupply(context.random());
         double inflow = supply * physicalDt;
 
@@ -634,13 +651,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private void percolateGas(StepContext context, double physicalDt, double waterKg, double co2Kg) {
         plugGas = 0;
         resealRemaining = 0;
-        // Between eruptions the chamber's budget runs at the dormant time scale (years per hour of
-        // play), but open-vent explosions are surface activity watched in volcano time at the eruptive
-        // scale. Bursting every slug of the compressed budget would fire them thousands of times too
-        // often (a near-continuous ash column); only the eruptive-time share bursts, the rest of the
-        // gas escapes passively as it would between the explosions an observer sees.
-        double surfaceShare = Math.min(1, config.eruptiveTimeScale() / config.dormantTimeScale());
-        double gas = (waterKg + co2Kg) * coalescence(Math.pow(10, viscosityLog10())) * surfaceShare;
+        double gas = (waterKg + co2Kg) * coalescence(Math.pow(10, viscosityLog10()));
         if (gas > 0) accumulateSlugs(context, gas, gasConstant(waterKg, co2Kg));
         else slugGas = 0;
     }
@@ -913,13 +924,6 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      *
      * @return the overpressure drop (MPa)
      */
-    /**
-     * Physical (volcano-time) seconds of a step of {@code dtSeconds} simulated seconds. The one place a
-     * chamber, and the plumbing around it, converts step time to physical time.
-     */
-    public double physicalSeconds(double dtSeconds) {
-        return dtSeconds * (erupting ? config.eruptiveTimeScale() : config.dormantTimeScale());
-    }
 
     /** Lets this chamber erupt through the summit conduit (the main chamber) or not (deeper or side chambers). */
     public void setEruptive(boolean eruptive) {
@@ -1105,11 +1109,6 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     @Override
     public double volumeM3() {
         return volume;
-    }
-
-    @Override
-    public double physicalEruptionRate() {
-        return erupting ? eruptionRate / config.eruptiveTimeScale() : 0;
     }
 
     /**

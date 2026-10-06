@@ -34,8 +34,9 @@ import me.alex4386.typhon.engine.world.WorldModel;
  * as steam, and the sea is a fixed-level boundary. {@link #budget()} accounts for every m³.
  *
  * <h2>Heat</h2>
- * Every {@link SubsurfaceConfig#macroStepSeconds} the heat and groundwater solvers advance by that
- * period × {@link SubsurfaceConfig#timeScale}. Volcanoes register {@link HeatSources} (chamber halo
+ * Every {@link SubsurfaceConfig#macroStepSeconds} (or once per longer engine step) the heat and
+ * groundwater solvers advance by the time that passed, in spans of at most
+ * {@link SubsurfaceConfig#maxMacroSpanSeconds}. Volcanoes register {@link HeatSources} (chamber halo
  * as the bottom boundary, vent heat pipes); surface flows add heat through {@link #addSurfaceHeat};
  * dikes through {@link #addSheetHeat}. Solver chunks far from any anomaly are not stepped
  * (DORMANT), neighbours of anomalies are stepped every {@code warmEvery} macro steps (WARM).
@@ -186,10 +187,21 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
         surface.step(dt, infiltration());
         macroClock += dt;
         if (macroClock + 1e-9 >= config.macroStepSeconds) {
-            macroClock -= config.macroStepSeconds;
+            // all whole macro periods that passed, in spans the solvers take in one go
+            double span = Math.floor((macroClock + 1e-9) / config.macroStepSeconds) * config.macroStepSeconds;
+            macroClock -= span;
             if (macroClock < 1e-9) macroClock = 0;
-            macroStep(config.macroStepSeconds * config.timeScale, config.macroStepSeconds, true);
+            while (span > 1e-9) {
+                double part = Math.min(span, config.maxMacroSpanSeconds);
+                macroStep(part, part, true);
+                span -= part;
+            }
         }
+    }
+
+    @Override
+    public double maxStepSeconds() {
+        return surface.moving() ? config.movingWaterStepSeconds : Double.POSITIVE_INFINITY;
     }
 
     /** Brings the grid and surface water up to date with the world model (new columns, lakes, edits). */
@@ -284,7 +296,7 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
     }
 
     /**
-     * One heat + groundwater step of {@code dtPhysical} seconds ({@code dtSim} is the simulated time it
+     * One heat + groundwater step of {@code dtPhysical} seconds ({@code dtSim} is the time it
      * covers; rain is integrated over physical time). With {@code levelOfDetail}, settled chunks are
      * skipped (play); without, every chunk is stepped (spin-up, where slow transients must run to
      * completion).

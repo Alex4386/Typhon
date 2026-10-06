@@ -47,7 +47,7 @@ public final class SeismicityModel implements Subsystem {
     private double vtRatePerMinute;
     private double lpRatePerMinute;
     private double explosionRatePerMinute;
-    /** End of the current swarm / tremor episode (simulated seconds; negative = none). */
+    /** End of the current swarm / tremor episode (seconds; negative = none). */
     private double swarmUntil = -1;
     private double tremorUntil = -1;
     private double tremorMagnitude;
@@ -163,8 +163,8 @@ public final class SeismicityModel implements Subsystem {
         }
         if (erupting && !tremorActive(now)) {
             // Tremor amplitude and how readily it sets in follow the physical magma flux, not the
-            // time-compressed rate (LP counts above do scale with simulated time).
-            double physicalRate = Math.max(0, magma.physicalEruptionRate());
+            // time-compressed rate (LP counts above do scale with time).
+            double physicalRate = Math.max(0, magma.eruptionRate());
             double onsetRate = config.tremorEpisodeRate() * Math.sqrt(physicalRate);
             if (random.chance(1 - Math.exp(-onsetRate * dt))) {
                 double seconds = random.nextExponential(1 / config.tremorMeanDurationSeconds());

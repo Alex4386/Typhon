@@ -126,7 +126,6 @@ public final class Geomorphology implements Subsystem {
     private Lahars lahars;
     private PyroclasticFlows pdc;
     private ChamberRoof roof;
-    private DoubleSupplier timeScale = () -> 1.0;
     private BooleanSupplier ventsOpen = () -> false;
     private List<VentSite> vents = List.of();
 
@@ -241,11 +240,6 @@ public final class Geomorphology implements Subsystem {
         this.roof = roof;
     }
 
-    /** Real seconds per simulated second (the volcano's clock), for alteration. */
-    public void setTimeScale(DoubleSupplier timeScale) {
-        this.timeScale = Objects.requireNonNull(timeScale);
-    }
-
     /** The vents, and whether their conduits are open (erupting). */
     public void setVents(List<VentSite> vents, BooleanSupplier open) {
         this.vents = List.copyOf(vents);
@@ -323,7 +317,7 @@ public final class Geomorphology implements Subsystem {
     @Override
     public void step(StepContext context) {
         now = context.time();
-        double dtReal = context.dtSeconds() * timeScale.getAsDouble();
+        double dtReal = context.dtSeconds();
         realClock += dtReal;
         Outbox outbox = context.outbox();
         changed.clear();

@@ -6,7 +6,7 @@ package me.alex4386.typhon.engine.geomorph;
  * material strengths themselves live in {@link RockStrength}.
  */
 public final class GeomorphConfig {
-    /** Simulated seconds between steps. */
+    /** Seconds between steps. */
     public double stepPeriodSeconds = 1.0;
 
     // ── Slope stability ──

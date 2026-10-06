@@ -9,7 +9,7 @@ import me.alex4386.typhon.engine.math.BlockPos;
  * geothermal activity, lava effusion, ...).
  *
  * <p>Units: 1 block = 1 m; pressures in MPa; temperatures in °C; compositions in weight percent;
- * rates per simulated second.
+ * rates per second.
  */
 public interface MagmaState {
     /** Centre of the magma chamber. */
@@ -54,16 +54,6 @@ public interface MagmaState {
 
     default double volumeM3() {
         return Double.NaN;
-    }
-
-    /**
-     * Eruption rate in physical time (DRE m³ per physical second). {@link #eruptionRate()} is per
-     * simulated second, so it includes the eruptive time compression; physics that depends on the
-     * instantaneous intensity of an eruption (column height, column collapse, tremor amplitude,
-     * eruption style) must use this instead.
-     */
-    default double physicalEruptionRate() {
-        return eruptionRate();
     }
 
     /**

@@ -27,7 +27,7 @@ public final class MagmaEvents {
 
     /**
      * @param eruptedVolume dense-rock-equivalent volume erupted (m³)
-     * @param durationSeconds simulated seconds between start and end
+     * @param durationSeconds seconds between start and end
      */
     public record EruptionEnded(double time, String volcanoId, double eruptedVolume, double durationSeconds, Cause cause)
             implements HistoricalEvent {}

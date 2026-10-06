@@ -248,6 +248,21 @@ public final class TephraSubsystem implements Subsystem {
 
     // ── Simulation ──
 
+    /** Longest step while bombs fly (s). */
+    static final double BOMB_STEP_SECONDS = 1;
+
+    /**
+     * While a phase erupts or ash is airborne, one ash step per engine step ({@link
+     * TephraConfig#ashStepSeconds}); while bombs fly, {@link #BOMB_STEP_SECONDS}.
+     */
+    @Override
+    public double maxStepSeconds() {
+        double limit = Double.POSITIVE_INFINITY;
+        if (phase != null || (grid != null && grid.airborneTotal() > 0)) limit = config.ashStepSeconds;
+        if (inFlightBombs() > 0) limit = Math.min(limit, BOMB_STEP_SECONDS);
+        return limit;
+    }
+
     @Override
     public void step(StepContext context) {
         processPending(context);
@@ -265,7 +280,7 @@ public final class TephraSubsystem implements Subsystem {
                     phase = start.phase();
                     ensureGrid(phase.vent().position());
                     context.outbox().emit(new ExplosivePhaseChanged(context.time(), id, true,
-                            phase.physicalMassEruptionRate()));
+                            phase.massEruptionRate()));
                 }
                 case StopExplosivePhase stop -> {
                     if (phase != null) {
@@ -595,7 +610,7 @@ public final class TephraSubsystem implements Subsystem {
             BlockPos base = vent.offset(0, 1, 0);
             // The column rises with the physical intensity of the eruption; the tephra each step
             // injects is the simulated (time-compressed) rate × step, so deposits add up correctly.
-            double height = PlumeModel.minecraftHeight(phase.physicalMassEruptionRate(), base.y(), config);
+            double height = PlumeModel.minecraftHeight(phase.massEruptionRate(), base.y(), config);
             double sigma = Math.max(config.cellSize * 0.5, 0.25 * height);
             grid.plumeHeight = height;
             grid.inject(
@@ -606,7 +621,7 @@ public final class TephraSubsystem implements Subsystem {
                     sigma);
             context.outbox().emit(new PlumeColumn(
                     context.time(), id, base, base.y() + (int) Math.round(height), 2 * sigma,
-                    phase.physicalMassEruptionRate()));
+                    phase.massEruptionRate()));
             lightning(context, base, height, sigma, dt);
         }
         if (grid == null) return;
@@ -632,12 +647,12 @@ public final class TephraSubsystem implements Subsystem {
     }
 
     private void lightning(StepContext context, BlockPos base, double height, double sigma, double dt) {
-        // Flash rate scales with the physical intensity; per simulated second there are
+        // Flash rate scales with the physical intensity; per second there are
         // timeCompression times as many physical seconds.
-        double rate = phase.physicalMassEruptionRate();
+        double rate = phase.massEruptionRate();
         if (rate < config.lightningMinMassEruptionRate || height < 1) return;
         double flashesPerSecond = Math.min(config.maxLightningPerSecond,
-                config.lightningPerMassRate * rate * phase.timeCompression());
+                config.lightningPerMassRate * rate);
         SimRandom random = context.random();
         int flashes = random.nextPoisson(flashesPerSecond * dt);
         for (int i = 0; i < flashes; i++) {
@@ -795,7 +810,6 @@ public final class TephraSubsystem implements Subsystem {
         vent.addProperty("fissureLength", v.fissureLength());
         out.add("vent", vent);
         out.addProperty("massEruptionRate", p.massEruptionRate());
-        out.addProperty("timeCompression", p.timeCompression());
         out.addProperty("gasFraction", p.gasFraction());
         out.addProperty("overpressure", p.overpressureMPa());
         out.addProperty("temperature", p.temperatureC());
@@ -819,15 +833,16 @@ public final class TephraSubsystem implements Subsystem {
         JsonArray f = in.getAsJsonArray("grainSize");
         double[] fractions = new double[f.size()];
         for (int i = 0; i < fractions.length; i++) fractions[i] = f.get(i).getAsDouble();
+        // phases saved under the old time compression stored a per-step rate: back to kg/s
+        double compression = in.has("timeCompression") ? in.get("timeCompression").getAsDouble() : 1;
         return new ExplosivePhase(
                 vent,
-                in.get("massEruptionRate").getAsDouble(),
+                in.get("massEruptionRate").getAsDouble() / compression,
                 in.get("gasFraction").getAsDouble(),
                 in.get("overpressure").getAsDouble(),
                 in.get("temperature").getAsDouble(),
                 in.get("silica").getAsDouble(),
                 in.get("ballisticFraction").getAsDouble(),
-                new GrainSizeDistribution(fractions),
-                in.has("timeCompression") ? in.get("timeCompression").getAsDouble() : 1);
+                new GrainSizeDistribution(fractions));
     }
 }

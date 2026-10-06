@@ -59,7 +59,7 @@ public final class TephraConfig {
 
     // ── Ash plume and fall ──
 
-    /** Ash transport runs every this many simulated seconds. */
+    /** Ash transport runs every this many seconds. */
     public double ashStepSeconds = 1.0;
     /** Horizontal size of an ash grid cell, blocks. */
     public int cellSize = 8;
@@ -84,7 +84,7 @@ public final class TephraConfig {
     /** Relative per-column jitter on thickness thresholds, to break up cell edges. */
     public double depositJitter = 0.3;
 
-    /** Ash-fall events are emitted every this many simulated seconds, aggregated over square regions. */
+    /** Ash-fall events are emitted every this many seconds, aggregated over square regions. */
     public double ashEventSeconds = 2.0;
     /** Region size for ash-fall events, in cells. */
     public int ashEventRegionCells = 4;

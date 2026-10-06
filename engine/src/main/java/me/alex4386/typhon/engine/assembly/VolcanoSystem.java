@@ -107,13 +107,7 @@ public final class VolcanoSystem {
         this.plumbing = all.size() > 1 || !d.connections().isEmpty()
                 ? new me.alex4386.typhon.engine.magma.plumbing.MagmaTransfer(volcanoId, all, chamber, d.connections(), scaling.metersPerBlock())
                 : null;
-        // The lava this volcano erupts lives on the volcano's clock: emplaced at the eruptive time
-        // compression, cooling on afterwards at the dormant one. Read live, so a retuned time
-        // compression applies at once.
         MagmaChamber clockChamber = chamber;
-        java.util.function.DoubleSupplier clock = () -> clockChamber.erupting() ? clockChamber.config().eruptiveTimeScale()
-                : clockChamber.config().dormantTimeScale();
-        b.lava.registerClock(volcanoId, clock);
 
         this.seismicity = new SeismicityModel(d.seismic(), chamber);
         this.alert = new AlertLevelEstimator(d.alert(), chamber, seismicity);
@@ -207,7 +201,6 @@ public final class VolcanoSystem {
             geomorphology.setGround(GroundState.of(subsurface));
             geomorphology.setFlows(avalanches, lahars, pdc);
             geomorphology.setChamber(ChamberRoof.of(chamber));
-            geomorphology.setTimeScale(clock);
             geomorphology.setVents(vents, clockChamber::erupting);
             Geomorphology g = geomorphology;
             seismicity.setQuakeListener(e -> g.queueQuake(e.hypocenter(), e.magnitude()));
@@ -247,8 +240,6 @@ public final class VolcanoSystem {
         MagmaChamberConfig chamberConfig = (b.chamberConfig != null
                         ? b.chamberConfig.toBuilder()
                         : MagmaChamberConfig.builder(volcanoId, defaultChamberCenter(primary)))
-                .dormantTimeScale(scaling.dormantTimeCompression())
-                .eruptiveTimeScale(scaling.eruptiveTimeCompression())
                 .build();
         if (!chamberConfig.volcanoId().equals(volcanoId)) {
             throw new IllegalArgumentException("Chamber config is for volcano " + chamberConfig.volcanoId());
@@ -257,9 +248,7 @@ public final class VolcanoSystem {
         List<MagmaChamberConfig> extraChambers = new java.util.ArrayList<>();
         for (MagmaChamberConfig extra : b.plumbing.chambers()) {
             if (!extra.volcanoId().equals(volcanoId)) throw new IllegalArgumentException("Chamber config is for volcano " + extra.volcanoId());
-            // one clock for the whole plumbing: the volcano's time scales
-            extraChambers.add(extra.toBuilder().dormantTimeScale(scaling.dormantTimeCompression())
-                    .eruptiveTimeScale(scaling.eruptiveTimeCompression()).build());
+            extraChambers.add(extra);
         }
         extraChambers.sort(java.util.Comparator.comparing(MagmaChamberConfig::chamberId));
         double failure = chamberConfig.tensileStrengthMPa();
@@ -269,7 +258,6 @@ public final class VolcanoSystem {
         DikeConfig dike = null;
         if (b.dikes) {
             dike = (b.dikeConfig != null ? b.dikeConfig : DikeConfig.defaults()).withScaling(scaling);
-            dike.timeScale = scaling.eruptiveTimeCompression();
         }
 
         TephraConfig tephra = b.tephraConfig != null ? b.tephraConfig.copy() : new TephraConfig();
@@ -321,14 +309,9 @@ public final class VolcanoSystem {
                 avalanche, deformation, geomorph, detail);
     }
 
-    /**
-     * Subsurface defaults for a volcano that runs its own (no world): heat and groundwater advance at
-     * the dormant time compression, so hydrothermal systems develop over hours of play.
-     */
+    /** Subsurface defaults for a volcano that runs its own (no world). */
     public static SubsurfaceConfig defaultSubsurfaceConfig(VolcanoScaling scaling) {
-        SubsurfaceConfig config = new SubsurfaceConfig();
-        config.timeScale = scaling.dormantTimeCompression();
-        return config;
+        return new SubsurfaceConfig();
     }
 
     /** Chamber a few dozen blocks under the primary vent, kept inside the overworld. */
@@ -531,7 +514,7 @@ public final class VolcanoSystem {
             this.stations = List.copyOf(stations);
             return this;
         }
-        /** Dike parameters; length scale and time compression are overridden by {@link #scaling}. */
+        /** Dike parameters; the length scale is overridden by {@link #scaling}. */
         public Builder dikes(DikeConfig config) { this.dikeConfig = config; return this; }
         /** Mass-flow parameters; {@code metersPerBlock} is overridden by {@link #scaling}. */
         public Builder pyroclasticFlows(MassFlowConfig config) { this.pdcConfig = config; return this; }

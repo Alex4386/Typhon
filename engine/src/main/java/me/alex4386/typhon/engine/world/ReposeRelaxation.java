@@ -9,7 +9,7 @@ import java.util.TreeSet;
  * (tephra, lapilli, bombs, wet Surtseyan tephra, debris), the column's loose top cascades downhill until
  * every local slope is within {@code L·tan φ} of its neighbours, the way grains avalanche off a growing
  * sand pile. It runs at deposition time, so a deposit of any size in a single step ends up relaxed
- * whatever the time compression or deposition rate.
+ * whatever the step length or deposition rate.
  *
  * <p>The cascade is a continuous sand pile: a column whose loose top exceeds the repose limit towards its
  * steepest neighbour (8-connected, diagonals at {@code √2 L}) moves half the excess there, then it and the

@@ -6,9 +6,9 @@ package me.alex4386.typhon.engine.subsurface;
  * {@code world.yaml}); the climate, geotherm and aquifer sections of the world definition fill the
  * corresponding fields.
  *
- * <p>All values are SI / real units. Physics runs at {@link #timeScale} × simulated time: heat and
- * groundwater act over months to years, so worlds usually spin them up ({@link Subsurface#equilibrate})
- * or compress them.
+ * <p>All values are SI / real units, in physical seconds. Heat and groundwater act over months to
+ * years, so worlds usually spin them up ({@link Subsurface#equilibrate}); with adaptive engine steps a
+ * quiet world advances them hours at a time.
  */
 public final class SubsurfaceConfig {
     // ── Vertical grid ──
@@ -20,12 +20,14 @@ public final class SubsurfaceConfig {
     public double levelGrowth = 1.32;
 
     // ── Time ──
-    /** Simulated seconds between heat/groundwater steps (macro step). */
+    /** Seconds between heat/groundwater steps (macro step); longer engine steps run longer macro steps. */
     public double macroStepSeconds = 120;
-    /** Simulated seconds between surface-water steps (sub-stepped internally for stability). */
+    /** Seconds between surface-water steps (sub-stepped internally for stability). */
     public double surfaceWaterStepSeconds = 1;
-    /** Time compression of heat and groundwater: a macro step advances them by {@code dt × timeScale}. */
-    public double timeScale = 1;
+    /** Longest single heat/groundwater solve (s); longer spans are split (groundwater sub-steps further). */
+    public double maxMacroSpanSeconds = 7 * 86_400;
+    /** Longest engine step while surface water moves (s): keeps the CFL sub-steps per step bounded. */
+    public double movingWaterStepSeconds = 30;
 
     // ── Thermal ──
     /** Mean annual surface temperature (°C); upper boundary of conduction. */
@@ -125,8 +127,8 @@ public final class SubsurfaceConfig {
     public void validate() {
         if (levels < 2 || levels > 64) throw new IllegalArgumentException("levels must be in [2, 64]");
         if (!(firstLevelM > 0) || !(levelGrowth >= 1)) throw new IllegalArgumentException("bad level geometry");
-        if (!(macroStepSeconds > 0) || !(surfaceWaterStepSeconds > 0) || !(timeScale > 0)) {
-            throw new IllegalArgumentException("time steps and timeScale must be > 0");
+        if (!(macroStepSeconds > 0) || !(surfaceWaterStepSeconds > 0)) {
+            throw new IllegalArgumentException("time steps must be > 0");
         }
         if (rainfallMmPerHour < 0 || evaporationMmPerHour < 0) throw new IllegalArgumentException("negative rates");
         if (!(specificYield > 0 && specificYield <= 1)) throw new IllegalArgumentException("specificYield must be in (0, 1]");

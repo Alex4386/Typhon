@@ -10,7 +10,7 @@ package me.alex4386.typhon.engine.expansion;
  *   marginTiles: 2           # activity this close (tiles) to unsimulated ground materialises it
  *   maxExtentM: 40000        # hard cap: tiles must lie within a square this wide around x = z = 0
  *   maxTiles: 400            # hard cap on tiles added by expansion (memory bound)
- *   periodSeconds: 1         # how often (simulated s) activity is checked
+ *   periodSeconds: 1         # how often (s) activity is checked
  *   ashThresholdM: 0.01      # tephra fall at least this thick (m) counts as activity
  *   waterThresholdM: 0.25    # moving surface water at least this deep (m) counts as activity
  * }</pre>
@@ -22,7 +22,7 @@ package me.alex4386.typhon.engine.expansion;
  * @param marginTiles Chebyshev distance (tiles) around active ground that must be simulated
  * @param maxExtentM width (m) of the square around the world origin that expansion stays within
  * @param maxTiles maximum number of tiles expansion may add
- * @param periodSeconds activity check period (simulated seconds)
+ * @param periodSeconds activity check period (seconds)
  * @param ashThresholdM tephra deposit thickness (m) that makes an area active ({@code Infinity} = never)
  * @param waterThresholdM moving surface-water depth (m) that makes an area active ({@code Infinity} = never)
  */

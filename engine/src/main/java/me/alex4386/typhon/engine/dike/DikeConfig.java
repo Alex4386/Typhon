@@ -7,10 +7,8 @@ import me.alex4386.typhon.engine.volcano.VolcanoScaling;
  * model-world geometry uses {@link #metersPerBlock}.
  */
 public final class DikeConfig {
-    /** Simulated seconds between steps. */
+    /** Seconds between steps. */
     public double stepPeriodSeconds = 1.0;
-    /** Physical seconds simulated per engine second while a dike propagates. */
-    public double timeScale = 1.0;
     /** Real metres per block of horizontal model geometry (see {@link VolcanoScaling}). */
     public double metersPerBlock = VolcanoScaling.DEFAULT.metersPerBlock();
 
@@ -23,7 +21,7 @@ public final class DikeConfig {
     public double conduitSealing = 0.5;
     /** Dikes may nucleate once overpressure exceeds this fraction of the roof tensile strength. */
     public double initiationPressureRatio = 0.85;
-    /** Nucleation rate (per simulated second) at full strength and full sealing; grows quadratically. */
+    /** Nucleation rate (per second) at full strength and full sealing; grows quadratically. */
     public double maxInitiationRate = 1.0 / 60.0;
     public int maxConcurrentDikes = 1;
     /**
@@ -99,7 +97,6 @@ public final class DikeConfig {
     public DikeConfig copy() {
         DikeConfig c = new DikeConfig();
         c.stepPeriodSeconds = stepPeriodSeconds;
-        c.timeScale = timeScale;
         c.metersPerBlock = metersPerBlock;
         c.conduitSealing = conduitSealing;
         c.initiationPressureRatio = initiationPressureRatio;
@@ -134,7 +131,6 @@ public final class DikeConfig {
 
     public void validate() {
         requirePositive("stepPeriodSeconds", stepPeriodSeconds);
-        requirePositive("timeScale", timeScale);
         requirePositive("metersPerBlock", metersPerBlock);
         if (!(conduitSealing >= 0 && conduitSealing <= 1)) {
             throw new IllegalArgumentException("conduitSealing must be in [0, 1]");

@@ -29,7 +29,7 @@ public final class AlertLevelEstimator implements Subsystem {
 
     private AlertLevel level;
     private EruptionClassifier classifier;
-    /** Simulated time at which a downgrade became possible (negative = not pending). */
+    /** Time at which a downgrade became possible (negative = not pending). */
     private double downgradeSince = -1;
 
     /** @param seismicity seismic observables, or {@code null} to rely on overpressure alone */

@@ -6,9 +6,6 @@ package me.alex4386.typhon.engine.lava;
  * <p>All lengths are real metres. The grid geometry comes from {@link #metersPerBlock}: a column is
  * {@code L × L} m, and one block of solidified rock is {@code L} m thick.
  *
- * @param timeScale extra multiplier on the lava field's time compression. With volcano clocks
- *     registered ({@link LavaFlow#registerClock}) the field advances at the clock's compression times
- *     this; without clocks (standalone use) it is the compression itself (1 = physical speed)
  * @param coolingScale multiplier on heat loss (&gt; 1 makes flows solidify sooner)
  * @param densityKgM3 lava bulk density
  * @param specificHeatJKgK heat capacity above the liquidus
@@ -25,7 +22,7 @@ package me.alex4386.typhon.engine.lava;
  * @param renderMinThickness films thinner than this fraction of a block are not shown as blocks
  * @param quenchRateKPerS physical cooling rate above which lava counts as quenched (glassy)
  * @param columnarMinThickness flows at least this thick that cool slowly form columnar joints
- * @param frontEventPeriodSeconds simulated seconds between {@link LavaEvents.LavaFlowFront} events
+ * @param frontEventPeriodSeconds seconds between {@link LavaEvents.LavaFlowFront} events
  * @param maxWaterEventsPerStep cap on {@link LavaEvents.LavaOceanEntry} events per interval
  * @param crustEnabled whether quiet flows grow an insulating crust (lava tubes need it)
  * @param crustConductivityWMK thermal conductivity of the (vesicular) crust
@@ -43,7 +40,7 @@ package me.alex4386.typhon.engine.lava;
  * @param metersPerBlock real metres per block (grid cell width and solid-block thickness)
  * @param waterEntryMinVolumeM3 submerged molten columns holding less lava than this are ignored by
  *     {@link LavaEvents.LavaOceanEntry} (quench films)
- * @param eventPeriodSeconds simulated seconds between aggregated {@link LavaEvents.LavaOceanEntry} and
+ * @param eventPeriodSeconds seconds between aggregated {@link LavaEvents.LavaOceanEntry} and
  *     {@link LavaEvents.LavaSolidified} events
  * @param maxSubsteps upper bound on flow sub-steps per engine step. The physical step is split so
  *     that the explicit flux stays within its stability limit ({@code Δt ≤ relaxation·L²/D},
@@ -53,11 +50,10 @@ package me.alex4386.typhon.engine.lava;
  * @param substepFlowThicknessM flow thickness the sub-step size is resolved for (a typical flow lobe
  *     or front; pāhoehoe lobes are ~0.2–1 m)
  * @param coolingStepK largest temperature drop of one column per cooling sub-iteration; the heat
- *     balance of a compressed step is integrated in such sub-iterations (per column, so thin films
+ *     balance of a long step is integrated in such sub-iterations (per column, so thin films
  *     that cool fast do not hold up the rest)
  */
 public record LavaConfig(
-        double timeScale,
         double coolingScale,
         double densityKgM3,
         double specificHeatJKgK,
@@ -94,19 +90,18 @@ public record LavaConfig(
     public LavaConfig {
         if (!(metersPerBlock > 0)) throw new IllegalArgumentException("metersPerBlock must be > 0");
         if (!(eventPeriodSeconds > 0)) throw new IllegalArgumentException("eventPeriodSeconds must be > 0");
-        if (!(timeScale > 0)) throw new IllegalArgumentException("timeScale must be > 0");
         if (maxSubsteps < 1) throw new IllegalArgumentException("maxSubsteps must be >= 1");
         if (!(substepFlowThicknessM > 0)) throw new IllegalArgumentException("substepFlowThicknessM must be > 0");
         if (!(coolingStepK > 0)) throw new IllegalArgumentException("coolingStepK must be > 0");
     }
 
     /** Flow-only configuration (crust, tube and coast parameters at their defaults). */
-    public LavaConfig(double timeScale, double coolingScale, double densityKgM3, double specificHeatJKgK,
+    public LavaConfig(double coolingScale, double densityKgM3, double specificHeatJKgK,
             double latentHeatJKg, double emissivity, double ambientC, double waterC, double waterHeatTransferWM2K,
             double groundConductivityWMK, double groundBoundaryLayerM, double minFlowThickness, double relaxation,
             double renderMinThickness, double quenchRateKPerS, double columnarMinThickness, double frontEventPeriodSeconds,
             int maxWaterEventsPerStep) {
-        this(timeScale, coolingScale, densityKgM3, specificHeatJKgK, latentHeatJKg, emissivity, ambientC, waterC,
+        this(coolingScale, densityKgM3, specificHeatJKgK, latentHeatJKg, emissivity, ambientC, waterC,
                 waterHeatTransferWM2K, groundConductivityWMK, groundBoundaryLayerM, minFlowThickness, relaxation,
                 renderMinThickness, quenchRateKPerS, columnarMinThickness, frontEventPeriodSeconds, maxWaterEventsPerStep,
                 true, 1.0, 0.3, 1.0, 0.25, 1.0, 0.05, 0.5, 1.0, 1.0, 0.01, 1.0, 8, 0.5, 25.0);
@@ -119,7 +114,7 @@ public record LavaConfig(
      */
     public static LavaConfig defaults() {
         return new LavaConfig(
-                1.0, 1.0,
+                1.0,
                 2600, 1150, 4.0e5, 0.95,
                 25, 15, 3000,
                 2.0, 0.5,
@@ -130,10 +125,6 @@ public record LavaConfig(
 
     public Builder toBuilder() {
         return new Builder(this);
-    }
-
-    public LavaConfig withTimeScale(double timeScale) {
-        return toBuilder().timeScale(timeScale).build();
     }
 
     public LavaConfig withCoolingScale(double coolingScale) {
@@ -160,7 +151,7 @@ public record LavaConfig(
 
     /** Mutable copy for changing several parameters at once. */
     public static final class Builder {
-        private double timeScale, coolingScale, densityKgM3, specificHeatJKgK, latentHeatJKg, emissivity;
+        private double coolingScale, densityKgM3, specificHeatJKgK, latentHeatJKg, emissivity;
         private double ambientC, waterC, waterHeatTransferWM2K, groundConductivityWMK, groundBoundaryLayerM;
         private double minFlowThickness, relaxation, renderMinThickness, quenchRateKPerS, columnarMinThickness;
         private double frontEventPeriodSeconds;
@@ -175,7 +166,6 @@ public record LavaConfig(
         private double coolingStepK;
 
         private Builder(LavaConfig c) {
-            timeScale = c.timeScale;
             coolingScale = c.coolingScale;
             densityKgM3 = c.densityKgM3;
             specificHeatJKgK = c.specificHeatJKgK;
@@ -210,7 +200,6 @@ public record LavaConfig(
             coolingStepK = c.coolingStepK;
         }
 
-        public Builder timeScale(double v) { timeScale = v; return this; }
         public Builder coolingScale(double v) { coolingScale = v; return this; }
         public Builder minFlowThickness(double v) { minFlowThickness = v; return this; }
         public Builder renderMinThickness(double v) { renderMinThickness = v; return this; }
@@ -232,7 +221,7 @@ public record LavaConfig(
         public Builder coolingStepK(double v) { coolingStepK = v; return this; }
 
         public LavaConfig build() {
-            return new LavaConfig(timeScale, coolingScale, densityKgM3, specificHeatJKgK, latentHeatJKg, emissivity,
+            return new LavaConfig(coolingScale, densityKgM3, specificHeatJKgK, latentHeatJKg, emissivity,
                     ambientC, waterC, waterHeatTransferWM2K, groundConductivityWMK, groundBoundaryLayerM,
                     minFlowThickness, relaxation, renderMinThickness, quenchRateKPerS, columnarMinThickness,
                     frontEventPeriodSeconds, maxWaterEventsPerStep, crustEnabled, crustConductivityWMK, crustMinThickness,
