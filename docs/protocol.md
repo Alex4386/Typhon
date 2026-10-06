@@ -77,7 +77,7 @@ reopened later and can be tuned (§3.5). *In-memory* sessions run a preset witho
 | `attach` | `sessionId: string` | Attach to an existing session (detaching from the current one). Reply: `attached` …, or `error{noSession}`. |
 | `sessionControl` | `requestId?`, `sessionId`, `action: "pause" \| "resume" \| "close" \| "closeWithoutSaving"` | Pause/resume any session (also one this client does not watch). `close` saves a world session and unloads it; clients attached to it receive `detached`. |
 | `deleteWorld` | `requestId?`, `name` | Delete `<worlds-dir>/<name>` (refused while it is loaded). Reply `ack`, then a fresh `catalog`. |
-| `subscribe` | `fields: FieldId[]`, `bounds?: TileBounds` | Replace the set of streamed tile fields (§5.2). Optional inclusive tile bounds restrict streaming; omitted means all tiles. Resets flow-control counters (§5.4). |
+| `subscribe` | `fields: FieldId[]`, `bounds?: TileBounds`, `levels?: int[]` | Replace the set of streamed tile fields (§5.2). Optional inclusive tile bounds restrict streaming of level 0; omitted means all tiles. `levels` adds pyramid levels from `WorldInfo.lod` (§5.5) — coarse context (> 0) and crater detail (< 0); level 0 always streams. Resets flow-control counters (§5.4). |
 | `flow` | `tilesProcessed: number` | Cumulative tile frames processed since the last `subscribe` (§5.4). |
 
 ### 3.2 Transport
@@ -232,6 +232,7 @@ for `SteamFraction`; section pixels for unmodelled quantities are 0 (saturation,
 | `volcanoes` | `VolcanoInfo[]` | `{id, name, vents: VentInfo[], chamber: {center: [x,y,z], radius}}`. |
 | `materials` | `MaterialInfo[]` | `{id, name, color: "#rrggbb", kind}`. `kind` is one of `rock`, `tephra`, `soil`, `ice`, `void`, `water`, `magma`. Ids are those used in sections. |
 | `depositTypes` | `DepositTypeInfo[]` | `{id, name, color}`, for the engine's deposit types (LAVA, FALL, PDC, LAHAR, TUBE_ROOF, INTRUSION, BASEMENT, FILL, …). |
+| `lod` | `LodInfo` | The tile pyramid (§5.5): `{levels: [{level, cellSize, tiles: TileBounds, fields: FieldId[], kind: "context" \| "detail"}], extent: [x0, y0, x1, y1]}`. `extent` is the whole landscape the server describes (m), the simulated core included. |
 
 `VentInfo` is `{id, kind: "crater" | "fissure", at, z, radius, line?: [XY, XY]}`.
 
@@ -483,6 +484,36 @@ compression.
   exceed ~128 KiB.
 - Tiles are never dropped, only delayed. A tile skipped now is still pending and goes out later at its
   newest version.
+
+### 5.5 Levels (multi-resolution)
+
+The core's columns are level 0. Around them the server offers a pyramid of extra levels, listed in
+`WorldInfo.lod` and streamed only to clients that ask for them (`subscribe.levels`):
+
+- **Coarse context levels `ℓ = 1…K`** — cells of `2^ℓ` columns. Level ℓ covers `2^ℓ` core half-widths
+  around the core's centre (a clipmap), clamped to `lod.extent` (by default 30 km at real scale, at
+  least 6 km and four core widths for compact worlds), so each level has about as many cells as the
+  core has columns. Inside the core a coarse cell is the **mean** of its live columns, so volumes per
+  area (lava, ash, PDC, lahar depth) and elevations are conserved between levels; outside, it is the
+  static context terrain (the generator's continuous surface, or the nearest core edge for DEMs) and,
+  for `AshDepth`, the tephra deposit where the ash grid reaches. Fields: 1, 2, 5, 6, 7, 11.
+- **Fine detail levels `ℓ < 0`** — cells of `2^ℓ` columns (1–5 m) over each volcano's crater-resolving
+  region (volcano YAML `detail: {radiusM, metersPerCell}`; default eight crater radii, 150–1500 m).
+  A detail cell's elevation averages to its column's, so the fine surface adds the shape of craters,
+  rims and ponds without volume and without seams; outside the region a fine tile repeats its
+  columns. Field: 1.
+
+All levels share `origin` and `tileSize`: level-ℓ cell `(i, j)` covers
+`x ∈ origin.x + [i·c, (i+1)·c)`, `y ∈ origin.y + [j·c, (j+1)·c)` with `c = cellSize·2^ℓ`, and tile
+`(tx, ty)` holds cells `i = tx·T + col`, `j = ty·T + row`. Tile indices can be negative (context west or
+south of the core). A tile frame carries its level as an **i16 at header offset 2** (0 for level 0, the
+value every protocol-1 frame already had there).
+
+Rendering: draw the coarsest level for the whole `extent`, then each finer level over its tiles, with
+level 0 over the core and detail levels over the craters; where a finer tile is present it replaces
+the coarser one. Elevation tiles spanning more than 655 m use codec 6 (F32Raw) instead of codec 1.
+Flow control is shared with level 0 (one credit window): level 0 goes first, then the coarse levels
+(coarsest first), then detail.
 
 ## 6. Section frames (binary, kind 2)
 

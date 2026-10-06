@@ -1,5 +1,6 @@
 package me.alex4386.typhon.simulator.terrain;
 
+import java.util.function.DoubleBinaryOperator;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.world.BlockId;
 
@@ -17,6 +18,15 @@ public final class TerrainGenerators {
     static final BlockId GRAVEL = BlockId.minecraft("gravel");
 
     private TerrainGenerators() {}
+
+    /**
+     * Continuous surface of a generator whose ground block at column (x, z) is
+     * {@code base + round(raw(x, z))}: the block top {@code base + raw + 1} at fractional column
+     * coordinates (column x spans [x, x+1), its centre is the generator's integer x).
+     */
+    static ColumnGrid.Relief relief(int base, DoubleBinaryOperator raw) {
+        return (cx, cz) -> base + raw.applyAsDouble(cx - 0.5, cz - 0.5) + 1;
+    }
 
     /**
      * Composite stratovolcano / cinder-cone geometry.
@@ -50,11 +60,12 @@ public final class TerrainGenerators {
 
     /** Flat grassland with gentle undulation. */
     public static ColumnGrid plain(int halfExtent, long seed) {
-        ColumnGrid grid = ColumnGrid.centered(halfExtent);
         ValueNoise noise = new ValueNoise(seed);
+        DoubleBinaryOperator raw = (x, z) -> 2 * noise.fbm(x, z, 48, 3);
+        ColumnGrid grid = ColumnGrid.centered(halfExtent).withRelief(relief(BASE_Y, raw));
         for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
             for (int x = grid.minX(); x <= grid.maxX(); x++) {
-                int y = BASE_Y + (int) Math.round(2 * noise.fbm(x, z, 48, 3));
+                int y = BASE_Y + (int) Math.round(raw.applyAsDouble(x, z));
                 grid.set(x, z, y, TerrainColumn.NO_WATER, GRASS);
             }
         }
@@ -63,14 +74,18 @@ public final class TerrainGenerators {
 
     /** A cone (stratovolcano or cinder cone) standing on a plain. */
     public static ColumnGrid cone(int halfExtent, long seed, Cone cone) {
-        ColumnGrid grid = ColumnGrid.centered(halfExtent);
         ValueNoise noise = new ValueNoise(seed);
+        DoubleBinaryOperator raw = (x, z) -> {
+            double d = Math.sqrt(x * x + z * z);
+            double h = cone.profile(d);
+            double rough = d > cone.craterRadius() ? 1.5 * noise.fbm(x, z, 24, 3) * Math.min(1, h / 8 + 0.3) : 0;
+            return h + rough + 1.5 * noise.fbm(x, z, 64, 2);
+        };
+        ColumnGrid grid = ColumnGrid.centered(halfExtent).withRelief(relief(BASE_Y, raw));
         for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
             for (int x = grid.minX(); x <= grid.maxX(); x++) {
-                double d = Math.sqrt((double) x * x + (double) z * z);
-                double h = cone.profile(d);
-                double rough = d > cone.craterRadius() ? 1.5 * noise.fbm(x, z, 24, 3) * Math.min(1, h / 8 + 0.3) : 0;
-                int y = BASE_Y + (int) Math.round(h + rough + 1.5 * noise.fbm(x, z, 64, 2));
+                double h = cone.profile(Math.sqrt((double) x * x + (double) z * z));
+                int y = BASE_Y + (int) Math.round(raw.applyAsDouble(x, z));
                 grid.set(x, z, y, TerrainColumn.NO_WATER, h > 2 ? cone.rock() : GRASS);
             }
         }
@@ -86,17 +101,20 @@ public final class TerrainGenerators {
      * @param pitDepth pit crater depth, blocks
      */
     public static ColumnGrid shield(int halfExtent, long seed, int height, int radius, int pitRadius, int pitDepth) {
-        ColumnGrid grid = ColumnGrid.centered(halfExtent);
         ValueNoise noise = new ValueNoise(seed);
         BlockId basalt = BlockId.minecraft("basalt");
+        DoubleBinaryOperator profile = (x, z) -> {
+            double d = Math.sqrt(x * x + z * z);
+            double u = Math.min(1, d / radius);
+            double h = height * (1 - Math.pow(u, 1.6)); // convex shield profile
+            return d < pitRadius ? h - pitDepth : h;
+        };
+        DoubleBinaryOperator raw = (x, z) -> profile.applyAsDouble(x, z) + 1.2 * noise.fbm(x, z, 32, 3);
+        ColumnGrid grid = ColumnGrid.centered(halfExtent).withRelief(relief(BASE_Y, raw));
         for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
             for (int x = grid.minX(); x <= grid.maxX(); x++) {
-                double d = Math.sqrt((double) x * x + (double) z * z);
-                double u = Math.min(1, d / radius);
-                double h = height * (1 - Math.pow(u, 1.6)); // convex shield profile
-                if (d < pitRadius) h -= pitDepth;
-                double rough = 1.2 * noise.fbm(x, z, 32, 3);
-                int y = BASE_Y + (int) Math.round(h + rough);
+                double h = profile.applyAsDouble(x, z);
+                int y = BASE_Y + (int) Math.round(raw.applyAsDouble(x, z));
                 grid.set(x, z, y, TerrainColumn.NO_WATER, h > 1 ? basalt : GRASS);
             }
         }
@@ -117,28 +135,30 @@ public final class TerrainGenerators {
     public static ColumnGrid caldera(int halfExtent, long seed, int rimHeight, int rimRadius, int outerRadius,
             int floorDepth, int lakeDepth) {
         if (rimRadius >= outerRadius) throw new IllegalArgumentException("rimRadius must be < outerRadius");
-        ColumnGrid grid = ColumnGrid.centered(halfExtent);
         ValueNoise noise = new ValueNoise(seed);
         BlockId tuff = BlockId.minecraft("tuff");
         int floorY = BASE_Y + rimHeight - floorDepth;
         // The floor tilts ±3 blocks across the caldera, so the lake fills only its low (western) side.
         int lakeY = floorY - 4 + lakeDepth;
+        DoubleBinaryOperator profile = (x, z) -> {
+            double d = Math.sqrt(x * x + z * z);
+            if (d >= outerRadius) return 0;
+            if (d >= rimRadius) {
+                double t = (d - rimRadius) / (outerRadius - rimRadius);
+                return rimHeight * Math.pow(1 - t, 1.3);
+            }
+            // ring-fault wall over the last 8 blocks, then a floor tilted slightly towards the lake side
+            double wall = Math.max(0, 1 - (rimRadius - d) / 8.0);
+            double floor = rimHeight - floorDepth + 3 * (x / (double) rimRadius) + 2 * noise.fbm(x, z, 20, 2);
+            return floor + (rimHeight - floor) * wall * wall;
+        };
+        DoubleBinaryOperator raw = (x, z) -> profile.applyAsDouble(x, z) + 1.2 * noise.fbm(x, z, 40, 3);
+        ColumnGrid grid = ColumnGrid.centered(halfExtent).withRelief(relief(BASE_Y, raw));
         for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
             for (int x = grid.minX(); x <= grid.maxX(); x++) {
                 double d = Math.sqrt((double) x * x + (double) z * z);
-                double h;
-                if (d >= outerRadius) {
-                    h = 0;
-                } else if (d >= rimRadius) {
-                    double t = (d - rimRadius) / (outerRadius - rimRadius);
-                    h = rimHeight * Math.pow(1 - t, 1.3);
-                } else {
-                    // ring-fault wall over the last 8 blocks, then a floor tilted slightly towards the lake side
-                    double wall = Math.max(0, 1 - (rimRadius - d) / 8.0);
-                    double floor = rimHeight - floorDepth + 3 * (x / (double) rimRadius) + 2 * noise.fbm(x, z, 20, 2);
-                    h = floor + (rimHeight - floor) * wall * wall;
-                }
-                int y = BASE_Y + (int) Math.round(h + 1.2 * noise.fbm(x, z, 40, 3));
+                double h = profile.applyAsDouble(x, z);
+                int y = BASE_Y + (int) Math.round(raw.applyAsDouble(x, z));
                 boolean inLake = d < rimRadius && y < lakeY;
                 BlockId surface = inLake ? SAND : (h > 2 ? tuff : GRASS);
                 grid.set(x, z, y, inLake ? lakeY : TerrainColumn.NO_WATER, surface);
@@ -160,16 +180,16 @@ public final class TerrainGenerators {
     public static ColumnGrid island(int halfExtent, long seed, int seaLevel, int seafloorY, int peakY, int radius,
             int craterRadius) {
         if (peakY <= seafloorY) throw new IllegalArgumentException("peakY must be above the sea floor");
-        ColumnGrid grid = ColumnGrid.centered(halfExtent);
         ValueNoise noise = new ValueNoise(seed);
         Cone cone = new Cone(peakY - seafloorY, radius, craterRadius, Math.min(4, (peakY - seafloorY) / 4), 1.4,
                 BlockId.minecraft("basalt"));
         BlockId basalt = BlockId.minecraft("basalt");
+        DoubleBinaryOperator raw = (x, z) -> cone.profile(Math.sqrt(x * x + z * z)) + 1.5 * noise.fbm(x, z, 32, 3);
+        ColumnGrid grid = ColumnGrid.centered(halfExtent).withRelief(relief(seafloorY, raw));
         for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
             for (int x = grid.minX(); x <= grid.maxX(); x++) {
-                double d = Math.sqrt((double) x * x + (double) z * z);
-                double h = cone.profile(d);
-                int y = seafloorY + (int) Math.round(h + 1.5 * noise.fbm(x, z, 32, 3));
+                double h = cone.profile(Math.sqrt((double) x * x + (double) z * z));
+                int y = seafloorY + (int) Math.round(raw.applyAsDouble(x, z));
                 boolean submerged = y < seaLevel;
                 BlockId surface = submerged ? (h > 2 ? basalt : GRAVEL) : (y <= seaLevel + 1 ? SAND : basalt);
                 grid.set(x, z, y, submerged ? seaLevel : TerrainColumn.NO_WATER, surface);

@@ -102,6 +102,7 @@ final class Session implements AutoCloseable {
 
     private volatile GridMapping map;
     private volatile TileStore tiles;
+    private volatile LodTiles lod;
     private volatile int[] tileOrder;
     private final Map<Field, Long> lastRefreshNanos = new EnumMap<>(Field.class);
     private final Map<Field, Double> lastRefreshSim = new EnumMap<>(Field.class);
@@ -218,6 +219,7 @@ final class Session implements AutoCloseable {
         this.map = new GridMapping(cell, tile, grid.minX(), grid.minZ(), grid.maxX(), grid.maxZ());
         installDepthStretch(map, scenario);
         this.tiles = new TileStore(map, base);
+        this.lod = new LodTiles(scenario, map, base);
         this.tileOrder = order(map, scenario);
         lastRefreshNanos.clear();
         lastRefreshSim.clear();
@@ -355,6 +357,7 @@ final class Session implements AutoCloseable {
     Source source() { return source; }
     GridMapping map() { return map; }
     TileStore tiles() { return tiles; }
+    LodTiles lod() { return lod; }
     int[] tileOrder() { return tileOrder; }
     boolean replay() { return replay; }
     EngineRunner runner() { return runner; }
@@ -595,7 +598,8 @@ final class Session implements AutoCloseable {
     JsonObject worldInfo() throws Exception {
         GridMapping m = map;
         String n = name;
-        return call(s -> Probe.worldInfo(s, m, n)).get(10, TimeUnit.SECONDS);
+        LodTiles pyramid = lod;
+        return call(s -> Probe.worldInfo(s, m, n, pyramid)).get(10, TimeUnit.SECONDS);
     }
 
     JsonObject replayInfo() {
@@ -619,6 +623,12 @@ final class Session implements AutoCloseable {
      * Returns the number of tile versions that changed.
      */
     int refreshTiles(Set<Field> subscribed) throws Exception {
+        return refreshTiles(subscribed, Set.of());
+    }
+
+    /** {@link #refreshTiles(Set)} also refreshing pyramid levels {@code levels} (§5.5). */
+    int refreshTiles(Set<Field> subscribed, Set<Integer> levels) throws Exception {
+        LodTiles pyramid = lod;
         long now = System.nanoTime();
         double simTime = time();
         Set<Field> due = new HashSet<>();
@@ -629,6 +639,10 @@ final class Session implements AutoCloseable {
                 Long last = lastRefreshNanos.get(f);
                 Double lastSim = lastRefreshSim.get(f);
                 boolean force = forceRefresh.contains(f) || !tiles.has(f);
+                for (int level : levels) {
+                    LodTiles.Level l = pyramid.level(level);
+                    if (l != null && l.fields.contains(f) && !l.store.has(f)) force = true;
+                }
                 boolean intervalDue = last == null || (now - last) / 1e9 >= f.refreshSeconds;
                 boolean changed = lastSim == null || lastSim != simTime;
                 if (force || (intervalDue && changed)) due.add(f);
@@ -638,9 +652,11 @@ final class Session implements AutoCloseable {
         if (due.isEmpty()) return 0;
         GridMapping m = map;
         TileStore store = tiles;
-        record Sampled(Map<Field, float[][]> values, double time) {}
-        Sampled sampled = call(s -> new Sampled(FieldSampler.sample(s, m, due), s.engine().time()))
-                .get(10, TimeUnit.SECONDS);
+        record Sampled(Map<Field, float[][]> values, Map<Integer, Map<Field, float[][]>> lod, double time) {}
+        Sampled sampled = call(s -> {
+            Map<Field, float[][]> core = FieldSampler.sample(s, m, due);
+            return new Sampled(core, levels.isEmpty() ? Map.of() : pyramid.sample(s, core, levels), s.engine().time());
+        }).get(10, TimeUnit.SECONDS);
         int changed = 0;
         for (Map.Entry<Field, float[][]> e : sampled.values().entrySet()) {
             boolean force;
@@ -648,6 +664,10 @@ final class Session implements AutoCloseable {
                 force = forceRefresh.remove(e.getKey());
             }
             changed += store.update(e.getKey(), e.getValue(), sampled.time(), force);
+            for (Map.Entry<Integer, Map<Field, float[][]>> level : sampled.lod().entrySet()) {
+                float[][] values = level.getValue().get(e.getKey());
+                if (values != null) changed += pyramid.level(level.getKey()).store.update(e.getKey(), values, sampled.time(), force);
+            }
             lastRefreshNanos.put(e.getKey(), now);
             lastRefreshSim.put(e.getKey(), simTime);
         }

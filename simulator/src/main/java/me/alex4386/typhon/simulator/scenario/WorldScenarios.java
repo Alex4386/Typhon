@@ -39,6 +39,8 @@ import me.alex4386.typhon.simulator.terrain.TerrainGenerators;
  * terrain: {source: dem, path: dem.asc, cell: 30, maxMeters: 3000} # compact: ESRI ASCII grid or PNG heightmap
  * terrain: {source: twin-cones, separation: 160, height: 60, radius: 140, craterRadius: 5}
  * </pre>
+ * Any source may add {@code contextExtentM}: the width (m) of the coarse, static terrain shown
+ * around the simulated domain ({@link Scenario#context()}; default 30 km at real scale).
  */
 public final class WorldScenarios {
     static final String HEADER = "# Typhon world definition (see engine/README.md, \"World definitions\").\n"
@@ -53,7 +55,10 @@ public final class WorldScenarios {
         WorldDefinition definition = layout.readWorld();
         ColumnGrid grid = terrain(definition, dir);
         World world = World.open(dir, (w, volcanoes) -> grid.toSnapshot(), policy);
-        return Scenario.fromWorld(definition.name(), world, grid, restored);
+        Scenario scenario = Scenario.fromWorld(definition.name(), world, grid, restored);
+        Number context = number(definition.terrain(), "contextExtentM", Double.NaN);
+        scenario.setContextExtent(context.doubleValue());
+        return scenario;
     }
 
     /** The initial terrain described by {@code world.yaml}'s {@code terrain} section. */

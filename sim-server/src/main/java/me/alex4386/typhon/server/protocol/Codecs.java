@@ -166,11 +166,20 @@ public final class Codecs {
     /** A complete tile frame (header + zlib payload). */
     public static byte[] tileFrame(int field, Payload payload, int tileX, int tileY, long version, int width,
             int height, double time) {
+        return tileFrame(field, payload, tileX, tileY, version, width, height, time, 0);
+    }
+
+    /**
+     * A tile frame of pyramid level {@code level} (§5.5): stored as an i16 in the header's bytes 2–3,
+     * which are 0 — the core's columns — in every frame of protocol 1 without levels.
+     */
+    public static byte[] tileFrame(int field, Payload payload, int tileX, int tileY, long version, int width,
+            int height, double time, int level) {
         byte[] compressed = zlib(payload.bytes());
         ByteBuffer out = buffer(TILE_HEADER_BYTES + compressed.length);
         out.put((byte) FRAME_TILE);
         out.put((byte) FRAME_VERSION);
-        out.putShort((short) 0);
+        out.putShort((short) level);
         out.putShort((short) field);
         out.put((byte) payload.codec());
         out.put((byte) FLAG_ZLIB);
@@ -189,7 +198,7 @@ public final class Codecs {
 
     /** Parsed tile frame (tests and diagnostics). */
     public record TileFrame(int field, int codec, int tileX, int tileY, long version, int width, int height,
-            double time, float[] values) {}
+            double time, float[] values, int level) {}
 
     public static TileFrame decodeTileFrame(byte[] frame) {
         ByteBuffer in = ByteBuffer.wrap(frame).order(ByteOrder.LITTLE_ENDIAN);
@@ -211,7 +220,7 @@ public final class Codecs {
         System.arraycopy(frame, TILE_HEADER_BYTES, payload, 0, len);
         if ((flags & FLAG_ZLIB) != 0) payload = unzlib(payload);
         return new TileFrame(field, codec, tx, ty, version, width, height, time,
-                decode(payload, codec, width * height, p0, p1));
+                decode(payload, codec, width * height, p0, p1), in.getShort(2));
     }
 
     // ── Section frames (§6) ──

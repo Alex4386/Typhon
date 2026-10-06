@@ -33,8 +33,14 @@ public final class RealTerrain {
      */
     public static ColumnGrid build(double metersPerColumn, int halfExtentColumns, long seed, Elevation elevation,
             double roughnessM, double roughnessScaleM, double seaLevelZ, Paint paint) {
-        ColumnGrid grid = ColumnGrid.centered(halfExtentColumns);
         ValueNoise noise = new ValueNoise(seed);
+        ColumnGrid grid = ColumnGrid.centered(halfExtentColumns).withRelief((cx, cz) -> {
+            double xm = cx * metersPerColumn;
+            double zm = cz * metersPerColumn;
+            double e = elevation.at(xm, zm);
+            if (roughnessM > 0) e += roughnessM * noise.fbm(xm, zm, roughnessScaleM, 4);
+            return e / metersPerColumn;
+        });
         int waterY = Double.isNaN(seaLevelZ) ? TerrainColumn.NO_WATER : DemImporter.groundBlock(seaLevelZ, metersPerColumn);
         for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
             for (int x = grid.minX(); x <= grid.maxX(); x++) {

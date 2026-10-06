@@ -37,6 +37,10 @@ final class Probe {
     // ── World info (§4.1) ──
 
     static JsonObject worldInfo(Scenario s, GridMapping map, String name) {
+        return worldInfo(s, map, name, null);
+    }
+
+    static JsonObject worldInfo(Scenario s, GridMapping map, String name, LodTiles lod) {
         WorldModel world = s.terrain().world();
         JsonObject w = new JsonObject();
         w.addProperty("name", name);
@@ -77,6 +81,7 @@ final class Probe {
         w.add("volcanoes", volcanoes);
         w.add("materials", materials());
         w.add("depositTypes", depositTypes());
+        if (lod != null) w.add("lod", lod.info());
         return w;
     }
 

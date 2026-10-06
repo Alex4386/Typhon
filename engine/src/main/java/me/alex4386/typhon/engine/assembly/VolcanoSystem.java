@@ -69,6 +69,7 @@ public final class VolcanoSystem {
     private final Lahars lahars;
     private final DeformationModel deformation;
     private final VolcanoUnits units;
+    private final VolcanoDetail detail;
 
     private final double ballisticFraction;
 
@@ -180,6 +181,11 @@ public final class VolcanoSystem {
 
         // Every deposit is attributed to this volcano's current eruption (stratigraphy).
         this.units = new VolcanoUnits(b.terrain.world(), volcanoId, chamber);
+        me.alex4386.typhon.engine.world.SurfaceDetailConfig detailConfig = b.detailConfig != null ? b.detailConfig
+                : me.alex4386.typhon.engine.world.SurfaceDetailConfig.defaults(scaling.metersPerBlock(),
+                        vents.get(0).craterRadius() * scaling.metersPerBlock());
+        this.detail = detailConfig.enabled()
+                ? new VolcanoDetail(volcanoId, detailConfig, b.terrain.world(), primary, b.detailRelief) : null;
         coupler.setUnits(units);
         tephra.setUnits(units);
         tephra.setMoltenSurface((x, z) -> b.lava.thickness(x, z) > 0 || b.lava.crustThickness(x, z) > 0);
@@ -247,6 +253,7 @@ public final class VolcanoSystem {
         }
         if (geothermal != null) list.add(geothermal);
         if (deformation != null) list.add(deformation);
+        if (detail != null) list.add(detail);
         return list;
     }
 
@@ -285,6 +292,12 @@ public final class VolcanoSystem {
     public Geothermal geothermal() { return geothermal; }
     /** The subsurface model this volcano heats ({@code null} without geothermal activity and no world). */
     public Subsurface subsurface() { return subsurface; }
+    /** The crater-resolving fine surface around the primary vent, {@code null} when disabled. */
+    public me.alex4386.typhon.engine.world.SurfaceDetail surfaceDetail() { return detail == null ? null : detail.detail(); }
+    /** Its configuration ({@link me.alex4386.typhon.engine.world.SurfaceDetailConfig#DISABLED} when off). */
+    public me.alex4386.typhon.engine.world.SurfaceDetailConfig surfaceDetailConfig() {
+        return detail == null ? me.alex4386.typhon.engine.world.SurfaceDetailConfig.DISABLED : (me.alex4386.typhon.engine.world.SurfaceDetailConfig) detail.config();
+    }
 
     public static final class Builder {
         private final String volcanoId;
@@ -313,6 +326,8 @@ public final class VolcanoSystem {
         private double geothermalPrewarmSeconds = -1;
         private Subsurface subsurface;
         private SubsurfaceConfig subsurfaceConfig;
+        private me.alex4386.typhon.engine.world.SurfaceDetailConfig detailConfig;
+        private java.util.function.DoubleBinaryOperator detailRelief;
 
         private Builder(String volcanoId, List<VentSite> vents, TerrainModel terrain, LavaFlow lava) {
             this.volcanoId = Objects.requireNonNull(volcanoId, "volcanoId");
@@ -383,6 +398,13 @@ public final class VolcanoSystem {
         /** Blocks the host supports; unsupported ones fall back along the default chains. */
         public Builder palette(BlockPalette palette) { this.palette = Objects.requireNonNull(palette); return this; }
         public Builder ballisticFraction(double fraction) { this.ballisticFraction = fraction; return this; }
+        /** Fine surface around the primary vent; {@code null} (the default) derives it from the crater size. */
+        public Builder detail(me.alex4386.typhon.engine.world.SurfaceDetailConfig config) { this.detailConfig = config; return this; }
+        /**
+         * Initial shape of the fine surface: elevation (m) at a point (m, world coordinates; column x
+         * spans {@code [x·L, (x+1)·L)}). {@code null} interpolates between column centres.
+         */
+        public Builder detailRelief(java.util.function.DoubleBinaryOperator relief) { this.detailRelief = relief; return this; }
 
         public VolcanoSystem build() {
             return new VolcanoSystem(this);

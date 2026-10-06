@@ -21,6 +21,17 @@ public final class ColumnGrid {
     private final int[] ground;
     private final int[] water;
     private final BlockId[] surface;
+    private Relief relief;
+
+    /**
+     * The continuous surface a generator sampled the grid from: ground-block top in blocks at
+     * fractional column coordinates (column {@code x} spans {@code [x, x+1)}), defined beyond the grid
+     * too. Multiply by the block size for metres.
+     */
+    @FunctionalInterface
+    public interface Relief {
+        double topBlocks(double cx, double cz);
+    }
 
     public ColumnGrid(int minX, int minZ, int size) {
         if (size <= 0 || size % 16 != 0) throw new IllegalArgumentException("size must be a positive multiple of 16");
@@ -39,6 +50,17 @@ public final class ColumnGrid {
     public static ColumnGrid centered(int halfExtent) {
         int half = Math.max(16, ((halfExtent + 15) / 16) * 16);
         return new ColumnGrid(-half, -half, 2 * half);
+    }
+
+    /** Attaches the generator's continuous surface (see {@link Relief}); returns this grid. */
+    public ColumnGrid withRelief(Relief relief) {
+        this.relief = relief;
+        return this;
+    }
+
+    /** The generator's continuous surface, or {@code null} (DEMs, edited grids). */
+    public Relief relief() {
+        return relief;
     }
 
     public int minX() { return minX; }
@@ -92,6 +114,7 @@ public final class ColumnGrid {
         System.arraycopy(ground, 0, c.ground, 0, ground.length);
         System.arraycopy(water, 0, c.water, 0, water.length);
         System.arraycopy(surface, 0, c.surface, 0, surface.length);
+        c.relief = relief;
         return c;
     }
 

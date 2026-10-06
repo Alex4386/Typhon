@@ -129,7 +129,11 @@ public final class SurfaceDetail {
         double surface = world.surfaceZ(x, z);
         if (Double.isNaN(surface)) return Double.NaN;
         int c = columnIndex(x, z);
-        if (Double.isNaN(seen[c])) return surface + initialOffset(x, z, fx - x * r, fz - z * r);
+        if (Double.isNaN(seen[c])) {
+            double[] offsets = new double[r * r];
+            initialOffsets(x, z, offsets);
+            return surface + offsets[(fz - z * r) * r + (fx - x * r)];
+        }
         return cells[fineIndex(fx, fz)] + (surface - seen[c]);
     }
 
@@ -165,9 +169,10 @@ public final class SurfaceDetail {
         if (Double.isNaN(surface)) return false;
         seenVersion[c] = version;
         if (Double.isNaN(seen[c])) {
+            initialOffsets(x, z, scratch);
             for (int j = 0; j < r; j++) {
                 for (int i = 0; i < r; i++) {
-                    cells[fineIndex(x * r + i, z * r + j)] = (float) (surface + initialOffset(x, z, i, j));
+                    cells[fineIndex(x * r + i, z * r + j)] = (float) (surface + scratch[j * r + i]);
                 }
             }
             seen[c] = surface;
@@ -234,31 +239,27 @@ public final class SurfaceDetail {
     }
 
     /**
-     * Shape of the initial surface inside a column: the relief at the cell centre minus the relief's
-     * mean over the column (zero mean), or the bilinear surface through neighbouring column centres.
+     * Shape of the initial surface inside column ({@code x}, {@code z}), zero mean, into {@code out}
+     * (row-major {@code r × r}): the relief (this detail's, else the world's) at the cell centres, or
+     * the bilinear surface through neighbouring column centres.
      */
-    private double initialOffset(int x, int z, int i, int j) {
+    private void initialOffsets(int x, int z, double[] out) {
         double size = world.spec().metersPerColumn();
         double cell = size / r;
-        if (relief != null) {
-            double mean = 0;
-            for (int jj = 0; jj < r; jj++) {
-                for (int ii = 0; ii < r; ii++) {
-                    mean += relief.applyAsDouble(x * size + (ii + 0.5) * cell, z * size + (jj + 0.5) * cell);
-                }
-            }
-            mean /= r * r;
-            return relief.applyAsDouble(x * size + (i + 0.5) * cell, z * size + (j + 0.5) * cell) - mean;
-        }
-        return bilinear(x, z, i, j) - bilinearMean(x, z);
-    }
-
-    private double bilinearMean(int x, int z) {
-        double sum = 0;
+        DoubleBinaryOperator shape = relief != null ? relief : world.relief();
+        double mean = 0;
         for (int j = 0; j < r; j++) {
-            for (int i = 0; i < r; i++) sum += bilinear(x, z, i, j);
+            for (int i = 0; i < r; i++) {
+                double v = shape != null
+                        ? shape.applyAsDouble(x * size + (i + 0.5) * cell, z * size + (j + 0.5) * cell)
+                        : bilinear(x, z, i, j);
+                if (Double.isNaN(v)) v = bilinear(x, z, i, j);
+                out[j * r + i] = v;
+                mean += v;
+            }
         }
-        return sum / (r * r);
+        mean /= r * r;
+        for (int k = 0; k < r * r; k++) out[k] -= mean;
     }
 
     /** Bilinear interpolation between column-centre surfaces at cell (i, j) of column (x, z). */

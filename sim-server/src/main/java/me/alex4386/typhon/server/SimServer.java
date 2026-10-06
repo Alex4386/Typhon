@@ -328,7 +328,10 @@ public final class SimServer implements AutoCloseable {
                     Long n = Json.lng(msg, "tilesProcessed");
                     if (n != null) c.acknowledge(n);
                     Session s = c.session;
-                    if (s != null) c.pumpTiles(s.tiles(), s.tileOrder());
+                    if (s != null) {
+                        c.pumpTiles(s.tiles(), s.tileOrder());
+                        c.pumpLod(s.lod());
+                    }
                 }
                 case "transport" -> {
                     // Optional sessionId: control a loaded world the client is not watching.
@@ -593,15 +596,20 @@ public final class SimServer implements AutoCloseable {
             bounds = new int[] {b.get("minTx").getAsInt(), b.get("minTy").getAsInt(), b.get("maxTx").getAsInt(),
                     b.get("maxTy").getAsInt()};
         }
-        c.subscribe(fields, bounds);
+        Set<Integer> levels = new java.util.TreeSet<>();
+        if (msg.has("levels") && msg.get("levels").isJsonArray()) {
+            for (JsonElement e : msg.getAsJsonArray("levels")) levels.add(e.getAsInt());
+        }
+        c.subscribe(fields, bounds, levels);
         Session s = c.session;
         if (s != null) {
             try {
-                s.refreshTiles(fields);
+                s.refreshTiles(fields, c.subscribedLevels());
             } catch (Exception e) {
                 LOG.log(Level.FINE, "refresh on subscribe failed", e);
             }
             c.pumpTiles(s.tiles(), s.tileOrder());
+            c.pumpLod(s.lod());
         }
     }
 
@@ -897,8 +905,13 @@ public final class SimServer implements AutoCloseable {
         Set<Field> wanted = EnumSet.noneOf(Field.class);
         for (ClientConnection c : watchers) wanted.addAll(c.subscribedFields());
         if (!wanted.isEmpty()) {
-            s.refreshTiles(wanted);
-            for (ClientConnection c : watchers) c.pumpTiles(s.tiles(), s.tileOrder());
+            Set<Integer> levels = new java.util.TreeSet<>();
+            for (ClientConnection c : watchers) levels.addAll(c.subscribedLevels());
+            s.refreshTiles(wanted, levels);
+            for (ClientConnection c : watchers) {
+                c.pumpTiles(s.tiles(), s.tileOrder());
+                c.pumpLod(s.lod());
+            }
         }
     }
 }

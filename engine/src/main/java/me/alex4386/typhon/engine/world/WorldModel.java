@@ -41,6 +41,7 @@ public final class WorldModel implements WorldQuery, WorldEdit {
     private final TreeMap<String, Integer> volcanoEdificeUnits = new TreeMap<>();
     private List<Edifice> edifices = List.of();
     private WaterSink waterSink;
+    private java.util.function.DoubleBinaryOperator relief;
     private final List<DepositObserver> depositObservers = new ArrayList<>();
 
     public WorldModel(WorldSpec spec) {
@@ -89,6 +90,20 @@ public final class WorldModel implements WorldQuery, WorldEdit {
 
     public List<Edifice> edifices() {
         return edifices;
+    }
+
+    /**
+     * The host's continuous description of the initial surface: elevation (m) at a point (m; column
+     * {@code x} spans {@code [x·L, (x+1)·L)}), or {@code null}. Not persisted (it comes from the terrain
+     * definition, like {@link #setEdifices}); {@link SurfaceDetail} takes the sub-column shape of
+     * fresh detail cells from it.
+     */
+    public void setRelief(java.util.function.DoubleBinaryOperator relief) {
+        this.relief = relief;
+    }
+
+    public java.util.function.DoubleBinaryOperator relief() {
+        return relief;
     }
 
     /**

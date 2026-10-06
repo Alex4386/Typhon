@@ -29,6 +29,12 @@ final class TileStore {
 
     private final GridMapping map;
     private final long base;
+    /** Pyramid level (0 = the core's columns, §5.5) and the tile range this store holds. */
+    private final int level;
+    private final int minTx;
+    private final int minTy;
+    private final int tilesX;
+    private final int tilesY;
     private final Map<Field, FieldTiles> fields = new EnumMap<>(Field.class);
     private long maxVersion;
 
@@ -37,9 +43,39 @@ final class TileStore {
      *     goes backwards for clients still holding the old tiles
      */
     TileStore(GridMapping map, long base) {
+        this(map, base, 0, 0, 0, map.tilesX, map.tilesY);
+    }
+
+    /** A store for level {@code level}, tiles {@code [minTx, minTx+tilesX) × [minTy, minTy+tilesY)}. */
+    TileStore(GridMapping map, long base, int level, int minTx, int minTy, int tilesX, int tilesY) {
         this.map = map;
         this.base = base;
         this.maxVersion = base;
+        this.level = level;
+        this.minTx = minTx;
+        this.minTy = minTy;
+        this.tilesX = tilesX;
+        this.tilesY = tilesY;
+    }
+
+    int level() {
+        return level;
+    }
+
+    int minTx() {
+        return minTx;
+    }
+
+    int minTy() {
+        return minTy;
+    }
+
+    int tilesX() {
+        return tilesX;
+    }
+
+    int tilesY() {
+        return tilesY;
     }
 
     synchronized long maxVersion() {
@@ -51,7 +87,7 @@ final class TileStore {
     }
 
     int tileCount() {
-        return map.tilesX * map.tilesY;
+        return tilesX * tilesY;
     }
 
     /**
@@ -66,7 +102,7 @@ final class TileStore {
         Codecs.Payload[] payloads = new Codecs.Payload[n];
         long[] hashes = new long[n];
         ENCODERS.forEach(n, i -> {
-            payloads[i] = Codecs.encode(tiles[i], field.codec, a, 1);
+            payloads[i] = Codecs.encode(tiles[i], codec(field, tiles[i]), a, 1);
             hashes[i] = fnv(payloads[i]);
         });
         int[] changedTiles = new int[n];
@@ -80,8 +116,8 @@ final class TileStore {
         }
         ENCODERS.forEach(changed, k -> {
             int i = changedTiles[k];
-            ft.frame[i] = Codecs.tileFrame(field.id, payloads[i], i % map.tilesX, i / map.tilesX, ft.version[i], t, t,
-                    time);
+            ft.frame[i] = Codecs.tileFrame(field.id, payloads[i], minTx + i % tilesX, minTy + i / tilesX, ft.version[i], t,
+                    t, time, level);
         });
         return changed;
     }
@@ -105,6 +141,21 @@ final class TileStore {
 
     synchronized boolean has(Field field) {
         return fields.containsKey(field);
+    }
+
+    /**
+     * The field's codec, except elevation tiles spanning more than the centimetre codec's 655 m (coarse
+     * levels, steep real-scale tiles), which go out as raw floats instead of being clipped.
+     */
+    static int codec(Field field, float[] values) {
+        if (field.codec != Codecs.ELEVATION_U16_CM_DELTA) return field.codec;
+        float min = Float.POSITIVE_INFINITY;
+        float max = Float.NEGATIVE_INFINITY;
+        for (float v : values) {
+            if (v < min) min = v;
+            if (v > max) max = v;
+        }
+        return max - min > 655 ? Codecs.F32_RAW : field.codec;
     }
 
     private static long fnv(Codecs.Payload p) {

@@ -5,6 +5,7 @@ import io.javalin.websocket.WsContext;
 import java.nio.ByteBuffer;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
@@ -33,6 +34,9 @@ final class ClientConnection {
     long tilesSent;
     long tilesAcked;
     final Map<Field, long[]> sentVersions = new EnumMap<>(Field.class);
+    /** Pyramid levels besides 0 the client asked for (§5.5), and what it holds of them. */
+    final java.util.SortedSet<Integer> levels = new java.util.TreeSet<>();
+    final Map<Integer, Map<Field, long[]>> lodSent = new java.util.HashMap<>();
 
     /** Transport for outgoing frames (a WebSocket in production, a list in tests). */
     interface Sender {
@@ -87,8 +91,15 @@ final class ClientConnection {
     }
 
     synchronized void subscribe(Set<Field> requested, int[] bounds) {
+        subscribe(requested, bounds, Set.of());
+    }
+
+    synchronized void subscribe(Set<Field> requested, int[] bounds, Set<Integer> lodLevels) {
         fields.clear();
         fields.addAll(requested);
+        levels.clear();
+        for (int l : lodLevels) if (l != 0) levels.add(l);
+        lodSent.clear();
         if (bounds != null) {
             minTx = bounds[0];
             minTy = bounds[1];
@@ -110,6 +121,7 @@ final class ClientConnection {
     /** Forget which tiles the client holds (after a jump or load: everything is resent). */
     synchronized void forgetTiles() {
         sentVersions.clear();
+        lodSent.clear();
     }
 
     /**
@@ -147,6 +159,48 @@ final class ClientConnection {
             }
         }
         return sent;
+    }
+
+    /**
+     * Sends tiles of the subscribed pyramid levels the client does not hold, coarsest first (the
+     * whole landscape appears quickly), then the fine levels. Bounds apply to level 0 only.
+     */
+    synchronized int pumpLod(LodTiles lod) {
+        if (lod == null || levels.isEmpty() || fields.isEmpty() || !sender.open()) return 0;
+        int sent = 0;
+        List<Integer> order = new java.util.ArrayList<>(levels);
+        order.sort((a, b) -> a > 0 && b > 0 ? Integer.compare(b, a) : a > 0 ? -1 : b > 0 ? 1 : Integer.compare(b, a));
+        for (int level : order) {
+            LodTiles.Level l = lod.level(level);
+            if (l == null) continue;
+            TileStore store = l.store;
+            Map<Field, long[]> held = lodSent.computeIfAbsent(level, k -> new EnumMap<>(Field.class));
+            for (int tile : l.order) {
+                for (Field field : fields) {
+                    if (!l.fields.contains(field)) continue;
+                    if (tilesSent - tilesAcked >= TILE_WINDOW) return sent;
+                    long v = store.version(field, tile);
+                    if (v == 0) continue;
+                    long[] h = held.computeIfAbsent(field, f -> new long[store.tileCount()]);
+                    if (h[tile] >= v) continue;
+                    byte[] frame = store.frame(field, tile);
+                    if (frame == null) continue;
+                    try {
+                        sender.binary(frame);
+                    } catch (Exception e) {
+                        return sent;
+                    }
+                    h[tile] = v;
+                    tilesSent++;
+                    sent++;
+                }
+            }
+        }
+        return sent;
+    }
+
+    synchronized Set<Integer> subscribedLevels() {
+        return Set.copyOf(levels);
     }
 
     synchronized Set<Field> subscribedFields() {

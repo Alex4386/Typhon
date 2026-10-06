@@ -103,6 +103,45 @@ class ProtocolTest {
     }
 
     @Test
+    void pyramidLevelsCarryContextAndCraterDetail() throws Exception {
+        try (TestClient c = new TestClient(server.port(), SimServer.SUBPROTOCOL)) {
+            c.send("{\"type\":\"hello\",\"protocol\":1,\"client\":\"test\"}");
+            c.awaitType("welcome", 10);
+            c.send("{\"type\":\"attach\",\"sessionId\":\"s1\"}");
+            JsonObject world = c.awaitType("attached", 30).json().getAsJsonObject("world");
+            JsonObject lod = world.getAsJsonObject("lod");
+            assertNotNull(lod, "WorldInfo describes the pyramid");
+            Set<Integer> levels = new HashSet<>();
+            double cell = world.get("cellSize").getAsDouble();
+            for (JsonElement e : lod.getAsJsonArray("levels")) {
+                JsonObject l = e.getAsJsonObject();
+                int level = l.get("level").getAsInt();
+                levels.add(level);
+                assertEquals(cell * Math.scalb(1.0, level), l.get("cellSize").getAsDouble(), 1e-9);
+            }
+            assertTrue(levels.stream().anyMatch(l -> l > 0), "coarse context levels: " + levels);
+            assertTrue(levels.stream().anyMatch(l -> l < 0), "crater-resolving detail levels: " + levels);
+            JsonArray extent = lod.getAsJsonArray("extent");
+            assertTrue(extent.get(2).getAsDouble() - extent.get(0).getAsDouble() >= 6000, "context reaches kilometres out");
+
+            StringBuilder wanted = new StringBuilder();
+            for (int l : levels) wanted.append(wanted.length() == 0 ? "" : ",").append(l);
+            c.send("{\"type\":\"subscribe\",\"fields\":[1],\"levels\":[" + wanted + "]}");
+            Set<Integer> seen = new HashSet<>();
+            int received = 0;
+            while (!seen.containsAll(levels) && received < 2000) {
+                TestClient.Msg m = c.await(x -> x.binary() != null && x.binary()[0] == Codecs.FRAME_TILE, 30);
+                Codecs.TileFrame f = Codecs.decodeTileFrame(m.binary());
+                seen.add(f.level());
+                for (float v : f.values()) assertTrue(Float.isFinite(v), "level " + f.level() + " elevation is finite");
+                if (++received % 32 == 0) c.send("{\"type\":\"flow\",\"tilesProcessed\":" + received + "}");
+            }
+            assertTrue(seen.containsAll(levels), "received levels " + seen + " of " + levels);
+            assertTrue(seen.contains(0), "level 0 still streams");
+        }
+    }
+
+    @Test
     void tilesStreamWithFlowControlAndDecode() throws Exception {
         try (TestClient c = attached()) {
             c.send("{\"type\":\"subscribe\",\"fields\":[1,10,2]}");
