@@ -315,6 +315,52 @@ final class Tuning {
         return out;
     }
 
+    /** Fields of {@code placeChamber}: depth and magma of a new chamber, defaults from {@link ChamberPlacement#FIELDS}. */
+    static JsonArray placeChamberSchema() {
+        JsonArray out = new JsonArray();
+        for (me.alex4386.typhon.engine.config.ChamberPlacement.Field f : me.alex4386.typhon.engine.config.ChamberPlacement.FIELDS) {
+            String group = f.id().equals("depthM") || f.id().equals("volumeM3") ? "Chamber"
+                    : f.id().equals("supplyRateM3PerS") || f.id().equals("tensileStrengthMPa") || f.id().equals("initialOverpressureMPa")
+                            ? "Recharge and strength" : "Magma";
+            JsonObject j = spec(f.id(), f.label(), f.unit(), group, f.min(), f.max(), f.log(), f.help());
+            j.add("default", Json.num(f.defaultValue()));
+            out.add(j);
+        }
+        return out;
+    }
+
+    /** Fields of an empty world from {@code template}, with the template's defaults. */
+    static JsonArray templateSchema(String template) {
+        var d = me.alex4386.typhon.simulator.scenario.WorldTemplates.Template.defaults(template);
+        JsonArray out = new JsonArray();
+        JsonObject size = spec("coreExtentM", "Size", "m", "World", 640.0, 40_000.0, true,
+                "Width of the area simulated from the start; it grows on demand where lava, flows or ash reach.");
+        size.add("default", Json.num(d.coreExtentM()));
+        out.add(size);
+        JsonObject cell = spec("metersPerColumn", "Resolution", "m", "World", 2.0, 50.0, true, "Width of one ground column.");
+        cell.add("default", Json.num(d.metersPerColumn()));
+        out.add(cell);
+        if (template.equals("ocean")) {
+            JsonObject depth = spec("depthM", "Sea depth", "m", "Terrain", 5.0, 5000.0, true,
+                    "Depth of the sea floor at the centre (Surtsey's eruption began at ~130 m).");
+            depth.add("default", Json.num(d.depthM()));
+            out.add(depth);
+        } else {
+            JsonObject elev = spec("elevationM", "Ground elevation", "m", "Terrain", -500.0, 5000.0, false, "Elevation at the centre.");
+            elev.add("default", Json.num(d.elevationM()));
+            out.add(elev);
+        }
+        JsonObject slope = spec("slope", "Slope", "m per m", "Terrain", 0.0, 0.5, false,
+                template.equals("ocean") ? "How fast the sea floor deepens towards the east." : "How fast the ground rises towards the west.");
+        slope.add("default", Json.num(d.slope()));
+        out.add(slope);
+        JsonObject tc = spec("eruptiveTimeCompression", "Volcano time while erupting", "×", "Time", 1.0, 1e4, true,
+                "Eruptions run this many times faster than the clock (a dial: change it any time).");
+        tc.add("default", Json.num(d.eruptiveTimeCompression()));
+        out.add(tc);
+        return out;
+    }
+
     /** Builds the engine command, validating ranges; missing fields use the magma the supply delivers now. */
     static MagmaCommands.InjectRecharge injection(String volcanoId, JsonObject cmd, MagmaChamber.SupplyMagma supply) {
         Double vol = Json.dbl(cmd, "volumeM3");
@@ -485,6 +531,7 @@ final class Tuning {
         Path dir = s.worldDir();
         MagmaChamberConfig c = s.firstChamberConfig();
         if (c != null) commands.add("injectMagma", injectSchema(c));
+        commands.add("placeChamber", placeChamberSchema());
         // per volcano: defaults from that volcano's own supply magma (the plain entry is the first's)
         s.chamberConfigs().forEach((id, cfg) -> commands.add("injectMagma@" + id, injectSchema(cfg)));
         if (dir == null) {

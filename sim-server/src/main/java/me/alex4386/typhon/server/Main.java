@@ -9,14 +9,21 @@ import java.util.List;
 import java.util.Map;
 import me.alex4386.typhon.simulator.scenario.Preset;
 import me.alex4386.typhon.simulator.scenario.Presets;
+import me.alex4386.typhon.simulator.scenario.WorldTemplates;
 
 /**
  * Command line entry point.
  *
  * <pre>
- * sim-server [--preset NAME[,NAME…] [--seed N]] [--world DIR[,DIR…]] [--port 8787] [--host 0.0.0.0]
- *            [--worlds-dir worlds] [--ui visualizer/dist] [--speed 20] [--base-step-ms 50] [--max-sessions 8]
+ * sim-server [--create TEMPLATE|PRESET[:NAME]] [--preset NAME[,NAME…] [--seed N]] [--world DIR[,DIR…]] [--port 8787]
+ *            [--host 0.0.0.0] [--worlds-dir worlds] [--ui visualizer/dist] [--speed 20] [--base-step-ms 50]
+ *            [--max-sessions 8]
  * </pre>
+ *
+ * <p>With no option at all the server starts with no world (an empty worlds directory is fine);
+ * {@code --create ocean} writes {@code <worlds-dir>/ocean} as an empty world from the {@code ocean} template
+ * (or a preset's world, for a preset name) if it does not exist yet and opens it, so
+ * {@code sim-server --create ocean} always lands in that world.
  */
 public final class Main {
     private Main() {}
@@ -53,7 +60,16 @@ public final class Main {
         List<String> presets = list(opts.get("preset"));
         List<String> worlds = list(opts.get("world"));
         for (String p : presets) Presets.get(p); // validate early
-        String defaultPreset = presets.isEmpty() ? "kilauea" : presets.get(0);
+        String defaultPreset = presets.isEmpty() ? DEFAULT_PRESET : presets.get(0);
+        String create = opts.get("create");
+        String createPreset = null;
+        String createName = null;
+        if (create != null) {
+            int colon = create.indexOf(':');
+            createPreset = colon < 0 ? create : create.substring(0, colon);
+            createName = colon < 0 ? createPreset : create.substring(colon + 1);
+            if (!WorldTemplates.NAMES.contains(createPreset)) Presets.get(createPreset); // validate early
+        }
         SimServer.Config config = new SimServer.Config(opts.getOrDefault("host", "0.0.0.0"),
                 Integer.parseInt(opts.getOrDefault("port", "8787")), worldsDir, ui, defaultPreset, seed,
                 Math.round(Double.parseDouble(opts.getOrDefault("base-step-ms", "50")) * 1000),
@@ -62,17 +78,33 @@ public final class Main {
         SimServer server = new SimServer(config);
         for (String w : worlds) server.createWorld(Path.of(w));
         for (String p : presets) server.createPreset(p, seed);
+        if (createPreset != null) {
+            Path dir = worldsDir.resolve(createName);
+            if (Files.isDirectory(dir)) {
+                server.createWorld(dir);
+                out.printf("Opened world %s%n", dir);
+            } else if (WorldTemplates.NAMES.contains(createPreset)) {
+                server.createTemplateWorld(createPreset, createName, seed, new com.google.gson.JsonObject());
+                out.printf("Created empty world %s from template %s%n", dir, createPreset);
+            } else {
+                server.createPresetWorld(createPreset, seed, createName, null, null);
+                out.printf("Created world %s from preset %s%n", dir, createPreset);
+            }
+        }
         server.start();
         Runtime.getRuntime().addShutdownHook(new Thread(server::close));
         out.printf("Typhon sim-server listening on ws://%s:%d/ws (subprotocol %s)%n", config.host(), server.port(),
                 SimServer.SUBPROTOCOL);
         out.printf("Worlds directory: %s (%d loaded; start or open more from the visualizer)%n",
-                worldsDir.toAbsolutePath(), worlds.size() + presets.size());
+                worldsDir.toAbsolutePath(), worlds.size() + presets.size() + (createPreset != null ? 1 : 0));
         if (ui != null) out.printf("Visualizer: http://localhost:%d/%n", server.port());
         else out.printf("Visualizer: cd visualizer && npm run dev, then open http://localhost:5180/?server=ws://localhost:%d/ws%n",
                 server.port());
         Thread.currentThread().join();
     }
+
+    /** Preset of preset worlds created without naming one. */
+    static final String DEFAULT_PRESET = "kilauea";
 
     private static List<String> list(String value) {
         List<String> out = new ArrayList<>();
@@ -82,12 +114,16 @@ public final class Main {
     }
 
     private static void usage(PrintStream out) {
-        out.println("Usage: sim-server [--preset NAME[,NAME…] [--seed N]] [--world DIR[,DIR…]] [--port 8787]");
+        out.println("Usage: sim-server [--create TEMPLATE|PRESET[:NAME]] [--preset NAME[,NAME…] [--seed N]] [--world DIR[,DIR…]]");
+        out.println("                  [--port 8787]");
         out.println("                  [--host 0.0.0.0] [--worlds-dir worlds] [--ui visualizer/dist] [--speed 20]");
         out.println("                  [--base-step-ms 50] [--max-sessions 8]");
         out.println("                  [--threads N (default: all cores; results are identical for any N)]");
         out.println("One server runs any number of worlds side by side (up to --max-sessions). --preset/--world only");
         out.println("load worlds at startup; more can be started, opened, paused and closed from the visualizer.");
+        out.println("--create TEMPLATE|PRESET[:NAME] opens <worlds-dir>/NAME (default: the template's or preset's name),");
+        out.println("writing it first if it does not exist: templates " + WorldTemplates.NAMES + " make an empty world (place");
+        out.println("a magma chamber from the visualizer), a preset its ready-made scenario. With no option the server starts empty.");
         out.println("Presets:");
         for (Preset p : Presets.all()) out.println("  " + p.name() + " — " + p.title());
     }

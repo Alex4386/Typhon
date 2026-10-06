@@ -263,12 +263,19 @@ final class Session implements AutoCloseable {
             loadWorldKeyframes(newSource.worldDir(), scenario.engine().time());
         }
 
-        // Initial weather as configured in the scenario.
-        VolcanoSystem first = scenario.volcanoes().get(0);
-        WindField wind = first.tephra().wind();
-        windSpeed = wind.baseSpeed() / first.scaling().velocityScale();
-        windBearingDeg = normalizeDeg(Math.toDegrees(wind.baseDirectionRad() + Math.PI / 2));
-        rainMmPerHour = first.lahars() == null ? 0 : first.lahars().rainfall();
+        // Initial weather as configured in the scenario (the world's climate while it has no volcano).
+        if (scenario.volcanoes().isEmpty()) {
+            var climate = scenario.session() != null ? scenario.session().definition().climate() : null;
+            windSpeed = climate != null && climate.hasWind() ? climate.windSpeed() : 0;
+            windBearingDeg = climate != null && climate.hasWind() ? normalizeDeg(climate.windBearingDeg()) : 0;
+            rainMmPerHour = climate != null ? climate.rainfallMmPerHour() : 0;
+        } else {
+            VolcanoSystem first = scenario.volcanoes().get(0);
+            WindField wind = first.tephra().wind();
+            windSpeed = wind.baseSpeed() / first.scaling().velocityScale();
+            windBearingDeg = normalizeDeg(Math.toDegrees(wind.baseDirectionRad() + Math.PI / 2));
+            rainMmPerHour = first.lahars() == null ? 0 : first.lahars().rainfall();
+        }
 
         EngineRunner.Options options = new EngineRunner.Options(EngineRunner.Mode.REALTIME,
                 runner == null ? initialSpeed : runnerSpeedOr(initialSpeed), 512, 16384, 33, 20);
@@ -1239,11 +1246,63 @@ final class Session implements AutoCloseable {
         WorldDirectory wd = new WorldDirectory(dir);
         Map<Path, Map<String, Object>> files = new java.util.LinkedHashMap<>();
         if (plan.worldChanged) files.put(wd.worldFile(), plan.worldTree);
-        for (String id : plan.changedVolcanoes) files.put(wd.volcanoFile(id), plan.volcanoTrees.get(id));
+        for (String id : plan.changedVolcanoes) {
+            if (!plan.removedVolcanoes.contains(id)) files.put(wd.volcanoFile(id), plan.volcanoTrees.get(id));
+        }
+        for (String id : plan.removedVolcanoes) {
+            Path file = wd.volcanoFile(id);
+            if (Files.exists(file)) {
+                if (previous != null) previous.put(file, Files.readAllBytes(file));
+                Files.delete(file);
+            }
+        }
         for (Map.Entry<Path, Map<String, Object>> f : files.entrySet()) {
             if (previous != null && Files.exists(f.getKey())) previous.put(f.getKey(), Files.readAllBytes(f.getKey()));
+            Files.createDirectories(f.getKey().getParent()); // an empty world has no volcanoes/ yet
             me.alex4386.typhon.engine.config.Yaml.write(f.getKey(), WorldFiles.header(f.getKey()), f.getValue());
         }
+    }
+
+    /**
+     * Places a new magma chamber {@code depthM} below the ground at map point (x, y) and adds its volcano
+     * through the configuration API (the server classifies and reports what that does). Optional magma
+     * fields default to {@link me.alex4386.typhon.engine.config.ChamberPlacement#FIELDS}.
+     */
+    synchronized ConfigOutcome placeChamber(double x, double y, String name, JsonObject fields, boolean dryRun) throws Exception {
+        Scenario scenario = live;
+        if (scenario.session() == null) throw new UnsupportedOperationException("This world runs in memory only; start it from the Worlds page to change it");
+        GridMapping m = map;
+        int cx = m.columnAtX(x);
+        int cz = m.columnAtY(y);
+        double ground = runner.onEngineThread(e -> scenario.terrain().world().isKnown(cx, cz)
+                ? scenario.terrain().world().surfaceZ(cx, cz) : Double.NaN).get(30, TimeUnit.SECONDS);
+        if (Double.isNaN(ground)) throw new IllegalArgumentException("That point is outside the simulated area");
+        java.util.function.Function<String, Double> f = k -> fields != null && fields.has(k) && !fields.get(k).isJsonNull()
+                ? fields.get(k).getAsDouble() : null;
+        Double depth = f.apply("depthM");
+        var request = new me.alex4386.typhon.engine.config.ChamberPlacement.Request(name, cx, cz,
+                depth != null ? depth : me.alex4386.typhon.engine.config.ChamberPlacement.defaultOf("depthM"),
+                f.apply("volumeM3"), f.apply("temperatureC"), f.apply("silicaWt"), f.apply("waterWt"), f.apply("co2Wt"),
+                f.apply("crystalFraction"), f.apply("supplyRateM3PerS"), f.apply("tensileStrengthMPa"),
+                f.apply("initialOverpressureMPa"));
+        java.util.Set<String> taken = scenario.session().volcanoes().keySet();
+        int n = taken.size() + 1;
+        while (taken.contains("volcano-" + n)) n++;
+        String vid = "volcano-" + n;
+        var definition = me.alex4386.typhon.engine.config.ChamberPlacement.definition(vid, request, ground,
+                scenario.terrain().world().spec().metersPerColumn());
+        JsonObject volcanoes = new JsonObject();
+        volcanoes.add(vid, Json.GSON.toJsonTree(definition.toTree()));
+        ConfigOutcome outcome = applyConfig(new ConfigApi.Request(null, volcanoes, false, dryRun, null));
+        outcome.response().addProperty("volcanoId", vid);
+        return outcome;
+    }
+
+    /** Removes a volcano through the configuration API (it is a reset: the response may ask to confirm). */
+    synchronized ConfigOutcome removeVolcano(String vid, boolean dryRun, String confirm) throws Exception {
+        JsonObject volcanoes = new JsonObject();
+        volcanoes.add(vid, com.google.gson.JsonNull.INSTANCE);
+        return applyConfig(new ConfigApi.Request(null, volcanoes, false, dryRun, confirm));
     }
 
     /** Changes the files of a world between saving and reopening it. */

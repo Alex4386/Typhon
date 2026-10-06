@@ -73,7 +73,7 @@ reopened later and can be tuned (§3.5). *In-memory* sessions run a preset witho
 | `hello` | `protocol: 1`, `client: string` | First message. |
 | `listSessions` | — | Reply: `sessions`. |
 | `listCatalog` | — | Reply: `catalog` (§4.1): presets and the world directories under `--worlds-dir`. |
-| `createSession` | `requestId?`, `preset?: string`, `world?: string`, `seed?: number`, `name?: string`, `timeCompression?: {dormant?, eruptive?}`, `paused?: boolean`, `attach?: boolean` (default true), `inMemory?: boolean` | `world`: open `<worlds-dir>/<world>` (if it is already loaded, its session is reused). `preset`: write a new world directory `<worlds-dir>/<name>` (default: a free name derived from the preset) from the preset and open it; with `inMemory:true` run the preset without files instead. `timeCompression` overrides the world's dormant/eruptive time compression (not allowed for an already loaded world or in memory). Replies `ack{message:"Session <id>"}`, then the attach burst if `attach`; `error{badRequest}` when the server is full or the name is taken. |
+| `createSession` | `requestId?`, `template?: "ocean" \| "flat" \| "slope"`, `params?: {…}`, `preset?: string`, `world?: string`, `seed?: number`, `name?: string`, `timeCompression?: {dormant?, eruptive?}`, `paused?: boolean`, `attach?: boolean` (default true), `inMemory?: boolean` | `template`: write `<worlds-dir>/<name>` as an **empty world** (terrain and sea only, no volcano) from a terrain template, with optional `params` (the template's fields in the catalog, defaults from the server), and open it. `world`: open `<worlds-dir>/<world>` (if it is already loaded, its session is reused). `preset`: write a new world directory `<worlds-dir>/<name>` (default: a free name derived from the preset) from the preset and open it; with `inMemory:true` run the preset without files instead. `timeCompression` overrides the world's dormant/eruptive time compression (not allowed for an already loaded world or in memory). Replies `ack{message:"Session <id>"}`, then the attach burst if `attach`; `error{badRequest}` when the server is full or the name is taken. |
 | `attach` | `sessionId: string` | Attach to an existing session (detaching from the current one). Reply: `attached` …, or `error{noSession}`. |
 | `sessionControl` | `requestId?`, `sessionId`, `action: "pause" \| "resume" \| "close" \| "closeWithoutSaving"` | Pause/resume any session (also one this client does not watch). `close` saves a world session and unloads it; clients attached to it receive `detached`. |
 | `deleteWorld` | `requestId?`, `name` | Delete `<worlds-dir>/<name>` (refused while it is loaded). Reply `ack`, then a fresh `catalog`. |
@@ -131,7 +131,9 @@ volcano, out of world, …).
 | type | fields | reply |
 |---|---|---|
 | `getSchema` | — | `schema` (§4.7) of the attached session. It is also sent at the end of every attach burst. |
-| `setConfig` | `requestId?`, `world?`, `volcanoes?: {[id]: …}`, `replace?: boolean`, `dryRun?: boolean`, `confirm?: string` | `configResult` (below). The configuration API; same semantics as HTTP `PATCH`/`PUT /api/sessions/{id}/config`. |
+| `setConfig` | `requestId?`, `world?`, `volcanoes?: {[id]: …}`, `replace?: boolean`, `dryRun?: boolean`, `confirm?: string` | `configResult` (below). The configuration API; same semantics as HTTP `PATCH`/`PUT /api/sessions/{id}/config`. A volcano id that does not exist with a full definition adds that volcano; `null` removes one. |
+| `placeChamber` | `requestId?`, `at: [x, y]` (map metres), `name?`, `fields?: {depthM?, volumeM3?, temperatureC?, silicaWt?, waterWt?, co2Wt?, crystalFraction?, supplyRateM3PerS?, tensileStrengthMPa?, initialOverpressureMPa?}`, `dryRun?` | Places a magma chamber `depthM` below the ground at the point: a new volcano `volcano-<n>` whose vent is **emergent** (no crater, no edifice: it forms where magma first reaches the surface). Omitted fields take the defaults in `schema.commands.placeChamber`. Applied through the configuration API (adding a volcano is a `reload`); replies `configResult` with `volcanoId`. |
+| `removeVolcano` | `requestId?`, `volcanoId`, `dryRun?`, `confirm?` | Removes a volcano through the configuration API: a `reinit`, so the first reply is `needsConfirmation` with a `token` to send back as `confirm`. Its deposits stay in the world. |
 | `setParams` | `requestId?`, `values: {[paramId]: number \| boolean \| null}`, `restart?: boolean` | Legacy alias of `setConfig` by parameter id. `restart: true` confirms a reset; without it a reset is refused with `error{badRequest}` carrying the server's description. Replies `ack{message: "Applied n changes" \| "Restarted with n changes"}`. |
 
 **The client says what it wants; the server decides how.** A request is a patch of the world
@@ -183,6 +185,13 @@ definitions, as editable trees). `PATCH /api/sessions/{id}/config` takes a patch
 the body) and answer like `configResult`: 200 applied or dry run, 409 confirmation needed,
 422 rejected, 404 unknown session.
 
+**World builder (HTTP).** `POST /api/worlds` with `{template: "ocean"|"flat"|"slope", name?, seed?, params?}`
+creates and opens an empty world (or `{preset, name?, seed?}` a preset's world): 201 `{ok, sessionId,
+world}`. `POST /api/sessions/{id}/volcanoes` with `{x, y, name?, depthM?, …}` (the `placeChamber`
+fields, at the top level or under `fields`) places a chamber: 201 with the `configResult` body and
+`volcanoId` (`?dryRun=true`: 200, nothing applied). `DELETE /api/sessions/{id}/volcanoes/{volcanoId}`
+removes one: 409 with a `token` first, then `?confirm=<token>` applies it (200).
+
 ### 3.6 Inspection
 
 `{"type":"inspect","requestId":31,"x":1200,"y":-450}` asks what the simulation knows about the
@@ -224,7 +233,8 @@ point or an entity, and again every 2 s while the simulation runs.
   "volcanoes":[{"id":"kilauea","alert":"ERUPTING","erupting":true,
                 "timeCompression":{"dormant":5000,"eruptive":20,"current":20}}]}],
  "server":{"maxSessions":8,"cpus":16,"heapUsedMB":812,"heapMaxMB":6144,"worldsDir":"/srv/worlds"}}
-{"type":"catalog","presets":[{"name":"kilauea","title":"Kīlauea-like shield","description":"…","realScale":false}],
+{"type":"catalog","templates":[{"name":"ocean","title":"Open sea","description":"…","fields":[ParamSpec…]}, …],
+ "defaultTemplate":"ocean","defaultPreset":"kilauea","presets":[{"name":"kilauea","title":"Kīlauea-like shield","description":"…","realScale":false}],
  "worlds":[{"name":"my-kilauea","title":"Kīlauea","volcanoes":1,"hasState":true,
             "timeCompression":{"dormant":5000,"eruptive":20},"sessionId":"s1"}],
  "server":{ … }}

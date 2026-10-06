@@ -131,6 +131,10 @@ final class WorldFiles {
 
     /** The leading comment block of a YAML file (kept when rewriting it). */
     static String header(Path file) throws IOException {
+        if (!Files.exists(file)) {
+            return "# Typhon volcano definition (see engine/README.md, \"World definitions\").\n"
+                    + "# Placed by the user: a magma chamber with nothing built yet.\n";
+        }
         StringBuilder sb = new StringBuilder();
         for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
             if (!line.startsWith("#")) break;

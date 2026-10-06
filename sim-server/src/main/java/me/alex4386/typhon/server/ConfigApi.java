@@ -104,6 +104,8 @@ final class ConfigApi {
         final Map<String, Map<String, Object>> volcanoTrees = new TreeMap<>();
         boolean worldChanged;
         final List<String> changedVolcanoes = new ArrayList<>();
+        /** Volcanoes the request removes (their definition files are deleted). */
+        final java.util.Set<String> removedVolcanoes = new java.util.TreeSet<>();
         ConfigChanges changes = ConfigChanges.NONE;
         final Map<String, String> names = new TreeMap<>();
         final List<String> warnings = new ArrayList<>();
@@ -235,18 +237,42 @@ final class ConfigApi {
         }
 
         // volcanoes
+        // a new id with a full definition adds a volcano; null removes one
+        Map<String, Map<String, Object>> adding = new TreeMap<>();
+        java.util.Set<String> removing = new java.util.TreeSet<>();
         if (r.volcanoes() != null) {
             for (Map.Entry<String, JsonElement> e : r.volcanoes().entrySet()) {
-                if (!running.containsKey(e.getKey())) {
-                    errors.add(new FieldError("volcano." + e.getKey(), "no such volcano in this world"));
+                String id = e.getKey();
+                boolean exists = running.containsKey(id);
+                if (e.getValue().isJsonNull()) {
+                    if (exists) removing.add(id);
+                    else errors.add(new FieldError("volcano." + id, "no such volcano in this world"));
                 } else if (!e.getValue().isJsonObject()) {
-                    errors.add(new FieldError("volcano." + e.getKey(), "expected an object"));
+                    errors.add(new FieldError("volcano." + id, "expected an object (or null to remove the volcano)"));
+                } else if (!exists) {
+                    if (!WorldFiles.validName(id)) {
+                        errors.add(new FieldError("volcano." + id, "volcano ids may use letters, digits, '.', '_' and '-'"));
+                    } else {
+                        adding.put(id, Tuning.toJava(e.getValue().getAsJsonObject()));
+                    }
                 }
             }
         }
         List<VolcanoDefinition> next = new ArrayList<>();
+        for (Map.Entry<String, Map<String, Object>> e : adding.entrySet()) {
+            try {
+                VolcanoDefinition v = VolcanoDefinition.parse(e.getKey(), ConfigNode.root("volcanoes/" + e.getKey() + ".yaml", e.getValue()));
+                next.add(v);
+                p.names.put(v.id(), v.name());
+                p.volcanoTrees.put(v.id(), e.getValue());
+            } catch (RuntimeException ex) {
+                errors.add(new FieldError("volcano." + e.getKey(), ex.getMessage()));
+            }
+        }
+        p.removedVolcanoes.addAll(removing);
         for (Map.Entry<String, VolcanoDefinition> e : running.entrySet()) {
             String id = e.getKey();
+            if (removing.contains(id)) continue;
             Map<String, Object> tree = now.volcanoes().get(id);
             JsonElement patch = r.volcanoes() != null ? r.volcanoes().get(id) : null;
             if (patch != null && patch.isJsonObject()) {

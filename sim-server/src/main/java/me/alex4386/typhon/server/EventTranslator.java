@@ -265,6 +265,7 @@ final class EventTranslator {
         JsonObject o = new JsonObject();
         o.addProperty("id", v.id());
         o.addProperty("kind", v.kind() == VentKind.FISSURE ? "fissure" : "crater");
+        if (v.emergent()) o.addProperty("emergent", true); // not formed yet: shown once magma reaches the surface
         BlockPos p = v.position();
         o.add("at", Json.xy(map.x(p.x()), map.y(p.z())));
         o.add("z", Json.num((p.y() + 1) * map.cell));

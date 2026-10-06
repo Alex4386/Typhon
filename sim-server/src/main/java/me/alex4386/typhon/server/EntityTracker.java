@@ -180,6 +180,8 @@ final class EntityTracker {
             List<String> active = activeVents.getOrDefault(vid, List.of());
             boolean erupting = ch.erupting();
             for (VentSite vent : v.coupler().allVents()) {
+                // a placed chamber's vent exists once magma has first reached the surface there
+                if (vent.emergent() && ch.eruptionCount() == 0 && !(erupting && active.contains(vent.id()))) continue;
                 boolean fissure = vent.kind() == VentKind.FISSURE;
                 JsonObject o = entity("vent:" + vid + ":" + vent.id(), fissure ? "fissure" : "vent", vid,
                         fissure ? fissureLabel(vent.id()) : "Vent " + vent.id(), map.point(vent.position()));

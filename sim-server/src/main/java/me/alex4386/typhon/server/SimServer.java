@@ -287,6 +287,39 @@ public final class SimServer implements AutoCloseable {
         });
         app.patch("/api/sessions/{id}/config", ctx -> httpConfig(ctx, false));
         app.put("/api/sessions/{id}/config", ctx -> httpConfig(ctx, true));
+        // World builder: empty worlds from templates (or presets), chambers placed and removed by the user.
+        app.post("/api/worlds", ctx -> httpJson(ctx, body -> {
+            String template = Json.str(body, "template");
+            String preset = Json.str(body, "preset");
+            Long seed = Json.lng(body, "seed");
+            long sd = seed == null ? config.defaultSeed() : seed;
+            Session s = template != null
+                    ? createTemplateWorld(template, Json.str(body, "name"), sd,
+                            body.has("params") && body.get("params").isJsonObject() ? body.getAsJsonObject("params") : new JsonObject())
+                    : createPresetWorld(preset == null ? config.defaultPreset() : preset, sd, Json.str(body, "name"), null, null);
+            broadcastSessions();
+            JsonObject r = new JsonObject();
+            r.addProperty("ok", true);
+            r.addProperty("sessionId", s.id);
+            r.addProperty("world", s.worldDir().getFileName().toString());
+            return new HttpReply(201, r);
+        }));
+        app.post("/api/sessions/{id}/volcanoes", ctx -> httpSession(ctx, (s, body) -> {
+            if (!body.has("x") || !body.has("y")) return new HttpReply(400, httpError("badRequest", "x and y (map metres) are required"));
+            JsonObject fields = body.has("fields") && body.get("fields").isJsonObject() ? body.getAsJsonObject("fields") : body;
+            boolean dryRun = "true".equalsIgnoreCase(ctx.queryParam("dryRun")) || (body.has("dryRun") && body.get("dryRun").getAsBoolean());
+            Session.ConfigOutcome o = s.placeChamber(body.get("x").getAsDouble(), body.get("y").getAsDouble(), Json.str(body, "name"),
+                    fields, dryRun);
+            configApplied(s, o);
+            return new HttpReply(o.response().get("ok").getAsBoolean() ? (dryRun ? 200 : 201) : 422, o.response());
+        }));
+        app.delete("/api/sessions/{id}/volcanoes/{vid}", ctx -> httpSession(ctx, (s, body) -> {
+            boolean dryRun = "true".equalsIgnoreCase(ctx.queryParam("dryRun"));
+            Session.ConfigOutcome o = s.removeVolcano(ctx.pathParam("vid"), dryRun, ctx.queryParam("confirm"));
+            configApplied(s, o);
+            JsonObject r = o.response();
+            return new HttpReply(r.get("ok").getAsBoolean() ? 200 : r.has("needsConfirmation") ? 409 : 422, r);
+        }));
         app.start(config.host(), config.port());
         pump.scheduleWithFixedDelay(this::pumpAll, PUMP_MILLIS, PUMP_MILLIS, TimeUnit.MILLISECONDS);
         if (AUTOSAVE_SECONDS > 0) {
@@ -417,6 +450,8 @@ public final class SimServer implements AutoCloseable {
                 });
                 case "setParams" -> setParams(c, msg, requestId);
                 case "setConfig" -> setConfig(c, msg, requestId);
+                case "placeChamber" -> placeChamber(c, msg, requestId);
+                case "removeVolcano" -> removeVolcano(c, msg, requestId);
                 case "replay" -> replay(c, msg, requestId);
                 case "seek" -> seek(c, msg, requestId);
                 default -> c.send(Json.error("badRequest", "Unknown message type '" + type + "'", requestId));
@@ -497,6 +532,27 @@ public final class SimServer implements AutoCloseable {
             presets.add(j);
         }
         o.add("presets", presets);
+        o.addProperty("defaultPreset", config.defaultPreset());
+        JsonArray templates = new JsonArray();
+        for (String t : me.alex4386.typhon.simulator.scenario.WorldTemplates.NAMES) {
+            JsonObject j = new JsonObject();
+            j.addProperty("name", t);
+            j.addProperty("title", switch (t) {
+                case "ocean" -> "Open sea";
+                case "flat" -> "Flat land";
+                default -> "Sloping land";
+            });
+            j.addProperty("description", switch (t) {
+                case "ocean" -> "A smooth sea floor under open sea, nothing on it. Place a magma chamber below it and watch"
+                        + " what the eruptions build.";
+                case "flat" -> "Level, empty land. Place a magma chamber and let a volcano grow.";
+                default -> "Empty land on a gentle slope. Place a magma chamber and let a volcano grow.";
+            });
+            j.add("fields", Tuning.templateSchema(t));
+            templates.add(j);
+        }
+        o.add("templates", templates);
+        o.addProperty("defaultTemplate", "ocean");
         JsonArray worlds = new JsonArray();
         for (WorldFiles.Listing w : WorldFiles.list(config.worldsDir())) {
             JsonObject j = new JsonObject();
@@ -538,6 +594,16 @@ public final class SimServer implements AutoCloseable {
         boolean paused = msg.has("paused") && msg.get("paused").getAsBoolean();
         boolean attach = !msg.has("attach") || msg.get("attach").getAsBoolean();
         Session s;
+        String template = Json.str(msg, "template");
+        if (template != null) {
+            JsonObject params = msg.has("params") && msg.get("params").isJsonObject() ? msg.getAsJsonObject("params") : new JsonObject();
+            s = createTemplateWorld(template, name, seed == null ? config.defaultSeed() : seed, params);
+            if (paused) s.transport("PAUSED", null);
+            ack(c, requestId, true, "Session " + s.id);
+            if (attach) attach(c, s);
+            broadcastSessions();
+            return;
+        }
         if (world != null) {
             Path dir = config.worldsDir().resolve(world).normalize();
             if (!dir.startsWith(config.worldsDir().normalize()) || !Files.isDirectory(dir)) {
@@ -780,6 +846,123 @@ public final class SimServer implements AutoCloseable {
         if (requestId != null) reply.addProperty("requestId", requestId);
         c.send(reply);
         configApplied(s, outcome);
+    }
+
+    /** WS {@code placeChamber}: a new magma chamber (and volcano) at a map point; replies {@code configResult}. */
+    private void placeChamber(ClientConnection c, JsonObject msg, Long requestId) throws Exception {
+        Session s = c.session;
+        if (s == null) {
+            c.send(Json.error("noSession", "Attach to a session first", requestId));
+            return;
+        }
+        if (!msg.has("at") || !msg.get("at").isJsonArray() || msg.getAsJsonArray("at").size() < 2) {
+            c.send(Json.error("badRequest", "placeChamber needs at: [x, y]", requestId));
+            return;
+        }
+        var at = msg.getAsJsonArray("at");
+        JsonObject fields = msg.has("fields") && msg.get("fields").isJsonObject() ? msg.getAsJsonObject("fields") : new JsonObject();
+        boolean dryRun = msg.has("dryRun") && msg.get("dryRun").getAsBoolean();
+        Session.ConfigOutcome outcome = s.placeChamber(at.get(0).getAsDouble(), at.get(1).getAsDouble(), Json.str(msg, "name"),
+                fields, dryRun);
+        replyConfig(c, s, outcome, requestId);
+    }
+
+    /** WS {@code removeVolcano}: deletes a volcano (a reset: the reply may ask to confirm). */
+    private void removeVolcano(ClientConnection c, JsonObject msg, Long requestId) throws Exception {
+        Session s = c.session;
+        if (s == null) {
+            c.send(Json.error("noSession", "Attach to a session first", requestId));
+            return;
+        }
+        String vid = Json.str(msg, "volcanoId");
+        boolean dryRun = msg.has("dryRun") && msg.get("dryRun").getAsBoolean();
+        String confirm = msg.has("confirm") && !msg.get("confirm").isJsonNull() ? msg.get("confirm").getAsString() : null;
+        replyConfig(c, s, s.removeVolcano(vid, dryRun, confirm), requestId);
+    }
+
+    private void replyConfig(ClientConnection c, Session s, Session.ConfigOutcome outcome, Long requestId) {
+        JsonObject reply = outcome.response().deepCopy();
+        reply.addProperty("type", "configResult");
+        if (requestId != null) reply.addProperty("requestId", requestId);
+        c.send(reply);
+        configApplied(s, outcome);
+    }
+
+    /**
+     * Writes {@code <worlds-dir>/<name>} as an empty world from a terrain template ({@code ocean},
+     * {@code flat}, {@code slope}) with optional {@code params} and runs it.
+     */
+    public synchronized Session createTemplateWorld(String template, String name, long seed, JsonObject params) {
+        checkCapacity();
+        var d = me.alex4386.typhon.simulator.scenario.WorldTemplates.Template.defaults(template);
+        java.util.function.BiFunction<String, Double, Double> p = (k, fallback) -> params != null && params.has(k)
+                && !params.get(k).isJsonNull() ? params.get(k).getAsDouble() : fallback;
+        var t = new me.alex4386.typhon.simulator.scenario.WorldTemplates.Template(template, p.apply("coreExtentM", d.coreExtentM()),
+                p.apply("metersPerColumn", d.metersPerColumn()), p.apply("depthM", d.depthM()), p.apply("elevationM", d.elevationM()),
+                p.apply("slope", d.slope()), p.apply("seaLevelZ", d.seaLevelZ()), p.apply("roughnessM", d.roughnessM()),
+                p.apply("eruptiveTimeCompression", d.eruptiveTimeCompression()));
+        if (name != null && !WorldFiles.validName(name)) {
+            throw new IllegalArgumentException("World names may use letters, digits, '.', '_' and '-' (max 64)");
+        }
+        String dirName = name != null ? name : WorldFiles.uniqueName(config.worldsDir(), template);
+        Path dir = config.worldsDir().resolve(dirName);
+        if (Files.exists(dir)) throw new IllegalArgumentException("A world named '" + dirName + "' already exists");
+        try {
+            Files.createDirectories(config.worldsDir());
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+        me.alex4386.typhon.simulator.scenario.WorldTemplates.writeEmpty(t, dirName, seed, dir);
+        return createWorld(dir);
+    }
+
+    record HttpReply(int status, JsonObject body) {}
+
+    @FunctionalInterface
+    interface HttpBodyHandler {
+        HttpReply handle(JsonObject body) throws Exception;
+    }
+
+    @FunctionalInterface
+    interface HttpSessionHandler {
+        HttpReply handle(Session s, JsonObject body) throws Exception;
+    }
+
+    /** Runs a JSON HTTP handler: 400 on a bad body or argument, 409 when unsupported, 500 otherwise. */
+    private void httpJson(io.javalin.http.Context ctx, HttpBodyHandler handler) {
+        ctx.contentType("application/json");
+        JsonObject body = new JsonObject();
+        String text = ctx.body();
+        if (text != null && !text.isBlank()) {
+            try {
+                JsonElement e = Json.GSON.fromJson(text, JsonElement.class);
+                if (e == null || !e.isJsonObject()) throw new JsonParseException("not an object");
+                body = e.getAsJsonObject();
+            } catch (RuntimeException e) {
+                ctx.status(400).result(Json.GSON.toJson(httpError("badRequest", "Expected a JSON object")));
+                return;
+            }
+        }
+        try {
+            HttpReply r = handler.handle(body);
+            ctx.status(r.status()).result(Json.GSON.toJson(r.body()));
+        } catch (IllegalArgumentException e) {
+            ctx.status(400).result(Json.GSON.toJson(httpError("badRequest", e.getMessage())));
+        } catch (UnsupportedOperationException | IllegalStateException e) {
+            ctx.status(409).result(Json.GSON.toJson(httpError("unsupported", e.getMessage())));
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "HTTP request failed", e);
+            ctx.status(500).result(Json.GSON.toJson(httpError("internal", e.getMessage())));
+        }
+    }
+
+    private void httpSession(io.javalin.http.Context ctx, HttpSessionHandler handler) {
+        Session s = session(ctx.pathParam("id"));
+        if (s == null) {
+            ctx.status(404).contentType("application/json").result(Json.GSON.toJson(httpError("noSession", "No session " + ctx.pathParam("id"))));
+            return;
+        }
+        httpJson(ctx, body -> handler.handle(s, body));
     }
 
     /** HTTP PATCH/PUT of a session's configuration. */
