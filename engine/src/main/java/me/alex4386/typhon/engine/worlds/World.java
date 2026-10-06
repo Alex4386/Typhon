@@ -283,7 +283,7 @@ public final class World {
         subsurface = new Subsurface(terrain.world(), definition.subsurfaceConfig());
         systems.clear();
         Engine.Builder builder = Engine.builder(definition.seed()).baseStepMicros(definition.baseStepMicros())
-                .add(terrain).add(subsurface);
+                .adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(terrain).add(subsurface);
         if (threads > 0) builder.threads(threads);
         Set<String> hidden = new HashSet<>();
         for (VolcanoDefinition v : volcanoDefinitions()) {

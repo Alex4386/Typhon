@@ -5,29 +5,43 @@ import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
 
 /**
- * A simulation component stepped by the {@link Engine} at its own rate.
+ * A simulation component stepped by the {@link Engine} at its own rate, in physical seconds.
  *
  * <p>Subsystems run at different resolutions in time: a magma chamber may step every second while
  * lava flow steps every base step. The engine rounds {@link #periodSeconds()} and {@link
  * #phaseSeconds()} to whole base steps (minimum one step), so a subsystem whose physics needs a
  * finer step than the engine's base step must sub-step internally. Staggering phases spreads
- * expensive subsystems across steps.
+ * expensive subsystems across steps. With adaptive stepping an engine step may span several
+ * periods; the subsystem then steps once with {@link StepContext#dtSeconds()} covering them all
+ * (see {@link #maxStepSeconds()} for limiting that).
  */
 public interface Subsystem {
     /** Stable identifier; also seeds this subsystem's random stream, so do not rename casually. */
     String id();
 
     /**
-     * Step period in simulated seconds. {@code 0} (the default) steps every base step;
+     * Step period in seconds. {@code 0} (the default) steps every base step;
      * {@link Double#POSITIVE_INFINITY} never steps (command-driven subsystems).
      */
     default double periodSeconds() {
         return 0;
     }
 
-    /** Offset of the first step in simulated seconds, in {@code [0, periodSeconds())}. */
+    /** Offset of the first step in seconds, in {@code [0, periodSeconds())}. */
     default double phaseSeconds() {
         return 0;
+    }
+
+    /**
+     * Longest step (seconds) this subsystem can take accurately from its current state, for
+     * adaptive time stepping ({@link Engine.Builder#adaptive}): e.g. a CFL limit while lava or a flow
+     * moves, a fine step while erupting, {@link Double#POSITIVE_INFINITY} (the default) when nothing in
+     * it constrains the step. Must depend on state only (never on wall time or playback), so runs stay
+     * deterministic. The engine never steps below its base step, so a subsystem that needs less must
+     * sub-step internally.
+     */
+    default double maxStepSeconds() {
+        return Double.POSITIVE_INFINITY;
     }
 
     /** Registers handlers for the commands this subsystem accepts. Called once while building. */

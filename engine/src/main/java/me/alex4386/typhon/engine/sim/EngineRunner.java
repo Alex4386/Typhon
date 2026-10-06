@@ -21,14 +21,18 @@ import me.alex4386.typhon.engine.output.EngineFrame;
  *
  * <h2>Modes</h2>
  * <ul>
- *   <li>{@link Mode#REALTIME}: simulation time advances at {@link #speed()} × wall-clock time
- *       (adjustable while running, e.g. 0.1×–1000×). When the engine cannot keep up it catches up
- *       at most {@code maxCatchUpSteps} steps at once and then lets simulation time slip.
+ *   <li>{@link Mode#REALTIME}: time advances at {@link #speed()} seconds per wall-clock second
+ *       (adjustable while running, e.g. 1×–10⁷×). A step runs once the wall clock has reached its
+ *       end, whatever its length (the engine picks step lengths from its state, never from the
+ *       speed). When the engine cannot keep up it catches up at most {@code maxCatchUpSteps} steps
+ *       at once and then lets time slip.
  *   <li>{@link Mode#UNBOUNDED}: as many steps as the CPU allows.
  *   <li>{@link Mode#PAUSED}: no steps, except those requested with {@link #step(int)}.
  * </ul>
- * The mode only changes how simulation time maps onto wall-clock time; the simulation itself
- * (frames, state) is identical whatever the mode or speed.
+ * The mode only changes how time maps onto wall-clock time; the simulation itself (frames, state)
+ * is identical whatever the mode or speed. A {@linkplain #setFrameObserver frame observer} sees
+ * every frame on the engine thread and may change the mode or speed there (playback policies that
+ * slow down when an eruption starts).
  *
  * <h2>Output</h2>
  * <ul>
@@ -104,11 +108,14 @@ public final class EngineRunner implements AutoCloseable {
     private volatile long pauseAtStep = Long.MAX_VALUE;
     private volatile EngineSnapshot snapshot;
     private volatile long completedStep;
+    private volatile long snapshotTimeMicros;
+    private volatile long nextStepMicros;
 
-    // REALTIME pacing anchor (engine thread only)
-    private long anchorNanos;
-    private long anchorMicros;
-    private boolean reanchor = true;
+    // REALTIME pacing anchor (written on the engine thread; read for the playback clock)
+    private volatile long anchorNanos;
+    private volatile long anchorMicros;
+    private volatile boolean reanchor = true;
+    private volatile Consumer<EngineFrame> frameObserver;
     private long lastSnapshotNanos;
 
     public EngineRunner(Engine engine, Options options, Consumer<Throwable> errorHandler) {
@@ -123,6 +130,7 @@ public final class EngineRunner implements AutoCloseable {
         this.thread.setDaemon(true);
         this.snapshot = engine.snapshot();
         this.completedStep = engine.currentStep();
+        this.snapshotTimeMicros = engine.timeMicros();
     }
 
     public EngineRunner(Engine engine, Consumer<Throwable> errorHandler) {
@@ -148,10 +156,38 @@ public final class EngineRunner implements AutoCloseable {
         return speed;
     }
 
+    /**
+     * Calls {@code observer} with every frame, on the engine thread, right after its step (before it
+     * is queued). It may switch the mode or speed; it must not block.
+     */
+    public void setFrameObserver(Consumer<EngineFrame> observer) {
+        this.frameObserver = observer;
+    }
+
+    /**
+     * Playback time (µs): in {@link Mode#REALTIME} the wall-clock position between the engine's
+     * time and the end of its next step (so a clock advances smoothly through long quiet steps);
+     * otherwise the time of the last completed step.
+     */
+    public long playbackMicros() {
+        long engineMicros = snapshotTimeMicros;
+        if (mode != Mode.REALTIME || reanchor) return engineMicros;
+        long target = anchorMicros + (long) ((System.nanoTime() - anchorNanos) / 1000.0 * speed);
+        return Math.max(engineMicros, Math.min(target, engineMicros + nextStepMicros));
+    }
+
     public void realtime(double speed) {
         if (!(speed > 0)) throw new IllegalArgumentException("speed must be positive");
         this.speed = speed;
         this.mode = Mode.REALTIME;
+        this.reanchor = true;
+        wake();
+    }
+
+    /** Sets the {@link Mode#REALTIME} speed without changing the mode (a paused runner stays paused). */
+    public void setSpeed(double speed) {
+        if (!(speed > 0)) throw new IllegalArgumentException("speed must be positive");
+        this.speed = speed;
         this.reanchor = true;
         wake();
     }
@@ -336,31 +372,43 @@ public final class EngineRunner implements AutoCloseable {
             anchorMicros = engine.timeMicros();
             reanchor = false;
         }
-        double elapsedSimMicros = (now - anchorNanos) / 1000.0 * speed;
-        long targetMicros = anchorMicros + (long) elapsedSimMicros;
-        long base = engine.baseStepMicros();
+        double elapsedMicros = (now - anchorNanos) / 1000.0 * speed;
+        long targetMicros = anchorMicros + (long) elapsedMicros;
+        double startSpeed = speed;
 
         int ran = 0;
-        while (running && mode == Mode.REALTIME && engine.timeMicros() + base <= targetMicros
+        while (running && mode == Mode.REALTIME && speed == startSpeed && !reanchor
+                && engine.timeMicros() + nextStep() <= targetMicros
                 && ran < options.maxCatchUpSteps() && engine.currentStep() < pauseAtStep) {
             doStep();
             ran++;
         }
-        if (ran >= options.maxCatchUpSteps() && engine.timeMicros() + base <= targetMicros) {
-            reanchor = true; // fell behind: let simulation time slip instead of spiralling
+        if (mode != Mode.REALTIME || speed != startSpeed || reanchor) return; // switched mid-slice
+        if (ran >= options.maxCatchUpSteps() && engine.timeMicros() + nextStep() <= targetMicros) {
+            reanchor = true; // fell behind: let time slip instead of spiralling
             return;
         }
         if (ran == 0) {
-            long nextMicros = engine.timeMicros() + base - anchorMicros;
+            long nextMicros = engine.timeMicros() + nextStep() - anchorMicros;
             long wakeAt = anchorNanos + (long) (nextMicros * 1000.0 / speed);
             long sleep = Math.min(wakeAt - System.nanoTime(), TimeUnit.MILLISECONDS.toNanos(10));
             if (sleep > 0) LockSupport.parkNanos(sleep);
         }
     }
 
+    /** Length of the engine's next step (µs), from its state. */
+    private long nextStep() {
+        long micros = Math.max(engine.baseStepMicros(), Math.round(engine.nextStepSeconds() * 1e6));
+        nextStepMicros = micros;
+        return micros;
+    }
+
     private void doStep() throws InterruptedException {
         EngineFrame frame = engine.step();
         completedStep = engine.currentStep();
+        snapshotTimeMicros = engine.timeMicros();
+        Consumer<EngineFrame> observer = frameObserver;
+        if (observer != null) observer.accept(frame);
         if (frame.isEmpty()) return;
         if (!frame.events().isEmpty()) {
             synchronized (ringLock) {

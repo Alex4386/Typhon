@@ -30,12 +30,21 @@ import me.alex4386.typhon.engine.save.SaveStore;
 import me.alex4386.typhon.engine.save.SubsystemState;
 
 /**
- * Deterministic, fixed-step simulation loop.
+ * Deterministic simulation loop on one physical clock.
  *
- * <p>Time advances in base steps of {@link #baseStepMicros()} (default 50 ms, a simulator setting).
- * Each {@link #step()} applies queued commands in submission order, steps every subsystem that is
- * due (in registration order) and returns the resulting {@link EngineFrame}. Given the same seed,
- * base step, subsystems and command sequence, the frames are identical across runs.
+ * <p>Time is counted in base quanta of {@link #baseStepMicros()} (default 50 ms, a simulator setting).
+ * Each {@link #step()} applies queued commands in submission order, picks the step length, steps
+ * every subsystem that is due (in registration order) and returns the resulting {@link EngineFrame}.
+ *
+ * <p><b>Adaptive steps.</b> With {@link Builder#adaptive} a step spans a power-of-two number of quanta
+ * (aligned to the current time, so steps tile the time line), as long as every subsystem allows
+ * ({@link Subsystem#maxStepSeconds()}) and up to the configured maximum: hours while the volcano is
+ * quiet, the base step while lava, flows or an eruption need it. The choice depends only on state,
+ * never on wall time or playback speed. A subsystem is due when one of its schedule points
+ * ({@code phase + n·period}) falls in the step; it then covers the time up to its next point after
+ * the step, so its steps tile the time line too. Without {@code adaptive} every step is one quantum.
+ * Given the same seed, base step, maximum step, subsystems and command sequence, the frames are
+ * identical across runs and thread counts.
  *
  * <p>{@link #save(SaveStore)} captures the time, every subsystem's configuration hash, random state
  * and own state, still-queued commands, and appends new {@link HistoricalEvent}s to the history log,
@@ -47,6 +56,11 @@ public final class Engine {
     public static final int STATE_FORMAT = 2;
     public static final String ENGINE_VERSION = "1.0.0-SNAPSHOT";
     public static final long DEFAULT_BASE_STEP_MICROS = 50_000;
+    /**
+     * Longest step hosts allow ({@link Builder#adaptive}): a day. Quiet volcanoes recharge for years;
+     * subsystems shorten the steps as soon as anything moves.
+     */
+    public static final double DEFAULT_MAX_STEP_SECONDS = 86_400;
 
     private final long seed;
     private final long baseStepMicros;
@@ -56,14 +70,20 @@ public final class Engine {
     private final Outbox outbox = new Outbox();
     private final List<HistoricalEvent> history = new ArrayList<>();
     private final Parallel parallel;
+    private final long maxStrideQuanta;
     private long currentStep;
+    /** Simulation time in base quanta. */
+    private long timeQuanta;
+    private long lastStrideQuanta = 1;
 
-    private Engine(long seed, long baseStepMicros, long startStep, List<Registered> subsystems, CommandBus commandBus,
-            Parallel parallel) {
+    private Engine(long seed, long baseStepMicros, long maxStrideQuanta, long startStep, long startQuanta,
+            List<Registered> subsystems, CommandBus commandBus, Parallel parallel) {
         this.parallel = parallel;
         this.seed = seed;
         this.baseStepMicros = baseStepMicros;
+        this.maxStrideQuanta = maxStrideQuanta;
         this.currentStep = startStep;
+        this.timeQuanta = startQuanta;
         this.subsystems = subsystems;
         this.commandBus = commandBus;
     }
@@ -92,7 +112,25 @@ public final class Engine {
 
     /** Simulation time at the start of the next step, in microseconds. */
     public long timeMicros() {
-        return currentStep * baseStepMicros;
+        return timeQuanta * baseStepMicros;
+    }
+
+    /** Length of the last step taken, in seconds (the base step before any). */
+    public double lastStepSeconds() {
+        return SimTime.seconds(lastStrideQuanta * baseStepMicros);
+    }
+
+    /** Longest step the engine may take, in seconds (the base step unless {@link Builder#adaptive}). */
+    public double maxStepSeconds() {
+        return SimTime.seconds(maxStrideQuanta * baseStepMicros);
+    }
+
+    /**
+     * Length (seconds) of the next step from the current state: what {@link #step()} takes unless a
+     * queued command changes the state first.
+     */
+    public double nextStepSeconds() {
+        return SimTime.seconds(chooseStride() * baseStepMicros);
     }
 
     /** Simulation time at the start of the next step, in seconds. */
@@ -126,7 +164,8 @@ public final class Engine {
         }
         r.periodSteps = schedule[0];
         r.phaseSteps = schedule[1];
-        r.dtMicros = (schedule[0] == 0 ? 1 : schedule[0]) * baseStepMicros;
+        // time already covered stays covered; the new period applies from the next schedule point
+        if (r.nextQuanta < timeQuanta) r.nextQuanta = r.nextPointAtOrAfter(timeQuanta);
         r.configJson = configJson(r.subsystem);
         r.configHash = hash(r.configJson);
     }
@@ -164,32 +203,49 @@ public final class Engine {
 
     public EngineFrame step() {
         long step = currentStep;
-        long time = step * baseStepMicros;
 
         EngineCommand command;
         while ((command = pendingCommands.poll()) != null) {
             commandBus.dispatch(command);
         }
 
+        long stride = chooseStride();
+        long time = timeQuanta * baseStepMicros;
+        long end = timeQuanta + stride;
         int count = subsystems.size();
+        // each due subsystem covers from its next schedule point to its first point after the step
+        long[] dts = new long[count];
         for (int s = 0; s < count; s++) {
+            Registered r = subsystems.get(s);
+            if (!r.isDue(end)) continue;
+            long next = r.nextPointAtOrAfter(end);
+            dts[s] = (next - r.nextQuanta) * baseStepMicros;
+            r.nextQuanta = next;
+        }
+        for (int s = 0; s < count; s++) {
+            if (dts[s] == 0) continue;
             Registered registered = subsystems.get(s);
-            if (!registered.isDue(step)) continue;
             if (registered.lane != null && !parallel.isSequential()) {
-                int end = s + 1; // the stage: following due subsystems that also declare a lane
-                while (end < count && subsystems.get(end).lane != null) end++;
+                int stageEnd = s + 1; // the stage: following due subsystems that also declare a lane
+                while (stageEnd < count && subsystems.get(stageEnd).lane != null) stageEnd++;
                 List<Registered> stage = new ArrayList<>();
-                for (int k = s; k < end; k++) if (subsystems.get(k).isDue(step)) stage.add(subsystems.get(k));
-                if (runStage(stage, step, time)) {
-                    s = end - 1;
+                List<Long> stageDts = new ArrayList<>();
+                for (int k = s; k < stageEnd; k++) {
+                    if (dts[k] == 0) continue;
+                    stage.add(subsystems.get(k));
+                    stageDts.add(dts[k]);
+                }
+                if (runStage(stage, stageDts, step, time)) {
+                    s = stageEnd - 1;
                     continue;
                 }
             }
-            registered.subsystem.step(new StepContext(step, time, registered.dtMicros, registered.random, outbox,
-                    parallel));
+            registered.subsystem.step(new StepContext(step, time, dts[s], registered.random, outbox, parallel));
         }
 
         currentStep++;
+        timeQuanta = end;
+        lastStrideQuanta = stride;
         EngineFrame frame = outbox.drain(step, time);
         for (EngineEvent event : frame.events()) {
             if (event instanceof HistoricalEvent historical) history.add(historical);
@@ -198,10 +254,32 @@ public final class Engine {
     }
 
     /**
+     * Quanta the next step spans: the largest power of two that divides the current time (steps stay
+     * aligned) and fits every stepping subsystem's {@link Subsystem#maxStepSeconds()} and the maximum.
+     */
+    private long chooseStride() {
+        if (maxStrideQuanta <= 1) return 1;
+        double limit = Double.POSITIVE_INFINITY;
+        for (Registered r : subsystems) {
+            if (r.periodSteps == 0) continue;
+            double m = r.subsystem.maxStepSeconds();
+            if (m < limit) limit = m;
+        }
+        long q = maxStrideQuanta;
+        if (limit < Double.POSITIVE_INFINITY) {
+            double quanta = Math.floor(limit * SimTime.MICROS_PER_SECOND / baseStepMicros);
+            q = (long) Math.max(1, Math.min(q, quanta));
+        }
+        long k = Long.highestOneBit(q);
+        while (k > 1 && Math.floorMod(timeQuanta, k) != 0) k >>= 1;
+        return k;
+    }
+
+    /**
      * Runs a stage of lane-declaring subsystems with lanes in parallel (see
      * {@link Subsystem#concurrencyLane()}); returns false (nothing run) when it has a single lane.
      */
-    private boolean runStage(List<Registered> stage, long step, long time) {
+    private boolean runStage(List<Registered> stage, List<Long> dts, long step, long time) {
         Map<String, List<Integer>> lanes = new LinkedHashMap<>();
         for (int i = 0; i < stage.size(); i++) {
             lanes.computeIfAbsent(stage.get(i).lane, k -> new ArrayList<>()).add(i);
@@ -214,7 +292,7 @@ public final class Engine {
                 Registered r = stage.get(i);
                 Outbox buffer = new Outbox();
                 buffers[i] = buffer;
-                r.subsystem.step(new StepContext(step, time, r.dtMicros, r.random, buffer, parallel));
+                r.subsystem.step(new StepContext(step, time, dts.get(i), r.random, buffer, parallel));
             }
         });
         for (Outbox buffer : buffers) outbox.absorb(buffer);
@@ -298,12 +376,14 @@ public final class Engine {
         meta.addProperty("step", currentStep);
         meta.addProperty("timeMicros", timeMicros());
         meta.addProperty("baseStepMicros", baseStepMicros);
+        meta.addProperty("lastStrideQuanta", lastStrideQuanta);
 
         JsonArray list = new JsonArray();
         for (Registered registered : subsystems) {
             JsonObject entry = new JsonObject();
             entry.addProperty("id", registered.subsystem.id());
             entry.addProperty("configHash", registered.configHash);
+            entry.addProperty("nextQuanta", registered.nextQuanta);
             entry.add("config", registered.configJson);
             list.add(entry);
 
@@ -357,24 +437,32 @@ public final class Engine {
         final String lane;
         long periodSteps;
         long phaseSteps;
-        long dtMicros;
+        /** The next schedule point (quanta) this subsystem has not yet covered. */
+        long nextQuanta;
         JsonElement configJson;
         String configHash;
 
-        Registered(Subsystem subsystem, long periodSteps, long phaseSteps, long dtMicros, SimRandom random,
+        Registered(Subsystem subsystem, long periodSteps, long phaseSteps, SimRandom random,
                 JsonElement configJson, String configHash, String lane) {
             this.subsystem = subsystem;
             this.periodSteps = periodSteps;
             this.phaseSteps = phaseSteps;
-            this.dtMicros = dtMicros;
+            this.nextQuanta = phaseSteps;
             this.random = random;
             this.configJson = configJson;
             this.configHash = configHash;
             this.lane = lane;
         }
 
-        boolean isDue(long step) {
-            return periodSteps > 0 && step >= phaseSteps && (step - phaseSteps) % periodSteps == 0;
+        /** Whether a schedule point not yet covered falls before {@code endQuanta}. */
+        boolean isDue(long endQuanta) {
+            return periodSteps > 0 && nextQuanta < endQuanta;
+        }
+
+        /** The first schedule point at or after {@code quanta}. */
+        long nextPointAtOrAfter(long quanta) {
+            if (quanta <= phaseSteps) return phaseSteps;
+            return phaseSteps + Math.floorDiv(quanta - phaseSteps + periodSteps - 1, periodSteps) * periodSteps;
         }
     }
 
@@ -383,6 +471,7 @@ public final class Engine {
         private final SimRandom root;
         private final List<Subsystem> subsystems = new ArrayList<>();
         private long baseStepMicros = DEFAULT_BASE_STEP_MICROS;
+        private double maxStepSeconds = Double.NaN;
         private SaveStore restoreFrom;
         private boolean allowConfigChanges;
         private int threads = Parallel.defaultThreads();
@@ -414,6 +503,17 @@ public final class Engine {
             return this;
         }
 
+        /**
+         * Adaptive stepping: steps grow (in powers of two of the base step) up to {@code maxStepSeconds}
+         * while every subsystem allows it ({@link Subsystem#maxStepSeconds()}). Without it every step is
+         * one base step.
+         */
+        public Builder adaptive(double maxStepSeconds) {
+            if (!(maxStepSeconds > 0)) throw new IllegalArgumentException("maxStepSeconds must be > 0");
+            this.maxStepSeconds = maxStepSeconds;
+            return this;
+        }
+
         public Builder baseStep(Duration step) {
             return baseStepMicros(step.toNanos() / 1000);
         }
@@ -437,6 +537,7 @@ public final class Engine {
         public Engine build() {
             JsonObject meta = null;
             Map<String, String> savedHashes = new LinkedHashMap<>();
+            Map<String, Long> savedNext = new LinkedHashMap<>();
             if (restoreFrom != null) {
                 byte[] bytes = restoreFrom.read(SaveFormat.META);
                 if (bytes == null) throw new IllegalArgumentException("Save has no " + SaveFormat.META);
@@ -457,6 +558,7 @@ public final class Engine {
                 for (JsonElement e : meta.getAsJsonArray("subsystems")) {
                     JsonObject entry = e.getAsJsonObject();
                     savedHashes.put(entry.get("id").getAsString(), entry.get("configHash").getAsString());
+                    if (entry.has("nextQuanta")) savedNext.put(entry.get("id").getAsString(), entry.get("nextQuanta").getAsLong());
                 }
             }
 
@@ -500,14 +602,23 @@ public final class Engine {
                     }
                 }
 
-                long dt = (periodSteps == 0 ? 1 : periodSteps) * baseStepMicros;
-                registered.add(new Registered(subsystem, periodSteps, phaseSteps, dt, random, configJson, configHash,
+                registered.add(new Registered(subsystem, periodSteps, phaseSteps, random, configJson, configHash,
                         subsystem.concurrencyLane()));
             }
 
             long startStep = meta == null ? 0 : meta.get("step").getAsLong();
-            Engine engine = new Engine(seed, baseStepMicros, startStep, List.copyOf(registered), bus,
-                    Parallel.of(threads));
+            // saves before adaptive stepping counted one quantum per step
+            long startQuanta = meta == null ? 0
+                    : meta.has("timeMicros") ? meta.get("timeMicros").getAsLong() / baseStepMicros : startStep;
+            for (Registered r : registered) {
+                Long next = savedNext.get(r.subsystem.id());
+                r.nextQuanta = next != null ? next : r.nextPointAtOrAfter(startQuanta);
+            }
+            long maxStride = Double.isNaN(maxStepSeconds) ? 1
+                    : Math.max(1, (long) Math.floor(maxStepSeconds * SimTime.MICROS_PER_SECOND / baseStepMicros));
+            Engine engine = new Engine(seed, baseStepMicros, maxStride, startStep, startQuanta, List.copyOf(registered),
+                    bus, Parallel.of(threads));
+            if (meta != null && meta.has("lastStrideQuanta")) engine.lastStrideQuanta = meta.get("lastStrideQuanta").getAsLong();
             if (meta != null) {
                 for (JsonElement e : meta.getAsJsonArray("pendingCommands")) {
                     JsonObject entry = e.getAsJsonObject();
