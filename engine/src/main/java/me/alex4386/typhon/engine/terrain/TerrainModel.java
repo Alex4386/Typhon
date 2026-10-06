@@ -117,7 +117,7 @@ public final class TerrainModel implements Subsystem {
                     } else {
                         Material cover = palette.knows(column.surface()) && solid(column.surface())
                                 ? palette.material(column.surface()) : null;
-                        imports.add(new WorldModel.ColumnImport(x, z, world.spec().blockTop(column.groundY()), cover));
+                        imports.add(new WorldModel.ColumnImport(x, z, importSurface(x, z, column.groundY()), cover));
                     }
                 }
             }
@@ -130,6 +130,21 @@ public final class TerrainModel implements Subsystem {
                 syncWater(x, z, chunk.waterY[i]);
             }
         }
+    }
+
+    /**
+     * Surface of a newly imported column: the host's continuous relief at the column centre when it lies
+     * within the ground block (so the block view is unchanged), else the block top. Without it a real-scale
+     * world starts as terraces one block (e.g. 20 m) high.
+     */
+    private double importSurface(int x, int z, int groundY) {
+        WorldSpec spec = world.spec();
+        double top = spec.blockTop(groundY);
+        java.util.function.DoubleBinaryOperator relief = world.relief();
+        if (relief == null) return top;
+        double l = spec.metersPerColumn();
+        double r = relief.applyAsDouble((x + 0.5) * l, (z + 0.5) * l);
+        return Double.isFinite(r) && r > top - l && r <= top + EPS ? r : top;
     }
 
     private boolean solid(BlockId block) {
