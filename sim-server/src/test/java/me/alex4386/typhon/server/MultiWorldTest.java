@@ -59,14 +59,15 @@ class MultiWorldTest {
             JsonObject catalog = c.awaitType("catalog", 10).json();
             assertTrue(catalog.getAsJsonArray("presets").size() > 0);
 
-            // A preset becomes a world directory with the requested time compression.
+            // A preset becomes a world directory.
             c.send("{\"type\":\"createSession\",\"requestId\":1,\"preset\":\"kilauea\",\"name\":\"alpha\","
-                    + "\"timeCompression\":{\"dormant\":1234},\"paused\":true}");
+                    + "\"paused\":true}");
             JsonObject created = ack(c, 1, 120);
             assertTrue(created.get("ok").getAsBoolean(), created.toString());
             String id = c.awaitType("attached", 60).json().get("sessionId").getAsString();
             assertTrue(Files.isRegularFile(worlds.resolve("alpha").resolve("world.yaml")));
-            assertTrue(Files.readString(worlds.resolve("alpha").resolve("world.yaml")).contains("1234"));
+            assertTrue(!Files.readString(worlds.resolve("alpha").resolve("world.yaml")).contains("Compression"),
+                    "one clock: no time compression in new worlds");
 
             // The attach burst ends with the parameter schema.
             JsonObject schema = c.awaitType("schema", 30).json();
@@ -77,7 +78,7 @@ class MultiWorldTest {
             assertEquals("live", supply.get("apply").getAsString());
             assertEquals("live", param(schema, "volcano." + vid + ".magma.chamber.rechargeSilicaWt").get("apply").getAsString());
             assertEquals("reinit", param(schema, "volcano." + vid + ".magma.chamber.volume").get("apply").getAsString());
-            assertNotNull(param(schema, "world.scaling.dormantTimeCompression"));
+            assertTrue(param(schema, "world.scaling.dormantTimeCompression") == null, "retired");
             JsonArray inject = schema.getAsJsonObject("commands").getAsJsonArray("injectMagma");
             assertTrue(inject.toString().contains("\"temperatureC\""), inject.toString());
 

@@ -39,7 +39,7 @@ public record ReferenceValue(String quantity, double low, double high, String ex
         PLUME_TOP_KM,
         /** Longest lava flow (m). */
         LONGEST_FLOW_M,
-        /** Explosion quakes per simulated hour (Strombolian/Vulcanian explosions). */
+        /** Explosion quakes per hour (Strombolian/Vulcanian explosions). */
         EXPLOSIONS_PER_HOUR,
         /** Farthest ballistic landing from the domain centre (m). */
         MAX_BALLISTIC_RANGE_M,

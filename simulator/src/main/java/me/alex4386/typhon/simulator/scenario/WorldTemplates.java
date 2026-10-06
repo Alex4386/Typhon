@@ -41,10 +41,9 @@ public final class WorldTemplates {
      *     ever surfacing), land rises towards −x
      * @param seaLevelZ sea level (m); {@code NaN} for no sea ({@code ocean} always has one, default 0)
      * @param roughnessM amplitude of gentle undulation (m)
-     * @param eruptiveTimeCompression volcano time per simulated second while erupting
      */
     public record Template(String kind, double coreExtentM, double metersPerColumn, double depthM, double elevationM,
-            double slope, double seaLevelZ, double roughnessM, double eruptiveTimeCompression) {
+            double slope, double seaLevelZ, double roughnessM) {
         public Template {
             if (!NAMES.contains(kind)) throw new IllegalArgumentException("Unknown template '" + kind + "'; known: " + NAMES);
             if (!(coreExtentM >= 640)) throw new IllegalArgumentException("coreExtentM must be at least 640 m");
@@ -52,15 +51,14 @@ public final class WorldTemplates {
             if (kind.equals("ocean") && !(depthM > 0)) throw new IllegalArgumentException("depthM must be positive");
             if (kind.equals("ocean") && Double.isNaN(seaLevelZ)) seaLevelZ = 0;
             if (!(roughnessM >= 0)) throw new IllegalArgumentException("roughnessM must be >= 0");
-            if (!(eruptiveTimeCompression >= 1)) throw new IllegalArgumentException("eruptiveTimeCompression must be >= 1");
         }
 
         /** The defaults of a template: an 8 km square of 10 m columns. */
         public static Template defaults(String kind) {
             return switch (kind) {
-                case "ocean" -> new Template(kind, 8_000, 10, 130, 0, 0.01, 0, 2, 20);
-                case "flat" -> new Template(kind, 8_000, 10, 0, 100, 0, Double.NaN, 2, 20);
-                case "slope" -> new Template(kind, 8_000, 10, 0, 300, 0.05, Double.NaN, 2, 20);
+                case "ocean" -> new Template(kind, 8_000, 10, 130, 0, 0.01, 0, 2);
+                case "flat" -> new Template(kind, 8_000, 10, 0, 100, 0, Double.NaN, 2);
+                case "slope" -> new Template(kind, 8_000, 10, 0, 300, 0.05, Double.NaN, 2);
                 default -> throw new IllegalArgumentException("Unknown template '" + kind + "'; known: " + NAMES);
             };
         }
@@ -89,8 +87,7 @@ public final class WorldTemplates {
             String kind = String.valueOf(t.getOrDefault("template", "ocean"));
             Template d = defaults(kind);
             return new Template(kind, num(t, "coreExtentM", d.coreExtentM), metersPerColumn, num(t, "depthM", d.depthM),
-                    num(t, "elevationM", d.elevationM), num(t, "slope", d.slope), seaLevelZ, num(t, "roughnessM", d.roughnessM),
-                    d.eruptiveTimeCompression);
+                    num(t, "elevationM", d.elevationM), num(t, "slope", d.slope), seaLevelZ, num(t, "roughnessM", d.roughnessM));
         }
     }
 
@@ -104,7 +101,7 @@ public final class WorldTemplates {
                 seed: %d
                 baseStepMs: 50
                 grid: {metersPerColumn: %s, solverSpacing: %s}
-                scaling: {plumeMetersPerBlock: %s, dormantTimeCompression: 5000, eruptiveTimeCompression: %s}
+                scaling: {plumeMetersPerBlock: %s}
                 seaLevel: %s
                 climate:
                   rainfallMmPerHour: 0.0
@@ -120,7 +117,7 @@ public final class WorldTemplates {
                 geotherm: {surfaceTemperatureC: %s, gradientCPerKm: 60, lapseRateCPerKm: 6.5}
                 aquifer: {waterTableDepth: %s, specificYield: 0.2, topographyFactor: 0.0, baseLevel: %s, rechargeFraction: 0.5}
                 terrain: %s
-                """, name, seed, fmt(l), fmt(4 * l), fmt(l), fmt(template.eruptiveTimeCompression()),
+                """, name, seed, fmt(l), fmt(4 * l), fmt(l),
                 sea ? fmt(template.seaLevelZ()) : "'.nan'", fmt(Math.min(template.elevation(0, 0), 0) - 400), surface,
                 fmt(2 * l), sea ? "5" : "15", sea ? "0" : "30", sea ? fmt(template.seaLevelZ()) : "'.nan'",
                 template.terrainSection(seed));

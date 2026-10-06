@@ -46,7 +46,7 @@ public final class Simulation {
      * Result of {@link #run}.
      *
      * @param steps engine steps run
-     * @param simulatedSeconds simulated time covered by this run
+     * @param simulatedSeconds time covered by this run
      */
     public record Result(Scenario scenario, List<Sample> samples, RunSummary summary, long steps,
             double simulatedSeconds, double wallSeconds) {
@@ -54,29 +54,34 @@ public final class Simulation {
             return wallSeconds > 0 ? steps / wallSeconds : Double.POSITIVE_INFINITY;
         }
 
-        /** Simulated seconds per wall-clock second. */
+        /** Seconds per wall-clock second. */
         public double speedup() {
             return wallSeconds > 0 ? simulatedSeconds / wallSeconds : Double.POSITIVE_INFINITY;
         }
     }
 
-    /** Runs {@code hours} of simulated time from wherever the engine currently is. */
+    /** Runs {@code hours} of time from wherever the engine currently is. */
     public Result run(double hours) {
         Engine engine = scenario.engine();
         long base = engine.baseStepMicros();
-        long totalSteps = Math.max(1, (long) Math.ceil(SimTime.micros(hours * 3600) / (double) base));
-        double totalSeconds = SimTime.seconds(totalSteps * base);
+        long startMicros = engine.timeMicros();
+        long endMicros = startMicros + Math.max(base, SimTime.micros(hours * 3600));
+        double totalSeconds = SimTime.seconds(endMicros - startMicros);
         List<Sample> samples = new ArrayList<>();
         RunSummary summary = new RunSummary();
 
         long start = System.nanoTime();
         long lastProgress = start;
         long lastProgressStep = 0;
+        double lastProgressSeconds = 0;
         Sample latest = null;
         boolean fresh = !scenario.restored() && engine.currentStep() == 0;
 
-        for (long i = 0; i < totalSteps; i++) {
+        long i = 0;
+        for (; engine.timeMicros() < endMicros; i++) {
             EngineFrame frame = engine.step();
+            long stepMicros = engine.timeMicros() - frame.timeMicros();
+            boolean last = engine.timeMicros() >= endMicros;
             for (BlockChange change : frame.blockChanges()) scenario.world().apply(change);
             for (EngineEvent event : frame.events()) {
                 summary.observe(event);
@@ -84,8 +89,8 @@ public final class Simulation {
             }
             if (i == 0 && fresh) scenario.runAfterFirstTick();
 
-            // Sample at the start of each step whose start time is a multiple of the sample period.
-            if (SimTime.crossed(frame.timeMicros(), base, sampleSeconds) || i == 0 || i == totalSteps - 1) {
+            // Sample after each step that crossed a multiple of the sample period.
+            if (SimTime.crossed(engine.timeMicros(), stepMicros, sampleSeconds) || i == 0 || last) {
                 latest = Sample.capture(scenario, frame);
                 samples.add(latest);
                 summary.observe(latest);
@@ -95,15 +100,16 @@ public final class Simulation {
             if ((now - lastProgress) / 1_000_000 >= progressIntervalMillis) {
                 double wall = (now - lastProgress) / 1e9;
                 double rate = (i + 1 - lastProgressStep) / wall;
-                progress.accept(new Progress(SimTime.seconds((i + 1) * base), totalSeconds, rate,
-                        rate * SimTime.seconds(base), latest));
+                double done = SimTime.seconds(engine.timeMicros() - startMicros);
+                progress.accept(new Progress(done, totalSeconds, rate, (done - lastProgressSeconds) / wall, latest));
                 lastProgress = now;
                 lastProgressStep = i + 1;
+                lastProgressSeconds = done;
             }
         }
 
         summary.finish(scenario.volcanoes());
         double wall = (System.nanoTime() - start) / 1e9;
-        return new Result(scenario, samples, summary, totalSteps, totalSeconds, wall);
+        return new Result(scenario, samples, summary, i, totalSeconds, wall);
     }
 }

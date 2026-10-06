@@ -16,7 +16,7 @@ public interface Preset {
     /** Real-world reference values the parameters are based on (one line each). */
     List<String> references();
 
-    /** Simulated hours that show the scenario's main behaviour. */
+    /** Hours that show the scenario's main behaviour. */
     double defaultHours();
 
     /** Real-world setting of a real-scale preset, or {@code null} for compact (Minecraft-sized) ones. */
@@ -24,7 +24,7 @@ public interface Preset {
         return null;
     }
 
-    /** Simulated hours the validation suite runs this preset for (its reference horizon). */
+    /** Hours the validation suite runs this preset for (its reference horizon). */
     default double validationHours() {
         return defaultHours();
     }

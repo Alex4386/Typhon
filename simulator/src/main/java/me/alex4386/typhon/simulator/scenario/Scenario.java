@@ -64,7 +64,8 @@ public final class Scenario {
         this.volcanoes = List.copyOf(b.volcanoes);
         this.afterFirstTick = List.copyOf(b.afterFirstTick);
 
-        Engine.Builder engineBuilder = Engine.builder(seed).baseStepMicros(b.options.baseStepMicros()).add(terrain);
+        Engine.Builder engineBuilder = Engine.builder(seed).baseStepMicros(b.options.baseStepMicros())
+                .adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(terrain);
         for (VolcanoSystem volcano : volcanoes) volcano.addTo(engineBuilder);
         engineBuilder.add(lava);
         // grows on demand like a world (same subsystem, so a preset and its world template stay identical)

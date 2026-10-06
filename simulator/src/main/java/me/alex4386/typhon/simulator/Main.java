@@ -176,7 +176,7 @@ public final class Main {
             String list = options.get("skip-events");
             if (!list.equals("none")) skipped.addAll(List.of(list.split(",")));
         }
-        out.printf(Locale.ROOT, "%s world '%s' (%d volcanoes: %s) at t=%s for %s simulated hours → %s%n",
+        out.printf(Locale.ROOT, "%s world '%s' (%d volcanoes: %s) at t=%s for %s hours → %s%n",
                 scenario.restored() ? "Resuming" : "Starting", world.definition().name(), world.volcanoes().size(),
                 String.join(", ", world.volcanoes().keySet()), time(scenario.engine().time()), fmt(hours), dir);
         Simulation.Result result;
@@ -261,7 +261,7 @@ public final class Main {
                     options.get("load"));
         }
 
-        out.printf(Locale.ROOT, "Running %s (seed %d) for %s simulated hours → %s%n", preset.name(), seed, fmt(hours), dir);
+        out.printf(Locale.ROOT, "Running %s (seed %d) for %s hours → %s%n", preset.name(), seed, fmt(hours), dir);
         RunSummary summary;
         Simulation.Result result;
         try (EventLog events = new EventLog(dir.resolve("events.ndjson"), skipped)) {

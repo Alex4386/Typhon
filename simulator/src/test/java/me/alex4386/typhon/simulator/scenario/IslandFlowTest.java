@@ -121,7 +121,7 @@ class IslandFlowTest {
         String steepestWhere = "none";
         for (int i = 0; i < BUDGET && st.oceanEntryAfterEffusive < 0; i++) {
             v = s.volcano();
-            volcSeconds += 0.05 * (v.chamber().erupting() ? v.scaling().eruptiveTimeCompression() : v.scaling().dormantTimeCompression());
+            volcSeconds = s.engine().time();
             EngineFrame f = s.engine().step();
             long step = s.engine().currentStep();
             for (EngineEvent e : f.events()) {
@@ -157,7 +157,7 @@ class IslandFlowTest {
                 dialled = true;
             }
         }
-        report.stage("eruptions", t, "%d eruptions, %d ocean entries, %.0f h of volcano time", st.eruptions, st.oceanEntries, volcSeconds / 3600);
+        report.stage("eruptions", t, "%d eruptions, %d ocean entries, %.0f h", st.eruptions, st.oceanEntries, volcSeconds / 3600);
         report.line("loose deposits: worst excess over the angle of repose (+%.2f in tan) %.4f m (step %d); %d repose moves",
                 ReposeRelaxation.SLOPE_TOLERANCE_TAN, steepest, steepestAt,
                 s.terrain().world().reposeRelaxation().moves());
@@ -266,7 +266,7 @@ class IslandFlowTest {
         private double hours;
 
         String when(long step) {
-            return String.format(Locale.ROOT, "step %d (%.1f h volcano time)", step, hours);
+            return String.format(Locale.ROOT, "step %d (%.1f h)", step, hours);
         }
 
         void observe(long step, double volcSeconds, VolcanoSystem v, Edifice ed, int lavaCells) {

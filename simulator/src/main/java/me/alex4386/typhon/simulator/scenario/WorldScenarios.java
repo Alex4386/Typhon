@@ -238,7 +238,7 @@ public final class WorldScenarios {
                 seed: 1
                 baseStepMs: 50
                 grid: {metersPerColumn: 4}
-                scaling: {plumeMetersPerBlock: 100, dormantTimeCompression: 5000, eruptiveTimeCompression: 20}
+                scaling: {plumeMetersPerBlock: 100}
                 climate:
                   wind: {speed: 6, bearingDeg: 60, variability: 0.3}
                 geology:

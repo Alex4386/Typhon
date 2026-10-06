@@ -80,26 +80,10 @@ final class RealPresets {
         return new Scenario.Builder(name, seed, terrain, setting.spec(), setting.edifices());
     }
 
-    /** Geometric scaling: blocks (and eruption columns) are L-metre cubes; dormancy ×5000, eruptions real time. */
+    /** Geometric scaling: blocks (and eruption columns) are L-metre cubes. */
     static VolcanoScaling scaling(double metersPerColumn) {
-        return scaling(metersPerColumn, 1);
+        return new VolcanoScaling(metersPerColumn, metersPerColumn);
     }
-
-    /** {@link #scaling(double)} with eruptions compressed {@code eruptive}× (lava, cooling and crust follow it). */
-    static VolcanoScaling scaling(double metersPerColumn, double eruptive) {
-        return new VolcanoScaling(metersPerColumn, metersPerColumn, 5000, eruptive);
-    }
-
-    /**
-     * Kīlauea's effusive eruptions last weeks to months (2018 LERZ: ~3 months, Neal et al. 2019), and
-     * flows and ponds take days to crust and freeze: ×20 lets a play session cover days of effusion
-     * so flows freeze into stratigraphy. The explosive presets keep ×1: their observables
-     * (Strombolian cadence, a Plinian column lasting hours, Surtsey's months-long Surtseyan phase
-     * judged at onset) are minutes-to-hours phenomena that play out in real time. Compression no
-     * longer distorts their intensity (column height, collapse, style and tremor follow the physical
-     * mass rate), but it would run a Plinian phase or a Strombolian cadence C× faster than observed.
-     */
-    static final double KILAUEA_ERUPTIVE_COMPRESSION = 20;
 
     /**
      * Subsurface of a real-scale preset: the world defaults with the preset's literature geotherm and
@@ -228,7 +212,7 @@ final class RealPresets {
                             .stations(List.of(
                                     // approximate positions of HVO's caldera-rim GNSS sites (Uwekahuna NW, Crater Rim SE)
                                     Stations.at("UWEV", vent, -1400, 1400, L), Stations.at("CRIM", vent, 1800, -1800, L),
-                                    Stations.at("KIL-FLK-S", vent, 0, -4000, L))).scaling(scaling(L, KILAUEA_ERUPTIVE_COMPRESSION)).tephra(tephra())
+                                    Stations.at("KIL-FLK-S", vent, 0, -4000, L))).scaling(scaling(L)).tephra(tephra())
                             .wind(7, 0.6, Presets.WIND_VARIABILITY)
                             // a century of spin-up: the summit's hydrothermal system has had the chamber's heat
                             // for far longer, so play starts from it, not from a halo mined by boiling
@@ -298,7 +282,7 @@ final class RealPresets {
                             .chamber(chamber)
                             .subsurfaceConfig(subsurface(setting, L))
                             .stations(List.of(Stations.at("STR-N", vent, 0, 1200, L), Stations.at("STR-E", vent, 1500, 0, L),
-                                    Stations.at("STR-S", vent, 0, -1500, L))).scaling(new VolcanoScaling(L, L, 1, 1)).tephra(tephra()) // persistently active: nothing to fast-forward
+                                    Stations.at("STR-S", vent, 0, -1500, L))).scaling(scaling(L)).tephra(tephra())
                             .wind(8, 1.2, Presets.WIND_VARIABILITY).build());
                 });
     }
@@ -581,7 +565,6 @@ final class RealPresets {
                             .build();
                     GeothermalConfig geothermal = new GeothermalConfig();
                     geothermal.radius = 192;
-                    geothermal.timeScale = 30;
                     // Single hydrothermal vents discharge ~1e8 W (Fournier 1989; the caldera ~5e9 W in total).
                     // The heat halo is set in metres (~60 m), not left at 8 blocks: at 30 m columns the default
                     // would spread each basin's heat over ~0.7 km² and keep the ground below boiling.

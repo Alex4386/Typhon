@@ -22,7 +22,7 @@ import me.alex4386.typhon.simulator.scenario.WorldScenarios;
 
 /**
  * World directories under {@code --worlds-dir}: listing them, creating one from a preset, and
- * patching a definition (time compression, base step) before it is opened.
+ * patching a definition (base step) before it is opened.
  */
 final class WorldFiles {
     /** Names usable as a directory under the worlds dir. */
@@ -31,8 +31,7 @@ final class WorldFiles {
     private WorldFiles() {}
 
     /** One world directory, as listed in the catalog. */
-    record Listing(String name, Path dir, String title, int volcanoes, boolean hasState, double dormantCompression,
-            double eruptiveCompression, String error) {}
+    record Listing(String name, Path dir, String title, int volcanoes, boolean hasState, String error) {}
 
     static boolean validName(String name) {
         return name != null && NAME.matcher(name).matches() && !name.contains("..");
@@ -65,45 +64,18 @@ final class WorldFiles {
                 WorldDirectory wd = new WorldDirectory(dir);
                 WorldDefinition def = wd.readWorld();
                 int volcanoes = wd.readVolcanoes().size();
-                out.add(new Listing(name, dir, def.name(), volcanoes, wd.hasState(),
-                        def.scaling().dormantTimeCompression(), def.scaling().eruptiveTimeCompression(), null));
+                out.add(new Listing(name, dir, def.name(), volcanoes, wd.hasState(), null));
             } catch (RuntimeException e) {
-                out.add(new Listing(name, dir, name, 0, false, Double.NaN, Double.NaN, String.valueOf(e.getMessage())));
+                out.add(new Listing(name, dir, name, 0, false, String.valueOf(e.getMessage())));
             }
         }
         return out;
     }
 
-    /**
-     * Writes a new world directory reproducing {@code preset}, then applies the base step and any
-     * time-compression override.
-     */
-    static void writePresetWorld(Preset preset, long seed, Path dir, double baseStepMs, Double dormant, Double eruptive) {
+    /** Writes a new world directory reproducing {@code preset}, then applies the base step. */
+    static void writePresetWorld(Preset preset, long seed, Path dir, double baseStepMs) {
         WorldScenarios.writeFromPreset(preset, seed, dir);
-        patchWorld(dir, false, tree -> {
-            if (baseStepMs != 50) tree.put("baseStepMs", baseStepMs);
-            putCompression(tree, dormant, eruptive);
-        });
-    }
-
-    /** Overrides an existing world's time compression (a hot change: saved state stays valid). */
-    static void setCompression(Path dir, Double dormant, Double eruptive) {
-        if (dormant == null && eruptive == null) return;
-        patchWorld(dir, true, tree -> putCompression(tree, dormant, eruptive));
-    }
-
-    @SuppressWarnings("unchecked")
-    private static void putCompression(Map<String, Object> tree, Double dormant, Double eruptive) {
-        if (dormant == null && eruptive == null) return;
-        Map<String, Object> scaling = (Map<String, Object>) tree.get("scaling");
-        if (dormant != null) {
-            if (!(dormant > 0 && dormant <= 1e9)) throw new IllegalArgumentException("dormant time compression must be in (0, 1e9]");
-            scaling.put("dormantTimeCompression", dormant);
-        }
-        if (eruptive != null) {
-            if (!(eruptive > 0 && eruptive <= 1e6)) throw new IllegalArgumentException("eruptive time compression must be in (0, 1e6]");
-            scaling.put("eruptiveTimeCompression", eruptive);
-        }
+        if (baseStepMs != 50) patchWorld(dir, false, tree -> tree.put("baseStepMs", baseStepMs));
     }
 
     /**

@@ -20,7 +20,7 @@ class EmptyWorldTest {
     static WorldTemplates.Template smallOcean() {
         WorldTemplates.Template d = WorldTemplates.Template.defaults("ocean");
         return new WorldTemplates.Template("ocean", 2_000, d.metersPerColumn(), d.depthM(), d.elevationM(), d.slope(),
-                d.seaLevelZ(), d.roughnessM(), d.eruptiveTimeCompression());
+                d.seaLevelZ(), d.roughnessM());
     }
 
     @Test

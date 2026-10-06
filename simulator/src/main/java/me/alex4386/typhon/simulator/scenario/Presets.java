@@ -23,7 +23,7 @@ import me.alex4386.typhon.simulator.terrain.TerrainGenerators.Cone;
  * <p>Magma properties (composition, temperature, water, reservoir depth, supply and eruption rates) are
  * taken from the literature values listed in each preset's {@link Preset#references()}; edifice sizes are
  * shrunk to Minecraft through {@link VolcanoScaling}. Every preset starts close to the state that makes
- * its signature behaviour happen within a few simulated hours (e.g. a chamber just below failure).
+ * its signature behaviour happen soon (e.g. a chamber just below failure).
  */
 public final class Presets {
     private static final Map<String, Preset> PRESETS = new LinkedHashMap<>();
@@ -92,7 +92,7 @@ public final class Presets {
     // ── presets ──
 
     static Preset kilauea() {
-        VolcanoScaling scaling = new VolcanoScaling(8, 100, 5000, 1);
+        VolcanoScaling scaling = new VolcanoScaling(8, 100);
         return new Defined(
                 "kilauea",
                 "Kīlauea-like shield (basaltic, effusive)",
@@ -133,7 +133,7 @@ public final class Presets {
     }
 
     static Preset stromboli() {
-        VolcanoScaling scaling = new VolcanoScaling(4, 100, 5000, 1);
+        VolcanoScaling scaling = new VolcanoScaling(4, 100);
         return new Defined(
                 "stromboli",
                 "Stromboli-like cone (persistent mild explosive)",
@@ -178,7 +178,7 @@ public final class Presets {
     }
 
     static Preset stHelens() {
-        VolcanoScaling scaling = new VolcanoScaling(10, 100, 5000, 1);
+        VolcanoScaling scaling = new VolcanoScaling(10, 100);
         return new Defined(
                 "st-helens",
                 "Mount St. Helens-like stratovolcano (dacite, explosive then dome)",
@@ -219,7 +219,7 @@ public final class Presets {
     }
 
     static Preset pinatubo() {
-        VolcanoScaling scaling = new VolcanoScaling(20, 125, 5000, 1);
+        VolcanoScaling scaling = new VolcanoScaling(20, 125);
         return new Defined(
                 "pinatubo",
                 "Pinatubo-like Plinian eruption (cold, wet dacite)",
@@ -260,7 +260,7 @@ public final class Presets {
     }
 
     static Preset surtsey() {
-        VolcanoScaling scaling = new VolcanoScaling(4, 100, 5000, 1);
+        VolcanoScaling scaling = new VolcanoScaling(4, 100);
         int seaLevel = 62;
         return new Defined(
                 "surtsey",
@@ -301,7 +301,7 @@ public final class Presets {
     }
 
     static Preset yellowstone() {
-        VolcanoScaling scaling = new VolcanoScaling(8, 100, 5000, 1);
+        VolcanoScaling scaling = new VolcanoScaling(8, 100);
         return new Defined(
                 "yellowstone",
                 "Yellowstone-like hydrothermal caldera (no eruption)",
@@ -339,7 +339,6 @@ public final class Presets {
                             .build();
                     GeothermalConfig geothermal = new GeothermalConfig();
                     geothermal.radius = 192;
-                    geothermal.timeScale = 30;
                     // Basin heat flux of a few hundred W/m² (Upper Geyser Basin–Norris order; the caldera as a whole
                     // discharges ~5 GW, Fournier 1989): at 820 °C the activity is ~0.44, so ~1.3·10⁷ W per basin.
                     geothermal.ventHeatPowerW = 3e7;

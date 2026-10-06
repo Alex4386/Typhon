@@ -318,17 +318,16 @@ final class Probe {
             chamber.add("silicaWt", Json.num(ch.silicaWt()));
             chamber.add("waterWt", Json.num(ch.waterWt()));
             chamber.add("crystalFraction", Json.num(ch.crystalFraction()));
-            chamber.add("eruptionRate", Json.num(ch.eruptionRate())); // per simulated second (time-compressed)
-            chamber.add("physicalEruptionRate", Json.num(ch.physicalEruptionRate())); // m³/s of volcano time
+            chamber.add("eruptionRate", Json.num(ch.eruptionRate())); // m³/s DRE
             chamber.add("ruptureOverpressureMPa", Json.num(ch.ruptureOverpressureMPa()));
             chamber.add("failureOverpressureMPa", Json.num(ch.failureOverpressureMPa()));
             chamber.add("volumeM3", Json.num(ch.volumeM3()));
             // magma budget: what comes in, what goes out and where the pressure is heading
             JsonObject budget = new JsonObject();
-            budget.add("supplyM3PerS", Json.num(ch.supplyRate())); // volcano time
-            budget.add("eruptionM3PerS", Json.num(ch.physicalEruptionRate()));
+            budget.add("supplyM3PerS", Json.num(ch.supplyRate())); // m³/s
+            budget.add("eruptionM3PerS", Json.num(ch.eruptionRate()));
             budget.add("balanceOverpressureMPa", Json.num(ch.balanceOverpressureMPa()));
-            budget.add("overpressureRateMPaPerS", Json.num(ch.overpressureRateMPaPerSecond())); // per simulated second
+            budget.add("overpressureRateMPaPerS", Json.num(ch.overpressureRateMPaPerSecond())); // per second
             budget.add("intrudedM3", Json.num(ch.intrudedVolumeM3()));
             budget.add("wallGrowthM3", Json.num(ch.wallGrowthM3()));
             budget.add("eruptedM3", Json.num(ch.eruptedVolume()));

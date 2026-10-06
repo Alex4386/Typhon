@@ -102,17 +102,14 @@ public final class ReferenceComparison {
                 }
                 yield max == Integer.MIN_VALUE ? Double.NaN : (max + 1) * L;
             }
-            // The chamber reports volume per (compressed) engine second; observations are physical rates.
-            case PEAK_ERUPTION_RATE_M3S -> s.peakEruptionRate > 0
-                    ? s.peakEruptionRate / scaling.eruptiveTimeCompression() : Double.NaN;
+            case PEAK_ERUPTION_RATE_M3S -> s.peakEruptionRate > 0 ? s.peakEruptionRate : Double.NaN;
             case ERUPTED_VOLUME_M3 -> s.eruptionRecords.isEmpty() ? Double.NaN : s.totalEruptedVolume();
             case PLUME_TOP_KM -> s.maxPlumeTopY == Integer.MIN_VALUE ? Double.NaN
                     : (s.maxPlumeTopY + 1) * scaling.plumeMetersPerBlock() / 1000;
             case LONGEST_FLOW_M -> s.maxFlowLengthM > 0 ? s.maxFlowLengthM : Double.NaN;
-            // per physical hour of (persistently) erupting time
+            // per hour of (persistently) erupting time
             case EXPLOSIONS_PER_HOUR -> result.simulatedSeconds() > 0
-                    ? s.seismicCounts.getOrDefault(SeismicEventType.EXPLOSION, 0L)
-                            / (result.simulatedSeconds() * scaling.eruptiveTimeCompression() / 3600)
+                    ? s.seismicCounts.getOrDefault(SeismicEventType.EXPLOSION, 0L) / (result.simulatedSeconds() / 3600)
                     : Double.NaN;
             case MAX_BALLISTIC_RANGE_M -> s.bombsLanded > 0 ? s.maxBombDistance * L : Double.NaN;
             case GEYSERS -> s.geysers;

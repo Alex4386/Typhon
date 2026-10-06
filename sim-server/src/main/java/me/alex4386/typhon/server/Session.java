@@ -147,20 +147,12 @@ final class Session implements AutoCloseable {
     private double rateSimTime;
 
     /** Cheap per-volcano status for the session list (refreshed by {@link #refreshSummary}). */
-    record VolcanoSummary(String id, String alert, boolean erupting, double dormantCompression,
-            double eruptiveCompression) {
-        double currentCompression() {
-            return erupting ? eruptiveCompression : dormantCompression;
-        }
-    }
+    record VolcanoSummary(String id, String alert, boolean erupting) {}
 
     private volatile List<VolcanoSummary> summary = List.of();
     private long lastSummaryNanos;
-    /**
-     * Approximate physical (volcano) time elapsed per volcano since this session started:
-     * simulated time × that volcano's current time compression, integrated by the pump.
-     */
-    private final Map<String, Double> physicalTime = new ConcurrentHashMap<>();
+    /** Playback speed policy (slow down while something happens); survives reloads of the session. */
+    final Playback playback = new Playback();
 
     private Session(String id, double initialSpeed) {
         this.id = id;
@@ -282,13 +274,16 @@ final class Session implements AutoCloseable {
                 runner == null ? initialSpeed : runnerSpeedOr(initialSpeed), 512, 16384, 33, 20);
         EngineRunner r = new EngineRunner(scenario.engine(), options,
                 t -> LOG.log(Level.SEVERE, "Engine of session " + id + " failed", t));
+        List<String> eruptingNow = new ArrayList<>();
+        for (VolcanoSystem v : scenario.volcanoes()) if (v.chamber().erupting()) eruptingNow.add(v.volcanoId());
+        playback.reset(eruptingNow);
+        r.setFrameObserver(frame -> playback.observe(frame, r));
         this.runner = r;
         r.start();
         rateWallNanos = System.nanoTime();
         rateSimTime = scenario.engine().time();
         rate = 0;
         droppedSeen = 0;
-        physicalTime.clear();
         summary = summarize(scenario);
 
         Thread drain = new Thread(() -> drainLoop(r, scenario), "typhon-frames-" + id);
@@ -471,10 +466,16 @@ final class Session implements AutoCloseable {
 
     // ── Clock / state / events / units ──
 
+    /**
+     * The clock: {@code time} is the playback position (it advances smoothly through long quiet
+     * steps), {@code engineTime} the time of the last completed step; {@code speed} is seconds per
+     * wall second and {@code playback} the slow-down policy and state.
+     */
     JsonObject clock() {
         EngineRunner r = runner;
         JsonObject o = Json.obj("clock");
-        o.add("time", Json.num(time()));
+        o.add("time", Json.num(replay ? time() : r.playbackMicros() / 1e6));
+        o.add("engineTime", Json.num(time()));
         long step = replay && replayScenario != null ? replayScenario.engine().currentStep() : r.completedStep();
         o.addProperty("step", step);
         o.add("baseStep", Json.num(live.engine().baseStepMicros() / 1e6));
@@ -482,12 +483,7 @@ final class Session implements AutoCloseable {
         o.add("speed", Json.num(replay ? speedBeforeReplay : r.speed()));
         o.add("rate", Json.num(replay ? 0 : rate));
         o.addProperty("replay", replay);
-        List<VolcanoSummary> sum = summary;
-        if (!sum.isEmpty()) {
-            VolcanoSummary primary = sum.get(0);
-            o.add("compression", Json.num(primary.currentCompression()));
-            o.add("physicalTime", Json.num(physicalTime.getOrDefault(primary.id(), 0.0)));
-        }
+        o.add("playback", playback.json());
         return o;
     }
 
@@ -495,8 +491,7 @@ final class Session implements AutoCloseable {
         List<VolcanoSummary> out = new ArrayList<>();
         for (VolcanoSystem v : s.volcanoes()) {
             var level = v.alert().level(); // null until the estimator's first sample (fresh or reset volcano)
-            out.add(new VolcanoSummary(v.volcanoId(), level == null ? "DORMANT" : level.name(), v.chamber().erupting(),
-                    v.scaling().dormantTimeCompression(), v.scaling().eruptiveTimeCompression()));
+            out.add(new VolcanoSummary(v.volcanoId(), level == null ? "DORMANT" : level.name(), v.chamber().erupting()));
         }
         return List.copyOf(out);
     }
@@ -521,8 +516,6 @@ final class Session implements AutoCloseable {
         if (wall < 0.5) return;
         double measured = Math.max(0, t - rateSimTime) / wall;
         rate = rate == 0 ? measured : 0.5 * rate + 0.5 * measured;
-        double dt = Math.max(0, t - rateSimTime);
-        for (VolcanoSummary v : summary) physicalTime.merge(v.id(), dt * v.currentCompression(), Double::sum);
         rateWallNanos = now;
         rateSimTime = t;
     }
@@ -555,16 +548,6 @@ final class Session implements AutoCloseable {
         wind.add("bearingDeg", Json.num(windBearingDeg));
         world.add("wind", wind);
         o.add("world", world);
-        for (VolcanoSummary v : summary) {
-            JsonElement e = res.volcanoes().get(v.id());
-            if (e == null || !e.isJsonObject()) continue;
-            JsonObject tc = new JsonObject();
-            tc.add("dormant", Json.num(v.dormantCompression()));
-            tc.add("eruptive", Json.num(v.eruptiveCompression()));
-            tc.add("current", Json.num(v.currentCompression()));
-            e.getAsJsonObject().add("timeCompression", tc);
-            e.getAsJsonObject().add("physicalTime", Json.num(physicalTime.getOrDefault(v.id(), 0.0)));
-        }
         o.add("volcanoes", res.volcanoes());
         return o;
     }
@@ -833,15 +816,52 @@ final class Session implements AutoCloseable {
         if (replay) return "Transport is disabled in replay mode";
         EngineRunner r = runner;
         switch (mode) {
-            case "REALTIME" -> r.realtime(clamp(speed == null ? r.speed() : speed));
+            case "REALTIME" -> r.realtime(Playback.clampSpeed(speed == null ? r.speed() : speed));
             case "UNBOUNDED" -> {
-                if (speed != null) r.realtime(clamp(speed));
+                if (speed != null) r.realtime(Playback.clampSpeed(speed));
                 r.unbounded();
             }
             case "PAUSED" -> r.pause();
             default -> {
                 return "Unknown transport mode " + mode;
             }
+        }
+        playback.userChanged();
+        return null;
+    }
+
+    /**
+     * {@code setSpeed}: seconds per wall second ({@value Playback#MIN_SPEED}–10⁷), or {@code "max"}
+     * for as fast as the CPU allows. A paused session stays paused with the new speed for resuming.
+     */
+    String setSpeed(JsonElement speed) {
+        if (replay) return "Transport is disabled in replay mode";
+        if (speed == null || speed.isJsonNull()) return "speed is required (a number or \"max\")";
+        EngineRunner r = runner;
+        boolean paused = r.mode() == EngineRunner.Mode.PAUSED;
+        if (speed.isJsonPrimitive() && speed.getAsJsonPrimitive().isString()) {
+            if (!speed.getAsString().equalsIgnoreCase("max")) return "speed must be a number or \"max\"";
+            if (!paused) r.unbounded();
+        } else {
+            double s;
+            try {
+                s = Playback.clampSpeed(speed.getAsDouble());
+            } catch (RuntimeException e) {
+                return "speed must be a positive number or \"max\"";
+            }
+            if (paused) r.setSpeed(s);
+            else r.realtime(s);
+        }
+        playback.userChanged();
+        return null;
+    }
+
+    /** {@code setPlaybackPolicy}: see {@link Playback#apply}. */
+    String setPlaybackPolicy(JsonObject msg) {
+        try {
+            playback.apply(msg, replay ? null : runner);
+        } catch (IllegalArgumentException e) {
+            return e.getMessage();
         }
         return null;
     }
@@ -861,10 +881,6 @@ final class Session implements AutoCloseable {
         if (time == null) runner.pauseAtStep(Long.MAX_VALUE);
         else runner.pauseAtTime(time);
         return null;
-    }
-
-    private static double clamp(double speed) {
-        return Math.max(0.1, Math.min(1000, speed));
     }
 
     // ── Commands (§3.3) ──
@@ -1480,7 +1496,7 @@ final class Session implements AutoCloseable {
 
     /**
      * Saves this world session, applies {@code edit} to its definition files and reopens it with
-     * {@code policy}, keeping the transport mode and the volcano-time estimate. If the reopen fails
+     * {@code policy}, keeping the transport mode and speed. If the reopen fails
      * the edit is reverted and the saved world reopened as it was. Clients must be re-attached by
      * the caller.
      */
@@ -1492,7 +1508,6 @@ final class Session implements AutoCloseable {
         double speed = runner.speed();
         runner.pause();
         save(null, null);
-        Map<String, Double> phys = new HashMap<>(physicalTime);
         Scenario scenario;
         edit.apply();
         try {
@@ -1504,7 +1519,6 @@ final class Session implements AutoCloseable {
         }
         replace(name, new Source(Kind.WORLD, null, scenario.seed(), scenario.engine().baseStepMicros(), src.worldDir()),
                 scenario);
-        physicalTime.putAll(phys);
         transport(mode.name(), speed);
     }
 
@@ -1730,17 +1744,13 @@ final class Session implements AutoCloseable {
         o.add("speed", Json.num(r.speed()));
         o.add("rate", Json.num(replay ? 0 : rate));
         o.addProperty("replay", replay);
+        o.add("playback", playback.json());
         JsonArray volcanoes = new JsonArray();
         for (VolcanoSummary v : summary) {
             JsonObject j = new JsonObject();
             j.addProperty("id", v.id());
             j.addProperty("alert", v.alert());
             j.addProperty("erupting", v.erupting());
-            JsonObject tc = new JsonObject();
-            tc.add("dormant", Json.num(v.dormantCompression()));
-            tc.add("eruptive", Json.num(v.eruptiveCompression()));
-            tc.add("current", Json.num(v.currentCompression()));
-            j.add("timeCompression", tc);
             volcanoes.add(j);
         }
         o.add("volcanoes", volcanoes);

@@ -81,7 +81,7 @@ public final class ReportWriter {
 
         h.append("<h1>").append(esc(preset.title())).append("</h1>");
         h.append("<p class=\"muted\">preset <code>").append(esc(preset.name())).append("</code> · seed ")
-                .append(result.scenario().seed()).append(" · ").append(fmt(result.simulatedSeconds() / 3600)).append(" h simulated in ")
+                .append(result.scenario().seed()).append(" · ").append(fmt(result.simulatedSeconds() / 3600)).append(" h in ")
                 .append(fmt(result.wallSeconds())).append(" s (").append(fmt(result.stepsPerSecond())).append(" steps/s, ")
                 .append(fmt(result.speedup())).append("× real time, base step ")
                 .append(fmt(result.scenario().engine().baseStepMicros() / 1000.0)).append(" ms)</p>");
@@ -107,9 +107,8 @@ public final class ReportWriter {
         row(h, "Hydrothermal features formed", s.featuresFormed.isEmpty() ? "none" : s.featuresFormed.toString());
         row(h, "Lava ocean-entry reports", Long.toString(s.lavaWaterEntries));
         row(h, "World changes applied / CAS conflicts", fmt(last.get("world_changes")) + " / " + fmt(last.get("world_conflicts")));
-        row(h, "Scaling", String.format(Locale.ROOT, "1 block = %s m, plume 1 block = %s m, dormant ×%s, eruptive ×%s",
-                fmt(scaling.metersPerBlock()), fmt(scaling.plumeMetersPerBlock()),
-                fmt(scaling.dormantTimeCompression()), fmt(scaling.eruptiveTimeCompression())));
+        row(h, "Scaling", String.format(Locale.ROOT, "1 block = %s m, plume 1 block = %s m",
+                fmt(scaling.metersPerBlock()), fmt(scaling.plumeMetersPerBlock())));
         h.append("</table>");
 
         if (!s.eruptionRecords.isEmpty()) {

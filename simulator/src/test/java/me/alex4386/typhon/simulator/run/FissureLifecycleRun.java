@@ -88,7 +88,7 @@ class FissureLifecycleRun {
                         seg == null ? "-" : seg[0] + "/" + seg[1]));
             }
             System.out.println(clock(scenario.engine().time()) + "  P=" + fmt(chamber.overpressureMPa()) + " MPa rate="
-                    + fmt(chamber.physicalEruptionRate()) + " cap=" + fmt(chamber.outletCapacity()) + sb);
+                    + fmt(chamber.eruptionRate()) + " cap=" + fmt(chamber.outletCapacity()) + sb);
             printed = t;
         }
         if (printed < 0) System.out.println("nothing ran");

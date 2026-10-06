@@ -105,21 +105,9 @@ public final class SimServer implements AutoCloseable {
      * not opened twice (two engines would write the same {@code state/}): its session is returned.
      */
     public synchronized Session createWorld(Path dir) {
-        return createWorld(dir, null, null);
-    }
-
-    /** As {@link #createWorld(Path)}, first overriding the world's time compression (a hot change). */
-    public synchronized Session createWorld(Path dir, Double dormantCompression, Double eruptiveCompression) {
         Session open = sessionForWorld(dir);
-        if (open != null) {
-            if (dormantCompression != null || eruptiveCompression != null) {
-                throw new IllegalStateException("World " + dir.getFileName() + " is already running as session " + open.id
-                        + "; close it before changing its time compression");
-            }
-            return open;
-        }
+        if (open != null) return open;
         checkCapacity();
-        WorldFiles.setCompression(dir, dormantCompression, eruptiveCompression);
         String id = "s" + sessionSeq.incrementAndGet();
         Session s = Session.world(id, dir, World.ChangePolicy.REJECT, config.initialSpeed());
         sessions.put(id, s);
@@ -129,12 +117,10 @@ public final class SimServer implements AutoCloseable {
     }
 
     /**
-     * Writes a new world directory {@code <worlds-dir>/<name>} from a preset (with an optional
-     * time-compression override) and runs it. Unlike {@link #createPreset} the result is a world on
+     * Writes a new world directory {@code <worlds-dir>/<name>} from a preset and runs it. Unlike {@link #createPreset} the result is a world on
      * disk: it is saved, can be closed and reopened, and shows up in the catalog.
      */
-    public synchronized Session createPresetWorld(String presetName, long seed, String name, Double dormantCompression,
-            Double eruptiveCompression) {
+    public synchronized Session createPresetWorld(String presetName, long seed, String name) {
         checkCapacity();
         Preset preset = Presets.get(presetName);
         if (name != null && !WorldFiles.validName(name)) {
@@ -148,8 +134,7 @@ public final class SimServer implements AutoCloseable {
         } catch (java.io.IOException e) {
             throw new java.io.UncheckedIOException(e);
         }
-        WorldFiles.writePresetWorld(preset, seed, dir, config.baseStepMicros() / 1000.0, dormantCompression,
-                eruptiveCompression);
+        WorldFiles.writePresetWorld(preset, seed, dir, config.baseStepMicros() / 1000.0);
         return createWorld(dir);
     }
 
@@ -296,7 +281,7 @@ public final class SimServer implements AutoCloseable {
             Session s = template != null
                     ? createTemplateWorld(template, Json.str(body, "name"), sd,
                             body.has("params") && body.get("params").isJsonObject() ? body.getAsJsonObject("params") : new JsonObject())
-                    : createPresetWorld(preset == null ? config.defaultPreset() : preset, sd, Json.str(body, "name"), null, null);
+                    : createPresetWorld(preset == null ? config.defaultPreset() : preset, sd, Json.str(body, "name"));
             broadcastSessions();
             JsonObject r = new JsonObject();
             r.addProperty("ok", true);
@@ -436,6 +421,22 @@ public final class SimServer implements AutoCloseable {
                         });
                     }
                 }
+                case "setSpeed", "setPlaybackPolicy" -> {
+                    // Optional sessionId, as for transport.
+                    String target = Json.str(msg, "sessionId");
+                    Session other = target == null ? null : session(target);
+                    if (target != null && other == null) {
+                        c.send(Json.error("noSession", "No session " + target, requestId));
+                    } else {
+                        java.util.function.Consumer<Session> apply = s -> {
+                            String err = type.equals("setSpeed") ? s.setSpeed(msg.get("speed")) : s.setPlaybackPolicy(msg);
+                            afterTransport(c, s, err, requestId);
+                            sessionsChanged();
+                        };
+                        if (other != null) apply.accept(other);
+                        else withSession(c, requestId, apply::accept);
+                    }
+                }
                 case "step" -> withSession(c, requestId, s -> afterTransport(c, s,
                         s.step(Json.lng(msg, "steps"), Json.dbl(msg, "seconds")), requestId));
                 case "pauseAt" -> withSession(c, requestId, s -> afterTransport(c, s, s.pauseAt(Json.dbl(msg, "time")),
@@ -573,12 +574,6 @@ public final class SimServer implements AutoCloseable {
             j.addProperty("title", w.title());
             j.addProperty("volcanoes", w.volcanoes());
             j.addProperty("hasState", w.hasState());
-            if (Double.isFinite(w.dormantCompression())) {
-                JsonObject tc = new JsonObject();
-                tc.add("dormant", Json.num(w.dormantCompression()));
-                tc.add("eruptive", Json.num(w.eruptiveCompression()));
-                j.add("timeCompression", tc);
-            }
             if (w.error() != null) j.addProperty("error", w.error());
             Session open;
             synchronized (this) {
@@ -597,13 +592,6 @@ public final class SimServer implements AutoCloseable {
         String world = Json.str(msg, "world");
         Long seed = Json.lng(msg, "seed");
         String name = Json.str(msg, "name");
-        Double dormant = null;
-        Double eruptive = null;
-        if (msg.has("timeCompression") && msg.get("timeCompression").isJsonObject()) {
-            JsonObject tc = msg.getAsJsonObject("timeCompression");
-            dormant = Json.dbl(tc, "dormant");
-            eruptive = Json.dbl(tc, "eruptive");
-        }
         boolean paused = msg.has("paused") && msg.get("paused").getAsBoolean();
         boolean attach = !msg.has("attach") || msg.get("attach").getAsBoolean();
         Session s;
@@ -623,15 +611,12 @@ public final class SimServer implements AutoCloseable {
                 c.send(Json.error("badRequest", "No world '" + world + "' under " + config.worldsDir(), requestId));
                 return;
             }
-            s = createWorld(dir, dormant, eruptive);
+            s = createWorld(dir);
         } else {
             String p = preset == null || preset.equals("default") ? config.defaultPreset() : preset;
             boolean inMemory = msg.has("inMemory") && msg.get("inMemory").getAsBoolean();
-            if (inMemory && (dormant != null || eruptive != null)) {
-                throw new IllegalArgumentException("Time compression options need a world (omit inMemory)");
-            }
             s = inMemory ? createPreset(p, seed == null ? config.defaultSeed() : seed)
-                    : createPresetWorld(p, seed == null ? config.defaultSeed() : seed, name, dormant, eruptive);
+                    : createPresetWorld(p, seed == null ? config.defaultSeed() : seed, name);
         }
         if (paused) s.transport("PAUSED", null);
         ack(c, requestId, true, "Session " + s.id);
@@ -954,8 +939,7 @@ public final class SimServer implements AutoCloseable {
                 && !params.get(k).isJsonNull() ? params.get(k).getAsDouble() : fallback;
         var t = new me.alex4386.typhon.simulator.scenario.WorldTemplates.Template(template, p.apply("coreExtentM", d.coreExtentM()),
                 p.apply("metersPerColumn", d.metersPerColumn()), p.apply("depthM", d.depthM()), p.apply("elevationM", d.elevationM()),
-                p.apply("slope", d.slope()), p.apply("seaLevelZ", d.seaLevelZ()), p.apply("roughnessM", d.roughnessM()),
-                p.apply("eruptiveTimeCompression", d.eruptiveTimeCompression()));
+                p.apply("slope", d.slope()), p.apply("seaLevelZ", d.seaLevelZ()), p.apply("roughnessM", d.roughnessM()));
         if (name != null && !WorldFiles.validName(name)) {
             throw new IllegalArgumentException("World names may use letters, digits, '.', '_' and '-' (max 64)");
         }

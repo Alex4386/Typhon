@@ -39,17 +39,17 @@ import me.alex4386.typhon.simulator.scenario.Scenario;
  * deformation stations and notable earthquakes.
  *
  * <p>Persistent entities come from an engine snapshot taken on the engine thread; short-lived ones
- * (flow fronts, earthquakes) from the event stream, and expire after a while of simulated time.
+ * (flow fronts, earthquakes) from the event stream, and expire after a while of time.
  * {@link #delta} diffs the result against what clients already have and stamps creation, update
  * and removal times, so a client can show where something formed and when it went away.
  */
 final class EntityTracker {
     /** Earthquakes at or above this magnitude become entities. */
     static final double QUAKE_MIN_MAGNITUDE = 2.0;
-    /** Simulated seconds a quake stays listed. */
+    /** Seconds a quake stays listed. */
     static final double QUAKE_LIFETIME = 1800;
     static final int QUAKE_CAP = 100;
-    /** A flow front not reported for this long (simulated s) is considered to have stopped. */
+    /** A flow front not reported for this long (s) is considered to have stopped. */
     static final double FRONT_LIFETIME = 120;
     /** Upper bound on entities streamed per session (diffuse features beyond it are skipped). */
     static final int ENTITY_CAP = 3000;
@@ -60,7 +60,7 @@ final class EntityTracker {
     private final Map<String, JsonObject> sent = new TreeMap<>();
     private final Map<String, Double> createdAt = new HashMap<>();
     private final Map<String, Double> updatedAt = new HashMap<>();
-    /** Event-fed entities and the simulated time they expire. */
+    /** Event-fed entities and the time they expire. */
     private final Map<String, JsonObject> transients = new LinkedHashMap<>();
     private final Map<String, Double> expires = new HashMap<>();
 
@@ -170,7 +170,7 @@ final class EntityTracker {
             cp.add("crystalFraction", Json.num(ch.crystalFraction()));
             cp.add("volumeM3", Json.num(ch.volumeM3()));
             cp.add("depthM", Json.num(ch.physicalDepthM()));
-            cp.add("eruptionRateM3PerS", Json.num(ch.physicalEruptionRate())); // volcano time
+            cp.add("eruptionRateM3PerS", Json.num(ch.eruptionRate()));
             cp.addProperty("regime", EventTranslator.regime(ch.eruptiveRegime()));
             var style = v.classifier().style();
             if (style != null) cp.addProperty("styleEstimate", style.name());
@@ -394,7 +394,7 @@ final class EntityTracker {
 
     /**
      * The {@code entities} message bringing a client from what was sent last up to {@code snapshot}
-     * at simulated {@code time}, or {@code null} if nothing changed. With {@code full} every current
+     * at {@code time}, or {@code null} if nothing changed. With {@code full} every current
      * entity is sent with {@code replace: true} (attach, replay jump); this does not change what
      * other clients are assumed to hold.
      */

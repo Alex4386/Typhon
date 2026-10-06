@@ -67,10 +67,6 @@ final class Tuning {
         META.put("world:climate.wind.speed", m("Wind speed", "m/s", 0.0, 60.0, false, "Carries ash and gas downwind."));
         META.put("world:climate.wind.bearingDeg", m("Wind blows towards", "°", 0.0, 360.0, false, "Compass bearing, 90 = east."));
         META.put("world:climate.wind.variability", m("Wind gustiness", null, 0.0, 1.0, false, null));
-        META.put("world:scaling.dormantTimeCompression", m("Volcano time while quiet", "×", 1.0, 1e7, true,
-                "Volcanoes recharge over years. Volcano processes run this many times faster than simulated time while quiet."));
-        META.put("world:scaling.eruptiveTimeCompression", m("Volcano time while erupting", "×", 1.0, 1e4, true,
-                "Usually small so lava flows and fountains move at a believable pace."));
 
         META.put("volcano:magma.chamber.supplyRate", m("Magma supply rate", "m³/s", 0.0, 100.0, true,
                 "Magma rising into the chamber from below. Kīlauea ~0.1–0.2 m³/s."));
@@ -82,10 +78,6 @@ final class Tuning {
                 "More silica = stickier magma and more explosive eruptions. Basalt ~50, andesite ~60, rhyolite ~74."));
         META.put("volcano:magma.chamber.rechargeWaterWt", m("New magma water (H₂O)", "wt%", 0.0, 8.0, false,
                 "Dissolved water drives explosions as it turns to gas. Hawaiʻi ~0.5, arcs 3–6."));
-        META.put("volcano:timeCompression.dormant", m("Volcano time while quiet", "×", 1.0, 1e7, true,
-                "Overrides the world setting for this volcano."));
-        META.put("volcano:timeCompression.eruptive", m("Volcano time while erupting", "×", 1.0, 1e4, true,
-                "Overrides the world setting for this volcano."));
         META.put("volcano:magma.chamber.volume", m("Chamber volume", "m³", 1e6, 1e13, true, "Size of the magma reservoir."));
         META.put("volcano:magma.chamber.lithostaticDepth", m("Chamber depth", "m", 200.0, 20000.0, false, "Depth of the chamber below the surface."));
         META.put("volcano:magma.chamber.tensileStrengthMPa", m("Roof strength", "MPa", 0.5, 100.0, true,
@@ -107,7 +99,7 @@ final class Tuning {
         META.put("volcano:magma.chamber.rechargeCrystalFraction", m("New magma crystals", "fraction", 0.0, 0.6, false, "Crystal content of the supplied magma; crystals stiffen it."));
         META.put("volcano:magma.chamber.initialCo2Wt", m("Starting magma CO₂", "wt%", 0.0, 3.0, false, null));
         META.put("volcano:magma.chamber.crystalSilicaWt", m("Crystal silica", "wt%", 35.0, 75.0, false, "Silica of the crystals that grow; the melt left behind is enriched accordingly."));
-        META.put("volcano:magma.chamber.stepPeriodSeconds", m("Chamber step", "s", 0.05, 60.0, true, "How often the chamber model runs (simulated seconds)."));
+        META.put("volcano:magma.chamber.stepPeriodSeconds", m("Chamber step", "s", 0.05, 60.0, true, "How often the chamber model runs (seconds)."));
         META.put("volcano:magma.chamber.samplePeriodSeconds", m("Chamber sample interval", "s", 0.0, 600.0, false, "How often chamber readings are reported."));
         META.put("volcano:magma.conduit.initialOpenness", m("Conduit open at start", "fraction", 0.0, 1.0, false, "0 = sealed, 1 = open summit conduit at the start."));
         META.put("volcano:magma.conduit.reopenOverpressureMPa", m("Reopening pressure", "MPa", 0.0, 100.0, false, "Overpressure that reopens a partly open conduit."));
@@ -172,7 +164,7 @@ final class Tuning {
         META.put("volcano:dikes.initiationPressureRatio", m("Dike onset", "× roof strength", 0.05, 0.99, false,
                 "Random dike nucleation starts once overpressure passes this share of the roof strength."));
         META.put("volcano:dikes.maxInitiationRate", m("Dike rate at roof strength", "/s", 1e-6, 1.0, true,
-                "Random nucleation rate (per simulated second) at full roof strength and a fully sealed conduit."));
+                "Random nucleation rate (per second) at full roof strength and a fully sealed conduit."));
         META.put("volcano:dikes.maxConcurrentDikes", m("Dikes at once", null, 0.0, 10.0, false,
                 "How many dikes may rise at the same time. 0 = no dikes at all (rupture magma grows the chamber)."));
         META.put("volcano:dikes.conduitSealing", m("Summit conduit sealing", "fraction", 0.0, 1.0, false,
@@ -189,13 +181,6 @@ final class Tuning {
     static final Map<String, Advice> ADVICE = new LinkedHashMap<>();
 
     static {
-        String fast = "Above ~100× lava, fountains and ash advance hundreds of metres per tick and the chamber drains in"
-                + " a few steps; results stay bounded but look unrealistic.";
-        ADVICE.put("world:scaling.eruptiveTimeCompression", new Advice(1.0, 100.0, fast));
-        ADVICE.put("volcano:timeCompression.eruptive", new Advice(1.0, 100.0, fast));
-        String quiet = "Above ~10⁵× a year of recharge passes in minutes; dikes and unrest are skipped over.";
-        ADVICE.put("world:scaling.dormantTimeCompression", new Advice(null, 1e5, quiet));
-        ADVICE.put("volcano:timeCompression.dormant", new Advice(null, 1e5, quiet));
         ADVICE.put("volcano:magma.chamber.supplyRate", new Advice(null, 10.0,
                 "Long-term supply above ~10 m³/s exceeds any active volcano (Kīlauea, among the highest, ~3–6 m³/s ="
                         + " 0.1–0.2 km³/yr; Etna ~1); the chamber sits at its rupture limit and keeps opening dikes."));
@@ -233,11 +218,10 @@ final class Tuning {
     /** Group headings by scope:path prefix (first match wins, in order). */
     private static final List<String[]> GROUPS = List.of(
             new String[] {"world:climate", "Weather"},
-            new String[] {"world:scaling", "Time scale"},
+            new String[] {"world:scaling", "Scale"},
             new String[] {"world:subsurface", "Underground heat and water (solver)"},
             new String[] {"volcano:magma.chamber.supply", "Magma supply"},
             new String[] {"volcano:magma.chamber.recharge", "Magma supply"},
-            new String[] {"volcano:timeCompression", "Time scale"},
             new String[] {"volcano:magma.chamber.initial", "Magma chamber at start"},
             new String[] {"volcano:magma.chamber", "Magma chamber"},
             new String[] {"volcano:magma.conduit", "Conduit and eruption style"},
@@ -421,10 +405,6 @@ final class Tuning {
                 template.equals("ocean") ? "How fast the sea floor deepens towards the east." : "How fast the ground rises towards the west.");
         slope.add("default", Json.num(d.slope()));
         out.add(slope);
-        JsonObject tc = spec("eruptiveTimeCompression", "Volcano time while erupting", "×", "Time", 1.0, 1e4, true,
-                "Eruptions run this many times faster than the clock (a dial: change it any time).");
-        tc.add("default", Json.num(d.eruptiveTimeCompression()));
-        out.add(tc);
         return out;
     }
 

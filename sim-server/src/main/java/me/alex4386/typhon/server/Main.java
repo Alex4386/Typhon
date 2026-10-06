@@ -16,7 +16,7 @@ import me.alex4386.typhon.simulator.scenario.WorldTemplates;
  *
  * <pre>
  * sim-server [--create TEMPLATE|PRESET[:NAME]] [--preset NAME[,NAME…] [--seed N]] [--world DIR[,DIR…]] [--port 8787]
- *            [--host 0.0.0.0] [--worlds-dir worlds] [--ui visualizer/dist] [--speed 20] [--base-step-ms 50]
+ *            [--host 0.0.0.0] [--worlds-dir worlds] [--ui visualizer/dist] [--speed 3600] [--base-step-ms 50]
  *            [--max-sessions 8]
  * </pre>
  *
@@ -73,7 +73,7 @@ public final class Main {
         SimServer.Config config = new SimServer.Config(opts.getOrDefault("host", "0.0.0.0"),
                 Integer.parseInt(opts.getOrDefault("port", "8787")), worldsDir, ui, defaultPreset, seed,
                 Math.round(Double.parseDouble(opts.getOrDefault("base-step-ms", "50")) * 1000),
-                Double.parseDouble(opts.getOrDefault("speed", "20")),
+                Double.parseDouble(opts.getOrDefault("speed", "3600")),
                 Integer.parseInt(opts.getOrDefault("max-sessions", String.valueOf(SimServer.DEFAULT_MAX_SESSIONS))));
         SimServer server = new SimServer(config);
         for (String w : worlds) server.createWorld(Path.of(w));
@@ -87,7 +87,7 @@ public final class Main {
                 server.createTemplateWorld(createPreset, createName, seed, new com.google.gson.JsonObject());
                 out.printf("Created empty world %s from template %s%n", dir, createPreset);
             } else {
-                server.createPresetWorld(createPreset, seed, createName, null, null);
+                server.createPresetWorld(createPreset, seed, createName);
                 out.printf("Created world %s from preset %s%n", dir, createPreset);
             }
         }
@@ -116,7 +116,7 @@ public final class Main {
     private static void usage(PrintStream out) {
         out.println("Usage: sim-server [--create TEMPLATE|PRESET[:NAME]] [--preset NAME[,NAME…] [--seed N]] [--world DIR[,DIR…]]");
         out.println("                  [--port 8787]");
-        out.println("                  [--host 0.0.0.0] [--worlds-dir worlds] [--ui visualizer/dist] [--speed 20]");
+        out.println("                  [--host 0.0.0.0] [--worlds-dir worlds] [--ui visualizer/dist] [--speed 3600]");
         out.println("                  [--base-step-ms 50] [--max-sessions 8]");
         out.println("                  [--threads N (default: all cores; results are identical for any N)]");
         out.println("One server runs any number of worlds side by side (up to --max-sessions). --preset/--world only");

@@ -12,9 +12,8 @@ import org.junit.jupiter.api.Test;
 class TuningTest {
     @Test
     void sensibleRangesWarnOnlyOutsideThem() {
-        assertNull(Tuning.advise("world:scaling.eruptiveTimeCompression", "x", 20));
-        assertNotNull(Tuning.advise("world:scaling.eruptiveTimeCompression", "x", 500), "the user's ×500");
-        assertNotNull(Tuning.advise("volcano:timeCompression.eruptive", "x", 500));
+        assertNull(Tuning.advise("world:scaling.eruptiveTimeCompression", "x", 500), "retired: no time compression");
+        assertNull(Tuning.META.get("volcano:timeCompression.eruptive"));
         assertNull(Tuning.advise("volcano:magma.chamber.supplyRate", "x", 0.3));
         assertNotNull(Tuning.advise("volcano:magma.chamber.supplyRate", "x", 50));
         assertNull(Tuning.advise("volcano:magma.chamber.coolingTimescale", "x", 1e30), "no advice, no warning");
