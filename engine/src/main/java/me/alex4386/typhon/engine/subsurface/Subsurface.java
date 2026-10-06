@@ -717,6 +717,11 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
         return ch.steamFlux[c] / grid.area();
     }
 
+    /** World expansion activity: running surface water at least {@code minDepthM} deep. */
+    public void reportMovingWater(double minDepthM, me.alex4386.typhon.engine.expansion.ExpansionActivity.Sink sink) {
+        surface.reportMoving(minDepthM, sink);
+    }
+
     @Override
     public double surfaceWaterDepthM(int x, int z) {
         return surface.depth(x, z);

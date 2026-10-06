@@ -397,6 +397,17 @@ public final class LavaFlow implements Subsystem {
         return sum * area();
     }
 
+    /**
+     * World expansion activity: chunks holding molten lava, and chunks a flow is waiting for (unknown
+     * terrain it would flow into).
+     */
+    public void reportActivity(me.alex4386.typhon.engine.expansion.ExpansionActivity.Sink sink) {
+        for (LavaChunk c : chunks.values()) {
+            if (c.lavaCells > 0) sink.active((c.cx << 4) + 8, (c.cz << 4) + 8);
+        }
+        for (long key : requestedTerrain) sink.active(((int) (key >> 32) << 4) + 8, ((int) key << 4) + 8);
+    }
+
     public int activeCellCount() {
         int n = 0;
         for (LavaChunk c : chunks.values()) n += c.lavaCells;

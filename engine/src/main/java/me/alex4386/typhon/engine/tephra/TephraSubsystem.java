@@ -189,6 +189,22 @@ public final class TephraSubsystem implements Subsystem {
         return phase == null || grid == null ? 0 : grid.plumeHeight;
     }
 
+    /**
+     * World expansion materialised columns {@code [x0, x0+size) × [z0, z0+size)}: they get the fall deposit
+     * that landed there while they were not simulated (see {@code WorldExpansion}).
+     */
+    public void backfill(double time, int x0, int z0, int size) {
+        if (grid == null) return;
+        grid.backfill(terrain.world(), units.unit(DepositType.FALL, time, Double.NaN), config.depositJitter, x0, z0, size);
+    }
+
+    /** Reports ground with a fall deposit at least {@code minThicknessM} thick (world expansion activity). */
+    public void reportDeposits(double minThicknessM, me.alex4386.typhon.engine.expansion.ExpansionActivity.Sink sink) {
+        if (grid == null) return;
+        double blocks = minThicknessM / terrain.world().spec().metersPerColumn();
+        grid.reportDeposits(blocks, config.depositBulkDensity, 16, sink);
+    }
+
     /** Ash deposit thickness (m) at a column; 0 outside the ash grid. */
     public double depositThickness(int x, int z) {
         if (grid == null) return 0;

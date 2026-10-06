@@ -45,7 +45,7 @@ public final class ConfigChanges {
             "subsurface.timeScale", "subsurface.macroStepSeconds", "subsurface.surfaceWaterStepSeconds",
             "subsurface.hotChangeC", "subsurface.warmEvery", "subsurface.demoteAfter",
             "subsurface.groundwaterIterations", "subsurface.sorOmega", "subsurface.manningN",
-            "subsurface.vadoseLagSeconds", "subsurface.threads");
+            "subsurface.vadoseLagSeconds", "subsurface.threads", "expansion.*");
 
     /** Hot-reloadable volcano keys. */
     static final List<String> HOT_VOLCANO = List.of(

@@ -485,6 +485,13 @@ public final class DikePropagation implements Subsystem {
         return Collections.unmodifiableList(dikes);
     }
 
+    /** World expansion activity: the tips of rising dikes. */
+    public void reportActivity(me.alex4386.typhon.engine.expansion.ExpansionActivity.Sink sink) {
+        for (Dike d : dikes) {
+            if (d.propagating()) sink.active((int) Math.floor(d.x), (int) Math.floor(d.z));
+        }
+    }
+
     public int activeCount() {
         int n = 0;
         for (Dike d : dikes) if (d.propagating()) n++;

@@ -144,6 +144,8 @@ public final class Geomorphology implements Subsystem {
     // per-step scratch
     private final TreeMap<Long, Double> shaking = new TreeMap<>();
     private final TreeSet<Long> changed = new TreeSet<>();
+    /** Columns whose ground moved during the latest step (kept until the next one; world expansion). */
+    private final TreeSet<Long> moved = new TreeSet<>();
     private double now;
     private double massWastingStep;
     private int massWastingColumns;
@@ -307,6 +309,7 @@ public final class Geomorphology implements Subsystem {
         realClock += dtReal;
         Outbox outbox = context.outbox();
         changed.clear();
+        moved.clear();
         shaking.clear();
         massWastingStep = 0;
         massWastingColumns = 0;
@@ -1255,6 +1258,7 @@ public final class Geomorphology implements Subsystem {
     private void markChanged(int x, int z) {
         long k = key(x, z);
         changed.add(k);
+        moved.add(k);
         for (int d = 0; d < 8; d++) active.add(key(x + DX[d], z + DZ[d]));
         active.add(k);
     }
@@ -1322,6 +1326,11 @@ public final class Geomorphology implements Subsystem {
         return key(Math.floorDiv(x, ColumnStacks.TILE), Math.floorDiv(z, ColumnStacks.TILE));
     }
 
+    /** World expansion activity: columns whose ground moved in the latest step (failures, craters, collapse). */
+    public void reportActivity(me.alex4386.typhon.engine.expansion.ExpansionActivity.Sink sink) {
+        for (long k : moved) sink.active(keyX(k), keyZ(k));
+    }
+
     // ── Persistence ──
 
     @Override
@@ -1330,6 +1339,9 @@ public final class Geomorphology implements Subsystem {
         JsonArray act = new JsonArray();
         for (long k : active) act.add(k);
         o.add("active", act);
+        JsonArray mv = new JsonArray();
+        for (long k : moved) mv.add(k);
+        o.add("moved", mv);
         o.add("explosions", arrays(pendingExplosions));
         o.add("quakes", arrays(pendingQuakes));
         o.addProperty("sweepCursor", sweepCursor);
@@ -1359,6 +1371,8 @@ public final class Geomorphology implements Subsystem {
         JsonObject o = in.json();
         active.clear();
         for (JsonElement e : o.getAsJsonArray("active")) active.add(e.getAsLong());
+        moved.clear();
+        if (o.has("moved")) for (JsonElement e : o.getAsJsonArray("moved")) moved.add(e.getAsLong());
         pendingExplosions.clear();
         readArrays(o.getAsJsonArray("explosions"), pendingExplosions);
         pendingQuakes.clear();

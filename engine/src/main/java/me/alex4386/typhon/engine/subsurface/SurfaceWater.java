@@ -145,6 +145,16 @@ final class SurfaceWater {
         this.parallel = new Parallel(config);
     }
 
+    /** Columns of water that is still moving (tiles not at rest) at least {@code minDepth} deep; open water excluded. */
+    void reportMoving(double minDepth, me.alex4386.typhon.engine.expansion.ExpansionActivity.Sink sink) {
+        for (Tile t : tiles.values()) {
+            if (t.settled) continue;
+            for (int i = 0; i < AREA; i++) {
+                if (t.depth[i] >= minDepth && !t.fixed(i)) sink.active(t.tx * TILE + i % TILE, t.tz * TILE + i / TILE);
+            }
+        }
+    }
+
     static long key(int tx, int tz) {
         return ((long) tx << 32) | (tz & 0xffffffffL);
     }

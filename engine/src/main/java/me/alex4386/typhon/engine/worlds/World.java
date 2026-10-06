@@ -90,6 +90,9 @@ public final class World {
     private TerrainModel terrain;
     private LavaFlow lava;
     private Subsurface subsurface;
+    private me.alex4386.typhon.engine.expansion.WorldExpansion expansion;
+    /** The host's terrain generator (not persisted; re-attached on every open). */
+    private me.alex4386.typhon.engine.terrain.TerrainGenerator generator;
     private final TreeMap<String, VolcanoSystem> systems = new TreeMap<>();
 
     private World(WorldDirectory directory, SaveStore stateStore, SaveStore historyStore, WorldDefinition definition,
@@ -261,6 +264,9 @@ public final class World {
             }
         }
         builder.add(lava);
+        expansion = new me.alex4386.typhon.engine.expansion.WorldExpansion(terrain, definition.expansion());
+        wireExpansion();
+        builder.add(expansion);
         if (restore != null) {
             builder.restore(hidden.isEmpty() ? restore : new HidingSaveStore(restore, hidden)).allowConfigChanges();
         }
@@ -276,6 +282,30 @@ public final class World {
                 }
             }
         }
+    }
+
+    /**
+     * Registers what drives on-demand growth: lava, mass flows, rising dikes, slope failures, thick tephra
+     * and running water; tephra that fell on unsimulated ground is laid down when it materialises.
+     */
+    private void wireExpansion() {
+        expansion.setGenerator(generator);
+        me.alex4386.typhon.engine.expansion.ExpansionWiring.wire(expansion, lava, subsurface, systems.values());
+    }
+
+    /**
+     * Attaches the host's terrain generator: the column at any (x, z), as generated for this world's
+     * definition. With it the simulated area grows on demand ({@link me.alex4386.typhon.engine.expansion.WorldExpansion});
+     * without it, it stays as imported. Call before stepping, after every open.
+     */
+    public void setTerrainGenerator(me.alex4386.typhon.engine.terrain.TerrainGenerator generator) {
+        this.generator = generator;
+        if (expansion != null) expansion.setGenerator(generator);
+    }
+
+    /** The on-demand growth of the simulated area. */
+    public me.alex4386.typhon.engine.expansion.WorldExpansion expansion() {
+        return expansion;
     }
 
     /** Rebuilds the engine with the current definitions, carrying all state over (between steps). */

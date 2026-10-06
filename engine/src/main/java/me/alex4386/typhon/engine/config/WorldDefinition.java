@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import me.alex4386.typhon.engine.expansion.ExpansionConfig;
 import me.alex4386.typhon.engine.lava.LavaConfig;
 import me.alex4386.typhon.engine.subsurface.SubsurfaceConfig;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
@@ -43,6 +44,7 @@ import me.alex4386.typhon.engine.world.WorldSpec;
  * lava: {coolingScale: 1}                       # any LavaConfig component
  * subsurface: {timeScale: 5000, macroStepSeconds: 60}   # any SubsurfaceConfig field except those
  *                                                     # set from climate/geotherm/aquifer
+ * expansion: {enabled: true, marginTiles: 2, maxExtentM: 40000}   # on-demand growth (ExpansionConfig)
  * }</pre>
  *
  * @param baseStepMs engine base step (simulation resolution)
@@ -51,10 +53,19 @@ import me.alex4386.typhon.engine.world.WorldSpec;
  * @param terrain free-form initial-terrain description for the host (generator, DEM, ...)
  * @param subsurface heat/groundwater/surface-water parameters, with the climate, geotherm and aquifer
  *     values filled in; its {@code timeScale} defaults to the dormant time compression
+ * @param expansion on-demand growth of the simulated area
  */
 public record WorldDefinition(String name, long seed, double baseStepMs, WorldSpec spec, VolcanoScaling scaling,
         Climate climate, Geotherm geotherm, Aquifer aquifer, Map<String, Object> terrain, LavaConfig lava,
-        SubsurfaceConfig subsurface) {
+        SubsurfaceConfig subsurface, ExpansionConfig expansion) {
+
+    /** A definition with the default {@link ExpansionConfig}. */
+    public WorldDefinition(String name, long seed, double baseStepMs, WorldSpec spec, VolcanoScaling scaling,
+            Climate climate, Geotherm geotherm, Aquifer aquifer, Map<String, Object> terrain, LavaConfig lava,
+            SubsurfaceConfig subsurface) {
+        this(name, seed, baseStepMs, spec, scaling, climate, geotherm, aquifer, terrain, lava, subsurface,
+                ExpansionConfig.DEFAULTS);
+    }
 
     /** @param windSpeed real wind speed (m/s), {@code NaN} to leave each volcano's own wind */
     public record Climate(double rainfallMmPerHour, double evaporationMmPerHour, double windSpeed, double windBearingDeg,
@@ -287,10 +298,13 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
         SubsurfaceConfig subsurface = defaultSubsurface(scaling);
         ConfigBinder.bindFields(root.child("subsurface"), subsurface, Set.of(), SUBSURFACE_DERIVED);
 
+        ExpansionConfig expansion = ConfigBinder.bindRecord(root.child("expansion"), ExpansionConfig.DEFAULTS, Set.of(),
+                Set.of());
+
         root.finish();
         return new WorldDefinition(name, seed, baseStep, spec, scaling,
                 new Climate(rain, evaporation, windSpeed, windBearing, windVariability), geotherm, aquifer, terrain, lava,
-                subsurface);
+                subsurface, expansion);
     }
 
     // ── Export ──
@@ -331,6 +345,7 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
         root.put("terrain", new LinkedHashMap<>(terrain));
         root.put("lava", ConfigBinder.exportRecord(lava, Set.of("metersPerBlock")));
         root.put("subsurface", ConfigBinder.exportFields(subsurface, SUBSURFACE_DERIVED));
+        root.put("expansion", ConfigBinder.exportRecord(expansion, Set.of()));
         return root;
     }
 

@@ -296,6 +296,14 @@ public abstract class MassFlowField implements Subsystem {
         return sum * cellArea;
     }
 
+    /** World expansion activity: chunks with a moving flow, and chunks a flow is waiting for. */
+    public void reportActivity(me.alex4386.typhon.engine.expansion.ExpansionActivity.Sink sink) {
+        for (MassFlowChunk c : chunks.values()) {
+            if (c.flowCells > 0) sink.active((c.cx << 4) + 8, (c.cz << 4) + 8);
+        }
+        for (long key : requestedTerrain) sink.active(((int) (key >> 32) << 4) + 8, ((int) key << 4) + 8);
+    }
+
     public int activeCellCount() {
         int n = 0;
         for (MassFlowChunk c : chunks.values()) n += c.flowCells;

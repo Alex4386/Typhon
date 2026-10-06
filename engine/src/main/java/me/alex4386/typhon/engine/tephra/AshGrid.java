@@ -380,6 +380,44 @@ final class AshGrid {
         terrain.updateBlockCache(x, z, column.groundY(), cover);
     }
 
+    /**
+     * Columns {@code [x0, x0+size) × [z0, z0+size)} just became simulated: lays down the fall deposit
+     * already converted for the rest of their cells ({@code applied}), so the ground gets the ash that fell
+     * on it before it was simulated (the cell grid kept it). Later increments arrive through
+     * {@link #applyDeposits} like everywhere else.
+     */
+    void backfill(WorldModel world, int unit, double jitter, int x0, int z0, int size) {
+        double metersPerBlock = world.spec().metersPerColumn();
+        for (int z = z0; z < z0 + size; z++) {
+            for (int x = x0; x < x0 + size; x++) {
+                int cell = cellAt(x, z);
+                if (cell < 0 || !(applied[cell] > 0) || !world.isKnown(x, z)) continue;
+                double f = 1 + jitter * columnNoise(x, z);
+                world.deposit(x, z, applied[cell] * f * metersPerBlock, MaterialTable.ASH, unit);
+            }
+        }
+    }
+
+    /**
+     * Reports the cells whose deposit is at least {@code minBlocks} thick: one sample column every
+     * {@code stride} columns across each such cell.
+     */
+    void reportDeposits(double minBlocks, double bulkDensity, int stride,
+            me.alex4386.typhon.engine.expansion.ExpansionActivity.Sink sink) {
+        for (int j = 0; j < cells; j++) {
+            for (int i = 0; i < cells; i++) {
+                int cell = index(i, j);
+                if (!(deposit[cell] > 0) || thickness(cell, bulkDensity) < minBlocks) continue;
+                int x0 = originX + i * cellSize;
+                int z0 = originZ + j * cellSize;
+                for (int z = z0; z < z0 + cellSize; z += stride) {
+                    for (int x = x0; x < x0 + cellSize; x += stride) sink.active(x, z);
+                }
+                sink.active(x0 + cellSize - 1, z0 + cellSize - 1);
+            }
+        }
+    }
+
     /** Deterministic per-column noise in [-1, 1). */
     static double columnNoise(int x, int z) {
         long h = x * 0x9e3779b97f4a7c15L ^ z * 0xc2b2ae3d27d4eb4fL;
