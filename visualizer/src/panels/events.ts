@@ -40,6 +40,36 @@ const STALL_LABEL: Record<string, string> = {
   FROZE: 'the magma froze',
 };
 
+const VENT_STATE_LABEL: Record<string, string> = {
+  idle: 'stopped erupting',
+  active: 'is erupting',
+  waning: 'is waning (its feeder is cooling and narrowing)',
+  frozen: 'froze shut',
+  sealed: 'was sealed',
+  removed: 'was removed',
+};
+
+const SLIDE_LABEL: Record<string, string> = {
+  TALUS: 'Rockfall',
+  DEBRIS_AVALANCHE: 'Debris avalanche',
+  DEBRIS_FLOW: 'Debris flow',
+};
+
+const TRIGGER_LABEL: Record<string, string> = {
+  OVERSTEEPENING: 'slope too steep',
+  ALTERATION: 'rock weakened by hot fluids',
+  THERMAL: 'heated rock',
+  PORE_PRESSURE: 'water pressure in the slope',
+  SEISMIC: 'earthquake shaking',
+};
+
+/** Volume in words: m³ below 10 000, else thousand / million m³. */
+export function formatVolume(m3: number): string {
+  if (m3 >= 1e6) return `${(m3 / 1e6).toFixed(m3 >= 1e7 ? 0 : 1)} million m³`;
+  if (m3 >= 1e4) return `${Math.round(m3 / 1e3)} thousand m³`;
+  return `${Math.round(m3)} m³`;
+}
+
 const SEISMIC_LABEL: Record<string, string> = {
   VT: 'rock-breaking quake',
   LP: 'fluid quake (long-period)',
@@ -76,7 +106,15 @@ export function describeEvent(e: SimEvent): string {
     case 'lightning':
       return 'Volcanic lightning';
     case 'massFlowFront':
-      return `${e.flow === 'PDC' ? 'Pyroclastic flow' : 'Mudflow (lahar)'} moving at ${e.speed.toFixed(0)} m/s`;
+      return `${e.flow === 'PDC' ? 'Pyroclastic flow' : e.flow === 'DEBRIS_AVALANCHE' ? 'Debris avalanche' : 'Mudflow (lahar)'} moving at ${e.speed.toFixed(0)} m/s`;
+    case 'ventState':
+      return `Vent ${e.ventId} ${VENT_STATE_LABEL[e.state] ?? `is ${e.state}`}`;
+    case 'slopeFailure':
+      return `${SLIDE_LABEL[e.style] ?? 'Landslide'}: ${formatVolume(e.volumeM3)} gave way (${TRIGGER_LABEL[e.trigger] ?? e.trigger.toLowerCase().replaceAll('_', ' ')})`;
+    case 'craterExcavated':
+      return `Explosion crater ${Math.round(2 * e.radiusM)} m wide, ${Math.round(e.depthM)} m deep`;
+    case 'calderaCollapse':
+      return `Crater floor collapsing: down ${e.subsidenceM.toFixed(e.subsidenceM < 10 ? 1 : 0)} m over ${Math.round(2 * e.radiusM)} m`;
     case 'geothermalFeature':
       return `New ${e.feature.toLowerCase().replaceAll('_', ' ')}`;
     case 'oceanEntry':
@@ -101,6 +139,8 @@ export function toastTone(e: SimEvent): 'info' | 'warn' | 'alert' | null {
       return e.magnitude >= 4 ? 'warn' : null;
     case 'oceanEntry':
       return e.littoralExplosion ? 'info' : null;
+    case 'slopeFailure':
+      return e.style !== 'TALUS' ? 'warn' : null;
     default:
       return null;
   }
@@ -110,7 +150,10 @@ export function toastTone(e: SimEvent): 'info' | 'warn' | 'alert' | null {
 export const NOTABLE_FEATURES = new Set(['GEYSER', 'HOT_SPRING', 'SULFUR_SPRING', 'SUBMARINE_VENT']);
 
 /** Changes in what the volcano is doing: always their own row among the key events. */
-const MILESTONE_KINDS = new Set(['eruptionStarted', 'eruptionEnded', 'alertChanged', 'regimeChanged', 'styleEstimated', 'dikeStarted', 'dikeStalled', 'fissureOpened', 'message']);
+const MILESTONE_KINDS = new Set(['eruptionStarted', 'eruptionEnded', 'alertChanged', 'regimeChanged', 'styleEstimated', 'dikeStarted', 'dikeStalled', 'fissureOpened', 'ventState', 'message']);
+
+/** Slope failures from this volume are key events even as plain rockfalls (avalanches and flows always are). */
+export const NOTABLE_SLIDE_M3 = 10_000;
 
 /** Notable bursts: quakes from this magnitude are key events (aggregated per hour). */
 export const NOTABLE_QUAKE_M = 3;
@@ -129,6 +172,11 @@ export function isImportant(e: SimEvent): boolean {
       return true;
     case 'seismic':
       return e.magnitude >= NOTABLE_QUAKE_M;
+    case 'slopeFailure':
+      return e.style !== 'TALUS' || e.volumeM3 >= NOTABLE_SLIDE_M3;
+    case 'craterExcavated':
+    case 'calderaCollapse':
+      return true;
     default:
       return false;
   }
@@ -149,6 +197,12 @@ function aggregateKey(e: SimEvent): string | null {
       return `feature:${v}:${e.feature}`;
     case 'oceanEntry':
       return 'ocean';
+    case 'slopeFailure':
+      return `slides:${v}`;
+    case 'craterExcavated':
+      return `craters:${v}`;
+    case 'calderaCollapse':
+      return `caldera:${v}`;
     default:
       return null;
   }
@@ -178,8 +232,13 @@ export function keyEventRows(events: SimEvent[], limit: number): Row[] {
     const row = open.get(key);
     if (row && e.time - row.firstTime < AGGREGATE_S) {
       row.count++;
-      // the row shows the newest; keep the strongest quake as its representative
-      if (e.kind !== 'seismic' || row.event.kind !== 'seismic' || e.magnitude >= row.event.magnitude) row.event = e;
+      // the row shows the newest; keep the strongest quake and the largest slide as its representative
+      if (e.kind === 'seismic' && row.event.kind === 'seismic') {
+        if (e.magnitude >= row.event.magnitude) row.event = e;
+      } else if (e.kind === 'slopeFailure' && row.event.kind === 'slopeFailure') {
+        row.total = (row.total ?? row.event.volumeM3) + e.volumeM3;
+        if (e.volumeM3 >= row.event.volumeM3) row.event = e;
+      } else row.event = e;
       row.lastTime = e.time;
       continue;
     }
@@ -204,6 +263,12 @@ export function describeRow(r: Row): string {
       return `${r.count} new ${e.feature.toLowerCase().replaceAll('_', ' ')}s`;
     case 'oceanEntry':
       return `Lava entering the sea (${r.count} entries, latest ${e.powerMW.toFixed(0)} MW)`;
+    case 'slopeFailure':
+      return `${r.count} landslides, ${formatVolume(r.total ?? e.volumeM3)} in all (largest ${formatVolume(e.volumeM3)})`;
+    case 'craterExcavated':
+      return `${r.count} crater-forming explosions (latest ${Math.round(2 * e.radiusM)} m wide)`;
+    case 'calderaCollapse':
+      return `Crater floor collapsing: down ${e.subsidenceM.toFixed(e.subsidenceM < 10 ? 1 : 0)} m so far`;
     default:
       return describeEvent(e);
   }
@@ -220,6 +285,9 @@ function groupKey(e: SimEvent): string | null {
     case 'massFlowFront':
     case 'oceanEntry':
     case 'dikeAdvanced':
+    case 'slopeFailure':
+    case 'craterExcavated':
+    case 'calderaCollapse':
       return `${e.kind}:${'volcanoId' in e ? e.volcanoId : ''}`;
     default:
       return null;
@@ -232,6 +300,8 @@ export interface Row {
   firstTime: number;
   /** Time of the newest event merged into the row (aggregated key events). */
   lastTime?: number;
+  /** Summed volume of merged slope failures (m³). */
+  total?: number;
 }
 
 /** Newest first, consecutive repeats collapsed (keeps the newest event of each run). */

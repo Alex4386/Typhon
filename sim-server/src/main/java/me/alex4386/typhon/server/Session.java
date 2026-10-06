@@ -80,7 +80,7 @@ final class Session implements AutoCloseable {
      * "key events" view is complete even after hours of quakes, bombs and plume updates.
      */
     static final Set<String> MILESTONES = Set.of("eruptionStarted", "eruptionEnded", "alertChanged", "regimeChanged",
-            "styleEstimated", "dikeStarted", "dikeStalled", "fissureOpened", "message");
+            "styleEstimated", "dikeStarted", "dikeStalled", "fissureOpened", "ventState", "message");
     static final String SESSION_FILE = "session.json";
 
     enum Kind { PRESET, WORLD }
@@ -556,15 +556,19 @@ final class Session implements AutoCloseable {
     }
 
     /**
-     * Whether an event goes into the milestone log: milestone kinds, and the first ocean entry and the
-     * first geothermal feature of each type per volcano (later ones are routine; `firsts` remembers them).
+     * Whether an event goes into the milestone log: milestone kinds, slope failures that became an
+     * avalanche or debris flow, and the first ocean entry, the first geothermal feature of each type,
+     * the first crater excavation and the first caldera collapse per volcano (later ones are routine;
+     * `firsts` remembers them).
      */
     static boolean isMilestone(JsonObject e, Set<String> firsts) {
         String kind = e.get("kind").getAsString();
         if (MILESTONES.contains(kind)) return true;
+        if (kind.equals("slopeFailure")) return e.has("style") && !e.get("style").getAsString().equals("TALUS");
         String first = switch (kind) {
             case "oceanEntry" -> "oceanEntry";
             case "geothermalFeature" -> "feature:" + e.get("volcanoId").getAsString() + ":" + e.get("feature").getAsString();
+            case "craterExcavated", "calderaCollapse" -> kind + ":" + e.get("volcanoId").getAsString();
             default -> null;
         };
         return first != null && firsts.add(first);

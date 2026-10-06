@@ -8,7 +8,30 @@ export type ContextAction =
   | { id: 'frame'; label: string }
   | { id: 'section'; label: string }
   | { id: 'water' | 'dig'; label: string }
-  | { id: 'supply'; label: string; volcanoId: string };
+  | { id: 'supply'; label: string; volcanoId: string }
+  | { id: 'sealVent' | 'unsealVent' | 'removeVent'; label: string; volcanoId: string; ventId: string }
+  | { id: 'removeDike'; label: string; volcanoId: string; dikeId: number }
+  | { id: 'blockDikes' | 'allowDikes'; label: string; volcanoId: string };
+
+/** Actions that cannot be undone: the Inspector asks first. */
+export const DESTRUCTIVE: ReadonlySet<ContextAction['id']> = new Set(['removeVent', 'removeDike']);
+
+/** Lifecycle of a vent or fissure as the server reports it (`props.state`, `ventState` events). */
+export type VentLifecycle = 'idle' | 'active' | 'waning' | 'frozen' | 'sealed' | 'removed';
+
+/** A vent's state for display: the server's, else derived from its flags (older servers). */
+export function ventLifecycle(props: Record<string, unknown>): VentLifecycle {
+  const s = props.state;
+  if (s === 'idle' || s === 'active' || s === 'waning' || s === 'frozen' || s === 'sealed' || s === 'removed') return s;
+  if (props.sealed === true) return 'sealed';
+  return props.erupting === true ? 'active' : 'idle';
+}
+
+/** The dike number of a `dike:<volcano>:<id>` entity. */
+export function dikeNumber(entityId: string): number | null {
+  const n = Number(entityId.slice(entityId.lastIndexOf(':') + 1));
+  return Number.isInteger(n) ? n : null;
+}
 
 /** Volcano a selection belongs to (its entity's volcano; chambers, vents and dikes always have one). */
 export function selectionVolcano(sel: Selection | null, entities: EntityMap): string | null {
@@ -43,17 +66,29 @@ export function contextActions(sel: Selection | null, entities: EntityMap, volca
     case 'chamber':
       if (v) {
         out.push({ id: 'inject', label: 'Add magma…', volcanoId: v }, eruptionToggle(v, volcanoes?.[v]), { id: 'forceDike', label: 'Push magma up (dike)', volcanoId: v }, { id: 'supply', label: 'Magma supply', volcanoId: v });
+        out.push(e.props.dikesBlocked === true ? { id: 'allowDikes', label: 'Allow new dikes', volcanoId: v } : { id: 'blockDikes', label: 'Block new dikes', volcanoId: v });
       }
       out.push({ id: 'section', label: 'Cross-section' });
       return out;
     case 'vent':
-    case 'fissure':
+    case 'fissure': {
       if (v) out.push(eruptionToggle(v, volcanoes?.[v]));
+      const ventId = typeof e.props.ventId === 'string' ? e.props.ventId : null;
+      const state = ventLifecycle(e.props);
+      if (v && ventId && state !== 'removed') {
+        out.push(state === 'sealed' ? { id: 'unsealVent', label: 'Unseal', volcanoId: v, ventId } : { id: 'sealVent', label: 'Seal', volcanoId: v, ventId });
+        // only dike-fed fissures can be deleted; a summit vent is sealed instead
+        if (e.kind === 'fissure') out.push({ id: 'removeVent', label: 'Remove…', volcanoId: v, ventId });
+      }
       out.push({ id: 'frame', label: 'Frame' }, { id: 'section', label: 'Cross-section' });
       return out;
-    case 'dike':
+    }
+    case 'dike': {
       out.push({ id: 'section', label: 'Section along the dike' }, { id: 'frame', label: 'Frame' });
+      const n = dikeNumber(e.id);
+      if (v && n !== null) out.push({ id: 'removeDike', label: 'Remove…', volcanoId: v, dikeId: n });
       return out;
+    }
     default:
       return [{ id: 'frame', label: 'Frame' }, { id: 'section', label: 'Cross-section' }];
   }

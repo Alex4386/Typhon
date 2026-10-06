@@ -6,7 +6,7 @@ const at = (kind: string, time: number, extra: Record<string, unknown> = {}) => 
 
 describe('key events', () => {
   it('classifies milestones, including style estimates and dikes', () => {
-    for (const k of ['eruptionStarted', 'eruptionEnded', 'alertChanged', 'regimeChanged', 'styleEstimated', 'dikeStarted', 'dikeStalled', 'fissureOpened', 'message'])
+    for (const k of ['eruptionStarted', 'eruptionEnded', 'alertChanged', 'regimeChanged', 'styleEstimated', 'dikeStarted', 'dikeStalled', 'fissureOpened', 'ventState', 'message'])
       expect(isImportant(at(k, 1)), k).toBe(true);
     expect(isImportant(at('plume', 1))).toBe(false);
     expect(isImportant(at('dikeAdvanced', 1))).toBe(false);
@@ -47,5 +47,17 @@ describe('key events', () => {
   it('merges a re-attach backlog into the key-event list without duplicates', () => {
     const merged = mergeByTime([at('eruptionStarted', 5)], [at('eruptionStarted', 5), at('alertChanged', 9, { previous: null, current: 'ERUPTING' })]);
     expect(merged.map((e) => e.kind)).toEqual(['eruptionStarted', 'alertChanged']);
+  });
+
+  it('shows landslides, craters and collapses, summarising small slides', () => {
+    const slide = (t: number, v: number, style = 'TALUS') => at('slopeFailure', t, { at: [0, 0, 1000], volumeM3: v, style, trigger: 'ALTERATION', factorOfSafety: 0.9 });
+    expect(isImportant(slide(1, 500))).toBe(false); // ravelling: summarised in the volcano's totals
+    expect(isImportant(slide(1, 20_000))).toBe(true);
+    expect(isImportant(slide(1, 500, 'DEBRIS_AVALANCHE'))).toBe(true);
+    expect(describeEvent(slide(1, 2.5e6, 'DEBRIS_AVALANCHE'))).toBe('Debris avalanche: 2.5 million m³ gave way (rock weakened by hot fluids)');
+    const rows = keyEventRows([slide(10, 20_000), slide(20, 50_000), slide(30, 30_000), at('craterExcavated', 40, { at: [0, 0, 0], radiusM: 60, depthM: 25 })], 10);
+    expect(rows.map(describeRow)).toEqual(['Explosion crater 120 m wide, 25 m deep', '3 landslides, 100 thousand m³ in all (largest 50 thousand m³)']);
+    expect(describeEvent(at('ventState', 1, { ventId: 'f1', previous: 'waning', state: 'frozen' }))).toBe('Vent f1 froze shut');
+    expect(describeEvent(at('calderaCollapse', 1, { at: [0, 0, 0], radiusM: 400, subsidenceM: 12.4 }))).toBe('Crater floor collapsing: down 12 m over 800 m');
   });
 });

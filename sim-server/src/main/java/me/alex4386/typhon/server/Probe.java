@@ -305,6 +305,20 @@ final class Probe {
 
             o.add("deformation", deformation(v.deformation(), map));
 
+            // landscape change so far: slope failures (including the small ravelling that is not
+            // reported one by one), avalanches, explosion craters and caldera subsidence
+            if (v.geomorphology() != null) {
+                var g = v.geomorphology().snapshot();
+                JsonObject geo = new JsonObject();
+                geo.addProperty("failures", g.failures());
+                geo.add("failedM3", Json.num(EntityTracker.roundSignificant(g.failedM3(), 3)));
+                geo.addProperty("avalanches", g.avalanches());
+                geo.addProperty("craters", g.craters());
+                geo.add("maxCraterRadiusM", Json.num(EntityTracker.roundSignificant(g.maxCraterRadiusM(), 3)));
+                geo.add("calderaSubsidenceM", Json.num(EntityTracker.roundSignificant(g.calderaSubsidenceM(), 3)));
+                o.add("geomorph", geo);
+            }
+
             TephraSubsystem tephra = v.tephra();
             ExplosivePhase phase = tephra.activePhase();
             if (phase != null && tephra.plumeHeight() > 0) {

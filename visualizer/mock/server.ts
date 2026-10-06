@@ -327,6 +327,11 @@ function handle(c: Client, msg: ClientMessage) {
         case 'setWind':
           w.wind = { speed: cmd.speed, bearingDeg: cmd.bearingDeg };
           break;
+        default:
+          // vent/dike lifecycle controls need the real engine
+          send(c, { type: 'ack', requestId: msg.requestId ?? 0, ok: false, message: `The mock server does not support ${cmd.kind}` });
+          send(c, { type: 'error', code: 'unsupported', message: `The mock server does not support ${cmd.kind}`, requestId: msg.requestId });
+          return;
       }
       if (msg.requestId !== undefined) send(c, { type: 'ack', requestId: msg.requestId, ok, message: ok ? undefined : 'unknown volcano' });
       if (!ok) send(c, { type: 'error', code: 'unknownVolcano', message: 'Unknown volcano', requestId: msg.requestId });

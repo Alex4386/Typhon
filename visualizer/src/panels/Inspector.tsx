@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowUpFromDot, Crosshair, Droplets, Pickaxe, Plus, Ruler, SlidersHorizontal, Square, Triangle, X } from 'lucide-react';
+import { ArrowUpFromDot, Ban, CircleCheck, Crosshair, Droplets, Lock, LockOpen, Pickaxe, Plus, Ruler, SlidersHorizontal, Square, Trash2, Triangle, X } from 'lucide-react';
 import { Tip } from '@/components/tip';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,8 @@ import { KIND_LABEL, entityColor, formatPlace, type EntityView, type Selection }
 import { useStore } from '../store/store';
 import { FEATURE_COLORS } from '../util/color';
 import { formatSimTime, worldExtent } from '../util/world';
-import { contextActions, supplyParams, type ContextAction } from './actions';
+import { DESTRUCTIVE, contextActions, supplyParams, ventLifecycle, type ContextAction, type VentLifecycle } from './actions';
+import { formatVolume } from './events';
 import { fieldError } from './inject';
 import { OVERLAY } from './Overlay';
 import { ParamInput } from './ParamInput';
@@ -105,6 +106,7 @@ export function Inspector({ world }: { world: WorldInfo }) {
       <Separator />
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto p-3">
         {selection.type === 'entity' && entity && <EntityProps e={entity} />}
+        {selection.type === 'entity' && entity?.kind === 'chamber' && entity.volcanoId && <LandscapeSummary volcanoId={entity.volcanoId} />}
         {selection.type === 'entity' && !entity && <p className="text-muted-foreground">This no longer exists.</p>}
         {selection.type === 'quake' && <QuakeProps q={selection.event} />}
         {inspection && inspection.inside && at && Math.hypot(inspection.at[0] - at[0], inspection.at[1] - at[1]) <= world.cellSize * 1.5 && <Column c={inspection} world={world} />}
@@ -131,6 +133,32 @@ function Heading({ children }: { children: ReactNode }) {
   return <h3 className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{children}</h3>;
 }
 
+/** What erosion and collapse have done to the volcano so far (slope failures, craters, caldera). */
+function LandscapeSummary({ volcanoId }: { volcanoId: string }) {
+  const g = useStore((s) => s.state?.volcanoes[volcanoId]?.geomorph);
+  if (!g || (g.failures === 0 && g.craters === 0 && g.calderaSubsidenceM <= 0)) return null;
+  const parts: string[] = [];
+  if (g.failures > 0) parts.push(`${g.failures.toLocaleString()} slope failure${g.failures > 1 ? 's' : ''} moved ${formatVolume(g.failedM3)}${g.avalanches > 0 ? ` (${g.avalanches} as avalanches or debris flows)` : ''}`);
+  if (g.craters > 0) parts.push(`${g.craters} explosion crater${g.craters > 1 ? 's' : ''}, the widest ${Math.round(2 * g.maxCraterRadiusM)} m`);
+  if (g.calderaSubsidenceM > 0) parts.push(`crater floor down ${g.calderaSubsidenceM.toFixed(g.calderaSubsidenceM < 10 ? 1 : 0)} m`);
+  return (
+    <section className="flex flex-col gap-1 text-xs">
+      <span className="font-medium text-muted-foreground">Landscape so far</span>
+      <p>{parts.join('; ')}.</p>
+    </section>
+  );
+}
+
+/** How a vent's lifecycle state reads, and its colour. */
+const VENT_STATE: Record<VentLifecycle, { label: string; tip: string; className: string }> = {
+  idle: { label: 'idle', tip: 'Not erupting now; it can erupt again', className: 'text-muted-foreground' },
+  active: { label: 'erupting', tip: 'Magma is coming out of it', className: 'border-orange-500/60 text-orange-400' },
+  waning: { label: 'waning', tip: 'Its feeder is narrowing as the magma in it cools; it will freeze shut unless flow picks up', className: 'border-amber-500/60 text-amber-400' },
+  frozen: { label: 'frozen', tip: 'Its feeder froze shut: it will not erupt again (a new dike can open a new fissure)', className: 'border-sky-500/60 text-sky-400' },
+  sealed: { label: 'sealed', tip: 'Plugged: magma leaves through the other open vents', className: 'border-violet-500/60 text-violet-400' },
+  removed: { label: 'removed', tip: 'Deleted: no longer a vent', className: 'text-destructive' },
+};
+
 function EntityProps({ e }: { e: EntityView }) {
   const rows: [string, string][] = Object.entries(e.props)
     .filter(([k, v]) => !HIDDEN_PROPS.has(k) && v !== null && v !== undefined)
@@ -142,6 +170,13 @@ function EntityProps({ e }: { e: EntityView }) {
         <span>Appeared {formatSimTime(typeof e.props.startedAt === 'number' ? e.props.startedAt : e.createdAt)}</span>
         <span>· updated {formatSimTime(e.updatedAt)}</span>
         {removed && <Badge variant="destructive">removed</Badge>}
+        {(e.kind === 'vent' || e.kind === 'fissure') && !removed && (
+          <Tip content={VENT_STATE[ventLifecycle(e.props)].tip}>
+            <Badge variant="outline" className={VENT_STATE[ventLifecycle(e.props)].className}>
+              {VENT_STATE[ventLifecycle(e.props)].label}
+            </Badge>
+          </Tip>
+        )}
       </div>
       {e.kind === 'dike' && e.path && e.path.length > 1 && (
         <p className="text-xs text-muted-foreground">
@@ -270,6 +305,12 @@ const ACTION_ICON: Record<ContextAction['id'], ReactNode> = {
   water: <Droplets />,
   dig: <Pickaxe />,
   supply: <SlidersHorizontal />,
+  sealVent: <Lock />,
+  unsealVent: <LockOpen />,
+  removeVent: <Trash2 />,
+  removeDike: <Trash2 />,
+  blockDikes: <Ban />,
+  allowDikes: <CircleCheck />,
 };
 
 const ACTION_TIP: Partial<Record<ContextAction['id'], ReactNode>> = {
@@ -286,6 +327,12 @@ const ACTION_TIP: Partial<Record<ContextAction['id'], ReactNode>> = {
   water: 'Pour water at this point (the volume is set in the tool bar)',
   dig: 'Dig a pit at this point',
   supply: 'Supply rate, temperature and composition of the magma feeding this chamber',
+  sealVent: 'Plug this vent: magma leaves through the other open vents; with none left the eruption ends and pressure builds again',
+  unsealVent: 'Open this vent again (a fissure whose feeder froze stays shut)',
+  removeVent: 'Delete this fissure and its dike: it stops being a vent; the intrusion stays in the rock',
+  removeDike: 'Delete this dike (arresting it if still rising); its fissure stops being a vent',
+  blockDikes: 'Stop new dikes from breaking out of this chamber on their own (Push magma up still works)',
+  allowDikes: 'Let dikes break out of this chamber again when its pressure is high enough',
 };
 
 /** The selection's own actions (see {@link contextActions}); magma supply settings expand inline. */
@@ -295,6 +342,14 @@ function ActionRow({ world, onFrame, onSection }: { world: WorldInfo; onFrame: (
   const volcanoes = useStore((s) => s.state?.volcanoes);
   const replay = useStore((s) => s.clock?.replay ?? false);
   const [supplyOpen, setSupplyOpen] = useState(false);
+  // removals ask once more: the first click arms the button for a few seconds
+  const [armed, setArmed] = useState<string | null>(null);
+  useEffect(() => {
+    if (!armed) return;
+    const t = window.setTimeout(() => setArmed(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [armed]);
+  useEffect(() => setArmed(null), [selection]);
   const actions = contextActions(selection, entities, volcanoes);
   const run = (a: ContextAction) => {
     const s = useStore.getState();
@@ -311,6 +366,17 @@ function ActionRow({ world, onFrame, onSection }: { world: WorldInfo; onFrame: (
         return onSection();
       case 'supply':
         return setSupplyOpen(!supplyOpen);
+      case 'sealVent':
+      case 'unsealVent':
+      case 'removeVent':
+        setArmed(null);
+        return command({ kind: a.id, volcanoId: a.volcanoId, ventId: a.ventId });
+      case 'removeDike':
+        setArmed(null);
+        return command({ kind: 'removeDike', volcanoId: a.volcanoId, dikeId: a.dikeId });
+      case 'blockDikes':
+      case 'allowDikes':
+        return command({ kind: 'blockDikes', volcanoId: a.volcanoId, blocked: a.id === 'blockDikes' });
       case 'water':
       case 'dig':
         if (selection?.type === 'point')
@@ -326,12 +392,12 @@ function ActionRow({ world, onFrame, onSection }: { world: WorldInfo; onFrame: (
           <Tip key={a.id} content={ACTION_TIP[a.id]}>
             <Button
               size="xs"
-              variant={a.id === 'stopEruption' ? 'destructive' : a.id === 'startEruption' || a.id === 'inject' ? 'default' : 'secondary'}
+              variant={a.id === 'stopEruption' || (DESTRUCTIVE.has(a.id) && armed === a.id) ? 'destructive' : a.id === 'startEruption' || a.id === 'inject' ? 'default' : 'secondary'}
               disabled={replay && a.id !== 'frame' && a.id !== 'section' && a.id !== 'supply'}
               aria-pressed={a.id === 'supply' ? supplyOpen : undefined}
-              onClick={() => run(a)}
+              onClick={() => (DESTRUCTIVE.has(a.id) && armed !== a.id ? setArmed(a.id) : run(a))}
             >
-              {ACTION_ICON[a.id]} {a.label}
+              {ACTION_ICON[a.id]} {DESTRUCTIVE.has(a.id) && armed === a.id ? 'Click again to remove' : a.label}
             </Button>
           </Tip>
         ))}
