@@ -18,6 +18,7 @@ const DEVICES = [
   ['iphone14-landscape', devices['iPhone 14 landscape']],
   ['pixel7', devices['Pixel 7']],
   ['ipad', devices['iPad Pro 11']],
+  ['desktop', { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, isMobile: false, hasTouch: false }],
 ].filter(([n]) => !only || only.includes(n));
 
 const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
@@ -82,7 +83,8 @@ async function layout(page, name, state) {
     return out;
   });
   for (const p of r.problems) problem(`${name}/${state}: ${p}`);
-  if (r.small.length) problem(`${name}/${state}: ${r.small.length} touch targets under 44 px: ${r.small.slice(0, 8).join(', ')}`);
+  const coarse = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+  if (coarse && r.small.length) problem(`${name}/${state}: ${r.small.length} touch targets under 44 px: ${r.small.slice(0, 8).join(', ')}`);
 }
 
 async function shot(page, name, state) {
@@ -176,12 +178,19 @@ async function perf(page, name) {
   const box = await page.locator('canvas').first().boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
-  await touch(cdp, 'touchStart', [[cx, cy]]);
+  const hasTouch = await page.evaluate(() => navigator.maxTouchPoints > 0);
+  if (hasTouch) await touch(cdp, 'touchStart', [[cx, cy]]);
+  else {
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+  }
   for (let k = 0; k < 120; k++) {
-    await touch(cdp, 'touchMove', [[cx + 60 * Math.sin(k / 10), cy]]);
+    if (hasTouch) await touch(cdp, 'touchMove', [[cx + 60 * Math.sin(k / 10), cy]]);
+    else await page.mouse.move(cx + 60 * Math.sin(k / 10), cy);
     await new Promise((r) => setTimeout(r, 50));
   }
-  await touch(cdp, 'touchEnd', []);
+  if (hasTouch) await touch(cdp, 'touchEnd', []);
+  else await page.mouse.up();
   const p1 = await page.evaluate(() => ({ frames: window.__typhonPerf.frames, t: performance.now(), s: { ...window.__typhonPerf } }));
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
   const fps = ((p1.frames - p0.frames) * 1000) / (p1.t - p0.t);
@@ -221,7 +230,7 @@ try {
       await page.keyboard.press('Escape');
       await page.waitForTimeout(400);
     } else problem(`${name}: no speed button in the header`);
-    if (name === DEVICES[0][0] || process.env.GESTURES === 'all') await gestures(page, name);
+    if (dev.hasTouch && (name === DEVICES[0][0] || process.env.GESTURES === 'all')) await gestures(page, name);
     if (name === DEVICES[0][0] || process.env.PERF === 'all') await perf(page, name);
     if (errors.length) problem(`${name}: page errors: ${errors.slice(0, 3).join(' | ')}`);
     await ctx.close();
