@@ -192,6 +192,8 @@ function MagmaBudgetView({ volcanoId }: { volcanoId: string }) {
   rows.push(['Erupted so far', formatVolume(b.eruptedM3)]);
   if (b.intrudedM3 > 0) rows.push(['Into dikes so far', formatVolume(b.intrudedM3)]);
   if (b.wallGrowthM3 > 0) rows.push(['Chamber growth so far', formatVolume(b.wallGrowthM3)]);
+  if (b.frozen) rows.push(['Chamber size', 'frozen']);
+  if ((b.refusedM3 ?? 0) > 0) rows.push(['Refused by the frozen chamber', formatVolume(b.refusedM3 ?? 0)]);
   return (
     <section className="flex flex-col gap-1.5 text-xs">
       <span className="font-medium text-muted-foreground">Magma budget</span>

@@ -28,7 +28,7 @@ export function budgetVerdict(b: MagmaBudget, overpressureMPa: number, ruptureMP
   if (ruptureMPa !== undefined && balance > ruptureMPa) {
     return {
       state: 'pinned',
-      text: `Supply exceeds what the conduit carries below the walls' limit: pressure is pinned at ${ruptureMPa.toFixed(1)} MPa and the excess goes into dikes (or chamber growth when dikes are off).`,
+      text: `Supply exceeds what the conduit carries below the walls' limit: pressure is pinned at ${ruptureMPa.toFixed(1)} MPa and the excess goes into dikes (${b.frozen ? 'or is refused at the source: the chamber size is frozen' : 'or chamber growth when dikes are off'}).`,
     };
   }
   const close = Math.abs(overpressureMPa - balance) <= Math.max(0.02 * balance, 0.05);

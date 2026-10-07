@@ -90,6 +90,38 @@ class WallRuptureDikeTest {
     }
 
     @Test
+    void aFrozenChamberRefusesWhatNoDikeTakesAndNeverGrows() {
+        // walls set to yield everything, but the size is frozen: nothing may grow the chamber
+        DikeTestWorld.World w = world(1, chamber().wallYieldFraction(1).freezeVolume(true).build(), fastConfig(), flat(), null);
+        w.dikes().setNucleationBlocked(true);
+        w.engine().step();
+        double volume = w.chamber().volumeM3();
+        double excess = excess(w.chamber());
+        w.engine().submit(new InjectRecharge("v", INJECTED, 1180, 50, 0.5, null, null));
+        run(w.engine(), 100);
+
+        assertEquals(volume, w.chamber().volumeM3(), 1e-6, "the frozen chamber keeps its size");
+        assertEquals(0, w.chamber().wallGrowthM3(), 1e-9);
+        assertEquals(excess, w.chamber().refusedVolumeM3(), 0.01 * excess, "the magma it could not hold is refused");
+        assertTrue(w.chamber().overpressureMPa() <= w.chamber().ruptureOverpressureMPa() + 1e-9);
+    }
+
+    @Test
+    void aFrozenChamberStillFeedsDikes() {
+        DikeTestWorld.World w = world(1, chamber().freezeVolume(true).build(), fastConfig(), flat(), null);
+        w.engine().step();
+        double volume = w.chamber().volumeM3();
+        double excess = excess(w.chamber());
+        w.engine().submit(new InjectRecharge("v", INJECTED, 1180, 50, 0.5, null, null));
+        List<EngineFrame> frames = run(w.engine(), 100);
+
+        assertFalse(events(frames, DikeEvents.DikeStarted.class).isEmpty());
+        assertTrue(dikeVolume(w.dikes()) >= 0.99 * excess);
+        assertEquals(volume, w.chamber().volumeM3(), 1e-6);
+        assertEquals(0, w.chamber().refusedVolumeM3(), 1e-6, "nothing refused while a dike carries it");
+    }
+
+    @Test
     void ruptureLimitIsComputedUnlessOverridden() {
         MagmaChamber computed = new MagmaChamber(chamber().build());
         assertEquals(2.0, computed.wallRuptureRatio(), 1e-12, "hoop stress at a spherical wall is half the overpressure");

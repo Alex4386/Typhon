@@ -153,6 +153,9 @@ final class Tuning {
         META.put("volcano:magma.chamber.wallRuptureRatio", m("Wall rupture limit", "× roof strength", 1.0, 10.0, false,
                 "Overpressure at which the chamber walls break, as a multiple of the roof strength (or eruption threshold)."
                         + " The chamber never holds more; magma beyond it leaves through a dike."));
+        META.put("volcano:magma.chamber.freezeVolume", m("Freeze chamber size", null, null, null, false,
+                "The chamber never grows: no wall yielding, and magma beyond the rupture limit that no dike carries is"
+                        + " refused at the deep source (the supply backs up) instead of enlarging the chamber."));
         META.put("volcano:magma.chamber.wallYieldFraction", m("Wall yielding", "fraction", 0.0, 1.0, false,
                 "Share of the magma beyond the rupture limit that the walls absorb by deforming (the chamber grows,"
                         + " the ground inflates) instead of feeding a dike. 0 = all into dikes, 1 = chamber growth only."));
@@ -249,7 +252,7 @@ final class Tuning {
      * lists here and decides nothing itself.
      */
     private static final List<String> CHAMBER_PANEL = List.of("magma.chamber.supply", "magma.chamber.recharge",
-            "magma.chamber.wall", "dikes.");
+            "magma.chamber.wall", "magma.chamber.freezeVolume", "dikes.");
 
     // ── Injection fields ──
 

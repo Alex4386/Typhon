@@ -780,6 +780,10 @@ export interface MagmaBudget {
   overpressureRateMPaPerS?: number;
   intrudedM3: number;
   wallGrowthM3: number;
+  /** Magma a frozen chamber turned away at its rupture limit (m³). */
+  refusedM3?: number;
+  /** The chamber's size is frozen (no growth). */
+  frozen?: boolean;
   eruptedM3: number;
   eruptionEndOverpressureMPa?: number;
 }

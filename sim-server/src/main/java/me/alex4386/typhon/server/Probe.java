@@ -330,6 +330,8 @@ final class Probe {
             budget.add("overpressureRateMPaPerS", Json.num(ch.overpressureRateMPaPerSecond())); // per second
             budget.add("intrudedM3", Json.num(ch.intrudedVolumeM3()));
             budget.add("wallGrowthM3", Json.num(ch.wallGrowthM3()));
+            budget.add("refusedM3", Json.num(ch.refusedVolumeM3()));
+            budget.addProperty("frozen", ch.config().freezeVolume());
             budget.add("eruptedM3", Json.num(ch.eruptedVolume()));
             budget.add("eruptionEndOverpressureMPa", Json.num(ch.config().eruptionEndOverpressureMPa()));
             chamber.add("budget", budget);

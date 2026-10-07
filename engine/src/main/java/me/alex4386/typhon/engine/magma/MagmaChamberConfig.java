@@ -43,7 +43,9 @@ import me.alex4386.typhon.engine.math.BlockPos;
  *     the larger of {@code tensileStrengthMPa} and the eruption threshold; NaN = computed (hoop stress, 2)
  * @param wallYieldFraction override for the share of magma beyond the rupture limit taken up by the walls
  *     yielding (inelastic growth) instead of a dike; NaN = computed from wall-rock relaxation vs. charging time
- * @param chamberId this chamber within its volcano's plumbing; {@link #MAIN} is the eruptive one
+ * @param freezeVolume the chamber never grows: no wall yielding, and magma beyond the rupture limit that no dike
+ *     takes is refused at the deep source (the supply backs up) instead of enlarging the chamber
+  * @param chamberId this chamber within its volcano's plumbing; {@link #MAIN} is the eruptive one
  */
 public record MagmaChamberConfig(
         String volcanoId,
@@ -76,7 +78,8 @@ public record MagmaChamberConfig(
         double samplePeriodSeconds,
         double wallRuptureRatio,
         double wallYieldFraction,
-        String chamberId) {
+        String chamberId,
+        boolean freezeVolume) {
 
     public MagmaChamberConfig {
         Objects.requireNonNull(volcanoId, "volcanoId");
@@ -161,6 +164,7 @@ public record MagmaChamberConfig(
         b.samplePeriodSeconds = samplePeriodSeconds;
         b.wallRuptureRatio = wallRuptureRatio;
         b.wallYieldFraction = wallYieldFraction;
+        b.freezeVolume = freezeVolume;
         b.chamberId = chamberId;
         return b;
     }
@@ -200,6 +204,7 @@ public record MagmaChamberConfig(
         private double samplePeriodSeconds = 5.0;
         private double wallRuptureRatio = Double.NaN; // computed (MagmaChamber#wallRuptureRatio)
         private double wallYieldFraction = Double.NaN; // computed (MagmaChamber#wallYieldFraction)
+        private boolean freezeVolume = false;
         private String chamberId = MAIN;
 
         private Builder(String volcanoId, BlockPos center) {
@@ -235,6 +240,7 @@ public record MagmaChamberConfig(
         public Builder samplePeriodSeconds(double v) { samplePeriodSeconds = v; return this; }
         public Builder wallRuptureRatio(double v) { wallRuptureRatio = v; return this; }
         public Builder wallYieldFraction(double v) { wallYieldFraction = v; return this; }
+        public Builder freezeVolume(boolean v) { freezeVolume = v; return this; }
         public Builder chamberId(String v) { chamberId = v; return this; }
         public Builder center(BlockPos v) { center = Objects.requireNonNull(v); return this; }
 
@@ -244,7 +250,7 @@ public record MagmaChamberConfig(
                     rechargeTemperatureC, rechargeSilicaWt, rechargeWaterWt, rechargeCo2Wt, rechargeCrystalFraction,
                     initialTemperatureC, initialSilicaWt, initialWaterWt, initialCo2Wt, initialOverpressureMPa,
                     wallTemperatureC, coolingTimescale, degassingTimescale, crystalSilicaWt, conduit, maxEruptionRate,
-                    stepPeriodSeconds, samplePeriodSeconds, wallRuptureRatio, wallYieldFraction, chamberId);
+                    stepPeriodSeconds, samplePeriodSeconds, wallRuptureRatio, wallYieldFraction, chamberId, freezeVolume);
         }
     }
 }

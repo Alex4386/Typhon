@@ -111,6 +111,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private boolean ruptureOffered;
     /** Magma that left the chamber into dikes, from rupture and as dikes grew (m³, cumulative). */
     private double intrudedVolume;
+    /** Magma the frozen chamber refused at its rupture limit (m³, cumulative; see MagmaChamberConfig#freezeVolume). */
+    private double refusedVolume;
     /** Magma received from / sent to other chambers of the plumbing (m³, cumulative). */
     private double transferredIn;
     private double transferredOut;
@@ -834,7 +836,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         if (!(overpressure > cap)) return 0;
         double excess = (overpressure - cap) * volume * effectiveCompressibility();
         overpressure = cap;
-        double yielded = wallYieldFraction(chargeRate) * excess;
+        double yielded = config.freezeVolume() ? 0 : wallYieldFraction(chargeRate) * excess;
         volume += yielded;
         inelasticGrowth += yielded;
         ruptureExcess += excess - yielded;
@@ -848,9 +850,19 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             return;
         }
         ruptureOffered = false;
-        volume += ruptureExcess;
-        inelasticGrowth += ruptureExcess;
+        if (config.freezeVolume()) {
+            // a frozen chamber cannot grow: the magma stays in the deep source (the supply backs up)
+            refusedVolume += ruptureExcess;
+        } else {
+            volume += ruptureExcess;
+            inelasticGrowth += ruptureExcess;
+        }
         ruptureExcess = 0;
+    }
+
+    /** Magma a frozen chamber refused at its rupture limit so far (m³). */
+    public double refusedVolumeM3() {
+        return refusedVolume;
     }
 
     /** Magma that left the chamber into dikes so far (m³). */
@@ -1281,6 +1293,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         out.addProperty("ruptureExcess", ruptureExcess);
         out.addProperty("ruptureOffered", ruptureOffered);
         out.addProperty("intrudedVolume", intrudedVolume);
+        out.addProperty("refusedVolume", refusedVolume);
         out.addProperty("transferredIn", transferredIn);
         out.addProperty("transferredOut", transferredOut);
         out.addProperty("temperature", temperature);
@@ -1346,6 +1359,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         ruptureExcess = in.has("ruptureExcess") ? in.get("ruptureExcess").getAsDouble() : 0;
         ruptureOffered = in.has("ruptureOffered") && in.get("ruptureOffered").getAsBoolean();
         intrudedVolume = in.has("intrudedVolume") ? in.get("intrudedVolume").getAsDouble() : 0;
+        refusedVolume = in.has("refusedVolume") ? in.get("refusedVolume").getAsDouble() : 0;
         transferredIn = in.has("transferredIn") ? in.get("transferredIn").getAsDouble() : 0;
         transferredOut = in.has("transferredOut") ? in.get("transferredOut").getAsDouble() : 0;
         temperature = in.get("temperature").getAsDouble();
