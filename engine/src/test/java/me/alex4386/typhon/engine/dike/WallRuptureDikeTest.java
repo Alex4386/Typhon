@@ -64,9 +64,9 @@ class WallRuptureDikeTest {
     }
 
     @Test
-    void ruptureNucleationCanBeSwitchedOff() {
+    void theDikesOverrideBlocksRuptureDikesToo() {
         DikeConfig config = fastConfig();
-        config.ruptureNucleation = false;
+        config.blocked = true;
         DikeTestWorld.World w = world(1, chamber().build(), config, flat(), null);
         w.engine().step();
         double excess = excess(w.chamber());

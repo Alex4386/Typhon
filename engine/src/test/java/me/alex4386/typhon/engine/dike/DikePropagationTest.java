@@ -157,19 +157,19 @@ class DikePropagationTest {
 
     @Test
     void nucleationNeedsPressureAndASealedConduit() {
-        DikeConfig sealed = fastConfig();
-        sealed.conduitSealing = 1;
-        sealed.maxInitiationRate = 1.0 / 10;
+        // how sealed the summit is comes from the chamber's live conduit openness, not a setting
+        DikeConfig spontaneous = fastConfig();
+        spontaneous.maxInitiationRate = 1.0 / 10;
+        java.util.function.BiFunction<Double, Double, me.alex4386.typhon.engine.magma.MagmaChamberConfig> withOpenness =
+                (p, o) -> basalt(p).conduit(me.alex4386.typhon.engine.magma.ConduitConfig.DEFAULT.withInitialOpenness(o)).build();
 
-        assertTrue(events(run(world(8, basalt(10).build(), sealed, flat(), null).engine(), 20 * 600),
+        assertTrue(events(run(world(8, withOpenness.apply(10.0, 0.0), spontaneous, flat(), null).engine(), 20 * 600),
                 DikeStarted.class).isEmpty(), "below the initiation threshold");
 
-        DikeConfig open = fastConfig();
-        open.conduitSealing = 0;
-        assertTrue(events(run(world(8, basalt(14.9).build(), open, flat(), null).engine(), 20 * 600),
+        assertTrue(events(run(world(8, withOpenness.apply(14.9, 1.0), spontaneous, flat(), null).engine(), 20 * 600),
                 DikeStarted.class).isEmpty(), "an open conduit vents at the summit instead");
 
-        assertFalse(events(run(world(8, basalt(14.9).build(), sealed, flat(), null).engine(), 20 * 600),
+        assertFalse(events(run(world(8, withOpenness.apply(14.9, 0.0), spontaneous, flat(), null).engine(), 20 * 600),
                 DikeStarted.class).isEmpty(), "near failure with a sealed conduit");
     }
 

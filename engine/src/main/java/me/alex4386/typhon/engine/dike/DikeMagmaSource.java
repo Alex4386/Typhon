@@ -33,6 +33,11 @@ public interface DikeMagmaSource {
     /** Removes {@code volume} m³ from the chamber; returns the overpressure drop (MPa). */
     double withdraw(double volume);
 
+    /** How open the summit conduit is, in [0, 1] (1 = open and venting: spontaneous dikes are unlikely). */
+    default double conduitOpenness() {
+        return 0.5;
+    }
+
     /** Magma pushed out of the ruptured chamber walls, waiting for a dike (m³). */
     default double ruptureExcessM3() {
         return 0;
@@ -62,6 +67,7 @@ public interface DikeMagmaSource {
             @Override public double withdraw(double volume) { return chamber.withdraw(volume); }
             @Override public double temperatureC() { return chamber.temperatureC(); }
             @Override public double ruptureExcessM3() { return chamber.ruptureExcessM3(); }
+            @Override public double conduitOpenness() { return chamber.conduitOpenness(); }
             @Override public double takeRuptureExcess() { return chamber.takeRuptureExcess(); }
         };
     }

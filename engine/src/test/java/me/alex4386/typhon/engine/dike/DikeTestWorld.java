@@ -65,7 +65,7 @@ final class DikeTestWorld {
 
     static DikeConfig fastConfig() {
         DikeConfig c = DikeConfig.defaults();
-        c.conduitSealing = 0; // only forced dikes unless a test opts in
+        c.maxInitiationRate = 0; // only forced and rupture dikes unless a test opts in
         return c;
     }
 

@@ -126,7 +126,7 @@ public final class DikePropagation implements Subsystem {
         if (activeCount() > 0 || forcedPending > 0) return RISING_STEP_SECONDS;
         // Keep a spontaneous dike unlikely within one step (≤ 10 %), so it starts, rises and erupts in
         // steps of its own rather than all inside a day-long quiet step.
-        double rate = nucleationBlocked ? 0 : nucleationRate();
+        double rate = blocked() ? 0 : nucleationRate();
         return rate > 0 ? Math.max(RISING_STEP_SECONDS, 0.1 / rate) : Double.POSITIVE_INFINITY;
     }
 
@@ -180,7 +180,12 @@ public final class DikePropagation implements Subsystem {
     }
 
     public boolean nucleationBlocked() {
-        return nucleationBlocked;
+        return blocked();
+    }
+
+    /** No new dikes: the definition's {@code dikes.blocked}, or the legacy runtime block. */
+    private boolean blocked() {
+        return config.blocked || nucleationBlocked;
     }
 
     private Dike find(int dikeId) {
@@ -220,7 +225,7 @@ public final class DikePropagation implements Subsystem {
         }
         pendingArrests.clear();
 
-        if (config.ruptureNucleation && !nucleationBlocked && magma.ruptureExcessM3() > 0) {
+        if (!blocked() && magma.ruptureExcessM3() > 0) {
             // Ruptured walls: the magma they could not hold leaves through a dike (a rising one, or a new one).
             Dike carrier = null;
             for (Dike dike : dikes) {
@@ -231,8 +236,7 @@ public final class DikePropagation implements Subsystem {
             }
             if (carrier == null && activeCount() < config.maxConcurrentDikes) carrier = start(context);
             if (carrier != null) carrier.volume += magma.takeRuptureExcess();
-        } else if (!nucleationBlocked && (config.nucleateDuringEruption || !magma.erupting())
-                && activeCount() < config.maxConcurrentDikes && random.chance(nucleationProbability(context))) {
+        } else if (!blocked() && activeCount() < config.maxConcurrentDikes && random.chance(nucleationProbability(context))) {
             start(context);
         }
 
@@ -253,7 +257,9 @@ public final class DikePropagation implements Subsystem {
         double f0 = config.initiationPressureRatio;
         if (ratio < f0) return 0;
         double x = Math.min(1, (ratio - f0) / (1 - f0));
-        return config.maxInitiationRate * config.conduitSealing * x * x;
+        // an open, venting summit conduit lets the pressure out there instead of through the walls
+        double sealing = 1 - Math.max(0, Math.min(1, magma.conduitOpenness()));
+        return config.maxInitiationRate * sealing * x * x;
     }
 
     private Dike start(StepContext context) {

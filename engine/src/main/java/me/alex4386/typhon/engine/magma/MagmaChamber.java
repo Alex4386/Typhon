@@ -499,7 +499,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         erupting = false;
         eruptionRate = 0;
         // A plugged outlet leaves the conduit sealed; otherwise it stays open for a while.
-        conduitOpenness = cause == Cause.SEALED ? 0 : 1;
+        // a sealed vent or a stop by hand plugs the conduit; an eruption that ran out of push leaves it open
+        conduitOpenness = cause == Cause.SEALED || cause == Cause.FORCED ? 0 : 1;
         conduit = null;
         conduitInput = null;
         context.outbox().emit(new MagmaEvents.EruptionEnded(
@@ -770,11 +771,13 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     /** Overpressure (MPa) at which the chamber walls rupture; never exceeded. */
     public double ruptureOverpressureMPa() {
-        return wallRuptureRatio(config) * Math.max(config.tensileStrengthMPa(), failureOverpressureMPa());
+        // one basis for every threshold: the rock's tensile strength (the reopen pressure of an open conduit
+        // never exceeds it, MagmaChamberConfig#reopenOverpressureMPa)
+        return wallRuptureRatio(config) * config.tensileStrengthMPa();
     }
 
     private static double ruptureCap(MagmaChamberConfig c) {
-        return wallRuptureRatio(c) * Math.max(c.tensileStrengthMPa(), c.conduit().reopenOverpressureMPa());
+        return wallRuptureRatio(c) * c.tensileStrengthMPa();
     }
 
     /**

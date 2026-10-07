@@ -191,6 +191,15 @@ public final class ConfigNode {
     static final Set<String> RETIRED = Set.of("timeCompression", "dormantTimeCompression", "eruptiveTimeCompression",
             "dormantTimeScale", "eruptiveTimeScale", "timeScale");
 
+    /**
+     * Keys merged into others or now derived from the physics (key → why); ignored with a warning so old
+     * definitions still load.
+     */
+    static final java.util.Map<String, String> MERGED = java.util.Map.of(
+            "conduitSealing", "dike likelihood now follows the live conduit openness",
+            "ruptureNucleation", "merged into dikes.blocked (wall rupture opens a dike unless dikes are blocked)",
+            "nucleateDuringEruption", "derived: an open, erupting conduit already makes spontaneous dikes unlikely");
+
     private static final java.util.logging.Logger LOG = java.util.logging.Logger.getLogger(ConfigNode.class.getName());
 
     /** Rejects keys that were never read; {@code valid} lists additional accepted keys for the message. */
@@ -198,6 +207,11 @@ public final class ConfigNode {
         List<String> unknown = new ArrayList<>();
         for (String key : values.keySet()) {
             if (used.contains(key)) continue;
+            if (MERGED.containsKey(key)) {
+                used.add(key);
+                LOG.warning(file + ": " + pathOf(key) + " is ignored: " + MERGED.get(key));
+                continue;
+            }
             if (RETIRED.contains(key)) {
                 used.add(key);
                 LOG.warning(file + ": " + pathOf(key) + " is ignored: time compression was removed (one physical"

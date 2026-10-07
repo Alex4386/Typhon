@@ -14,24 +14,18 @@ public final class DikeConfig {
 
     // ── Initiation ──
 
-    /**
-     * How sealed the summit conduit is, in [0, 1]. 0 = open conduit: overpressure always vents at the
-     * summit and no dikes form spontaneously; 1 = sealed: rupture through the chamber walls is likely.
-     */
-    public double conduitSealing = 0.5;
     /** Dikes may nucleate once overpressure exceeds this fraction of the roof tensile strength. */
     public double initiationPressureRatio = 0.85;
     /** Nucleation rate (per second) at full strength and full sealing; grows quadratically. */
     public double maxInitiationRate = 1.0 / 60.0;
     public int maxConcurrentDikes = 1;
     /**
-     * When the chamber walls rupture (overpressure at the chamber's rupture limit), a dike opens at once and
-     * carries the magma the walls could not hold, even during an eruption. Off: rupture magma only grows the
-     * chamber, and dikes form only by the random nucleation above.
+     * The one dike override: no new dikes from this chamber, neither spontaneous ones nor those wall rupture
+     * would open (rising dikes go on; forced ones still start). Off (default): the physics decides — wall
+     * rupture opens a dike at once, and spontaneous nucleation follows the overpressure and how sealed the
+     * summit conduit is (an open, erupting conduit vents the pressure instead).
      */
-    public boolean ruptureNucleation = true;
-    /** Random nucleation also while the chamber erupts through its summit (flank dikes mid-eruption). */
-    public boolean nucleateDuringEruption = false;
+    public boolean blocked = false;
     /** Dikes nucleate within this horizontal distance of the chamber centre (blocks). */
     public double startOffsetBlocks = 8;
 
@@ -98,12 +92,10 @@ public final class DikeConfig {
         DikeConfig c = new DikeConfig();
         c.stepPeriodSeconds = stepPeriodSeconds;
         c.metersPerBlock = metersPerBlock;
-        c.conduitSealing = conduitSealing;
         c.initiationPressureRatio = initiationPressureRatio;
         c.maxInitiationRate = maxInitiationRate;
         c.maxConcurrentDikes = maxConcurrentDikes;
-        c.ruptureNucleation = ruptureNucleation;
-        c.nucleateDuringEruption = nucleateDuringEruption;
+        c.blocked = blocked;
         c.startOffsetBlocks = startOffsetBlocks;
         c.shearModulusPa = shearModulusPa;
         c.poissonRatio = poissonRatio;
@@ -132,9 +124,6 @@ public final class DikeConfig {
     public void validate() {
         requirePositive("stepPeriodSeconds", stepPeriodSeconds);
         requirePositive("metersPerBlock", metersPerBlock);
-        if (!(conduitSealing >= 0 && conduitSealing <= 1)) {
-            throw new IllegalArgumentException("conduitSealing must be in [0, 1]");
-        }
         if (!(initiationPressureRatio > 0 && initiationPressureRatio < 1)) {
             throw new IllegalArgumentException("initiationPressureRatio must be in (0, 1)");
         }

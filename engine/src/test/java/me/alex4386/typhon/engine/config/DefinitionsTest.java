@@ -48,7 +48,7 @@ class DefinitionsTest {
                 supplyRate: 0.5
                 initialSilicaWt: 51
               conduit: {initialOpenness: 1.0}
-            dikes: {enabled: true, conduitSealing: 0.7}
+            dikes: {enabled: true, blocked: true}
             geothermal: {center: {x: -30, y: 70, z: 0}, maxGeysers: 3, alterableSurfaces: ["minecraft:stone"]}
             massFlows: {pdc: {frictionCoefficient: 0.2}}
             deformation: {enabled: false}
@@ -95,7 +95,7 @@ class DefinitionsTest {
         assertEquals(1.0e9, v.chamber().volume());
         assertEquals(0.5, v.chamber().supplyRate());
         assertEquals(1.0, v.chamber().conduit().initialOpenness());
-        assertEquals(0.7, v.dikes().conduitSealing);
+        assertTrue(v.dikes().blocked);
         assertEquals(3, v.geothermal().maxGeysers);
         assertTrue(v.geothermal().alterableSurfaces.contains(BlockId.minecraft("stone")));
         assertEquals(new BlockPos(-30, 70, 0), v.geothermalCenter());
