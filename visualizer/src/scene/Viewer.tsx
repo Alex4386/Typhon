@@ -97,11 +97,13 @@ function Sun({ position, target, span, shadows }: { position: [number, number, n
     waterUniforms.uSunDir.value.set(position[0] - target[0], position[1] - target[1], position[2] - target[2]).normalize();
   }, [position, target]);
   const clarity = useStore((s) => s.waterClarity);
+  const seeThrough = useStore((s) => s.waterSeeThrough);
   const invalidate = useThree((s) => s.invalidate);
   useEffect(() => {
     waterUniforms.uClarity.value = clarity;
+    waterUniforms.uSeeThrough.value = seeThrough;
     invalidate();
-  }, [clarity, invalidate]);
+  }, [clarity, seeThrough, invalidate]);
   useFrame(({ clock }) => {
     waterUniforms.uTime.value = clock.elapsedTime;
   });

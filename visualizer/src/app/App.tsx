@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { Hud, HudToasts } from './Hud';
+import { LoadingIndicator } from './LoadingIndicator';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { CameraBar, CameraHelp, CameraReadoutPanel, Minimap } from '../camera/CameraHud';
@@ -72,6 +73,7 @@ export function App() {
             top={
               <>
                 <PerfHud />
+                <LoadingIndicator />
                 <HudToasts />
               </>
             }

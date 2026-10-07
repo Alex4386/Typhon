@@ -29,6 +29,8 @@ export const waterUniforms = {
   uSky: uniform(new THREE.Color('#6f8296')),
   /** Light attenuation length of the water (m): open ocean ≈ 20–30, coastal ≈ 5–10 (View → Graphics). */
   uClarity: uniform(25),
+  /** See-through, 0 (physical) … 1 (glass): raises the transmittance T' = T + (1 − T)·s (View → Map). */
+  uSeeThrough: uniform(0.5),
 };
 
 const CLASSIC_WEBGL = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('renderer') === 'webgl';
@@ -101,7 +103,8 @@ function nodeWater(opts: { perVertexDepth: boolean; depthM?: number; opacity?: n
   const fresnel: N = float(0.02).add(pow(float(1).sub(ndv), 5).mul(0.98));
   const d: N = max(depth, 0);
   const path: N = d.div(max(abs(v.y), 0.2));
-  const transmit: N = exp(path.negate().div(u.uClarity));
+  const physical: N = exp(path.negate().div(u.uClarity));
+  const transmit: N = physical.add(float(1).sub(physical).mul(u.uSeeThrough));
   const sun: N = normalize(u.uSunDir);
   const h: N = normalize(sun.add(v));
   // the glint uses a normal that flattens with distance and a highlight that broadens with it: far
@@ -169,6 +172,7 @@ const fragment = /* glsl */ `
   uniform vec3 uSunColor;
   uniform vec3 uSky;
   uniform float uClarity;
+  uniform float uSeeThrough;
   uniform float uOpacity;
   uniform float uUseDepthAttr;
   varying float vDepth;
@@ -187,7 +191,8 @@ ${waveGlsl}
     vec3 v = normalize(toCam);
     float fresnel = 0.02 + 0.98 * pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 5.0);
     float d = max(vDepth, 0.0);
-    float transmit = exp(-(d / max(abs(v.y), 0.2)) / uClarity);
+    float physical = exp(-(d / max(abs(v.y), 0.2)) / uClarity);
+    float transmit = physical + (1.0 - physical) * uSeeThrough;
     vec3 sun = normalize(uSunDir);
     float near = 1.0 - smoothstep(80.0, 600.0, length(toCam));
     vec3 ns = normalize(mix(vec3(0.0, 1.0, 0.0), n, near));
@@ -220,6 +225,7 @@ function glslWater(opts: { perVertexDepth: boolean; depthM?: number; opacity?: n
       uSunColor: u.uSunColor as unknown as THREE.IUniform,
       uSky: u.uSky as unknown as THREE.IUniform,
       uClarity: u.uClarity as unknown as THREE.IUniform,
+      uSeeThrough: u.uSeeThrough as unknown as THREE.IUniform,
       uDepth: { value: opts.depthM ?? 200 },
       uUseDepthAttr: { value: opts.perVertexDepth ? 1 : 0 },
       uOpacity: { value: opts.opacity ?? 1 },

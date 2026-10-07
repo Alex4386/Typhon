@@ -90,6 +90,18 @@ export function ViewSettings() {
         <TabsTrigger value="graphics">Graphics</TabsTrigger>
       </TabsList>
       <TabsContent value="map" className="flex flex-col gap-5">
+        <PanelSection title="Under the water">
+          <SliderRow
+            label="See-through water"
+            help="Make the sea transparent enough to see the volcano under it. 0 % is how real water looks (it hides anything deeper than a few tens of metres); 100 % is like glass."
+            value={s.waterSeeThrough}
+            display={`${Math.round(s.waterSeeThrough * 100)} %`}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(v) => s.set({ waterSeeThrough: v })}
+          />
+        </PanelSection>
         <PanelSection title="Map colours">
           <RadioGroup
             value={s.colorMode}
