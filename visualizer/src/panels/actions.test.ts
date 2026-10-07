@@ -66,4 +66,20 @@ describe('inspector actions', () => {
     expect(ventLifecycle({ state: 'frozen', sealed: false })).toBe('frozen');
     expect(ventLifecycle({ erupting: true })).toBe('active');
   });
+
+  it('links a vent to the dikes feeding it and back', () => {
+    const withProps = (e: EntityView, props: Record<string, unknown>): EntityView => ({ ...e, props: props as EntityView['props'] });
+    const map: EntityMap = {
+      'chamber:a': ent('chamber:a', 'chamber', 'a'),
+      'vent:a:f1': withProps(ent('vent:a:f1', 'fissure', 'a'), { ventId: 'f1', state: 'active' }),
+      'dike:a:3': withProps({ ...ent('dike:a:3', 'dike', 'a'), label: 'Dike 3' }, { fissure: 'f1' }),
+      'dike:a:4': withProps(ent('dike:a:4', 'dike', 'a'), { fissure: 'other' }),
+    };
+    const links = (id: string) => contextActions({ type: 'entity', id }, map, {}).filter((a) => a.id === 'inspect');
+    expect(links('vent:a:f1')).toEqual([
+      { id: 'inspect', label: 'Inspect Dike 3', target: 'dike:a:3' },
+      { id: 'inspect', label: 'Inspect chamber', target: 'chamber:a' },
+    ]);
+    expect(links('dike:a:3').map((a) => 'target' in a && a.target)).toEqual(['vent:a:f1', 'chamber:a']);
+  });
 });

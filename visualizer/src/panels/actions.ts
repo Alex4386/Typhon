@@ -10,7 +10,8 @@ export type ContextAction =
   | { id: 'water' | 'dig'; label: string }
   | { id: 'removeVent'; label: string; volcanoId: string; ventId: string }
   | { id: 'removeDike'; label: string; volcanoId: string; dikeId: number }
-  | { id: 'removeVolcano'; label: string; volcanoId: string };
+  | { id: 'removeVolcano'; label: string; volcanoId: string }
+  | { id: 'inspect'; label: string; target: string };
 
 /** A state the Inspector shows as a checkbox (a setting that stays, unlike a one-off action). */
 export type ContextToggle =
@@ -81,12 +82,17 @@ export function contextActions(sel: Selection | null, entities: EntityMap, volca
       if (v) out.push(eruptionToggle(v, volcanoes?.[v]));
       const ventId = typeof e.props.ventId === 'string' ? e.props.ventId : null;
       const state = ventLifecycle(e.props);
+      if (v && ventId) out.push(...relatedDikes(entities, v, ventId));
+      if (v && entities[`chamber:${v}`]) out.push({ id: 'inspect', label: 'Inspect chamber', target: `chamber:${v}` });
       // only dike-fed fissures can be deleted; a summit vent is sealed instead
       if (v && ventId && state !== 'removed' && e.kind === 'fissure') out.push({ id: 'removeVent', label: 'Remove…', volcanoId: v, ventId });
       out.push({ id: 'frame', label: 'Frame' }, { id: 'section', label: 'Cross-section' });
       return out;
     }
     case 'dike': {
+      const fissure = typeof e.props.fissure === 'string' && v ? `vent:${v}:${e.props.fissure}` : null;
+      if (fissure && entities[fissure]) out.push({ id: 'inspect', label: 'Inspect fissure', target: fissure });
+      if (v && entities[`chamber:${v}`]) out.push({ id: 'inspect', label: 'Inspect chamber', target: `chamber:${v}` });
       out.push({ id: 'section', label: 'Section along the dike' }, { id: 'frame', label: 'Frame' });
       const n = dikeNumber(e.id);
       if (v && n !== null) out.push({ id: 'removeDike', label: 'Remove…', volcanoId: v, dikeId: n });
@@ -95,6 +101,14 @@ export function contextActions(sel: Selection | null, entities: EntityMap, volca
     default:
       return [{ id: 'frame', label: 'Frame' }, { id: 'section', label: 'Cross-section' }];
   }
+}
+
+/** Links to the dikes that feed a vent (a dike's `fissure` prop names the vent it opened). */
+function relatedDikes(entities: EntityMap, volcanoId: string, ventId: string): ContextAction[] {
+  return Object.values(entities)
+    .filter((d) => d.kind === 'dike' && d.volcanoId === volcanoId && d.props.fissure === ventId && d.removedAt === undefined)
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map((d) => ({ id: 'inspect' as const, label: `Inspect ${d.label || 'dike'}`, target: d.id }));
 }
 
 /** Lasting states of a selection, shown as checkboxes: a chamber's dike blocking, a vent's seal. */

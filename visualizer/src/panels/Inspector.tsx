@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowUpFromDot, Crosshair, Droplets, Pickaxe, Plus, Ruler, Square, Trash2, Triangle, X } from 'lucide-react';
+import { ArrowRight, ArrowUpFromDot, Crosshair, Droplets, Pickaxe, Plus, Ruler, Square, Trash2, Triangle, X } from 'lucide-react';
 import { Tip } from '@/components/tip';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -365,6 +365,7 @@ function Column({ c, world }: { c: InspectionMessage; world: WorldInfo }) {
 }
 
 const ACTION_ICON: Record<ContextAction['id'], ReactNode> = {
+  inspect: <ArrowRight />,
   inject: <Plus />,
   startEruption: <Triangle />,
   stopEruption: <Square />,
@@ -379,6 +380,7 @@ const ACTION_ICON: Record<ContextAction['id'], ReactNode> = {
 };
 
 const ACTION_TIP: Partial<Record<ContextAction['id'], ReactNode>> = {
+  inspect: 'Select it and show its properties',
   inject: 'Add a batch of magma to this chamber; the form starts from the magma its supply delivers',
   startEruption: 'Open a vent and start an eruption of this volcano now',
   stopEruption: 'End the eruption of this volcano now',
@@ -420,6 +422,8 @@ function ActionRow({ onFrame, onSection }: { onFrame: () => void; onSection: () 
       case 'stopEruption':
       case 'forceDike':
         return command({ kind: a.id, volcanoId: a.volcanoId });
+      case 'inspect':
+        return s.select({ type: 'entity', id: a.target });
       case 'frame':
         return onFrame();
       case 'section':
@@ -447,7 +451,7 @@ function ActionRow({ onFrame, onSection }: { onFrame: () => void; onSection: () 
     <>
       <div className="flex flex-wrap gap-1.5 px-3 pb-2" role="toolbar" aria-label="Actions">
         {actions.map((a) => (
-          <Tip key={a.id} content={ACTION_TIP[a.id]}>
+          <Tip key={a.id === 'inspect' ? `inspect:${a.target}` : a.id} content={ACTION_TIP[a.id]}>
             <Button
               size="xs"
               variant={a.id === 'stopEruption' || (DESTRUCTIVE.has(a.id) && armed === a.id) ? 'destructive' : a.id === 'startEruption' || a.id === 'inject' ? 'default' : 'secondary'}
