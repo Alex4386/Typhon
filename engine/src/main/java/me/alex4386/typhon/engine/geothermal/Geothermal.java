@@ -85,9 +85,9 @@ public final class Geothermal implements Subsystem, HeatSources {
     private final Map<HydrothermalFeature, Integer> counts = new EnumMap<>(HydrothermalFeature.class);
     private double hazardClock;
     private boolean prewarmed;
-    /** Columns lava has covered: column key → simulated time (s) it was last covered. */
+    /** Columns lava has covered: column key → time (s) it was last covered. */
     private final TreeMap<Long, Double> lavaCover = new TreeMap<>();
-    /** Simulated time of the current step (s). */
+    /** Time of the current step (s). */
     private double now;
     /** Last announced fumarole intensity and time (s), by column key. */
     private final TreeMap<Long, double[]> fumaroleReports = new TreeMap<>();
