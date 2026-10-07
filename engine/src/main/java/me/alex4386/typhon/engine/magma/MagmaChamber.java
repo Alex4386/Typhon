@@ -776,7 +776,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return wallRuptureRatio(config) * config.tensileStrengthMPa();
     }
 
-    private static double ruptureCap(MagmaChamberConfig c) {
+    /** The overpressure at which walls built from {@code c} rupture (a preview of a configuration). */
+    public static double ruptureCap(MagmaChamberConfig c) {
         return wallRuptureRatio(c) * c.tensileStrengthMPa();
     }
 

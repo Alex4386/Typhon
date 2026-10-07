@@ -391,6 +391,7 @@ final class EntityTracker {
                     p.add("wallYieldFraction", Json.num(roundSignificant(ch.wallYieldFraction(), 2)));
                     p.add("viscosityLog10", Json.num(roundSignificant(ch.viscosityLog10(), 3)));
                     p.add("supplyNowM3PerS", Json.num(roundSignificant(ch.supplyRate(), 3)));
+                    p.add("chamberRadiusM", Json.num(chamberRadiusM(ch.config())));
                 }
             } else if (kind.equals("connection") && p.has("connectionId")) {
                 configPath = "magma.connections[" + p.get("connectionId").getAsString() + "]";
@@ -401,6 +402,32 @@ final class EntityTracker {
             JsonArray related = related(kind, vid, p, out);
             if (!related.isEmpty()) o.add("related", related);
         }
+    }
+
+    /** The radius of a spherical chamber of the configured volume (m, 3 significant digits). */
+    static double chamberRadiusM(MagmaChamberConfig c) {
+        return roundSignificant(Math.cbrt(3 * c.volume() / (4 * Math.PI)), 3);
+    }
+
+    /**
+     * What the chambers' derived values would be under changed definitions, by entity id (a dry run's
+     * preview, so the Inspector can show them while a reload or reset setting is being dragged).
+     */
+    static JsonObject preview(List<me.alex4386.typhon.engine.config.VolcanoDefinition> volcanoes, java.util.Collection<String> changed) {
+        JsonObject out = new JsonObject();
+        for (var d : volcanoes) {
+            if (!changed.contains(d.id())) continue;
+            java.util.List<MagmaChamberConfig> chambers = new java.util.ArrayList<>();
+            if (d.chamber() != null) chambers.add(d.chamber());
+            chambers.addAll(d.plumbing().chambers());
+            for (MagmaChamberConfig c : chambers) {
+                JsonObject p = new JsonObject();
+                p.add("chamberRadiusM", Json.num(chamberRadiusM(c)));
+                p.add("ruptureOverpressureMPa", Json.num(roundSignificant(MagmaChamber.ruptureCap(c), 3)));
+                out.add(c.isMain() ? "chamber:" + d.id() : "chamber:" + d.id() + ":" + c.chamberId(), p);
+            }
+        }
+        return out;
     }
 
     /**

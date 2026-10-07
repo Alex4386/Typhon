@@ -149,6 +149,8 @@ interface Store {
   toasts: HudToast[];
   /** A change the server wants confirmed (it resets something), with what to do on each answer. */
   configPrompt: { result: import('../protocol/messages').ConfigResult; confirm: () => void; cancel: () => void } | null;
+  /** Derived values a pending reload/reset edit would give (dry-run preview), by entity id. */
+  panelPreview: Record<string, Record<string, number>>;
   /** Where the user clicked with the chamber tool: the placement dialog is open for it. */
   /** Build mode: the chamber being placed or edited (its ghost is drawn; fields and gizmos stay in sync). */
   buildDraft: import('../panels/builder').BuildDraft | null;
@@ -273,6 +275,7 @@ export const useStore = create<Store>((set, get) => ({
   showMinimap: false,
   toasts: [],
   configPrompt: null,
+  panelPreview: {},
   buildDraft: null,
   connectDraft: null,
   buildHistory: { undo: [], redo: [] },

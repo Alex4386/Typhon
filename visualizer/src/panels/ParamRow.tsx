@@ -18,6 +18,11 @@ import { atRest, editApplied, isComputed, overrideSeed, shownValue } from './par
 
 /** Edits are sent this long after the last keystroke/slider move. */
 const SEND_DEBOUNCE_MS = 200;
+/**
+ * An edit that rebuilds or resets something is sent once the slider rests this long; until then a dry
+ * run previews the derived values it would give, so dragging shows them without asking to confirm.
+ */
+const HEAVY_SEND_MS = 900;
 
 /**
  * Edits of world/volcano settings: pending values per parameter id (null = back to the default, or
@@ -30,7 +35,14 @@ export function useParamEdits() {
   const [pending, setPending] = useState<Record<string, ParamValue | null>>({});
   const queue = useRef<Record<string, ParamValue | null>>({});
   const timer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const previewTimer = useRef<number | undefined>(undefined);
+  useEffect(
+    () => () => {
+      window.clearTimeout(timer.current);
+      window.clearTimeout(previewTimer.current);
+    },
+    [],
+  );
   useEffect(() => {
     if (!schema) return;
     setPending((p) => {
@@ -43,22 +55,36 @@ export function useParamEdits() {
       return next;
     });
   }, [schema]);
-  const drop = (ids: string[]) =>
+  const drop = (ids: string[]) => {
+    useStore.getState().set({ panelPreview: {} });
     setPending((p) => {
       const next = { ...p };
       for (const id of ids) delete next[id];
       return next;
     });
+  };
   const edit = (p: ParamSpec, v: ParamValue | null) => {
     setPending((x) => ({ ...x, [p.id]: v }));
     if (v !== null && p.type === 'number' && fieldError(p, v) !== null) return;
     queue.current[p.id] = v;
+    const heavy = p.apply !== 'live';
+    if (heavy) {
+      window.clearTimeout(previewTimer.current);
+      previewTimer.current = window.setTimeout(() => {
+        void setConfig({ ...queue.current }, { dryRun: true }).then((r) => {
+          if (r.ok && r.preview) useStore.getState().set({ panelPreview: r.preview });
+        });
+      }, SEND_DEBOUNCE_MS);
+    }
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
       const batch = queue.current;
       queue.current = {};
-      void setConfig(batch).then((r) => showConfigResult(r, batch, drop));
-    }, SEND_DEBOUNCE_MS);
+      void setConfig(batch).then((r) => {
+        if (r.ok && !r.needsConfirmation) useStore.getState().set({ panelPreview: {} });
+        showConfigResult(r, batch, drop);
+      });
+    }, heavy ? HEAVY_SEND_MS : SEND_DEBOUNCE_MS);
   };
   return { pending, setPending, edit };
 }

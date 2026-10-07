@@ -1237,7 +1237,9 @@ final class Session implements AutoCloseable {
                     false, false);
         }
         if (request.dryRun()) {
-            return new ConfigOutcome(ConfigApi.result(plan, null, true, (System.nanoTime() - start) / 1000, null), false, false);
+            JsonObject r = ConfigApi.result(plan, null, true, (System.nanoTime() - start) / 1000, null);
+            if (plan.volcanoes != null) r.add("preview", EntityTracker.preview(plan.volcanoes, plan.changedVolcanoes));
+            return new ConfigOutcome(r, false, false);
         }
         if (plan.needsConfirmation() && !CONFIRMED.equals(request.confirm()) && !plan.token().equals(request.confirm())) {
             return new ConfigOutcome(ConfigApi.needsConfirmation(plan), false, false);

@@ -379,6 +379,8 @@ export interface ConfigResult {
   requestId?: number;
   ok: boolean;
   dryRun?: boolean;
+  /** A dry run's preview: entity id → derived values as they would be under the change. */
+  preview?: Record<string, Record<string, number>>;
   /** The most disruptive kind among the changes. */
   plan?: ApplyKind;
   applied?: ApplyKind;

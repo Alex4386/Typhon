@@ -112,6 +112,14 @@ class PlumbingBuilderE2ETest {
             String message = plan.body().toString();
             assertTrue(message.contains("chamber deep") && message.contains("the other chambers carry on"), message);
 
+            // a dry run previews what the chambers' derived values would become (shown while dragging)
+            Reply bigger = http(port, "PATCH", "/api/sessions/" + id + "/config?dryRun=true",
+                    "{\"volcanoes\":{\"" + vid + "\":{\"magma.chambers[deep].volume\":4.19e9}}}");
+            assertEquals(200, bigger.status(), bigger.body().toString());
+            JsonObject preview = bigger.body().getAsJsonObject("preview").getAsJsonObject("chamber:" + vid + ":deep");
+            assertEquals(1000, preview.get("chamberRadiusM").getAsDouble(), 1, preview.toString());
+            assertTrue(preview.get("ruptureOverpressureMPa").getAsDouble() > 0, preview.toString());
+
             // removing it: the server asks to confirm, then deletes it and its pathway
             Reply ask = http(port, "DELETE", base + "/chambers/deep", null);
             assertEquals(409, ask.status(), ask.body().toString());
