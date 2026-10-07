@@ -30,7 +30,7 @@ export const waterUniforms = {
   /** Light attenuation length of the water (m): open ocean ≈ 20–30, coastal ≈ 5–10 (View → Graphics). */
   uClarity: uniform(25),
   /** See-through, 0 (physical) … 1 (glass): raises the transmittance T' = T + (1 − T)·s (View → Map). */
-  uSeeThrough: uniform(0.5),
+  uSeeThrough: uniform(0.2),
 };
 
 const CLASSIC_WEBGL = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('renderer') === 'webgl';

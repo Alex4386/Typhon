@@ -324,7 +324,7 @@ export const useStore = create<Store>((set, get) => ({
   hiddenCategories: loadPref(PREF_KEYS.hiddenCategories, {}, isFlags),
   showPerf: loadPref(PREF_KEYS.showPerf, false, isBool),
   waterClarity: loadPref(PREF_KEYS.waterClarity, 25, isClarity),
-  waterSeeThrough: loadPref(PREF_KEYS.waterSeeThrough, 0.5, isFraction),
+  waterSeeThrough: loadPref(PREF_KEYS.waterSeeThrough, 0.2, isFraction),
   autoQuality: loadPref(PREF_KEYS.autoQuality, true, isBool),
 
   set: (partial) => set(partial),
