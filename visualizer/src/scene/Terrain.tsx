@@ -1,3 +1,4 @@
+import { notATap } from '../camera/gestures';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -642,7 +643,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
         castShadow={shadows}
         receiveShadow={shadows}
         onClick={(e) => {
-          if (e.delta > 4) return;
+          if (notATap(e)) return;
           e.stopPropagation();
           onPick([e.point.x, -e.point.z], e);
         }}

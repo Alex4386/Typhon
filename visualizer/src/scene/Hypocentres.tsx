@@ -1,3 +1,4 @@
+import { notATap } from '../camera/gestures';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -101,7 +102,7 @@ export function Hypocentres() {
       userData={{ quakes: drawn }}
       onClick={(e) => {
         const q = quakeOf(drawn.current, e);
-        if (!q || e.delta > 4 || useStore.getState().tool !== 'orbit') return;
+        if (!q || notATap(e) || useStore.getState().tool !== 'orbit') return;
         e.stopPropagation();
         useStore.getState().select({ type: 'quake', event: q });
       }}

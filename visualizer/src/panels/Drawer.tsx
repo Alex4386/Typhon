@@ -1,3 +1,4 @@
+import { COARSE_POINTER, useMediaQuery } from '../util/useMediaQuery';
 import { useEffect } from 'react';
 import { BuildPanel } from './BuildPanel';
 import { redoBuild, removeChamber, removeConnection, undoBuild } from './buildActions';
@@ -72,6 +73,7 @@ const SHORTCUTS: [string, string][] = [
 export function Guide() {
   const open = useStore((s) => s.guideOpen);
   const set = useStore((s) => s.set);
+  const touch = useMediaQuery(COARSE_POINTER);
   const close = () => {
     rememberGuideSeen();
     set({ guideOpen: false });
@@ -84,12 +86,25 @@ export function Guide() {
           <DialogDescription>A volcano simulator: magma, earthquakes, lava, ash and groundwater, computed live.</DialogDescription>
         </DialogHeader>
         <ol className="flex list-decimal flex-col gap-1.5 pl-5 text-sm">
-          <li>
-            <b>Look around</b>: drag to rotate, right-drag to pan, scroll to zoom. Double-click the ground to focus there.
-          </li>
-          <li>
-            <b>Select</b> anything — a vent, a dike, a hot spring, a quake or just the ground — by clicking it. The inspector on the right shows what it is, live.
-          </li>
+          {touch ? (
+            <>
+              <li>
+                <b>Look around</b>: drag with one finger to orbit, pinch to zoom, drag with two fingers to pan, twist two fingers to turn. Double-tap the ground to focus there.
+              </li>
+              <li>
+                <b>Select</b> anything — a vent, a dike, a hot spring, a quake or just the ground — by tapping it; hold a finger on the ground for what you can do there. The inspector slides up from the bottom; drag its handle to see more.
+              </li>
+            </>
+          ) : (
+            <>
+              <li>
+                <b>Look around</b>: drag to rotate, right-drag to pan, scroll to zoom. Double-click the ground to focus there.
+              </li>
+              <li>
+                <b>Select</b> anything — a vent, a dike, a hot spring, a quake or just the ground — by clicking it. The inspector on the right shows what it is, live.
+              </li>
+            </>
+          )}
           <li>
             <b>Play</b> the simulation and choose how fast to watch it. <i>Speed</i> only changes how fast you watch; the physics stays the same.
           </li>

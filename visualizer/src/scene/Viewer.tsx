@@ -1,3 +1,5 @@
+import { TouchGestures } from '../camera/TouchGestures';
+import { notATap } from '../camera/gestures';
 import { waterUniforms } from './water';
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
@@ -136,7 +138,7 @@ function PickPlane({ world, onPick }: { world: WorldInfo; onPick: (xy: XY, e: Th
       rotation={[-Math.PI / 2, 0, 0]}
       position={[(ext[0] + ext[2]) / 2, below, -(ext[1] + ext[3]) / 2]}
       onClick={(e) => {
-        if (e.delta > 4) return;
+        if (notATap(e)) return;
         e.stopPropagation();
         const st = useStore.getState();
         const mid = ((world.elevationRange[0] + world.elevationRange[1]) / 2) * st.verticalExaggeration;
@@ -238,6 +240,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
       <SurgeClouds world={world} />
       <EruptionColumn world={world} />
       <CameraRig world={world} />
+      <TouchGestures />
       <PerfProbe />
       <FrameScheduler world={world} />
     </Canvas>

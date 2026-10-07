@@ -1,3 +1,4 @@
+import { notATap } from '../camera/gestures';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -51,7 +52,7 @@ function handlersFor(get: (instanceId: number | undefined) => PickData | undefin
   return {
     onClick: (e: ThreeEvent<MouseEvent>) => {
       const data = get(e.instanceId);
-      if (!data || e.delta > 4 || useStore.getState().tool !== 'orbit' || !reach(e, data)) return;
+      if (!data || notATap(e) || useStore.getState().tool !== 'orbit' || !reach(e, data)) return;
       e.stopPropagation();
       useStore.getState().select(data.pick);
     },
