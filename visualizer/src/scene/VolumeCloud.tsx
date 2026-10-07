@@ -1,3 +1,4 @@
+import { scaledBudget } from '../util/device';
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -26,8 +27,8 @@ export interface CloudShape {
 }
 
 /** Billows per cloud at most, and in total. */
-const PER_CLOUD = 28;
-const MAX_BILLOWS = 160;
+const PER_CLOUD = scaledBudget(28);
+const MAX_BILLOWS = scaledBudget(160);
 /** Lobes travel from tail to head at this share of the cloud length per second (wall time). */
 const ADVECT = 0.06;
 

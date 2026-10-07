@@ -1,3 +1,4 @@
+import { currentTier } from '../util/device';
 import { TouchGestures } from '../camera/TouchGestures';
 import { notATap } from '../camera/gestures';
 import { waterUniforms } from './water';
@@ -209,7 +210,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
       key={quality /* the renderer's shadow map is fixed at creation */}
       gl={createRenderer as never}
       shadows={q.shadows}
-      dpr={q.dpr}
+      dpr={[q.dpr[0], Math.min(q.dpr[1], currentTier().dprCap)]}
       frameloop="demand"
       camera={{ position, fov: 38, near: 5, far: span * 20 }}
       style={{ cursor: tool !== 'orbit' ? 'crosshair' : camMode === 'fly' || camMode === 'walk' ? 'crosshair' : 'default', touchAction: 'none' }}

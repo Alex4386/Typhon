@@ -1,3 +1,4 @@
+import { currentTier, powerSave } from '../util/device';
 import { useThree } from '@react-three/fiber';
 import { useEffect } from 'react';
 import { useCamera } from '../camera/cameraStore';
@@ -71,7 +72,7 @@ export function FrameScheduler({ world }: { world: WorldInfo }) {
         slowFor = slow ? slowFor + 1 : 0;
         fastFor = wanted > 5 && !slow ? fastFor + 1 : 0;
         if (st.autoQuality) {
-          const next = nextDpr(dpr, Math.min(window.devicePixelRatio || 1, q.dpr[1]), delivered, wanted, slowFor, fastFor);
+          const next = nextDpr(dpr, Math.min(window.devicePixelRatio || 1, q.dpr[1], currentTier().dprCap, powerSave.on ? 1 : Infinity), delivered, wanted, slowFor, fastFor);
           if (next !== dpr) {
             dpr = next;
             setDpr(next);
@@ -83,7 +84,8 @@ export function FrameScheduler({ world }: { world: WorldInfo }) {
         wanted = 0;
         windowStart = wall;
       }
-      timer = window.setTimeout(tick, animating ? 1000 / q.ambientFps : 250);
+      // on battery saver the ambient animation runs at half rate
+      timer = window.setTimeout(tick, animating ? 1000 / (q.ambientFps * (powerSave.on ? 0.5 : 1)) : 250);
     };
     tick();
     return () => {

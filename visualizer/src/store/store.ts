@@ -1,3 +1,4 @@
+import { currentTier } from '../util/device';
 import { create } from 'zustand';
 import { Field, type FieldId } from '../protocol/fields';
 import { DETAIL_TOLERANCE_M, detailMismatch } from '../scene/detail';
@@ -608,7 +609,7 @@ function initialQuality(): Quality {
   } catch {
     // storage unavailable (private mode, sandbox): fall through
   }
-  return 'medium';
+  return currentTier().quality; // first visit: what this device can afford
 }
 
 /** Persists the quality choice for the next visit (best effort). */

@@ -1,3 +1,4 @@
+import { currentTier } from '../util/device';
 import { Field, type FieldId } from '../protocol/fields';
 import { FrameKind, decodeSectionFrame, decodeTileFrame, type TileFrame } from '../protocol/frames';
 import {
@@ -80,18 +81,28 @@ let pendingTiles: TileFrame[] = [];
 let tilesProcessed = 0;
 let flushScheduled = false;
 
-/** Tiles arrive in bursts; apply them to the store at most once per animation frame. */
+/**
+ * Tiles arrive in bursts; apply them to the store at most once per animation frame, at most the
+ * device's `tilesPerFrame` at a time. Only applied tiles are acknowledged, so on phones and slow links
+ * the server's credit window (§5.4) paces the stream instead of a burst landing in memory at once.
+ */
 function queueTile(f: TileFrame): void {
   pendingTiles.push(f);
+  scheduleFlush();
+}
+
+function scheduleFlush(): void {
   if (flushScheduled) return;
   flushScheduled = true;
   requestAnimationFrame(() => {
     flushScheduled = false;
-    const batch = pendingTiles;
-    pendingTiles = [];
+    const n = Math.min(pendingTiles.length, currentTier().tilesPerFrame);
+    const batch = pendingTiles.slice(0, n);
+    pendingTiles = pendingTiles.slice(n);
     useStore.getState().applyTiles(batch);
     tilesProcessed += batch.length;
     send({ type: 'flow', tilesProcessed });
+    if (pendingTiles.length > 0) scheduleFlush();
   });
 }
 

@@ -1,3 +1,4 @@
+import { currentTier } from '../util/device';
 import * as THREE from 'three';
 import { abs, attribute, cameraPosition, clamp, cos, dot, exp, float, fwidth, length, max, mix, normalize, positionWorld, pow, smoothstep, uniform, vec3 } from 'three/tsl';
 
@@ -43,6 +44,9 @@ const WAVES: [number, number, number, number][] = [
   [0.28, -0.96, 13.7, 0.05],
   [-0.81, 0.59, 7.9, 0.035],
 ];
+/** Phones and tablets (device tier): the three longest wave trains, no shoreline foam. */
+const LITE = currentTier().liteWater;
+const ACTIVE_WAVES = LITE ? WAVES.slice(0, 3) : WAVES;
 /** Water's own (back-scattered) colour, linear RGB. */
 const BODY = new THREE.Vector3(0.012, 0.075, 0.11);
 /** Waves fade out between these camera distances (m). */
@@ -80,7 +84,7 @@ function nodeWater(opts: { perVertexDepth: boolean; depthM?: number; opacity?: n
   const farFade: N = float(1).sub(smoothstep(WAVE_FADE_NEAR, WAVE_FADE_FAR, dist));
   let sx: N = float(0);
   let sy: N = float(0);
-  for (const [dx, dy, len, amp] of WAVES) {
+  for (const [dx, dy, len, amp] of ACTIVE_WAVES) {
     const k = (2 * Math.PI) / len;
     const w = Math.sqrt(9.81 * k);
     const ph: N = p.x.mul(dx * k).add(p.y.mul(dy * k)).sub(u.uTime.mul(w));
@@ -111,7 +115,7 @@ function nodeWater(opts: { perVertexDepth: boolean; depthM?: number; opacity?: n
   const alpha: N = clamp(float(1).sub(transmit.mul(float(1).sub(fresnel))).mul(opts.opacity ?? 1), 0.0, 1);
   let lit: N = u.uSky.mul(fresnel.mul(REFLECT)).add(body.mul(float(1).sub(fresnel)).mul(float(1).sub(transmit))).add(u.uSunColor.mul(spec));
   let a: N = alpha;
-  if (opts.perVertexDepth) {
+  if (opts.perVertexDepth && !LITE) {
     const ripple: N = cos(p.x.mul(0.33).add(u.uTime.mul(0.9))).mul(cos(p.y.mul(0.29).sub(u.uTime.mul(0.7)))).mul(0.5).add(0.5);
     const foam: N = float(1)
       .sub(smoothstep(0, FOAM_DEPTH, d))
@@ -152,7 +156,7 @@ const vertex = /* glsl */ `
   }
 `;
 
-const waveGlsl = WAVES.map(([dx, dy, len, amp]) => {
+const waveGlsl = ACTIVE_WAVES.map(([dx, dy, len, amp]) => {
   const k = (2 * Math.PI) / len;
   return `    { float ph = ${(dx * k).toFixed(6)} * p.x + ${(dy * k).toFixed(6)} * p.y - ${Math.sqrt(9.81 * k).toFixed(6)} * uTime;
       float aa = 1.0 - smoothstep(0.08, 0.2, fwidth(ph) / 3.14159265);
@@ -191,7 +195,7 @@ ${waveGlsl}
     vec3 body = vec3(${BODY.x}, ${BODY.y}, ${BODY.z}) * (0.55 + 0.45 * clamp(sun.y, 0.0, 1.0));
     float alpha = clamp((1.0 - transmit * (1.0 - fresnel)) * uOpacity, 0.0, 1.0);
     vec3 lit = uSky * fresnel * ${REFLECT.toFixed(2)} + body * (1.0 - fresnel) * (1.0 - transmit) + uSunColor * spec;
-    if (uUseDepthAttr > 0.5) {
+    if (uUseDepthAttr > 0.5 && ${LITE ? "false" : "true"}) {
       float ripple = cos(p.x * 0.33 + uTime * 0.9) * cos(p.y * 0.29 - uTime * 0.7) * 0.5 + 0.5;
       float foam = (1.0 - smoothstep(0.0, ${FOAM_DEPTH.toFixed(2)}, d)) * (0.35 + 0.65 * ripple) * ${FOAM_MAX.toFixed(2)}
         * (1.0 - smoothstep(${(FOAM_FAR * 0.5).toFixed(1)}, ${FOAM_FAR.toFixed(1)}, length(toCam)));

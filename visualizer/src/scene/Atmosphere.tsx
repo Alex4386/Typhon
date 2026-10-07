@@ -1,3 +1,4 @@
+import { scaledBudget } from '../util/device';
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -6,8 +7,8 @@ import { simNow, useStore } from '../store/store';
 import { displayZ } from './Terrain';
 
 /** Upper bounds; the active counts follow the quality setting. */
-const MAX_BOMBS = 400;
-const FOUNTAIN_PARTICLES = 700;
+const MAX_BOMBS = scaledBudget(400);
+const FOUNTAIN_PARTICLES = scaledBudget(700);
 const G = 9.81;
 
 /** Soft round puff (alpha falls off smoothly), drawn once into a canvas texture. */

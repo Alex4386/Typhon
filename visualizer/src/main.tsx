@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { useCamera } from './camera/cameraStore';
 import { getTile, useStore } from './store/store';
+import { watchBattery } from './util/device';
 import './index.css';
 import './app.css';
 
@@ -14,6 +15,8 @@ if (import.meta.env.DEV || new URLSearchParams(window.location.search).has("debu
   (window as unknown as { __typhonCamera: typeof useCamera }).__typhonCamera = useCamera;
   (window as unknown as { __typhonPerf: typeof perfStats }).__typhonPerf = perfStats;
 }
+
+watchBattery();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -1,3 +1,4 @@
+import { currentTier } from '../util/device';
 import { notATap } from '../camera/gestures';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -41,9 +42,14 @@ export function DetailTerrain({ world, onPick }: Props) {
     const above = (camera.position.y - ground) / st.verticalExaggeration;
     const x = camera.position.x;
     const y = -camera.position.z;
+    // mobile budget: detail only closer in, and only the coarsest levels wanted (each finer level is 4× the tiles)
+    const tier = currentTier();
     const want = levels
-      .filter((l) => wantsDetail(levelRect(world, l), x, y, above, active.includes(l.level) ? 1.3 : 1))
-      .map((l) => l.level);
+      .filter((l) => wantsDetail(levelRect(world, l), x, y, above, (active.includes(l.level) ? 1.3 : 1) * tier.detailReach))
+      .map((l) => l.level)
+      .sort((a, b) => b - a)
+      .slice(0, tier.maxDetailLevels)
+      .sort((a, b) => a - b);
     if (want.join(',') !== active.join(',')) {
       setActive(want);
       setDetailLevels(want);

@@ -1,3 +1,4 @@
+import { scaledBudget } from '../util/device';
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { SimEvent, WorldInfo } from '../protocol/messages';
@@ -6,11 +7,11 @@ import { BillowLayer, type Billow } from './Billows';
 import { displayZ } from './Terrain';
 
 /** Billows in all columns at most (one draw call). */
-const MAX_BILLOWS = 300;
+const MAX_BILLOWS = scaledBudget(300);
 /** Per column: rising column, umbrella, downwind ash. */
-const COLUMN = 110;
-const UMBRELLA = 80;
-const DRIFT = 60;
+const COLUMN = scaledBudget(110);
+const UMBRELLA = scaledBudget(80);
+const DRIFT = scaledBudget(60);
 /** Plume radius growth with height: top-hat entrainment α ≈ 0.1 gives db/dz = 6α/5 (Morton, Taylor & Turner 1956). */
 const SPREAD = 0.12;
 /** Neutral-buoyancy height as a share of the column top: H_T ≈ 1.32·H_B (Sparks 1986). */
