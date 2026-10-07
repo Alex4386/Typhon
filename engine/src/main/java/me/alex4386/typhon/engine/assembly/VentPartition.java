@@ -270,11 +270,13 @@ public final class VentPartition {
             // c_m (T − 100) / (c_w · 80 K + L) of water per kg (~0.5), and no more than the water present.
             double boilable = MAGMA_HEAT_CAPACITY * Math.max(0, tC - 100) / (WATER_HEAT_CAPACITY * 80 + WATER_LATENT_HEAT);
             steam = explosive * Math.min(ratio, boilable);
-            // The jet is a dense mixture: tephra, steam and the liquid water (slurry) it entrains; only the steam
-            // expands, so its speed follows the steam's share of the whole mixture. Observed cock's-tail jets reach
-            // 200–500 m, i.e. leave at ~60–100 m/s (Thorarinsson 1967; Moore 1985).
-            double liquid = Math.max(0, explosive * ratio - steam);
-            wetGas = explosive > 0 ? steam / (steam + explosive + liquid) : 0;
+            // The jet is a dense mixture: the steam has to blast out the whole wet vent fill it forms in, all the
+            // magma that met water and the liquid water left over (the slurry; Kokelaar 1983 "continuous uprush"),
+            // and only the steam expands, so the speed follows the steam's share of that mixture. Most of the
+            // slurry slumps back at the vent (the wet fallout); the jets carry the explosive tephra. Observed
+            // cock's-tail jets reach 200–500 m, i.e. leave at ~60–100 m/s (Thorarinsson 1967; Moore 1985).
+            double liquid = Math.max(0, wetMagma * ratio - steam);
+            wetGas = explosive > 0 ? steam / (steam + wetMagma + liquid) : 0;
             double hydrostatic = WATER_DENSITY * GRAVITY * Math.max(0, water.surfaceDepthM());
             double drivePa = Math.max(1e5, hydrostatic);
             jetSpeed = Math.sqrt(2 * wetGas * R_STEAM * 373.15 * Math.log(1 + drivePa / ambientPa));

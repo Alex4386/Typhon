@@ -139,6 +139,22 @@ class VentPartitionTest {
         assertTrue(sealed < 0.15, "a sealed crater dries out: " + sealed);
     }
 
+    @Test
+    void floodedVentMeetsWaterThroughoutAndJetsAtObservedSpeeds() {
+        // Magma rising through 20 m of open sea all meets water (contact is set by water supply, not by the
+        // MFCI efficiency); the explosive part drives dense cock's-tail jets at ~60–160 m/s (jets 200–500 m high,
+        // the largest bombs to ~1 km; Thorarinsson 1967; Moore 1985), with coarse tephra and aggregated wet
+        // ash, not a fine-ash plume.
+        ConduitSolution f = flow(11.8, 3000, 2, 1170, 46.5, 0.7, 0.2, 0, Branch.FASTEST);
+        for (double depth : new double[] {5, 20, 40}) {
+            VentPartition.Result p = VentPartition.partition(f, VentPartition.ambientPressurePa(depth), 2, 46.5,
+                    new VentPartition.Water(depth, 1, 0, 1, 0.45, Double.NaN), WOODS);
+            assertTrue(p.waterFragmentedMassFlux() > 0.8 * p.magmaMassFlux(), depth + " m: magma meets water: " + p);
+            assertTrue(p.jetSpeed() > 50 && p.jetSpeed() < 160, depth + " m: jet speed " + p.jetSpeed());
+            assertTrue(p.jetMassFlux() > p.columnMassFlux(), depth + " m: wet tephra flies in jets, little is lofted: " + p);
+        }
+    }
+
     private static double wetShare(ConduitSolution f, VentPartition.Water water) {
         VentPartition.Result p = VentPartition.partition(f, VentPartition.ambientPressurePa(water.surfaceDepthM()), 2, 46.5,
                 water, WOODS);
