@@ -19,7 +19,7 @@ import type {
   WorldInfo,
   XY,
 } from '../protocol/messages';
-import { isBool, isFlags, loadPref, PREF_KEYS, savePref } from './prefs';
+import { isBool, isClarity, isFlags, loadPref, PREF_KEYS, savePref } from './prefs';
 import { loadQuakeFilter, saveQuakeFilter, type QuakeFilter } from './quakeFilter';
 import { isImportant, mergeByTime } from '../panels/events';
 import { applyEntities, pruneEntities, type EntityMap, type EntityView, type Selection } from './entities';
@@ -226,6 +226,11 @@ interface Store {
   injectFor: string | null;
   /** Frame statistics overlay (persisted). */
   showPerf: boolean;
+  /**
+   * How far you see into the water (m): the light attenuation length of the display water. Open ocean is
+   * ~20–30 m; coastal or eruption-clouded water 5–10 m. Visual only.
+   */
+  waterClarity: number;
   /** Lower the resolution (and then quality) when frames get slow (persisted). */
   autoQuality: boolean;
 
@@ -316,6 +321,7 @@ export const useStore = create<Store>((set, get) => ({
   injectFor: null,
   hiddenCategories: loadPref(PREF_KEYS.hiddenCategories, {}, isFlags),
   showPerf: loadPref(PREF_KEYS.showPerf, false, isBool),
+  waterClarity: loadPref(PREF_KEYS.waterClarity, 25, isClarity),
   autoQuality: loadPref(PREF_KEYS.autoQuality, true, isBool),
 
   set: (partial) => set(partial),
@@ -534,6 +540,7 @@ if (typeof window !== 'undefined') {
     if (s.quakeFilter !== prev.quakeFilter) saveQuakeFilter(s.quakeFilter);
     if (s.hiddenCategories !== prev.hiddenCategories) savePref(PREF_KEYS.hiddenCategories, s.hiddenCategories);
     if (s.showPerf !== prev.showPerf) savePref(PREF_KEYS.showPerf, s.showPerf);
+    if (s.waterClarity !== prev.waterClarity) savePref(PREF_KEYS.waterClarity, s.waterClarity);
     if (s.autoQuality !== prev.autoQuality) savePref(PREF_KEYS.autoQuality, s.autoQuality);
     if (s.showSimulatedArea !== prev.showSimulatedArea) savePref(PREF_KEYS.showSimulatedArea, s.showSimulatedArea);
   });

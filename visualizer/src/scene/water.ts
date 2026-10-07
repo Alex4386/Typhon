@@ -9,8 +9,8 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
  *
  * Seeing through: the water column transmits T = exp(−d_path/λ) of the light from the bed, with
  * d_path = depth / max(cos θ_view, 0.2) (looking obliquely crosses more water) and λ ≈ 10 m (clear
- * coastal water, attenuation coefficient ~0.1 m⁻¹). A few metres of water show the bed clearly; 30 m
- * and more are nearly opaque. The surface's opacity is α = 1 − T·(1 − F): what is not transmitted
+ * the display's water clarity, default 25 m: clear open ocean, attenuation coefficient ~0.04 m⁻¹). The bed
+ * shows clearly through a few metres and fades out over a few attenuation lengths. The surface's opacity is α = 1 − T·(1 − F): what is not transmitted
  * is either reflected (Fresnel F, Schlick with water F0 ≈ 0.02) or scattered back in the water's own
  * colour. The bed itself is drawn by the terrain under the transparent surface.
  *
@@ -27,8 +27,8 @@ export const waterUniforms = {
   uSunColor: uniform(new THREE.Color('#fff1dc')),
   /** Sky colour seen in reflection (kept muted: a bright sky turns the horizon band white). */
   uSky: uniform(new THREE.Color('#6f8296')),
-  /** Light attenuation length of the water (m): clear coastal water ≈ 10. */
-  uClarity: uniform(10),
+  /** Light attenuation length of the water (m): open ocean ≈ 20–30, coastal ≈ 5–10 (View → Graphics). */
+  uClarity: uniform(25),
 };
 
 const CLASSIC_WEBGL = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('renderer') === 'webgl';

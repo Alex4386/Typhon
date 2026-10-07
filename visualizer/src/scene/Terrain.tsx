@@ -112,7 +112,8 @@ const LAHAR_MIN_M = 0.05;
  * of a full grid: through 35 m of water almost nothing of the bed shows (transmittance e^−3.5 ≈ 0.03),
  * so the flat 2-triangle surface looks the same at a 4000th of the triangles.
  */
-const DEEP_SEA_M = 35;
+/** Sea this many attenuation lengths deep shows (almost) nothing of its bed: e^−3.5 ≈ 0.03. */
+const DEEP_SEA_LENGTHS = 3.5;
 const LAHAR_LIFT_M = 0.35;
 
 /** Groundwater table: a translucent cyan sheet `depth` below the ground. */
@@ -368,6 +369,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
   const mode = useStore((s) => s.colorMode);
   const units = useStore((s) => s.units);
   const smoothR = useStore((s) => (s.smoothTerrain ? QUALITY[s.quality].smoothRadius : 0));
+  const clarity = useStore((s) => s.waterClarity);
   const shadows = useStore((s) => QUALITY[s.quality].shadows);
 
   useEffect(() => {
@@ -582,7 +584,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       }
       if (anyLava) compactIndex(lava, wetL, n, true);
       // deep open sea over the whole tile: its quad stands in for the full water grid
-      const deepQuad = seaOn && anyWater && !anyPond && shallowest >= DEEP_SEA_M && maxLift < 0.5 * vExag;
+      const deepQuad = seaOn && anyWater && !anyPond && shallowest >= DEEP_SEA_LENGTHS * clarity && maxLift < 0.5 * vExag;
       if (deepQuad) anyWater = false;
       if (fillMesh.current) {
         fillMesh.current.visible = deepQuad;
@@ -622,7 +624,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
     };
     coreJobs.set(key, job);
     queueRebuild(key, job.run, job.at);
-  }, [rev, vExag, dExag, mode, units, world, tx, ty, t, n, ground, lava, water, flow, smoothR, covered, levels]);
+  }, [rev, vExag, dExag, mode, units, world, tx, ty, t, n, ground, lava, water, flow, smoothR, covered, levels, clarity]);
 
   useEffect(
     () => () => {

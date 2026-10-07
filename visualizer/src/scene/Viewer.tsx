@@ -2,7 +2,7 @@ import { currentTier } from '../util/device';
 import { TouchGestures } from '../camera/TouchGestures';
 import { notATap } from '../camera/gestures';
 import { waterUniforms } from './water';
-import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu';
@@ -96,6 +96,12 @@ function Sun({ position, target, span, shadows }: { position: [number, number, n
   useEffect(() => {
     waterUniforms.uSunDir.value.set(position[0] - target[0], position[1] - target[1], position[2] - target[2]).normalize();
   }, [position, target]);
+  const clarity = useStore((s) => s.waterClarity);
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    waterUniforms.uClarity.value = clarity;
+    invalidate();
+  }, [clarity, invalidate]);
   useFrame(({ clock }) => {
     waterUniforms.uTime.value = clock.elapsedTime;
   });

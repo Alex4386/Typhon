@@ -22,7 +22,9 @@ export function savePref(key: string, v: unknown): void {
 
 export const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
 export const isFlags = (v: unknown): v is Record<string, boolean> => !!v && typeof v === 'object' && !Array.isArray(v) && Object.values(v).every(isBool);
+export const isClarity = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 2 && v <= 80;
 export const PREF_KEYS = {
+  waterClarity: 'typhon.waterClarity',
   hiddenCategories: 'typhon.hiddenCategories',
   showPerf: 'typhon.showPerf',
   autoQuality: 'typhon.autoQuality',

@@ -163,6 +163,18 @@ export function ViewSettings() {
             }
           />
         </PanelSection>
+        <PanelSection title="Water">
+          <SliderRow
+            label="Water clarity"
+            help="How far you see into the water: the distance over which light fades by e (≈ 63 %). Clear open ocean ~25 m, coastal 5–10 m, ash-laden water near an eruption a few metres. Display only."
+            value={s.waterClarity}
+            display={`${s.waterClarity.toFixed(0)} m`}
+            min={2}
+            max={60}
+            step={1}
+            onChange={(v) => s.set({ waterClarity: v })}
+          />
+        </PanelSection>
         <PanelSection title="Graphics">
           <div className="flex items-center justify-between gap-3">
             <Label htmlFor="quality" className="font-normal">
