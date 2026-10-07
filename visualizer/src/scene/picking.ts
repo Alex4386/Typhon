@@ -19,7 +19,7 @@ export function sceneToWorld(p: { x: number; z: number }): XY {
  * about 2.5 % of the distance (a few pixels at usual fields of view), at least 10 m.
  */
 export function pickRadius(cameraDistance: number): number {
-  return Math.max(10, Math.min(400, cameraDistance * 0.025));
+  return Math.max(30, Math.min(400, cameraDistance * 0.04));
 }
 
 /**
@@ -105,4 +105,49 @@ export function sectionThrough(sel: Selection | null, entities: EntityMap, lengt
     [a[0] - dir[0] * h, a[1] - dir[1] * h],
     [a[0] + dir[0] * h, a[1] + dir[1] * h],
   ];
+}
+
+/** Screen pixels around a dike's drawn path within which a click selects it. */
+export const DIKE_PICK_PX = 14;
+
+/** Distance (px) from point `p` to segment `a`–`b`. */
+export function segmentDistance(p: XY, a: XY, b: XY): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  const t = len2 > 0 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2)) : 0;
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+}
+
+/**
+ * The dike whose path, projected to the screen by `toScreen` (null for points behind the camera),
+ * passes nearest the click `at` (px), if within `maxPx`. Dikes are thin sheets far below the
+ * surface, so they are picked by screen distance rather than by hitting their mesh.
+ */
+export function nearestDikeOnScreen(entities: EntityMap, toScreen: (p: readonly number[]) => XY | null, at: XY, maxPx = DIKE_PICK_PX): Entity | null {
+  // the stretch of a dike inside a magma chamber belongs to the chamber: clicking there picks the chamber
+  const chambers = Object.values(entities).filter((c) => c.kind === 'chamber' && typeof c.props.radiusM === 'number');
+  const inside = (q: readonly number[]) => chambers.some((c) => Math.hypot(q[0] - c.at[0], q[1] - c.at[1], q[2] - c.at[2]) < Number(c.props.radiusM));
+  let best: Entity | null = null;
+  let bestD = maxPx;
+  for (const e of Object.values(entities)) {
+    if (e.kind !== 'dike' || e.hidden || ('removedAt' in e && e.removedAt !== undefined) || !e.path || e.path.length < 2) continue;
+    let prev: XY | null = null;
+    let prevInside = false;
+    for (const q of e.path) {
+      const s = toScreen(q);
+      const ins = inside(q);
+      const skip = ins && prevInside;
+      prevInside = ins;
+      if (s && prev && !skip) {
+        const d = segmentDistance(at, prev, s);
+        if (d <= bestD) {
+          best = e;
+          bestD = d;
+        }
+      }
+      prev = s;
+    }
+  }
+  return best;
 }

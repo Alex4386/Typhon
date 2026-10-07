@@ -19,14 +19,14 @@ import { Hypocentres } from './Hypocentres';
 import { LavaGlow } from './LavaGlow';
 import { LavaHalo } from './LavaHalo';
 import { SimulatedArea } from './SimulatedArea';
-import { EntityMarkers, pickDataOf, type PickData } from './EntityMarkers';
+import { EntityMarkers, firstMarkerHit, pickDataOf, relevantHits, type PickData } from './EntityMarkers';
 import { FarField } from './FarField';
 import { FrameScheduler } from './FrameScheduler';
 import { Markers } from './Markers';
 import { PerfProbe } from './PerfProbe';
 import { Plumbing } from './Plumbing';
 import { draftAtClick } from '../panels/builder';
-import { nearestSurfaceEntity, pickRadius } from './picking';
+import { nearestDikeOnScreen, nearestSurfaceEntity, pickRadius } from './picking';
 import { DetailTerrain } from './DetailTerrain';
 import { Terrain, displayZ } from './Terrain';
 import { rayGround } from './terrainMath';
@@ -177,18 +177,55 @@ export function Viewer({ world }: { world: WorldInfo }) {
     const s = useStore.getState();
     switch (s.tool) {
       case 'orbit': {
-        // x-ray markers (dikes, quakes) drawn over the ground win; then a marker next to the click; then a
-        // see-through volume the ray passes (the chamber under the summit); else the ground
+        // Priority: a marker the ray meets before the ground (vents, fissures, springs, plumes, chambers);
+        // then a dike (drawn through the ground, picked anywhere along the ray); then an entity next to the
+        // click on the surface; then a quake; then a see-through volume (the chamber under the summit);
+        // else the ground point. Visual layers (clouds, water, lava sheets) never take a click.
         let volume: PickData | undefined;
-        for (const hit of e.intersections) {
+        let xray: PickData | undefined;
+        let quake: Extract<SimEvent, { kind: 'seismic' }> | undefined;
+        let blocked = false;
+        for (const hit of relevantHits(e.intersections)) {
           const data = pickDataOf(hit);
-          if (data?.volume) volume ??= data;
-          else if (data?.xray) return s.select(data.pick);
+          if (data?.volume) {
+            volume ??= data;
+            continue;
+          }
+          if (data?.xray) {
+            if (data.pick.type === 'entity' && data.pick.id.startsWith('dike:')) xray ??= data;
+            continue;
+          }
           const quakes = hit.object.userData.quakes as { current: Extract<SimEvent, { kind: 'seismic' }>[] } | undefined;
-          if (quakes && hit.instanceId !== undefined && quakes.current[hit.instanceId]) return s.select({ type: 'quake', event: quakes.current[hit.instanceId] });
+          if (quakes) {
+            if (hit.instanceId !== undefined && quakes.current[hit.instanceId]) quake ??= quakes.current[hit.instanceId];
+            continue;
+          }
+          if (hit.object.userData.occluder === true) blocked = true;
+        }
+        const marker = firstMarkerHit(e.intersections);
+        if (marker) return s.select(pickDataOf(marker)!.pick);
+        if ((window as unknown as { __pickDebug?: boolean }).__pickDebug) {
+          const hits = relevantHits(e.intersections).map((h) => `${pickDataOf(h)?.label ?? (h.object.userData.occluder ? 'ground' : 'quake')}@${h.distance.toFixed(0)}`);
+          console.log(`PICKDBG onPick blocked=${blocked} xray=${xray?.label} quake=${!!quake} volume=${volume?.label} hits=${hits.join(', ')}`);
+        }
+        if (xray) return s.select(xray.pick);
+        // dikes are thin sheets far below: a click within a few pixels of one's drawn path picks it
+        if (s.showChambers) {
+          const el = e.nativeEvent.target as HTMLElement;
+          const w = el.clientWidth;
+          const h = el.clientHeight;
+          const v = new THREE.Vector3();
+          const toScreen = (q: readonly number[]): XY | null => {
+            v.set(q[0], q[2] * s.verticalExaggeration, -q[1]).project(e.camera);
+            return v.z > 1 ? null : [((v.x + 1) / 2) * w, ((1 - v.y) / 2) * h];
+          };
+          const rect = el.getBoundingClientRect();
+          const dike = nearestDikeOnScreen(s.entities, toScreen, [e.nativeEvent.clientX - rect.left, e.nativeEvent.clientY - rect.top]);
+          if (dike) return s.select({ type: 'entity', id: dike.id });
         }
         const near = nearestSurfaceEntity(s.entities, xy, pickRadius(e.distance) / Math.max(1, s.verticalExaggeration * 0.5));
         if (near) return s.select({ type: 'entity', id: near.id });
+        if (quake) return s.select({ type: 'quake', event: quake });
         s.select(volume ? volume.pick : { type: 'point', at: xy });
         return;
       }

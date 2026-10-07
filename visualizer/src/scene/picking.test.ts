@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import type { EntityMap, EntityView } from '../store/entities';
-import { frameDistance, nearestSurfaceEntity, pickRadius, sceneToWorld, sectionThrough, selectionAnchor, toScene } from './picking';
+import { frameDistance, nearestDikeOnScreen, nearestSurfaceEntity, pickRadius, sceneToWorld, sectionThrough, segmentDistance, selectionAnchor, toScene } from './picking';
+
+describe('dike picking on screen', () => {
+  // a top-down "screen": x px = map x / 10, y px = map y / 10; points below −5000 m count as behind the camera
+  const toScreen = (q: readonly number[]): [number, number] | null => (q[2] < -5000 ? null : [q[0] / 10, q[1] / 10]);
+  const dikes: EntityMap = {
+    dike: view('dike', 'dike', [300, 100, -500], { path: [[100, 100, -3000], [300, 100, -1500], [600, 100, -500]] }),
+    gone: view('gone', 'dike', [0, 0, 0], { path: [[0, 0, -100], [1000, 1000, -100]], removedAt: 1 }),
+  };
+
+  it('measures the distance to a segment, clamped at its ends', () => {
+    expect(segmentDistance([5, 3], [0, 0], [10, 0])).toBeCloseTo(3);
+    expect(segmentDistance([-4, 3], [0, 0], [10, 0])).toBeCloseTo(5);
+  });
+
+  it('picks a dike within a few pixels of its drawn path, not further away or removed ones', () => {
+    expect(nearestDikeOnScreen(dikes, toScreen, [40, 18])?.id).toBe('dike'); // 8 px off the path
+    expect(nearestDikeOnScreen(dikes, toScreen, [40, 40])).toBeNull(); // 30 px off
+    expect(nearestDikeOnScreen(dikes, toScreen, [50, 50])).toBeNull(); // only the removed dike runs here
+  });
+});
 
 function view(id: string, kind: string, at: [number, number, number], extra: Partial<EntityView> = {}): EntityView {
   return { id, kind, label: id, at, props: {}, createdAt: 0, updatedAt: 0, seenAt: 0, fresh: false, ...extra };
@@ -23,8 +43,9 @@ describe('picking', () => {
   });
 
   it('pick tolerance grows with distance but stays bounded', () => {
-    expect(pickRadius(0)).toBe(10);
-    expect(pickRadius(4000)).toBe(100);
+    // at least 30 m: the drawn (smoothed) ground can sit tens of metres off a vent's true position
+    expect(pickRadius(0)).toBe(30);
+    expect(pickRadius(4000)).toBe(160);
     expect(pickRadius(1e6)).toBe(400);
   });
 

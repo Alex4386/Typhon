@@ -1,4 +1,3 @@
-import { notATap } from '../camera/gestures';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -99,13 +98,9 @@ export function Hypocentres() {
       args={[undefined, material, MAX]}
       renderOrder={11}
       frustumCulled={false}
+      // clicks are resolved by the view's pick priority (Viewer onPick): a quake only wins when no marker,
+      // dike or surface entity is under the pointer, so explosion quakes under a vent never steal its clicks
       userData={{ quakes: drawn }}
-      onClick={(e) => {
-        const q = quakeOf(drawn.current, e);
-        if (!q || notATap(e) || useStore.getState().tool !== 'orbit') return;
-        e.stopPropagation();
-        useStore.getState().select({ type: 'quake', event: q });
-      }}
       onPointerMove={(e) => {
         const q = quakeOf(drawn.current, e);
         if (!q || useStore.getState().tool !== 'orbit') return;

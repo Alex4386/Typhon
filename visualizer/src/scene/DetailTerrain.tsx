@@ -216,6 +216,7 @@ function DetailTile({ world, level, tx, ty, onPick }: { world: WorldInfo; level:
   return (
     <mesh
       ref={mesh}
+      userData={{ occluder: true }}
       visible={false}
       geometry={geo}
       castShadow={shadows}

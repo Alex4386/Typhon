@@ -628,6 +628,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
     <group>
       <mesh
         ref={groundMesh}
+        userData={{ occluder: true }}
         visible={false}
         geometry={ground}
         castShadow={shadows}

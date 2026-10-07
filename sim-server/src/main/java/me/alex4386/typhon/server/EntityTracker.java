@@ -244,7 +244,7 @@ final class EntityTracker {
                 if (vent.emergent() && ch.eruptionCount() == 0 && !(erupting && active.contains(vent.id()))) continue;
                 boolean fissure = vent.kind() == VentKind.FISSURE;
                 JsonObject o = entity("vent:" + vid + ":" + vent.id(), fissure ? "fissure" : "vent", vid,
-                        fissure ? fissureLabel(vent.id()) : "Vent " + vent.id(), map.point(vent.position()));
+                        fissure ? fissureLabel(vent.id()) : ventLabel(vent.id()), map.point(vent.position()));
                 JsonObject p = o.getAsJsonObject("props");
                 p.addProperty("ventId", vent.id());
                 p.addProperty("shape", vent.kind().name());
@@ -346,6 +346,12 @@ final class EntityTracker {
             out.put("lava:field", o);
         }
         return out;
+    }
+
+    /** A summit vent's name: "Summit vent" for the main one (preset "summit", emergent "vent"), else "Vent <id>". */
+    static String ventLabel(String ventId) {
+        if (ventId.equals("summit") || ventId.equals("vent")) return "Summit vent";
+        return "Vent " + ventId.replace('-', ' ').replace('_', ' ');
     }
 
     /** "Fissure from dike 2" for fissures the engine names after their dike, else "Fissure <id>". */

@@ -47,11 +47,18 @@ function setCursor(e: ThreeEvent<PointerEvent>, cursor: string | null) {
  * pointer (instanced meshes) or returns the object's own.
  */
 function handlersFor(get: (instanceId: number | undefined) => PickData | undefined) {
-  const reach = (e: ThreeEvent<PointerEvent | MouseEvent>, data: PickData) =>
-    !!data.xray || (e.intersections[0]?.object === e.eventObject && e.intersections[0]?.instanceId === e.instanceId);
+  // the first thing the ray meets that matters for picking: purely visual layers (clouds, plume billows,
+  // water, lava sheets) let clicks through; only markers and the ground itself stop them
+  const reach = (e: ThreeEvent<PointerEvent | MouseEvent>, data: PickData) => {
+    if (data.xray) return true;
+    const first = firstMarkerHit(e.intersections);
+    return first?.object === e.eventObject && first?.instanceId === e.instanceId;
+  };
   return {
     onClick: (e: ThreeEvent<MouseEvent>) => {
       const data = get(e.instanceId);
+      if ((window as unknown as { __pickDebug?: boolean }).__pickDebug)
+        console.log(`PICKDBG marker ${data?.label} tap=${!notATap(e)} tool=${useStore.getState().tool} reach=${data ? reach(e, data) : null}`);
       if (!data || notATap(e) || useStore.getState().tool !== 'orbit' || !reach(e, data)) return;
       e.stopPropagation();
       useStore.getState().select(data.pick);
@@ -83,6 +90,41 @@ function handlersFor(get: (instanceId: number | undefined) => PickData | undefin
 /** Pointer handlers shared by every pickable marker. */
 export function pickHandlers(data: PickData) {
   return { userData: { pickData: data }, ...handlersFor(() => data) };
+}
+
+/**
+ * Hits that matter for picking, nearest first: markers (with pick data), quake points and the ground
+ * (meshes flagged `userData.occluder`). Everything else drawn is see-through to clicks.
+ */
+export function relevantHits<T extends { object: THREE.Object3D; instanceId?: number }>(hits: readonly T[]): T[] {
+  return hits.filter((h) => pickDataOf(h) !== undefined || h.object.userData.occluder === true || h.object.userData.quakes !== undefined);
+}
+
+/**
+ * How far behind the first ground hit a marker may lie and still be clicked (m): markers sit on the
+ * ground, and the displayed (smoothed, exaggerated) ground can bulge a few tens of metres in front of them.
+ */
+export function groundTolerance(distance: number): number {
+  return Math.max(40, distance * 0.05);
+}
+
+/**
+ * The marker a click lands on: the nearest hit with pick data (not see-through volumes, x-ray or quakes)
+ * that is not hidden behind the ground by more than {@link groundTolerance}.
+ */
+export function firstMarkerHit<T extends { object: THREE.Object3D; instanceId?: number; distance: number }>(hits: readonly T[]): T | undefined {
+  let ground = Number.POSITIVE_INFINITY;
+  for (const h of hits) {
+    if (h.object.userData.occluder === true) {
+      ground = Math.min(ground, h.distance);
+      continue;
+    }
+    const d = pickDataOf(h);
+    if (!d || d.volume || d.xray) continue;
+    if (h.distance - ground <= groundTolerance(h.distance)) return h;
+    return undefined;
+  }
+  return undefined;
 }
 
 /** Pick data of a ray hit: a marker's own, or that of the instance hit on an instanced marker. */
@@ -287,6 +329,11 @@ function ShapedMarker({ p, vExag, selected, hovered }: { p: Placed; vExag: numbe
         <mesh ref={body} rotation={[-Math.PI / 2, 0, 0]} position={[0, 4, 0]} renderOrder={6} {...handlers}>
           <torusGeometry args={[ventR, Math.max(4, ventR * 0.12), 6, 48]} />
           <meshBasicMaterial transparent opacity={0} />
+          {/* the ring's hole is the crater: an invisible disc makes the whole crater clickable */}
+          <mesh {...handlers}>
+            <circleGeometry args={[ventR, 32]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
+          </mesh>
         </mesh>
       )}
       {e.kind === 'fissure' && (
