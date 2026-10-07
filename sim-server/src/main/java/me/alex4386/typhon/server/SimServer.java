@@ -740,9 +740,50 @@ public final class SimServer implements AutoCloseable {
             c.send(Json.error("badRequest", "command object required", requestId));
             return;
         }
-        Session.CommandResult r = s.command(msg.getAsJsonObject("command")).get(30, TimeUnit.SECONDS);
+        JsonObject cmd = msg.getAsJsonObject("command");
+        if ("blockDikes".equals(Json.str(cmd, "kind")) && s.worldDir() != null && blockDikesInConfig(c, s, cmd, requestId)) return;
+        Session.CommandResult r = s.command(cmd).get(30, TimeUnit.SECONDS);
         if (requestId != null) ack(c, requestId, r.ok(), r.message());
         if (!r.ok()) c.send(Json.error(r.code(), r.message(), requestId));
+    }
+
+    /**
+     * {@code blockDikes} is the volcano's {@code dikes.blocked} setting: the command writes it to the
+     * configuration (one source, saved with the world, shown in the Inspector), and clears the legacy
+     * runtime flag so the setting alone decides. False when the command is malformed (the engine path
+     * then reports why).
+     */
+    private boolean blockDikesInConfig(ClientConnection c, Session s, JsonObject cmd, Long requestId) throws Exception {
+        String vid = Json.str(cmd, "volcanoId");
+        if (vid == null || !cmd.has("blocked") || !cmd.get("blocked").isJsonPrimitive() || !cmd.get("blocked").getAsJsonPrimitive().isBoolean()) {
+            return false;
+        }
+        JsonObject values = new JsonObject();
+        values.addProperty("volcano." + vid + ".dikes.blocked", cmd.get("blocked").getAsBoolean());
+        Session.ConfigOutcome outcome;
+        try {
+            outcome = s.applyConfig(ConfigApi.Request.fromParams(values, false, null));
+        } catch (ConfigApi.Rejected e) {
+            if (requestId != null) ack(c, requestId, false, e.getMessage());
+            c.send(Json.error("badRequest", e.getMessage(), requestId));
+            return true;
+        }
+        JsonObject r = outcome.response();
+        if (!r.get("ok").getAsBoolean()) {
+            String why = r.has("errors") && !r.getAsJsonArray("errors").isEmpty()
+                    ? r.getAsJsonArray("errors").get(0).getAsJsonObject().get("message").getAsString() : "Could not change the dike setting";
+            if (requestId != null) ack(c, requestId, false, why);
+            c.send(Json.error("badRequest", why, requestId));
+            return true;
+        }
+        JsonObject clear = new JsonObject();
+        clear.addProperty("kind", "blockDikes");
+        clear.addProperty("volcanoId", vid);
+        clear.addProperty("blocked", false);
+        s.command(clear).get(30, TimeUnit.SECONDS);
+        if (requestId != null) ack(c, requestId, true, null);
+        configApplied(s, outcome);
+        return true;
     }
 
     private void section(ClientConnection c, JsonObject msg, Long requestId) throws Exception {

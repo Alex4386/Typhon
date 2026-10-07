@@ -125,6 +125,27 @@ class ConfigApiTest {
     }
 
     @Test
+    void blockDikesCommandIsTheDikesBlockedSetting() throws Exception {
+        try (TestClient c = client()) {
+            String id = world(c, "block");
+            try {
+                String vid = onlyVolcano(id);
+                c.send("{\"type\":\"command\",\"requestId\":61,\"command\":{\"kind\":\"blockDikes\",\"volcanoId\":\"" + vid + "\",\"blocked\":true}}");
+                JsonObject ack = c.await(m -> m.type().equals("ack") && m.json().get("requestId").getAsLong() == 61, 30).json();
+                assertTrue(ack.get("ok").getAsBoolean(), ack.toString());
+                JsonObject dikes = http("GET", id, null, null).body().getAsJsonObject("volcanoes").getAsJsonObject(vid).getAsJsonObject("dikes");
+                assertTrue(dikes.get("blocked").getAsBoolean(), "the command wrote the setting: " + dikes);
+                assertTrue(server.session(id).live().volcanoes().get(0).dikes().nucleationBlocked(), "and it is in effect");
+                c.send("{\"type\":\"command\",\"requestId\":62,\"command\":{\"kind\":\"blockDikes\",\"volcanoId\":\"" + vid + "\",\"blocked\":false}}");
+                c.await(m -> m.type().equals("ack") && m.json().get("requestId").getAsLong() == 62, 30);
+                assertFalse(server.session(id).live().volcanoes().get(0).dikes().nucleationBlocked(), "one source: unblocking clears it");
+            } finally {
+                close(id);
+            }
+        }
+    }
+
+    @Test
     void dryRunAppliesNothingAndInvalidPatchesAreAtomic() throws Exception {
         try (TestClient c = client()) {
             String id = world(c, "dry");
