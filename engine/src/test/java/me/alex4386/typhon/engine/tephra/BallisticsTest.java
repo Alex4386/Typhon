@@ -137,7 +137,7 @@ class BallisticsTest {
     }
 
     @Test
-    void bigFastBombDigsCraterLeavesHotBlockThatCools() {
+    void bigFastBombDigsAContinuousCrater() {
         TerrainModel terrain = new TerrainModel();
         TephraConfig config = vacuum();
         TephraSubsystem tephra = new TephraSubsystem("tephra", terrain, config);
@@ -153,23 +153,12 @@ class BallisticsTest {
         assertEquals(1.0, landed.diameter());
 
         int x = landed.position().x(), z = landed.position().z();
-        List<BlockChange> changes = new ArrayList<>();
-        frames.forEach(f -> changes.addAll(f.blockChanges()));
-        assertTrue(changes.stream().anyMatch(ch -> ch.to().id().equals(BlockId.AIR) && ch.pos().y() == 63),
-                "crater excavates the surface");
-
-        BlockChange hot = changes.stream().filter(ch -> ch.to().id().equals(BlockId.minecraft("magma_block")))
-                .findFirst().orElseThrow();
-        assertEquals(x, hot.pos().x());
-        assertEquals(z, hot.pos().z());
-        BlockChange cooled = changes.stream().filter(ch -> ch.pos().equals(hot.pos())
-                        && ch.to().id().equals(BlockId.minecraft("basalt")))
-                .findFirst().orElseThrow();
-        assertEquals(BlockId.minecraft("magma_block"), cooled.expected());
+        double surface = terrain.world().surfaceZ(x, z);
+        double depth = 64 - surface;
+        assertTrue(depth > 0.05, "the crater lowers the surface: " + depth);
+        // paraboloid of the crater radius in metres, not whole blocks
+        assertTrue(depth < 0.5 * landed.craterRadius() * 1.0 + 1e-6, "no deeper than the crater shape: " + depth);
         assertEquals(0, tephra.pendingCoolings());
-        assertEquals(BlockId.minecraft("basalt"), terrain.column(x, z).surface());
-        assertEquals(hot.pos().y(), terrain.column(x, z).groundY());
-        assertTrue(hot.pos().y() < 64, "bomb rests in its crater");
     }
 
     @Test

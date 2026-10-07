@@ -504,7 +504,8 @@ public final class Geothermal implements Subsystem, HeatSources {
             BlockId expected = y == g ? column.surface() : null;
             set(context, new BlockPos(x, y, z), expected, BlockState.of(GeothermalBlocks.WATER));
         }
-        terrain.setColumn(x, z, new TerrainColumn(potentY, g, GeothermalBlocks.POTENT_SULFUR));
+        // the vent pit is waterBlocks feature blocks deep (≤ 1 m each), never whole 20 m columns
+        terrain.excavate(x, z, waterBlocks * featureBlockM(), true, GeothermalBlocks.POTENT_SULFUR);
         register(new PlacedFeature(x, potentY, z, HydrothermalFeature.GEYSER, waterBlocks));
 
         for (int dz = -1; dz <= 1; dz++) {
@@ -559,7 +560,7 @@ public final class Geothermal implements Subsystem, HeatSources {
             TerrainColumn column = terrain.column(p[0], p[1]);
             set(context, new BlockPos(p[0], g, p[1]), column.surface(), BlockState.of(GeothermalBlocks.WATER));
             if (floor != null) set(context, new BlockPos(p[0], g - 1, p[1]), null, BlockState.of(floor));
-            terrain.setColumn(p[0], p[1], new TerrainColumn(g - 1, g, floor != null ? floor : column.surface()));
+            terrain.excavate(p[0], p[1], featureBlockM(), true, floor != null ? floor : column.surface());
             register(new PlacedFeature(p[0], g, p[1], kind, 0));
         }
 
@@ -1064,4 +1065,13 @@ public final class Geothermal implements Subsystem, HeatSources {
         loadReports(in, "fumaroleReports", fumaroleReports);
         loadReports(in, "hazardReports", hazardReports);
     }
+
+    /**
+     * Size of one geothermal "feature block" (m): a block in a block-scaled world, but at most 1 m, so a
+     * spring pool or a geyser vent on 20 m real-scale columns is metres deep, not tens of metres.
+     */
+    private double featureBlockM() {
+        return Math.min(terrain.world().spec().metersPerColumn(), 1.0);
+    }
+
 }

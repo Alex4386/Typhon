@@ -43,8 +43,6 @@ public final class DeformationModel implements Subsystem {
     private final Supplier<List<DikeGeometry>> dikes;
     private final TerrainModel terrain;
 
-    /** Whole blocks of uplift already applied per column (packed x/z key); absent = 0. */
-    private final Map<Long, Integer> applied = new HashMap<>();
     private double lastTime;
 
     /**
@@ -159,56 +157,37 @@ public final class DeformationModel implements Subsystem {
 
     // ── Terrain ──
 
+    /**
+     * Writes the modelled uplift into the world model's continuous uplift field (metres per column, the
+     * displayed and physical ground is surface + uplift). Never moves ground in whole blocks: a host that
+     * shows blocks quantises the uplifted surface itself (mc-projection).
+     */
     private void adjustTerrain(StepContext context) {
+        var world = terrain.world();
         int radius = config.terrainRadiusBlocks;
-        int changes = 0;
         int raised = 0;
         int lowered = 0;
-        outer:
         for (int dz = -radius; dz <= radius; dz++) {
             for (int dx = -radius; dx <= radius; dx++) {
                 if (dx * dx + dz * dz > radius * radius) continue;
                 int x = config.centerX + dx;
                 int z = config.centerZ + dz;
-                TerrainColumn column = terrain.column(x, z);
-                if (column == null) continue;
-
-                long key = key(x, z);
-                int already = applied.getOrDefault(key, 0);
-                int target = (int) (upliftAt(x, z) / config.metersPerBlock); // truncate toward zero
-                if (target == already) continue;
-
-                int g = column.groundY();
-                boolean wet = column.waterY() != TerrainColumn.NO_WATER;
-                if (target > already) {
-                    BlockId expected = wet && column.waterY() > g ? WATER : BlockId.AIR;
-                    context.outbox().setBlock(BlockChange.replace(new BlockPos(x, g + 1, z), expected,
-                            BlockState.of(column.surface())));
-                    terrain.setGround(x, z, g + 1, column.surface());
-                    already++;
-                    raised++;
-                } else {
-                    BlockState fill = wet && column.waterY() >= g ? BlockState.of(WATER) : BlockState.AIR;
-                    context.outbox().setBlock(BlockChange.replace(new BlockPos(x, g, z), column.surface(), fill));
-                    terrain.setGround(x, z, g - 1, column.surface());
-                    already--;
-                    lowered++;
-                }
-                if (already == 0) applied.remove(key);
-                else applied.put(key, already);
-
-                if (++changes >= config.maxTerrainChangesPerCheck) break outer;
+                if (!world.isKnown(x, z)) continue;
+                double before = world.uplift(x, z);
+                double after = upliftAt(x, z);
+                if (Math.abs(after - before) < UPLIFT_REPORT_M) continue;
+                world.setUplift(x, z, after);
+                if (after > before) raised++;
+                else lowered++;
             }
         }
-        if (changes > 0) {
+        if (raised + lowered > 0) {
             context.outbox().emit(new DeformationEvents.GroundDeformed(context.time(), config.volcanoId, raised, lowered));
         }
     }
 
-    /** Whole blocks of deformation applied to a column so far (positive = raised). */
-    public int appliedBlocks(int x, int z) {
-        return applied.getOrDefault(key(x, z), 0);
-    }
+    /** Uplift changes smaller than this (m) are not written or reported. */
+    private static final double UPLIFT_REPORT_M = 0.005;
 
     @Override
     public DeformationConfig config() {
@@ -224,34 +203,13 @@ public final class DeformationModel implements Subsystem {
     @Override
     public void saveState(StateWriter writer) {
         writer.json().addProperty("lastTime", lastTime);
-        // Applied whole-block uplift per column, one 16×16 int array per chunk.
-        Map<Long, int[]> chunks = new TreeMap<>();
-        for (Map.Entry<Long, Integer> e : applied.entrySet()) {
-            int x = (int) (e.getKey() >> 32);
-            int z = (int) (long) e.getKey();
-            long chunkKey = ((long) (x >> 4) << 32) | ((z >> 4) & 0xffffffffL);
-            chunks.computeIfAbsent(chunkKey, k -> new int[256])[((z & 15) << 4) | (x & 15)] = e.getValue();
-        }
-        StateWriter.Field field = writer.field("appliedUplift", 1);
-        for (Map.Entry<Long, int[]> e : chunks.entrySet()) {
-            field.put((int) (e.getKey() >> 32), (int) (long) e.getKey(), new FieldChunk().ints("blocks", e.getValue()));
-        }
+        // the uplift itself lives in the world model (saved with it)
     }
 
     @Override
     public void loadState(StateReader reader) {
         lastTime = reader.json().get("lastTime").getAsDouble();
-        applied.clear();
-        StateReader.Field field = reader.field("appliedUplift");
-        if (field == null) return;
-        for (StateReader.Entry entry : field.chunks()) {
-            int[] blocks = entry.data().ints("blocks");
-            for (int i = 0; i < blocks.length; i++) {
-                if (blocks[i] == 0) continue;
-                int x = (entry.chunkX() << 4) | (i & 15);
-                int z = (entry.chunkZ() << 4) | (i >> 4);
-                applied.put(((long) x << 32) | (z & 0xffffffffL), blocks[i]);
-            }
-        }
+        // saves from before the continuous uplift carried whole applied blocks ("appliedUplift"); the blocks
+        // they raised are already part of those worlds' ground, so the field is ignored
     }
 }

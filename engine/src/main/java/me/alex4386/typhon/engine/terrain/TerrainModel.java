@@ -248,6 +248,27 @@ public final class TerrainModel implements Subsystem {
         return (int) Math.floor(surfaceZ / world.spec().metersPerColumn() + 0.5) - 1;
     }
 
+    /**
+     * Lowers a column's ground by {@code depthM} metres of the world model (continuous) and, with
+     * {@code flood}, leaves water standing up to the old surface (a pool or a geyser vent). The block cache
+     * follows the new surface; nothing changes by whole blocks.
+     *
+     * @return the depth actually removed (m)
+     */
+    public double excavate(int x, int z, double depthM, boolean flood, BlockId surface) {
+        double before = world.surfaceZ(x, z);
+        if (!Double.isFinite(before) || !(depthM > 0)) return 0;
+        double removed = world.erode(x, z, depthM, false).removedM();
+        double after = world.surfaceZ(x, z);
+        if (flood && removed > 0) world.setWaterZ(x, z, Math.max(before, Double.isFinite(world.waterZ(x, z)) ? world.waterZ(x, z) : before));
+        TerrainChunk chunk = chunks.computeIfAbsent(key(x >> 4, z >> 4), k -> new TerrainChunk(x >> 4, z >> 4));
+        TerrainColumn current = chunk.get(x, z);
+        int groundY = blockForSurface(after);
+        int waterY = flood && removed > 0 ? Math.max(groundY, blockForSurface(before)) : current.waterY();
+        chunk.set(x, z, new TerrainColumn(groundY, waterY, surface != null ? surface : current.surface()));
+        return removed;
+    }
+
     public void setGround(int x, int z, int groundY, BlockId surface) {
         setGround(x, z, groundY, surface, UnitTable.UNATTRIBUTED);
     }

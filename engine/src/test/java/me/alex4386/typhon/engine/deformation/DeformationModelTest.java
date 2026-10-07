@@ -175,38 +175,28 @@ class DeformationModelTest {
     }
 
     @Test
-    void wholeBlocksOfUpliftRaiseTheTerrainOneStepAtATime() {
+    void upliftIsWrittenContinuouslyIntoTheWorldModelAndReturnsOnDeflation() {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.overpressure = 50;
         World w = world(magma, null, flat(32));
-        int target = (int) (w.model().upliftAt(0, 0) / 4);
-        assertTrue(target >= 3, "test source should lift several blocks: " + target);
+        double target = w.model().upliftAt(0, 0);
+        assertTrue(target > 0.5, "test source should lift the ground: " + target);
+        var world = w.terrain().world();
 
-        List<EngineFrame> first = run(w.engine(), 20);
-        BlockChange change = first.get(0).blockChanges().stream()
-                .filter(c -> c.pos().equals(new BlockPos(0, 65, 0))).findFirst().orElseThrow();
-        assertEquals(BlockId.AIR, change.expected());
-        assertEquals(BlockState.of(STONE), change.to());
-        assertEquals(65, w.terrain().column(0, 0).groundY());
-        assertEquals(1, w.model().appliedBlocks(0, 0));
+        List<EngineFrame> first = run(w.engine(), 20 * 20);
+        assertEquals(target, world.uplift(0, 0), 0.01, "the world model carries the modelled uplift");
+        assertEquals(w.model().upliftAt(4, 0), world.uplift(4, 0), 0.01, "a continuous field, not whole blocks");
+        assertEquals(64, w.terrain().column(0, 0).groundY(), "the stratigraphy is not raised in blocks");
         assertFalse(events(first, GroundDeformed.class).isEmpty());
-
-        run(w.engine(), 20 * 20);
-        assertEquals(target, w.model().appliedBlocks(0, 0));
-        assertEquals(64 + target, w.terrain().column(0, 0).groundY());
-        assertNull(w.terrain().column(1000, 1000));
+        assertTrue(first.stream().allMatch(f -> f.blockChanges().isEmpty()), "no block edits");
 
         magma.overpressure = 0;
-        List<EngineFrame> relax = run(w.engine(), 20 * 20);
-        assertEquals(0, w.model().appliedBlocks(0, 0));
-        assertEquals(64, w.terrain().column(0, 0).groundY(), "deflation returns the ground");
-        assertTrue(relax.stream().flatMap(f -> f.blockChanges().stream())
-                .anyMatch(c -> c.pos().equals(new BlockPos(0, 64 + target, 0)) && c.expected().equals(STONE)
-                        && c.to().equals(BlockState.AIR)));
+        run(w.engine(), 20 * 20);
+        assertEquals(0, world.uplift(0, 0), 0.01, "deflation returns the ground");
     }
 
     @Test
-    void saveAndRestoreKeepsAppliedDeformation() {
+    void saveAndRestoreKeepsTheUplift() {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.overpressure = 50;
         World reference = world(magma, null, flat(32));
@@ -222,7 +212,7 @@ class DeformationModelTest {
         StubMagmaState magma3 = StubMagmaState.basalt();
         magma3.overpressure = 50;
         World second = world(magma3, saved, live);
-        assertEquals(first.model().appliedBlocks(0, 0), second.model().appliedBlocks(0, 0));
+        assertEquals(first.terrain().world().uplift(0, 0), second.terrain().world().uplift(0, 0));
         assertEquals(expected.subList(60, 400), run(second.engine(), 340));
     }
 

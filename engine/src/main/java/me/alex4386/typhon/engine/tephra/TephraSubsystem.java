@@ -522,28 +522,27 @@ public final class TephraSubsystem implements Subsystem {
     }
 
     /**
-     * Paraboloid crater, depth 0.5·r·(1 − (d/r)²). The newly exposed floor keeps the old surface id in
-     * the terrain model (the engine does not know what lies beneath).
+     * Paraboloid crater of radius {@code radius} columns and depth 0.5·R·(1 − (d/R)²) in metres (R the radius
+     * in metres), eroded from the world model as a continuous thickness. The block view follows the eroded
+     * surface (a host quantises it); nothing is dug in whole blocks.
      */
     private void dig(StepContext context, int x, int z, double radius) {
+        var world = terrain.world();
+        double l = metersPerBlock();
         int reach = (int) Math.ceil(radius);
         for (int dz = -reach; dz <= reach; dz++) {
             for (int dx = -reach; dx <= reach; dx++) {
                 double d = Math.sqrt(dx * dx + dz * dz);
                 if (d > radius) continue;
-                int depth = (int) Math.round(0.5 * radius * (1 - (d / radius) * (d / radius)));
-                if (depth < 1) continue;
+                double depth = 0.5 * radius * l * (1 - (d / radius) * (d / radius));
+                if (depth < 0.01) continue;
                 TerrainColumn column = terrain.column(x + dx, z + dz);
                 if (column == null || column.surface().equals(BEDROCK) || column.surface().equals(BlockId.AIR)) continue;
-                for (int k = 0; k < depth; k++) {
-                    int y = column.groundY() - k;
-                    BlockId to = column.waterY() != TerrainColumn.NO_WATER && y <= column.waterY() ? WATER : BlockId.AIR;
-                    BlockId expected = k == 0 ? column.surface() : null;
-                    context.outbox().setBlock(new BlockChange(
-                            new BlockPos(x + dx, y, z + dz), expected, BlockState.of(to)));
+                world.erode(x + dx, z + dz, depth, false);
+                double surface = world.surfaceZ(x + dx, z + dz);
+                if (Double.isFinite(surface)) {
+                    terrain.updateBlockCache(x + dx, z + dz, terrain.blockForSurface(surface), column.surface());
                 }
-                terrain.world().erode(x + dx, z + dz, depth * metersPerBlock(), false);
-                terrain.updateBlockCache(x + dx, z + dz, column.groundY() - depth, column.surface());
             }
         }
     }
