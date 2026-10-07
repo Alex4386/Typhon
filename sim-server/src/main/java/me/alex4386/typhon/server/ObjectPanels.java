@@ -53,6 +53,9 @@ final class ObjectPanels {
                     + "maxSpeed|freezeSpeed|stallPressure|minOpening|maxOpening|maxStrikeLength|startOffset|"
                     + "Fissure).*");
 
+    /** A chamber's position and depth: set by placing or moving it in Build mode. */
+    static final Pattern BUILD_ONLY = Pattern.compile("magma\\.(chamber|chambers\\[[^\\]]+\\])\\.(center\\..*|lithostaticDepth)");
+
     /** Chamber settings (main {@code magma.chamber.*} or a further chamber's element). */
     private static final List<Rule> CHAMBER = List.of(
             r("supplyRate", "supply", PRIMARY, 0),
@@ -75,8 +78,8 @@ final class ObjectPanels {
             r("wallRuptureRatio", "overrides", PRIMARY, 2),
             r("wallYieldFraction", "overrides", PRIMARY, 3),
             r("freezeVolume", "overrides", PRIMARY, 4),
-            // geometry is set in Build mode (position and depth), the same for every chamber
-            r("center.*|lithostaticDepth|id|chamberId", "details", MORE, 90));
+            // (position and depth are set in Build mode: see BUILD_ONLY)
+            r("id|chamberId", "details", MORE, 90));
 
     private static final List<Rule> CONDUIT = List.of(
             r("reopenOverpressureMPa|conduitSealTimescale|initialOpenness", "eruption", MORE, 20));
@@ -95,6 +98,8 @@ final class ObjectPanels {
     /** Where a volcano setting at dotted {@code path} goes, or null for settings no object shows. */
     static Place volcanoPlace(String volcanoId, String path) {
         String v = "volcano." + volcanoId;
+        // where a chamber sits is set in Build mode (moving it), the same for every chamber: no dial
+        if (BUILD_ONLY.matcher(path).matches()) return null;
         if (path.startsWith("magma.chambers[")) {
             int close = path.indexOf(']');
             String owner = v + "." + path.substring(0, close + 1);

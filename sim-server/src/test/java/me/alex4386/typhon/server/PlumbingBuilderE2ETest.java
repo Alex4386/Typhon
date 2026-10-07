@@ -159,6 +159,10 @@ class PlumbingBuilderE2ETest {
             JsonObject p = el.getAsJsonObject();
             boolean world = !p.has("volcanoId");
             if (!world && !vid.equals(p.get("volcanoId").getAsString())) continue;
+            if (!world && ObjectPanels.BUILD_ONLY.matcher(p.get("id").getAsString().substring(("volcano." + vid + ".").length())).matches()) {
+                assertFalse(p.has("owner"), "a chamber's position is set in Build mode, not on a dial: " + p.get("id"));
+                continue;
+            }
             assertTrue(p.has("owner") && p.has("tab") && p.has("tier"), "placed: " + p.get("id"));
             java.util.Set<String> tabs = tabsByOwner.get(p.get("owner").getAsString());
             assertTrue(tabs != null, "some object shows " + p.get("owner") + " (" + p.get("id") + ")");

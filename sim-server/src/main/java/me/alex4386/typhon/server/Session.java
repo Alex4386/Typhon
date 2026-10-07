@@ -896,7 +896,23 @@ final class Session implements AutoCloseable {
                     VolcanoSystem v = volcano(s, vid);
                     if (v == null) return done(CommandResult.error("unknownVolcano", "Unknown volcano " + vid));
                     switch (kind) {
-                        case "startEruption" -> r.submit(new MagmaCommands.StartEruption(vid));
+                        case "startEruption" -> {
+                            // refuse what cannot happen rather than accept it and do nothing
+                            return r.onEngineThread(e -> {
+                                if (v.chamber().erupting()) return CommandResult.ok("Already erupting");
+                                VolcanoCoupler c = v.coupler();
+                                boolean open = c.allVents().stream().anyMatch(vent -> {
+                                    VentStatus st = c.ventStatus(vent.id());
+                                    return st != VentStatus.SEALED && st != VentStatus.FROZEN && st != VentStatus.REMOVED && !c.sealed(vent.id());
+                                });
+                                if (!open) {
+                                    return CommandResult.error("unsupported", "No vent can open: every vent is sealed, frozen"
+                                            + " or removed. Unseal one, or push magma up so a dike opens a new fissure.");
+                                }
+                                e.submit(new MagmaCommands.StartEruption(vid));
+                                return CommandResult.ok(null);
+                            });
+                        }
                         case "stopEruption" -> r.submit(new MagmaCommands.StopEruption(vid));
                         case "forceDike" -> {
                             if (v.dikes() == null) {
