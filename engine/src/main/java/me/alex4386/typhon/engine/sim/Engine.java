@@ -487,8 +487,12 @@ public final class Engine {
             return periodSteps > 0 && nextQuanta < endQuanta;
         }
 
-        /** The first schedule point at or after {@code quanta}. */
+        /**
+         * The first schedule point at or after {@code quanta}; {@link Long#MAX_VALUE} for a command-driven
+         * subsystem (period ∞, never stepped).
+         */
         long nextPointAtOrAfter(long quanta) {
+            if (periodSteps <= 0) return Long.MAX_VALUE;
             if (quanta <= phaseSteps) return phaseSteps;
             return phaseSteps + Math.floorDiv(quanta - phaseSteps + periodSteps - 1, periodSteps) * periodSteps;
         }
