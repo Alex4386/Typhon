@@ -37,7 +37,7 @@ import me.alex4386.typhon.engine.output.EngineFrame;
  * <h2>Output</h2>
  * <ul>
  *   <li><b>Frames</b> (optional, {@code frameCapacity > 0}): every non-empty {@link EngineFrame},
- *       in order, never dropped. Hosts that must apply every block change use this; when the queue
+ *       in order, never dropped. Hosts that must see every frame use this; when the queue
  *       is full the engine thread waits (back-pressure) instead of discarding anything.
  *   <li><b>Events</b>: a bounded ring for UIs. When a consumer falls behind, the oldest events are
  *       discarded and counted in {@link #droppedEvents()}.

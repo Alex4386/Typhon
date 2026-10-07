@@ -19,18 +19,19 @@ import me.alex4386.typhon.engine.magma.MagmaCommands;
 import me.alex4386.typhon.engine.magma.MagmaEvents;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionEnded;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.save.SaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.testing.Saves;
+import me.alex4386.typhon.engine.testing.TestConduits;
 import me.alex4386.typhon.engine.volcano.VentCommands;
+import me.alex4386.typhon.engine.volcano.VentEvents.VentFormed;
 import me.alex4386.typhon.engine.volcano.VentEvents.VentStateChanged;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.volcano.VentStatus;
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import org.junit.jupiter.api.Test;
 
 /** Fissures wane and freeze, later eruptions avoid them, and the user can seal, remove and block. */
@@ -44,11 +45,17 @@ class FissureLifecycleTest {
         }
     }
 
+    /** A pressurised chamber with no conduit: only a dike gets its magma out. */
     static MagmaChamberConfig flank() {
-        return MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
-                .initialOverpressureMPa(14.0) // above dike nucleation, below summit failure
+        return MagmaChamberConfig.builder("test", new Point3(0, -3000, 0))
+                .initialOverpressureMPa(14.0) // below wall rupture (2 × 15 MPa): no dike of its own
                 .supplyVariability(0)
                 .build();
+    }
+
+    /** {@link #flank()} under a crater whose conduit is still molten (it would fail at 15 MPa). */
+    static MagmaChamberConfig flankWithSummitConduit() {
+        return flank().toBuilder().conduit(TestConduits.molten()).build();
     }
 
     static World world(long seed, MagmaChamberConfig chamber, SaveStore restore, int threads) {
@@ -56,7 +63,6 @@ class FissureLifecycleTest {
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder("test", List.of(CRATER), terrain, lava)
                 .chamber(chamber)
-                .scaling(VolcanoScaling.DEFAULT)
                 .dikesEnabled(true)
                 .build();
         Engine.Builder builder = Engine.builder(seed).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).threads(threads).add(terrain);
@@ -114,13 +120,22 @@ class FissureLifecycleTest {
         assertTrue(states(frames, fissure).stream().anyMatch(e -> e.current() == VentStatus.FROZEN));
         assertEquals(0, w.coupler().feederWidthM(fissure));
 
-        // The next eruption finds the summit, not the extinct fissure.
+        // The stopped eruption left no molten conduit: forcing the next one sends a new dike up, and the
+        // eruption goes through its fissure, never the extinct one.
+        assertEquals(0, w.volcano().chamber().conduitOpenness());
         frames.clear();
         w.engine().submit(new MagmaCommands.StartEruption("test"));
-        frames.addAll(run(w.engine(), 5 * MINUTE));
+        String next = null;
+        for (double end = w.engine().time() + 30 * MINUTE; w.engine().time() < end && next == null; ) {
+            EngineFrame f = w.engine().step();
+            frames.add(f);
+            for (FissureOpened o : events(List.of(f), FissureOpened.class)) next = o.vent().id();
+        }
+        assertNotNull(next, "a forced eruption without a conduit should send a dike up");
+        frames.addAll(run(w.engine(), 2 * MINUTE));
         assertTrue(w.volcano().chamber().erupting());
         List<String> active = w.coupler().activeVents().stream().map(VentSite::id).toList();
-        assertEquals(List.of(CRATER.id()), active);
+        assertTrue(active.contains(next) && !active.contains(fissure) && !active.contains(CRATER.id()), active.toString());
         assertEquals(0, w.coupler().ventFluxM3PerS(fissure));
         assertEquals(VentStatus.FROZEN, w.coupler().ventStatus(fissure));
         assertTrue(w.coupler().allVents().stream().anyMatch(v -> v.id().equals(fissure)),
@@ -128,8 +143,47 @@ class FissureLifecycleTest {
     }
 
     @Test
-    void sealingAFissureRedirectsToTheSummitAndSealingBothEndsTheEruption() {
+    void anEruptingFissureLocalisesIntoAVentOnItsLine() {
         World w = world(3, flank(), null, 1);
+        List<EngineFrame> frames = new ArrayList<>();
+        String fissureId = flankEruption(w, frames);
+        VentSite fissure = w.coupler().allVents().stream().filter(v -> v.id().equals(fissureId)).findFirst().orElseThrow();
+        assertTrue(events(frames, VentFormed.class).isEmpty(), "a fresh fissure erupts along its length");
+
+        // Narrow segments starve and freeze; a segment that keeps the flow after its neighbours froze is a vent.
+        List<VentFormed> formed = new ArrayList<>();
+        for (double end = w.engine().time() + 30 * 86_400; w.engine().time() < end && formed.isEmpty()
+                && w.volcano().chamber().erupting(); ) {
+            formed.addAll(events(List.of(w.engine().step()), VentFormed.class));
+        }
+        System.out.println("localised after " + (w.engine().time() / 3600) + " h: " + formed.size() + " vents, erupting="
+                + w.volcano().chamber().erupting() + ", segments=" + java.util.Arrays.toString(w.coupler().feederSegments(fissureId)));
+        assertFalse(formed.isEmpty(), "the flow should localise before the eruption ends");
+        VentSite vent = formed.get(0).vent();
+        assertEquals(fissureId, formed.get(0).fissureId());
+        assertEquals(me.alex4386.typhon.engine.volcano.VentKind.CRATER, vent.kind());
+        double dx = vent.position().x() - fissure.position().x();
+        double dz = vent.position().z() - fissure.position().z();
+        double along = dx * Math.cos(fissure.fissureAngleRad()) + dz * Math.sin(fissure.fissureAngleRad());
+        double across = -dx * Math.sin(fissure.fissureAngleRad()) + dz * Math.cos(fissure.fissureAngleRad());
+        assertTrue(Math.abs(across) < 1e-6, "on the fissure line, off by " + across);
+        assertTrue(Math.abs(along) <= fissure.fissureLengthM() / 2, "within the fissure");
+        assertTrue(w.coupler().allVents().stream().anyMatch(v -> v.id().equals(vent.id())), "the vent is a vent of the volcano");
+        if (w.volcano().chamber().erupting()) {
+            assertTrue(w.coupler().activeVents().stream().anyMatch(v -> v.id().equals(vent.id())), "and erupts");
+            w.engine().step();
+            assertTrue(w.coupler().ventFluxM3PerS(vent.id()) > 0, "magma leaves through the vent");
+        }
+
+        // It survives a save and restore.
+        InMemorySaveStore saved = Saves.save(w.engine());
+        World restored = world(3, flank(), saved, 1);
+        assertTrue(restored.coupler().allVents().stream().anyMatch(v -> v.id().equals(vent.id())));
+    }
+
+    @Test
+    void sealingAFissureRedirectsToTheSummitAndSealingBothEndsTheEruption() {
+        World w = world(3, flankWithSummitConduit(), null, 1);
         List<EngineFrame> frames = new ArrayList<>();
         String fissure = flankEruption(w, frames);
 
@@ -152,26 +206,29 @@ class FissureLifecycleTest {
         assertEquals(MagmaEvents.Cause.SEALED, ends.get(0).cause());
         assertTrue(w.volcano().chamber().overpressureMPa() > w.volcano().chamber().config().eruptionEndOverpressureMPa(),
                 "a plugged volcano stays pressurised");
-        assertEquals(0, w.volcano().chamber().conduitOpenness());
+        assertTrue(w.volcano().chamber().summitBlocked(), "its conduit is still molten, but blocked at the surface");
+        frames.clear();
+        frames.addAll(run(w.engine(), 10 * MINUTE));
+        assertTrue(events(frames, EruptionStarted.class).isEmpty(), "and cannot fail while sealed");
     }
 
     @Test
-    void sealedSummitCannotFailButAFlankDikeCanStillOpen() {
+    void sealedSummitCannotFailButAForcedEruptionSendsADike() {
         MagmaChamberConfig atFailure = VolcanoSystemTest.basalt(); // fails through the summit within minutes
         World w = world(1, atFailure, null, 1);
-        // sealed and blocked before the first step: at failure, a dike could nucleate in the very first one
         w.engine().submit(new VentCommands.SealVent("test", CRATER.id()));
         w.engine().submit(new DikeCommands.BlockDikes("test", true));
-        w.engine().submit(new MagmaCommands.StartEruption("test"));
         List<EngineFrame> frames = run(w.engine(), 10 * MINUTE);
-        assertTrue(events(frames, EruptionStarted.class).isEmpty(), "a sealed summit neither fails nor can be forced");
+        assertTrue(events(frames, EruptionStarted.class).isEmpty(), "a sealed summit does not fail");
         assertTrue(w.volcano().chamber().overpressureMPa() > atFailure.tensileStrengthMPa(), "pressure keeps building");
         assertTrue(events(frames, DikeEvents.DikeStarted.class).isEmpty(), "blocked dikes do not nucleate");
         assertEquals(VentStatus.SEALED, w.coupler().ventStatus(CRATER.id()));
 
-        // A forced dike still opens a flank fissure, and the eruption goes there.
-        w.engine().submit(new DikeCommands.ForceDike("test"));
+        // Forcing the eruption: the sealed summit leaves only a dike as the way up; it opens a flank fissure
+        // and the eruption goes there.
+        w.engine().submit(new MagmaCommands.StartEruption("test"));
         frames = run(w.engine(), 30 * MINUTE);
+        assertFalse(events(frames, DikeEvents.DikeStarted.class).isEmpty(), "the forced eruption starts a dike");
         List<FissureOpened> opened = events(frames, FissureOpened.class);
         assertFalse(opened.isEmpty());
         List<EruptionStarted> starts = events(frames, EruptionStarted.class);
@@ -186,7 +243,7 @@ class FissureLifecycleTest {
 
     @Test
     void removingAFissureDropsTheVentButKeepsTheIntrusion() {
-        World w = world(3, flank(), null, 1);
+        World w = world(3, flankWithSummitConduit(), null, 1);
         List<EngineFrame> frames = new ArrayList<>();
         String fissure = flankEruption(w, frames);
         int dikeId = events(frames, FissureOpened.class).get(0).dikeId();

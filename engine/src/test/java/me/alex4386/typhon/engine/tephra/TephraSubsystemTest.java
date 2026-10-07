@@ -10,7 +10,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.util.ArrayList;
 import java.util.List;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.tephra.TephraCommands.SetWind;
@@ -28,8 +28,8 @@ import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.save.SaveStore;
 
 class TephraSubsystemTest {
-    private static final int TERRAIN_RADIUS = 20;
-    private static final VentSite VENT = VentSite.crater("summit", new BlockPos(0, 80, 0), 3);
+    private static final int TERRAIN_RADIUS = 12;
+    private static final VentSite VENT = VentSite.crater("summit", new Point3(5, 80, 5), 30);
 
     private static TephraConfig config() {
         TephraConfig config = new TephraConfig();
@@ -51,7 +51,7 @@ class TephraSubsystemTest {
     /** Strombolian bombs and ash with veering wind, driven entirely through commands. */
     private static void script(Engine engine, long tick) {
         if (tick == 0) {
-            engine.submit(TephraTestSupport.flat(TERRAIN_RADIUS, 79));
+            engine.submit(TephraTestSupport.flat(TERRAIN_RADIUS, 80));
             engine.submit(new SetWind("tephra:test", 4, 0.7, 0.8));
             engine.submit(new StartExplosivePhase("tephra:test", ExplosivePhase.strombolian(VENT, 4000)));
         }
@@ -70,9 +70,10 @@ class TephraSubsystemTest {
     @Test
     void phaseLaunchesBombsThatLandAndIsDeterministic() {
         Rig a = new Rig();
-        List<EngineFrame> first = run(a.engine(42, null), 0, 900);
+        // 25 s of eruption, then 35 s for the last bombs (tens of seconds aloft at real speeds) to land.
+        List<EngineFrame> first = run(a.engine(42, null), 0, 1200);
         Rig b = new Rig();
-        List<EngineFrame> second = run(b.engine(42, null), 0, 900);
+        List<EngineFrame> second = run(b.engine(42, null), 0, 1200);
         assertEquals(first, second);
 
         List<BombLaunched> launched = events(first, BombLaunched.class);
@@ -85,18 +86,18 @@ class TephraSubsystemTest {
         assertFalse(changes.get(1).active());
         assertNull(a.tephra.activePhase());
 
-        // Bombs leave from the crater and land around it, a few tens of blocks away.
+        // Bombs leave from the crater floor and land around it, tens to hundreds of metres away.
         for (BombLaunched l : launched) {
-            assertTrue(l.start().subtract(new Vec3d(0.5, 81, 0.5)).horizontalLength() <= 3.0001);
+            assertTrue(l.start().subtract(new Vec3d(5, 80, 5)).horizontalLength() <= VENT.craterRadiusM() + 1e-4);
             assertTrue(l.velocity().y() > 0);
         }
         double meanDistance = landed.stream()
-                .mapToDouble(l -> Math.hypot(l.position().x(), l.position().z()))
+                .mapToDouble(l -> Math.hypot(l.position().x() - 5, l.position().z() - 5))
                 .average().orElseThrow();
-        assertTrue(meanDistance > 5 && meanDistance < 300, "mean landing distance " + meanDistance);
+        assertTrue(meanDistance > VENT.craterRadiusM() && meanDistance < 1500, "mean landing distance " + meanDistance);
 
         Rig c = new Rig();
-        assertFalse(first.equals(run(c.engine(43, null), 0, 900)), "different seed, different eruption");
+        assertFalse(first.equals(run(c.engine(43, null), 0, 1200)), "different seed, different eruption");
     }
 
     @Test
@@ -132,7 +133,7 @@ class TephraSubsystemTest {
     @Test
     void phaseCanBeDerivedFromMagmaState() {
         MagmaState dacite = new MagmaState() {
-            @Override public BlockPos chamberCenter() { return new BlockPos(0, -500, 0); }
+            @Override public Point3 chamberCenter() { return new Point3(0, -5000, 0); }
             @Override public double overpressureMPa() { return 8; }
             @Override public double overpressureRateMPaPerSecond() { return 0; }
             @Override public double temperatureC() { return 850; }

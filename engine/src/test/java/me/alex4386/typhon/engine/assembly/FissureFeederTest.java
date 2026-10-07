@@ -16,7 +16,8 @@ class FissureFeederTest {
 
     /** A Kīlauea-like fissure: 1 m dike, 500 m long, fed from 1.5 km down, 12 segments. */
     static FissureFeeder kilauea(long seed) {
-        return FissureFeeder.open(1.0, 500, 1500, 12, new SimRandom(seed));
+        // host rock of a 1.5 km dike on the average continental geotherm: 15 °C + 30 °C/km × 750 m
+        return FissureFeeder.open(1.0, 500, 1500, 37.5, 12, new SimRandom(seed));
     }
 
     static FissureFeeder run(FissureFeeder f, double flux, double seconds) {

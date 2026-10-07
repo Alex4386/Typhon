@@ -1,6 +1,6 @@
 package me.alex4386.typhon.engine.tephra;
 
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.HistoricalEvent;
 
@@ -9,7 +9,7 @@ public final class TephraEvents {
     private TephraEvents() {}
 
     /**
-     * A bomb left the vent. Hosts can render it (falling block, block display, particles) by
+     * A bomb left the vent. Hosts can render it by
      * integrating the same equations ({@link Ballistics}) from {@code start} with {@code velocity} and
      * {@code dragFactor}, or simply interpolate towards {@code predictedLanding} over
      * {@code expectedFlightSeconds}.
@@ -31,43 +31,43 @@ public final class TephraEvents {
     /**
      * A bomb hit the ground.
      *
-     * @param position block the bomb landed on top of (column ground at impact)
+     * @param position impact point on the ground (m)
      * @param energyJoules kinetic energy at impact
-     * @param craterRadius crater radius in blocks (0 if no crater was dug)
+     * @param craterRadiusM impact crater radius (m; 0 if no crater was dug)
      */
     public record BombLanded(
             double time,
             String source,
             long bombId,
-            BlockPos position,
+            Point3 position,
             double impactSpeed,
             double energyJoules,
             double diameter,
-            double craterRadius)
+            double craterRadiusM)
             implements EngineEvent {}
 
     /**
      * Ash falling over a square region. Hosts use it for visibility, fog, darkness, sounds and particles.
      *
-     * @param center region centre (y = 0; hosts use the local surface)
-     * @param halfSize half the region's side in blocks
+     * @param center region centre (m; y = 0, hosts use the local surface)
+     * @param halfSizeM half the region's side (m)
      * @param fallRate deposition rate, kg/m²/s
      * @param airborneLoad ash suspended above the region, kg/m²
      */
-    public record AshFall(double time, String source, BlockPos center, int halfSize, double fallRate, double airborneLoad)
+    public record AshFall(double time, String source, Point3 center, double halfSizeM, double fallRate, double airborneLoad)
             implements EngineEvent {}
 
-    /** A lightning flash inside the ash plume; hosts may strike vanilla lightning here. */
-    public record VolcanicLightning(double time, String source, BlockPos position) implements EngineEvent {}
+    /** A lightning flash inside the ash plume (m). */
+    public record VolcanicLightning(double time, String source, Point3 position) implements EngineEvent {}
 
     /**
      * The eruption column above a vent, emitted periodically while an explosive phase is active.
      *
-     * @param base top of the vent
-     * @param topY plume top height (world y)
-     * @param radius approximate umbrella radius in blocks
+     * @param base top of the vent (m)
+     * @param topZ plume top elevation (m)
+     * @param radiusM approximate umbrella radius (m)
      */
-    public record PlumeColumn(double time, String source, BlockPos base, int topY, double radius, double massEruptionRate)
+    public record PlumeColumn(double time, String source, Point3 base, double topZ, double radiusM, double massEruptionRate)
             implements EngineEvent {}
 
     /** An explosive phase started or ended. */

@@ -1,10 +1,24 @@
 package me.alex4386.typhon.engine.seismic;
 
 import java.util.Objects;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 
 /**
  * Parameters of a {@link SeismicityModel}. Rates are events per second.
+ *
+ * <p><b>Basis.</b> Seismicity is modelled statistically, and most of these are empirical descriptions, not
+ * values derivable from the magma state:
+ * <ul>
+ *   <li>Gutenberg–Richter magnitudes: {@code b ≈ 1} for tectonic-like VTs (global average); volcanic swarms
+ *       and LP events commonly show higher b, ~1.5–3 (McNutt 2005, Annu. Rev. Earth Planet. Sci. 33). The
+ *       explosion-quake magnitude of a discrete explosion follows from its energy ({@code log E = 1.5 M + 4.8},
+ *       seismic efficiency ~1e-5–1e-3).
+ *   <li>The hyperbolic acceleration {@code 1 / (1 − P/P_f)} toward failure is the materials-failure forecast
+ *       form (Voight 1988, Nature 332); its cap is a numerical safeguard.
+ *   <li>Background, per-MPa, per-m³/s and swarm/tremor rates, durations and magnitude bounds are tuning
+ *       choices of the observed order of magnitude, not derived; hypocentre scatter and the explosion source
+ *       depth (upper ~100 m of the conduit) likewise. Step, sample and averaging periods are numerical.
+ * </ul>
  *
  * @param volcanoId id of the owning volcano
  * @param conduitTop top of the conduit (vent floor); hypocentres are scattered between the chamber
@@ -34,7 +48,7 @@ import me.alex4386.typhon.engine.math.BlockPos;
  * @param lpMaxMagnitude largest LP magnitude
  * @param explosionMinMagnitude smallest explosion quake
  * @param explosionMaxMagnitude largest explosion quake
- * @param hypocenterSpread lateral scatter of hypocentres (blocks, 1σ)
+ * @param hypocenterSpread lateral scatter of hypocentres (m, 1σ)
  * @param rsamWindowSeconds averaging time constant of RSAM
  * @param rateWindowSeconds averaging time constant of the event-rate estimates
  * @param stepPeriodSeconds how often the model steps (seconds)
@@ -42,7 +56,7 @@ import me.alex4386.typhon.engine.math.BlockPos;
  */
 public record SeismicConfig(
         String volcanoId,
-        BlockPos conduitTop,
+        Point3 conduitTop,
         double failureOverpressureMPa,
         double backgroundVtRate,
         double vtPerMPa,
@@ -92,13 +106,13 @@ public record SeismicConfig(
         if (!(samplePeriodSeconds >= 0)) throw new IllegalArgumentException("samplePeriodSeconds must be >= 0");
     }
 
-    public static Builder builder(String volcanoId, BlockPos conduitTop) {
+    public static Builder builder(String volcanoId, Point3 conduitTop) {
         return new Builder(volcanoId, conduitTop);
     }
 
     public static final class Builder {
         private final String volcanoId;
-        private final BlockPos conduitTop;
+        private final Point3 conduitTop;
         private double failureOverpressureMPa = 15;
         private double backgroundVtRate = 1e-5;
         private double vtPerMPa = 50;
@@ -122,13 +136,13 @@ public record SeismicConfig(
         private double lpMaxMagnitude = 3;
         private double explosionMinMagnitude = 1;
         private double explosionMaxMagnitude = 3.5;
-        private double hypocenterSpread = 20;
+        private double hypocenterSpread = 200;
         private double rsamWindowSeconds = 60;
         private double rateWindowSeconds = 120;
         private double stepPeriodSeconds = 0.5;
         private double samplePeriodSeconds = 5.0;
 
-        private Builder(String volcanoId, BlockPos conduitTop) {
+        private Builder(String volcanoId, Point3 conduitTop) {
             this.volcanoId = volcanoId;
             this.conduitTop = conduitTop;
         }

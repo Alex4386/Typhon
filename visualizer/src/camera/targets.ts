@@ -4,6 +4,7 @@ import { displayZ } from '../scene/Terrain';
 import { tileStore } from '../store/store';
 import { columnOf, sampleColumn, worldExtent } from '../util/world';
 import { frameDistance, orbitPose, type Bookmark, type CameraPose, type FollowTarget } from './math';
+import { volcanoAnchor } from '../store/worldVents';
 
 /** Everything the camera needs to know about the scene to compute targets. */
 export interface SceneInfo {
@@ -53,7 +54,7 @@ export function groundAt(info: SceneInfo, x: number, y: number): number {
 export function ventPoint(info: SceneInfo): [number, number, number] {
   const v = volcanoOf(info);
   const ext = worldExtent(info.world);
-  const at = v?.vents[0]?.at ?? [(ext.minX + ext.maxX) / 2, (ext.minY + ext.maxY) / 2];
+  const at = v ? volcanoAnchor(v) : [(ext.minX + ext.maxX) / 2, (ext.minY + ext.maxY) / 2];
   const g = groundAt(info, at[0], at[1]);
   return [at[0], g, -at[1]];
 }

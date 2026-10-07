@@ -6,10 +6,11 @@ package me.alex4386.typhon.engine.magma;
  * selects an eruption style: fountains, slugs, plugs, domes and explosive columns all follow from
  * the flow these parameters produce (see {@code docs/eruption-dynamics.md}).
  *
- * @param initialOpenness 0 = sealed conduit (the roof must fail at its tensile strength),
- *     1 = open (a persistently active vent)
- * @param reopenOverpressureMPa overpressure that re-opens a conduit left open by a recent eruption
- * @param conduitSealTimescale e-folding time (physical s) for an open conduit to seal in repose
+ * @param initialOpenness molten share of the conduit's radius at the start: 0 = no conduit (a volcano that
+ *     has not erupted yet, or one whose conduit froze solid; magma must break out through a dike), 1 = a
+ *     fully molten conduit (a persistently active vent). In repose it falls as the conduit solidifies (see
+ *     {@link MagmaChamber#conduitFreezeSeconds})
+ * @param reopenOverpressureMPa overpressure that re-opens a conduit still molten from a recent eruption
  * @param fragmentationPorosity gas volume fraction at which an expanding foam breaks up (~0.75;
  *     Sparks 1978)
  * @param brittleStressPa melt viscosity × strain rate above which melt fails brittlely
@@ -51,7 +52,6 @@ package me.alex4386.typhon.engine.magma;
 public record ConduitConfig(
         double initialOpenness,
         double reopenOverpressureMPa,
-        double conduitSealTimescale,
         double fragmentationPorosity,
         double brittleStressPa,
         double foamStrengthPa,
@@ -78,7 +78,7 @@ public record ConduitConfig(
 
     /** Literature-based defaults; see each parameter for its source range. */
     public static final ConduitConfig DEFAULT = new ConduitConfig(
-            0, 3.0, 3e7,
+            0, 3.0,
             0.75, 1e8, 1e6, 0.02,
             1e-11, 0.3, 1e-13, 3e-5,
             0.12, 2e4, 0.6,
@@ -91,7 +91,6 @@ public record ConduitConfig(
     public ConduitConfig {
         if (!(initialOpenness >= 0 && initialOpenness <= 1)) throw new IllegalArgumentException("initialOpenness must be in [0, 1]");
         requirePositive("reopenOverpressureMPa", reopenOverpressureMPa);
-        requirePositive("conduitSealTimescale", conduitSealTimescale);
         requireFraction("fragmentationPorosity", fragmentationPorosity);
         requirePositive("brittleStressPa", brittleStressPa);
         requirePositive("foamStrengthPa", foamStrengthPa);
@@ -120,7 +119,7 @@ public record ConduitConfig(
     }
 
     public ConduitConfig withInitialOpenness(double value) {
-        return new ConduitConfig(value, reopenOverpressureMPa, conduitSealTimescale, fragmentationPorosity, brittleStressPa, foamStrengthPa,
+        return new ConduitConfig(value, reopenOverpressureMPa, fragmentationPorosity, brittleStressPa, foamStrengthPa,
                 turbulentFrictionFactor, referencePermeability, percolationThreshold, wallPermeability, gasViscosity,
                 microlitesPerWtWater, crystallisationTimescale, maxCrystalFraction, bubbleRadiusM, surfaceTension,
                 coalescenceViscosity, slugLengthDiameters, plugViscosityLog10, plugStrengthMPa, plugCapDepthM, plugPorosity,
@@ -128,7 +127,7 @@ public record ConduitConfig(
     }
 
     public ConduitConfig withReopenOverpressureMPa(double value) {
-        return new ConduitConfig(initialOpenness, value, conduitSealTimescale, fragmentationPorosity, brittleStressPa, foamStrengthPa,
+        return new ConduitConfig(initialOpenness, value, fragmentationPorosity, brittleStressPa, foamStrengthPa,
                 turbulentFrictionFactor, referencePermeability, percolationThreshold, wallPermeability, gasViscosity,
                 microlitesPerWtWater, crystallisationTimescale, maxCrystalFraction, bubbleRadiusM, surfaceTension,
                 coalescenceViscosity, slugLengthDiameters, plugViscosityLog10, plugStrengthMPa, plugCapDepthM, plugPorosity,
@@ -136,7 +135,7 @@ public record ConduitConfig(
     }
 
     public ConduitConfig withPermeability(double reference, double wall) {
-        return new ConduitConfig(initialOpenness, reopenOverpressureMPa, conduitSealTimescale, fragmentationPorosity,
+        return new ConduitConfig(initialOpenness, reopenOverpressureMPa, fragmentationPorosity,
                 brittleStressPa, foamStrengthPa, turbulentFrictionFactor, reference, percolationThreshold, wall, gasViscosity,
                 microlitesPerWtWater, crystallisationTimescale, maxCrystalFraction, bubbleRadiusM, surfaceTension,
                 coalescenceViscosity, slugLengthDiameters, plugViscosityLog10, plugStrengthMPa, plugCapDepthM, plugPorosity,
@@ -144,7 +143,7 @@ public record ConduitConfig(
     }
 
     public ConduitConfig withPlug(double viscosityLog10, double strengthMPa) {
-        return new ConduitConfig(initialOpenness, reopenOverpressureMPa, conduitSealTimescale, fragmentationPorosity,
+        return new ConduitConfig(initialOpenness, reopenOverpressureMPa, fragmentationPorosity,
                 brittleStressPa, foamStrengthPa, turbulentFrictionFactor, referencePermeability, percolationThreshold, wallPermeability,
                 gasViscosity, microlitesPerWtWater, crystallisationTimescale, maxCrystalFraction, bubbleRadiusM,
                 surfaceTension, coalescenceViscosity, slugLengthDiameters, viscosityLog10, strengthMPa, plugCapDepthM,

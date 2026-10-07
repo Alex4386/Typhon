@@ -150,12 +150,11 @@ public final class ConfigImpact {
             new Rule("massFlows.*enabled", reinit(Target.VOLCANO, "adds or removes pyroclastic flows and lahars")),
             new Rule("deformation", reinit(Target.VOLCANO, "adds or removes ground deformation")),
             new Rule("deformation.enabled", reinit(Target.VOLCANO, "adds or removes ground deformation")),
-            new Rule("tephra.cellSize", reinit(Target.TEPHRA, "the ash grid's cell size")),
+            new Rule("tephra.cellSizeM", reinit(Target.TEPHRA, "the ash grid's cell size")),
             new Rule("tephra.gridCells", reinit(Target.TEPHRA, "the ash grid's size")),
-            new Rule("tephra.worldTopY", reinit(Target.TEPHRA, "the ash grid's top")),
             new Rule("geothermal.center*", reinit(Target.GEOTHERMAL, "the hot-spring field's position")),
-            new Rule("geothermal.radius", reinit(Target.GEOTHERMAL, "the hot-spring grid's size")),
-            new Rule("geothermal.cellSize", reinit(Target.GEOTHERMAL, "the hot-spring grid's cell size")),
+            new Rule("geothermal.radiusM", reinit(Target.GEOTHERMAL, "the hot-spring grid's size")),
+            new Rule("geothermal.cellSizeM", reinit(Target.GEOTHERMAL, "the hot-spring grid's cell size")),
             new Rule("detail*", reinit(Target.DETAIL, "the crater surface's resolution")),
             new Rule("edifice*", reload(Target.EDIFICE, "edifice")));
 

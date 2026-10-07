@@ -1,19 +1,20 @@
 package me.alex4386.typhon.engine.magma;
 
 import java.util.Objects;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 
 /**
  * Parameters of a {@link MagmaChamber}, in physical units and physical time. Defaults give a small
  * basaltic-andesite system.
  *
  * @param volcanoId id of the owning volcano; commands and events are keyed by it
- * @param center chamber centre in world coordinates
+ * @param center chamber centre (m; {@code y} is its elevation)
  * @param volume chamber volume (m³)
- * @param compressibilityPerMPa combined magma + wall-rock compressibility of the bubble-free system (1/MPa)
- * @param lithostaticDepth "physical" chamber depth (m) used for lithostatic pressure, volatile
- *     solubility and conduit length. Independent of {@code center} because Minecraft's vertical
- *     scale is compressed.
+ * @param compressibilityPerMPa combined magma + wall-rock compressibility of the bubble-free system (1/MPa);
+ *     NaN = computed: bubble-free melt ({@code ~1e-10 Pa⁻¹}) plus the compliance of a spherical cavity in an
+ *     elastic crust, {@code 3/(4μ)} (McTigue 1987)
+ * @param lithostaticDepth chamber depth below the surface (m), for lithostatic pressure, volatile
+ *     solubility and conduit length
  * @param conduitRadius conduit radius (m) for the Poiseuille eruption-rate law
  * @param tensileStrengthMPa overpressure at which the roof fails and an eruption starts
  * @param eruptionEndOverpressureMPa overpressure below which an eruption stops
@@ -30,8 +31,10 @@ import me.alex4386.typhon.engine.math.BlockPos;
  * @param initialCo2Wt bulk CO₂ at creation (wt%)
  * @param initialOverpressureMPa overpressure at creation
  * @param wallTemperatureC temperature the chamber relaxes towards by conduction
- * @param coolingTimescale e-folding time of conductive cooling (physical s)
- * @param degassingTimescale e-folding time for venting exsolved volatiles (physical s)
+ * @param coolingTimescale e-folding time of conductive cooling (physical s); NaN = computed from conduction
+ *     out of a sphere of the chamber's volume (see {@code MagmaChamber#coolingTimescaleSeconds})
+ * @param degassingTimescale e-folding time for venting exsolved volatiles (physical s); NaN = computed from the
+ *     Stokes rise of bubbles across the chamber (see {@code MagmaChamber#degassingTimescaleSeconds})
  * @param crystalSilicaWt SiO₂ of the crystallising (mafic) assemblage; drives melt evolution
  * @param conduit conduit-flow physics: outgassing, fragmentation, open/closed conduit, explosion
  *     cycles (see {@link ConduitConfig})
@@ -49,7 +52,7 @@ import me.alex4386.typhon.engine.math.BlockPos;
  */
 public record MagmaChamberConfig(
         String volcanoId,
-        BlockPos center,
+        Point3 center,
         double volume,
         double compressibilityPerMPa,
         double lithostaticDepth,
@@ -85,7 +88,7 @@ public record MagmaChamberConfig(
         Objects.requireNonNull(volcanoId, "volcanoId");
         Objects.requireNonNull(center, "center");
         requirePositive("volume", volume);
-        requirePositive("compressibilityPerMPa", compressibilityPerMPa);
+        requirePositiveOrNaN("compressibilityPerMPa", compressibilityPerMPa);
         requirePositive("lithostaticDepth", lithostaticDepth);
         requirePositive("conduitRadius", conduitRadius);
         requirePositive("tensileStrengthMPa", tensileStrengthMPa);
@@ -94,8 +97,8 @@ public record MagmaChamberConfig(
         }
         if (supplyRate < 0) throw new IllegalArgumentException("supplyRate must be >= 0");
         if (supplyVariability < 0) throw new IllegalArgumentException("supplyVariability must be >= 0");
-        requirePositive("coolingTimescale", coolingTimescale);
-        requirePositive("degassingTimescale", degassingTimescale);
+        requirePositiveOrNaN("coolingTimescale", coolingTimescale);
+        requirePositiveOrNaN("degassingTimescale", degassingTimescale);
         Objects.requireNonNull(conduit, "conduit");
         MagmaCommands.validateMagma(rechargeTemperatureC, rechargeSilicaWt, rechargeWaterWt, rechargeCo2Wt,
                 rechargeCrystalFraction);
@@ -115,7 +118,8 @@ public record MagmaChamberConfig(
 
     /**
      * Overpressure that re-opens an open conduit, kept between the eruption end threshold and the
-     * tensile strength.
+     * tensile strength (at least 0.5 MPa above the end threshold: a numerical margin so a conduit that just
+     * stopped does not re-open in the same step).
      */
     public double reopenOverpressureMPa() {
         double low = Math.min(tensileStrengthMPa, eruptionEndOverpressureMPa + 0.5);
@@ -130,7 +134,10 @@ public record MagmaChamberConfig(
         return MAIN.equals(chamberId);
     }
 
-    public static Builder builder(String volcanoId, BlockPos center) {
+    /** Chamber depth (m) when a definition does not give one. */
+    public static final double DEFAULT_LITHOSTATIC_DEPTH_M = 4000;
+
+    public static Builder builder(String volcanoId, Point3 center) {
         return new Builder(volcanoId, center);
     }
 
@@ -173,13 +180,19 @@ public record MagmaChamberConfig(
         if (!(value > 0)) throw new IllegalArgumentException(name + " must be positive: " + value);
     }
 
+    private static void requirePositiveOrNaN(String name, double value) {
+        if (!Double.isNaN(value) && !(value > 0)) throw new IllegalArgumentException(name + " must be positive (or NaN = computed): " + value);
+    }
+
     public static final class Builder {
         private final String volcanoId;
-        private BlockPos center;
+        private Point3 center;
         private double volume = 1e10; // 10 km³; real chambers are ~1–100 km³
-        private double compressibilityPerMPa = 2e-4;
-        private double lithostaticDepth = 4000;
-        private double conduitRadius = 1.5;
+        private double compressibilityPerMPa = Double.NaN; // computed (MagmaChamber#bubbleFreeCompressibility)
+        private double lithostaticDepth = DEFAULT_LITHOSTATIC_DEPTH_M;
+        private double conduitRadius = 1.5; // basaltic feeders are metres across (Wilson & Head 1981)
+        // overpressure at roof failure: of the order of the host rock's tensile strength, a few to ~20 MPa
+        // (Gudmundsson 2012; Jellinek & DePaolo 2003)
         private double tensileStrengthMPa = 15;
         private double eruptionEndOverpressureMPa = 2;
         private double supplyRate = 0.3; // between arc (~0.01–0.1) and hotspot (~1–5) supply
@@ -194,9 +207,12 @@ public record MagmaChamberConfig(
         private double initialWaterWt = 2.0;
         private double initialCo2Wt = 0;
         private double initialOverpressureMPa = 0;
+        // host rock around a long-lived reservoir, heated above the regional geotherm: a few hundred °C
+        // (order of magnitude; poorly constrained, depends on the reservoir's history)
         private double wallTemperatureC = 400;
-        private double coolingTimescale = 2e10;
-        private double degassingTimescale = 1e9;
+        private double coolingTimescale = Double.NaN; // computed (MagmaChamber#coolingTimescaleSeconds)
+        private double degassingTimescale = Double.NaN; // computed (MagmaChamber#degassingTimescaleSeconds)
+        // olivine + clinopyroxene + plagioclase of a basaltic cumulate (~45–48 wt% SiO₂)
         private double crystalSilicaWt = 47;
         private ConduitConfig conduit = ConduitConfig.DEFAULT;
         private double maxEruptionRate = 1e6;
@@ -207,7 +223,7 @@ public record MagmaChamberConfig(
         private boolean freezeVolume = false;
         private String chamberId = MAIN;
 
-        private Builder(String volcanoId, BlockPos center) {
+        private Builder(String volcanoId, Point3 center) {
             this.volcanoId = volcanoId;
             this.center = center;
         }
@@ -242,7 +258,7 @@ public record MagmaChamberConfig(
         public Builder wallYieldFraction(double v) { wallYieldFraction = v; return this; }
         public Builder freezeVolume(boolean v) { freezeVolume = v; return this; }
         public Builder chamberId(String v) { chamberId = v; return this; }
-        public Builder center(BlockPos v) { center = Objects.requireNonNull(v); return this; }
+        public Builder center(Point3 v) { center = Objects.requireNonNull(v); return this; }
 
         public MagmaChamberConfig build() {
             return new MagmaChamberConfig(volcanoId, center, volume, compressibilityPerMPa, lithostaticDepth,

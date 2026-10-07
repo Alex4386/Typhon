@@ -360,7 +360,7 @@ public final class EruptionClassifier implements Subsystem {
         slugPerHour = in.get("slugPerHour").getAsDouble();
         plugPerHour = in.get("plugPerHour").getAsDouble();
         submerged = in.get("submerged").getAsDouble();
-        windowWeight = in.has("windowWeight") ? in.get("windowWeight").getAsDouble() : 1;
+        windowWeight = in.get("windowWeight").getAsDouble();
         seenSlugs = in.get("seenSlugs").getAsLong();
         seenPlugs = in.get("seenPlugs").getAsLong();
         eruption = in.get("eruption").getAsInt();

@@ -14,8 +14,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import me.alex4386.typhon.engine.output.EngineEvent;
-import me.alex4386.typhon.engine.world.BlockId;
-import me.alex4386.typhon.engine.world.BlockState;
 
 /**
  * Streams events to newline-delimited JSON: one object per line, {@code "type"} (the record's simple
@@ -27,10 +25,6 @@ import me.alex4386.typhon.engine.world.BlockState;
 public final class EventLog implements Consumer<EngineEvent>, Closeable {
     static final Gson GSON = new GsonBuilder()
             .serializeSpecialFloatingPointValues()
-            .registerTypeAdapter(BlockId.class, (com.google.gson.JsonSerializer<BlockId>)
-                    (src, type, ctx) -> new com.google.gson.JsonPrimitive(src.toString()))
-            .registerTypeAdapter(BlockState.class, (com.google.gson.JsonSerializer<BlockState>)
-                    (src, type, ctx) -> new com.google.gson.JsonPrimitive(src.toString()))
             .create();
 
     private static final EngineEvent END = new EngineEvent() {

@@ -1,11 +1,12 @@
 package me.alex4386.typhon.engine.magma;
 
+import me.alex4386.typhon.engine.testing.TestConduits;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import me.alex4386.typhon.engine.magma.MagmaCommands.InjectRecharge;
 import me.alex4386.typhon.engine.magma.MagmaCommands.SetSupplyRate;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.testing.Saves;
@@ -16,11 +17,12 @@ import org.junit.jupiter.api.Test;
  * the step length (the stromboli repro: a strong supply of 0.3 m³/s).
  */
 class ChamberRuptureTest {
-    private static final BlockPos CENTER = new BlockPos(0, -40, 0);
+    private static final Point3 CENTER = new Point3(0, -4000, 0);
 
     private static MagmaChamberConfig.Builder stromboli() {
         return MagmaChamberConfig.builder("v", CENTER).volume(5e7).compressibilityPerMPa(2e-4)
                 .lithostaticDepth(3000).conduitRadius(0.8).tensileStrengthMPa(8).eruptionEndOverpressureMPa(0.5)
+                .conduit(TestConduits.molten(8)) // an open-vent volcano
                 .supplyRate(0.3).supplyVariability(0);
     }
 

@@ -1,9 +1,7 @@
 package me.alex4386.typhon.engine.massflow;
 
 /**
- * Parameters for a mass-flow field. Physics is in real units; {@link #metersPerBlock} maps the block
- * grid onto real lengths (pass {@code VolcanoScaling.metersPerBlock()}), so cells are
- * {@code metersPerBlock} wide and one block of deposit is {@code metersPerBlock} thick.
+ * Parameters for a mass-flow field, in SI units; cells are the world model's surface columns.
  *
  * <p>Rheology is Voellmy–Salm: basal resistance {@code μ g cosθ + g u²/ξ} per unit mass. Typical
  * back-fitted values: dense PDCs / block-and-ash flows μ ≈ 0.1–0.3, ξ ≈ 200–1000 m/s²; lahars and
@@ -12,16 +10,17 @@ package me.alex4386.typhon.engine.massflow;
  */
 public final class MassFlowConfig {
     // ── Grid & time ──
-    /** Real metres per block (cell width and block thickness). */
-    public double metersPerBlock = 1.0;
     /** Seconds between field steps (sub-stepped internally for CFL stability). */
     public double stepPeriodSeconds = 0.1;
     public double gravity = 9.81;
     /** Courant number for sub-stepping: {@code dt ≤ cfl · dx / (|u| + √(g h))}. */
     public double cfl = 0.4;
     public int maxSubsteps = 64;
-    /** Hard speed cap (m/s), a guard against numerical blow-up. */
-    public double maxSpeed = 150;
+    /**
+     * Hard speed cap (m/s): a numerical guard against blow-up only, set above the fastest observed mass
+     * flows (the Mount St Helens 1980 lateral blast, of order 100–250 m/s) so it never shapes a real flow.
+     */
+    public double maxSpeed = 300;
 
     // ── Rheology ──
     /** Coulomb friction coefficient μ (tangent of the angle the flow can rest on). */
@@ -39,9 +38,6 @@ public final class MassFlowConfig {
     public double stopSpeed;
     /** Deposit thickness per unit thickness of deposited flow (PDC bulk density / deposit density). */
     public double depositThicknessFactor = 0.7;
-    /** Veneer thresholds, as fractions of a block of deposit. */
-    public double thinVeneerBlocks = 0.1;
-    public double veneerBlocks = 0.4;
 
     // ── PDC ──
     public double ambientC = 15;
@@ -64,17 +60,18 @@ public final class MassFlowConfig {
     public double porosity = 0.35;
     /** Rapid settling where a lahar enters standing water (s). */
     public double waterDepositionTimescale = 60;
-    /** Deposits laid down faster than this are coarse (gravel), slower ones fine (mud). */
-    public double coarseSpeed = 3;
     /**
      * Rain-triggered failure: loose deposit soaks up rain until its pores are full
-     * ({@code rain ≥ porosity · thickness}); on slopes steeper than {@link #rainMinSlope} it then fails
-     * as a slug of the saturated deposit plus concentrated runoff of {@code rainFailureWaterRatio ×
-     * thickness}.
+     * ({@code rain ≥ porosity · thickness}); where the saturated layer is unstable (see
+     * {@code Lahars#criticalSaturatedSlope}) it then fails as a slug of the saturated deposit plus
+     * concentrated runoff of {@code rainFailureWaterRatio × thickness}.
      */
     public double rainFailureWaterRatio = 0.3;
-    /** Rain mobilises loose deposit only on bed slopes steeper than this (tan θ). */
-    public double rainMinSlope = 0.1;
+    /**
+     * Density of the deposit's grains (kg/m³): volcanic clasts and lithics 2400–2800 (scoria and pumice grains
+     * are lighter, but their pores fill with water too). Sets the saturated unit weight of a soaked deposit.
+     */
+    public double grainDensity = 2500;
     /** Loose deposit thinner than this (m) is not mobilised by rain. */
     public double rainMinErodible = 0.05;
 
@@ -127,7 +124,6 @@ public final class MassFlowConfig {
 
     public MassFlowConfig copy() {
         MassFlowConfig c = new MassFlowConfig();
-        c.metersPerBlock = metersPerBlock;
         c.stepPeriodSeconds = stepPeriodSeconds;
         c.gravity = gravity;
         c.cfl = cfl;
@@ -140,8 +136,6 @@ public final class MassFlowConfig {
         c.stopTimescale = stopTimescale;
         c.stopSpeed = stopSpeed;
         c.depositThicknessFactor = depositThicknessFactor;
-        c.thinVeneerBlocks = thinVeneerBlocks;
-        c.veneerBlocks = veneerBlocks;
         c.ambientC = ambientC;
         c.coolingTimescale = coolingTimescale;
         c.waterLossTimescale = waterLossTimescale;
@@ -153,9 +147,8 @@ public final class MassFlowConfig {
         c.erosionSpeed = erosionSpeed;
         c.porosity = porosity;
         c.waterDepositionTimescale = waterDepositionTimescale;
-        c.coarseSpeed = coarseSpeed;
         c.rainFailureWaterRatio = rainFailureWaterRatio;
-        c.rainMinSlope = rainMinSlope;
+        c.grainDensity = grainDensity;
         c.rainMinErodible = rainMinErodible;
         c.frontEventPeriodSeconds = frontEventPeriodSeconds;
         c.maxReportedCells = maxReportedCells;
@@ -163,7 +156,6 @@ public final class MassFlowConfig {
     }
 
     public void validate() {
-        requirePositive("metersPerBlock", metersPerBlock);
         requirePositive("gravity", gravity);
         requirePositive("cfl", cfl);
         requirePositive("maxSpeed", maxSpeed);
@@ -183,6 +175,7 @@ public final class MassFlowConfig {
         }
         if (stopSpeed < 0) throw new IllegalArgumentException("stopSpeed must be >= 0");
         if (rainFailureWaterRatio < 0) throw new IllegalArgumentException("rainFailureWaterRatio must be >= 0");
+        requirePositive("grainDensity", grainDensity);
         if (!(porosity >= 0 && porosity < 1)) throw new IllegalArgumentException("porosity must be in [0, 1)");
         if (frontEventPeriodSeconds < 0 || maxReportedCells < 0) throw new IllegalArgumentException("telemetry limits must be >= 0");
     }

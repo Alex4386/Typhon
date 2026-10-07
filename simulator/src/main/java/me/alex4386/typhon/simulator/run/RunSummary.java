@@ -12,7 +12,6 @@ import me.alex4386.typhon.engine.assembly.SurfaceEvents.PhreatomagmaticChanged;
 import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.alert.AlertEvents.AlertLevelChanged;
 import me.alex4386.typhon.engine.alert.AlertEvents.EruptionStyleEstimated;
-import me.alex4386.typhon.engine.geothermal.GeyserFormed;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeature;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeatureFormed;
 import me.alex4386.typhon.engine.lava.LavaEvents.LavaOceanEntry;
@@ -80,7 +79,8 @@ public final class RunSummary {
     public double peakEruptionRate;
     public double peakEruptionRateSeconds = Double.NaN;
     public double maxMagnitude = Double.NEGATIVE_INFINITY;
-    public int maxPlumeTopY = Integer.MIN_VALUE;
+    /** Highest plume top (m a.s.l.), {@code NaN} if no plume. */
+    public double maxPlumeTopZ = Double.NaN;
     public double maxPlumeMassRate;
     public double maxFlowLengthM; // real metres
     public long bombsLaunched;
@@ -139,7 +139,7 @@ public final class RunSummary {
                 maxMagnitude = Math.max(maxMagnitude, e.magnitude());
             }
             case PlumeColumn e -> {
-                maxPlumeTopY = Math.max(maxPlumeTopY, e.topY());
+                maxPlumeTopZ = Double.isNaN(maxPlumeTopZ) ? e.topZ() : Math.max(maxPlumeTopZ, e.topZ());
                 maxPlumeMassRate = Math.max(maxPlumeMassRate, e.massEruptionRate());
             }
             case LavaFlowFront e -> {
@@ -167,12 +167,9 @@ public final class RunSummary {
                 maxBombDistance = Math.max(maxBombDistance, Math.hypot(e.position().x(), e.position().z()));
             }
             case VolcanicLightning e -> lightning++;
-            case GeyserFormed e -> {
-                geysers++;
-                if (geysers == 1) milestones.add(new Milestone(t, "First geyser formed at " + e.potentSulfur()));
-            }
             case HydrothermalFeatureFormed e -> {
                 long n = featuresFormed.merge(e.feature(), 1L, Long::sum);
+                if (e.feature() == HydrothermalFeature.GEYSER) geysers++;
                 if (n == 1) milestones.add(new Milestone(t, "First " + e.feature() + " at " + e.pos()));
             }
             case LavaOceanEntry e -> {

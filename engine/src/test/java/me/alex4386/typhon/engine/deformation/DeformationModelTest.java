@@ -11,19 +11,16 @@ import me.alex4386.typhon.engine.deformation.DeformationEvents.GroundDeformed;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
-import me.alex4386.typhon.engine.terrain.TerrainChunk;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
+import me.alex4386.typhon.engine.terrain.GroundImport;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
 import me.alex4386.typhon.engine.testing.StubMagmaState;
-import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.testing.TestGround;
 import org.junit.jupiter.api.Test;
 import me.alex4386.typhon.engine.testing.Saves;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.save.SaveStore;
 
 class DeformationModelTest {
-    private static final BlockId STONE = BlockId.minecraft("stone");
     private static final double NU = 0.25;
 
     // ── Analytic sources ──
@@ -78,9 +75,8 @@ class DeformationModelTest {
 
     // ── Model ──
 
-    private static DeformationConfig config(double metersPerBlock) {
+    private static DeformationConfig config() {
         DeformationConfig c = new DeformationConfig("v", 1e10, 4000, 0, 0);
-        c.metersPerBlock = metersPerBlock;
         c.stations = List.of(new GeodeticStation("SUMMIT", 0, 0), new GeodeticStation("EAST", 200, 0));
         return c;
     }
@@ -88,7 +84,7 @@ class DeformationModelTest {
     @Test
     void inflationRaisesAndDeflationLowersTheSummit() {
         StubMagmaState magma = StubMagmaState.basalt();
-        DeformationModel model = new DeformationModel(config(4), magma, null, null);
+        DeformationModel model = new DeformationModel(config(), magma, null, null);
 
         magma.overpressure = 10;
         assertTrue(model.upliftAt(0, 0) > 0);
@@ -108,7 +104,7 @@ class DeformationModelTest {
     void samplesStationsPeriodically() {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.overpressure = 8;
-        DeformationModel model = new DeformationModel(config(4), magma, null, null);
+        DeformationModel model = new DeformationModel(config(), magma, null, null);
         Engine engine = Engine.builder(0).add(model).build();
         List<DeformationSample> samples = events(run(engine, 1000), DeformationSample.class);
         assertEquals(5, samples.size());
@@ -122,7 +118,7 @@ class DeformationModelTest {
     void dikeSourcesAddToTheField() {
         StubMagmaState magma = StubMagmaState.basalt();
         List<DikeGeometry> dikes = new ArrayList<>();
-        DeformationModel model = new DeformationModel(config(4), magma, () -> dikes, null);
+        DeformationModel model = new DeformationModel(config(), magma, () -> dikes, null);
         double without = model.displacementAt(50.5, 10.5).north();
         dikes.add(new DikeGeometry(50, 0, 0, 1000, 0, 4000, 2));
         double with = model.displacementAt(50.5, 10.5).north();
@@ -132,25 +128,20 @@ class DeformationModelTest {
 
     // ── Terrain ──
 
-    private static TerrainSnapshot flat(int radius) {
-        List<TerrainChunk> chunks = new ArrayList<>();
-        for (int cx = -(radius >> 4) - 1; cx <= (radius >> 4); cx++) {
-            for (int cz = -(radius >> 4) - 1; cz <= (radius >> 4); cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int x = cx * 16; x < cx * 16 + 16; x++) {
-                    for (int z = cz * 16; z < cz * 16 + 16; z++) chunk.set(x, z, TerrainColumn.dry(64, STONE));
-                }
-                chunks.add(chunk);
-            }
-        }
-        return new TerrainSnapshot(chunks);
+    /** Column width (m) of the terrain tests. */
+    private static final double COLUMN_M = 4;
+
+    /** Flat ground at 64 m over columns within about {@code radius} columns of the origin. */
+    private static GroundImport flat(int radius) {
+        int lo = -((radius >> 4) + 1) * 16;
+        int hi = ((radius >> 4) + 1) * 16 - 1;
+        return TestGround.columns(lo, lo, hi, hi, (x, z) -> 64, TestGround.DRY);
     }
 
-    /** Shallow, strongly pressurised source so the uplift spans several blocks. */
+    /** Shallow, strongly pressurised source so the uplift spans several columns. */
     private static DeformationConfig shallowConfig() {
         DeformationConfig c = new DeformationConfig("v", 1e9, 200, 0, 0);
-        c.metersPerBlock = 4;
-        c.terrainRadiusBlocks = 6;
+        c.terrainRadiusM = 24;
         c.terrainPeriodSeconds = 1;
         c.maxTerrainChangesPerCheck = 10_000;
         return c;
@@ -158,13 +149,13 @@ class DeformationModelTest {
 
     record World(Engine engine, TerrainModel terrain, DeformationModel model) {}
 
-    private static World world(StubMagmaState magma, SaveStore restore, TerrainSnapshot snapshot) {
-        TerrainModel terrain = new TerrainModel();
+    private static World world(StubMagmaState magma, SaveStore restore, GroundImport ground) {
+        TerrainModel terrain = TestGround.terrain(COLUMN_M);
         DeformationModel model = new DeformationModel(shallowConfig(), magma, null, terrain);
         Engine.Builder builder = Engine.builder(0).add(terrain).add(model);
         if (restore != null) builder.restore(restore);
         Engine engine = builder.build();
-        engine.submit(snapshot);
+        engine.submit(ground);
         return new World(engine, terrain, model);
     }
 
@@ -173,14 +164,16 @@ class DeformationModelTest {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.overpressure = 50;
         World w = world(magma, null, flat(32));
-        double target = w.model().upliftAt(0, 0);
+        double target = w.model().upliftAt(0.5 * COLUMN_M, 0.5 * COLUMN_M); // centre of column (0, 0)
         assertTrue(target > 0.5, "test source should lift the ground: " + target);
         var world = w.terrain().world();
 
         List<EngineFrame> first = run(w.engine(), 20 * 20);
-        assertEquals(target, world.uplift(0, 0), 0.01, "the world model carries the modelled uplift");
-        assertEquals(w.model().upliftAt(4, 0), world.uplift(4, 0), 0.01, "a continuous field, not whole blocks");
-        assertEquals(64, w.terrain().column(0, 0).groundY(), "the stratigraphy is not raised in blocks");
+        // stored in single precision
+        assertEquals(target, world.uplift(0, 0), 1e-5 * target, "the world model carries the modelled uplift");
+        assertEquals(w.model().upliftAt(4.5 * COLUMN_M, 0.5 * COLUMN_M), world.uplift(4, 0), 1e-5 * target,
+                "a continuous field sampled at column centres");
+        assertEquals(64, world.surfaceZ(0, 0), 1e-9, "uplift is a field, not material added to the stratigraphy");
         assertFalse(events(first, GroundDeformed.class).isEmpty());
 
         magma.overpressure = 0;
@@ -200,7 +193,7 @@ class DeformationModelTest {
         World first = world(magma2, null, flat(32));
         run(first.engine(), 60);
         InMemorySaveStore saved = Saves.save(first.engine());
-        TerrainSnapshot live = resample(first.terrain(), 32);
+        GroundImport live = resample(first.terrain(), 32);
 
         StubMagmaState magma3 = StubMagmaState.basalt();
         magma3.overpressure = 50;
@@ -209,18 +202,10 @@ class DeformationModelTest {
         assertEquals(expected.subList(60, 400), run(second.engine(), 340));
     }
 
-    private static TerrainSnapshot resample(TerrainModel terrain, int radius) {
-        List<TerrainChunk> chunks = new ArrayList<>();
-        for (int cx = -(radius >> 4) - 1; cx <= (radius >> 4); cx++) {
-            for (int cz = -(radius >> 4) - 1; cz <= (radius >> 4); cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int x = cx * 16; x < cx * 16 + 16; x++) {
-                    for (int z = cz * 16; z < cz * 16 + 16; z++) chunk.set(x, z, terrain.column(x, z));
-                }
-                chunks.add(chunk);
-            }
-        }
-        return new TerrainSnapshot(chunks);
+    private static GroundImport resample(TerrainModel terrain, int radius) {
+        int lo = -((radius >> 4) + 1) * 16;
+        int hi = ((radius >> 4) + 1) * 16 - 1;
+        return TestGround.copy(terrain.world(), lo, lo, hi, hi);
     }
 
     // ── helpers ──

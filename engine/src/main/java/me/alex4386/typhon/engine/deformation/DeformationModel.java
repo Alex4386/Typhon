@@ -9,7 +9,6 @@ import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.MagmaState;
-import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
 
@@ -19,13 +18,11 @@ import me.alex4386.typhon.engine.save.StateWriter;
  *
  * <p>The displacement field is relative to an unstressed reference (zero chamber overpressure, no
  * dikes) and is evaluated on demand. Virtual {@link GeodeticStation}s are sampled periodically as
- * {@link DeformationEvents.DeformationSample}s for monitoring dashboards. Optionally, uplift or
- * subsidence that accumulates past whole blocks (after {@code 1/metersPerBlock} scaling) raises or
- * lowers terrain columns — rate-limited and compare-and-set against the surface.
+ * {@link DeformationEvents.DeformationSample}s for monitoring dashboards. Optionally the uplift is
+ * written into the world model's uplift field (metres per column).
  */
 public final class DeformationModel implements Subsystem {
     static final double STEP_SECONDS = 1.0;
-    private static final BlockId WATER = BlockId.minecraft("water");
 
     private final DeformationConfig config;
     private final MagmaState magma;
@@ -33,6 +30,8 @@ public final class DeformationModel implements Subsystem {
     private final TerrainModel terrain;
 
     private double lastTime;
+    /** Largest radius (m) the uplift has been written out to: columns there are reset when it shrinks. */
+    private double appliedRadiusM;
 
     /**
      * @param dikes current dike sources (e.g. {@code DikePropagation::geometries}); may be {@code null}
@@ -47,10 +46,10 @@ public final class DeformationModel implements Subsystem {
         this.terrain = terrain;
     }
 
-    /** Live retune; the source position and block size are refused. */
+    /** Live retune; the source position is refused. */
     @Override
     public boolean reconfigure(Object c) {
-        if (!(c instanceof DeformationConfig n) || !ConfigCopy.same(n, config, "volcanoId", "centerX", "centerZ", "metersPerBlock")) {
+        if (!(c instanceof DeformationConfig n) || !ConfigCopy.same(n, config, "volcanoId", "centerX", "centerZ")) {
             return false;
         }
         n.validate();
@@ -94,7 +93,7 @@ public final class DeformationModel implements Subsystem {
 
     /**
      * A further pressure source of the plumbing (a deeper or side chamber), as a Mogi point source: its
-     * volume change (m³), physical depth (m) and centre column.
+     * volume change (m³), depth (m) and horizontal position (m).
      */
     public record Source(double volumeChangeM3, double depthM, double centerX, double centerZ) {}
 
@@ -105,33 +104,35 @@ public final class DeformationModel implements Subsystem {
         this.extraSources = java.util.Objects.requireNonNull(sources);
     }
 
-    /** Surface displacement (real metres) at world position ({@code x}, {@code z}). */
+    /** Surface displacement (m) at horizontal position ({@code x}, {@code z}) (m). */
     public Displacement displacementAt(double x, double z) {
-        double l = config.metersPerBlock;
         Displacement total = Mogi.displacement(chamberVolumeChange(), config.sourceDepth,
-                (x - (config.centerX + 0.5)) * l, -(z - (config.centerZ + 0.5)) * l, config.poissonRatio);
+                x - config.centerX, -(z - config.centerZ), config.poissonRatio);
         for (Source s : extraSources.get()) {
-            total = total.plus(Mogi.displacement(s.volumeChangeM3(), s.depthM(), (x - (s.centerX() + 0.5)) * l,
-                    -(z - (s.centerZ() + 0.5)) * l, config.poissonRatio));
+            total = total.plus(Mogi.displacement(s.volumeChangeM3(), s.depthM(), x - s.centerX(), -(z - s.centerZ()),
+                    config.poissonRatio));
         }
         if (dikes != null) {
             for (DikeGeometry dike : dikes.get()) {
-                total = total.plus(DikeDislocation.displacement(dike, (x - dike.centerX()) * l, -(z - dike.centerZ()) * l));
+                total = total.plus(DikeDislocation.displacement(dike, x - dike.centerX(), -(z - dike.centerZ())));
             }
         }
         return total;
     }
 
-    /** Vertical displacement (m) at the centre of world column ({@code x}, {@code z}). */
-    public double upliftAt(int x, int z) {
-        return displacementAt(x + 0.5, z + 0.5).up();
+    /** Vertical displacement (m) at horizontal position ({@code x}, {@code z}) (m). */
+    public double upliftAt(double x, double z) {
+        return displacementAt(x, z).up();
     }
 
+    /** Numerical: half the baseline (m) of the finite difference that stands for a point tiltmeter. */
+    private static final double TILT_HALF_BASELINE_M = 5;
+
     public StationReading read(GeodeticStation station) {
-        double x = station.x() + 0.5;
-        double z = station.z() + 0.5;
-        double h = 0.5;
-        double baseline = 2 * h * config.metersPerBlock;
+        double x = station.x();
+        double z = station.z();
+        double h = TILT_HALF_BASELINE_M;
+        double baseline = 2 * h;
         double tiltEast = (displacementAt(x + h, z).up() - displacementAt(x - h, z).up()) / baseline;
         double tiltNorth = (displacementAt(x, z - h).up() - displacementAt(x, z + h).up()) / baseline;
         return new StationReading(station.name(), displacementAt(x, z), tiltEast * 1e6, tiltNorth * 1e6);
@@ -147,23 +148,26 @@ public final class DeformationModel implements Subsystem {
     // ── Terrain ──
 
     /**
-     * Writes the modelled uplift into the world model's continuous uplift field (metres per column, the
-     * displayed and physical ground is surface + uplift). Never moves ground in whole blocks: a host that
-     * shows blocks quantises the uplifted surface itself (mc-projection).
+     * Writes the modelled uplift into the world model's uplift field (metres per column; the ground is
+     * surface + uplift).
      */
     private void adjustTerrain(StepContext context) {
         var world = terrain.world();
-        int radius = config.terrainRadiusBlocks;
+        double l = world.spec().metersPerColumn();
+        int cx = (int) Math.floor(config.centerX / l);
+        int cz = (int) Math.floor(config.centerZ / l);
+        appliedRadiusM = Math.min(config.terrainRadiusM, Math.max(appliedRadiusM, upliftRadiusM()));
+        int radius = (int) Math.ceil(appliedRadiusM / l);
         int raised = 0;
         int lowered = 0;
         for (int dz = -radius; dz <= radius; dz++) {
             for (int dx = -radius; dx <= radius; dx++) {
                 if (dx * dx + dz * dz > radius * radius) continue;
-                int x = config.centerX + dx;
-                int z = config.centerZ + dz;
+                int x = cx + dx;
+                int z = cz + dz;
                 if (!world.isKnown(x, z)) continue;
                 double before = world.uplift(x, z);
-                double after = upliftAt(x, z);
+                double after = upliftAt((x + 0.5) * l, (z + 0.5) * l);
                 if (Math.abs(after - before) < UPLIFT_REPORT_M) continue;
                 world.setUplift(x, z, after);
                 if (after > before) raised++;
@@ -175,7 +179,26 @@ public final class DeformationModel implements Subsystem {
         }
     }
 
-    /** Uplift changes smaller than this (m) are not written or reported. */
+    /**
+     * Distance (m) from the main source within which its Mogi uplift reaches {@link #UPLIFT_REPORT_M}:
+     * {@code u(r) = u₀ (d² / (d² + r²))^{3/2}}, so {@code r = d √((u₀ / u_min)^{2/3} − 1)}; plus the reach of
+     * the dikes (their extent from the source and a few top depths around them).
+     */
+    double upliftRadiusM() {
+        double d = config.sourceDepth;
+        double peak = Math.abs(upliftAt(config.centerX, config.centerZ));
+        double r = peak > UPLIFT_REPORT_M ? d * Math.sqrt(Math.pow(peak / UPLIFT_REPORT_M, 2.0 / 3.0) - 1) : 0;
+        if (dikes != null) {
+            for (DikeGeometry dike : dikes.get()) {
+                double reach = Math.hypot(dike.centerX() - config.centerX, dike.centerZ() - config.centerZ)
+                        + dike.strikeLengthM() / 2 + 3 * Math.max(dike.topDepthM(), 1);
+                r = Math.max(r, reach);
+            }
+        }
+        return r;
+    }
+
+    /** Numerical: uplift changes smaller than this (m) are not written or reported. */
     private static final double UPLIFT_REPORT_M = 0.005;
 
     @Override
@@ -183,22 +206,18 @@ public final class DeformationModel implements Subsystem {
         return config;
     }
 
-    private static long key(int x, int z) {
-        return ((long) x << 32) | (z & 0xffffffffL);
-    }
-
     // ── Persistence ──
 
     @Override
     public void saveState(StateWriter writer) {
         writer.json().addProperty("lastTime", lastTime);
+        writer.json().addProperty("appliedRadiusM", appliedRadiusM);
         // the uplift itself lives in the world model (saved with it)
     }
 
     @Override
     public void loadState(StateReader reader) {
         lastTime = reader.json().get("lastTime").getAsDouble();
-        // saves from before the continuous uplift carried whole applied blocks ("appliedUplift"); the blocks
-        // they raised are already part of those worlds' ground, so the field is ignored
+        appliedRadiusM = reader.json().get("appliedRadiusM").getAsDouble();
     }
 }

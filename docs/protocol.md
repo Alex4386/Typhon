@@ -18,7 +18,7 @@ Java implementation against the visualizer.
   an Adler-32 trailer. This is what `java.util.zip.Deflater` produces by default; decompress with
   `Inflater` (not with `nowrap`).
 - **Coordinates.** World coordinates are metres: `x` east, `y` north, `z` up above the datum. Points
-  are `[x, y]` (`XY`) or `[x, y, z]`. This is the simulator's real-scale frame, not Minecraft blocks.
+  are `[x, y]` (`XY`) or `[x, y, z]`. This is the engine's real-scale frame (the engine's `z` south is the protocol's `−y`).
 - **Time.** All simulation times are **seconds** (JSON numbers, binary `f64`). The engine keeps exact
   integer microseconds internally; send `timeMicros / 1e6`. Event times use the same clock.
 - **Ids.** Volcano and vent ids are the engine's ids (`"fuji"`, `"fuji/summit"`). Unit ids,
@@ -108,12 +108,12 @@ volcano, out of world, …).
 
 | kind | fields | engine meaning |
 |---|---|---|
-| `startEruption` | `volcanoId` | Forced eruption start (`MagmaCommands.StartEruption`). |
+| `startEruption` | `volcanoId` | Forced eruption start (`MagmaCommands.StartEruption`): through a molten conduit to an open crater; without one, a dike is forced (the eruption starts when it reaches the surface). |
 | `stopEruption` | `volcanoId` | Forced stop. |
 | `forceDike` | `volcanoId` | `DikeCommands.ForceDike`. |
 | `arrestDike` | `volcanoId`, `dikeId` (integer) | `DikeCommands.ArrestDike`: a propagating dike stops where it is and freezes into an intrusion (`DikeStalled` with reason `ARRESTED`). Rejected (`unknownDike`, `badRequest`) for unknown or no longer propagating dikes. |
 | `removeDike` | `volcanoId`, `dikeId` (integer) | `DikeCommands.RemoveDike`: deletes the dike (arresting it if still rising). Its fissure stops being a vent (`ventState` → `removed`); the intrusion stays in the rock and deformation. The `dike:` entity is removed. |
-| `blockDikes` | `volcanoId`, `blocked` (boolean) | `DikeCommands.BlockDikes`: stops (or allows again) spontaneous dike nucleation; `forceDike` still works. Shown as the chamber's `dikesBlocked`. |
+| `blockDikes` | `volcanoId`, `blocked` (boolean) | `DikeCommands.BlockDikes`: stops (or allows again) dikes breaking out where the chamber walls fail (the chamber grows instead); `forceDike` still works. Shown as the chamber's `dikesBlocked`. |
 | `sealVent` | `volcanoId`, `ventId` | `VentCommands.SealVent`: plug a summit vent or a fissure. Magma leaves through the remaining open vents; with none left the eruption ends (`eruptionEnded` cause `SEALED`) and the chamber keeps its pressure. A sealed summit cannot fail, so pressure builds until a dike opens a flank path. Error `unknownVent` for an unknown id. |
 | `unsealVent` | `volcanoId`, `ventId` | `VentCommands.UnsealVent`. A frozen fissure stays frozen (the ack carries a note). |
 | `removeVent` | `volcanoId`, `ventId` | `VentCommands.RemoveVent`: delete a dike-fed fissure (same as `removeDike` on its dike). Summit vents are rejected (`unsupported`): seal them instead. |
@@ -139,7 +139,7 @@ volcano, out of world, …).
 |---|---|---|
 | `getSchema` | — | `schema` (§4.7) of the attached session. It is also sent at the end of every attach burst. |
 | `setConfig` | `requestId?`, `world?`, `volcanoes?: {[id]: …}`, `replace?: boolean`, `dryRun?: boolean`, `confirm?: string` | `configResult` (below). The configuration API; same semantics as HTTP `PATCH`/`PUT /api/sessions/{id}/config`. A volcano id that does not exist with a full definition adds that volcano; `null` removes one. |
-| `placeChamber` | `requestId?`, `at: [x, y]` (map metres), `name?`, `fields?: {depthM?, volumeM3?, temperatureC?, silicaWt?, waterWt?, co2Wt?, crystalFraction?, supplyRateM3PerS?, tensileStrengthMPa?, initialOverpressureMPa?}`, `dryRun?` | Places a magma chamber `depthM` below the ground at the point: a new volcano `volcano-<n>` whose vent is **emergent** (no crater, no edifice: it forms where magma first reaches the surface). Omitted fields take the defaults in `schema.commands.placeChamber`. Applied through the configuration API (adding a volcano is a `reload`); replies `configResult` with `volcanoId`. |
+| `placeChamber` | `requestId?`, `at: [x, y]` (map metres), `name?`, `fields?: {depthM?, volumeM3?, temperatureC?, silicaWt?, waterWt?, co2Wt?, crystalFraction?, supplyRateM3PerS?, tensileStrengthMPa?, initialOverpressureMPa?}`, `dryRun?` | Places a magma chamber `depthM` below the ground at the point: a new volcano `volcano-<n>` with **no vent** (no conduit, crater or edifice: magma reaches the surface only through a dike that breaks out of the chamber, and its fissure may localise into a vent). Omitted fields take the defaults in `schema.commands.placeChamber`. Applied through the configuration API (adding a volcano is a `reload`); replies `configResult` with `volcanoId`. |
 | `getConfig` | `requestId?` | Replies `config {requestId, world, volcanoes: {[id]: tree}}`: the attached world's current definitions (as HTTP `GET /api/sessions/{id}/config`). Clients snapshot it for undo. |
 | `plumbing` | `requestId?`, `volcanoId`, `op`, `chamberId?`, `connectionId?`, `at?: [x, y]`, `from?`, `to?`, `kind?: "conduit"\|"dike"`, `fields?`, `dryRun?`, `confirm?` | One edit of a volcano's magma plumbing (§3.5.1): `op` is `addChamber` (`at`, `fields` from `schema.components.chamber`; `chamberId` optional, else `chamber-<n>`), `editChamber` (`chamberId`; `at` and/or `fields.depthM` move it, other fields retune it; `main` is the volcano's eruptive chamber), `removeChamber` (also removes its pathways), `connect` (`from`, `to`, `kind`, `fields` from `schema.components.connection`), `editConnection` (`connectionId`, `fields`, `kind?`), `removeConnection`. Built into the definition by the server and applied through the configuration API, which classifies it: adding a chamber or pathway is a `reload` keeping every other state; moving or resizing a further chamber resets only that chamber (`needsConfirmation` first); its other fields and every pathway field are `live`. Replies `configResult` with `chamberId`/`connectionId`. |
 | `removeVolcano` | `requestId?`, `volcanoId`, `dryRun?`, `confirm?` | Removes a volcano through the configuration API: a `reinit`, so the first reply is `needsConfirmation` with a `token` to send back as `confirm`. Its deposits stay in the world. |
@@ -261,7 +261,7 @@ point or an entity, and again every 2 s while the simulation runs.
   "volcanoes":[{"id":"kilauea","alert":"ERUPTING","erupting":true}]}],
  "server":{"maxSessions":8,"cpus":16,"heapUsedMB":812,"heapMaxMB":6144,"worldsDir":"/srv/worlds"}}
 {"type":"catalog","templates":[{"name":"ocean","title":"Open sea","description":"…","fields":[ParamSpec…]}, …],
- "defaultTemplate":"ocean","defaultPreset":"kilauea","presets":[{"name":"kilauea","title":"Kīlauea-like shield","description":"…","realScale":false}],
+ "defaultTemplate":"ocean","defaultPreset":"kilauea","presets":[{"name":"kilauea","title":"Kīlauea summit at real scale","description":"…"}],
  "worlds":[{"name":"my-kilauea","title":"Kīlauea","volcanoes":1,"hasState":true,
             "sessionId":"s1"}],
  "server":{ … }}
@@ -373,7 +373,7 @@ This is a snapshot of 0D state per volcano (from `runner` snapshots), sent ≥ 2
 
 On attach the server sends a backlog, in time order up to the session time: every **milestone**
 (`eruptionStarted`, `eruptionEnded`, `alertChanged`, `regimeChanged`, `styleEstimated`, `dikeStarted`,
-`dikeStalled`, `fissureOpened`, `ventState`, `areaExpanded`, `message`, the first `oceanEntry` and the first `geothermalFeature` of
+`dikeStalled`, `fissureOpened`, `ventFormed`, `ventState`, `areaExpanded`, `message`, the first `oceanEntry` and the first `geothermalFeature` of
 each feature type per volcano; the last 4000), the most recent ~1500 other non-seismic events, and the
 most recent ~600 seismic events and bombs. Milestones are kept apart from the rolling event log so a
 late client always learns that an eruption started, however many quakes and plume updates followed. Every event has `kind` and `time` (s):
@@ -391,6 +391,7 @@ late client always learns that an eruption started, however many quakes and plum
 | `dikeAdvanced` | `volcanoId`, `dikeId`, `path` [[x,y,z]…] (full path so far) | `DikeEvents.DikeAdvanced` |
 | `dikeStalled` | `volcanoId`, `dikeId`, `tip` [x,y,z], `depthM`, `volumeM3`, `reason` (`INSUFFICIENT_PRESSURE`/`FROZE`) | `DikeEvents.DikeStalled` (was a `message` before) |
 | `fissureOpened` | `volcanoId`, `vent: VentInfo` | `DikeEvents.FissureOpened` |
+| `ventFormed` | `volcanoId`, `vent: VentInfo` (a crater), `fissureId` | `VentEvents.VentFormed`: a segment of an erupting fissure kept the flow after its neighbours froze; it goes on erupting as a crater on the fissure line |
 | `bombLaunched` | `volcanoId`, `id`, `start`, `velocity` (m/s), `dragK`, `flightSeconds`, `landing` | `TephraEvents.BombLaunched` |
 | `plume` | `volcanoId`, `base`, `topZ`, `radius`, `massRateKgS` | `TephraEvents.PlumeColumn` |
 | `lightning` | `volcanoId`, `at` | `TephraEvents.VolcanicLightning` |
@@ -535,9 +536,11 @@ not resend tiles.
 | 7 | AshDepth | tephra-fall deposit thickness, m | 2 |
 | 8 | SurfaceTemperature | top subsurface cell, °C | 4 |
 | 9 | WaterTableDepth | m below surface; negative = above ground (spring) | 6 |
-| 10 | TopUnit | unit id of the top layer (§4.2) | 5 U16Raw |
+| 10 | TopUnit | unit id most visible at the surface, by areal coverage: from the top down each layer covers 1 − exp(−t/d) of what lies beneath (t thickness, d grain size) (§4.2) | 5 U16Raw |
 | 11 | Uplift | cumulative vertical deformation since session start, m | 6 |
 | 12 | SteamFraction | top subsurface cell, 0..1 | 7 U8Linear (0, 1) |
+| 13 | UnderUnit | unit id second most visible at the surface (0 = none) | 5 U16Raw |
+| 14 | UnderShare | share of UnderUnit in what the top two units show, 0..1 | 7 U8Linear (0, 1) |
 
 The server may use any codec for any field. Clients decode by the codec id in the frame.
 
@@ -578,8 +581,8 @@ The core's columns are level 0. Around them the server offers a pyramid of extra
 `WorldInfo.lod` and streamed only to clients that ask for them (`subscribe.levels`):
 
 - **Coarse context levels `ℓ = 1…K`** — cells of `2^ℓ` columns. Level ℓ covers `2^ℓ` core half-widths
-  around the core's centre (a clipmap), clamped to `lod.extent` (by default 30 km at real scale, at
-  least 6 km and four core widths for compact worlds), so each level has about as many cells as the
+  around the core's centre (a clipmap), clamped to `lod.extent` (by default 30 km, and at least the
+  core's width), so each level has about as many cells as the
   core has columns. Inside the core a coarse cell is the **mean** of its live columns, so volumes per
   area (lava, ash, PDC, lahar depth) and elevations are conserved between levels; outside, it is the
   static context terrain (the generator's continuous surface, or the nearest core edge for DEMs) and,
@@ -690,23 +693,23 @@ Body (after decompression), in order:
 
 The Java implementation is `sim-server/` (see its README). Notes from implementing it:
 
-- Engine columns are integer `(x, z)` with `+z` south and blocks `L` metres tall; the server maps
-  column `(cx, cz)` to `x ∈ [cx·L, (cx+1)·L)`, `y ∈ [−(cz+1)·L, −cz·L)` and elevations to
-  `block·L`. Unit ids on the wire are engine unit ids + 1 (0 = none).
+- Engine positions are metres with `+z` south and `y` up; engine columns are integer `(x, z)`, `L`
+  metres wide. The server maps column `(cx, cz)` to `x ∈ [cx·L, (cx+1)·L)`, `y ∈ [−(cz+1)·L, −cz·L)`
+  and engine points `(x, y, z)` to `(x, −z, y)`; elevations pass through unchanged. Unit ids on the wire are engine unit ids + 1 (0 = none).
 - Events are batched (~4 Hz). Every `events` message re-renders the client's event-driven views,
   so per-step messages swamp it.
 - `geothermalFeature` is sent for point features only (fumaroles, geysers, springs, mud pots,
   sulfur deposits, submarine vents); diffuse alteration shows through `TopUnit`.
 - Tiles are 64 columns when the world allows (fewer meshes for the client).
 
-- **Runner.** Run the engine on `EngineRunner`. Use lossless frames for block changes (needed only
-  by a Minecraft host) and the event ring for `events`. Build `state` from `runner.snapshot()` and
+- **Runner.** Run the engine on `EngineRunner`. Use lossless frames when every event must be seen
+  (e.g. a Minecraft projection) and the event ring for `events`. Build `state` from `runner.snapshot()` and
   `clock` from `completedStep()` and the base step.
 - **Tiles.** Derive tiles from the world model: `ColumnStacks.surfaceZ` + uplift; lava, water, PDC
   and lahar surface fields; ash from FALL layers; subsurface top-cell temperature and steam; water
   table `hw`. Keep a per-(field, tile) version and the last encoded payload hash.
 - **Compression.** `Deflater` with level 6 is sufficient; reuse a `Deflater` per thread.
-- **Sections.** `WorldQuery.section(polyline, zMin, zMax, nu, nz, mask)` maps one-to-one onto §6.
+- **Sections.** `WorldQuery.section(polyline, zMin, zMax, nu, nz)` (polyline in engine metres) maps one-to-one onto §6.
 - **Reference check.** Run the visualizer against your server with `VITE` pointed at it
   (`?server=ws://host:port/ws`). The codec tests in `visualizer/src/protocol/frames.test.ts` define
   exact round-trip expectations.

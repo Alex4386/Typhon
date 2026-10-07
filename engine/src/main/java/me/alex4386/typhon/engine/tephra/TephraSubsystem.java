@@ -12,7 +12,7 @@ import java.util.Objects;
 import java.util.TreeMap;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.command.EngineCommand;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
@@ -28,7 +28,6 @@ import me.alex4386.typhon.engine.tephra.TephraEvents.BombLaunched;
 import me.alex4386.typhon.engine.tephra.TephraEvents.ExplosivePhaseChanged;
 import me.alex4386.typhon.engine.tephra.TephraEvents.PlumeColumn;
 import me.alex4386.typhon.engine.tephra.TephraEvents.VolcanicLightning;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerFlags;
@@ -37,7 +36,6 @@ import me.alex4386.typhon.engine.world.WorldModel;
 import me.alex4386.typhon.engine.world.UnitSource;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
-import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
 
@@ -46,31 +44,25 @@ import me.alex4386.typhon.engine.save.StateWriter;
  *
  * <p><b>Bombs</b> are launched from the vent of the active {@link ExplosivePhase} at a Poisson rate
  * set by the ballistic share of the mass eruption rate, with log-normal diameters, near-vertical
- * launch angles and a gas-thrust exit speed ({@link Ballistics#gasThrustExitSpeed}) scaled by
- * {@link TephraConfig#ballisticSpeedScale}. They fly under gravity and quadratic drag relative to the
- * wind ({@link Ballistics#rk4}, sub-steps of at most {@link TephraConfig#maxIntegrationStepSeconds}) until they
- * cross the ground of the {@link TerrainModel}; where the terrain is unknown the ground is taken to
- * be at launch height. On impact a crater of radius {@code k·E^(1/3)} is dug and bombs of at least
- * {@link TephraConfig#minBlockDiameter} leave a {@code magma_block} that later cools into rock chosen
- * by silica content.
+ * launch angles and the gas-thrust exit speed ({@link Ballistics#gasThrustExitSpeed}). They fly under
+ * gravity and quadratic drag relative to the wind ({@link Ballistics#rk4}, sub-steps of at most
+ * {@link TephraConfig#maxIntegrationStepSeconds}) until they cross the ground surface of the world model;
+ * where the ground is unknown it is taken to be at launch height. On impact a crater of radius
+ * {@code k·E^(1/3)} is excavated and the bomb's own volume is laid on the ground as loose rock chosen by
+ * silica content.
  *
  * <p><b>Ash</b>: every {@link TephraConfig#ashStepSeconds} seconds the non-ballistic mass is injected
  * around the vent at the plume height from {@link PlumeModel}, transported and settled on an
- * {@link AshGrid}, and the accumulated deposit is turned into block changes via the
- * {@link AshPalette}. The subsystem emits {@link PlumeColumn}, {@link AshFall} and
- * {@link VolcanicLightning} events for hosts to render.
+ * {@link AshGrid}, and the accumulated deposit is laid on the ground as loose ash layers. The subsystem
+ * emits {@link PlumeColumn}, {@link AshFall} and {@link VolcanicLightning} events.
+ *
+ * <p>All quantities are physical: positions in metres, masses in kg, speeds in m/s.
  *
  * <p>Must be registered after the {@link TerrainModel} it reads.
  */
 public final class TephraSubsystem implements Subsystem {
-    private static final BlockId MAGMA_BLOCK = BlockId.minecraft("magma_block");
-    private static final BlockId WATER = BlockId.minecraft("water");
-    private static final BlockId BEDROCK = BlockId.minecraft("bedrock");
-
     /** Mass accounting for airborne tephra (kg). emitted = airborne + deposited + exported + discarded. */
     public record MassBudget(double emitted, double airborne, double deposited, double exported, double discarded) {}
-
-    private record Cooling(BlockPos pos, double dueTime, BlockId target) {}
 
     private record Landing(Vec3d position, Vec3d velocity) {}
 
@@ -83,7 +75,6 @@ public final class TephraSubsystem implements Subsystem {
     /** Parcels a proximal-fallout command is split into (deterministic sampling of the landing field). */
     static final int PROXIMAL_PARCELS = 96;
     private final List<Bomb> bombs = new ArrayList<>();
-    private final List<Cooling> coolings = new ArrayList<>();
     /** Last announced ash fall per region: {fallRate, airborneLoad, time}. */
     private final TreeMap<Integer, double[]> ashReports = new TreeMap<>();
 
@@ -105,10 +96,10 @@ public final class TephraSubsystem implements Subsystem {
         this(id, terrain, new TephraConfig());
     }
 
-    /** Live retune; the ash grid's layout (cell size, cell count, top) is refused. A changed wind blows from now on. */
+    /** Live retune; the ash grid's layout (cell size, cell count) is refused. A changed wind blows from now on. */
     @Override
     public boolean reconfigure(Object c) {
-        if (!(c instanceof TephraConfig n) || !ConfigCopy.same(n, config, "cellSize", "gridCells", "worldTopY")) return false;
+        if (!(c instanceof TephraConfig n) || !ConfigCopy.same(n, config, "cellSizeM", "gridCells")) return false;
         TephraConfig next = n.copy();
         next.validate();
         boolean wind = !ConfigCopy.same(next, config, "initialWindSpeed", "initialWindDirectionRad", "initialWindVariability");
@@ -153,8 +144,9 @@ public final class TephraSubsystem implements Subsystem {
 
     /** See {@link LaunchSalvo}; applied at this subsystem's next step. */
     public void launchSalvo(VentSite vent, double ballisticMassKg, double exitSpeed, double zenithMeanDeg,
-            double zenithSigmaDeg, double silicaWt, int maxBombs) {
-        pending.add(new LaunchSalvo(id, vent, ballisticMassKg, exitSpeed, zenithMeanDeg, zenithSigmaDeg, silicaWt, maxBombs));
+            double zenithSigmaDeg, double silicaWt, int maxBombs, boolean carriesMass) {
+        pending.add(new LaunchSalvo(id, vent, ballisticMassKg, exitSpeed, zenithMeanDeg, zenithSigmaDeg, silicaWt, maxBombs,
+                carriesMass));
     }
 
     /** See {@link ProximalFallout}; applied at this subsystem's next step. */
@@ -187,15 +179,11 @@ public final class TephraSubsystem implements Subsystem {
         return bombs.size();
     }
 
-    public int pendingCoolings() {
-        return coolings.size();
-    }
-
     public WindField wind() {
         return wind;
     }
 
-    /** Current plume height above the vent in blocks (0 when no phase is active). */
+    /** Current plume height above the vent (m; 0 when no phase is active). */
     public double plumeHeight() {
         return phase == null || grid == null ? 0 : grid.plumeHeight;
     }
@@ -206,22 +194,19 @@ public final class TephraSubsystem implements Subsystem {
      */
     public void backfill(double time, int x0, int z0, int size) {
         if (grid == null) return;
-        grid.backfill(terrain.world(), units.unit(DepositType.FALL, time, Double.NaN), config.depositJitter, x0, z0, size);
+        grid.backfill(terrain.world(), units.unit(DepositType.FALL, time, Double.NaN), x0, z0, size);
     }
 
     /** Reports ground with a fall deposit at least {@code minThicknessM} thick (world expansion activity). */
     public void reportDeposits(double minThicknessM, me.alex4386.typhon.engine.expansion.ExpansionActivity.Sink sink) {
         if (grid == null) return;
-        double blocks = minThicknessM / terrain.world().spec().metersPerColumn();
-        grid.reportDeposits(blocks, config.depositBulkDensity, 16, sink);
+        grid.reportDeposits(minThicknessM, config.depositBulkDensity, 16, sink);
     }
 
     /** Ash deposit thickness (m) at a column; 0 outside the ash grid. */
     public double depositThickness(int x, int z) {
         if (grid == null) return 0;
-        int cell = grid.cellAt(x, z);
-        // the grid's thickness is in columns (blocks): convert to metres
-        return cell < 0 ? 0 : grid.thickness(cell, config.depositBulkDensity) * terrain.world().spec().metersPerColumn();
+        return grid.thicknessAt(x, z, config.depositBulkDensity);
     }
 
     /** Suspended ash load (kg/m²) above a column; 0 outside the ash grid. */
@@ -267,7 +252,6 @@ public final class TephraSubsystem implements Subsystem {
         processPending(context);
         launchFromPhase(context);
         advanceBombs(context);
-        runCoolings(context);
         if (context.crossed(config.ashStepSeconds)) ashStep(context);
         if (grid != null && context.crossed(config.ashEventSeconds)) emitAshFall(context);
     }
@@ -288,17 +272,22 @@ public final class TephraSubsystem implements Subsystem {
                     }
                 }
                 case SetWind set -> wind.set(set.speed(), set.directionRad(), set.variability(), context.random());
-                case LaunchBomb launch -> launch(context, launch.start(), launch.velocity(), launch.diameter(), launch.silicaWt());
+                case LaunchBomb launch -> launch(context, launch.start(), launch.velocity(), launch.diameter(), launch.silicaWt(), 1);
                 case LaunchSalvo salvo -> launchSalvo(context, salvo);
-                case ProximalFallout fallout -> depositProximal(context, fallout);
+                // a salvo's parcels land, then the cone relaxes once
+                case ProximalFallout fallout ->
+                        terrain.world().withRelaxationDeferred(() -> depositProximal(context, fallout));
                 default -> throw new IllegalStateException("Unexpected command " + command);
             }
         }
         pending.clear();
     }
 
-    private void ensureGrid(BlockPos center) {
-        if (grid == null) grid = AshGrid.centeredOn(center, config.cellSize, config.gridCells);
+    private void ensureGrid(Point3 center) {
+        if (grid != null) return;
+        double l = metersPerColumn();
+        int cellColumns = Math.max(1, (int) Math.round(config.cellSizeM / l));
+        grid = AshGrid.centeredOn(center, cellColumns, l, config.gridCells);
     }
 
     // ── Bombs ──
@@ -310,12 +299,15 @@ public final class TephraSubsystem implements Subsystem {
         double sigma = config.bombDiameterSigma;
         double meanMass = Ballistics.sphereMass(config.bombMedianDiameter, config.bombDensity)
                 * StrictMath.exp(4.5 * sigma * sigma);
-        double rate = Math.min(config.maxBombsPerSecond, phase.massEruptionRate() * config.massScale * phase.ballisticFraction() / meanMass);
+        double trueRate = phase.massEruptionRate() * phase.ballisticFraction() / meanMass;
+        double rate = Math.min(config.maxBombsPerSecond, trueRate);
+        // beyond the tracking cap each tracked bomb stands for several real ones, so all the mass lands
+        double weight = rate > 0 ? trueRate / rate : 0;
         int count = random.nextPoisson(rate * context.dtSeconds());
         if (count == 0) return;
 
         double physical = Ballistics.gasThrustExitSpeed(phase.gasFraction(), phase.temperatureC(), phase.overpressureMPa());
-        double exitSpeed = Math.max(config.minExitSpeed, Math.min(config.maxExitSpeed, physical)) * config.ballisticSpeedScale;
+        double exitSpeed = Math.max(config.minExitSpeed, Math.min(config.maxExitSpeed, physical));
 
         for (int n = 0; n < count; n++) {
             double diameter = clamp(
@@ -331,7 +323,7 @@ public final class TephraSubsystem implements Subsystem {
             double horizontal = speed * StrictMath.sin(zenith);
             Vec3d velocity = new Vec3d(
                     horizontal * StrictMath.cos(azimuth), speed * StrictMath.cos(zenith), horizontal * StrictMath.sin(azimuth));
-            launch(context, sampleVentPoint(phase.vent(), random), velocity, diameter, phase.silicaWt());
+            launch(context, sampleVentPoint(phase.vent(), random), velocity, diameter, phase.silicaWt(), weight);
         }
     }
 
@@ -342,20 +334,29 @@ public final class TephraSubsystem implements Subsystem {
 
     private void launchSalvo(StepContext context, LaunchSalvo salvo) {
         SimRandom random = context.random();
-        double expected = salvo.ballisticMassKg() * config.massScale / meanBombMass();
+        double expected = salvo.ballisticMassKg() / meanBombMass();
         int count = (int) Math.floor(expected);
         if (random.chance(expected - count)) count++;
         count = Math.min(count, salvo.maxBombs());
+        // a salvo that carries its mass lays all of it, even when it is less than one mean bomb
+        if (salvo.carriesMass() && count == 0 && salvo.ballisticMassKg() > 0) count = 1;
         if (count <= 0) return;
 
-        double exitSpeed = Math.max(config.minExitSpeed, Math.min(config.maxExitSpeed, salvo.exitSpeed()))
-                * config.ballisticSpeedScale;
+        double exitSpeed = Math.max(config.minExitSpeed, Math.min(config.maxExitSpeed, salvo.exitSpeed()));
         double sigma = config.bombDiameterSigma;
+        double[] diameters = new double[count];
+        double sampled = 0;
         for (int n = 0; n < count; n++) {
-            double diameter = clamp(
+            diameters[n] = clamp(
                     config.bombMedianDiameter * StrictMath.exp(sigma * random.nextGaussian()),
                     config.minBombDiameter,
                     config.maxBombDiameter);
+            sampled += Ballistics.sphereMass(diameters[n], config.bombDensity);
+        }
+        // tracked bombs stand for the whole ballistic mass (capped salvos weight each up), or for none of it
+        double weight = salvo.carriesMass() && sampled > 0 ? salvo.ballisticMassKg() / sampled : 0;
+        for (int n = 0; n < count; n++) {
+            double diameter = diameters[n];
             double speed = exitSpeed * StrictMath.exp(0.15 * random.nextGaussian()) / Math.sqrt(1 + diameter);
             double zenithDeg = launchZenithDeg(salvo.zenithMeanDeg(), salvo.zenithSigmaDeg(), random);
             double zenith = Math.toRadians(zenithDeg);
@@ -363,7 +364,7 @@ public final class TephraSubsystem implements Subsystem {
             double horizontal = speed * StrictMath.sin(zenith);
             Vec3d velocity = new Vec3d(
                     horizontal * StrictMath.cos(azimuth), speed * StrictMath.cos(zenith), horizontal * StrictMath.sin(azimuth));
-            launch(context, sampleVentPoint(salvo.vent(), random), velocity, diameter, salvo.silicaWt());
+            launch(context, sampleVentPoint(salvo.vent(), random), velocity, diameter, salvo.silicaWt(), weight);
         }
     }
 
@@ -382,9 +383,8 @@ public final class TephraSubsystem implements Subsystem {
         ensureGrid(f.vent().position());
         SimRandom random = context.random();
         double exitSpeed = Math.max(config.minExitSpeed, Math.min(config.maxExitSpeed, f.exitSpeed()));
-        double v = config.ballisticSpeedScale; // Froude: speeds ×1/√L, so ranges come out in blocks
         Vec3d w = wind.at(context.time());
-        double parcelMass = f.massKg() * config.massScale / PROXIMAL_PARCELS;
+        double parcelMass = f.massKg() / PROXIMAL_PARCELS;
         double sigma = config.bombDiameterSigma;
         for (int n = 0; n < PROXIMAL_PARCELS; n++) {
             double d = clamp(f.medianSizeM() * StrictMath.exp(sigma * random.nextGaussian()), f.minSizeM(), f.maxSizeM());
@@ -394,19 +394,18 @@ public final class TephraSubsystem implements Subsystem {
             // Quadratic drag (v_t = sqrt(g/k)): a vertical launch at speed v peaks at (v_t²/2g)·ln(1 + v²/v_t²),
             // so use the drag-free speed that reaches the same height.
             double vt = Math.sqrt(config.gravity / Ballistics.dragFactor(d, config.bombDensity, config.dragCoefficient,
-                    config.airDensity));
+                    config.airDensity * Ballistics.airDensityRatio(f.vent().position().y(), config.gravity)));
             double u = vt * Math.sqrt(Math.log1p((speed / vt) * (speed / vt)));
-            double vh = u * StrictMath.sin(zenith) * v;
-            double vz = u * StrictMath.cos(zenith) * v;
+            double vh = u * StrictMath.sin(zenith);
+            double vz = u * StrictMath.cos(zenith);
             double flight = 2 * vz / config.gravity + 1e-3;
-            // The wind couples over the drag response time tau = v_t/g (model speeds, model seconds); like the
-            // launch speed it is a real speed, Froude-scaled to blocks per model second.
-            double tau = vt * v / config.gravity;
+            // The wind couples over the drag response time tau = v_t/g.
+            double tau = vt / config.gravity;
             double drift = flight - tau * (1 - StrictMath.exp(-flight / tau));
             double r = vh * flight;
             Vec3d at = sampleVentPoint(f.vent(), random);
-            double x = at.x() + r * StrictMath.cos(azimuth) + w.x() * v * drift;
-            double z = at.z() + r * StrictMath.sin(azimuth) + w.z() * v * drift;
+            double x = at.x() + r * StrictMath.cos(azimuth) + w.x() * drift;
+            double z = at.z() + r * StrictMath.sin(azimuth) + w.z() * drift;
             depositParcel(context, x, z, parcelMass);
         }
     }
@@ -418,26 +417,26 @@ public final class TephraSubsystem implements Subsystem {
     static final double PROXIMAL_BULK_DENSITY = 1400;
 
     /**
-     * Lays one proximal parcel (model mass) on the ground where it lands, at column resolution (a 3×3
+     * Lays one proximal parcel (kg) on the ground where it lands (m), at column resolution (a 3×3
      * footprint, the centre weighted twice), not spread over an ash-grid cell: near the vent the cone is built
      * column by column and relaxes to its angle of repose. The ash grid keeps the record (for maps and
      * world growth) without applying it again. Off the simulated ground the grid holds it for the backfill.
      */
     private void depositParcel(StepContext context, double x, double z, double parcelMass) {
-        int cx = (int) Math.floor(x);
-        int cz = (int) Math.floor(z);
+        WorldModel world = terrain.world();
+        double l = world.spec().metersPerColumn();
+        int cx = (int) Math.floor(x / l);
+        int cz = (int) Math.floor(z / l);
         int cell = grid.cellAt(cx, cz);
         if (cell < 0) {
             grid.discarded += parcelMass;
             return;
         }
-        WorldModel world = terrain.world();
-        double l = world.spec().metersPerColumn();
         if (!world.isKnown(cx, cz)) {
             grid.addDeposit(cell, parcelMass); // applied (or backfilled) through the grid later
             return;
         }
-        double realMass = parcelMass / config.massScale;
+        double realMass = parcelMass;
         int unit = units.unit(DepositType.FALL, context.time(), Double.NaN);
         double weightSum = 10; // centre 2, eight neighbours 1
         for (int dz = -1; dz <= 1; dz++) {
@@ -456,26 +455,27 @@ public final class TephraSubsystem implements Subsystem {
         grid.addAppliedDeposit(cell, parcelMass, config.depositBulkDensity);
     }
 
+    /** A launch point on the vent floor (m). */
     private static Vec3d sampleVentPoint(VentSite vent, SimRandom random) {
-        BlockPos p = vent.position();
-        double cx = p.x() + 0.5, cz = p.z() + 0.5, y = p.y() + 1;
+        Point3 p = vent.position();
+        double cx = p.x(), cz = p.z(), y = p.y();
         if (vent.kind() == VentKind.FISSURE) {
-            double along = (random.nextDouble() - 0.5) * vent.fissureLength();
-            double across = (random.nextDouble() - 0.5) * Math.max(1, vent.craterRadius());
+            double along = (random.nextDouble() - 0.5) * vent.fissureLengthM();
+            double across = (random.nextDouble() - 0.5) * 2 * vent.craterRadiusM();
             double dx = StrictMath.cos(vent.fissureAngleRad()), dz = StrictMath.sin(vent.fissureAngleRad());
             return new Vec3d(cx + along * dx - across * dz, y, cz + along * dz + across * dx);
         }
-        double r = vent.craterRadius() * Math.sqrt(random.nextDouble());
+        double r = vent.craterRadiusM() * Math.sqrt(random.nextDouble());
         double a = random.nextDouble(0, 2 * Math.PI);
         return new Vec3d(cx + r * StrictMath.cos(a), y, cz + r * StrictMath.sin(a));
     }
 
-    private void launch(StepContext context, Vec3d start, Vec3d velocity, double diameter, double silicaWt) {
+    private void launch(StepContext context, Vec3d start, Vec3d velocity, double diameter, double silicaWt, double weight) {
         if (!(diameter > 0)) throw new IllegalArgumentException("diameter must be positive");
         double k = Ballistics.dragFactor(diameter, config.bombDensity, config.dragCoefficient, config.airDensity);
         double[] s = {start.x(), start.y(), start.z(), velocity.x(), velocity.y(), velocity.z()};
         Bomb bomb = new Bomb(
-                nextBombId++, s, diameter, k, silicaWt, (int) Math.floor(start.y()) - 1, context.time());
+                nextBombId++, s, diameter, k, silicaWt, start.y(), context.time(), weight);
         // A launch point sampled inside the crater can sit below a wall column: start on its surface,
         // otherwise the bomb "lands" on its first step without flying.
         s[1] = Math.max(s[1], surfaceTop(s[0], s[2], bomb));
@@ -502,8 +502,14 @@ public final class TephraSubsystem implements Subsystem {
         bombs.add(bomb);
     }
 
+    /** Ground elevation (m) under a point, the bomb's fallback where the ground is not known. */
     private double surfaceTop(double x, double z, Bomb bomb) {
-        return terrain.groundY((int) Math.floor(x), (int) Math.floor(z), bomb.fallbackGroundY) + 1;
+        WorldModel world = terrain.world();
+        double l = world.spec().metersPerColumn();
+        int cx = (int) Math.floor(x / l);
+        int cz = (int) Math.floor(z / l);
+        double s = world.surfaceZ(cx, cz);
+        return Double.isFinite(s) ? s + world.uplift(cx, cz) : bomb.fallbackGroundZ;
     }
 
     /** Integrates one engine step of {@code stepSeconds}; returns the landing point if the bomb reached the ground. */
@@ -544,53 +550,96 @@ public final class TephraSubsystem implements Subsystem {
     }
 
     private void land(StepContext context, Bomb bomb, Landing landing) {
-        int x = (int) Math.floor(landing.position().x());
-        int z = (int) Math.floor(landing.position().z());
+        WorldModel world = terrain.world();
+        double l = metersPerColumn();
+        int x = (int) Math.floor(landing.position().x() / l);
+        int z = (int) Math.floor(landing.position().z() / l);
         double speed = landing.velocity().length();
         double energy = 0.5 * Ballistics.sphereMass(bomb.diameter, config.bombDensity) * speed * speed;
-        // the impact crater is metres across; at real-scale columns (10 m and more) it stays below one column
-        double radius = Ballistics.craterRadius(energy, config.craterCoefficient) / metersPerBlock();
-        int impactGround = terrain.groundY(x, z, bomb.fallbackGroundY);
-
+        double radius = Ballistics.craterRadius(energy, config.craterCoefficient);
         double dug = 0;
-        if (terrain.column(x, z) != null) {
-            if (radius >= 1) {
-                dig(context, x, z, radius);
-                dug = radius;
-            }
-            if (bomb.diameter >= config.minBlockDiameter) placeBomb(context, x, z, bomb);
+        if (world.isKnown(x, z)) {
+            if (radius > 0) dug = dig(context.time(), landing.position().x(), landing.position().z(), radius) > 0 ? radius : 0;
+            placeBomb(context, x, z, bomb);
         }
         context.outbox().emit(new BombLanded(
-                context.time(), id, bomb.id, new BlockPos(x, impactGround, z), speed, energy, bomb.diameter, dug));
+                context.time(), id, bomb.id, landing.position().toPoint(), speed, energy, bomb.diameter, dug));
     }
+
+    /** Porosity of loose impact ejecta (a poorly sorted breccia of the excavated ground). */
+    static final double EJECTA_POROSITY = 0.35;
+    /** The ejecta blanket reaches this many crater radii (its thickness ∝ (r/R)⁻³ beyond the rim). */
+    static final double EJECTA_REACH = 3;
 
     /**
-     * Paraboloid crater of radius {@code radius} columns and depth 0.5·R·(1 − (d/R)²) in metres (R the radius
-     * in metres), eroded from the world model as a continuous thickness. The block view follows the eroded
-     * surface (a host quantises it); nothing is dug in whole blocks.
+     * Excavates an impact crater of radius {@code radius} m centred at ({@code cx}, {@code cz}) (m): a
+     * paraboloid of depth {@code 0.5·R·(1 − (d/R)²)} and volume {@code πR³/4}, in loose ground only (a bomb
+     * landing on solid rock or a cooled flow splatters without cratering it). What it digs out is thrown onto
+     * an ejecta blanket beyond the rim, thinning as {@code (r/R)⁻³} (McGetchin, Settle &amp; Head 1973), so
+     * cratering moves material and never destroys it. A crater smaller than half a column keeps crater and
+     * blanket inside its column: the column's mean is unchanged and nothing is moved. Returns the volume
+     * excavated (m³).
      */
-    private void dig(StepContext context, int x, int z, double radius) {
-        var world = terrain.world();
-        double l = metersPerBlock();
-        int reach = (int) Math.ceil(radius);
+    private double dig(double time, double cx, double cz, double radius) {
+        WorldModel world = terrain.world();
+        double l = metersPerColumn();
+        if (radius < 0.5 * l) return 0;
+        int ix = (int) Math.floor(cx / l);
+        int iz = (int) Math.floor(cz / l);
+        double area = l * l;
+        int reach = (int) Math.ceil(EJECTA_REACH * radius / l);
+        double removed = 0;
+        java.util.Map<Short, Double> solids = new java.util.TreeMap<>();
         for (int dz = -reach; dz <= reach; dz++) {
             for (int dx = -reach; dx <= reach; dx++) {
-                double d = Math.sqrt(dx * dx + dz * dz);
+                int x = ix + dx;
+                int z = iz + dz;
+                double d = Math.hypot((x + 0.5) * l - cx, (z + 0.5) * l - cz);
                 if (d > radius) continue;
-                double depth = 0.5 * radius * l * (1 - (d / radius) * (d / radius));
-                if (depth < 0.01) continue;
-                TerrainColumn column = terrain.column(x + dx, z + dz);
-                if (column == null || column.surface().equals(BEDROCK) || column.surface().equals(BlockId.AIR)) continue;
-                world.erode(x + dx, z + dz, depth, false);
-                double surface = world.surfaceZ(x + dx, z + dz);
-                if (Double.isFinite(surface)) {
-                    terrain.updateBlockCache(x + dx, z + dz, terrain.blockForSurface(surface), column.surface());
-                }
+                double depth = 0.5 * radius * (1 - (d / radius) * (d / radius));
+                if (depth < 0.01 || !world.isKnown(x, z)) continue;
+                var cut = world.erode(x, z, depth, true);
+                removed += cut.removedM() * area;
+                cut.byMaterial().forEach((m, t) -> solids.merge(m, t * area, Double::sum));
             }
         }
+        if (solids.isEmpty()) return removed;
+        // the blanket: weights (r/R)⁻³ over the columns beyond the rim
+        java.util.List<int[]> cells = new java.util.ArrayList<>();
+        java.util.List<Double> weights = new java.util.ArrayList<>();
+        double total = 0;
+        for (int dz = -reach; dz <= reach; dz++) {
+            for (int dx = -reach; dx <= reach; dx++) {
+                int x = ix + dx;
+                int z = iz + dz;
+                double d = Math.hypot((x + 0.5) * l - cx, (z + 0.5) * l - cz);
+                if (d <= radius || d > EJECTA_REACH * radius || !world.isKnown(x, z)) continue;
+                double w = Math.pow(d / radius, -3);
+                cells.add(new int[] {x, z});
+                weights.add(w);
+                total += w;
+            }
+        }
+        if (total <= 0) {
+            // no ground beyond the rim (a crater filling the known area): the ejecta falls back in
+            cells.add(new int[] {ix, iz});
+            weights.add(1.0);
+            total = 1;
+        }
+        int unit = units.unit(DepositType.EJECTA, time, Double.NaN);
+        for (var e : solids.entrySet()) {
+            var material = MaterialTable.get(e.getKey());
+            for (int i = 0; i < cells.size(); i++) {
+                double solid = e.getValue() * weights.get(i) / total;
+                double thickness = solid / ((1 - EJECTA_POROSITY) * area);
+                if (thickness > 0) world.deposit(cells.get(i)[0], cells.get(i)[1], thickness, material, unit,
+                        LayerFlags.LOOSE, EJECTA_POROSITY, 0);
+            }
+        }
+        return removed;
     }
 
-    private double metersPerBlock() {
+    private double metersPerColumn() {
         return terrain.world().spec().metersPerColumn();
     }
 
@@ -602,39 +651,20 @@ public final class TephraSubsystem implements Subsystem {
         return MaterialTable.RHYOLITE;
     }
 
+    /** Porosity of a heap of landed bombs and blocks (loose, poorly sorted coarse clasts). */
+    static final double BOMB_HEAP_POROSITY = 0.3;
+
+    /**
+     * Lays the volume of the real bombs this one stands for ({@link Bomb#weight}) on the column it landed in,
+     * as a loose heap (its solid volume over {@code 1 − porosity}).
+     */
     private void placeBomb(StepContext context, int x, int z, Bomb bomb) {
-        TerrainColumn column = terrain.column(x, z);
-        boolean inWater = column.submerged();
-        // The world model gets the bomb's real volume spread over the column (a bomb is far smaller than a
-        // column); the block cache shows the hot clast as the surface of whatever block that surface is in.
-        double l = metersPerBlock();
-        double thickness = Math.PI / 6 * bomb.diameter * bomb.diameter * bomb.diameter / (l * l);
-        // a landed bomb is a loose clast among the scoria (cohesionless; it rolls to the angle of repose)
+        if (!(bomb.weight > 0)) return;
+        double l = metersPerColumn();
+        double solid = bomb.weight * Math.PI / 6 * bomb.diameter * bomb.diameter * bomb.diameter;
+        double thickness = solid / ((1 - BOMB_HEAP_POROSITY) * l * l);
         terrain.world().deposit(x, z, thickness, bombRock(bomb.silicaWt),
-                units.unit(DepositType.FALL, context.time(), Double.NaN), LayerFlags.LOOSE, 0.3, 0);
-        int y = terrain.blockForSurface(terrain.world().surfaceZ(x, z));
-        BlockPos pos = new BlockPos(x, y, z);
-        terrain.updateBlockCache(x, z, y, MAGMA_BLOCK);
-
-        double seconds = Math.max(config.minCoolingSeconds, config.coolingSecondsPerSquareMeter * bomb.diameter * bomb.diameter);
-        if (inWater) seconds *= config.waterCoolingFactor;
-        coolings.add(new Cooling(pos, context.time() + Math.max(0, seconds),
-                Ballistics.cooledBombRock(bomb.silicaWt)));
-    }
-
-    private void runCoolings(StepContext context) {
-        double now = context.time();
-        Iterator<Cooling> it = coolings.iterator();
-        while (it.hasNext()) {
-            Cooling cooling = it.next();
-            if (cooling.dueTime() > now) continue;
-            it.remove();
-            BlockPos pos = cooling.pos();
-            TerrainColumn column = terrain.column(pos.x(), pos.z());
-            if (column != null && column.groundY() == pos.y() && column.surface().equals(MAGMA_BLOCK)) {
-                terrain.updateBlockCache(pos.x(), pos.z(), pos.y(), cooling.target());
-            }
-        }
+                units.unit(DepositType.FALL, context.time(), Double.NaN), LayerFlags.LOOSE, BOMB_HEAP_POROSITY, 0);
     }
 
     // ── Ash ──
@@ -642,25 +672,20 @@ public final class TephraSubsystem implements Subsystem {
     private void ashStep(StepContext context) {
         double dt = config.ashStepSeconds;
         if (phase != null) {
-            BlockPos vent = phase.vent().position();
-            ensureGrid(vent);
+            Point3 base = phase.vent().position();
+            ensureGrid(base);
             grid.parallel = context.parallel();
-            // The column rises from the block above the vent, so cap its height at the world top from there.
-            BlockPos base = vent.offset(0, 1, 0);
-            // The column rises with the physical intensity of the eruption; the tephra each step
-            // injects is the simulated (time-compressed) rate × step, so deposits add up correctly.
-            double height = PlumeModel.minecraftHeight(phase.massEruptionRate(), base.y(), config);
-            double sigma = Math.max(config.cellSize * 0.5, 0.25 * height);
+            double height = PlumeModel.heightForMassRate(phase.massEruptionRate());
+            double sigma = Math.max(grid.cellMeters() * 0.5, 0.25 * height);
             grid.plumeHeight = height;
             grid.inject(
-                    phase.massEruptionRate() * config.massScale * (1 - phase.ballisticFraction()) * dt,
+                    phase.massEruptionRate() * (1 - phase.ballisticFraction()) * dt,
                     phase.grainSize().fractions(),
-                    vent.x() + 0.5,
-                    vent.z() + 0.5,
+                    base.x(),
+                    base.z(),
                     sigma);
             context.outbox().emit(new PlumeColumn(
-                    context.time(), id, base, base.y() + (int) Math.round(height), 2 * sigma,
-                    phase.massEruptionRate()));
+                    context.time(), id, base, base.y() + height, 2 * sigma, phase.massEruptionRate()));
             lightning(context, base, height, sigma, dt);
         }
         if (grid == null) return;
@@ -671,7 +696,7 @@ public final class TephraSubsystem implements Subsystem {
             grid.settle(dt, config.settlingVelocities, grid.plumeHeight);
             if (phase == null && grid.airborneTotal() < config.minAirborneMass) grid.discardAirborne();
         }
-        grid.applyDeposits(terrain, context.outbox(), config,
+        grid.applyDeposits(terrain.world(), config.depositBulkDensity, config.depositUpdateThickness,
                 units.unit(DepositType.FALL, context.time(), Double.NaN), molten);
     }
 
@@ -685,19 +710,19 @@ public final class TephraSubsystem implements Subsystem {
         this.molten = molten;
     }
 
-    private void lightning(StepContext context, BlockPos base, double height, double sigma, double dt) {
+    private void lightning(StepContext context, Point3 base, double height, double sigma, double dt) {
         // Flash rate scales with the column's mass eruption rate.
         double rate = phase.massEruptionRate();
-        if (rate < config.lightningMinMassEruptionRate || height < 1) return;
+        if (rate < config.lightningMinMassEruptionRate || height <= 0) return;
         double flashesPerSecond = Math.min(config.maxLightningPerSecond,
                 config.lightningPerMassRate * rate);
         SimRandom random = context.random();
         int flashes = random.nextPoisson(flashesPerSecond * dt);
         for (int i = 0; i < flashes; i++) {
-            int x = (int) Math.floor(base.x() + 0.5 + random.nextGaussian() * sigma * 0.5);
-            int z = (int) Math.floor(base.z() + 0.5 + random.nextGaussian() * sigma * 0.5);
-            int y = base.y() + (int) Math.round(height * (0.4 + 0.6 * random.nextDouble()));
-            context.outbox().emit(new VolcanicLightning(context.time(), id, new BlockPos(x, Math.min(y, BlockPos.MAX_Y), z)));
+            double x = base.x() + random.nextGaussian() * sigma * 0.5;
+            double z = base.z() + random.nextGaussian() * sigma * 0.5;
+            double y = base.y() + height * (0.4 + 0.6 * random.nextDouble());
+            context.outbox().emit(new VolcanicLightning(context.time(), id, new Point3(x, y, z)));
         }
     }
 
@@ -726,9 +751,9 @@ public final class TephraSubsystem implements Subsystem {
                 double area = count * grid.cellArea();
                 double fallRate = rate / area;
                 double airborneLoad = load / area;
-                int half = r * grid.cellSize / 2;
-                BlockPos center = new BlockPos(
-                        grid.originX + ri * r * grid.cellSize + half, 0, grid.originZ + rj * r * grid.cellSize + half);
+                double half = r * grid.cellMeters() / 2;
+                Point3 center = new Point3((grid.originX + (double) ri * r * grid.cellColumns) * grid.metersPerColumn + half, 0,
+                        (grid.originZ + (double) rj * r * grid.cellColumns) * grid.metersPerColumn + half);
                 if (fallRate < config.ashFallRateThreshold && airborneLoad < config.ashLoadThreshold) {
                     if (last != null) {
                         ashReports.remove(region);
@@ -769,17 +794,6 @@ public final class TephraSubsystem implements Subsystem {
         JsonArray bombStates = new JsonArray();
         for (Bomb bomb : bombs) bombStates.add(bomb.save());
         out.add("bombs", bombStates);
-        JsonArray coolingStates = new JsonArray();
-        for (Cooling cooling : coolings) {
-            JsonObject c = new JsonObject();
-            c.addProperty("x", cooling.pos().x());
-            c.addProperty("y", cooling.pos().y());
-            c.addProperty("z", cooling.pos().z());
-            c.addProperty("due", cooling.dueTime());
-            c.addProperty("target", cooling.target().toString());
-            coolingStates.add(c);
-        }
-        out.add("coolings", coolingStates);
         if (grid != null) {
             JsonObject gridState = new JsonObject();
             grid.save(gridState);
@@ -806,31 +820,21 @@ public final class TephraSubsystem implements Subsystem {
         nextBombId = in.get("nextBombId").getAsLong();
         bombs.clear();
         for (JsonElement e : in.getAsJsonArray("bombs")) bombs.add(Bomb.load(e.getAsJsonObject()));
-        coolings.clear();
-        for (JsonElement e : in.getAsJsonArray("coolings")) {
-            JsonObject c = e.getAsJsonObject();
-            coolings.add(new Cooling(
-                    new BlockPos(c.get("x").getAsInt(), c.get("y").getAsInt(), c.get("z").getAsInt()),
-                    c.get("due").getAsDouble(),
-                    BlockId.parse(c.get("target").getAsString())));
-        }
         grid = null;
         if (in.has("ash")) {
             grid = AshGrid.load(in.getAsJsonObject("ash"), reader.field("ash").get(0, 0));
-            if (grid.cellSize != config.cellSize || grid.cells != config.gridCells) {
-                throw new IllegalStateException("Saved ash grid " + grid.cells + "x" + grid.cellSize
-                        + " does not match config " + config.gridCells + "x" + config.cellSize);
+            if (grid.cells != config.gridCells) {
+                throw new IllegalStateException("Saved ash grid of " + grid.cells + " cells does not match config "
+                        + config.gridCells);
             }
         }
         ashReports.clear();
-        if (in.has("ashReports")) {
-            for (JsonElement e : in.getAsJsonArray("ashReports")) {
-                JsonArray entry = e.getAsJsonArray();
-                ashReports.put(entry.get(0).getAsInt(), new double[] {
-                    Double.longBitsToDouble(entry.get(1).getAsLong()),
-                    Double.longBitsToDouble(entry.get(2).getAsLong()),
-                    Double.longBitsToDouble(entry.get(3).getAsLong())});
-            }
+        for (JsonElement e : in.getAsJsonArray("ashReports")) {
+            JsonArray entry = e.getAsJsonArray();
+            ashReports.put(entry.get(0).getAsInt(), new double[] {
+                Double.longBitsToDouble(entry.get(1).getAsLong()),
+                Double.longBitsToDouble(entry.get(2).getAsLong()),
+                Double.longBitsToDouble(entry.get(3).getAsLong())});
         }
     }
 
@@ -839,13 +843,11 @@ public final class TephraSubsystem implements Subsystem {
         VentSite v = p.vent();
         JsonObject vent = new JsonObject();
         vent.addProperty("id", v.id());
-        vent.addProperty("x", v.position().x());
-        vent.addProperty("y", v.position().y());
-        vent.addProperty("z", v.position().z());
+        vent.add("position", v.position().toJson());
         vent.addProperty("kind", v.kind().name());
-        vent.addProperty("craterRadius", v.craterRadius());
+        vent.addProperty("craterRadius", v.craterRadiusM());
         vent.addProperty("fissureAngle", v.fissureAngleRad());
-        vent.addProperty("fissureLength", v.fissureLength());
+        vent.addProperty("fissureLength", v.fissureLengthM());
         out.add("vent", vent);
         out.addProperty("massEruptionRate", p.massEruptionRate());
         out.addProperty("gasFraction", p.gasFraction());
@@ -863,19 +865,17 @@ public final class TephraSubsystem implements Subsystem {
         JsonObject v = in.getAsJsonObject("vent");
         VentSite vent = new VentSite(
                 v.get("id").getAsString(),
-                new BlockPos(v.get("x").getAsInt(), v.get("y").getAsInt(), v.get("z").getAsInt()),
+                Point3.fromJson(v.get("position")),
                 VentKind.valueOf(v.get("kind").getAsString()),
-                v.get("craterRadius").getAsInt(),
+                v.get("craterRadius").getAsDouble(),
                 v.get("fissureAngle").getAsDouble(),
-                v.get("fissureLength").getAsInt());
+                v.get("fissureLength").getAsDouble());
         JsonArray f = in.getAsJsonArray("grainSize");
         double[] fractions = new double[f.size()];
         for (int i = 0; i < fractions.length; i++) fractions[i] = f.get(i).getAsDouble();
-        // phases saved under the old time compression stored a per-step rate: back to kg/s
-        double compression = in.has("timeCompression") ? in.get("timeCompression").getAsDouble() : 1;
         return new ExplosivePhase(
                 vent,
-                in.get("massEruptionRate").getAsDouble() / compression,
+                in.get("massEruptionRate").getAsDouble(),
                 in.get("gasFraction").getAsDouble(),
                 in.get("overpressure").getAsDouble(),
                 in.get("temperature").getAsDouble(),

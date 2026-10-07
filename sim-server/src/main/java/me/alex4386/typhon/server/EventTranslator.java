@@ -14,13 +14,12 @@ import me.alex4386.typhon.engine.alert.AlertEvents;
 import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.dike.DikeEvents;
 import me.alex4386.typhon.engine.geomorph.GeomorphEvents;
-import me.alex4386.typhon.engine.geothermal.GeyserFormed;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeature;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeatureFormed;
 import me.alex4386.typhon.engine.lava.LavaEvents;
 import me.alex4386.typhon.engine.magma.MagmaEvents;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.seismic.SeismicEvent;
 import me.alex4386.typhon.engine.tephra.TephraEvents;
@@ -142,6 +141,12 @@ final class EventTranslator {
                 o.add("vent", vent(e.vent()));
                 yield o;
             }
+            case VentEvents.VentFormed e -> {
+                JsonObject o = base("ventFormed", e.time(), e.volcanoId());
+                o.add("vent", vent(e.vent()));
+                o.addProperty("fissureId", e.fissureId());
+                yield o;
+            }
             case VentEvents.VentStateChanged e -> {
                 JsonObject o = base("ventState", e.time(), e.volcanoId());
                 o.addProperty("ventId", e.ventId());
@@ -155,7 +160,7 @@ final class EventTranslator {
                 o.addProperty("id", e.bombId());
                 o.add("start", Json.xyz(point(e.start())));
                 o.add("velocity", Json.xyz(velocity(e.velocity())));
-                o.add("dragK", Json.num(e.dragFactor() / map.cell));
+                o.add("dragK", Json.num(e.dragFactor()));
                 o.add("flightSeconds", Json.num(e.expectedFlightSeconds()));
                 o.add("landing", Json.xyz(point(e.predictedLanding())));
                 yield o;
@@ -164,8 +169,8 @@ final class EventTranslator {
                 JsonObject o = base("plume", e.time(), strip(e.source()));
                 double[] base = map.point(e.base());
                 o.add("base", Json.xyz(base));
-                o.add("topZ", Json.num(e.topY() * map.cell));
-                o.add("radius", Json.num(e.radius() * map.cell));
+                o.add("topZ", Json.num(e.topZ()));
+                o.add("radius", Json.num(e.radiusM()));
                 o.add("massRateKgS", Json.num(e.massEruptionRate()));
                 yield o;
             }
@@ -202,13 +207,12 @@ final class EventTranslator {
                 o.add("subsidenceM", Json.num(e.totalSubsidenceM()));
                 yield o;
             }
-            // Alteration, sinter and cinnabar are diffuse surface changes (hundreds of blocks), not point
+            // Alteration, sinter and cinnabar are diffuse surface changes (hundreds of columns), not point
             // features: they show up through the TopUnit field instead of as markers.
             case HydrothermalFeatureFormed e -> switch (e.feature()) {
                 case ACID_ALTERATION, SINTER, CINNABAR -> null;
                 default -> feature(e.time(), e.feature().name(), e.pos());
             };
-            case GeyserFormed e -> feature(e.time(), HydrothermalFeature.GEYSER.name(), e.potentSulfur());
             case me.alex4386.typhon.engine.geothermal.HydrothermalFeatureBuried e -> switch (e.feature()) {
                 case ACID_ALTERATION, SINTER, CINNABAR -> null;
                 default -> {
@@ -245,7 +249,7 @@ final class EventTranslator {
                 JsonObject o = new JsonObject();
                 o.addProperty("kind", "oceanEntry");
                 o.add("time", Json.num(e.time()));
-                o.add("at", Json.xy(map.x(e.pos().x()), map.y(e.pos().z())));
+                o.add("at", Json.xy(e.pos().x(), -e.pos().z()));
                 o.add("powerMW", Json.num(e.powerMW()));
                 o.addProperty("littoralExplosion", e.littoralExplosion());
                 yield o;
@@ -273,18 +277,17 @@ final class EventTranslator {
         JsonObject o = new JsonObject();
         o.addProperty("id", v.id());
         o.addProperty("kind", v.kind() == VentKind.FISSURE ? "fissure" : "crater");
-        if (v.emergent()) o.addProperty("emergent", true); // not formed yet: shown once magma reaches the surface
-        BlockPos p = v.position();
-        o.add("at", Json.xy(map.x(p.x()), map.y(p.z())));
-        o.add("z", Json.num((p.y() + 1) * map.cell));
-        o.add("radius", Json.num(Math.max(1, v.craterRadius()) * map.cell));
+        Point3 p = v.position();
+        o.add("at", Json.xy(p.x(), -p.z()));
+        o.add("z", Json.num(p.y()));
+        o.add("radius", Json.num(Math.max(1, v.craterRadiusM())));
         if (v.kind() == VentKind.FISSURE) {
-            double half = v.fissureLength() / 2.0;
+            double half = v.fissureLengthM() / 2.0;
             double dx = Math.cos(v.fissureAngleRad()) * half;
             double dz = Math.sin(v.fissureAngleRad()) * half;
             JsonArray line = new JsonArray();
-            line.add(Json.xy(map.x(p.x() - dx), map.y(p.z() - dz)));
-            line.add(Json.xy(map.x(p.x() + dx), map.y(p.z() + dz)));
+            line.add(Json.xy(p.x() - dx, -(p.z() - dz)));
+            line.add(Json.xy(p.x() + dx, -(p.z() + dz)));
             o.add("line", line);
         }
         return o;
@@ -298,7 +301,7 @@ final class EventTranslator {
         int n = 0;
         for (MassFlowEvents.FlowCell c : cells) {
             if (n++ >= 256) break;
-            xy.add(Json.xy(map.x(c.pos().x()), map.y(c.pos().z())));
+            xy.add(Json.xy(c.pos().x(), -c.pos().z()));
         }
         o.add("cells", xy);
         o.add("speed", Json.num(speed));
@@ -306,7 +309,7 @@ final class EventTranslator {
         return o;
     }
 
-    private JsonObject feature(double time, String feature, BlockPos pos) {
+    private JsonObject feature(double time, String feature, Point3 pos) {
         JsonObject o = base("geothermalFeature", time, nearestVolcano(pos));
         o.addProperty("feature", feature);
         o.add("at", Json.xyz(map.point(pos)));
@@ -322,12 +325,12 @@ final class EventTranslator {
     }
 
     private double[] point(Vec3d v) {
-        return map.point(v.x(), v.y(), v.z());
+        return new double[] {v.x(), -v.z(), v.y()};
     }
 
-    /** Engine velocities are in blocks/s; the protocol uses m/s in the (east, north, up) frame. */
+    /** Engine velocity (m/s; x east, z south, y up) in the protocol's (east, north, up) frame. */
     private double[] velocity(Vec3d v) {
-        return new double[] {v.x() * map.cell, -v.z() * map.cell, v.y() * map.cell};
+        return new double[] {v.x(), -v.z(), v.y()};
     }
 
     /** Subsystem ids look like {@code tephra:<volcanoId>}. */
@@ -345,12 +348,16 @@ final class EventTranslator {
         return strip(flowId);
     }
 
-    private String nearestVolcano(BlockPos pos) {
+    private String nearestVolcano(Point3 pos) {
         String best = volcanoes.isEmpty() ? null : volcanoes.get(0).volcanoId();
         double bestD = Double.POSITIVE_INFINITY;
         for (VolcanoSystem v : volcanoes) {
-            for (VentSite vent : v.vents()) {
-                double d = vent.position().horizontalDistance(pos);
+            // its vents, or the ground above its chamber while it has none
+            List<Point3> points = new ArrayList<>();
+            for (VentSite vent : v.coupler().allVents()) points.add(vent.position());
+            if (points.isEmpty()) points.add(v.referencePoint());
+            for (Point3 p : points) {
+                double d = p.horizontalDistance(pos);
                 if (d < bestD) {
                     bestD = d;
                     best = v.volcanoId();

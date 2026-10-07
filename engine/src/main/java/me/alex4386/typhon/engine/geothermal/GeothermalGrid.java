@@ -6,8 +6,8 @@ import java.util.Arrays;
  * Coarse 2D feature grid: per cell, the shallow-reservoir excess temperature over ambient (°C) and
  * liquid saturation (0..1) last sampled from the subsurface model.
  *
- * <p>Cell {@code (i, j)} covers blocks {@code [minX + i·s, minX + (i+1)·s) × [minZ + j·s, ...)} for
- * cell size {@code s}.
+ * <p>Cell {@code (i, j)} covers surface columns {@code [minX + i·s, minX + (i+1)·s) × [minZ + j·s, ...)} for
+ * a cell size of {@code s} columns.
  */
 public final class GeothermalGrid {
     private final int minX;
@@ -29,7 +29,7 @@ public final class GeothermalGrid {
         this.water = new double[sizeX * sizeZ];
     }
 
-    /** Grid covering {@code [cx - radius, cx + radius)} in both axes. */
+    /** Grid covering columns {@code [cx - radius, cx + radius)} in both axes, in cells of {@code cellSize} columns. */
     public static GeothermalGrid centeredOn(int centerX, int centerZ, int radius, int cellSize) {
         int cells = Math.max(1, (2 * radius + cellSize - 1) / cellSize);
         int extent = cells * cellSize;
@@ -55,14 +55,14 @@ public final class GeothermalGrid {
         return index / sizeX;
     }
 
-    public boolean containsBlock(int x, int z) {
+    public boolean containsColumn(int x, int z) {
         int i = Math.floorDiv(x - minX, cellSize);
         int j = Math.floorDiv(z - minZ, cellSize);
         return i >= 0 && i < sizeX && j >= 0 && j < sizeZ;
     }
 
-    /** Index of the cell containing block column {@code (x, z)}, or -1 outside the grid. */
-    public int indexOfBlock(int x, int z) {
+    /** Index of the cell containing column {@code (x, z)}, or -1 outside the grid. */
+    public int indexOfColumn(int x, int z) {
         int i = Math.floorDiv(x - minX, cellSize);
         int j = Math.floorDiv(z - minZ, cellSize);
         if (i < 0 || i >= sizeX || j < 0 || j >= sizeZ) return -1;
@@ -109,9 +109,9 @@ public final class GeothermalGrid {
         Arrays.fill(water, value);
     }
 
-    /** Excess temperature at a block column (0 outside the grid). */
-    public double excessAtBlock(int x, int z) {
-        int index = indexOfBlock(x, z);
+    /** Excess temperature at a column (0 outside the grid). */
+    public double excessAtColumn(int x, int z) {
+        int index = indexOfColumn(x, z);
         return index < 0 ? 0 : excess[index];
     }
 

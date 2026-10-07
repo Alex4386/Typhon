@@ -43,7 +43,11 @@ class DikePropagationTest {
         VentSite vent = opened.get(0).vent();
         assertEquals(VentKind.FISSURE, vent.kind());
         assertEquals(64, vent.position().y(), "fissure opens at the ground surface");
-        assertTrue(vent.fissureLength() >= 3 && vent.fissureLength() <= 60);
+        // the fissure is the dike's top edge: as long as the dike is broad (its height from the chamber roof,
+        // bounded by the chamber's diameter) and as wide as it is open
+        double radius = Math.cbrt(3 * 1e11 / (4 * Math.PI));
+        double roof = 4000 - radius;
+        assertEquals(Math.min(roof, 2 * radius), vent.fissureLengthM(), 1e-6, "fissure length");
 
         Dike dike = w.dikes().dikes().get(0);
         assertEquals(DikeStatus.ERUPTED, dike.status());
@@ -52,6 +56,7 @@ class DikePropagationTest {
         assertEquals(List.of(vent), w.dikes().openedVents());
         assertEquals(dike.tip().x(), vent.position().x());
         assertEquals(dike.tip().z(), vent.position().z());
+        assertEquals(dike.openingM() / 2, vent.craterRadiusM(), 1e-12, "fissure width is the dike's opening");
 
         List<DikeAdvanced> advances = events(frames, DikeAdvanced.class);
         assertFalse(advances.isEmpty());
@@ -60,12 +65,14 @@ class DikePropagationTest {
             assertTrue(a.depthM() <= previous, "tip only rises");
             previous = a.depthM();
             assertTrue(a.speedMPerS() >= 0.01 && a.speedMPerS() <= 5, "realistic dike speed: " + a.speedMPerS());
-            assertTrue(a.openingM() >= 0.2 && a.openingM() <= 3);
+            // a thin elastic crack: opening/breadth = 2(1−ν)ΔP/μ, of order 1e-3 for MPa pressures in a GPa crust
+            assertTrue(a.openingM() > 0 && a.openingM() < 0.01 * Math.max(200, dike.strikeLengthM()),
+                    "thin crack: opening " + a.openingM());
         }
         int hypocenters = advances.stream().mapToInt(a -> a.hypocenters().size()).sum();
         assertTrue(hypocenters > 20, "rising dike should be seismically active: " + hypocenters);
         // hypocentres migrate upward with the tip
-        int firstY = advances.stream().filter(a -> !a.hypocenters().isEmpty()).findFirst().orElseThrow()
+        double firstY = advances.stream().filter(a -> !a.hypocenters().isEmpty()).findFirst().orElseThrow()
                 .hypocenters().get(0).y();
         DikeAdvanced last = advances.stream().filter(a -> !a.hypocenters().isEmpty()).reduce((a, b) -> b).orElseThrow();
         assertTrue(last.hypocenters().get(0).y() > firstY);
@@ -73,8 +80,9 @@ class DikePropagationTest {
 
     @Test
     void higherOverpressureRisesFaster() {
-        long slow = timeToSurface(9);
-        long fast = timeToSurface(14);
+        // below the speed safeguard (wide, strongly driven basaltic dikes reach it)
+        long slow = timeToSurface(3);
+        long fast = timeToSurface(4);
         assertTrue(slow > 0 && fast > 0, "both should surface: " + slow + ", " + fast);
         assertTrue(fast < slow, "fast " + fast + " vs slow " + slow);
     }
@@ -87,17 +95,29 @@ class DikePropagationTest {
 
     @Test
     void denseBasaltStallsWithoutEnoughPressure() {
-        DikeTestWorld.World w = world(4, basalt(1).build(), fastConfig(), flat(), null);
+        // dense basalt pushed by 2 MPa: as it rises its negative buoyancy eats the drive, the crack thins and
+        // the magma freezes in it (or the tip can no longer break rock) before the surface
+        DikeTestWorld.World w = world(4, basalt(2).build(), fastConfig(), flat(), null);
         w.engine().submit(new DikeCommands.ForceDike("v"));
         List<EngineFrame> frames = run(w.engine(), LONG);
 
         assertTrue(events(frames, FissureOpened.class).isEmpty());
         List<DikeStalled> stalls = events(frames, DikeStalled.class);
         assertEquals(1, stalls.size());
-        assertEquals(StallReason.INSUFFICIENT_PRESSURE, stalls.get(0).reason());
+        StallReason reason = stalls.get(0).reason();
+        assertTrue(reason == StallReason.INSUFFICIENT_PRESSURE || reason == StallReason.FROZE, "arrested: " + reason);
         Dike dike = w.dikes().dikes().get(0);
         assertEquals(DikeStatus.STALLED, dike.status());
-        assertTrue(dike.depthM() > 0 && dike.depthM() < 4000, "stalls part-way: " + dike.depthM());
+        assertTrue(dike.depthM() > 0 && dike.depthM() < dike.heightM() + dike.depthM() - 1, "stalls part-way: " + dike.depthM());
+    }
+
+    @Test
+    void solidificationFollowsTheStefanCondition() {
+        // the root satisfies e^{−λ²} / (λ (1 + erf λ)) = L √π / (c ΔT)
+        double rhs = 4e5 * Math.sqrt(Math.PI) / (1200 * 1100);
+        double lambda = DikePropagation.stefanLambda(rhs);
+        assertEquals(rhs, Math.exp(-lambda * lambda) / (lambda * (1 + DikePropagation.erf(lambda))), 1e-6);
+        assertEquals(0.8427007929, DikePropagation.erf(1), 2e-7);
     }
 
     @Test
@@ -150,27 +170,19 @@ class DikePropagationTest {
         w.engine().submit(new DikeCommands.ForceDike("v"));
         runUntil(w.engine(), FissureOpened.class, LONG);
         VentSite vent = w.dikes().openedVents().get(0);
-        double radial = Math.atan2(vent.position().z() + 0.5, vent.position().x() + 0.5);
+        double radial = Math.atan2(vent.position().z(), vent.position().x());
         double diff = Math.abs(Math.IEEEremainder(vent.fissureAngleRad() - radial, Math.PI));
         assertTrue(diff < 0.2, "strike should be radial, off by " + diff);
     }
 
     @Test
-    void nucleationNeedsPressureAndASealedConduit() {
-        // how sealed the summit is comes from the chamber's live conduit openness, not a setting
-        DikeConfig spontaneous = fastConfig();
-        spontaneous.maxInitiationRate = 1.0 / 10;
-        java.util.function.BiFunction<Double, Double, me.alex4386.typhon.engine.magma.MagmaChamberConfig> withOpenness =
-                (p, o) -> basalt(p).conduit(me.alex4386.typhon.engine.magma.ConduitConfig.DEFAULT.withInitialOpenness(o)).build();
-
-        assertTrue(events(run(world(8, withOpenness.apply(10.0, 0.0), spontaneous, flat(), null).engine(), 20 * 600),
-                DikeStarted.class).isEmpty(), "below the initiation threshold");
-
-        assertTrue(events(run(world(8, withOpenness.apply(14.9, 1.0), spontaneous, flat(), null).engine(), 20 * 600),
-                DikeStarted.class).isEmpty(), "an open conduit vents at the summit instead");
-
-        assertFalse(events(run(world(8, withOpenness.apply(14.9, 0.0), spontaneous, flat(), null).engine(), 20 * 600),
-                DikeStarted.class).isEmpty(), "near failure with a sealed conduit");
+    void noDikeStartsBeforeTheWallsFail() {
+        // a dike is a fracture: none opens until the hoop stress reaches the rock's tensile strength (P = 2T),
+        // however long the chamber sits just below it, sealed conduit or not (WallRuptureDikeTest covers P ≥ 2T)
+        me.alex4386.typhon.engine.magma.MagmaChamberConfig sealed = basalt(19.9).tensileStrengthMPa(10)
+                .conduit(me.alex4386.typhon.engine.magma.ConduitConfig.DEFAULT.withInitialOpenness(0)).build();
+        assertTrue(events(run(world(8, sealed, fastConfig(), flat(), null).engine(), 20 * 600),
+                DikeStarted.class).isEmpty(), "just below wall rupture");
     }
 
     @Test
@@ -183,7 +195,7 @@ class DikePropagationTest {
         DikeGeometry g = geometries.get(0);
         Dike dike = w.dikes().dikes().get(0);
         assertEquals(dike.depthM(), g.topDepthM(), 1e-9);
-        assertEquals(4000, g.bottomDepthM(), 1e-9);
+        assertEquals(4000 - Math.cbrt(3 * 1e11 / (4 * Math.PI)), g.bottomDepthM(), 1e-6, "from the chamber roof");
         assertEquals(dike.openingM(), g.openingM(), 1e-12);
         assertNotNull(dike.tip());
     }

@@ -3,9 +3,10 @@ package me.alex4386.typhon.engine.tephra;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
+import me.alex4386.typhon.engine.testing.TestGround;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.world.WorldModel;
 import org.junit.jupiter.api.Test;
@@ -15,15 +16,15 @@ import org.junit.jupiter.api.Test;
  * thins away from the vent the way proximal deposits do.
  */
 class ProximalBudgetTest {
-    private static final int GROUND = 99;
-    private static final VentSite VENT = VentSite.crater("summit", new BlockPos(0, GROUND + 1, 0), 2);
+    /** Ground elevation (m) of the 1 m-column test ground. */
+    private static final double GROUND = 100;
+    private static final VentSite VENT = VentSite.crater("summit", new Point3(0.5, GROUND, 0.5), 2);
 
     private record Setup(Engine engine, TephraSubsystem tephra, WorldModel world) {}
 
     private static Setup setup() {
         TephraConfig c = new TephraConfig();
-        c.ballisticSpeedScale = 1; // 1 m columns: real speeds
-        TerrainModel terrain = new TerrainModel();
+        TerrainModel terrain = TestGround.terrain(1.0);
         TephraSubsystem tephra = new TephraSubsystem("tephra", terrain, c);
         Engine engine = Engine.builder(5).add(terrain).add(tephra).build();
         engine.submit(TephraTestSupport.flat(24, GROUND));
@@ -50,7 +51,7 @@ class ProximalBudgetTest {
             for (int z = -n; z <= n; z++) {
                 int r = (int) Math.hypot(x, z);
                 if (r >= n) continue;
-                sum[r] += w.surfaceZ(x, z) - (GROUND + 1);
+                sum[r] += w.surfaceZ(x, z) - GROUND;
                 count[r]++;
             }
         }
@@ -68,9 +69,32 @@ class ProximalBudgetTest {
         double volume = 0;
         WorldModel w = s.world();
         int n = 24 * 16;
-        for (int x = -n; x < n; x++) for (int z = -n; z < n; z++) volume += w.surfaceZ(x, z) - (GROUND + 1);
+        for (int x = -n; x < n; x++) for (int z = -n; z < n; z++) volume += w.surfaceZ(x, z) - GROUND;
         double onGround = volume * TephraSubsystem.PROXIMAL_BULK_DENSITY;
         assertEquals(b.deposited(), onGround, 1e-3 * mass, "what is booked as deposited lies on the world: " + onGround);
+    }
+
+    /** Solid mass (kg) of the bomb heaps on the ground: volume over bulk density of the heap. */
+    private static double bombMass(Setup s) {
+        double volume = 0;
+        WorldModel w = s.world();
+        int n = 24 * 16;
+        for (int x = -n; x < n; x++) for (int z = -n; z < n; z++) volume += w.surfaceZ(x, z) - GROUND;
+        return volume * (1 - TephraSubsystem.BOMB_HEAP_POROSITY) * new TephraConfig().bombDensity;
+    }
+
+    @Test
+    void cappedSalvosLandAllTheirMassAndShowOnlySalvosNone() {
+        // 5e5 kg is thousands of mean bombs: the salvo tracks 10 and each stands for the rest
+        Setup carried = setup();
+        carried.tephra().launchSalvo(VENT, 5e5, 60, 0, 20, 50, 10, true);
+        for (int i = 0; i < 20 * 60; i++) carried.engine().step();
+        assertEquals(5e5, bombMass(carried), 0.01 * 5e5, "the whole ballistic mass lands");
+
+        Setup shown = setup();
+        shown.tephra().launchSalvo(VENT, 5e5, 60, 0, 20, 50, 10, false);
+        for (int i = 0; i < 20 * 60; i++) shown.engine().step();
+        assertEquals(0, bombMass(shown), 1e-6, "a salvo that only shows laid-down ejecta adds nothing");
     }
 
     @Test
@@ -91,7 +115,7 @@ class ProximalBudgetTest {
         double mean = moment / mass;
         double maxRange = speed * speed / 9.81;
         assertTrue(far < 1.2 * maxRange, "nothing beyond the drag-free range: " + far + " vs " + maxRange);
-        assertTrue(mean > 3 * VENT.craterRadius(), "builds a ring, not a spike in the crater: mean " + mean);
+        assertTrue(mean > 3 * VENT.craterRadiusM(), "builds a ring, not a spike in the crater: mean " + mean);
         System.out.printf("jet ejecta at %.0f m/s: mean range %.0f m, farthest %d m%n", speed, mean, far);
     }
 

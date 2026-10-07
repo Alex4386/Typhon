@@ -27,6 +27,10 @@ export const Field = {
   Uplift: 11,
   /** Steam fraction of the top subsurface cell (0..1). */
   SteamFraction: 12,
+  /** Unit id of the second most visible deposit at the surface (by areal coverage). */
+  UnderUnit: 13,
+  /** Share (0..1) of UnderUnit in what the top two units show. */
+  UnderShare: 14,
 } as const;
 export type FieldId = (typeof Field)[keyof typeof Field];
 
@@ -43,6 +47,8 @@ export const FIELD_NAMES: Record<FieldId, string> = {
   10: 'topUnit',
   11: 'uplift',
   12: 'steamFraction',
+  13: 'underUnit',
+  14: 'underShare',
 };
 
 /** Payload encodings. Values are the u8 `codec` in the frame header. */

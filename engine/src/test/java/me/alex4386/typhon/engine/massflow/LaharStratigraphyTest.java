@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerView;
@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 
 /** Lahars rework the loose volcanic layers of the world model and lay down attributed deposits. */
 class LaharStratigraphyTest {
-    private static final BlockPos TOP = new BlockPos(4, 0, 32);
+    private static final Point3 TOP = new Point3(4.5, 0, 32.5);
 
     private static MassFlowTestWorld ramp() {
         return new MassFlowTestWorld(0, 0, 15, 3, MassFlowTestWorld.rampToPlain(0.3, 100, 64));
@@ -70,7 +70,7 @@ class LaharStratigraphyTest {
         int unit = Provenance.unitFor(world, "v", 2, DepositType.LAHAR, 0, Double.NaN, 50);
         l.setUnits((type, time, temperature) -> type == DepositType.LAHAR ? unit : 0);
         Engine e = w.engine(l, 4);
-        l.release(new BlockPos(110, 0, 32), 3, 2000, 15, 0.4, MassFlowEvents.Trigger.MANUAL);
+        l.release(new Point3(110.5, 0, 32.5), 3, 2000, 15, 0.4, MassFlowEvents.Trigger.MANUAL);
         w.runUntilStill(e, l, 20 * 600);
 
         boolean found = false;

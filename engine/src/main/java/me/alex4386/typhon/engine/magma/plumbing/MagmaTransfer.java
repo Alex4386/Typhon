@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
@@ -44,7 +44,6 @@ public final class MagmaTransfer implements Subsystem {
     private final String volcanoId;
     private final Map<String, MagmaChamber> chambers;
     private final MagmaChamber clock;
-    private final double metersPerBlock;
     private List<ConnectionConfig> connections;
     /** Per pathway, by id. */
     private final Map<String, Link> links = new TreeMap<>();
@@ -66,12 +65,10 @@ public final class MagmaTransfer implements Subsystem {
      * @param chambers every chamber of the volcano by id (the main one included)
      * @param clock the chamber whose state sets the physical time step (the main chamber)
      */
-    public MagmaTransfer(String volcanoId, Map<String, MagmaChamber> chambers, MagmaChamber clock, List<ConnectionConfig> connections,
-            double metersPerBlock) {
+    public MagmaTransfer(String volcanoId, Map<String, MagmaChamber> chambers, MagmaChamber clock, List<ConnectionConfig> connections) {
         this.volcanoId = Objects.requireNonNull(volcanoId);
         this.chambers = Map.copyOf(chambers);
         this.clock = Objects.requireNonNull(clock);
-        this.metersPerBlock = metersPerBlock;
         setConnections(connections);
     }
 
@@ -133,9 +130,9 @@ public final class MagmaTransfer implements Subsystem {
         if (!Double.isNaN(c.lengthM())) return c.lengthM();
         MagmaChamber a = chambers.get(c.from());
         MagmaChamber b = chambers.get(c.to());
-        BlockPos pa = a.config().center();
-        BlockPos pb = b.config().center();
-        double h = Math.hypot(pa.x() - pb.x(), pa.z() - pb.z()) * metersPerBlock;
+        Point3 pa = a.config().center();
+        Point3 pb = b.config().center();
+        double h = Math.hypot(pa.x() - pb.x(), pa.z() - pb.z());
         double v = a.config().lithostaticDepth() - b.config().lithostaticDepth();
         return Math.max(1, Math.hypot(h, v));
     }
@@ -148,6 +145,36 @@ public final class MagmaTransfer implements Subsystem {
         return c.kind() == ConnectionConfig.Kind.CONDUIT
                 ? Math.PI * StrictMath.pow(c.radiusM(), 4) / (8 * eta * length)
                 : StrictMath.pow(c.widthM(), 3) * c.strikeLengthM() / (12 * eta * length);
+    }
+
+    /**
+     * Flow (m³/s) below which a pathway counts as stalled: the configured value, or the flow too slow to keep it
+     * open thermally. Magma crossing the path length {@code L} faster than heat diffuses across its half-width
+     * {@code a} stays molten ({@code a²/κ > L/v}): a conduit needs {@code Q > πκL}, a dike of strike {@code S}
+     * and width {@code w} {@code Q > 4κLS/w} (Delaney &amp; Pollard 1982; Bruce &amp; Huppert 1989).
+     */
+    public double stallRateM3PerS(ConnectionConfig c) {
+        if (!Double.isNaN(c.stallRateM3PerS())) return c.stallRateM3PerS();
+        double kappa = MagmaChamber.THERMAL_DIFFUSIVITY;
+        double length = lengthM(c);
+        return c.kind() == ConnectionConfig.Kind.CONDUIT
+                ? Math.PI * kappa * length
+                : 4 * kappa * length * c.strikeLengthM() / c.widthM();
+    }
+
+    /**
+     * Seconds of stall before a pathway freezes shut: the configured value, or the conductive solidification time
+     * across its half-width {@code a}, {@code (a²/κ)(1 + L/(c ΔT))} with the latent heat {@code L} slowing it
+     * (Turcotte &amp; Schubert 2002, §4.17; ΔT from the source magma to the host rock): weeks for a metre-scale
+     * conduit, days for a dike.
+     */
+    public double freezeSeconds(ConnectionConfig c) {
+        if (!Double.isNaN(c.freezeSeconds())) return c.freezeSeconds();
+        MagmaChamber from = chambers.get(c.from());
+        double half = c.kind() == ConnectionConfig.Kind.CONDUIT ? c.radiusM() : c.widthM() / 2;
+        double cooling = Math.max(1, from.temperatureC() - from.config().wallTemperatureC());
+        double stefan = 1 + MagmaChamber.LATENT_HEAT_CRYSTALLISATION / (MagmaChamber.MELT_HEAT_CAPACITY * cooling);
+        return half * half / MagmaChamber.THERMAL_DIFFUSIVITY * stefan;
     }
 
     /** Pressure (MPa) driving magma from the source to the receiving chamber of a pathway. */
@@ -178,7 +205,7 @@ public final class MagmaTransfer implements Subsystem {
                 double inv = 1 / sFrom + 1 / sTo;
                 double k = conductance(c) * 1e6 * inv; // 1/s
                 moved = drive * -Math.expm1(-k * dt) / inv;
-                moved = Math.min(moved, 0.5 * from.volumeM3()); // never drain a chamber in one step
+                moved = Math.min(moved, 0.5 * from.volumeM3()); // numerical guard: never drain a chamber in one step
             }
             if (moved > 0) {
                 double rate = moved / dt;
@@ -193,9 +220,9 @@ public final class MagmaTransfer implements Subsystem {
                 link.transferredM3 += moved;
             }
             if (c.freezeOnStall()) {
-                if (link.rateM3PerS < c.stallRateM3PerS()) {
+                if (link.rateM3PerS < stallRateM3PerS(c)) {
                     link.stalledSeconds += dt;
-                    if (link.stalledSeconds >= c.freezeSeconds()) {
+                    if (link.stalledSeconds >= freezeSeconds(c)) {
                         link.frozen = true;
                         Outbox out = context.outbox();
                         out.emit(new PlumbingEvents.ConnectionFroze(context.time(), volcanoId, c.id()));
@@ -257,8 +284,7 @@ public final class MagmaTransfer implements Subsystem {
     @Override
     public void loadState(StateReader in) {
         JsonObject o = in.json();
-        lastTime = o.has("lastTime") ? o.get("lastTime").getAsDouble() : 0;
-        if (!o.has("links")) return;
+        lastTime = o.get("lastTime").getAsDouble();
         for (JsonElement e : o.getAsJsonArray("links")) {
             JsonObject l = e.getAsJsonObject();
             Link link = links.get(l.get("id").getAsString());

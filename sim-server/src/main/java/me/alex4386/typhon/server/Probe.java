@@ -13,7 +13,7 @@ import me.alex4386.typhon.engine.deformation.DeformationModel;
 import me.alex4386.typhon.engine.deformation.GeodeticStation;
 import me.alex4386.typhon.engine.deformation.StationReading;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
 import me.alex4386.typhon.engine.tephra.ExplosivePhase;
 import me.alex4386.typhon.engine.tephra.TephraSubsystem;
@@ -53,7 +53,7 @@ final class Probe {
                 boolean any = false;
                 for (int dz = 0; dz < t && !any; dz += 16) {
                     for (int dx = 0; dx < t && !any; dx += 16) {
-                        any = terrain.isKnown(map.columnX(tx, dx), map.columnZ(ty, dz));
+                        any = terrain.world().isKnown(map.columnX(tx, dx), map.columnZ(ty, dz));
                     }
                 }
                 if (!any) continue;
@@ -136,28 +136,20 @@ final class Probe {
     }
 
     static double groundAboveChamber(me.alex4386.typhon.engine.magma.MagmaChamber chamber, VolcanoSystem v, GridMapping map, WorldModel world) {
-        BlockPos c = chamber.chamberCenter();
-        double s = world.surfaceZ(c.x(), c.z());
-        return Double.isFinite(s) ? s : (v.vents().get(0).position().y() + 1) * map.cell;
+        Point3 c = chamber.chamberCenter();
+        double l = world.spec().metersPerColumn();
+        double s = world.isKnown(c.columnX(l), c.columnZ(l)) ? world.surfaceZ(c.columnX(l), c.columnZ(l)) : Double.NaN;
+        return Double.isFinite(s) ? s : v.referencePoint().y();
     }
 
-    /**
-     * Chamber centre in protocol coordinates at its <em>physical</em> depth below the ground
-     * ({@code MagmaState.physicalDepthM()}). The engine compresses chamber depth into the block
-     * world; the visualizer shows the real geometry. Falls back to the block position when the
-     * physical depth is unknown.
-     */
+    /** Chamber centre in protocol coordinates. */
     static double[] chamberCenter(VolcanoSystem v, GridMapping map, WorldModel world) {
         return chamberCenter(v.chamber(), v, map, world);
     }
 
-    /** Centre of any chamber of the plumbing, at its physical depth below the ground above it. */
+    /** Centre of any chamber of the plumbing in protocol coordinates. */
     static double[] chamberCenter(me.alex4386.typhon.engine.magma.MagmaChamber chamber, VolcanoSystem v, GridMapping map, WorldModel world) {
-        BlockPos b = chamber.chamberCenter();
-        double[] c = {map.x(b.x()), map.y(b.z()), (b.y() + 0.5) * map.cell};
-        double depth = chamber.physicalDepthM();
-        if (Double.isFinite(depth) && depth > 0) c[2] = groundAboveChamber(chamber, v, map, world) - depth;
-        return c;
+        return map.point(chamber.chamberCenter());
     }
 
     /**
@@ -266,6 +258,7 @@ final class Probe {
                 case LANDSLIDE -> "#78964a";
                 case DEBRIS_AVALANCHE -> "#3c823c";
                 case EJECTA -> "#c86ea0";
+                case HYDROTHERMAL -> "#d9c27a";
             });
             out.add(o);
         }
@@ -377,8 +370,7 @@ final class Probe {
             ExplosivePhase phase = tephra.activePhase();
             if (phase != null && tephra.plumeHeight() > 0) {
                 JsonObject plume = new JsonObject();
-                double ventZ = (phase.vent().position().y() + 1) * map.cell;
-                plume.add("topZ", Json.num(ventZ + tephra.plumeHeight() * map.cell));
+                plume.add("topZ", Json.num(phase.vent().position().y() + tephra.plumeHeight()));
                 plume.add("massRateKgS", Json.num(phase.massEruptionRate()));
                 o.add("plume", plume);
             }
@@ -386,7 +378,11 @@ final class Probe {
 
             List<String> ids = new ArrayList<>();
             if (ch.erupting()) for (VentSite vent : v.coupler().activeVents()) ids.add(vent.id());
-            if (ids.isEmpty()) for (VentSite vent : v.vents()) ids.add(vent.id());
+            // the vents erupting now (fountains, fissure curtains); empty between eruptions
+            JsonArray erupting = new JsonArray();
+            for (String id : ids) erupting.add(id);
+            o.add("activeVents", erupting);
+            if (ids.isEmpty()) for (VentSite vent : v.coupler().allVents()) ids.add(vent.id());
             activeVents.put(v.volcanoId(), ids);
         }
         return out;
@@ -406,7 +402,7 @@ final class Probe {
                     st.addProperty("id", r.name());
                     GeodeticStation g = null;
                     for (GeodeticStation c : configured) if (c.name().equals(r.name())) g = c;
-                    st.add("at", g == null ? Json.xy(0, 0) : Json.xy(map.x(g.x()), map.y(g.z())));
+                    st.add("at", g == null ? Json.xy(0, 0) : Json.xy(g.x(), -g.z()));
                     st.add("east", Json.num(r.displacement().east()));
                     st.add("north", Json.num(r.displacement().north()));
                     st.add("up", Json.num(r.displacement().up()));

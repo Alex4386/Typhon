@@ -20,13 +20,13 @@ class OutputTest {
     void cliWritesCsvEventsMapsAndReport(@TempDir Path dir) throws Exception {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         int code = MainAccess.run(new String[] {
-            "run", "--preset", "stromboli", "--hours", "0.02", "--seed", "3", "--sample-seconds", "5",
+            "run", "--preset", "stromboli", "--hours", "1", "--seed", "3", "--sample-seconds", "60",
             "--out", dir.toString(), "--quiet"}, new PrintStream(out), System.err);
         assertEquals(0, code, out.toString());
 
         List<String> csv = Files.readAllLines(dir.resolve("timeseries.csv"));
         assertTrue(csv.get(0).startsWith("step,time_s,alert_level_name,style_name,overpressure_mpa"));
-        // samples follow the steps: a quiet open-conduit volcano covers the 72 s in a few long ones
+        // an hour of Stromboli: real bursts come every 10-20 min
         assertTrue(csv.size() >= 2, "a header and at least one sample: " + csv.size());
         int columns = csv.get(0).split(",").length;
         for (String line : csv) assertEquals(columns, line.split(",").length);
@@ -67,7 +67,7 @@ class OutputTest {
     void realPresetReportComparesWithReferenceValues(@TempDir Path dir) throws Exception {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         int code = MainAccess.run(new String[] {
-            "run", "--preset", "kilauea-real", "--hours", "0.02", "--out", dir.toString(), "--quiet"},
+            "run", "--preset", "kilauea", "--hours", "0.02", "--out", dir.toString(), "--quiet"},
                 new PrintStream(out), System.err);
         assertEquals(0, code, out.toString());
         String text = out.toString();
@@ -80,10 +80,10 @@ class OutputTest {
     @Test
     void demInfoPointsAtRealTiles() throws Exception {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        assertEquals(0, MainAccess.run(new String[] {"dem-info", "--preset", "st-helens-real"}, new PrintStream(out),
+        assertEquals(0, MainAccess.run(new String[] {"dem-info", "--preset", "st-helens"}, new PrintStream(out),
                 System.err));
         assertTrue(out.toString().contains("Copernicus_DSM_COG_10_N46_00_W123_00_DEM"), out.toString());
-        assertEquals(1, MainAccess.run(new String[] {"dem-info", "--preset", "kilauea"}, new PrintStream(out),
+        assertEquals(1, MainAccess.run(new String[] {"dem-info"}, new PrintStream(out),
                 new PrintStream(out)));
     }
 

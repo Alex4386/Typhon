@@ -2,46 +2,50 @@ package me.alex4386.typhon.engine.terrain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.sim.Engine;
-import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.world.MaterialTable;
+import me.alex4386.typhon.engine.world.WorldModel;
 import org.junit.jupiter.api.Test;
 
 class TerrainModelTest {
-    private static final BlockId STONE = BlockId.minecraft("stone");
-
     @Test
-    void snapshotsArriveViaCommandsAndAreCopied() {
+    void groundArrivesViaCommandsAndIsCopied() {
         TerrainModel terrain = new TerrainModel();
         Engine engine = Engine.builder(0).add(terrain).build();
 
-        TerrainChunk chunk = new TerrainChunk(-1, 0);
-        chunk.set(-3, 5, new TerrainColumn(70, 72, BlockId.minecraft("sand")));
-        engine.submit(new TerrainSnapshot(List.of(chunk)));
+        List<GroundColumn> columns = new ArrayList<>();
+        columns.add(new GroundColumn(-3, 5, 70.4, 72.9, MaterialTable.SEDIMENT));
+        engine.submit(new GroundImport(columns));
         engine.step();
-        chunk.set(-3, 5, TerrainColumn.dry(10, STONE)); // host reuses its buffer
+        columns.set(0, GroundColumn.dry(-3, 5, 10, MaterialTable.ANDESITE)); // host reuses its buffer
 
-        TerrainColumn column = terrain.column(-3, 5);
-        assertEquals(70, column.groundY());
-        assertTrue(column.submerged());
-        assertEquals(2, column.waterDepth());
-        assertTrue(terrain.isKnown(-16, 15));
-        assertFalse(terrain.isKnown(0, 0));
-        assertNull(terrain.column(0, 0));
-        assertEquals(-99, terrain.groundY(0, 0, -99));
+        WorldModel world = terrain.world();
+        assertEquals(70.4, world.surfaceZ(-3, 5), 1e-4); // stored in single precision
+        assertEquals(72.9, world.waterZ(-3, 5), 1e-4);
+        assertEquals(MaterialTable.SEDIMENT, world.layer(-3, 5, world.layerCount(-3, 5) - 1).materialInfo());
+        assertTrue(world.isKnown(-3, 5));
+        assertFalse(world.isKnown(0, 0));
     }
 
     @Test
-    void engineEditsKeepWater() {
+    void reImportDepositsOrErodesToTheSurfaceAndSetsWater() {
         TerrainModel terrain = new TerrainModel();
-        terrain.setColumn(1, 1, new TerrainColumn(60, 64, STONE));
-        terrain.setGround(1, 1, 62, BlockId.minecraft("basalt"));
-        TerrainColumn column = terrain.column(1, 1);
-        assertEquals(62, column.groundY());
-        assertEquals(64, column.waterY());
-        assertEquals(BlockId.minecraft("basalt"), column.surface());
+        WorldModel world = terrain.world();
+        terrain.apply(new GroundImport(List.of(new GroundColumn(1, 1, 60, 64, MaterialTable.ANDESITE))));
+        assertEquals(60, world.surfaceZ(1, 1), 1e-9);
+        assertEquals(64, world.waterZ(1, 1), 1e-9);
+
+        terrain.apply(new GroundImport(List.of(new GroundColumn(1, 1, 62.5, 64, MaterialTable.BASALT))));
+        assertEquals(62.5, world.surfaceZ(1, 1), 1e-9);
+        assertEquals(64, world.waterZ(1, 1), 1e-9);
+        assertEquals(MaterialTable.BASALT, world.layer(1, 1, world.layerCount(1, 1) - 1).materialInfo());
+
+        terrain.apply(new GroundImport(List.of(GroundColumn.dry(1, 1, 58.25, null))));
+        assertEquals(58.25, world.surfaceZ(1, 1), 1e-9);
+        assertTrue(Double.isNaN(world.waterZ(1, 1)));
     }
 }

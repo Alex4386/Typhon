@@ -69,11 +69,11 @@ public record Sample(long step, double timeSeconds, Map<String, Double> values, 
         v.put("water_magma_ratio", partition == null ? 0 : partition.waterMagmaRatio());
         v.put("effusing", bool(volcano.coupler().effusing()));
         v.put("explosive", bool(volcano.coupler().explosive()));
-        v.put("lava_volume_blocks", lava.toBlocks(lava.totalLavaVolume()));
+        v.put("lava_volume_m3", lava.totalLavaVolume());
         v.put("lava_active_cells", (double) lava.activeCellCount());
-        v.put("lava_emitted_blocks", lava.toBlocks(lava.emittedVolume()));
-        v.put("lava_solidified_blocks", lava.toBlocks(lava.solidifiedVolume()));
-        v.put("plume_height_blocks", tephra.plumeHeight());
+        v.put("lava_emitted_m3", lava.emittedVolume());
+        v.put("lava_solidified_m3", lava.solidifiedVolume());
+        v.put("plume_height_m", tephra.plumeHeight());
         TephraSubsystem.MassBudget budget = tephra.massBudget();
         v.put("ash_emitted_kg", budget.emitted());
         v.put("ash_airborne_kg", budget.airborne());
@@ -96,8 +96,9 @@ public record Sample(long step, double timeSeconds, Map<String, Double> values, 
             v.put("water_springs_m3", subsurface.springDischarge());
             v.put("water_to_sea_m3", water.seaOutflow() + water.seaGroundwater());
             v.put("water_imbalance_m3", water.imbalance());
-            int x = volcano.vents().get(0).position().x();
-            int z = volcano.vents().get(0).position().z();
+            double l = scenario.world().spec().metersPerColumn();
+            int x = volcano.referencePoint().columnX(l);
+            int z = volcano.referencePoint().columnZ(l);
             v.put("vent_water_table_depth_m", subsurface.waterTableDepthM(x, z));
             v.put("vent_ground_temperature_10m_c", subsurface.temperatureC(x, z, 10));
         }

@@ -37,6 +37,8 @@ export const SUBSCRIBED_FIELDS: FieldId[] = [
   Field.TopUnit,
   Field.Uplift,
   Field.SteamFraction,
+  Field.UnderUnit,
+  Field.UnderShare,
 ];
 
 /** Pyramid levels currently subscribed (§5.5), besides level 0. */

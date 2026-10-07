@@ -16,17 +16,15 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.lava.LavaEvents.ChunkCoord;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.Parallel;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
-import me.alex4386.typhon.engine.terrain.TerrainChunkView;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.GroundCoupling;
-import me.alex4386.typhon.engine.world.BlockState;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerFlags;
 import me.alex4386.typhon.engine.world.LayerView;
@@ -42,10 +40,8 @@ import me.alex4386.typhon.engine.save.StateWriter;
 /**
  * Lava flow as a 2.5D cellular automaton over surface columns (after MAGFLOW / SCIARA).
  *
- * <p>The automaton runs in real units: a column is {@code L × L} m ({@link #metersPerBlock()}), its
- * molten core is {@code h} real metres thick, and one block of rock is {@code L} m thick, so a real
- * erupted volume {@code V} occupies {@code V / L³} blocks and flows reach real runout distances.
- * Every column holds a molten core with temperature, SiO₂ and H₂O on top of the world-model ground
+ * <p>The automaton runs in physical units: a column is {@code L × L} m ({@link #metersPerColumn()}) and its
+ * molten core is {@code h} m thick, so an erupted volume reaches real runout distances. Every column holds a molten core with temperature, SiO₂ and H₂O on top of the world-model ground
  * surface ({@link WorldModel#surfaceZ} + uplift, real metres — so it flows over ash, ignimbrite and
  * earlier lava of any thickness), and optionally a rigid crust above the core. Each cell also carries
  * the stratigraphic unit (volcano, eruption) of its melt, taken from its {@link LavaSource} and
@@ -70,46 +66,45 @@ import me.alex4386.typhon.engine.save.StateWriter;
  *   <li><b>Cooling</b>:
  *       <ul>
  *         <li><i>Open or submerged columns</i> (thin, fast, at a vent, or under water) cool as a
- *             whole: radiation {@code εσ(T⁴ − T_a⁴)} or, submerged, {@code h_w(T − T_w)}, plus
- *             basal conduction, over {@code ρ c_eff h} with latent heat between liquidus and
- *             solidus.
- *         <li><i>Quiet columns</i> (at least {@link LavaConfig#crustMinThickness()} thick and slower
- *             than {@link LavaConfig#crustDisruptionVelocity()}) grow a crust instead (Stefan
- *             problem): the surface loss {@code (T − T_a) / (h_c/k_c + 1/h_rad)} freezes melt onto
- *             the crust base at {@code ρ (L + c (T − T_sol))} per m³, while the insulated core only
- *             loses heat through its base. A quiet pond's crust grows as ≈ √t (≈0.45 m after a day
- *             at k_c = 1 W/m·K), and insulated flows stay hot and travel farther.
+ *             whole: radiation {@code εσ(T⁴ − T_a⁴)} plus free convection or, submerged,
+ *             {@code h_w(T − T_w)}, plus basal conduction, over {@code ρ c_eff h} with latent heat
+ *             between liquidus and solidus.
+ *         <li><i>Quiet columns</i> (Biot number {@code h_s H / k} at least {@link #CRUST_BIOT}, i.e. thicker
+ *             than the lumped-capacitance limit, and slower than
+ *             {@link LavaConfig#crustDisruptionVelocity()}) grow a crust instead (Stefan problem): the
+ *             conduction through the crust, balanced against the radiation and convection of its surface
+ *             (solved for the surface temperature), freezes melt onto the crust base at
+ *             {@code ρ (L + c (T − T_sol))} per m³, while the insulated core only loses heat through its
+ *             base. A quiet pond's crust grows as ≈ √t (≈0.45 m after a day at k_c = 1 W/m·K), and
+ *             insulated flows stay hot and travel farther.
+ *         <li><i>Basal conduction</i>: melt and substrate meet as two half-spaces; the flux into the
+ *             rock is {@code E (T − T_g) / √(π t)} with {@code E = e_l e_g / (e_l + e_g)},
+ *             {@code e = √(kρc)} and {@code t} the time the column has been covered (its boundary layer
+ *             grows as {@code √(π κ t)}; Carslaw &amp; Jaeger 1959).
  *         <li>Melt pushing up into its crust lifts it (inflation); a faster flow, a vent or water
  *             tears the crust up and re-mixes it.
  *       </ul>
  *       Below the solidus the column solidifies: its exact thickness is deposited into the world
- *       model as a {@link DepositType#LAVA} layer of its unit (rock from {@link
- *       LavaPalette#rockMaterial}), and whole blocks of it are shown via {@link LavaPalette}. Lava
+ *       model as a {@link DepositType#LAVA} layer of its unit (rock from {@link LavaRocks#rockMaterial}). Lava
  *       quenched in water sheds part of its volume as {@link DepositType#HYALOCLASTITE} onto the
  *       steepest lower submerged neighbour, so sustained ocean entry builds a delta seaward.
  *   <li><b>Tubes</b>: when the melt under a crust drains away (supply stopped, flow moved on), a
- *       roof at least {@link LavaConfig#tubeMinRoofThickness()} thick over at least one block of
- *       void stays standing: the world model gets a cavity ({@link DepositType#CAVITY}) under a
+ *       roof that spans the column under its own weight ({@link LavaConfig#minRoofThickness}:
+ *       bending stress {@code ρ g L²/(2t)} below the roof's tensile strength) over a void at least
+ *       {@link #MIN_TUBE_VOID_M} high stays standing: the world model gets a cavity ({@link DepositType#CAVITY}) under a
  *       {@link DepositType#TUBE_ROOF} layer, and {@link #tubes()} lists them. Thinner roofs collapse
  *       into the column.
- *   <li><b>Rendering</b>: molten columns are shown as lava (or a magma-block skin once crusted or
- *       cooled past the crust temperature), drained voids as air and thick crust as roof rock; only
- *       columns whose visible state changed emit block changes.
  * </ol>
  *
- * <p>Columns in chunks the host has not sent terrain for act as walls and are requested with a
- * {@link LavaEvents.TerrainNeeded} event.
- *
- * <p>Hosts must not report engine-rendered lava, magma-block skin or roof rock above
- * {@link TerrainModel} ground as ground in later terrain snapshots, or the melt would be counted
- * twice; tube voids are listed by {@link #tubes()}.
+ * <p>Columns whose ground is not known act as walls; chunks of them are requested with a
+ * {@link LavaEvents.TerrainNeeded} event. Tube voids are listed by {@link #tubes()}.
  *
  * <p>References: Del Negro et al. (2008), Bull. Volcanol. 70:805-812 (MAGFLOW cellular automaton); Hon et al. (1994), GSA Bull. 106:351-370 (crust growth, inflation, tubes). See {@code docs/references.md}.
  */
 public final class LavaFlow implements Subsystem {
     public static final String ID = "lava";
 
-    private static final int STATE_FORMAT = 5;
+    private static final int STATE_FORMAT = 7;
     private static final double SIGMA = 5.670374419e-8;
     private static final double G = 9.81;
     private static final double KELVIN = 273.15;
@@ -117,6 +112,18 @@ public final class LavaFlow implements Subsystem {
     /** Share of a cell's melt a newer unit must contribute to take the cell over (see gather). */
     private static final double UNIT_SHARE = 0.1;
     private static final double WATER_HEAT_CAPACITY = 4186;
+    /**
+     * Air at a film temperature of ≈700 K (Incropera &amp; DeWitt, Table A.4): conductivity (W/m·K), kinematic
+     * viscosity and thermal diffusivity (m²/s), for free convection off a hot surface.
+     */
+    private static final double AIR_K = 0.0524;
+    private static final double AIR_NU = 68.1e-6;
+    private static final double AIR_ALPHA = 97.0e-6;
+    /**
+     * Below this Biot number {@code h_s·H/k} a column cools as a whole (lumped capacitance, the textbook
+     * Bi &lt; 0.1 criterion); above it the surface cools faster than heat arrives from inside and a crust forms.
+     */
+    static final double CRUST_BIOT = 0.1;
     private static final double WATER_LATENT_HEAT = 2.26e6;
     private static final int DIRS = LavaChunk.DIRECTIONS;
     // 4 orthogonal then 4 diagonal; d ^ 1 is the opposite direction
@@ -127,7 +134,6 @@ public final class LavaFlow implements Subsystem {
     /** Face width per direction as a fraction of L (equal widths: isotropic linear flux). */
     private static final double FACE = 0.5;
     private static final int AREA = LavaChunk.AREA;
-    private static final int UNKNOWN = LavaChunk.UNKNOWN;
     /** Minimum chunks per parallel task (a chunk is 256 cells of work). */
     private static final int CHUNK_GRAIN = 1;
     private static final Comparator<LavaChunk> BY_KEY = Comparator.comparingLong(c -> c.key);
@@ -135,8 +141,6 @@ public final class LavaFlow implements Subsystem {
     private final TerrainModel terrain;
     private LavaConfig config;
     private final LavaRheology rheology;
-    private double metersPerBlock;
-    private boolean scaleLocked;
 
     private final ChunkMap chunks = new ChunkMap();
 
@@ -180,10 +184,10 @@ public final class LavaFlow implements Subsystem {
         }
     }
     private final Map<String, LavaSource> sources = new LinkedHashMap<>();
-    private final List<BlockPos> origins = new ArrayList<>();
+    private final List<ColumnIndex> origins = new ArrayList<>();
     private final TreeSet<Long> requestedTerrain = new TreeSet<>();
-    /** Columns holding a lava tube cavity (packed x/z); the cavities themselves live in the world model. */
-    private final TreeMap<Long, int[]> tubeColumns = new TreeMap<>(); // shown block range {bottomY, topY}
+    /** Columns holding a lava tube cavity (packed x/z) → {bottomZ, topZ} (m); the cavities live in the world model. */
+    private final TreeMap<Long, double[]> tubeColumns = new TreeMap<>();
     private double emittedVolume;
     private double solidifiedVolume;
 
@@ -215,7 +219,6 @@ public final class LavaFlow implements Subsystem {
         this.terrain = terrain;
         this.config = config;
         this.rheology = rheology;
-        this.metersPerBlock = config.metersPerBlock();
     }
 
     @Override
@@ -244,40 +247,14 @@ public final class LavaFlow implements Subsystem {
         return config;
     }
 
-    /** Real metres per block: column width and the thickness of one block of rock. */
-    public double metersPerBlock() {
-        return metersPerBlock;
-    }
-
-    /**
-     * Sets the grid scale from a volcano's {@code VolcanoScaling}. The lava field is shared by every
-     * volcano in an engine, so all of them must use the same scale: the first call fixes it and a
-     * different value afterwards is rejected. Must be called before any lava exists.
-     */
-    public void setMetersPerBlock(double metersPerBlock) {
-        if (!(metersPerBlock > 0)) throw new IllegalArgumentException("metersPerBlock must be > 0");
-        if (metersPerBlock == this.metersPerBlock) {
-            scaleLocked = true;
-            return;
-        }
-        if (scaleLocked) {
-            throw new IllegalArgumentException("Lava field is already scaled at " + this.metersPerBlock
-                    + " m/block; volcanoes sharing it cannot use " + metersPerBlock);
-        }
-        if (emittedVolume > 0 || !chunks.isEmpty()) {
-            throw new IllegalStateException("Cannot rescale a lava field that already holds lava");
-        }
-        this.metersPerBlock = metersPerBlock;
-        this.scaleLocked = true;
-    }
-
-    /** Converts a real volume (m³) to blocks at this field's scale. */
-    public double toBlocks(double volumeM3) {
-        return volumeM3 / (metersPerBlock * metersPerBlock * metersPerBlock);
+    /** Column width L (m), from the world model. */
+    public double metersPerColumn() {
+        return world().spec().metersPerColumn();
     }
 
     private double area() {
-        return metersPerBlock * metersPerBlock;
+        double l = metersPerColumn();
+        return l * l;
     }
 
     private WorldModel world() {
@@ -286,9 +263,8 @@ public final class LavaFlow implements Subsystem {
 
     public void addSource(LavaSource source) {
         sources.put(source.id(), source);
-        for (BlockPos cell : source.cells()) {
-            BlockPos origin = new BlockPos(cell.x(), 0, cell.z());
-            if (!origins.contains(origin)) origins.add(origin);
+        for (ColumnIndex cell : source.cells()) {
+            if (!origins.contains(cell)) origins.add(cell);
         }
     }
 
@@ -306,8 +282,8 @@ public final class LavaFlow implements Subsystem {
     }
 
     /**
-     * Injects {@code volumeM3} real m³ of lava into a column (e.g. a molten bomb or a lava-dome
-     * collapse). Returns false if the column's terrain is unknown.
+     * Injects {@code volumeM3} m³ of lava into a column (e.g. a molten bomb or a lava-dome collapse). Returns
+     * false if the column's ground is unknown.
      */
     public boolean addLava(int x, int z, double volumeM3, double temperatureC, double silicaWt, double waterWt) {
         return addLava(x, z, volumeM3, temperatureC, silicaWt, waterWt, UnitTable.UNATTRIBUTED);
@@ -321,7 +297,7 @@ public final class LavaFlow implements Subsystem {
         if (c == null) return false;
         if (c.freshStamp != stamp) refresh(c);
         int i = index(x, z);
-        if (c.ground[i] == UNKNOWN) return false;
+        if (Double.isNaN(c.bed[i])) return false;
         double h0 = c.thickness[i];
         double added = volumeM3 / area();
         double h = h0 + added;
@@ -350,15 +326,6 @@ public final class LavaFlow implements Subsystem {
     public double crustThickness(int x, int z) {
         LavaChunk c = chunks.get(LavaChunk.key(x >> 4, z >> 4));
         return c == null ? 0 : c.crust[index(x, z)];
-    }
-
-    /**
-     * Lava rock laid down in the column that is not yet shown as a whole block (real m). The rock
-     * itself is already in the world model.
-     */
-    public double partialSolid(int x, int z) {
-        LavaChunk c = chunks.get(LavaChunk.key(x >> 4, z >> 4));
-        return c == null ? 0 : c.solid[index(x, z)];
     }
 
     /** Stratigraphic unit of the melt in a column ({@link UnitTable#UNATTRIBUTED} if none). */
@@ -427,14 +394,14 @@ public final class LavaFlow implements Subsystem {
     }
 
     /**
-     * Hollow lava-tube voids left by drained flows, in column order, as the block ranges shown to
-     * hosts. The cavities themselves are {@link DepositType#CAVITY} layers in the world model; a
+     * Hollow lava-tube voids left by drained flows, in column order, with their elevation ranges (m).
+     * The cavities themselves are {@link DepositType#CAVITY} layers in the world model; a
      * column whose cavity was later filled or collapsed by other edits drops out of the list.
      */
     public List<LavaTube> tubes() {
         List<LavaTube> list = new ArrayList<>();
         WorldModel world = world();
-        for (Map.Entry<Long, int[]> e : tubeColumns.entrySet()) {
+        for (Map.Entry<Long, double[]> e : tubeColumns.entrySet()) {
             int x = (int) (e.getKey() >> 32);
             int z = (int) (long) e.getKey();
             if (hasCavity(world, x, z)) list.add(new LavaTube(x, z, e.getValue()[0], e.getValue()[1]));
@@ -500,7 +467,7 @@ public final class LavaFlow implements Subsystem {
         if (activeCellCount() == 0 && sourcesIdle()) return Double.POSITIVE_INFINITY;
         double limit = MOLTEN_STEP_SECONDS;
         if (lastMaxDiffusivity > 0) {
-            double stable = config.relaxation() * metersPerBlock * metersPerBlock / lastMaxDiffusivity;
+            double stable = config.relaxation() * metersPerColumn() * metersPerColumn() / lastMaxDiffusivity;
             limit = Math.min(limit, config.maxSubsteps() * stable);
         }
         return limit;
@@ -530,7 +497,7 @@ public final class LavaFlow implements Subsystem {
         for (LavaSource source : sources.values()) {
             if (source.rateM3PerS() <= 0) continue;
             double perCell = source.rateM3PerS() * dt / source.cells().size();
-            for (BlockPos cell : source.cells()) {
+            for (ColumnIndex cell : source.cells()) {
                 if (!addLava(cell.x(), cell.z(), perCell, source.temperatureC(), source.silicaWt(), source.waterWt(),
                         source.unit())) {
                     neededTerrain.add(LavaChunk.key(cell.x() >> 4, cell.z() >> 4));
@@ -552,7 +519,7 @@ public final class LavaFlow implements Subsystem {
         // at the resolved lobe thickness; thicker channels and ponds level through the relaxation cap).
         int substeps = 1;
         if (lastMaxDiffusivity > 0) {
-            double stable = config.relaxation() * metersPerBlock * metersPerBlock / lastMaxDiffusivity;
+            double stable = config.relaxation() * metersPerColumn() * metersPerColumn() / lastMaxDiffusivity;
             substeps = (int) Math.min(config.maxSubsteps(), Math.max(1, Math.ceil(dt / stable)));
         }
         lastSubsteps = substeps;
@@ -617,7 +584,7 @@ public final class LavaFlow implements Subsystem {
         double interval = config.eventPeriodSeconds();
         if (context.crossed(interval)) {
             if (stats.cells > 0) {
-                outbox.emit(new LavaEvents.LavaSolidified(now, interval, stats.cells, stats.volume, stats.blocks));
+                outbox.emit(new LavaEvents.LavaSolidified(now, interval, stats.cells, stats.volume));
             }
             stats.clear();
             emitOceanEntries(now, interval, outbox);
@@ -651,7 +618,7 @@ public final class LavaFlow implements Subsystem {
             int lx = i & 15;
             int lz = i >> 4;
             if (lx != 0 && lx != 15 && lz != 0 && lz != 15) continue;
-            if (c.thickness[i] < minFlow || c.ground[i] == UNKNOWN) continue;
+            if (c.thickness[i] < minFlow || Double.isNaN(c.bed[i])) continue;
             for (int d = 0; d < DIRS; d++) {
                 int nx = lx + DX[d];
                 int nz = lz + DZ[d];
@@ -700,12 +667,12 @@ public final class LavaFlow implements Subsystem {
         double minFlow = config.minFlowThickness();
         double relaxation = config.relaxation();
         double subH = config.substepFlowThicknessM();
-        double cell = metersPerBlock;
+        double cell = metersPerColumn();
         double perDischarge = FACE * dt / cell; // thickness moved per unit discharge: q·(FACE·L)·dt / L²
 
         for (int i = 0; i < AREA; i++) {
             double h = c.thickness[i];
-            if (h < minFlow || c.ground[i] == UNKNOWN) continue;
+            if (h < minFlow || Double.isNaN(c.bed[i])) continue;
             double head = c.bed[i] + h;
             int lx = i & 15;
             int lz = i >> 4;
@@ -726,7 +693,7 @@ public final class LavaFlow implements Subsystem {
                     if (nc == null) continue;
                 }
                 int j = ((nz & 15) << 4) | (nx & 15);
-                if (nc.ground[j] == UNKNOWN) continue;
+                if (Double.isNaN(nc.bed[j])) continue;
                 double dh = head - (nc.bed[j] + nc.thickness[j]);
                 if (dh <= 0) continue;
                 if (eta != eta) { // rheology only for cells that have somewhere to flow
@@ -826,6 +793,8 @@ public final class LavaFlow implements Subsystem {
 
             c.nextThickness[i] = volume;
             c.nextUnit[i] = unit < 0 ? c.unit[i] : unit;
+            // the bed keeps its heated boundary layer while lava (or its crust) stays on it; fresh cover starts anew
+            c.nextContact[i] = volume > 0 && (h > 0 || c.crust[i] > 0) ? c.contact[i] : 0;
             if (volume > 0) {
                 c.nextTemperature[i] = heat / volume;
                 c.nextSilica[i] = silica / volume;
@@ -872,7 +841,7 @@ public final class LavaFlow implements Subsystem {
         double flux = dt > 0 ? volumeM3 / dt : 0;
         if (flux > c.oceanMaxFlux) {
             c.oceanMaxFlux = flux;
-            c.oceanMaxPos = BlockPos.pack(c.worldX(i), c.ground[i] + 1, c.worldZ(i));
+            c.oceanMaxPos = columnKey(c.worldX(i), c.worldZ(i));
         }
         if (flux >= config.littoralExplosionFluxM3s()) c.oceanExplosive = true;
     }
@@ -923,7 +892,7 @@ public final class LavaFlow implements Subsystem {
                     molten += v;
                     if (v > largestVolume) {
                         largestVolume = v;
-                        largest = BlockPos.pack(c.worldX(i), c.ground[i] + 1, c.worldZ(i));
+                        largest = columnKey(c.worldX(i), c.worldZ(i));
                     }
                 }
             }
@@ -931,7 +900,7 @@ public final class LavaFlow implements Subsystem {
             if (emitted++ >= config.maxWaterEventsPerStep()) break;
             double powerW = seconds > 0 ? e.heatJ / seconds : 0;
             double steam = powerW / (WATER_HEAT_CAPACITY * Math.max(0, 100 - config.waterC()) + WATER_LATENT_HEAT);
-            BlockPos pos = BlockPos.unpack(e.maxFluxM3s >= 0 ? e.maxPos : largest);
+            Point3 pos = surfacePoint(e.maxFluxM3s >= 0 ? e.maxPos : largest);
             outbox.emit(new LavaEvents.LavaOceanEntry(now, interval, pos, columns, molten,
                     seconds > 0 ? e.inflowM3 / seconds : 0, powerW / 1e6, steam, e.explosive));
         }
@@ -980,9 +949,15 @@ public final class LavaFlow implements Subsystem {
         double rho = config.densityKgM3();
         double cs = config.coolingScale();
         double ambient = config.ambientC();
-        double ambientK4 = Math.pow(ambient + KELVIN, 4);
         double stepK = config.coolingStepK();
         boolean track = ground != GroundCoupling.NONE;
+        double kLava = config.crustConductivityWMK();
+        // melt and rock brought into contact: the interface sits between them by their thermal effusivities
+        // e = √(kρc), and the flux into the rock decays as the boundary layer below grows (√(π κ t))
+        double eLava = Math.sqrt(kLava * rho * config.specificHeatJKgK());
+        double eGround = Math.sqrt(config.groundConductivityWMK() * config.groundVolumetricHeatCapacityJM3K());
+        double contactEffusivity = eLava * eGround / (eLava + eGround);
+        double roofSpan = config.minRoofThickness(metersPerColumn());
         for (int i = 0; i < AREA; i++) {
             double h = c.thickness[i];
             double hc = c.crust[i];
@@ -998,7 +973,7 @@ public final class LavaFlow implements Subsystem {
                 if (meltTop > crustBase) c.roofTop[i] += meltTop - crustBase; // inflation lifts the roof
                 // A young crust is torn up by fast flow; a roof thick enough to span the flow is
                 // anchored to its levees and lets the melt run beneath it (tube flow).
-                boolean anchored = hc >= config.tubeMinRoofThickness();
+                boolean anchored = hc >= roofSpan;
                 if (!submerged && !source && !anchored) speed = localSpeed(c, i);
                 boolean torn = submerged || source || (!anchored && speed > config.crustDisruptionVelocity());
                 if (torn && h > 0) {
@@ -1019,6 +994,7 @@ public final class LavaFlow implements Subsystem {
             double t = c.temperature[i];
             double maxRate = 0;
             boolean underVoid = false;
+            double age = c.contact[i];
             // Integrate the heat balance over the (possibly compressed) step in sub-iterations that
             // each cool the core by at most coolingStepK and grow the crust by a bounded amount.
             double remaining = dt;
@@ -1027,25 +1003,31 @@ public final class LavaFlow implements Subsystem {
                 double gap = hc > 0 ? (c.roofTop[i] - hc) - meltTop : 0;
                 underVoid = hc > 0 && gap > GAP_EPS;
 
-                double tK = t + KELVIN;
                 double qTop;
                 if (submerged) {
                     qTop = config.waterHeatTransferWM2K() * (t - config.waterC());
                 } else if (underVoid) {
                     qTop = 0; // melt under a drained roof faces a hot void, not the sky
+                } else if (hc > 0 && t > ambient) {
+                    // conduction through the crust balances what its surface loses
+                    double ts = crustSurfaceC(t, hc, kLava, ambient);
+                    qTop = kLava * (t - ts) / hc;
                 } else {
-                    double radiative = config.emissivity() * SIGMA * (tK * tK * tK * tK - ambientK4);
-                    qTop = hc > 0 && t > ambient
-                            ? (t - ambient) / (hc / config.crustConductivityWMK() + (t - ambient) / radiative)
-                            : radiative;
+                    qTop = surfaceLoss(t, ambient);
                 }
-                double qBase = config.groundConductivityWMK() * (t - ambient) / config.groundBoundaryLayerM();
+                // basal conduction, averaged over the rest of the step: E·ΔT·2(√(a+Δt) − √a)/(Δt·√π)
+                double qBase = remaining > 0 && t > ambient
+                        ? contactEffusivity * (t - ambient) * 2 * (Math.sqrt(age + remaining) - Math.sqrt(age))
+                                / (remaining * Math.sqrt(Math.PI))
+                        : 0;
                 double cEff = config.specificHeatJKgK();
                 if (t < liquidus && t > solidus) cEff += config.latentHeatJKg() / (liquidus - solidus);
 
-                boolean anchored = hc >= config.tubeMinRoofThickness();
+                boolean anchored = hc >= roofSpan;
+                // a crust forms where the surface loses heat faster than conduction brings it up (Biot number)
+                double hSurface = t > ambient ? surfaceLoss(t, ambient) / (t - ambient) : 0;
                 boolean quiet = config.crustEnabled() && !submerged && !underVoid
-                        && h + hc >= config.crustMinThickness() && !source;
+                        && (h + hc) * hSurface / kLava >= CRUST_BIOT && !source;
                 if (quiet && !anchored) {
                     if (speed != speed) speed = localSpeed(c, i);
                     quiet = speed <= config.crustDisruptionVelocity();
@@ -1072,7 +1054,7 @@ public final class LavaFlow implements Subsystem {
                     double grow = Math.min(h, qTop * cs * step / freezeHeat);
                     if (hc <= 0) {
                         c.roofTop[i] = meltTop;
-                        c.crustKind[i] = LavaPalette.crustKind(si);
+                        c.crustKind[i] = LavaRocks.crustKind(si);
                     }
                     h -= grow;
                     hc += grow;
@@ -1088,25 +1070,58 @@ public final class LavaFlow implements Subsystem {
                 }
                 t = cooled;
                 remaining -= step;
+                age += step;
                 if (t <= solidus || (underVoid && h < config.tubeDrainThickness())) break;
             }
             c.thickness[i] = h;
             c.crust[i] = hc;
             c.temperature[i] = t;
+            c.contact[i] = age;
 
             if (h <= 0) {
                 // the whole melt froze into the crust
-                defer(c, i, ACT_SOLIDIFY | (submerged ? ACT_SUBMERGED : 0)
-                        | (h + hc >= config.columnarMinThickness() ? ACT_COLUMNAR : 0));
+                defer(c, i, ACT_SOLIDIFY | (submerged ? ACT_SUBMERGED : 0) | (submerged ? 0 : ACT_COLUMNAR));
             } else if (underVoid && (h < config.tubeDrainThickness() || t <= solidus)) {
                 defer(c, i, ACT_DRAIN);
             } else if (t <= solidus) {
                 boolean quenched = submerged || maxRate > config.quenchRateKPerS();
-                boolean columnar = !quenched && h + hc >= config.columnarMinThickness();
+                // thermal contraction joints every lava that cools through its solidus without quenching
+                boolean columnar = !quenched;
                 defer(c, i, ACT_SOLIDIFY | (submerged ? ACT_SUBMERGED : 0) | (quenched ? ACT_QUENCHED : 0)
                         | (columnar ? ACT_COLUMNAR : 0));
             }
         }
+    }
+
+    /**
+     * Heat loss (W/m²) of a lava surface at {@code surfaceC} into air at {@code ambientC}: radiation plus
+     * turbulent free convection off a hot horizontal plate, {@code h = 0.14 k (g β ΔT / ν α)^{1/3}}
+     * (McAdams; Incropera &amp; DeWitt), with β = 1/T_film. Radiation dominates (hundreds vs ~10 W/m²·K).
+     */
+    private double surfaceLoss(double surfaceC, double ambientC) {
+        if (!(surfaceC > ambientC)) return 0;
+        double tsK = surfaceC + KELVIN;
+        double taK = ambientC + KELVIN;
+        double radiative = config.emissivity() * SIGMA * (tsK * tsK * tsK * tsK - taK * taK * taK * taK);
+        double dT = surfaceC - ambientC;
+        double film = 0.5 * (tsK + taK);
+        double hConv = 0.14 * AIR_K * Math.cbrt(G * dT / (film * AIR_NU * AIR_ALPHA));
+        return radiative + hConv * dT;
+    }
+
+    /**
+     * Surface temperature (°C) of a crust {@code crustM} thick over melt at {@code meltC}: the conduction
+     * through the crust, {@code k (T − T_s) / H}, equals the surface loss (bisection; the loss rises with T_s).
+     */
+    private double crustSurfaceC(double meltC, double crustM, double k, double ambientC) {
+        double lo = ambientC;
+        double hi = meltC;
+        for (int n = 0; n < 32; n++) {
+            double mid = 0.5 * (lo + hi);
+            if (surfaceLoss(mid, ambientC) > k * (meltC - mid) / crustM) hi = mid;
+            else lo = mid;
+        }
+        return 0.5 * (lo + hi);
     }
 
     /**
@@ -1152,47 +1167,46 @@ public final class LavaFlow implements Subsystem {
         double film = c.thickness[i];
         double hc = c.crust[i];
         byte kind = c.crustKind[i];
-        double silica = film > 0 ? c.silica[i] : LavaPalette.crustSilica(kind);
+        double silica = film > 0 ? c.silica[i] : LavaRocks.crustSilica(kind);
         boolean submerged = submerged(c, i);
         clearMelt(c, i);
         stats.volume += film * area();
         solidifiedVolume += film * area();
-        depositRock(c, i, film, LavaPalette.rockMaterial(silica, submerged, false), c.unit[i], 0);
-        raiseGround(c, i, silica, submerged, false, false, null, random, outbox, stats);
+        depositRock(c, i, film, LavaRocks.rockMaterial(silica, submerged, false), c.unit[i], 0);
 
-        // A roof that is strong enough to stand is shown as at least one block.
-        double l = metersPerBlock;
-        int roofEnd = (int) Math.ceil(c.roofTop[i] / l - 0.5);
-        int roofBottom = Math.min((int) Math.ceil((c.roofTop[i] - hc) / l - 0.5), roofEnd - 1);
-        int voidBottom = c.ground[i] + 1;
+        // a roof strong enough to stand over a real void stays as a tube
         double gap = (c.roofTop[i] - hc) - c.bed[i];
-        if (hc >= config.tubeMinRoofThickness() && roofBottom > voidBottom && gap > GAP_EPS) {
-            formTube(c, i, kind, voidBottom, roofBottom, roofEnd, outbox, formed);
+        if (hc >= config.minRoofThickness(metersPerColumn()) && gap >= MIN_TUBE_VOID_M) {
+            formTube(c, i, kind, formed);
         } else {
             // roof too thin or no void: it caves in onto the floor
             c.crust[i] = 0;
             c.roofTop[i] = 0;
             solidifiedVolume += hc * area();
             stats.volume += hc * area();
-            double crustSilica = LavaPalette.crustSilica(kind);
-            depositRock(c, i, hc, LavaPalette.rockMaterial(crustSilica, submerged, false), c.unit[i], 0);
-            raiseGround(c, i, crustSilica, submerged, false, false, null, random, outbox, stats);
+            double crustSilica = LavaRocks.crustSilica(kind);
+            depositRock(c, i, hc, LavaRocks.rockMaterial(crustSilica, submerged, false), c.unit[i], 0);
         }
         stats.cells++;
     }
 
     /**
+     * Numerical: a drained void under a standing roof must be at least this high (m) to be kept as a cavity in
+     * the world model (thinner gaps are not resolved; the roof settles onto the floor).
+     */
+    static final double MIN_TUBE_VOID_M = 0.5;
+
+    /**
      * Converts a drained column into a roofed void: the world model gets the cavity and the roof as
      * layers of the flow's eruption, and the roof top becomes the surface.
      */
-    private void formTube(LavaChunk c, int i, byte kind, int voidBottom, int roofBottom, int roofEnd, Outbox outbox,
-            List<LavaTube> formed) {
+    private void formTube(LavaChunk c, int i, byte kind, List<LavaTube> formed) {
         int x = c.worldX(i);
         int z = c.worldZ(i);
-        BlockState roof = LavaPalette.roof(kind);
 
         double hc = c.crust[i];
-        double cavity = Math.max(0, (c.roofTop[i] - hc) - c.bed[i]);
+        double voidBottom = c.bed[i];
+        double cavity = Math.max(0, (c.roofTop[i] - hc) - voidBottom);
         WorldModel world = world();
         int lavaUnit = c.unit[i];
         int versionBefore = world.version(x, z);
@@ -1200,23 +1214,21 @@ public final class LavaFlow implements Subsystem {
             world.deposit(x, z, cavity, MaterialTable.VOID,
                     Provenance.sibling(world, lavaUnit, DepositType.CAVITY, currentTime), 0, 1, 0);
         }
-        Material roofRock = LavaPalette.rockMaterial(LavaPalette.crustSilica(kind), false, false);
+        Material roofRock = LavaRocks.rockMaterial(LavaRocks.crustSilica(kind), false, false);
         world.deposit(x, z, hc, roofRock, Provenance.sibling(world, lavaUnit, DepositType.TUBE_ROOF, currentTime),
                 LayerFlags.FRACTURED, roofRock.porosity(), 1);
         rereadBed(c, i, versionBefore);
-        tubeColumns.put(columnKey(x, z), new int[] {voidBottom, roofBottom - 1});
+        double voidTop = voidBottom + cavity;
+        tubeColumns.put(columnKey(x, z), new double[] {voidBottom, voidTop});
 
         solidifiedVolume += hc * area();
         c.crust[i] = 0;
         c.roofTop[i] = 0;
-        c.solid[i] = 0;
-        int surface = roofEnd - 1;
-        c.ground[i] = surface;
-        terrain.updateBlockCache(x, z, surface, roof.id());
-        formed.add(new LavaTube(x, z, voidBottom, roofBottom - 1));
+        formed.add(new LavaTube(x, z, voidBottom, voidTop));
     }
 
     private void clearMelt(LavaChunk c, int i) {
+        c.contact[i] = 0;
         c.thickness[i] = 0;
         c.temperature[i] = 0;
         c.silica[i] = 0;
@@ -1238,9 +1250,8 @@ public final class LavaFlow implements Subsystem {
             total -= shedHyaloclastite(c, i, total * config.hyaloclastiteFraction(), random, outbox, stats);
         }
         // cooling joints make thick, slowly cooled flows permeable
-        depositRock(c, i, total, LavaPalette.rockMaterial(silica, submerged, quenched), c.unit[i],
+        depositRock(c, i, total, LavaRocks.rockMaterial(silica, submerged, quenched), c.unit[i],
                 columnar ? LayerFlags.FRACTURED : 0);
-        raiseGround(c, i, silica, submerged, quenched, columnar, null, random, outbox, stats);
     }
 
     /**
@@ -1254,7 +1265,7 @@ public final class LavaFlow implements Subsystem {
         int lz = i >> 4;
         LavaChunk best = null;
         int bestIndex = -1;
-        double bestTop = surface - 0.5 * metersPerBlock;
+        double bestTop = surface - 0.5 * metersPerColumn();
         for (int d = 0; d < DIRS; d++) {
             int nx = lx + DX[d];
             int nz = lz + DZ[d];
@@ -1264,7 +1275,7 @@ public final class LavaFlow implements Subsystem {
                 if (nc == null) continue;
             }
             int j = ((nz & 15) << 4) | (nx & 15);
-            if (nc.ground[j] == UNKNOWN || !submerged(nc, j)) continue;
+            if (Double.isNaN(nc.bed[j]) || !submerged(nc, j)) continue;
             double top = nc.bed[j] + nc.thickness[j];
             if (top < bestTop) {
                 bestTop = top;
@@ -1277,14 +1288,10 @@ public final class LavaFlow implements Subsystem {
         // quench-shattered glass sheds as a loose breccia that avalanches down the flow front (it consolidates
         // later, by palagonitisation)
         depositRock(best, bestIndex, volume, MaterialTable.HYALOCLASTITE, unit, LayerFlags.LOOSE);
-        raiseGround(best, bestIndex, 0, true, true, false, LavaPalette.HYALOCLASTITE, random, outbox, stats);
         return volume;
     }
 
-    /**
-     * Lays {@code thickness} m of solid rock into the world model (the exact amount, as a layer of
-     * {@code unit}) and counts it towards the column's next whole block.
-     */
+    /** Lays {@code thickness} m of solid rock into the world model (the exact amount, as a layer of {@code unit}). */
     private void depositRock(LavaChunk c, int i, double thickness, Material material, int unit, int flags) {
         if (!(thickness > 0)) return;
         int x = c.worldX(i);
@@ -1293,34 +1300,12 @@ public final class LavaFlow implements Subsystem {
         world().deposit(x, z, thickness, material, unit, flags, material.porosity(), (flags & LayerFlags.LOOSE) != 0 ? 0 : 1.0);
         // the stacks hold elevations as floats: re-read so the cache equals a fresh read (restores)
         rereadBed(c, i, versionBefore);
-        c.solid[i] += thickness;
-    }
-
-    /**
-     * Shows whole blocks ({@code L} m each) of a column's not-yet-shown rock: places the block and
-     * moves the terrain's block cache up (the world model already holds the rock).
-     */
-    private void raiseGround(LavaChunk c, int i, double silica, boolean submerged, boolean quenched, boolean columnar,
-            BlockState forced, SimRandom random, Outbox outbox, SolidStats stats) {
-        int x = c.worldX(i);
-        int z = c.worldZ(i);
-        double s = c.solid[i];
-        double l = metersPerBlock;
-        while (s >= l * (1 - 1e-9)) {
-            s -= l;
-            int y = c.ground[i] + 1;
-            c.ground[i] = y;
-            BlockState rock = forced != null ? forced : LavaPalette.rock(silica, submerged, quenched, columnar, random);
-            terrain.updateBlockCache(x, z, y, rock.id());
-            stats.blocks++;
-        }
-        c.solid[i] = Math.max(0, s);
     }
 
     private void emitFront(double now, List<LavaChunk> update, Outbox outbox) {
         if (origins.isEmpty()) return;
         double best = -1;
-        BlockPos front = null;
+        Point3 front = null;
         int cells = 0;
         double volume = 0;
         for (LavaChunk c : update) {
@@ -1333,19 +1318,19 @@ public final class LavaFlow implements Subsystem {
                 int x = c.worldX(i);
                 int z = c.worldZ(i);
                 double nearest = Double.MAX_VALUE;
-                for (BlockPos o : origins) {
+                for (ColumnIndex o : origins) {
                     double dx = x - o.x();
                     double dz = z - o.z();
                     nearest = Math.min(nearest, dx * dx + dz * dz);
                 }
                 if (nearest > best) {
                     best = nearest;
-                    front = new BlockPos(x, c.ground[i] + 1, z);
+                    front = Point3.columnCentre(x, z, c.bed[i] + h, metersPerColumn());
                 }
             }
         }
         if (front != null) {
-            outbox.emit(new LavaEvents.LavaFlowFront(now, front, Math.sqrt(best) * metersPerBlock, cells, volume));
+            outbox.emit(new LavaEvents.LavaFlowFront(now, front, Math.sqrt(best) * metersPerColumn(), cells, volume));
         }
     }
 
@@ -1355,12 +1340,31 @@ public final class LavaFlow implements Subsystem {
         long key = LavaChunk.key(cx, cz);
         LavaChunk c = chunks.get(key);
         if (c != null) return c;
-        if (!terrain.isKnown(cx << 4, cz << 4)) return null;
+        if (!anyKnown(cx, cz)) return null;
         requestedTerrain.remove(key);
         c = new LavaChunk(cx, cz);
         chunks.put(key, c);
         chunkGeneration++;
         return c;
+    }
+
+    /** Whether any column of chunk {@code (cx, cz)} has known ground. */
+    private boolean anyKnown(int cx, int cz) {
+        WorldModel world = world();
+        for (int i = 0; i < AREA; i++) {
+            if (world.isKnown((cx << 4) | (i & 15), (cz << 4) | (i >> 4))) return true;
+        }
+        return false;
+    }
+
+    /** The lava surface at the centre of a packed column (m). */
+    private Point3 surfacePoint(long key) {
+        int x = (int) (key >> 32);
+        int z = (int) key;
+        WorldModel world = world();
+        double s = world.surfaceZ(x, z);
+        double y = Double.isFinite(s) ? s + world.uplift(x, z) + thickness(x, z) : 0;
+        return Point3.columnCentre(x, z, y, metersPerColumn());
     }
 
     /**
@@ -1412,46 +1416,26 @@ public final class LavaFlow implements Subsystem {
     }
 
     /**
-     * Re-reads the chunk's terrain (block cache: ground and water) if the terrain chunk was replaced
-     * or modified, and its bed (world-model surface + uplift) if any column under it was edited.
+     * Re-reads the chunk's bed (world-model surface + uplift) and standing water level if any column
+     * under it was edited.
      */
     private void refresh(LavaChunk c) {
         c.freshStamp = stamp;
-        TerrainChunkView view = terrain.chunkView(c.cx, c.cz);
-        if (view == null) {
-            if (c.terrainView != null || c.ground[0] != UNKNOWN) {
-                Arrays.fill(c.ground, UNKNOWN);
-                Arrays.fill(c.waterY, TerrainColumn.NO_WATER);
-                Arrays.fill(c.bed, Double.NaN);
-            }
-            c.terrainView = null;
-            c.bedVersion = Long.MIN_VALUE;
-            c.seenEdits = Long.MIN_VALUE;
-            return;
-        }
-        boolean terrainChanged = view != c.terrainView || view.version() != c.terrainVersion;
-        if (terrainChanged) {
-            view.copyGroundY(c.ground, 0);
-            view.copyWaterY(c.waterY, 0);
-            c.terrainView = view;
-            c.terrainVersion = view.version();
-        }
         WorldModel world = world();
         long edits = world.stacks().editCount();
-        if (!terrainChanged && edits == c.seenEdits) return; // nothing in the world changed since
+        if (edits == c.seenEdits) return; // nothing in the world changed since
         c.seenEdits = edits;
         int x0 = c.cx << 4;
         int z0 = c.cz << 4;
         long version = world.stacks().versionSum(x0, z0, 16, 16);
-        if (!terrainChanged && version == c.bedVersion) return;
+        if (version == c.bedVersion) return;
         c.bedVersion = version;
         for (int i = 0; i < AREA; i++) {
             int x = x0 | (i & 15);
             int z = z0 | (i >> 4);
             double surface = world.surfaceZ(x, z);
-            c.bed[i] = surface == surface
-                    ? surface + world.uplift(x, z)
-                    : c.ground[i] == UNKNOWN ? Double.NaN : (c.ground[i] + 1) * metersPerBlock;
+            c.bed[i] = surface == surface ? surface + world.uplift(x, z) : Double.NaN;
+            c.waterLevel[i] = world.waterZ(x, z);
         }
     }
 
@@ -1478,8 +1462,8 @@ public final class LavaFlow implements Subsystem {
     static final double SUBMERGED_WATER_M = 0.1;
 
     private static boolean submerged(LavaChunk c, int i) {
-        int w = c.waterY[i];
-        return (w != TerrainColumn.NO_WATER && w > c.ground[i]) || c.surfaceWater[i] >= SUBMERGED_WATER_M;
+        double w = c.waterLevel[i];
+        return (w == w && w > c.bed[i]) || c.surfaceWater[i] >= SUBMERGED_WATER_M;
     }
 
     /**
@@ -1543,12 +1527,10 @@ public final class LavaFlow implements Subsystem {
 
     private static final class SolidStats {
         int cells;
-        int blocks;
         double volume;
 
         void clear() {
             cells = 0;
-            blocks = 0;
             volume = 0;
         }
     }
@@ -1556,20 +1538,19 @@ public final class LavaFlow implements Subsystem {
     // ── Persistence ──
 
     /** Schema of the per-chunk {@code cells} field. */
-    private static final int CELLS_SCHEMA = 2;
+    private static final int CELLS_SCHEMA = 4;
 
     @Override
     public void saveState(StateWriter writer) {
         JsonObject out = writer.json();
         out.addProperty("format", STATE_FORMAT);
-        out.addProperty("metersPerBlock", metersPerBlock);
+        out.addProperty("metersPerColumn", metersPerColumn());
         out.addProperty("emitted", emittedVolume);
         out.addProperty("solidified", solidifiedVolume);
         out.addProperty("lastMaxDiffusivity", lastMaxDiffusivity);
         out.addProperty("eventSeconds", eventSeconds);
         JsonArray solidAccArray = new JsonArray();
         solidAccArray.add(solidAcc.cells);
-        solidAccArray.add(solidAcc.blocks);
         solidAccArray.add(solidAcc.volume);
         out.add("solidAcc", solidAccArray);
         JsonArray oceanArray = new JsonArray();
@@ -1606,7 +1587,7 @@ public final class LavaFlow implements Subsystem {
         out.add("requestedTerrain", requested);
 
         JsonArray tubeArray = new JsonArray();
-        for (Map.Entry<Long, int[]> e : tubeColumns.entrySet()) {
+        for (Map.Entry<Long, double[]> e : tubeColumns.entrySet()) {
             JsonArray a = new JsonArray();
             a.add(e.getKey());
             a.add(e.getValue()[0]);
@@ -1623,11 +1604,11 @@ public final class LavaFlow implements Subsystem {
                     .doubles("temperature", c.temperature.clone())
                     .doubles("silica", c.silica.clone())
                     .doubles("water", c.water.clone())
-                    .doubles("solid", c.solid.clone())
                     .doubles("crust", c.crust.clone())
                     .doubles("roofTop", c.roofTop.clone())
                     .bytes("crustKind", c.crustKind.clone())
-                    .ints("unit", c.unit.clone()));
+                    .ints("unit", c.unit.clone())
+                    .doubles("contact", c.contact.clone()));
         }
     }
 
@@ -1643,24 +1624,22 @@ public final class LavaFlow implements Subsystem {
         if (format != STATE_FORMAT) {
             throw new IllegalArgumentException("Unsupported lava state format: " + format);
         }
-        double savedScale = in.get("metersPerBlock").getAsDouble();
-        if (savedScale != metersPerBlock) {
+        double savedScale = in.get("metersPerColumn").getAsDouble();
+        if (savedScale != metersPerColumn()) {
             throw new IllegalArgumentException(
-                    "Lava state was saved at " + savedScale + " m/block, but the field is at " + metersPerBlock);
+                    "Lava state was saved at " + savedScale + " m per column, but the world is at " + metersPerColumn());
         }
         emittedVolume = in.get("emitted").getAsDouble();
         solidifiedVolume = in.get("solidified").getAsDouble();
-        lastMaxDiffusivity = in.has("lastMaxDiffusivity") ? in.get("lastMaxDiffusivity").getAsDouble() : 0;
-        eventSeconds = in.has("eventSeconds") ? in.get("eventSeconds").getAsDouble()
-                : in.has("eventPhysicalSeconds") ? in.get("eventPhysicalSeconds").getAsDouble() : 0; // older saves
+        lastMaxDiffusivity = in.get("lastMaxDiffusivity").getAsDouble();
+        eventSeconds = in.get("eventSeconds").getAsDouble();
         solidAcc.clear();
         oceanEntries.clear();
         oceanGeneration++;
         {
             JsonArray acc = in.getAsJsonArray("solidAcc");
             solidAcc.cells = acc.get(0).getAsInt();
-            solidAcc.blocks = acc.get(1).getAsInt();
-            solidAcc.volume = acc.get(2).getAsDouble();
+            solidAcc.volume = acc.get(1).getAsDouble();
             for (JsonElement e : in.getAsJsonArray("oceanEntries")) {
                 JsonArray o = e.getAsJsonArray();
                 OceanEntry entry = new OceanEntry();
@@ -1684,11 +1663,10 @@ public final class LavaFlow implements Subsystem {
         for (JsonElement e : in.getAsJsonArray("requestedTerrain")) requestedTerrain.add(e.getAsLong());
         for (JsonElement e : in.getAsJsonArray("tubeColumns")) {
             JsonArray a = e.getAsJsonArray();
-            tubeColumns.put(a.get(0).getAsLong(), new int[] {a.get(1).getAsInt(), a.get(2).getAsInt()});
+            tubeColumns.put(a.get(0).getAsLong(), new double[] {a.get(1).getAsDouble(), a.get(2).getAsDouble()});
         }
 
         StateReader.Field cells = reader.field("cells");
-        if (cells == null) return;
         if (cells.schemaVersion() != CELLS_SCHEMA) {
             throw new IllegalArgumentException("Unsupported lava cell schema: " + cells.schemaVersion());
         }
@@ -1699,33 +1677,32 @@ public final class LavaFlow implements Subsystem {
             System.arraycopy(f.doubles("temperature"), 0, c.temperature, 0, AREA);
             System.arraycopy(f.doubles("silica"), 0, c.silica, 0, AREA);
             System.arraycopy(f.doubles("water"), 0, c.water, 0, AREA);
-            System.arraycopy(f.doubles("solid"), 0, c.solid, 0, AREA);
             System.arraycopy(f.doubles("crust"), 0, c.crust, 0, AREA);
             System.arraycopy(f.doubles("roofTop"), 0, c.roofTop, 0, AREA);
             System.arraycopy(f.ints("unit"), 0, c.unit, 0, AREA);
             System.arraycopy(f.bytes("crustKind"), 0, c.crustKind, 0, AREA);
+            System.arraycopy(f.doubles("contact"), 0, c.contact, 0, AREA);
             c.recount();
             chunks.put(c.key, c);
         }
     }
 
-    private static JsonArray positions(List<BlockPos> list) {
+    private static JsonArray positions(List<ColumnIndex> list) {
         JsonArray array = new JsonArray();
-        for (BlockPos p : list) {
+        for (ColumnIndex p : list) {
             JsonArray a = new JsonArray();
             a.add(p.x());
-            a.add(p.y());
             a.add(p.z());
             array.add(a);
         }
         return array;
     }
 
-    private static List<BlockPos> readPositions(JsonArray array) {
-        List<BlockPos> list = new ArrayList<>();
+    private static List<ColumnIndex> readPositions(JsonArray array) {
+        List<ColumnIndex> list = new ArrayList<>();
         for (JsonElement e : array) {
             JsonArray a = e.getAsJsonArray();
-            list.add(new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt()));
+            list.add(new ColumnIndex(a.get(0).getAsInt(), a.get(1).getAsInt()));
         }
         return list;
     }

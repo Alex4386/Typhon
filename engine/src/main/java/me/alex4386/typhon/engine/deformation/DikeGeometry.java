@@ -3,8 +3,8 @@ package me.alex4386.typhon.engine.deformation;
 /**
  * A vertical tensile dislocation (dike) as seen by the deformation model.
  *
- * @param centerX world x of the dike's top-edge midpoint (blocks)
- * @param centerZ world z of the dike's top-edge midpoint (blocks)
+ * @param centerX x of the dike's top-edge midpoint (m)
+ * @param centerZ z of the dike's top-edge midpoint (m)
  * @param strikeRad strike, radians clockwise from +X (same convention as vent fissures)
  * @param strikeLengthM along-strike length (m)
  * @param topDepthM depth of the upper tip below the surface (m, 0 when it reached the surface)

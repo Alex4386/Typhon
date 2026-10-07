@@ -23,11 +23,10 @@ import org.junit.jupiter.api.Test;
 
 /** Multi-chamber plumbing in volcano definitions: parsing, round trip, and what each change needs. */
 class PlumbingDefinitionTest {
-    private static final double L = 10;
 
     private static VolcanoDefinition single() {
         var r = new ChamberPlacement.Request("v", 0, 0, 1500, null, null, null, null, null, null, 0.0, null, null);
-        return ChamberPlacement.definition("v", r, -130, L);
+        return ChamberPlacement.definition("v", r, -130);
     }
 
     /** The single-chamber definition with a deep chamber and a conduit from it to the main one. */
@@ -36,7 +35,7 @@ class PlumbingDefinitionTest {
         Map<String, Object> tree = single().toTree();
         Map<String, Object> magma = new LinkedHashMap<>((Map<String, Object>) tree.get("magma"));
         var deep = new ChamberPlacement.Request(null, 0, 0, 4500, deepVolume, null, null, null, null, null, 3.0, null, null);
-        List<Object> chambers = new ArrayList<>(List.of(ChamberPlacement.chamberElement("deep", deep, -130, L)));
+        List<Object> chambers = new ArrayList<>(List.of(ChamberPlacement.chamberElement("deep", deep, -130)));
         magma.put("chambers", chambers);
         magma.put("connections", List.of(ChamberPlacement.connectionElement("deep-main", "deep", "main", false, radius, null)));
         tree.put("magma", magma);

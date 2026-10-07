@@ -1,6 +1,6 @@
 package me.alex4386.typhon.engine.seismic;
 
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.HistoricalEvent;
 
 /**
@@ -15,7 +15,7 @@ public record SeismicEvent(
         String volcanoId,
         SeismicEventType type,
         double magnitude,
-        BlockPos hypocenter,
+        Point3 hypocenter,
         double durationSeconds,
         boolean swarm)
         implements HistoricalEvent {

@@ -4,8 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeature;
 import me.alex4386.typhon.engine.seismic.SeismicEventType;
-import me.alex4386.typhon.engine.terrain.TerrainChunkView;
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import me.alex4386.typhon.simulator.scenario.Preset;
 import me.alex4386.typhon.simulator.scenario.ReferenceValue;
 import me.alex4386.typhon.simulator.scenario.ReferenceValue.Verdict;
@@ -69,7 +67,7 @@ public final class ReferenceComparison {
         double dir = tephra.wind().baseDirectionRad();
         double wx = Math.cos(dir);
         double wz = Math.sin(dir);
-        var vent = scenario.volcano().vents().get(0).position();
+        var vent = scenario.volcano().referencePoint();
         int half = scenario.initialTerrain().size() / 2;
         double down = 0;
         double up = 0;
@@ -89,29 +87,30 @@ public final class ReferenceComparison {
     /** The measured value of a numeric metric (real units), {@code NaN} if not observed. */
     public static double numeric(ReferenceValue.Metric metric, Simulation.Result result) {
         Scenario scenario = result.scenario();
-        VolcanoScaling scaling = scenario.volcano().scaling();
-        double L = scaling.metersPerBlock();
         RunSummary s = result.summary();
         List<Sample> samples = result.samples();
         return switch (metric) {
-            case SUMMIT_ELEVATION_M -> (scenario.initialTerrain().maxGround() + 1) * L;
+            case SUMMIT_ELEVATION_M -> scenario.initialTerrain().maxSurfaceZ();
             case FINAL_MAX_ELEVATION_M -> {
-                int max = Integer.MIN_VALUE;
-                for (TerrainChunkView c : scenario.terrain().chunks()) {
-                    for (int i = 0; i < 256; i++) max = Math.max(max, c.groundY(i));
+                var world = scenario.world();
+                var grid = scenario.initialTerrain();
+                double max = Double.NaN;
+                for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
+                    for (int x = grid.minX(); x <= grid.maxX(); x++) {
+                        if (world.isKnown(x, z)) max = Double.isNaN(max) ? world.surfaceZ(x, z) : Math.max(max, world.surfaceZ(x, z));
+                    }
                 }
-                yield max == Integer.MIN_VALUE ? Double.NaN : (max + 1) * L;
+                yield max;
             }
             case PEAK_ERUPTION_RATE_M3S -> s.peakEruptionRate > 0 ? s.peakEruptionRate : Double.NaN;
             case ERUPTED_VOLUME_M3 -> s.eruptionRecords.isEmpty() ? Double.NaN : s.totalEruptedVolume();
-            case PLUME_TOP_KM -> s.maxPlumeTopY == Integer.MIN_VALUE ? Double.NaN
-                    : (s.maxPlumeTopY + 1) * scaling.plumeMetersPerBlock() / 1000;
+            case PLUME_TOP_KM -> s.maxPlumeTopZ / 1000;
             case LONGEST_FLOW_M -> s.maxFlowLengthM > 0 ? s.maxFlowLengthM : Double.NaN;
             // per hour of (persistently) erupting time
             case EXPLOSIONS_PER_HOUR -> result.simulatedSeconds() > 0
                     ? s.seismicCounts.getOrDefault(SeismicEventType.EXPLOSION, 0L) / (result.simulatedSeconds() / 3600)
                     : Double.NaN;
-            case MAX_BALLISTIC_RANGE_M -> s.bombsLanded > 0 ? s.maxBombDistance * L : Double.NaN;
+            case MAX_BALLISTIC_RANGE_M -> s.bombsLanded > 0 ? s.maxBombDistance : Double.NaN;
             case GEYSERS -> s.geysers;
             case ERUPTIONS -> s.eruptions;
             case SPRINGS -> s.featuresFormed.getOrDefault(HydrothermalFeature.HOT_SPRING, 0L)

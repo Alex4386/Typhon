@@ -20,5 +20,7 @@ public enum DepositType {
     /** Deposit of a debris avalanche (long-runout rock/debris flow from a large slope failure). */
     DEBRIS_AVALANCHE,
     /** Breccia thrown out of an explosion crater (ejecta blanket and rim). */
-    EJECTA
+    EJECTA,
+    /** Hydrothermal precipitates and alteration products: siliceous sinter, native sulfur, acid-altered clay. */
+    HYDROTHERMAL
 }

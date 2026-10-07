@@ -11,7 +11,6 @@ import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -26,7 +25,6 @@ class BaseStepInvarianceTest {
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder("test", List.of(VolcanoSystemTest.CRATER), terrain, lava)
                 .chamber(VolcanoSystemTest.basalt())
-                .scaling(VolcanoScaling.DEFAULT)
                 .dikesEnabled(false)
                 .build();
         Engine.Builder builder = Engine.builder(7).baseStepMicros(baseStepMicros).add(terrain);
@@ -48,8 +46,8 @@ class BaseStepInvarianceTest {
 
     @Test
     void outcomeDoesNotDependOnTheBaseStep() {
-        Outcome fine = run(50_000, 900); // the chamber fails after ≈ 11 min
-        Outcome coarse = run(100_000, 900);
+        Outcome fine = run(50_000, 1500); // the chamber fails after ≈ 19 min
+        Outcome coarse = run(100_000, 1500);
 
         // The chamber, seismicity and alert subsystems step every 0.5–1 s at either resolution.
         assertEquals(fine.erupted(), coarse.erupted(), 1e-9 * Math.max(1, fine.erupted()));

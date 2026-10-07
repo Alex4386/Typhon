@@ -3,7 +3,6 @@ package me.alex4386.typhon.engine.massflow;
 /** Mass-flow state of one 16×16 chunk as flat primitive arrays, indexed {@code (z & 15) * 16 + (x & 15)}. */
 final class MassFlowChunk {
     static final int AREA = 256;
-    static final int UNKNOWN = Integer.MIN_VALUE;
 
     final int cx;
     final int cz;
@@ -15,14 +14,10 @@ final class MassFlowChunk {
     double[] vz = new double[AREA];
     double[] temperature = new double[AREA];  // °C (PDC)
     double[] sediment = new double[AREA];     // sediment volume fraction (lahar)
-    final double[] deposit = new double[AREA];      // deposit not yet amounting to a whole block (m)
-    final double[] depositHeat = new double[AREA];  // Σ thickness·temperature of the partial deposit
-    final double[] depositSpeed = new double[AREA]; // Σ thickness·speed of the partial deposit
     final double[] depositTotal = new double[AREA]; // all deposit laid down in the column (m)
     final double[] worldPending = new double[AREA];     // deposit not yet written to the world model (m)
     final double[] worldPendingHeat = new double[AREA]; // Σ thickness·temperature of that pool
     final double[] soak = new double[AREA];         // rain soaked into the loose material (m of water)
-    final byte[] veneer = new byte[AREA];           // rendered veneer tier: 0 none, 1 thin, 2 thick
 
     // Double buffers and per-substep scratch (transient)
     double[] nextDepth = new double[AREA];
@@ -32,8 +27,10 @@ final class MassFlowChunk {
     double[] nextSediment = new double[AREA];
     final double[] outVolume = new double[4 * AREA];  // direction-major volume leaving each cell (m³)
     final double[] outSpeed = new double[4 * AREA];   // pipe speed in that direction after forcing (m/s)
-    final int[] ground = new int[AREA];
-    final int[] waterY = new int[AREA];
+    /** World-model ground surface + uplift (m), NaN where unknown; refreshed every step. */
+    final double[] bed = new double[AREA];
+    /** Standing water surface elevation (m), NaN where dry. */
+    final double[] waterLevel = new double[AREA];
     final MassFlowChunk[] neighbours = new MassFlowChunk[4];
     long freshStamp = Long.MIN_VALUE;
     long fluxStamp = Long.MIN_VALUE;
@@ -95,7 +92,7 @@ final class MassFlowChunk {
     boolean hasPersistentState() {
         if (flowCells > 0 || soakedCells > 0) return true;
         for (int i = 0; i < AREA; i++) {
-            if (deposit[i] != 0 || depositTotal[i] != 0 || veneer[i] != 0 || worldPending[i] != 0) return true;
+            if (depositTotal[i] != 0 || worldPending[i] != 0) return true;
         }
         return false;
     }

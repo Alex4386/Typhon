@@ -56,6 +56,13 @@ public record AlertConfig(
         if (!(stepPeriodSeconds > 0)) throw new IllegalArgumentException("stepPeriodSeconds must be > 0");
     }
 
+    /**
+     * Default thresholds. The pressure ratios and VT/RSAM levels are operational heuristics in the spirit
+     * of observatory practice (USGS alert levels are set by expert judgement on these indicators, with no
+     * universal numeric thresholds; Gardner &amp; Guffanti 2006, USGS Fact Sheet 2006-3139); RSAM is in the
+     * model's own units. A quiet reservoir above 55 % crystals is past rheological lock-up of a crystal
+     * mush (~50–60 %; Marsh 1981, Contrib. Mineral. Petrol. 78; Vigneresse et al. 1996) and counts as extinct.
+     */
     public static AlertConfig defaults(String volcanoId) {
         return new AlertConfig(volcanoId, 15, 0.3, 0.6, 0.9, 0.5, 3, 10, 2, 10, 50, 0.7, 120, 0.55, 20);
     }

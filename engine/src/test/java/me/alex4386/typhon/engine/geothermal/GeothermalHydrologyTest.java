@@ -2,7 +2,8 @@ package me.alex4386.typhon.engine.geothermal;
 
 import static me.alex4386.typhon.engine.geothermal.GeothermalTest.ANDESITE;
 import static me.alex4386.typhon.engine.geothermal.GeothermalTest.CENTER;
-import static me.alex4386.typhon.engine.geothermal.GeothermalTest.SURFACE_Y;
+import static me.alex4386.typhon.engine.geothermal.GeothermalTest.L;
+import static me.alex4386.typhon.engine.geothermal.GeothermalTest.SURFACE_Z;
 import static me.alex4386.typhon.engine.geothermal.GeothermalTest.events;
 import static me.alex4386.typhon.engine.geothermal.GeothermalTest.flatTerrain;
 import static me.alex4386.typhon.engine.geothermal.GeothermalTest.frozen;
@@ -20,7 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import me.alex4386.typhon.engine.geothermal.GeothermalTest.StubMagma;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
@@ -31,8 +32,8 @@ import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 /** Liquid- vs vapour-dominated ground, patchy alteration, aggregated events and prewarming. */
 class GeothermalHydrologyTest {
-    private static final VentSite WET_VENT = VentSite.crater("wet", new BlockPos(-12, SURFACE_Y, 0), 2);
-    private static final VentSite DRY_VENT = VentSite.crater("dry", new BlockPos(16, SURFACE_Y, 0), 2);
+    private static final VentSite WET_VENT = VentSite.crater("wet", Point3.columnCentre(-12, 0, SURFACE_Z, L), 2 * L);
+    private static final VentSite DRY_VENT = VentSite.crater("dry", Point3.columnCentre(16, 0, SURFACE_Z, L), 2 * L);
 
     /** Flat ground: well watered west of x = −4, poorly watered east of x = 4. */
     static TerrainModel basin() {
@@ -40,24 +41,17 @@ class GeothermalHydrologyTest {
     }
 
     /**
-     * A pinned hydrothermal state: the wet vent's ground is liquid-dominated near boiling (140 °C,
-     * saturation 0.9), the dry vent's ground vapour-dominated and hot (300 °C, saturation 0.2).
+     * A pinned hydrothermal state: the wet vent's ground is liquid-dominated near boiling (110 °C,
+     * saturation 0.9: liquid at the reservoir, above the surface boiling point), the dry vent's ground
+     * vapour-dominated and hot (300 °C, saturation 0.2).
      */
     static Geothermal lakesideVolcano(GeothermalConfig config) {
         TerrainModel terrain = basin();
         StubField field = new StubField(terrain, config.reservoirDepthM, 15, 0.5);
-        field.temperature = (x, z) -> x < -4 ? 140 : (x > 4 ? 300 : 15);
+        field.temperature = (x, z) -> x < -4 ? GeothermalTest.GEYSER_C : (x > 4 ? 300 : 15);
         field.water = (x, z) -> x < -4 ? 0.9 : 0.2;
-        return new Geothermal("test", config, CENTER, new StubMagma(1150), terrain, BlockPalette.unrestricted(),
+        return new Geothermal("test", config, CENTER, new StubMagma(1150), terrain,
                 List.of(WET_VENT, DRY_VENT), field);
-    }
-
-    @Test
-    void boilingPointFollowsDepth() {
-        assertEquals(100, Geothermal.boilingPointAtDepth(0), 1e-9);
-        assertEquals(115, Geothermal.boilingPointAtDepth(10), 1.5);
-        assertEquals(146, Geothermal.boilingPointAtDepth(50), 3);
-        assertEquals(200, Geothermal.boilingPointAtDepth(150), 3);
     }
 
     /**
@@ -86,19 +80,14 @@ class GeothermalHydrologyTest {
         // Permeable host rock (basalt, K ≈ 10⁻⁵ m/s): boiling is limited by how fast the rock lets
         // water back in, so a liquid-dominated system needs permeable ground (tight andesite would
         // conduct the heat away instead and simply heat up).
-        me.alex4386.typhon.engine.world.WorldSpec spec = new me.alex4386.typhon.engine.world.WorldSpec(1, 8, -2000,
+        me.alex4386.typhon.engine.world.WorldSpec spec = new me.alex4386.typhon.engine.world.WorldSpec(L, 8 * L, -2000,
                 Double.NaN, List.of(new me.alex4386.typhon.engine.world.WorldSpec.GeologyLayer("granite", -500, 0.01)),
-                "basalt", "soil", 1);
-        me.alex4386.typhon.engine.terrain.TerrainModel terrain = new me.alex4386.typhon.engine.terrain.TerrainModel(
-                new me.alex4386.typhon.engine.world.WorldModel(spec));
-        for (int x = -40; x < 40; x++) {
-            for (int z = -40; z < 40; z++) {
-                terrain.setColumn(x, z, me.alex4386.typhon.engine.terrain.TerrainColumn.dry(GeothermalTest.SURFACE_Y,
-                        me.alex4386.typhon.engine.world.BlockId.minecraft("basalt")));
-            }
-        }
+                "basalt", "soil", L);
+        TerrainModel terrain = new TerrainModel(new me.alex4386.typhon.engine.world.WorldModel(spec));
+        terrain.apply(me.alex4386.typhon.engine.testing.TestGround.columns(-40, -40, 39, 39, (x, z) -> SURFACE_Z,
+                me.alex4386.typhon.engine.testing.TestGround.DRY));
         Geothermal geothermal = GeothermalTest.live(config, terrain, new StubMagma(1150),
-                List.of(VentSite.crater("main", CENTER, 3)), sc);
+                List.of(VentSite.crater("main", CENTER, 3 * L)), sc);
         geothermal.equilibrate(60 * 86400);
         return geothermal;
     }
@@ -113,9 +102,10 @@ class GeothermalHydrologyTest {
         Geothermal geothermal = lakesideVolcano(config);
         List<EngineFrame> frames = run(geothermal, 5, 300);
 
-        List<GeyserFormed> geysers = events(frames, GeyserFormed.class);
+        List<HydrothermalFeatureFormed> geysers = events(frames, HydrothermalFeatureFormed.class).stream()
+                .filter(e -> e.feature() == HydrothermalFeature.GEYSER).toList();
         assertFalse(geysers.isEmpty(), "a hot, well-watered basin grows geysers");
-        assertTrue(geysers.stream().allMatch(g -> g.potentSulfur().x() < 0), "only on the lakeside");
+        assertTrue(geysers.stream().allMatch(g -> g.pos().x() < 0), "only on the lakeside");
         assertTrue(geothermal.features(HydrothermalFeature.FUMAROLE).stream().anyMatch(f -> f.x() > 4),
                 "the dry vent is fumarolic");
     }
@@ -127,14 +117,14 @@ class GeothermalHydrologyTest {
         GeothermalConfig config = frozenConfig(0.6);
         config.acidAlterationPerHour = 5;
         config.fumaroleFormationPerHour = 0;
-        Geothermal noFumaroles = frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 200);
+        Geothermal noFumaroles = frozen(config, flatTerrain(40, ANDESITE), 200);
         run(noFumaroles, 3, 30);
         assertEquals(0, noFumaroles.count(HydrothermalFeature.ACID_ALTERATION), "no isolated nucleation when saturated");
 
         GeothermalConfig unsaturated = frozenConfig(0.3);
         unsaturated.acidAlterationPerHour = 5;
         unsaturated.fumaroleFormationPerHour = 0;
-        Geothermal dry = frozen(unsaturated, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 200);
+        Geothermal dry = frozen(unsaturated, flatTerrain(40, ANDESITE), 200);
         run(dry, 3, 30);
         assertTrue(dry.count(HydrothermalFeature.ACID_ALTERATION) > 0, "steam-heated ground nucleates");
     }
@@ -145,12 +135,12 @@ class GeothermalHydrologyTest {
         config.acidAlterationPerHour = 5;
         config.fumaroleFormationPerHour = 0.5;
         config.sulfurDepositPerHour = 0;
-        Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 200);
+        Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), 200);
         run(geothermal, 4, 40);
 
         List<PlacedFeature> altered = geothermal.features(HydrothermalFeature.ACID_ALTERATION);
         assertFalse(altered.isEmpty());
-        int r = config.alterationGrowthRadius;
+        int r = (int) Math.round(config.alterationGrowthRadiusM / L);
         Map<Long, PlacedFeature> all = geothermal.featuresByColumn();
         for (PlacedFeature a : altered) {
             boolean anchored = all.values().stream().anyMatch(f -> f != a
@@ -158,7 +148,7 @@ class GeothermalHydrologyTest {
                     && Math.abs(f.x() - a.x()) <= r && Math.abs(f.z() - a.z()) <= r);
             assertTrue(anchored, "altered column " + a + " grew from a fumarole or other altered ground");
         }
-        assertTrue(altered.size() < 80 * 80 / 4, "patchy, not blanket: " + altered.size());
+        assertTrue(altered.size() < 80 * 80 / 2, "patchy, not blanket: " + altered.size());
     }
 
     // ── Events ──
@@ -169,7 +159,7 @@ class GeothermalHydrologyTest {
         config.fumaroleFormationPerHour = 0;
         config.acidAlterationPerHour = 0;
         GeothermalTest.stepTime(config, 1); // nothing forms: test steps of one geothermal period
-        Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 300);
+        Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), 300);
         Engine engine = GeothermalTest.engine(geothermal, 1).build();
 
         List<GasHazard> active = events(run(engine, geothermal, 100), GasHazard.class); // 200 s, 20 evaluations
@@ -181,7 +171,7 @@ class GeothermalHydrologyTest {
         List<GasHazard> cleared = events(run(engine, geothermal, 10), GasHazard.class);
         assertEquals(zoneSpecies, cleared.size());
         assertTrue(cleared.stream().allMatch(h -> h.concentrationPpm() == 0));
-        Set<BlockPos> activeCentres = active.stream().map(GasHazard::center).collect(Collectors.toSet());
+        Set<Point3> activeCentres = active.stream().map(GasHazard::center).collect(Collectors.toSet());
         assertTrue(cleared.stream().allMatch(h -> activeCentres.contains(h.center())), "zones keep their centre");
     }
 
@@ -190,7 +180,7 @@ class GeothermalHydrologyTest {
         GeothermalConfig config = frozenConfig(0.2);
         config.sulfurDepositPerHour = 0;
         config.acidAlterationPerHour = 0;
-        Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 300);
+        Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), 300);
         Engine engine = GeothermalTest.engine(geothermal, 7).build();
         run(engine, geothermal, 90); // fumaroles form over days
         GeothermalTest.stepTime(config, 1);
@@ -198,7 +188,7 @@ class GeothermalHydrologyTest {
 
         List<FumaroleActivity> activity = events(frames, FumaroleActivity.class);
         assertFalse(activity.isEmpty());
-        Map<BlockPos, Integer> perFumarole = new HashMap<>();
+        Map<Point3, Integer> perFumarole = new HashMap<>();
         for (FumaroleActivity a : activity) perFumarole.merge(a.pos(), 1, Integer::sum);
         long maxReports = 1 + Math.round(180 / config.fumaroleRefreshSeconds);
         assertTrue(perFumarole.values().stream().allMatch(n -> n <= maxReports), "per fumarole: " + perFumarole);

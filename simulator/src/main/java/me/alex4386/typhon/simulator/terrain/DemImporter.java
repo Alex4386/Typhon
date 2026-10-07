@@ -13,32 +13,20 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
-import me.alex4386.typhon.engine.world.BlockId;
-import me.alex4386.typhon.engine.world.WorldSpec;
+import me.alex4386.typhon.engine.terrain.GroundColumn;
+import me.alex4386.typhon.engine.world.Material;
+import me.alex4386.typhon.engine.world.MaterialTable;
 
 /**
  * Imports real elevation data (GeoTIFF, SRTM {@code .hgt}, ESRI ASCII grid, PNG heightmap) as a
  * {@link ColumnGrid}.
  *
- * <p>Two vertical mappings exist:
- * <ul>
- *   <li>{@link #toRealGrid} (real-scale worlds): elevation {@code z} metres lies in ground block
- *       {@code y} with {@code (y + 1)·L ≥ z}, i.e. sea level (0 m) is the top of block −1, exactly the
- *       world model's convention ({@link WorldSpec#groundBlock}). Columns are {@code L} metres wide.
- *   <li>{@link #toGrid} (compact Minecraft-style presets): sea level maps to {@link #SEA_LEVEL_Y} and
- *       heights are clamped to Minecraft's build range.
- * </ul>
+ * <p>{@link #toGrid} resamples the DEM onto columns {@code L} metres wide; elevations stay in metres.
  *
  * <p>Geographic DEMs (degrees) are converted to metres with a local equirectangular approximation at
  * the DEM's (or crop's) centre latitude, accurate to well under 1% over the few-km domains used here.
  */
 public final class DemImporter {
-    /** Minecraft's sea level (compact mapping only). */
-    public static final int SEA_LEVEL_Y = 62;
-    static final int MIN_Y = -60;
-    static final int MAX_Y = 318;
-
     /** WGS84 metres per degree of latitude / of longitude at the equator (mean values). */
     static final double METERS_PER_DEG_LAT = 110_574;
     static final double METERS_PER_DEG_LON = 111_320;
@@ -287,25 +275,24 @@ public final class DemImporter {
         return new Dem(e, dem.cellX(), dem.cellY(), geo);
     }
 
-    /** Surface block for an imported column. */
+    /** Surface material of an imported column ({@code null} = the world's default surface). */
     @FunctionalInterface
     public interface SurfacePainter {
-        BlockId paint(int x, int z, double elevation, boolean submerged);
+        Material paint(int x, int z, double elevation, boolean submerged);
 
-        /** Sand under water, grass in the lowlands, bare stone higher up. */
-        SurfacePainter DEFAULT = (x, z, elevation, submerged) -> BlockId.minecraft(
-                submerged ? "sand" : elevation < 400 ? "grass_block" : "stone");
+        /** Sediment under water, soil in the lowlands, the world's default surface higher up. */
+        SurfacePainter DEFAULT = (x, z, elevation, submerged) ->
+                submerged ? MaterialTable.SEDIMENT : elevation < 400 ? MaterialTable.SOIL : null;
     }
 
     /**
-     * Real-scale mapping: resamples the DEM onto {@code metersPerColumn} columns centred on the given
-     * pixel-centre (row, col) — box-averaging when columns are coarser than the DEM, bilinear otherwise —
-     * covering at most {@code halfExtentColumns} columns either side (rounded up to whole chunks).
-     * Columns whose ground lies below {@code seaLevelZ} (unless {@code NaN}) are flooded up to it.
+     * Resamples the DEM onto {@code metersPerColumn} columns centred on the given pixel-centre (row, col) —
+     * box-averaging when columns are coarser than the DEM, bilinear otherwise — covering at most
+     * {@code halfExtentColumns} columns either side (rounded up to whole tiles). Columns whose ground lies
+     * below {@code seaLevelZ} (unless {@code NaN}) are flooded up to it.
      */
-    public static ColumnGrid toRealGrid(Dem dem, double metersPerColumn, double centreRow, double centreCol,
+    public static ColumnGrid toGrid(Dem dem, double metersPerColumn, double centreRow, double centreCol,
             int halfExtentColumns, double seaLevelZ, SurfacePainter painter) {
-        int waterY = Double.isNaN(seaLevelZ) ? TerrainColumn.NO_WATER : groundBlock(seaLevelZ, metersPerColumn);
         double spanC = metersPerColumn / dem.cellX();
         double spanR = metersPerColumn / dem.cellY();
         boolean box = spanC > 1 || spanR > 1;
@@ -317,45 +304,11 @@ public final class DemImporter {
         };
         ColumnGrid.Source source = (x, z) -> {
             double m = meters.applyAsDouble(x + 0.5, z + 0.5);
-            int y = groundBlock(m, metersPerColumn);
             boolean submerged = !Double.isNaN(seaLevelZ) && m < seaLevelZ;
-            return new TerrainColumn(y, submerged ? waterY : TerrainColumn.NO_WATER, painter.paint(x, z, m, submerged));
+            return new GroundColumn(x, z, m, submerged ? seaLevelZ : Double.NaN, painter.paint(x, z, m, submerged));
         };
-        return ColumnGrid.generateCentered(halfExtentColumns, source,
-                (cx, cz) -> meters.applyAsDouble(cx, cz) / metersPerColumn);
-    }
-
-    /** Ground block whose top is the surface at {@code elevation} (same as {@link WorldSpec#groundBlock}). */
-    public static int groundBlock(double elevation, double metersPerColumn) {
-        return (int) Math.ceil(elevation / metersPerColumn - 1e-6) - 1;
-    }
-
-    /**
-     * Compact (Minecraft-style) mapping: resamples a DEM onto blocks of {@code metersPerBlock},
-     * bilinearly, keeping at most {@code maxHalfExtent} blocks either side of the centre; sea level is
-     * {@link #SEA_LEVEL_Y} and heights are clamped to the build range.
-     */
-    public static ColumnGrid toGrid(Dem dem, double metersPerBlock, int maxHalfExtent) {
-        double widthBlocks = dem.cols() * dem.cellX() / metersPerBlock;
-        double heightBlocks = dem.rows() * dem.cellY() / metersPerBlock;
-        int half = (int) Math.min(maxHalfExtent, Math.max(widthBlocks, heightBlocks) / 2);
-        ColumnGrid grid = ColumnGrid.centered(half);
-        BlockId grass = BlockId.minecraft("grass_block");
-        BlockId stone = BlockId.minecraft("stone");
-        BlockId sand = BlockId.minecraft("sand");
-        for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
-            for (int x = grid.minX(); x <= grid.maxX(); x++) {
-                double col = (x * metersPerBlock) / dem.cellX() + dem.cols() / 2.0;
-                double row = (z * metersPerBlock) / dem.cellY() + dem.rows() / 2.0;
-                double meters = bilinear(dem, row, col);
-                int y = SEA_LEVEL_Y + (int) Math.round(meters / metersPerBlock);
-                y = Math.max(MIN_Y, Math.min(MAX_Y, y));
-                boolean submerged = y < SEA_LEVEL_Y;
-                BlockId surface = submerged ? sand : (meters < 400 ? grass : stone);
-                grid.set(x, z, y, submerged ? SEA_LEVEL_Y : TerrainColumn.NO_WATER, surface);
-            }
-        }
-        return grid;
+        return ColumnGrid.generateCentered(halfExtentColumns, metersPerColumn, source,
+                (xm, zm) -> meters.applyAsDouble(xm / metersPerColumn, zm / metersPerColumn));
     }
 
     /** Mean of the DEM samples whose centres fall in the footprint; bilinear if none does. */

@@ -650,6 +650,10 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
     public void addIntrusionHeat(double x, double z, double depthM, double areaM2, double widthM,
             double temperatureC) {
         if (!(areaM2 > 0) || !(widthM > 0)) return;
+        // metres → surface-column coordinates
+        double l = world.spec().metersPerColumn();
+        x /= l;
+        z /= l;
         int gx = grid.solverCoord((int) Math.floor(x));
         int gz = grid.solverCoord((int) Math.floor(z));
         SolverChunk ch = grid.chunkOf(gx, gz);
@@ -715,6 +719,17 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
             }
         }
         return ch.temperature[c * n + n - 1];
+    }
+
+    @Override
+    public double rockTemperatureC(double x, double z, double depthM) {
+        if (!(depthM >= 0) || depthM > grid.totalDepth()) return Double.NaN; // below the modelled ground
+        double l = world.spec().metersPerColumn();
+        int cx = (int) Math.floor(x / l);
+        int cz = (int) Math.floor(z / l);
+        SolverChunk ch = chunkAt(cx, cz);
+        if (ch == null || !ch.exists[SolverChunk.column(grid.solverCoord(cx), grid.solverCoord(cz))]) return Double.NaN;
+        return temperatureC(cx, cz, depthM);
     }
 
     @Override
@@ -915,14 +930,13 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
     @Override
     public void loadState(StateReader in) {
         JsonObject json = in.json();
-        if (!json.has("macroClock")) return;
         macroClock = json.get("macroClock").getAsDouble();
         macroSteps = json.get("macroSteps").getAsLong();
         rainfallOverride = json.has("rainfallOverride") ? json.get("rainfallOverride").getAsDouble() : Double.NaN;
         JsonObject b = json.getAsJsonObject("budget");
         rain = b.get("rain").getAsDouble();
         boiled = b.get("boiled").getAsDouble();
-        chamberHeat = b.has("chamberHeat") ? b.get("chamberHeat").getAsDouble() : 0;
+        chamberHeat = b.get("chamberHeat").getAsDouble();
         seaGroundwater = b.get("seaGroundwater").getAsDouble();
         deficit = b.get("deficit").getAsDouble();
         initialGroundwater = b.get("initialGroundwater").getAsDouble();
@@ -993,7 +1007,7 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
                 System.arraycopy(d.doubles("depth"), 0, t.depth, 0, SurfaceWater.AREA);
                 System.arraycopy(d.doubles("qEast"), 0, t.qEast, 0, SurfaceWater.AREA);
                 System.arraycopy(d.doubles("qSouth"), 0, t.qSouth, 0, SurfaceWater.AREA);
-                t.settled = d.has("settled") && d.booleans("settled")[0];
+                t.settled = d.booleans("settled")[0];
                 surface.putTile(t);
             }
         }

@@ -8,14 +8,14 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import me.alex4386.typhon.engine.math.LongHashSet;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.FlowCell;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.world.BlockState;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerFlags;
 import me.alex4386.typhon.engine.world.LayerView;
@@ -55,12 +55,15 @@ public final class Lahars extends MassFlowField {
     private boolean rainLaharActive;
     /** Columns where loose volcanic material was deposited (packed x/z), oldest first; may hold stale entries. */
     private final TreeSet<Long> erodibleColumns = new TreeSet<>();
+    /** Membership mirror of {@link #erodibleColumns}: most deposits land on columns already listed. */
+    private final LongHashSet erodibleMembers = new LongHashSet();
 
     public Lahars(String id, TerrainModel terrain, MassFlowConfig config) {
         super(id, MassFlowKind.LAHAR, terrain, config);
         terrain.world().addDepositObserver((x, z, thickness, unit, flags) -> {
             if ((flags & LayerFlags.LOOSE) != 0 && ERODIBLE.contains(terrain.world().unit(unit).type())) {
-                erodibleColumns.add(columnKey(x, z));
+                long key = columnKey(x, z);
+                if (erodibleMembers.add(key)) erodibleColumns.add(key);
             }
         });
     }
@@ -110,6 +113,23 @@ public final class Lahars extends MassFlowField {
         return sum;
     }
 
+    /**
+     * Steepest slope (tan β) a fully soaked loose deposit stands on: the infinite-slope factor of safety of a
+     * cohesionless layer with slope-parallel seepage and the water table at its surface is
+     * {@code FS = (γ'/γ_sat)·tanφ / tanβ} (e.g. Duncan, Wright &amp; Brandon 2014, §6.3), so it fails at
+     * {@code tanβ = (1 − γ_w/γ_sat)·tanφ}, about half the dry angle of repose. φ is the repose angle of the
+     * deposit's top material; {@code γ_sat = (1 − n)ρ_s g + n ρ_w g} with the deposit porosity n.
+     */
+    double criticalSaturatedSlope(int x, int z) {
+        WorldModel world = terrain.world();
+        int n = world.layerCount(x, z);
+        if (n == 0) return Double.POSITIVE_INFINITY;
+        double phi = Math.toRadians(MaterialTable.reposeAngleDeg(world.layer(x, z, n - 1).materialInfo()));
+        double porosity = config.porosity;
+        double saturated = (1 - porosity) * config.grainDensity + porosity * 1000;
+        return (1 - 1000 / saturated) * Math.tan(phi);
+    }
+
     /** Removes up to {@code thicknessM} of loose material from the world model; returns what was removed. */
     private double erodeLoose(int x, int z, double thicknessM) {
         if (thicknessM <= 0) return 0;
@@ -131,13 +151,13 @@ public final class Lahars extends MassFlowField {
     }
 
     /** Snow/ice melted by an eruption or hot deposits: dilute water picking up sediment as it runs. */
-    public boolean meltwater(BlockPos center, int radius, double volumeM3) {
-        return release(center, radius, volumeM3, config.ambientC, 0.05, Trigger.MELTWATER);
+    public boolean meltwater(Point3 center, double radiusM, double volumeM3) {
+        return release(center, radiusM, volumeM3, config.ambientC, 0.05, Trigger.MELTWATER);
     }
 
     /** Sudden release of a crater lake's water. */
-    public boolean lakeBreakout(BlockPos center, int radius, double volumeM3) {
-        return release(center, radius, volumeM3, config.ambientC, 0.02, Trigger.LAKE_BREAKOUT);
+    public boolean lakeBreakout(Point3 center, double radiusM, double volumeM3) {
+        return release(center, radiusM, volumeM3, config.ambientC, 0.02, Trigger.LAKE_BREAKOUT);
     }
 
     // ── Kind hooks ──
@@ -150,7 +170,7 @@ public final class Lahars extends MassFlowField {
 
     /**
      * Rain soaks into loose deposit; once its pores are full ({@code soaked ≥ porosity · e}) a deposit
-     * on a slope steeper than {@link MassFlowConfig#rainMinSlope} fails and flows off as a slug: the
+     * on a slope steeper than {@link #criticalSaturatedSlope} fails and flows off as a slug: the
      * saturated bulk {@code e} (solids fraction {@code 1 − porosity}) plus concentrated runoff of
      * {@code rainFailureWaterRatio · e}. Gentle slopes just stay saturated. The loose layers are read
      * from (and eroded out of) the world model.
@@ -161,7 +181,7 @@ public final class Lahars extends MassFlowField {
         double rain = rainfallMmPerHour / 1000 / 3600 * dt; // m of water this step
         double solids = 1 - config.porosity;
         double mobilised = 0;
-        BlockPos strongest = null;
+        Point3 strongest = null;
         double strongestVolume = 0;
 
         for (long key : new ArrayList<>(erodibleColumns)) {
@@ -170,19 +190,21 @@ public final class Lahars extends MassFlowField {
             double e = erodibleThickness(x, z);
             if (e <= 0) {
                 erodibleColumns.remove(key);
+                erodibleMembers.remove(key);
                 continue;
             }
             MassFlowChunk c = chunkFor(x >> 4, z >> 4);
             if (c == null) continue;
             ensureFresh(c);
             int i = index(x, z);
-            if (c.ground[i] == UNKNOWN) continue;
+            if (Double.isNaN(c.bed[i])) continue;
             c.soak[i] = Math.min(c.soak[i] + rain, config.porosity * e);
             if (c.soak[i] > 0 && c.soakedCells == 0) c.soakedCells = 1;
             if (e < config.rainMinErodible || c.soak[i] < config.porosity * e) continue;
-            if (steepestBedSlope(c, i) < config.rainMinSlope) continue;
+            if (steepestBedSlope(c, i) < criticalSaturatedSlope(x, z)) continue;
 
             double removed = erodeLoose(x, z, e);
+            rereadBed(c, i);
             c.soak[i] = 0;
             if (removed <= 0) continue;
             double runoff = config.rainFailureWaterRatio * removed;
@@ -195,7 +217,7 @@ public final class Lahars extends MassFlowField {
             mobilised += volume;
             if (volume > strongestVolume) {
                 strongestVolume = volume;
-                strongest = new BlockPos(x, c.ground[i], z);
+                strongest = groundPoint(x, z);
             }
         }
         if (mobilised > 0 && !rainLaharActive) {
@@ -205,22 +227,27 @@ public final class Lahars extends MassFlowField {
     }
 
     /**
-     * Steepest downhill ground slope (tan θ) measured over {@link #SLOPE_WINDOW} blocks: block terrain
-     * is stepped, so the immediate neighbour of a cell on a gentle slope is often level with it.
+     * Steepest downhill slope (tan θ) of the substrate under the loose deposit to a neighbouring column:
+     * the plane the saturated layer slides on. The loose layers themselves are left out, so a patch of
+     * deposit on flat ground is not a slope.
      */
     private double steepestBedSlope(MassFlowChunk c, int i) {
+        WorldModel world = terrain.world();
         int x = c.worldX(i);
         int z = c.worldZ(i);
-        int g = c.ground[i];
+        double g = bed(c, i) - erodibleThickness(x, z);
         double best = 0;
         for (int d = 0; d < 4; d++) {
-            int gj = terrain.groundY(x + DX[d] * SLOPE_WINDOW, z + DZ[d] * SLOPE_WINDOW, g);
-            best = Math.max(best, (double) (g - gj) / SLOPE_WINDOW);
+            int nx = x + DX[d];
+            int nz = z + DZ[d];
+            double s = world.surfaceZ(nx, nz);
+            if (!Double.isFinite(s)) continue;
+            double substrate = s + world.uplift(nx, nz)
+                    - (erodibleColumns.contains(columnKey(nx, nz)) ? erodibleThickness(nx, nz) : 0);
+            best = Math.max(best, (g - substrate) / dx);
         }
         return best;
     }
-
-    private static final int SLOPE_WINDOW = 4;
 
     @Override
     protected void process(MassFlowChunk c, int i, double dt, Outbox outbox, double time) {
@@ -236,6 +263,7 @@ public final class Lahars extends MassFlowField {
                 double capacity = Math.max(0, 1 - sediment / config.maxSedimentFraction);
                 double eroded = erodeLoose(x, z, Math.min(e, config.erosionCoefficient * u * dt * capacity));
                 if (eroded > 0) {
+                    rereadBed(c, i);
                     c.soak[i] = Math.min(c.soak[i], config.porosity * Math.max(0, e - eroded));
                     entrain(c, i, eroded, solids);
                     sediment = c.sediment[i];
@@ -272,30 +300,20 @@ public final class Lahars extends MassFlowField {
     }
 
     @Override
-    protected BlockState depositBlock(MassFlowChunk c, int i, double meanTemperatureC, double meanSpeed) {
-        return MassFlowPalette.laharBlock(meanSpeed, config.coarseSpeed);
-    }
-
-    @Override
-    protected BlockState veneer(int tier) {
-        return tier >= 2 ? MassFlowPalette.LAHAR_VENEER : MassFlowPalette.LAHAR_THIN_VENEER;
-    }
-
-    @Override
     protected EngineEvent startedEvent(double time, PendingStart start) {
         return new MassFlowEvents.LaharStarted(time, id, start.trigger(), start.position(), start.volumeM3(),
                 start.rateM3PerS());
     }
 
     @Override
-    protected EngineEvent frontEvent(double time, BlockPos front, double runoutM, int cells, double volume,
+    protected EngineEvent frontEvent(double time, Point3 front, double runoutM, int cells, double volume,
             double maxSpeed, double tracer, List<FlowCell> reported) {
         return new MassFlowEvents.LaharFront(time, id, front, runoutM, cells, volume, maxSpeed, tracer, reported);
     }
 
     @Override
-    protected EngineEvent depositEvent(double time, int cells, double volume, int blocks) {
-        return new MassFlowEvents.LaharDeposit(time, id, cells, volume, blocks);
+    protected EngineEvent depositEvent(double time, int cells, double volume) {
+        return new MassFlowEvents.LaharDeposit(time, id, cells, volume);
     }
 
     @Override
@@ -312,6 +330,10 @@ public final class Lahars extends MassFlowField {
         rainfallMmPerHour = in.get("rainfall").getAsDouble();
         rainLaharActive = in.get("rainLaharActive").getAsBoolean();
         erodibleColumns.clear();
-        for (JsonElement e : in.getAsJsonArray("erodibleColumns")) erodibleColumns.add(e.getAsLong());
+        erodibleMembers.clear();
+        for (JsonElement e : in.getAsJsonArray("erodibleColumns")) {
+            erodibleColumns.add(e.getAsLong());
+            erodibleMembers.add(e.getAsLong());
+        }
     }
 }

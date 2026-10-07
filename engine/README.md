@@ -1,12 +1,16 @@
 # typhon-engine
 
-Platform-independent volcano simulation core for Typhon v1. Hosts (Paper, Fabric, standalone)
-feed it commands and terrain snapshots and apply the block changes and events it produces.
+Platform-independent volcano simulation core for Typhon v1: a real-scale physical simulator in SI
+units. Hosts (the simulator, sim-server, a Minecraft adapter) feed it commands and ground
+(`GroundImport`) and read the events and world-model state it produces. Minecraft is only a
+*projection* of that state (`mc-projection`); nothing in the engine knows about blocks.
 
 ## Rules
 
-- **No Minecraft/Bukkit/Fabric dependencies.** Blocks are `BlockId` / `BlockState` (namespaced
-  ids, e.g. `minecraft:potent_sulfur`); hosts resolve them against their registries.
+- **No Minecraft/Bukkit/Fabric dependencies, no blocks.** Positions are `Point3` in metres
+  (`x` east, `z` south, `y` up); grid cells are `ColumnIndex` on `L`-metre columns
+  (`WorldSpec.metersPerColumn()`, a resolution only). Block ids, palettes and any scaling to fit
+  Minecraft live in `mc-projection`.
 - **Deterministic.** All randomness comes from the `SimRandom` in `StepContext` (never
   `Math.random()`, `new Random()` or wall-clock time). Same seed + same commands ⇒ same frames.
 - **Persistent.** Subsystem state must round-trip through `saveState(StateWriter)` /
@@ -15,8 +19,8 @@ feed it commands and terrain snapshots and apply the block changes and events it
   to `field(name, schema)`. Expose the build configuration through `config()` (hash-checked on
   restore) and a cheap immutable `snapshot()` for dashboards.
 - **Semantic output.** Subsystems emit `EngineEvent`s describing what happened (a tremor of
-  magnitude M at P), never how to render it. Block edits go through `Outbox.setBlock` as
-  compare-and-set `BlockChange`s.
+  magnitude M at P), never how to render it. Ground changes are deposits and erosion in the world
+  model (below).
 - **Multi-rate, in seconds.** Pick each subsystem's `periodSeconds()` from the physics it models
   (a magma chamber every second, lava every base step) and use `StepContext.dtSeconds()`. Never
   assume a particular base step; sub-step internally when stability needs a finer step.
@@ -26,8 +30,7 @@ feed it commands and terrain snapshots and apply the block changes and events it
 There is **one clock**: time is an exact count of microseconds and every subsystem works in
 seconds of physical time. Nothing is compressed or sped up inside the model; how fast the clock
 runs against the wall clock is playback (the runner's speed, §Runner), which never changes the
-physics. Compact worlds scale *lengths* only (`VolcanoScaling`: metres per block, with velocities
-and the times derived from them following Froude similarity).
+physics, and nothing is scaled in space either: lengths, volumes and velocities are real.
 
 **Adaptive steps.** Time advances in quanta of the **base step** (`baseStepMicros`, default 50 ms).
 With `Engine.builder(seed).adaptive(maxSeconds)` (hosts use `Engine.DEFAULT_MAX_STEP_SECONDS`, a
@@ -74,8 +77,7 @@ and cooling integrates each column in sub-iterations of at most `coolingStepK`.
 | `UNBOUNDED` | as fast as the CPU allows |
 | `PAUSED` | no steps; `step(n)` runs n steps, `stepFor(seconds)` until the clock has advanced that far; `pauseAtStep` / `pauseAtTime` pause automatically |
 
-Output: an optional **lossless** frame queue (back-pressure; hosts that must apply every block
-change), a bounded **lossy** event ring with a dropped-event count (UIs), and a throttled
+Output: an optional **lossless** frame queue (back-pressure; hosts that must see every event), a bounded **lossy** event ring with a dropped-event count (UIs), and a throttled
 `EngineSnapshot`. Saves and inspection run between steps via `onEngineThread`. The mode never
 changes results (`EngineRunnerTest.resultsDoNotDependOnRunnerSpeed`). A frame observer
 (`setFrameObserver`) sees every frame on the engine thread and may switch the speed there: the
@@ -107,7 +109,7 @@ Rules for subsystem authors (all checked by thread-count invariance tests,
    double buffers in a *later* region than the one that reads neighbours.
 2. Never accumulate into shared doubles from a parallel body: write per-item partials and combine
    them sequentially in item order (`Parallel.sum`, per-chunk scratch folded afterwards).
-3. Anything order-dependent — `Outbox` block changes and events, `SimRandom` draws, world-model and
+3. Anything order-dependent — `Outbox` events, `SimRandom` draws, world-model and
    terrain edits, creating chunks or other map entries — happens sequentially, in a fixed (sorted)
    order, before or after the parallel region. Defer per-item actions into the item's own buffer
    (as lava defers solidification) and apply them afterwards in order.
@@ -151,7 +153,7 @@ porosity, welding, a sub-cell void fraction and flags (`LOOSE`, `FRACTURED`, `AL
 
 Imported columns are built bottom-up from the world spec: the basement layer cake
 (`geology.basement`), country rock (`geology.edificeMaterial`) and a surface cover. Where a volcano
-defines an edifice (`edifice: {material, radius, baseZ}` in its YAML, a `world.Edifice` centred on its
+defines an edifice (`edifice: {material, radiusM, baseZ}` in its YAML, a `world.Edifice` centred on its
 primary vent), the rock above `baseZ` (the pre-volcano surface; default: the top of the basement cake)
 is the volcano's material instead, recorded as that volcano's `EDIFICE` unit. Overlapping edifices go
 to the volcano the column lies deepest in (distance / radius).
@@ -167,19 +169,21 @@ on; nothing integrates them yet):
   the surface; `base` is `baseLevel`, else sea level, else the domain's lowest surface. `f = 1` keeps
   the table a fixed depth below ground, `f = 0` makes it flat (real tables: ~0.3–0.8).
 
-`terrain.TerrainModel` is the block-level bridge over it: host `TerrainSnapshot`s import columns
-(built as above) or reconcile known ones,
-and every ground change made through it deposits or erodes in the stacks. Blocks are cubes of
-`WorldSpec.metersPerColumn()`; ground block `y` has its top at `(y + 1)·L` metres. A re-sent column
-whose ground block did not move keeps the stacks' exact (sub-block) surface.
+`terrain.TerrainModel` owns the world model as a subsystem. Hosts hand it ground as a
+`GroundImport` command: a list of `GroundColumn(x, z, surfaceZ, waterZ, cover)` — the column index,
+the surface and standing-water elevations in metres (`waterZ = NaN` where dry) and the surface
+material. Unknown columns are built from the geology as above; known ones are brought to the given
+surface by depositing or eroding unattributed material, and their water level is set. A
+`TerrainGenerator` (the host's pure ground function) lets the engine materialise further columns on
+demand (`expansion`).
 
 ### Stratigraphy (who deposits what)
 
 Volcanic subsystems write their physical deposits straight into the world model, at their exact
 thickness, as layers of a unit attributed to the producing volcano's current eruption (a
-`UnitSource`; `assembly.VolcanoUnits` uses `MagmaChamber.eruptionCount()`). Blocks only render
-those layers: subsystems update the block cache with `TerrainModel.updateBlockCache`, never through
-the bridge (which would deposit unattributed fill a second time).
+`UnitSource`; `assembly.VolcanoUnits` uses `MagmaChamber.eruptionCount()`). Hosts read the layers
+(`WorldQuery`: columns, and vertical sections along a polyline in metres) and render them as they
+like.
 
 | Producer | Deposit type, material | Flags |
 |---|---|---|
@@ -242,7 +246,7 @@ A world is a directory:
 
 ```
 worlds/<world>/
-  world.yaml                     grid, scaling, sea level, climate, geology, geotherm, aquifer,
+  world.yaml                     grid, sea level, climate, geology, geotherm, aquifer,
                                  terrain source (host-interpreted), lava and subsurface parameters
   volcanoes/<id>.yaml            vents, magma chamber + conduit, dikes, geothermal, mass flows,
                                  deformation, tephra, active flag
@@ -253,7 +257,7 @@ worlds/<world>/
 ```
 
 `config.WorldDefinition` / `config.VolcanoDefinition` parse the YAML (SnakeYAML Engine) strictly:
-unknown keys, wrong types and values that only the world scaling may set are reported with file,
+unknown keys, wrong types and values derived from another section are reported with file,
 key path and the valid keys. Sections bind onto the engine's config objects by name
 (`ConfigBinder`), so every tunable of `MagmaChamberConfig`, `ConduitConfig`, `DikeConfig`,
 `GeothermalConfig`, `MassFlowConfig`, `TephraConfig` and `LavaConfig` is configurable. See the
@@ -275,7 +279,7 @@ from it. The rule: **every physical parameter is live**; only these are not:
 | kind | what | why |
 |---|---|---|
 | **reinit** of the whole volcano | `magma.chamber.initial*`, chamber `volume` and `center`, `magma.conduit.initialOpenness`, `vents`, adding/removing `dikes`, `geothermal`, `massFlows`, `deformation`, adding/removing a volcano | initial conditions, geometry or the presence of subsystems define the state |
-| **reinit** of one part | `tephra.cellSize`/`gridCells`/`worldTopY` (ash grid), `geothermal.center`/`radius`/`cellSize` (hot-spring grid), `detail.*` (crater surface) | the part's saved state is laid out on them; only that part starts over |
+| **reinit** of one part | `tephra.cellSizeM`/`gridCells` (ash grid), `geothermal.center`/`radiusM`/`cellSizeM` (hot-spring grid), `detail.*` (crater surface) | the part's saved state is laid out on them; only that part starts over |
 | **reload** (state kept) | world `geology`, `geotherm`, `aquifer`, `terrain`; a volcano's `edifice` | read only when ground is generated or the world assembled |
 | refused for a running world | `seed`, `baseStepMs`, `grid.*`, `seaLevel`, `subsurface.levels`/`firstLevelM`/`levelGrowth`, `expansion.tileColumns` | the whole world is laid out on them |
 
@@ -318,12 +322,37 @@ loads ground is physics, never a viewer.
   20 m columns costs about 0.8 MB of heap (≈0.2 KB per column), so the default 400 tiles add ≤ ~0.35 GB.
   All `expansion:` parameters are hot.
 
-## Units and scaling
+## Units
 
-Physics runs in real units: metres, seconds, MPa, °C, wt%, m³/s. Outputs reach the Minecraft world
-through `VolcanoScaling` (Froude similarity: with L metres per block, lengths ×1/L, volumes ×1/L³,
-velocities ×1/√L; eruption columns use their own length scale; dormancy is time-compressed).
-Tests assert physical relationships (basalt runs farther than dacite), not tuned ratios.
+Everything runs at real scale in real units: metres, seconds, kg, MPa, °C, wt%, m³/s, g = 9.81 m/s².
+Positions, lengths and radii in configuration and events are metres (vents `x`/`y`/`z`, `radiusM`,
+`lengthM`; chamber centres as real elevations). The column width `L` is only the horizontal
+resolution. Fitting a volcano into Minecraft (shrinking it, quantising to blocks) is the job of the
+`mc-projection` adapter, not of the engine. Tests assert physical relationships (basalt runs farther
+than dacite), not tuned ratios.
+
+## How magma reaches the surface
+
+Nothing opens a vent by decree. A chamber has a conduit only if a definition says one is still molten
+(`magma.conduit.initialOpenness`) or an eruption left one behind; a placed chamber has neither vent nor
+conduit.
+
+- **Walls fail → dike.** Recharge raises the overpressure until the hoop stress on the chamber wall reaches
+  the rock's tensile strength (at twice it, Tait et al. 1989). The magma the walls cannot hold leaves
+  through a dike from the roof (`DikePropagation`); nothing nucleates below that, and where on the roof
+  it starts is the only random choice.
+- **Dike → fissure.** A dike that reaches the surface opens a fissure and a flank eruption starts at the
+  chamber's pressure. Its feeder is followed thermally (`FissureFeeder`): the flow shares out by w³,
+  narrow segments freeze, and lava pours only from the open ones.
+- **Fissure → vent.** A segment still erupting after both neighbours froze is where the flow localised
+  (Bruce & Huppert 1989; Wylie et al. 1999): it becomes a crater on the fissure line
+  (`VentEvents.VentFormed`) with that segment's conductance.
+- **Conduit lifecycle.** After an eruption through a crater the conduit stays molten and freezes inward
+  as √t over `t_f = (a²/κ)(1 + L/(cΔT))` (Turcotte & Schubert §4-18); while molten, a later eruption
+  reopens it at a lower pressure. An eruption that ended without a vent of its own leaves no conduit
+  (its fissures freeze as dikes), and so does a stop by hand or a sealed outlet.
+- **Forcing.** `StartEruption` erupts through a molten conduit to an open crater; without one it forces
+  a dike instead.
 
 ## Eruptions are emulated, not chosen
 
@@ -369,14 +398,14 @@ waterWt, co2Wt, crystalFraction, variability)`).
 | `sim` | `Engine` loop, `Subsystem`, `StepContext`, `SimTime`, `EngineRunner` (modes, frames, events, snapshots), `EngineSnapshot` |
 | `save` | `SaveStore` (directory / in-memory), `StateWriter` / `StateReader`, `FieldChunk`, `SaveFormat` (region files) |
 | `command` | `EngineCommand`, `CommandBus` |
-| `output` | `BlockChange`, `EngineEvent`, `HistoricalEvent`, `EngineFrame`, `Outbox` |
+| `output` | `EngineEvent`, `HistoricalEvent`, `EngineFrame`, `Outbox` |
 | `random` | `SimRandom` (SplitMix64, forkable, saveable) |
-| `math` | `BlockPos` |
-| `world` | `BlockId`, `BlockState`; world model: `WorldModel`, `ColumnStacks`, `MaterialTable`, `UnitTable`, `WorldQuery`, `WorldEdit`, `BlockMaterialPalette` |
+| `math` | `Point3` (metres), `ColumnIndex` |
+| `world` | World model: `WorldModel`, `WorldSpec`, `ColumnStacks`, `MaterialTable`, `UnitTable`, `WorldQuery`, `WorldEdit`, `Edifice`, `SurfaceDetail` |
 | `config` | `WorldDefinition`, `VolcanoDefinition` (YAML), `ConfigBinder`, `ConfigNode`, `Yaml` |
 | `worlds` | `World` (multi-volcano assembly, saves, runtime changes), `WorldDirectory`, `ConfigChanges`, `HistoryRouter` |
-| `terrain` | `TerrainModel` (block-level bridge over the world model), `TerrainSnapshot` command |
-| `volcano` | Shared volcano model: `VentSite`, `VentStatus`, `VentEvents`, `VentCommands` (seal/unseal/remove vents), `MagmaState`, `VolcanoScaling` |
+| `terrain` | `TerrainModel` (owns the world model), `GroundImport` / `GroundColumn` (host ground), `TerrainGenerator` |
+| `volcano` | Shared volcano model: `VentSite`, `VentStatus`, `VentEvents`, `VentCommands` (seal/unseal/remove vents), `MagmaState` |
 | `magma` | `MagmaChamber` (lumped chamber: recharge by mass and enthalpy, overpressure, crystallisation, H₂O/CO₂ exsolution, open/closed conduit, slug bursts, plug failures), `MagmaCommands`, `MeltViscosity`; `magma.conduit`: `ConduitModel` (steady 1-D two-phase conduit flow: exsolution, outgassing, microlites, fragmentation, choking, multiple steady states), `ConduitSolution` |
 | `seismic` | `SeismicityModel` (VT/LP/tremor/explosion, Gutenberg–Richter, RSAM), `SeismicIntensity` |
 | `alert` | `AlertLevelEstimator` (status with hysteresis), `EruptionClassifier` (style probabilities and VEI estimated from the eruption's observables; output only) |

@@ -88,7 +88,9 @@ export function VolumeCloud({ clouds, color = '#857868' }: { clouds: () => Cloud
               r: base.r,
               g: base.g,
               b: base.b,
-              fade: (0.55 + 0.45 * u) * (0.35 + 0.65 * cl.opacity) * 1.6,
+              // the low tail is a thin ash sheet; a dissipating cloud thins out (never darkens)
+              fade: 1.2,
+              alpha: cl.opacity * (0.55 + 0.45 * u),
               seed,
             });
           }

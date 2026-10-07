@@ -1,67 +1,88 @@
 package me.alex4386.typhon.engine.dike;
 
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 
 /**
- * Parameters of dike initiation and propagation. Physical quantities are in real units; the
- * model-world geometry uses {@link #metersPerBlock}.
+ * Parameters of dike initiation and propagation, in SI units (lengths in metres). The dike's geometry
+ * (breadth, opening, fissure length and width) is derived from elastic crack mechanics and the chamber
+ * feeding it (see {@link DikePropagation}); what is set here are material properties of the crust, the
+ * statistical description of path wander, and numerical safeguards (labelled as such).
  */
 public final class DikeConfig {
     /** Seconds between steps. */
     public double stepPeriodSeconds = DikePropagation.RISING_STEP_SECONDS;
-    /** Real metres per block of horizontal model geometry (see {@link VolcanoScaling}). */
-    public double metersPerBlock = VolcanoScaling.DEFAULT.metersPerBlock();
 
     // ── Initiation ──
 
-    /** Dikes may nucleate once overpressure exceeds this fraction of the roof tensile strength. */
-    public double initiationPressureRatio = 0.85;
-    /** Nucleation rate (per second) at full strength and full sealing; grows quadratically. */
-    public double maxInitiationRate = 1.0 / 60.0;
     public int maxConcurrentDikes = 1;
     /**
-     * The one dike override: no new dikes from this chamber, neither spontaneous ones nor those wall rupture
-     * would open (rising dikes go on; forced ones still start). Off (default): the physics decides — wall
-     * rupture opens a dike at once, and spontaneous nucleation follows the overpressure and how sealed the
-     * summit conduit is (an open, erupting conduit vents the pressure instead).
+     * The one dike override: no new dikes from this chamber where wall rupture would open them (rising dikes
+     * go on; forced ones still start). Off (default): the physics decides — wall rupture opens a dike at once.
      */
     public boolean blocked = false;
-    /** Dikes nucleate within this horizontal distance of the chamber centre (blocks). */
-    public double startOffsetBlocks = 8;
 
     // ── Mechanics ──
 
+    /**
+     * Effective shear modulus of the volcanic crust (Pa): edifice and shallow-crust rocks are fractured, with
+     * effective moduli of a few GPa, well below laboratory values (Heap et al. 2020, J. Volcanol. Geotherm.
+     * Res. 390; Rubin 1995).
+     */
     public double shearModulusPa = 3e9;
     public double poissonRatio = 0.25;
+    /** Density of the host rock (kg/m³). */
     public double rockDensity = 2600;
-    /** Observed dike thicknesses (m); the elastic opening estimate is clamped to this range. */
-    public double minOpening = 0.2;
-    public double maxOpening = 3.0;
-    /** Maximum along-strike extent of a dike (m). */
-    public double maxStrikeLength = 500;
-    /** Lower bound on the height used for the pressure gradient (m), avoids singular starts. */
-    public double minCharacteristicHeight = 200;
-    /** Upper bound on tip speed (m/s). */
+    /**
+     * Effective fracture toughness of the host rock (MPa·√m). Laboratory values are ~1–3 MPa·√m; dike
+     * dimensions suggest larger in-situ values (up to ~100; Delaney &amp; Pollard 1981, Rubin 1995). The dike
+     * stalls when the stress intensity at its tip, {@code K = ΔP·√(π b/2)}, falls below this.
+     */
+    public double fractureToughnessMPaSqrtM = 10;
+    /** Thermal diffusivity of the wall rock (m²/s; typical crustal rock, Turcotte &amp; Schubert 2002). */
+    public double wallRockDiffusivity = 1e-6;
+    /** Latent heat of crystallisation of the magma (J/kg; basaltic ~4e5, Turcotte &amp; Schubert 2002). */
+    public double magmaLatentHeat = 4e5;
+    /** Specific heat of magma and rock (J/kg/K). */
+    public double specificHeat = 1200;
+    /**
+     * Geothermal gradient of the crust the dike crosses (°C/km) and surface temperature (°C), for the wall
+     * rock temperature that freezes the magma (continental average ~25–30 °C/km; volcanic areas are hotter).
+     */
+    public double geothermalGradientCPerKm = 30;
+    public double surfaceTemperatureC = 10;
+    /**
+     * Upper bound on tip speed (m/s): a safeguard on the laminar slot-flow estimate, which grows without
+     * bound for wide basaltic dikes; observed dike propagation is ~0.1–5 m/s (Rivalta et al. 2015,
+     * Tectonophysics 638).
+     */
     public double maxSpeed = 5.0;
-    /** Below this tip speed magma freezes faster than the dike advances: the dike stalls (m/s). */
-    public double freezeSpeed = 0.01;
-    /** The dike stalls when its driving pressure falls below this (MPa). */
-    public double stallPressureMPa = 0.5;
-    /** Longest advance integrated in one sub-step (m). */
+    /** Numerical: lower bound on the height used for the pressure gradient (m), avoids singular starts. */
+    public double minCharacteristicHeight = 200;
+    /** Numerical: longest advance integrated in one sub-step (m). */
     public double maxSubstepMeters = 50;
+    /**
+     * Azimuth (degrees clockwise from +x towards +z) of the regional least compressive stress σ₃, or NaN for
+     * none. Where neither the chamber nor the topography sets a direction (a dike rising straight above the
+     * chamber on flat ground), a dike strikes perpendicular to σ₃ (Anderson 1951); without a regional stress
+     * the strike there is undetermined and drawn at random.
+     */
+    public double regionalSigma3AzimuthDeg = Double.NaN;
 
     // ── Path ──
 
-    /** Strength of deflection down the edifice slope near the surface (dimensionless). */
+    /**
+     * Strength of deflection down the edifice slope near the surface (dimensionless). Edifice loading turns
+     * shallow dikes towards the flanks (Muller et al. 2001, J. Geophys. Res. 106; Acocella &amp; Neri 2009);
+     * the strength and depth scale here parametrise that effect (not computed from the load's stress field).
+     */
     public double deflectionStrength = 3.0;
     /** Depth over which edifice stresses fade (m); deflection ∝ exp(−depth / scale). */
     public double edificeDepthScale = 1500;
-    /** Half-width of the slope stencil on the terrain (blocks). */
-    public int slopeSampleRadius = 8;
+    /** Half-width of the slope stencil on the terrain (m). */
+    public double slopeSampleRadiusM = 200;
     /**
-     * Stationary standard deviation of the random heading perturbation (dimensionless slope). The
-     * perturbation is an Ornstein–Uhlenbeck process along the path, so dikes wander but stay roughly
-     * vertical.
+     * Stationary standard deviation of the random heading perturbation (dimensionless slope): host-rock
+     * heterogeneity (layering, old fractures) the model does not resolve. An Ornstein–Uhlenbeck process
+     * along the path, so dikes wander but stay roughly vertical. Statistical description, not derived.
      */
     public double headingNoise = 0.1;
     /** Correlation length of the heading perturbation along the path (m). */
@@ -69,80 +90,66 @@ public final class DikeConfig {
 
     // ── Seismicity and output ──
 
-    /** Mean number of VT hypocentres per km of tip advance. */
+    /**
+     * Mean number of VT hypocentres per km of tip advance (above the catalogue's minimum magnitude). An
+     * observational rate, of the order of the swarms that track propagating dikes (e.g. Sigmundsson et al.
+     * 2015, Nature 517); not derived. Hypocentres are placed along the dike's leading edge.
+     */
     public double hypocentersPerKm = 25;
-    /** Horizontal scatter of hypocentres around the tip (blocks). */
-    public double hypocenterJitterBlocks = 3;
-    public int minFissureLength = 3;
-    public int maxFissureLength = 60;
-    /** Finished dikes kept for queries and deformation (oldest are dropped first). */
+    /** Numerical: finished dikes kept for queries and deformation (oldest are dropped first). */
     public int maxRecordedDikes = 16;
 
     public static DikeConfig defaults() {
         return new DikeConfig();
     }
 
-    public DikeConfig withScaling(VolcanoScaling scaling) {
-        DikeConfig c = copy();
-        c.metersPerBlock = scaling.metersPerBlock();
-        return c;
-    }
-
     public DikeConfig copy() {
         DikeConfig c = new DikeConfig();
         c.stepPeriodSeconds = stepPeriodSeconds;
-        c.metersPerBlock = metersPerBlock;
-        c.initiationPressureRatio = initiationPressureRatio;
-        c.maxInitiationRate = maxInitiationRate;
         c.maxConcurrentDikes = maxConcurrentDikes;
         c.blocked = blocked;
-        c.startOffsetBlocks = startOffsetBlocks;
         c.shearModulusPa = shearModulusPa;
         c.poissonRatio = poissonRatio;
         c.rockDensity = rockDensity;
-        c.minOpening = minOpening;
-        c.maxOpening = maxOpening;
-        c.maxStrikeLength = maxStrikeLength;
         c.minCharacteristicHeight = minCharacteristicHeight;
+        c.fractureToughnessMPaSqrtM = fractureToughnessMPaSqrtM;
+        c.wallRockDiffusivity = wallRockDiffusivity;
+        c.magmaLatentHeat = magmaLatentHeat;
+        c.specificHeat = specificHeat;
+        c.geothermalGradientCPerKm = geothermalGradientCPerKm;
+        c.surfaceTemperatureC = surfaceTemperatureC;
+        c.regionalSigma3AzimuthDeg = regionalSigma3AzimuthDeg;
         c.maxSpeed = maxSpeed;
-        c.freezeSpeed = freezeSpeed;
-        c.stallPressureMPa = stallPressureMPa;
         c.maxSubstepMeters = maxSubstepMeters;
         c.deflectionStrength = deflectionStrength;
         c.edificeDepthScale = edificeDepthScale;
-        c.slopeSampleRadius = slopeSampleRadius;
+        c.slopeSampleRadiusM = slopeSampleRadiusM;
         c.headingNoise = headingNoise;
         c.headingCorrelationLength = headingCorrelationLength;
         c.hypocentersPerKm = hypocentersPerKm;
-        c.hypocenterJitterBlocks = hypocenterJitterBlocks;
-        c.minFissureLength = minFissureLength;
-        c.maxFissureLength = maxFissureLength;
         c.maxRecordedDikes = maxRecordedDikes;
         return c;
     }
 
     public void validate() {
         requirePositive("stepPeriodSeconds", stepPeriodSeconds);
-        requirePositive("metersPerBlock", metersPerBlock);
-        if (!(initiationPressureRatio > 0 && initiationPressureRatio < 1)) {
-            throw new IllegalArgumentException("initiationPressureRatio must be in (0, 1)");
-        }
         if (maxConcurrentDikes < 0) throw new IllegalArgumentException("maxConcurrentDikes must be >= 0");
         requirePositive("shearModulusPa", shearModulusPa);
         if (!(poissonRatio > 0 && poissonRatio < 0.5)) {
             throw new IllegalArgumentException("poissonRatio must be in (0, 0.5)");
         }
-        if (!(minOpening > 0 && maxOpening >= minOpening)) throw new IllegalArgumentException("invalid opening bounds");
-        requirePositive("maxStrikeLength", maxStrikeLength);
+        requirePositive("rockDensity", rockDensity);
+        requirePositive("fractureToughnessMPaSqrtM", fractureToughnessMPaSqrtM);
+        requirePositive("wallRockDiffusivity", wallRockDiffusivity);
+        requirePositive("magmaLatentHeat", magmaLatentHeat);
+        requirePositive("specificHeat", specificHeat);
+        if (!(geothermalGradientCPerKm >= 0)) throw new IllegalArgumentException("geothermalGradientCPerKm must be >= 0");
         requirePositive("minCharacteristicHeight", minCharacteristicHeight);
         requirePositive("maxSpeed", maxSpeed);
         requirePositive("maxSubstepMeters", maxSubstepMeters);
         requirePositive("edificeDepthScale", edificeDepthScale);
         requirePositive("headingCorrelationLength", headingCorrelationLength);
-        if (slopeSampleRadius < 1) throw new IllegalArgumentException("slopeSampleRadius must be >= 1");
-        if (minFissureLength < 1 || maxFissureLength < minFissureLength) {
-            throw new IllegalArgumentException("invalid fissure length bounds");
-        }
+        requirePositive("slopeSampleRadiusM", slopeSampleRadiusM);
         if (maxRecordedDikes < 1) throw new IllegalArgumentException("maxRecordedDikes must be >= 1");
     }
 

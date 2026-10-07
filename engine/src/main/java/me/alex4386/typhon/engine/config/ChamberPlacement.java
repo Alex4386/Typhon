@@ -4,13 +4,15 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
+import me.alex4386.typhon.engine.math.Point3;
 
 /**
  * A magma chamber placed by the user into a world: the definition of a new volcano with nothing built
- * yet. The chamber sits {@code depthM} below the ground at a column; its vent is {@link
- * me.alex4386.typhon.engine.volcano.VentSite#emergent emergent}, where the conduit from the chamber will
- * meet the ground, with no crater carved and no edifice. Cones, craters, islands and fissures come from
- * what the eruptions do. Fields left out take the defaults below (the server reports them in its schema).
+ * yet. The chamber sits {@code depthM} below the ground at a point, with no vent, no conduit, no crater
+ * and no edifice: its magma reaches the surface only through a dike that breaks out of it, whose fissure
+ * may localise into a vent. Cones, craters, islands and fissures come from what the eruptions do. Fields
+ * left out take the defaults below (the server reports them in its schema).
  */
 public final class ChamberPlacement {
     private ChamberPlacement() {}
@@ -18,11 +20,11 @@ public final class ChamberPlacement {
     /**
      * A placement request; {@code null} optional fields take the {@link Field#defaultValue defaults}.
      *
-     * @param x column of the chamber (and vent)
-     * @param z column of the chamber (and vent)
+     * @param x horizontal position of the chamber, east (m)
+     * @param z horizontal position of the chamber, south (m)
      * @param depthM depth of the chamber centre below the ground (m)
      */
-    public record Request(String name, int x, int z, double depthM, Double volumeM3, Double temperatureC, Double silicaWt,
+    public record Request(String name, double x, double z, double depthM, Double volumeM3, Double temperatureC, Double silicaWt,
             Double waterWt, Double co2Wt, Double crystalFraction, Double supplyRateM3PerS, Double tensileStrengthMPa,
             Double initialOverpressureMPa) {
         public Request {
@@ -56,7 +58,12 @@ public final class ChamberPlacement {
     /**
      * The fields of a placement. Defaults describe a shallow alkali-basalt reservoir like the one that
      * built Surtsey (SiO₂ ~46–47 wt%, 1150–1180 °C, H₂O < 1 wt%; Jakobsson et al. 2000), a cubic kilometre
-     * fed at ~0.06 km³/yr, starting unpressurised: it erupts once recharge breaks its roof.
+     * fed at ~0.06 km³/yr, starting unpressurised: it erupts once recharge breaks its roof. The roof breaks at
+     * an excess pressure about equal to the in-situ tensile strength of the host rock, 0.5–9 MPa and most
+     * commonly 2–4 MPa (Gudmundsson 2011, Rock Fractures in Geological Processes; Gudmundsson 2012, J.
+     * Volcanol. Geotherm. Res. 237–238); laboratory strengths of intact rock (5–15 MPa) overestimate it.
+     * Volume, depth and supply describe one possible reservoir, not a measured one (Surtsey's own
+     * plumbing is unknown).
      */
     public static final List<Field> FIELDS = List.of(
             new Field("depthM", "Depth below the ground", "m", 3000, 200, 20_000, false,
@@ -70,8 +77,8 @@ public final class ChamberPlacement {
             new Field("crystalFraction", "Crystals", "fraction", 0, 0, 0.6, false, null),
             new Field("supplyRateM3PerS", "Deep magma supply", "m³/s", 2, 0, 50, true,
                     "Magma arriving from depth; Kīlauea ~3–6 m³/s, Etna ~1."),
-            new Field("tensileStrengthMPa", "Roof strength", "MPa", 12, 0.5, 100, true,
-                    "Overpressure that breaks the rock above the chamber and starts an eruption."),
+            new Field("tensileStrengthMPa", "Rock tensile strength", "MPa", 3, 0.5, 100, true,
+                    "In-situ tensile strength of the host rock (0.5–9 MPa, usually 2–4): the walls fail and a dike breaks out at twice it."),
             new Field("initialOverpressureMPa", "Starting overpressure", "MPa", 0, 0, 100, false,
                     "0: a new chamber that must be recharged before it can erupt."));
 
@@ -86,34 +93,16 @@ public final class ChamberPlacement {
         return value(null, field);
     }
 
-    /**
-     * The definition of the new volcano {@code id} for {@code r}, with the ground at {@code groundZ} (m) at
-     * the chosen column, in a world of {@code metersPerColumn} columns.
-     */
-    public static VolcanoDefinition definition(String id, Request r, double groundZ, double metersPerColumn) {
-        double l = metersPerColumn;
-        int ventY = block(groundZ, l);
-        int chamberY = block(groundZ - r.depthM(), l);
+    /** The definition of the new volcano {@code id} for {@code r}, with the ground at {@code groundZ} (m) there. */
+    public static VolcanoDefinition definition(String id, Request r, double groundZ) {
         double temperature = value(r.temperatureC(), "temperatureC");
         double silica = value(r.silicaWt(), "silicaWt");
         double water = value(r.waterWt(), "waterWt");
         double co2 = value(r.co2Wt(), "co2Wt");
         double crystals = value(r.crystalFraction(), "crystalFraction");
 
-        Map<String, Object> vent = new LinkedHashMap<>();
-        vent.put("id", "vent");
-        vent.put("kind", "crater");
-        vent.put("x", r.x());
-        vent.put("y", ventY);
-        vent.put("z", r.z());
-        // an opening a conduit's width across (~20 m); the crater widens from what the eruption excavates
-        vent.put("radius", Math.max(1, (int) Math.round(20 / l)));
-        vent.put("emergent", true);
-        List<Object> vents = new ArrayList<>();
-        vents.add(vent);
-
         Map<String, Object> chamber = new LinkedHashMap<>();
-        chamber.put("center", WorldDefinition.map("x", r.x(), "y", chamberY, "z", r.z()));
+        chamber.put("center", WorldDefinition.map("x", r.x(), "y", groundZ - r.depthM(), "z", r.z()));
         chamber.put("volume", value(r.volumeM3(), "volumeM3"));
         chamber.put("lithostaticDepth", r.depthM());
         chamber.put("tensileStrengthMPa", value(r.tensileStrengthMPa(), "tensileStrengthMPa"));
@@ -131,21 +120,21 @@ public final class ChamberPlacement {
 
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("name", r.name() != null && !r.name().isBlank() ? r.name() : id);
-        root.put("vents", vents);
+        root.put("vents", new ArrayList<>()); // vents form from the eruptions
         root.put("magma", WorldDefinition.map("chamber", chamber));
         return VolcanoDefinition.parse(id, ConfigNode.root("volcanoes/" + id + ".yaml", root));
     }
 
     /**
      * A further chamber of an existing volcano's plumbing for {@code r}: the {@code magma.chambers} element
-     * (YAML tree) at column ({@code r.x}, {@code r.z}), {@code r.depthM} below ground at {@code groundZ}.
+     * (YAML tree) at ({@code r.x}, {@code r.z}), {@code r.depthM} below the ground at {@code groundZ} (m).
      * Fields left unset are not written, so they follow the volcano's main chamber; it gets no deep supply
      * unless {@code r} sets one. The server's one mapping from placement fields to definitions.
      */
-    public static Map<String, Object> chamberElement(String chamberId, Request r, double groundZ, double metersPerColumn) {
+    public static Map<String, Object> chamberElement(String chamberId, Request r, double groundZ) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", chamberId);
-        m.put("center", WorldDefinition.map("x", r.x(), "y", block(groundZ - r.depthM(), metersPerColumn), "z", r.z()));
+        m.put("center", WorldDefinition.map("x", r.x(), "y", groundZ - r.depthM(), "z", r.z()));
         m.put("lithostaticDepth", r.depthM());
         if (r.volumeM3() != null) m.put("volume", r.volumeM3());
         if (r.tensileStrengthMPa() != null) m.put("tensileStrengthMPa", r.tensileStrengthMPa());
@@ -183,11 +172,6 @@ public final class ChamberPlacement {
         return m;
     }
 
-    /** Index of the block whose top is at or just above {@code z} (m): a chamber centre's block. */
-    public static int blockBelow(double z, double metersPerColumn) {
-        return block(z, metersPerColumn);
-    }
-
     /**
      * The definition key of a placement field ({@code volumeM3} → {@code volume}); other names are
      * definition keys already ({@code rechargeTemperatureC}). Depth and position are handled by callers.
@@ -198,10 +182,5 @@ public final class ChamberPlacement {
             case "supplyRateM3PerS" -> "supplyRate";
             default -> field;
         };
-    }
-
-    /** Index of the block whose top is at or just above {@code z} (m). */
-    static int block(double z, double l) {
-        return (int) Math.ceil(z / l - 1e-6) - 1;
     }
 }

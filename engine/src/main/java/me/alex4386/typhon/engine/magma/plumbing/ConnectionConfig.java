@@ -18,8 +18,10 @@ import java.util.Objects;
  * @param open closed connections carry nothing (a dial: seal or open the pathway)
  * @param freezeOnStall whether a pathway whose flow stays below {@code stallRateM3PerS} for
  *     {@code freezeSeconds} of physical time freezes shut (magma solidifying in a stagnant conduit)
- * @param stallRateM3PerS flow below which the pathway counts as stalled (m³/s)
- * @param freezeSeconds physical seconds of stall before it freezes
+ * @param stallRateM3PerS flow below which the pathway counts as stalled (m³/s); NaN = computed, the flow too
+ *     slow to keep it from freezing (see {@link MagmaTransfer#stallRateM3PerS})
+ * @param freezeSeconds physical seconds of stall before it freezes; NaN = computed, the conductive
+ *     solidification time across its half-width (see {@link MagmaTransfer#freezeSeconds})
  */
 public record ConnectionConfig(String id, String from, String to, Kind kind, double radiusM, double widthM, double strikeLengthM,
         double lengthM, boolean open, boolean freezeOnStall, double stallRateM3PerS, double freezeSeconds) {
@@ -39,16 +41,20 @@ public record ConnectionConfig(String id, String from, String to, Kind kind, dou
         if (!(widthM > 0)) throw new IllegalArgumentException("widthM must be > 0");
         if (!(strikeLengthM > 0)) throw new IllegalArgumentException("strikeLengthM must be > 0");
         if (!Double.isNaN(lengthM) && !(lengthM > 0)) throw new IllegalArgumentException("lengthM must be > 0 (or NaN = computed)");
-        if (!(stallRateM3PerS >= 0)) throw new IllegalArgumentException("stallRateM3PerS must be >= 0");
-        if (!(freezeSeconds > 0)) throw new IllegalArgumentException("freezeSeconds must be > 0");
+        if (!Double.isNaN(stallRateM3PerS) && !(stallRateM3PerS >= 0)) {
+            throw new IllegalArgumentException("stallRateM3PerS must be >= 0 (or NaN = computed)");
+        }
+        if (!Double.isNaN(freezeSeconds) && !(freezeSeconds > 0)) {
+            throw new IllegalArgumentException("freezeSeconds must be > 0 (or NaN = computed)");
+        }
     }
 
     /**
      * Defaults: a 1.5 m conduit (basaltic feeders are metres across; Wilson &amp; Head 1981), or a 1 m dike
-     * 500 m long (Rubin 1995); freezing off.
+     * 500 m long (Rubin 1995); freezing off, its stall rate and freezing time computed from the pathway.
      */
     public static ConnectionConfig of(String id, String from, String to, Kind kind) {
-        return new ConnectionConfig(id, from, to, kind, 1.5, 1.0, 500, Double.NaN, true, false, 0.01, 3.0e7);
+        return new ConnectionConfig(id, from, to, kind, 1.5, 1.0, 500, Double.NaN, true, false, Double.NaN, Double.NaN);
     }
 
     public ConnectionConfig withOpen(boolean v) {

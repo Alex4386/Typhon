@@ -37,6 +37,18 @@ public final class ColumnStacks {
 
     private final double datumZ;
     private final Map<Long, Tile> tiles = new HashMap<>();
+    /**
+     * Dense index of {@link #tiles} over their bounding box (row-major in tile z, then x), rebuilt whenever
+     * a tile is added or replaced: column queries are by far the hottest path of the world model (repose
+     * relaxation, surface sampling), and an array read beats hashing a boxed key. {@code null} when the
+     * bounding box would be too sparse ({@link #MAX_INDEX_SLOTS}); lookups then use the map.
+     */
+    private Tile[] index = new Tile[0];
+    private int indexX0;
+    private int indexZ0;
+    private int indexW;
+    private int indexH;
+    private static final int MAX_INDEX_SLOTS = 1 << 22;
 
     public ColumnStacks(double datumZ) {
         this.datumZ = datumZ;
@@ -158,24 +170,65 @@ public final class ColumnStacks {
     }
 
     static int tileCoord(int c) {
-        return Math.floorDiv(c, TILE);
+        return c >> 5; // floorDiv(c, TILE)
     }
 
     static int local(int x, int z) {
-        return (Math.floorMod(z, TILE) << 5) | Math.floorMod(x, TILE);
+        return ((z & (TILE - 1)) << 5) | (x & (TILE - 1)); // floorMod per axis
     }
 
     Tile tile(int x, int z) {
-        return tiles.get(key(tileCoord(x), tileCoord(z)));
+        return tileAt(x >> 5, z >> 5);
+    }
+
+    private Tile tileAt(int tx, int tz) {
+        Tile[] idx = index;
+        if (idx == null) return tiles.get(key(tx, tz));
+        int i = tx - indexX0;
+        int j = tz - indexZ0;
+        if (i < 0 || j < 0 || i >= indexW || j >= indexH) return null;
+        return idx[j * indexW + i];
     }
 
     private Tile tileOrCreate(int x, int z) {
         int tx = tileCoord(x);
         int tz = tileCoord(z);
-        return tiles.computeIfAbsent(key(tx, tz), k -> {
-            editCount++;
-            return new Tile(tx, tz);
-        });
+        Tile t = tileAt(tx, tz);
+        if (t != null) return t;
+        t = new Tile(tx, tz);
+        tiles.put(key(tx, tz), t);
+        editCount++;
+        reindex();
+        return t;
+    }
+
+    /** Rebuilds {@link #index} after the tile set changed. */
+    private void reindex() {
+        if (tiles.isEmpty()) {
+            index = new Tile[0];
+            indexW = indexH = 0;
+            return;
+        }
+        int x0 = Integer.MAX_VALUE, z0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, z1 = Integer.MIN_VALUE;
+        for (Tile t : tiles.values()) {
+            x0 = Math.min(x0, t.tx);
+            z0 = Math.min(z0, t.tz);
+            x1 = Math.max(x1, t.tx);
+            z1 = Math.max(z1, t.tz);
+        }
+        long w = (long) x1 - x0 + 1;
+        long h = (long) z1 - z0 + 1;
+        if (w * h > MAX_INDEX_SLOTS) {
+            index = null;
+            return;
+        }
+        Tile[] idx = new Tile[(int) (w * h)];
+        for (Tile t : tiles.values()) idx[(t.tz - z0) * (int) w + (t.tx - x0)] = t;
+        indexX0 = x0;
+        indexZ0 = z0;
+        indexW = (int) w;
+        indexH = (int) h;
+        index = idx;
     }
 
     /** Tiles sorted by key (deterministic iteration for persistence). */
@@ -188,11 +241,13 @@ public final class ColumnStacks {
     void putTile(Tile tile) {
         tiles.put(key(tile.tx, tile.tz), tile);
         editCount++;
+        reindex();
     }
 
     void clear() {
         tiles.clear();
         editCount++;
+        reindex();
     }
 
     /**
@@ -232,7 +287,7 @@ public final class ColumnStacks {
      * of the tile is edited, so derived caches can be refreshed per tile.
      */
     public long tileVersion(int tileX, int tileZ) {
-        Tile t = tiles.get(key(tileX, tileZ));
+        Tile t = tileAt(tileX, tileZ);
         if (t == null) return 0;
         long sum = t.size();
         for (int v : t.version) sum += v;
@@ -320,16 +375,32 @@ public final class ColumnStacks {
      */
     public long versionSum(int x0, int z0, int width, int depth) {
         long sum = 0;
-        Tile t = null;
-        long tileKey = Long.MIN_VALUE;
         for (int z = z0; z < z0 + depth; z++) {
             for (int x = x0; x < x0 + width; x++) {
-                long k = key(tileCoord(x), tileCoord(z));
-                if (k != tileKey) {
-                    t = tiles.get(k);
-                    tileKey = k;
-                }
+                Tile t = tile(x, z);
                 if (t != null) sum += t.version[local(x, z)];
+            }
+        }
+        return sum;
+    }
+
+    /**
+     * Fingerprint of a rectangle of columns: changes whenever any column under it is edited or its standing
+     * water changes (which {@link #version} does not count). A 64-bit mix per column, so per-column caches
+     * can skip columns that did not change inside a tile that did.
+     */
+    public long footprint(int x0, int z0, int width, int depth) {
+        long sum = 0;
+        for (int z = z0; z < z0 + depth; z++) {
+            for (int x = x0; x < x0 + width; x++) {
+                Tile t = tile(x, z);
+                if (t == null) continue;
+                int c = local(x, z);
+                long h = ((long) t.version[c] << 32) ^ (Float.floatToRawIntBits(t.water[c]) & 0xffffffffL);
+                h ^= pack(x, z) * 0x9e3779b97f4a7c15L;
+                h = (h ^ (h >>> 30)) * 0xbf58476d1ce4e5b9L;
+                h = (h ^ (h >>> 27)) * 0x94d049bb133111ebL;
+                sum += h ^ (h >>> 31);
             }
         }
         return sum;
@@ -418,7 +489,8 @@ public final class ColumnStacks {
      * {@link #local}) to its new layers.
      */
     public void setLayersBatch(int tileX, int tileZ, Map<Integer, List<LayerSpec>> replacements) {
-        Tile t = tiles.computeIfAbsent(key(tileX, tileZ), k -> new Tile(tileX, tileZ));
+        Tile t = tileAt(tileX, tileZ);
+        if (t == null) t = new Tile(tileX, tileZ);
         int total = 0;
         for (int c = 0; c < TILE_AREA; c++) {
             List<LayerSpec> r = replacements.get(c);
@@ -452,6 +524,7 @@ public final class ColumnStacks {
         for (int c : replacements.keySet()) enforceCap(fresh, c);
         tiles.put(key(tileX, tileZ), fresh);
         editCount++;
+        reindex();
     }
 
     /** Local index of column {@code (x, z)} inside its tile. */
@@ -491,6 +564,8 @@ public final class ColumnStacks {
             // a dusting on a dusting (ash between bomb clasts, lapilli on ash): one thin loose layer, not a
             // stack of near-zero layers
             t.top[g] = (float) (t.top[g] + thickness);
+        } else if (t.count(c) >= MAX_LAYERS) {
+            depositAtCap(t, c, t.top[g] + thickness, material, unit, por, weld, (byte) flags);
         } else {
             double newTop = t.top[g] + thickness;
             t.insert(c, g + 1, 1);
@@ -634,6 +709,42 @@ public final class ColumnStacks {
                 g++;
             }
         }
+    }
+
+    /** Per-thread one-column workspace for {@link #depositAtCap}. */
+    private static final ThreadLocal<Tile> CAP_SCRATCH = ThreadLocal.withInitial(() -> new Tile(0, 0));
+
+    /**
+     * Pushes a new top layer onto a column that is at the layer cap: the same as inserting it and
+     * {@link #enforceCap merging}, but the merge happens on a copy of the column, so the tile's tail is not
+     * shifted up and back down for every deposit (old columns under steady ash fall sit at the cap).
+     */
+    private void depositAtCap(Tile t, int c, double newTop, short material, int unit, byte por, byte weld, byte fl) {
+        int s = t.start[c];
+        int n = t.count(c);
+        Tile w = CAP_SCRATCH.get();
+        w.ensure(n + 1);
+        System.arraycopy(t.top, s, w.top, 0, n);
+        System.arraycopy(t.material, s, w.material, 0, n);
+        System.arraycopy(t.unit, s, w.unit, 0, n);
+        System.arraycopy(t.porosity, s, w.porosity, 0, n);
+        System.arraycopy(t.voidFrac, s, w.voidFrac, 0, n);
+        System.arraycopy(t.welding, s, w.welding, 0, n);
+        System.arraycopy(t.flags, s, w.flags, 0, n);
+        w.set(n, newTop, material, unit, por, (byte) 0, weld, fl);
+        w.start[0] = 0;
+        Arrays.fill(w.start, 1, TILE_AREA + 1, n + 1);
+        enforceCap(w, 0);
+        int m = w.count(0);
+        if (m > n) t.insert(c, s + n, m - n);
+        else if (m < n) t.remove(c, s + m, n - m);
+        System.arraycopy(w.top, 0, t.top, s, m);
+        System.arraycopy(w.material, 0, t.material, s, m);
+        System.arraycopy(w.unit, 0, t.unit, s, m);
+        System.arraycopy(w.porosity, 0, t.porosity, s, m);
+        System.arraycopy(w.voidFrac, 0, t.voidFrac, s, m);
+        System.arraycopy(w.welding, 0, t.welding, s, m);
+        System.arraycopy(w.flags, 0, t.flags, s, m);
     }
 
     /** Merges the thinnest adjacent pairs until the column has at most {@link #MAX_LAYERS} layers. */

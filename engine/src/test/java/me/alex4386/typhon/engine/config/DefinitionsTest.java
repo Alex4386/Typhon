@@ -7,10 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.save.SaveFormat;
 import me.alex4386.typhon.engine.volcano.VentKind;
-import me.alex4386.typhon.engine.world.BlockId;
 import org.junit.jupiter.api.Test;
 
 class DefinitionsTest {
@@ -19,7 +18,6 @@ class DefinitionsTest {
             seed: 42
             baseStepMs: 50
             grid: {metersPerColumn: 4, solverSpacing: 16}
-            scaling: {plumeMetersPerBlock: 100, dormantTimeCompression: 5000, eruptiveTimeCompression: 20}
             seaLevel: .nan
             climate:
               rainfallMmPerHour: 2
@@ -37,19 +35,17 @@ class DefinitionsTest {
     static final String VOLCANO = """
             name: West cone
             vents:
-              - {id: summit, kind: crater, x: -30, y: 70, z: 0, radius: 5}
-              - {id: rift, kind: fissure, x: -10, y: 55, z: 8, angleDeg: 30, length: 16}
-            timeCompression: {eruptive: 10}
-            ballisticFraction: 0.1
+              - {id: summit, kind: crater, x: -120, y: 280, z: 0, radiusM: 20}
+              - {id: rift, kind: fissure, x: -40, y: 220, z: 32, angleDeg: 30, lengthM: 64}
             magma:
               chamber:
-                center: {x: -30, y: -20, z: 0}
+                center: {x: -120, y: -3000, z: 0}
                 volume: 1.0e9
                 supplyRate: 0.5
                 initialSilicaWt: 51
               conduit: {initialOpenness: 1.0}
             dikes: {enabled: true, blocked: true}
-            geothermal: {center: {x: -30, y: 70, z: 0}, maxGeysers: 3, alterableSurfaces: ["minecraft:stone"]}
+            geothermal: {center: {x: -120, y: 280, z: 0}, maxGeysers: 3}
             massFlows: {pdc: {frictionCoefficient: 0.2}}
             deformation: {enabled: false}
             tephra: {bombMedianDiameter: 0.4}
@@ -72,8 +68,6 @@ class DefinitionsTest {
         assertEquals(50_000, w.baseStepMicros());
         assertEquals(4, w.spec().metersPerColumn());
         assertEquals(16, w.spec().solverSpacing());
-        assertEquals(4, w.scaling().metersPerBlock());
-        // the fixture still has scaling.*TimeCompression: retired keys load and are ignored
         assertTrue(Double.isNaN(w.spec().seaLevelZ()));
         assertEquals(2, w.spec().basement().size());
         assertEquals("basalt", w.spec().edificeMaterial());
@@ -91,19 +85,16 @@ class DefinitionsTest {
         assertEquals(2, v.vents().size());
         assertEquals(VentKind.FISSURE, v.vents().get(1).kind());
         assertEquals(Math.toRadians(30), v.vents().get(1).fissureAngleRad(), 1e-12);
-        assertEquals(new BlockPos(-30, -20, 0), v.chamber().center());
+        assertEquals(new Point3(-120, -3000, 0), v.chamber().center());
         assertEquals(1.0e9, v.chamber().volume());
         assertEquals(0.5, v.chamber().supplyRate());
         assertEquals(1.0, v.chamber().conduit().initialOpenness());
         assertTrue(v.dikes().blocked);
         assertEquals(3, v.geothermal().maxGeysers);
-        assertTrue(v.geothermal().alterableSurfaces.contains(BlockId.minecraft("stone")));
-        assertEquals(new BlockPos(-30, 70, 0), v.geothermalCenter());
+        assertEquals(new Point3(-120, 280, 0), v.geothermalCenter());
         assertEquals(0.2, v.pdc().frictionCoefficient);
         assertFalse(v.deformation());
         assertEquals(0.4, v.tephra().bombMedianDiameter);
-        // the fixture's retired timeCompression section is ignored: one physical clock
-        assertEquals(world().scaling(), v.scaling(world().scaling()));
         assertEquals("basalt", v.edificeMaterial());
     }
 
@@ -157,22 +148,14 @@ class DefinitionsTest {
                 magma: {chamber: {volume: big}}
                 """);
         assertTrue(msg.contains("magma.chamber.volume: expected a number"), msg);
-        String vent = error("v", "vents: [{id: a, x: 1.5, y: 0, z: 0}]");
-        assertTrue(vent.contains("vents[0].x: expected an integer"), vent);
-    }
-
-    @Test
-    void scaledValuesCannotBeSetPerVolcano() {
-        String msg = error("v", """
-                vents: [{id: a, x: 0, y: 0, z: 0}]
-                dikes: {metersPerBlock: 2}
-                """);
-        assertTrue(msg.contains("dikes.metersPerBlock: is derived from the world scaling"), msg);
+        String vent = error("v", "vents: [{id: a, x: east, y: 0, z: 0}]");
+        assertTrue(vent.contains("vents[0].x: expected a number"), vent);
     }
 
     @Test
     void structuralErrors() {
-        assertTrue(error("v", "name: x").contains("vents: at least one vent is required"));
+        // no vent yet is fine (a placed chamber), but then nothing places the chamber
+        assertTrue(error("v", "name: x").contains("a volcano without vents needs its chamber's centre"));
         assertTrue(error("v", "id: other\nvents: [{id: a}]").contains("does not match the file name"));
         assertTrue(error("v", "vents: [{id: a}, {id: a}]").contains("duplicate vent id"));
         assertTrue(error("v", "vents: [{id: a, kind: cone}]").contains("expected crater or fissure"));
@@ -184,23 +167,7 @@ class DefinitionsTest {
                 () -> WorldDefinition.parse(Yaml.parse("world.yaml", "name: w\ngeology: {basement: [{material: lava, top: 0}]}")))
                 .getMessage();
         assertTrue(world.contains("world.yaml: geology.basement[0]: Unknown material 'lava'"), world);
-        String scale = assertThrows(ConfigException.class,
-                () -> WorldDefinition.parse(Yaml.parse("world.yaml", "name: w\nscaling: {metersPerBlock: 3}")))
-                .getMessage();
-        assertTrue(scale.contains("grid.metersPerColumn"), scale);
     }
 
-    @Test
-    void oldDikeSwitchesLoadAndAreIgnored() {
-        VolcanoDefinition v = volcano("old", """
-                name: Old cone
-                vents: [{id: main, x: 0, y: 64, z: 0}]
-                magma:
-                  chamber: {center: {x: 0, y: -20, z: 0}, volume: 1.0e9}
-                dikes: {enabled: true, conduitSealing: 0.9, ruptureNucleation: false, nucleateDuringEruption: true}
-                """);
-        assertNotNull(v.dikes(), "the old switches leave dikes on");
-        assertTrue(!v.dikes().blocked, "the merged switches do not block dikes; dikes.blocked does");
-    }
 }
 

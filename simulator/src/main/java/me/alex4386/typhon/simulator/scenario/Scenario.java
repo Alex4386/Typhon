@@ -80,11 +80,7 @@ public final class Scenario {
         attachRelief(terrain, initialTerrain);
         this.restored = restore != null;
         this.session = null;
-        if (restored) {
-            warnLegacyVoxelLog(restore);
-        } else {
-            this.engine.submit(initialTerrain.toSnapshot());
-        }
+        if (!restored) this.engine.submit(initialTerrain.toImport());
     }
 
     private Scenario(String name, World session, ColumnGrid initialTerrain, boolean restored) {
@@ -97,29 +93,11 @@ public final class Scenario {
         this.afterFirstTick = List.of();
         this.engine = session.engine();
         ColumnGrid.Relief relief = initialTerrain.relief();
-        if (relief != null) {
-            double size = terrain.world().spec().metersPerColumn();
-            session.setRelief((xm, zm) -> relief.topBlocks(xm / size, zm / size) * size);
-        }
+        if (relief != null) session.setRelief(relief::elevation);
         if (initialTerrain.source() != null) session.setTerrainGenerator(initialTerrain.source());
         this.expansion = session.expansion();
         this.restored = restored;
         this.session = session;
-        if (restored) warnLegacyVoxelLog(session.stateStore());
-    }
-
-    /** Where saves before the continuous engine kept the simulator's block world (an edit log). */
-    public static final String LEGACY_VOXEL_PATH = "host/voxel-world.bin";
-
-    /**
-     * Saves from before the continuous engine also hold a block edit log; the world model in the engine
-     * state is the whole world now, so the log is ignored (with a warning).
-     */
-    private static void warnLegacyVoxelLog(SaveStore store) {
-        if (store.read(LEGACY_VOXEL_PATH) != null) {
-            System.err.println("warning: ignoring the legacy voxel edit log " + LEGACY_VOXEL_PATH
-                    + " (the engine's world model is the world now)");
-        }
     }
 
     /**
@@ -137,17 +115,11 @@ public final class Scenario {
     private static void attachRelief(TerrainModel terrain, ColumnGrid grid) {
         ColumnGrid.Relief relief = grid.relief();
         if (relief == null) return;
-        var world = terrain.world();
-        world.setRelief((xm, zm) -> {
-            double size = world.spec().metersPerColumn();
-            return relief.topBlocks(xm / size, zm / size) * size;
-        });
+        terrain.world().setRelief(relief::elevation);
     }
 
-    /** Real-scale worlds (columns ≥ 10 m) show this much terrain around the core by default (m). */
-    public static final double REAL_CONTEXT_M = 30_000;
-    /** Compact worlds show at least this much (m), and at least four core widths. */
-    public static final double COMPACT_CONTEXT_M = 6_000;
+    /** Worlds show this much terrain around the core by default (m), and at least the core itself. */
+    public static final double CONTEXT_M = 30_000;
 
     private double contextExtentM = Double.NaN;
     private ContextTerrain context;
@@ -163,14 +135,13 @@ public final class Scenario {
 
     /**
      * The coarse terrain around the simulated core ({@link ContextTerrain}), by default 30 km wide
-     * for real-scale worlds and four core widths (at least 6 km) for compact ones.
+     * (at least the core's width).
      */
     public synchronized ContextTerrain context() {
         if (context == null) {
             double size = terrain.world().spec().metersPerColumn();
             double core = initialTerrain.size() * size;
-            double extent = !Double.isNaN(contextExtentM) ? contextExtentM
-                    : size >= 10 ? Math.max(REAL_CONTEXT_M, core) : Math.max(COMPACT_CONTEXT_M, 4 * core);
+            double extent = !Double.isNaN(contextExtentM) ? contextExtentM : Math.max(CONTEXT_M, core);
             context = new ContextTerrain(initialTerrain, size, extent);
         }
         return context;
@@ -234,12 +205,13 @@ public final class Scenario {
         private Options options = Options.DEFAULT;
 
         public Builder(String presetName, long seed, ColumnGrid terrainGrid, LavaConfig lavaConfig) {
-            this(presetName, seed, terrainGrid, lavaConfig, new TerrainModel());
+            this(presetName, seed, terrainGrid, lavaConfig,
+                    new TerrainModel(new WorldModel(WorldSpec.withColumns(terrainGrid.metersPerColumn()))));
         }
 
         /**
          * A scenario on a world model with explicit geology ({@code spec}, its metres per column must
-         * match the volcanoes' scaling) and volcano edifices applied to imported columns.
+         * match the terrain grid's) and volcano edifices applied to imported columns.
          */
         public Builder(String presetName, long seed, ColumnGrid terrainGrid, WorldSpec spec, List<Edifice> edifices) {
             this(presetName, seed, terrainGrid, LavaConfig.defaults(), worldTerrain(spec, edifices));

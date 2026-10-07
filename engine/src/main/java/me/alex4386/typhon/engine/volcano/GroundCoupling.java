@@ -21,20 +21,29 @@ public interface GroundCoupling {
     /** Removes up to {@code volumeM3} of surface water at a column (boiled or displaced); returns the volume removed. */
     double removeSurfaceWater(int x, int z, double volumeM3);
 
+    /**
+     * Temperature (°C) of the rock {@code depthM} metres below the ground at horizontal position {@code (x, z)}
+     * (m), as the ground model has it (warmed by earlier intrusions and flows); NaN where the model does
+     * not reach (callers fall back to a geotherm).
+     */
+    default double rockTemperatureC(double x, double z, double depthM) {
+        return Double.NaN;
+    }
+
     /** Heat (J) conducted into the ground under a column. */
     void addGroundHeat(int x, int z, double joules);
 
     /**
-     * Width (columns) of the ground model's heat cells: callers may sum heat over aligned blocks of
-     * this size and hand it over once per block (at the block's centre column).
+     * Width (columns) of the ground model's heat cells: callers may sum heat over aligned squares of
+     * this size and hand it over once per square (at its centre column).
      */
     default int heatCellColumns() {
         return 1;
     }
 
     /**
-     * Heat of an intruded sheet segment cooling into its host rock: centred on column {@code (x, z)}
-     * at {@code depthM} physical metres below the ground, {@code areaM2} of sheet {@code widthM}
+     * Heat of an intruded sheet segment cooling into its host rock: centred at horizontal position
+     * {@code (x, z)} (m) at {@code depthM} metres below the ground, {@code areaM2} of sheet {@code widthM}
      * thick, emplaced at {@code temperatureC} (it releases {@code ρ (c ΔT + L) · width · area}).
      */
     void addIntrusionHeat(double x, double z, double depthM, double areaM2, double widthM, double temperatureC);

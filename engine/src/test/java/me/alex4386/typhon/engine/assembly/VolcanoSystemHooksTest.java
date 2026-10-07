@@ -8,36 +8,34 @@ import me.alex4386.typhon.engine.geothermal.GeothermalConfig;
 import me.alex4386.typhon.engine.geothermal.GeothermalGrid;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.VentSite;
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import org.junit.jupiter.api.Test;
 
 /** Wind, geothermal centring and prewarming hooks on {@link VolcanoSystem}. */
 class VolcanoSystemHooksTest {
-    private static final VentSite FLANK = VentSite.crater("flank", new BlockPos(60, 90, -20), 3);
-    private static final VentSite SUMMIT = VentSite.crater("summit", new BlockPos(0, 120, 0), 4);
+    private static final VentSite FLANK = VentSite.crater("flank", new Point3(600, 400, -200), 30);
+    private static final VentSite SUMMIT = VentSite.crater("summit", new Point3(5, 600, 5), 40);
 
     private static VolcanoSystem.Builder builder() {
         TerrainModel terrain = new TerrainModel();
         return VolcanoSystem.builder("v", List.of(FLANK, SUMMIT), terrain, new LavaFlow(terrain))
-                .chamber(MagmaChamberConfig.builder("v", new BlockPos(0, 40, 0)).build())
-                .scaling(new VolcanoScaling(4, 100));
+                .chamber(MagmaChamberConfig.builder("v", new Point3(0, -3000, 0)).build());
     }
 
     @Test
-    void windIsGivenInRealUnitsAndScaled() {
+    void windIsGivenInRealUnits() {
         VolcanoSystem volcano = builder().wind(10, 1.0, 0.2).build();
-        assertEquals(10 / Math.sqrt(4), volcano.tephra().wind().baseSpeed(), 1e-12, "Froude: v / sqrt(L)");
+        assertEquals(10, volcano.tephra().wind().baseSpeed(), 1e-12, "real wind speed (m/s), unscaled");
         assertEquals(1.0, volcano.tephra().wind().baseDirectionRad());
         assertEquals(0.2, volcano.tephra().wind().variability());
 
         volcano.setWind(16, 2.0, 0);
         Engine engine = volcano.addTo(Engine.builder(1)).build();
         engine.step();
-        assertEquals(16 / Math.sqrt(4), volcano.tephra().wind().baseSpeed(), 1e-12);
+        assertEquals(16, volcano.tephra().wind().baseSpeed(), 1e-12);
         assertEquals(2.0, volcano.tephra().wind().baseDirectionRad());
     }
 
@@ -49,7 +47,7 @@ class VolcanoSystemHooksTest {
         assertEquals(-extent / 2, grid.minX(), "centred above the chamber (x = 0), not on the flank vent");
         assertEquals(-extent / 2, grid.minZ());
 
-        VolcanoSystem custom = builder().geothermalCenter(new BlockPos(100, 64, 100)).build();
+        VolcanoSystem custom = builder().geothermalCenter(new Point3(1005, 64, 1005)).build(); // column 100 at 10 m
         assertEquals(100 - extent / 2, custom.geothermal().grid().minX());
     }
 

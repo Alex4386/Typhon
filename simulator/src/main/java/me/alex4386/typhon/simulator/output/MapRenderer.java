@@ -13,7 +13,6 @@ import me.alex4386.typhon.engine.geothermal.Geothermal;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeature;
 import me.alex4386.typhon.engine.geothermal.PlacedFeature;
 import me.alex4386.typhon.engine.tephra.TephraSubsystem;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.simulator.scenario.Scenario;
 import me.alex4386.typhon.simulator.terrain.ColumnGrid;
 
@@ -28,8 +27,9 @@ public final class MapRenderer {
     private final ColumnGrid grid;
     private final int step;
     private final int width;
-    private final double[][] top;      // final ground surface, in blocks (world-model surface + uplift over L)
-    private final double[][] initial;  // initial ground surface, in blocks (the top of the initial ground block)
+    private final double[][] top;      // final ground surface (m): world-model surface + uplift
+    private final double metersPerColumn;
+    private final double[][] initial;  // initial ground surface (m)
 
     public MapRenderer(Scenario scenario) {
         this.scenario = scenario;
@@ -39,13 +39,13 @@ public final class MapRenderer {
         this.top = new double[width][width];
         this.initial = new double[width][width];
         var world = scenario.world();
-        double l = world.spec().metersPerColumn();
+        this.metersPerColumn = world.spec().metersPerColumn();
         for (int j = 0; j < width; j++) {
             for (int i = 0; i < width; i++) {
                 int x = x(i);
                 int z = z(j);
-                initial[j][i] = grid.ground(x, z) + 1;
-                top[j][i] = world.isKnown(x, z) ? (world.surfaceZ(x, z) + world.uplift(x, z)) / l : initial[j][i];
+                initial[j][i] = grid.surfaceZ(x, z);
+                top[j][i] = world.isKnown(x, z) ? world.surfaceZ(x, z) + world.uplift(x, z) : initial[j][i];
             }
         }
     }
@@ -99,7 +99,6 @@ public final class MapRenderer {
         BufferedImage img = image();
         var world = scenario.world();
         var lava = scenario.lava();
-        double l = world.spec().metersPerColumn();
         for (int j = 0; j < width; j++) {
             for (int i = 0; i < width; i++) {
                 double shade = hillshade(top, i, j);
@@ -107,7 +106,7 @@ public final class MapRenderer {
                 Color c = ramp(t, TERRAIN);
                 int x = x(i), z = z(j);
                 if (lava.thickness(x, z) > 0) c = new Color(255, 120, 20);
-                else if (world.isKnown(x, z) && world.waterZ(x, z) > top[j][i] * l) c = new Color(40, 90, 200);
+                else if (world.isKnown(x, z) && world.waterZ(x, z) > top[j][i]) c = new Color(40, 90, 200);
                 img.setRGB(i, j, shadeColor(c, shade).getRGB());
             }
         }
@@ -177,15 +176,14 @@ public final class MapRenderer {
             for (int i = 0; i < width; i++) {
                 int x = x(i), z = z(j);
                 double shade = hillshade(top, i, j);
-                double t = geo.grid().containsBlock(x, z) ? geo.temperatureAt(x, z) : Double.NaN;
-                TerrainColumn col = grid.column(x, z);
+                double t = geo.grid().containsColumn(x, z) ? geo.temperatureAt(x, z) : Double.NaN;
                 Color c;
                 if (Double.isNaN(t)) {
                     c = new Color(210, 210, 210);
                 } else {
                     c = ramp(Math.max(0, Math.min(1, (t - 15) / 285)), HEAT);
                 }
-                if (col.submerged()) c = mix(c, new Color(40, 90, 200), 0.35);
+                if (grid.column(x, z).submerged()) c = mix(c, new Color(40, 90, 200), 0.35);
                 img.setRGB(i, j, shadeColor(c, 0.5 + 0.5 * shade).getRGB());
             }
         }
@@ -243,8 +241,8 @@ public final class MapRenderer {
 
     /** Lambertian hillshade in [0, 1], light from the north-west at 45°. */
     private double hillshade(double[][] h, int i, int j) {
-        double dzdx = (h[j][Math.min(width - 1, i + 1)] - h[j][Math.max(0, i - 1)]) / (2.0 * step);
-        double dzdy = (h[Math.min(width - 1, j + 1)][i] - h[Math.max(0, j - 1)][i]) / (2.0 * step);
+        double dzdx = (h[j][Math.min(width - 1, i + 1)] - h[j][Math.max(0, i - 1)]) / (2.0 * step * metersPerColumn);
+        double dzdy = (h[Math.min(width - 1, j + 1)][i] - h[Math.max(0, j - 1)][i]) / (2.0 * step * metersPerColumn);
         double nx = -dzdx, ny = -dzdy, nz = 1;
         double norm = Math.sqrt(nx * nx + ny * ny + nz * nz);
         double lx = -0.5, ly = -0.5, lz = Math.sqrt(0.5);

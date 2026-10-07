@@ -45,12 +45,6 @@ public final class WorldModel implements WorldQuery, WorldEdit {
     private final List<DepositObserver> depositObservers = new ArrayList<>();
     /** Keeps loose deposits at or below their angle of repose (null until a host enables it). */
     private ReposeRelaxation repose;
-    /**
-     * Version of the repose rule this world's loose deposits already obey. Fresh worlds start current; a
-     * state saved before the rule (no version) gets one deterministic sweep of every loose column on load.
-     */
-    public static final int REPOSE_VERSION = 1;
-    private int reposeVersion = REPOSE_VERSION;
 
     public WorldModel(WorldSpec spec) {
         this.spec = Objects.requireNonNull(spec);
@@ -146,7 +140,7 @@ public final class WorldModel implements WorldQuery, WorldEdit {
     private List<ColumnStacks.LayerSpec> importLayers(int x, int z, double surfaceZ, Material coverMaterial) {
         Material cover = coverMaterial != null ? coverMaterial : MaterialTable.require(spec.surfaceMaterial());
         Material country = MaterialTable.require(spec.edificeMaterial());
-        Edifice zone = edifices.isEmpty() ? null : Edifice.at(edifices, x, z);
+        Edifice zone = edifices.isEmpty() ? null : Edifice.at(edifices, x, z, spec.metersPerColumn());
         double coverBottom = Math.max(spec.datumZ(), surfaceZ - spec.surfaceThickness());
         List<ColumnStacks.LayerSpec> layers = new ArrayList<>();
         double previous = spec.datumZ();
@@ -307,9 +301,9 @@ public final class WorldModel implements WorldQuery, WorldEdit {
             double f = segLength > 0 ? (along - cumulative[segment]) / segLength : 0;
             double px = polylineXZ[2 * segment] + f * (polylineXZ[2 * segment + 2] - polylineXZ[2 * segment]);
             double pz = polylineXZ[2 * segment + 1] + f * (polylineXZ[2 * segment + 3] - polylineXZ[2 * segment + 1]);
-            int cx = (int) Math.floor(px);
-            int cz = (int) Math.floor(pz);
-            u[iu] = along * spec.metersPerColumn();
+            int cx = (int) Math.floor(px / spec.metersPerColumn());
+            int cz = (int) Math.floor(pz / spec.metersPerColumn());
+            u[iu] = along;
             surface[iu] = (float) stacks.surface(cx, cz);
             for (int iz = 0; iz < nz; iz++) {
                 double elevation = zMax - (iz + 0.5) * (zMax - zMin) / nz;
@@ -377,37 +371,24 @@ public final class WorldModel implements WorldQuery, WorldEdit {
      */
     public ReposeRelaxation enableReposeRelaxation() {
         if (repose == null) repose = new ReposeRelaxation(this);
-        upgradeRepose();
         return repose;
     }
 
-    /** The repose rule version the loose deposits obey (see {@link #REPOSE_VERSION}). */
-    public int reposeVersion() {
-        return reposeVersion;
-    }
-
-    /** Marks the deposits as made before the repose rule (tests of the migration sweep). */
-    void markPreRepose() {
-        reposeVersion = 0;
-    }
-
     /**
-     * One-time migration: deposits saved before the repose rule (e.g. single-column tephra towers) relax once,
-     * every column in tile and column order, then the version is recorded so it never runs again.
+     * Runs a sweep of edits with repose relaxation deferred to its end ({@link ReposeRelaxation#hold()}): every
+     * column touched is relaxed in one drain afterwards. The edits must not depend on the relaxed surface.
      */
-    private void upgradeRepose() {
-        if (repose == null || reposeVersion >= REPOSE_VERSION) return;
-        long[] keys = stacks.tileKeys();
-        java.util.Arrays.sort(keys);
-        for (long key : keys) {
-            int x0 = ColumnStacks.keyTileX(key) * ColumnStacks.TILE;
-            int z0 = ColumnStacks.keyTileZ(key) * ColumnStacks.TILE;
-            for (int dz = 0; dz < ColumnStacks.TILE; dz++) {
-                for (int dx = 0; dx < ColumnStacks.TILE; dx++) repose.enqueue(x0 + dx, z0 + dz);
-            }
+    public void withRelaxationDeferred(Runnable edits) {
+        if (repose == null) {
+            edits.run();
+            return;
         }
-        repose.drain();
-        reposeVersion = REPOSE_VERSION;
+        repose.hold();
+        try {
+            edits.run();
+        } finally {
+            repose.release();
+        }
     }
 
     /** The repose relaxation, or {@code null} when not enabled. */
@@ -556,7 +537,6 @@ public final class WorldModel implements WorldQuery, WorldEdit {
             water.add(entry);
         }
         world.add("pendingWater", water);
-        world.addProperty("reposeVersion", reposeVersion);
         out.json().add("world", world);
     }
 
@@ -565,9 +545,7 @@ public final class WorldModel implements WorldQuery, WorldEdit {
         pendingWater.clear();
         volcanoEdificeUnits.clear();
         JsonObject world = in.json().getAsJsonObject("world");
-        if (world == null) return;
         units.load(world.getAsJsonArray("units"));
-        reposeVersion = world.has("reposeVersion") ? world.get("reposeVersion").getAsInt() : 0;
         basementUnit = world.get("basementUnit").getAsInt();
         edificeUnit = world.get("edificeUnit").getAsInt();
         if (world.has("volcanoEdificeUnits")) {
@@ -580,7 +558,6 @@ public final class WorldModel implements WorldQuery, WorldEdit {
             pendingWater.put(entry.get(0).getAsLong(), entry.get(1).getAsDouble());
         }
         StateReader.Field field = in.field("stacks");
-        if (field == null) return;
         if (field.schemaVersion() != STACKS_SCHEMA) {
             throw new IllegalStateException("Unsupported world stacks schema " + field.schemaVersion());
         }
@@ -607,6 +584,5 @@ public final class WorldModel implements WorldQuery, WorldEdit {
             System.arraycopy(data.ints("version"), 0, t.version, 0, t.version.length);
             stacks.putTile(t);
         }
-        upgradeRepose();
     }
 }

@@ -13,13 +13,13 @@ class GeothermalGridTest {
     }
 
     @Test
-    void blockToCellMapping() {
+    void columnToCellMapping() {
         GeothermalGrid grid = GeothermalGrid.centeredOn(0, 0, 32, 4);
         assertEquals(16, grid.sizeX());
         assertEquals(-32, grid.minX());
-        assertEquals(grid.index(0, 0), grid.indexOfBlock(-32, -29));
-        assertEquals(grid.index(8, 8), grid.indexOfBlock(0, 3));
-        assertEquals(-1, grid.indexOfBlock(32, 0));
-        assertEquals(-1, grid.indexOfBlock(-33, 0));
+        assertEquals(grid.index(0, 0), grid.indexOfColumn(-32, -29));
+        assertEquals(grid.index(8, 8), grid.indexOfColumn(0, 3));
+        assertEquals(-1, grid.indexOfColumn(32, 0));
+        assertEquals(-1, grid.indexOfColumn(-33, 0));
     }
 }

@@ -19,7 +19,8 @@ import org.junit.jupiter.api.Test;
 class DikeIntrusionTest {
     @Test
     void stalledDikeLeavesIntrusionAtDepth() {
-        DikeTestWorld.World w = world(4, basalt(1).build(), fastConfig(), flat(), null);
+        // 2 MPa: rises part-way from the chamber roof and freezes (1 MPa freezes before it leaves the roof)
+        DikeTestWorld.World w = world(4, basalt(2).build(), fastConfig(), flat(), null);
         WorldModel world = w.terrain().world();
         int unit = Provenance.unitFor(world, "v", 0, DepositType.INTRUSION, 0, Double.NaN, 50);
         w.dikes().setUnits((type, time, temperature) -> type == DepositType.INTRUSION ? unit : 0);
@@ -28,8 +29,9 @@ class DikeIntrusionTest {
 
         Dike dike = w.dikes().dikes().get(0);
         assertEquals(DikeStatus.STALLED, dike.status());
-        int x = (int) Math.floor(dike.x());
-        int z = (int) Math.floor(dike.z());
+        double l = world.spec().metersPerColumn();
+        int x = (int) Math.floor(dike.x() / l);
+        int z = (int) Math.floor(dike.z() / l);
         double surface = world.surfaceZ(x, z);
         double tipZ = surface - dike.depthM();
         if (tipZ <= world.spec().datumZ()) return; // stalled below the modelled crust: nothing to record

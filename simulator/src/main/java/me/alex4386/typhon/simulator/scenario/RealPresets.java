@@ -8,28 +8,22 @@ import me.alex4386.typhon.engine.config.WorldDefinition;
 import me.alex4386.typhon.engine.geothermal.GeothermalConfig;
 import me.alex4386.typhon.engine.magma.ConduitConfig;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
-import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.tephra.TephraConfig;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.subsurface.SubsurfaceConfig;
 import me.alex4386.typhon.engine.volcano.VentSite;
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
-import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.Edifice;
+import me.alex4386.typhon.engine.world.Material;
+import me.alex4386.typhon.engine.world.MaterialTable;
 import me.alex4386.typhon.engine.world.WorldSpec;
 import me.alex4386.typhon.simulator.terrain.ColumnGrid;
-import me.alex4386.typhon.simulator.terrain.DemImporter;
 import me.alex4386.typhon.simulator.terrain.RealTerrain;
 
 /**
- * Real-scale presets ({@code <name>-real}): km-wide domains of 10–30 m columns with geometry fitted to
+ * The presets: km-wide domains of 10–30 m columns with geometry fitted to
  * published edifice dimensions, real geology layering and initial conditions, and a documented real
  * DEM that can replace the synthetic terrain ({@code --dem}).
  *
- * <p>Blocks are cubes of {@code L} metres in every direction (no vertical exaggeration), so eruption
- * columns also use {@code L} metres per block and may rise far above Minecraft's build height. Time
- * compression is the same as the compact presets: dormant phases ×5000, eruptions in real time.
- * Magma-system parameters are those of the compact presets (already real units, see
- * {@link Presets}).
+ * <p>Time compression: dormant phases ×5000, eruptions in real time.
  */
 final class RealPresets {
     private RealPresets() {}
@@ -49,14 +43,14 @@ final class RealPresets {
      * </ul>
      */
     static final java.util.Map<String, Double> WORLD_CORE_EXTENT_M = java.util.Map.of(
-            "kilauea-real", 20_480.0, "stromboli-real", 12_000.0, "st-helens-real", 20_480.0,
-            "pinatubo-real", 30_720.0, "surtsey-real", 6_400.0, "yellowstone-real", 30_720.0);
+            "kilauea", 20_480.0, "stromboli", 12_000.0, "st-helens", 20_480.0,
+            "pinatubo", 30_720.0, "surtsey", 6_400.0, "yellowstone", 30_720.0);
 
     static List<Preset> all() {
         return List.of(kilauea(), stromboli(), stHelens(), pinatubo(), surtsey(), yellowstone());
     }
 
-    /** A real-scale preset: compact-preset magma physics on a real setting. */
+    /** A preset: magma physics on a real setting. */
     record Real(String name, String title, String description, List<String> references, double defaultHours,
             RealSetting realSetting, List<ReferenceValue> referenceValues, java.util.function.LongFunction<ColumnGrid> terrain,
             Presets.Assembly assembly) implements Preset {
@@ -80,30 +74,12 @@ final class RealPresets {
         return new Scenario.Builder(name, seed, terrain, setting.spec(), setting.edifices());
     }
 
-    /** Geometric scaling: blocks (and eruption columns) are L-metre cubes. */
-    static VolcanoScaling scaling(double metersPerColumn) {
-        return new VolcanoScaling(metersPerColumn, metersPerColumn);
-    }
-
     /**
-     * Subsurface of a real-scale preset: the world defaults with the preset's literature geotherm and
+     * Subsurface of a preset: the world defaults with the preset's literature geotherm and
      * aquifer (water-table shape, recharge) applied, exactly as a world written from it would derive.
      */
-    static SubsurfaceConfig subsurface(RealSetting setting, double metersPerColumn) {
-        return WorldDefinition.applyGeothermAquifer(VolcanoSystem.defaultSubsurfaceConfig(scaling(metersPerColumn)),
-                setting.geotherm(), setting.aquifer());
-    }
-
-    /** Tephra with the column cap raised to the top of the engine's coordinate range. */
-    static TephraConfig tephra() {
-        TephraConfig t = new TephraConfig();
-        t.worldTopY = BlockPos.MAX_Y;
-        return t;
-    }
-
-    /** Block (y) whose top is {@code elevation} metres. */
-    static int y(double elevation, double metersPerColumn) {
-        return DemImporter.groundBlock(elevation, metersPerColumn);
+    static SubsurfaceConfig subsurface(RealSetting setting) {
+        return WorldDefinition.applyGeothermAquifer(new SubsurfaceConfig(), setting.geotherm(), setting.aquifer());
     }
 
     /** Stromboli's crater terrace, 300 m NW of the summit (m from the centre). */
@@ -114,31 +90,28 @@ final class RealPresets {
      * Edifice zone centred on the column of the primary vent at real offset (m) — volcano definitions
      * place edifices on the primary vent, so world templates reproduce the preset exactly.
      */
-    static Edifice edifice(String id, double xm, double zm, double metersPerColumn, double radiusColumns, double baseZ,
+    static Edifice edifice(String id, double xm, double zm, double metersPerColumn, double radiusM, double baseZ,
             String material) {
-        return new Edifice(id, Math.floor(xm / metersPerColumn) + 0.5, Math.floor(zm / metersPerColumn) + 0.5,
-                radiusColumns, baseZ, material);
+        return new Edifice(id, (Math.floor(xm / metersPerColumn) + 0.5) * metersPerColumn,
+                (Math.floor(zm / metersPerColumn) + 0.5) * metersPerColumn, radiusM, baseZ, material);
     }
 
-    /** Crater vent at real offset (m) from the centre, its floor on the terrain's ground. */
-    static VentSite vent(String id, ColumnGrid terrain, double metersPerColumn, double xm, double zm, double radiusM) {
-        int x = (int) Math.floor(xm / metersPerColumn);
-        int z = (int) Math.floor(zm / metersPerColumn);
-        return VentSite.crater(id, new BlockPos(x, terrain.ground(x, z), z),
-                Math.max(1, (int) Math.round(radiusM / metersPerColumn)));
+    /** Crater vent at the centre of the column at real offset (m) from the centre, its floor on the terrain's ground. */
+    static VentSite vent(String id, ColumnGrid terrain, double xm, double zm, double radiusM) {
+        int x = (int) Math.floor(xm / terrain.metersPerColumn());
+        int z = (int) Math.floor(zm / terrain.metersPerColumn());
+        return VentSite.crater(id, Point3.columnCentre(x, z, terrain.surfaceZ(x, z), terrain.metersPerColumn()), radiusM);
     }
 
     /** Chamber centre under a vent at an elevation (m a.s.l.; negative below sea level). */
-    static BlockPos chamberAt(VentSite vent, double elevation, double metersPerColumn) {
-        return new BlockPos(vent.position().x(), Math.max(BlockPos.MIN_Y + 1, y(elevation, metersPerColumn)),
-                vent.position().z());
+    static Point3 chamberAt(VentSite vent, double elevation) {
+        return new Point3(vent.position().x(), elevation, vent.position().z());
     }
 
-    static RealTerrain.Paint rock(String rock, double vegetationBelow) {
-        BlockId r = BlockId.minecraft(rock);
-        BlockId grass = BlockId.minecraft("grass_block");
-        BlockId sand = BlockId.minecraft("sand");
-        return (xm, zm, e, submerged) -> submerged ? sand : e < vegetationBelow ? grass : r;
+    /** Sediment under water, soil below {@code vegetationBelow} m, {@code rock} above. */
+    static RealTerrain.Paint rock(Material rock, double vegetationBelow) {
+        return (xm, zm, e, submerged) -> submerged ? MaterialTable.SEDIMENT
+                : e < vegetationBelow ? MaterialTable.SOIL : rock;
     }
 
     // ── Kīlauea ──
@@ -149,7 +122,7 @@ final class RealPresets {
         RealSetting setting = new RealSetting(
                 new WorldSpec(L, 4 * L, -6000, Double.NaN,
                         List.of(new WorldSpec.GeologyLayer("gabbro", -5000, 0.01)), "basalt", "basalt", L),
-                List.of(edifice("kilauea-real", 0, 0, L, Double.POSITIVE_INFINITY, Double.NaN, "basalt")),
+                List.of(edifice("kilauea", 0, 0, L, Double.POSITIVE_INFINITY, Double.NaN, "basalt")),
                 new WorldDefinition.Geotherm(18, 60, 6.5),
                 // flat basal water table at ~610 m a.s.l. under the summit (NSF drill hole, Keller et al. 1979)
                 new WorldDefinition.Aquifer(30, 0.1, 0.0, 610, 0.5),
@@ -158,7 +131,7 @@ final class RealPresets {
                         "SRTM/Copernicus show the summit after the 2018 collapse (Halema'uma'u ~500 m deep);"
                                 + " the synthetic terrain uses the pre-2018 geometry."));
         return new Real(
-                "kilauea-real",
+                "kilauea",
                 "Kīlauea summit at real scale (basaltic, effusive)",
                 "A 10 km window over Kīlauea's summit at 20 m per column: a gently sloping shield (3–6°) with a"
                         + " 3 km caldera (~120 m deep) and the Halema'uma'u pit crater (1 km across, 85 m deep, pre-2008)"
@@ -189,11 +162,11 @@ final class RealPresets {
                     double shield = 1247 - Math.tan(Math.toRadians(4)) * Math.max(0, d - 1900);
                     double caldera = RealTerrain.pit(shield, d, 1900, 250, 1100);
                     return RealTerrain.pit(caldera, d, 500, 60, 1015);
-                }, 4, 300, Double.NaN, rock("basalt", 0)),
+                }, 4, 300, Double.NaN, rock(MaterialTable.BASALT, 0)),
                 (seed, terrain) -> {
-                    Scenario.Builder b = builder("kilauea-real", seed, terrain, setting);
-                    VentSite vent = vent("halemaumau", terrain, L, 0, 0, 140);
-                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("kilauea-real", chamberAt(vent, -400, L))
+                    Scenario.Builder b = builder("kilauea", seed, terrain, setting);
+                    VentSite vent = vent("halemaumau", terrain, 0, 0, 140);
+                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("kilauea", chamberAt(vent, -400))
                             // feeder ~3 m across, the scale of basaltic feeder dikes/conduits (Wilson & Head 1981);
                             // Poiseuille flow (Q ∝ r⁴) then peaks within the observed 1-100 m3/s (Neal et al. 2019)
                             .volume(1e9).lithostaticDepth(1500).conduitRadius(1.5).tensileStrengthMPa(10)
@@ -201,18 +174,21 @@ final class RealPresets {
                             .initialSilicaWt(50).rechargeSilicaWt(50).initialWaterWt(0.4).rechargeWaterWt(0.4)
                             .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
                             .initialTemperatureC(1165).rechargeTemperatureC(1180).initialOverpressureMPa(9.9999)
+                            // the summit's magma pathway stays molten between eruptions (the Halema'uma'u lava
+                            // lake, 2008-2018: Patrick et al. 2015): the conduit exists
+                            .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1))
                             .build();
-                    SubsurfaceConfig subsurface = subsurface(setting, L);
+                    SubsurfaceConfig subsurface = subsurface(setting);
                     // The window sits in the island's basal aquifer, held near 610 m by recharge and
                     // drainage outside it: its edge keeps that level and resupplies what boils off.
                     subsurface.regionalBoundary = true;
-                    return b.volcano(VolcanoSystem.builder("kilauea-real", List.of(vent), b.terrain(), b.lava())
+                    return b.volcano(VolcanoSystem.builder("kilauea", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
                             .subsurfaceConfig(subsurface)
                             .stations(List.of(
                                     // approximate positions of HVO's caldera-rim GNSS sites (Uwekahuna NW, Crater Rim SE)
-                                    Stations.at("UWEV", vent, -1400, 1400, L), Stations.at("CRIM", vent, 1800, -1800, L),
-                                    Stations.at("KIL-FLK-S", vent, 0, -4000, L))).scaling(scaling(L)).tephra(tephra())
+                                    Stations.at("UWEV", vent, -1400, 1400), Stations.at("CRIM", vent, 1800, -1800),
+                                    Stations.at("KIL-FLK-S", vent, 0, -4000)))
                             .wind(7, 0.6, Presets.WIND_VARIABILITY)
                             // a century of spin-up: the summit's hydrothermal system has had the chamber's heat
                             // for far longer, so play starts from it, not from a halo mined by boiling
@@ -228,7 +204,7 @@ final class RealPresets {
         RealSetting setting = new RealSetting(
                 new WorldSpec(L, 4 * L, -4000, 0,
                         List.of(new WorldSpec.GeologyLayer("sediment", -2500, 0.15)), "basalt", "scoria", L),
-                List.of(edifice("stromboli-real", CRATER_X, CRATER_Z, L, 600, -2500, "basalt")),
+                List.of(edifice("stromboli", CRATER_X, CRATER_Z, L, 600 * L, -2500, "basalt")),
                 new WorldDefinition.Geotherm(17, 80, 6.5),
                 new WorldDefinition.Aquifer(5, 0.15, 0.05, 0, 0.2), // thin basal lens at sea level
                 half,
@@ -237,7 +213,7 @@ final class RealPresets {
         double craterX = CRATER_X;
         double craterZ = CRATER_Z;
         return new Real(
-                "stromboli-real",
+                "stromboli",
                 "Stromboli at real scale (persistent Strombolian)",
                 "Stromboli island at 15 m per column: a 924 m cone reaching the shoreline ~2 km out and plunging to"
                         + " ~-700 m at the domain edge, with the Sciara del Fuoco scar on the NW flank and the crater"
@@ -266,11 +242,11 @@ final class RealPresets {
                             Math.cos(az - Math.toRadians(135)))));
                     if (off < 18 && d > 250) cone -= 110 * (1 - off / 18) * Math.min(1, (d - 250) / 600);
                     return RealTerrain.crater(cone, RealTerrain.dist(xm, zm, craterX, craterZ), 130, 45);
-                }, 6, 150, 0, rock("blackstone", -1e9)),
+                }, 6, 150, 0, rock(MaterialTable.BASALT, -1e9)),
                 (seed, terrain) -> {
-                    Scenario.Builder b = builder("stromboli-real", seed, terrain, setting);
-                    VentSite vent = vent("crater-terrace", terrain, L, craterX, craterZ, 60);
-                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("stromboli-real", chamberAt(vent, -3000, L))
+                    Scenario.Builder b = builder("stromboli", seed, terrain, setting);
+                    VentSite vent = vent("crater-terrace", terrain, craterX, craterZ, 60);
+                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("stromboli", chamberAt(vent, -3000))
                             .volume(5e7).lithostaticDepth(3000).conduitRadius(1.5).tensileStrengthMPa(8)
                             .eruptionEndOverpressureMPa(0.5).supplyRate(0.002).supplyVariability(0.4)
                             .initialSilicaWt(50).rechargeSilicaWt(50).initialWaterWt(2.7).rechargeWaterWt(2.7)
@@ -278,11 +254,11 @@ final class RealPresets {
                             .initialTemperatureC(1140).rechargeTemperatureC(1150).initialOverpressureMPa(0)
                             .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
                             .build();
-                    return b.volcano(VolcanoSystem.builder("stromboli-real", List.of(vent), b.terrain(), b.lava())
+                    return b.volcano(VolcanoSystem.builder("stromboli", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
-                            .subsurfaceConfig(subsurface(setting, L))
-                            .stations(List.of(Stations.at("STR-N", vent, 0, 1200, L), Stations.at("STR-E", vent, 1500, 0, L),
-                                    Stations.at("STR-S", vent, 0, -1500, L))).scaling(scaling(L)).tephra(tephra())
+                            .subsurfaceConfig(subsurface(setting))
+                            .stations(List.of(Stations.at("STR-N", vent, 0, 1200), Stations.at("STR-E", vent, 1500, 0),
+                                    Stations.at("STR-S", vent, 0, -1500)))
                             .wind(8, 1.2, Presets.WIND_VARIABILITY).build());
                 });
     }
@@ -295,7 +271,7 @@ final class RealPresets {
         RealSetting setting = new RealSetting(
                 new WorldSpec(L, 4 * L, -6000, Double.NaN,
                         List.of(new WorldSpec.GeologyLayer("granite", -2000, 0.01)), "andesite", "soil", L),
-                List.of(edifice("st-helens-real", 0, 0, L, 300, 1100, "dacite")),
+                List.of(edifice("st-helens", 0, 0, L, 300 * L, 1100, "dacite")),
                 new WorldDefinition.Geotherm(8, 40, 6.5),
                 new WorldDefinition.Aquifer(30, 0.1, 0.6, Double.NaN, 0.4),
                 half,
@@ -303,7 +279,7 @@ final class RealPresets {
                         "DEMs show the post-1980 horseshoe crater (summit 2549 m); the synthetic terrain is the"
                                 + " pre-1980 cone."));
         return new Real(
-                "st-helens-real",
+                "st-helens",
                 "Mount St. Helens at real scale (Plinian, then dome growth)",
                 "The pre-1980 cone at 20 m per column: summit 2950 m on a ~1200 m plateau, basal radius ~6 km,"
                         + " concave flanks, over a water-rich dacite reservoir at failure. Expect a Plinian column,"
@@ -333,21 +309,24 @@ final class RealPresets {
                 seed -> RealTerrain.build(L, half, seed, (xm, zm) -> {
                     // pre-1980: a symmetric cone topped by a small summit dome, no crater
                     return RealTerrain.cone(RealTerrain.dist(xm, zm, 0, 0), 2950, 1200, 6000, 1.6);
-                }, 12, 400, Double.NaN, rock("andesite", 1500)),
+                }, 12, 400, Double.NaN, rock(MaterialTable.ANDESITE, 1500)),
                 (seed, terrain) -> {
-                    Scenario.Builder b = builder("st-helens-real", seed, terrain, setting);
-                    VentSite vent = vent("summit", terrain, L, 0, 0, 120);
-                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("st-helens-real", chamberAt(vent, -4800, L))
+                    Scenario.Builder b = builder("st-helens", seed, terrain, setting);
+                    VentSite vent = vent("summit", terrain, 0, 0, 120);
+                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("st-helens", chamberAt(vent, -4800))
                             .volume(5e9).lithostaticDepth(7500).conduitRadius(30).tensileStrengthMPa(15)
                             .eruptionEndOverpressureMPa(2).supplyRate(1.0).supplyVariability(0.2)
                             .initialSilicaWt(64).rechargeSilicaWt(62).initialWaterWt(4.6).rechargeWaterWt(4.6)
                             .initialTemperatureC(920).rechargeTemperatureC(950).initialOverpressureMPa(15.1)
+                            // the scenario starts on 18 May: the magma that intruded the cryptodome from late
+                            // March 1980 had opened its pathway to the summit (Lipman & Mullineaux 1981)
+                            .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1))
                             .build();
-                    return b.volcano(VolcanoSystem.builder("st-helens-real", List.of(vent), b.terrain(), b.lava())
+                    return b.volcano(VolcanoSystem.builder("st-helens", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
-                            .subsurfaceConfig(subsurface(setting, L))
-                            .stations(List.of(Stations.at("MSH-N", vent, 0, 3000, L), Stations.at("MSH-E", vent, 3000, 0, L),
-                                    Stations.at("MSH-S", vent, 0, -3000, L))).scaling(scaling(L)).tephra(tephra())
+                            .subsurfaceConfig(subsurface(setting))
+                            .stations(List.of(Stations.at("MSH-N", vent, 0, 3000), Stations.at("MSH-E", vent, 3000, 0),
+                                    Stations.at("MSH-S", vent, 0, -3000)))
                             .wind(15, 0.0, Presets.WIND_VARIABILITY).build());
                 });
     }
@@ -360,18 +339,18 @@ final class RealPresets {
         RealSetting setting = new RealSetting(
                 new WorldSpec(L, 4 * L, -8000, Double.NaN,
                         List.of(new WorldSpec.GeologyLayer("gabbro", -1500, 0.01)), "andesite", "soil", L),
-                List.of(edifice("pinatubo-real", 0, 0, L, 240, 400, "dacite")),
+                List.of(edifice("pinatubo", 0, 0, L, 240 * L, 400, "dacite")),
                 new WorldDefinition.Geotherm(26, 40, 6.5),
                 new WorldDefinition.Aquifer(20, 0.1, 0.6, Double.NaN, 0.5),
                 half,
                 RealSetting.DemSource.at(15.1429, 120.3496,
                         "DEMs show the 2.5 km post-1991 caldera and its lake; the synthetic terrain is pre-1991."));
         return new Real(
-                "pinatubo-real",
+                "pinatubo",
                 "Pinatubo at real scale (Plinian)",
                 "The pre-1991 edifice at 30 m per column: a 1745 m summit rising from ~400 m foothills over a cool,"
-                        + " water-saturated dacite reservoir at failure. Expect a sustained Plinian column far above"
-                        + " Minecraft's build height (blocks are 30 m cubes) and a broad downwind ash blanket.",
+                        + " water-saturated dacite reservoir at failure. Expect a sustained Plinian column and a broad"
+                        + " downwind ash blanket.",
                 List.of(
                         "Pre-1991 summit 1745 m (Newhall & Punongbayan 1996)",
                         "Dacite SiO2 64-65 wt%, ~780 C, H2O 6-6.5 wt% (Rutherford & Devine 1996)",
@@ -396,23 +375,26 @@ final class RealPresets {
                 seed -> RealTerrain.build(L, half, seed, (xm, zm) -> {
                     // pre-1991: a dissected cone topped by a dome complex, no open crater
                     return RealTerrain.cone(RealTerrain.dist(xm, zm, 0, 0), 1745, 400, 7000, 1.8);
-                }, 35, 900, Double.NaN, rock("andesite", 900)),
+                }, 35, 900, Double.NaN, rock(MaterialTable.ANDESITE, 900)),
                 (seed, terrain) -> {
-                    Scenario.Builder b = builder("pinatubo-real", seed, terrain, setting);
-                    VentSite vent = vent("summit", terrain, L, 0, 0, 240);
-                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("pinatubo-real", chamberAt(vent, -5300, L))
+                    Scenario.Builder b = builder("pinatubo", seed, terrain, setting);
+                    VentSite vent = vent("summit", terrain, 0, 0, 240);
+                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("pinatubo", chamberAt(vent, -5300))
                             .volume(4e10).lithostaticDepth(7000).conduitRadius(90).tensileStrengthMPa(15)
                             .eruptionEndOverpressureMPa(2).supplyRate(2).supplyVariability(0.1)
                             .initialSilicaWt(64.5).rechargeSilicaWt(64.5).initialWaterWt(6.2).rechargeWaterWt(6.2)
                             .initialTemperatureC(780).rechargeTemperatureC(800).initialOverpressureMPa(15.1)
+                            // the scenario starts at the climax: the magma that reached the summit in April-June
+                            // 1991 (dome from 7 June) had opened its pathway (Newhall & Punongbayan 1996)
+                            .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1))
                             // climactic DRE rate ~0.7-1.5e5 m3/s (Mastin et al. 2009, Table 1); with the Mastin
                             // plume fit this gives the observed 35-40 km column
                             .build();
-                    return b.volcano(VolcanoSystem.builder("pinatubo-real", List.of(vent), b.terrain(), b.lava())
+                    return b.volcano(VolcanoSystem.builder("pinatubo", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
-                            .subsurfaceConfig(subsurface(setting, L))
-                            .stations(List.of(Stations.at("PIN-N", vent, 0, 4000, L), Stations.at("PIN-E", vent, 4000, 0, L),
-                                    Stations.at("PIN-W", vent, -4000, 0, L))).scaling(scaling(L)).tephra(tephra())
+                            .subsurfaceConfig(subsurface(setting))
+                            .stations(List.of(Stations.at("PIN-N", vent, 0, 4000), Stations.at("PIN-E", vent, 4000, 0),
+                                    Stations.at("PIN-W", vent, -4000, 0)))
                             .wind(20, Math.PI, Presets.WIND_VARIABILITY).build());
                 });
     }
@@ -425,14 +407,14 @@ final class RealPresets {
         RealSetting setting = new RealSetting(
                 new WorldSpec(L, 4 * L, -3000, 0,
                         List.of(new WorldSpec.GeologyLayer("basalt", -400, 0.05)), "sediment", "sediment", L),
-                List.of(edifice("surtsey-real", 0, 0, L, 60, -130, "hyaloclastite")),
+                List.of(edifice("surtsey", 0, 0, L, 60 * L, -130, "hyaloclastite")),
                 new WorldDefinition.Geotherm(5, 60, 6.5),
                 new WorldDefinition.Aquifer(0, 0.2, 0.0, 0, 0.5), // saturated by the sea
                 half,
                 RealSetting.DemSource.at(63.3033, -20.6046,
                         "Land DEMs only cover today's island (~1.3 km2, 155 m): use EMODnet bathymetry for the shelf."));
         return new Real(
-                "surtsey-real",
+                "surtsey",
                 "Surtsey at real scale (submarine to emergent)",
                 "A 3.8 km window of the Icelandic shelf at 10 m per column: sea floor at -130 m and a young"
                         + " hyaloclastite cone whose summit is 15 m below sea level (the state a few days into the"
@@ -467,20 +449,22 @@ final class RealPresets {
                     double d = RealTerrain.dist(xm, zm, 0, 0);
                     double cone = RealTerrain.cone(d, -15, -130, 500, 1.3);
                     return RealTerrain.crater(cone, d, 60, 12);
-                }, 3, 200, 0, rock("basalt", -1e9)),
+                }, 3, 200, 0, rock(MaterialTable.BASALT, -1e9)),
                 (seed, terrain) -> {
-                    Scenario.Builder b = builder("surtsey-real", seed, terrain, setting);
-                    VentSite vent = vent("surtur", terrain, L, 0, 0, 40);
-                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("surtsey-real", chamberAt(vent, -3000, L))
+                    Scenario.Builder b = builder("surtsey", seed, terrain, setting);
+                    VentSite vent = vent("surtur", terrain, 0, 0, 40);
+                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("surtsey", chamberAt(vent, -3000))
                             .volume(5e8).lithostaticDepth(3000).conduitRadius(2.0).tensileStrengthMPa(12)
                             .eruptionEndOverpressureMPa(1).supplyRate(2).supplyVariability(0.2)
                             .initialSilicaWt(46.5).rechargeSilicaWt(46.5).initialWaterWt(0.7).rechargeWaterWt(0.7)
                             .initialCo2Wt(0.2).rechargeCo2Wt(0.2)
                             .initialTemperatureC(1170).rechargeTemperatureC(1180).initialOverpressureMPa(11.99996)
+                            // a few days into the eruption: the conduit to the submarine vent is open
+                            .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1))
                             .build();
-                    return b.volcano(VolcanoSystem.builder("surtsey-real", List.of(vent), b.terrain(), b.lava())
+                    return b.volcano(VolcanoSystem.builder("surtsey", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
-                            .subsurfaceConfig(subsurface(setting, L)).scaling(scaling(L)).tephra(tephra())
+                            .subsurfaceConfig(subsurface(setting))
                             .wind(10, 0.8, Presets.WIND_VARIABILITY).build());
                 });
     }
@@ -508,7 +492,7 @@ final class RealPresets {
         double lakeX = 3500;
         double lakeZ = 0;
         return new Real(
-                "yellowstone-real",
+                "yellowstone",
                 "Yellowstone caldera floor at real scale (hydrothermal)",
                 "A 15 km slice of the Yellowstone caldera at 30 m per column: a rhyolite plateau at ~2400 m with the"
                         + " caldera rim rising ~250 m to the west, a 60 m deep lake at 2357 m to the east and four"
@@ -545,44 +529,43 @@ final class RealPresets {
                             if (e > floor) e = floor + (e - floor) * (1 - Math.exp(-(d * d) / (700.0 * 700.0)));
                         }
                         return e;
-                    }, 30, 1200, Double.NaN, rock("tuff", 2380));
-                    RealTerrain.lake(grid, L, lakeX, lakeZ, 2600, 2357);
+                    }, 30, 1200, Double.NaN, rock(MaterialTable.TUFF, 2380));
+                    RealTerrain.lake(grid, lakeX, lakeZ, 2600, 2357, MaterialTable.SEDIMENT);
                     return grid;
                 },
                 (seed, terrain) -> {
-                    Scenario.Builder b = builder("yellowstone-real", seed, terrain, setting);
+                    Scenario.Builder b = builder("yellowstone", seed, terrain, setting);
                     List<VentSite> basins = List.of(
-                            vent("upper-geyser-basin", terrain, L, 0, 0, 240),
-                            vent("norris", terrain, L, -1500, -3500, 180),
-                            vent("mud-volcano", terrain, L, 2000, 3000, 180),
-                            vent("west-thumb", terrain, L, lakeX - 1500, 600, 180));
-                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("yellowstone-real",
-                                    new BlockPos(0, y(-3600, L), 0))
+                            vent("upper-geyser-basin", terrain, 0, 0, 240),
+                            vent("norris", terrain, -1500, -3500, 180),
+                            vent("mud-volcano", terrain, 2000, 3000, 180),
+                            vent("west-thumb", terrain, lakeX - 1500, 600, 180));
+                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("yellowstone",
+                                    new Point3(0, -3600, 0))
                             .volume(1e10).lithostaticDepth(6000).tensileStrengthMPa(20).supplyRate(0.001)
                             .supplyVariability(0).initialSilicaWt(75).rechargeSilicaWt(75).initialWaterWt(4)
                             .rechargeWaterWt(4).initialTemperatureC(820).rechargeTemperatureC(850)
                             .initialOverpressureMPa(0)
                             .build();
                     GeothermalConfig geothermal = new GeothermalConfig();
-                    geothermal.radius = 192;
+                    geothermal.radiusM = 192 * L;
                     // Single hydrothermal vents discharge ~1e8 W (Fournier 1989; the caldera ~5e9 W in total).
-                    // The heat halo is set in metres (~60 m), not left at 8 blocks: at 30 m columns the default
-                    // would spread each basin's heat over ~0.7 km² and keep the ground below boiling.
+                    // A ~60 m heat halo: spreading each basin's heat wider keeps the ground below boiling.
                     geothermal.ventHeatPowerW = 2e8;
-                    geothermal.ventHaloBlocks = 60 / L;
+                    geothermal.ventHaloM = 60;
                     geothermal.ventPipeDepthM = 300;
                     geothermal.maxGeysers = 20;
-                    SubsurfaceConfig subsurface = subsurface(setting, L);
+                    SubsurfaceConfig subsurface = subsurface(setting);
                     subsurface.initialWaterTableDepthM = 3;
                     subsurface.rainfallMmPerHour = 0.1;
                     subsurface.gradientCPerKm = 100; // caldera heat flow ~30–40× the continental average
-                    return b.volcano(VolcanoSystem.builder("yellowstone-real", basins, b.terrain(), b.lava())
+                    return b.volcano(VolcanoSystem.builder("yellowstone", basins, b.terrain(), b.lava())
                             .chamber(chamber)
                             .stations(List.of(
                                     // approximate: Old Faithful (OFW2) and Hayden Valley (HVWY) GNSS sites near the basins
-                                    Stations.at("OFW2", basins.get(0), 0, 300, L),
-                                    Stations.at("HVWY", basins.get(2), -500, 500, L),
-                                    Stations.at("YEL-NOR", basins.get(1), 300, 0, L))).scaling(scaling(L)).tephra(tephra()).geothermal(geothermal)
+                                    Stations.at("OFW2", basins.get(0), 0, 300),
+                                    Stations.at("HVWY", basins.get(2), -500, 500),
+                                    Stations.at("YEL-NOR", basins.get(1), 300, 0))).geothermal(geothermal)
                             .subsurfaceConfig(subsurface)
                             .geothermalPrewarm(300 * 365.25 * 86400).build());
                 });

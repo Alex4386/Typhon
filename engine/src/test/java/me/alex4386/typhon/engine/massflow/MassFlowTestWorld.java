@@ -2,76 +2,47 @@ package me.alex4386.typhon.engine.massflow;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.IntBinaryOperator;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
-import me.alex4386.typhon.engine.terrain.TerrainChunk;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
+import me.alex4386.typhon.engine.terrain.GroundImport;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
-import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.testing.TestGround;
+import me.alex4386.typhon.engine.testing.TestGround.Elevation;
 import me.alex4386.typhon.engine.world.LayerView;
+import me.alex4386.typhon.engine.world.Material;
 import me.alex4386.typhon.engine.world.WorldModel;
 
-/** Synthetic terrain plus helpers for driving mass-flow fields in tests. */
+/** Synthetic terrain (1 m columns, elevations in metres) plus helpers for driving mass-flow fields in tests. */
 final class MassFlowTestWorld {
-    static final BlockId STONE = BlockId.minecraft("stone");
-    static final int NO_WATER = TerrainColumn.NO_WATER;
+    static final double NO_WATER = Double.NaN;
+    static final double COLUMN_M = 1.0;
 
     final int minChunkX, minChunkZ, maxChunkX, maxChunkZ;
-    final TerrainModel terrain = new TerrainModel();
+    final TerrainModel terrain = TestGround.terrain(COLUMN_M);
     final List<EngineFrame> frames = new ArrayList<>();
 
-    MassFlowTestWorld(int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ, IntBinaryOperator ground,
-            IntBinaryOperator waterY) {
+    MassFlowTestWorld(int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ, Elevation ground, Elevation water) {
         this.minChunkX = minChunkX;
         this.minChunkZ = minChunkZ;
         this.maxChunkX = maxChunkX;
         this.maxChunkZ = maxChunkZ;
-        List<TerrainChunk> chunks = new ArrayList<>();
-        for (int cx = minChunkX; cx <= maxChunkX; cx++) {
-            for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int lz = 0; lz < 16; lz++) {
-                    for (int lx = 0; lx < 16; lx++) {
-                        int x = cx * 16 + lx;
-                        int z = cz * 16 + lz;
-                        chunk.set(x, z, new TerrainColumn(ground.applyAsInt(x, z), waterY.applyAsInt(x, z), STONE));
-                    }
-                }
-                chunks.add(chunk);
-            }
-        }
-        terrain.apply(new TerrainSnapshot(chunks));
+        terrain.apply(TestGround.chunks(minChunkX, minChunkZ, maxChunkX, maxChunkZ, ground, water));
     }
 
-    MassFlowTestWorld(int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ, IntBinaryOperator ground) {
-        this(minChunkX, minChunkZ, maxChunkX, maxChunkZ, ground, (x, z) -> NO_WATER);
+    MassFlowTestWorld(int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ, Elevation ground) {
+        this(minChunkX, minChunkZ, maxChunkX, maxChunkZ, ground, TestGround.DRY);
     }
 
-    /** Ramp descending toward +x at {@code slope} down to a flat plain from {@code plainX} on. */
-    static IntBinaryOperator rampToPlain(double slope, int plainX, int plainY) {
-        return (x, z) -> x >= plainX ? plainY : plainY + (int) Math.round((plainX - x) * slope);
+    /** Ramp descending toward +x at {@code slope} down to a flat plain at {@code plainZ} m from {@code plainX} on. */
+    static Elevation rampToPlain(double slope, int plainX, double plainZ) {
+        return (x, z) -> x >= plainX ? plainZ : plainZ + (plainX - x) * slope;
     }
 
     /** Current terrain (including engine edits), as a host would re-send after a restart. */
-    TerrainSnapshot resample() {
-        List<TerrainChunk> chunks = new ArrayList<>();
-        for (int cx = minChunkX; cx <= maxChunkX; cx++) {
-            for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int lz = 0; lz < 16; lz++) {
-                    for (int lx = 0; lx < 16; lx++) {
-                        int x = cx * 16 + lx;
-                        int z = cz * 16 + lz;
-                        chunk.set(x, z, terrain.column(x, z));
-                    }
-                }
-                chunks.add(chunk);
-            }
-        }
-        return new TerrainSnapshot(chunks);
+    GroundImport resample() {
+        return TestGround.copy(terrain.world(), minChunkX * 16, minChunkZ * 16, maxChunkX * 16 + 15,
+                maxChunkZ * 16 + 15);
     }
 
     /** Base step of engines this world builds (µs); {@link #coarse} lengthens it. */
@@ -118,13 +89,13 @@ final class MassFlowTestWorld {
         return list;
     }
 
-    /** The surface blocks the block cache shows over {@code [0, size)²}. */
-    List<BlockId> surfaces(int size) {
-        List<BlockId> list = new ArrayList<>();
+    /** The surface material of each column over {@code [0, size)²}. */
+    List<Material> surfaces(int size) {
+        WorldModel world = terrain.world();
+        List<Material> list = new ArrayList<>();
         for (int x = 0; x < size; x++) {
             for (int z = 0; z < size; z++) {
-                TerrainColumn column = terrain.column(x, z);
-                if (column != null) list.add(column.surface());
+                if (world.isKnown(x, z)) list.add(world.layer(x, z, world.layerCount(x, z) - 1).materialInfo());
             }
         }
         return list;

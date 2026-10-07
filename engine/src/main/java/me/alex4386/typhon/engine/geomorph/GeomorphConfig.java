@@ -24,11 +24,13 @@ public final class GeomorphConfig {
     public int reliefSteps = 48;
     /**
      * A failure cluster whose failed volume reaches this (m³) mobilises as a flow (debris avalanche,
-     * debris flow or block-and-ash flow) instead of settling as talus beside its scar. Rock falls and
-     * slumps below ≈10⁴ m³ rarely run out beyond the slope foot, while larger rock avalanches show the
-     * excess mobility of Hsü (1975) and Scheidegger (1973). Scale knob.
+     * debris flow or block-and-ash flow) instead of settling as talus beside its scar. Smaller rock falls
+     * and slides run out with a roughly constant reach angle (H/L ≈ 0.6); the volume-dependent excess
+     * mobility of rock avalanches, which a flow model reproduces, sets in from about 10⁵ m³: Scheidegger's
+     * (1973, Rock Mechanics 5) regression {@code log(H/L) = 0.624 − 0.157 log V} is fitted to events above
+     * that volume (cf. Hsü 1975, who places the long-runout "sturzstroms" above ~10⁶ m³).
      */
-    public double avalancheMinVolumeM3 = 1e4;
+    public double avalancheMinVolumeM3 = 1e5;
     /**
      * Failures at least this large (m³) are reported one by one as {@code SlopeFailure} events (and
      * kept in the history); smaller ones are summed per step into {@code MassWasting}.
@@ -52,11 +54,10 @@ public final class GeomorphConfig {
     // ── Seismic shaking ──
     /**
      * Shaking below this PGA (g) is ignored: its pseudo-static load (k_h = 0.01) changes a slope's
-     * factor of safety by about 1 %.
+     * factor of safety by about 1 %. It also sets how far a quake's shaking reaches (the distance where the
+     * attenuation of {@link GroundMotion} falls to it), so a large earthquake shakes a wide area.
      */
     public double minPgaG = 0.02;
-    /** Farthest shaking considered from an epicentre (m). */
-    public double maxShakingRadiusM = 3000;
 
     // ── Hydrothermal alteration ──
     /**
@@ -105,7 +106,6 @@ public final class GeomorphConfig {
         c.submergedReposeFactor = submergedReposeFactor;
         c.waveBaseM = waveBaseM;
         c.minPgaG = minPgaG;
-        c.maxShakingRadiusM = maxShakingRadiusM;
         c.alterationTimescaleSeconds = alterationTimescaleSeconds;
         c.alterationReferenceC = alterationReferenceC;
         c.alterationActivationJPerMol = alterationActivationJPerMol;

@@ -18,7 +18,6 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
 import javax.imageio.stream.ImageOutputStream;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -231,23 +230,20 @@ class GeoTiffTest {
     }
 
     @Test
-    void realGridMapsSeaLevelToBlockTopZeroAndFloodsBelowIt() {
+    void gridKeepsElevationsInMetresAndFloodsBelowSeaLevel() {
         double[][] e = new double[64][64];
         for (int r = 0; r < 64; r++) for (int c = 0; c < 64; c++) e[r][c] = (c - 32) * 10.0; // -320 .. 310 m
         DemImporter.Dem dem = new DemImporter.Dem(e, 10);
         double[] centre = dem.centre();
-        ColumnGrid g = DemImporter.toRealGrid(dem, 10, centre[0], centre[1], 24, 0, DemImporter.SurfacePainter.DEFAULT);
+        ColumnGrid g = DemImporter.toGrid(dem, 10, centre[0], centre[1], 24, 0, DemImporter.SurfacePainter.DEFAULT);
         // column x covers [x*10, x*10+10) m east of centre; the DEM rises 1 m per m eastwards
         int x = 5;
         double meters = DemImporter.bilinear(dem, centre[0] + 0.5, centre[1] + x + 0.5);
-        assertEquals(DemImporter.groundBlock(meters, 10), g.ground(x, 0));
-        assertEquals(TerrainColumn.NO_WATER, g.water(x, 0));
+        assertEquals(meters, g.surfaceZ(x, 0), 1e-9);
+        assertTrue(Double.isNaN(g.waterZ(x, 0)), "dry above sea level");
         int sub = -10;
-        assertTrue(g.ground(sub, 0) < -1);
-        assertEquals(-1, g.water(sub, 0), "sea level 0 m is the top of block -1");
-        assertEquals(-1, DemImporter.groundBlock(0, 10));
-        assertEquals(0, DemImporter.groundBlock(0.5, 10));
-        assertEquals(0, DemImporter.groundBlock(10, 10));
+        assertTrue(g.surfaceZ(sub, 0) < 0);
+        assertEquals(0, g.waterZ(sub, 0), 1e-9, "flooded up to sea level");
     }
 
     @Test
@@ -257,8 +253,8 @@ class GeoTiffTest {
         DemImporter.Dem dem = new DemImporter.Dem(e, 5);
         // 20 m columns average 4x4 DEM cells of a checkerboard: exactly 50 m
         assertEquals(50, DemImporter.boxAverage(dem, 10.5, 10.5, 4, 4), 1e-9);
-        ColumnGrid coarse = DemImporter.toRealGrid(dem, 20, 19.5, 19.5, 4, Double.NaN, DemImporter.SurfacePainter.DEFAULT);
-        assertEquals(DemImporter.groundBlock(50, 20), coarse.ground(0, 0));
+        ColumnGrid coarse = DemImporter.toGrid(dem, 20, 19.5, 19.5, 4, Double.NaN, DemImporter.SurfacePainter.DEFAULT);
+        assertEquals(50, coarse.surfaceZ(0, 0), 1e-9);
     }
 
     @Test

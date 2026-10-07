@@ -2,19 +2,19 @@ package me.alex4386.typhon.engine.massflow;
 
 import java.util.List;
 import java.util.Objects;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 
 /**
  * A sustained release of flowing material, e.g. a collapsing eruption column feeding a PDC or a
  * breaching crater lake feeding a lahar.
  *
  * @param id unique id within one flow field
- * @param cells columns the material is released into (y is ignored); the rate is split evenly
+ * @param cells columns the material is released into; the rate is split evenly
  * @param rateM3PerS bulk flow volume per second (real m³)
  * @param temperatureC temperature of the released material
  * @param sedimentFraction sediment volume fraction of the released material (lahars; 0 for PDCs)
  */
-public record FlowSource(String id, List<BlockPos> cells, double rateM3PerS, double temperatureC,
+public record FlowSource(String id, List<ColumnIndex> cells, double rateM3PerS, double temperatureC,
         double sedimentFraction) {
     public FlowSource {
         Objects.requireNonNull(id, "id");
@@ -26,7 +26,7 @@ public record FlowSource(String id, List<BlockPos> cells, double rateM3PerS, dou
         }
     }
 
-    public static FlowSource at(String id, BlockPos position, double rateM3PerS, double temperatureC,
+    public static FlowSource at(String id, ColumnIndex position, double rateM3PerS, double temperatureC,
             double sedimentFraction) {
         return new FlowSource(id, List.of(position), rateM3PerS, temperatureC, sedimentFraction);
     }

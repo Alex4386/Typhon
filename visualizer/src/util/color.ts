@@ -40,10 +40,11 @@ export const HYPSO: [number, number, number, number][] = [
   [1, 0.6, 0.58, 0.56],
 ];
 
-/** Sea floor, t = 0 at sea level → 1 at the deepest point. */
+/** Sea floor, t = 0 at sea level → 1 at the deepest point: sand in the shallows, dark silt and rock deeper. */
 export const BATHY: [number, number, number, number][] = [
-  [0, 0.55, 0.58, 0.52],
-  [1, 0.25, 0.3, 0.33],
+  [0, 0.62, 0.58, 0.46],
+  [0.2, 0.45, 0.45, 0.38],
+  [1, 0.22, 0.26, 0.28],
 ];
 
 /** Approximate incandescence of lava by temperature (°C). */

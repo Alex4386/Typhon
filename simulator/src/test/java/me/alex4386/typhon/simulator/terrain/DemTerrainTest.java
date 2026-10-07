@@ -52,17 +52,17 @@ class DemTerrainTest {
         Path file = coneDem(dir, 19.4069, -155.2834, 500);
         ColumnGrid g = DemTerrain.load(file, 20, 128, Double.NaN, 19.4069, -155.2834);
         assertEquals(2 * 128, g.size());
-        double summit = (g.ground(0, 0) + 1) * 20.0;
+        double summit = g.surfaceZ(0, 0);
         assertEquals(1500, summit, 25, "summit at the domain centre");
-        assertEquals(g.maxGround(), g.ground(0, 0), 1);
-        double at2km = (g.ground(100, 0) + 1) * 20.0; // 2 km east
+        assertEquals(g.maxSurfaceZ(), summit, 20);
+        double at2km = g.surfaceZ(100, 0); // 2 km east
         assertEquals(800 + 700 * 0.5, at2km, 25);
-        assertTrue(g.minGround() >= DemImporter.groundBlock(780, 20), "voids filled from their neighbours");
+        assertTrue(g.minSurfaceZ() >= 780, "voids filled from their neighbours");
     }
 
     @Test
     void realPresetRunsOnADemAndItsWorldTemplateReopensIdentically() throws IOException {
-        Preset preset = Presets.get("kilauea-real");
+        Preset preset = Presets.get("kilauea");
         RealSetting real = preset.realSetting();
         Path file = coneDem(dir, real.dem().lat(), real.dem().lon(), 700);
         // the world keeps DEM data as far as it may grow (expansion.maxExtentM)
@@ -72,7 +72,7 @@ class DemTerrainTest {
                 real.spec().seaLevelZ(), real.dem().lat(), real.dem().lon());
         Scenario scenario = preset.build(4, g, Scenario.Options.DEFAULT);
         VentSite vent = scenario.volcano().vents().get(0);
-        assertEquals(g.ground(0, 0), vent.position().y(), "vent re-anchored on the DEM");
+        assertEquals(g.surfaceZ(0, 0), vent.position().y(), 1e-9, "vent re-anchored on the DEM");
 
         Path world = dir.resolve("world");
         WorldScenarios.writeFromPreset(preset, 4, world, file);

@@ -542,7 +542,6 @@ public final class SimServer implements AutoCloseable {
             j.addProperty("name", p.name());
             j.addProperty("title", p.title());
             j.addProperty("description", p.description());
-            j.addProperty("realScale", p.realSetting() != null);
             presets.add(j);
         }
         o.add("presets", presets);

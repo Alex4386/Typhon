@@ -11,7 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 /**
  * Heap and step cost of one real-scale world at a given core size (sizing the default world windows;
  * see {@code RealPresets.WORLD_CORE_EXTENT_M}). Opt-in:
- * {@code TYPHON_MEM_PROBE=<preset>:<coreExtentM>[:<steps>]}, e.g. {@code kilauea-real:24000:400}.
+ * {@code TYPHON_MEM_PROBE=<preset>:<coreExtentM>[:<steps>]}, e.g. {@code kilauea:24000:400}.
  */
 class WorldMemoryProbe {
     @TempDir

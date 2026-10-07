@@ -10,7 +10,7 @@ import me.alex4386.typhon.engine.geomorph.GeomorphEvents.FailureStyle;
 import me.alex4386.typhon.engine.geomorph.GeomorphEvents.SlopeFailure;
 import me.alex4386.typhon.engine.geomorph.GeomorphEvents.Trigger;
 import me.alex4386.typhon.engine.massflow.DebrisAvalanches;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.testing.Saves;
@@ -21,8 +21,7 @@ import me.alex4386.typhon.engine.world.UnitTable;
 import org.junit.jupiter.api.Test;
 
 class GeomorphologyTest {
-    private static final int BASE_Y = 64;
-    private static final double BASE_Z = BASE_Y + 1; // surface elevation of the flat ground (m)
+    private static final double BASE_Z = 65; // surface elevation of the flat ground (m)
 
     /** Saturated ground: water table at the surface, everything else dry and cold. */
     private static final GroundState SATURATED = new StubGround(0, 0, 15);
@@ -93,7 +92,7 @@ class GeomorphologyTest {
 
     @Test
     void dryScoriaConeRelaxesToItsAngleOfRepose() {
-        GeoWorld w = GeoWorld.flat(5, BASE_Y);
+        GeoWorld w = GeoWorld.flat(5, BASE_Z);
         scoriaCone(w, 40, 40, 20, 50);
         double before = w.solid(MaterialTable.SCORIA, BASE_Z - 1e-9);
         Geomorphology g = geo(w, GroundState.DRY);
@@ -113,7 +112,7 @@ class GeomorphologyTest {
 
     @Test
     void saturatedSlopeFailsAtAGentlerAngle() {
-        GeoWorld w = GeoWorld.flat(5, BASE_Y);
+        GeoWorld w = GeoWorld.flat(5, BASE_Z);
         scoriaCone(w, 40, 40, 20, 50);
         Geomorphology g = geo(w, SATURATED);
         g.activateArea(0, 0, w.size - 1, w.size - 1);
@@ -126,14 +125,14 @@ class GeomorphologyTest {
 
     @Test
     void stableDrySlopeFailsWhenRainSoaksIt() {
-        GeoWorld dry = GeoWorld.flat(4, BASE_Y);
+        GeoWorld dry = GeoWorld.flat(4, BASE_Z);
         scoriaRamp(dry, 10, 30, 30);
         Geomorphology g = geo(dry, GroundState.DRY);
         g.activateArea(0, 0, dry.size - 1, dry.size - 1);
         dry.settle(dry.engine(1, 1, g), g, 50);
         assertEquals(0, g.failureCount(), "a 30° scoria slope is stable dry (FS = tan34/tan30 = 1.17)");
 
-        GeoWorld wet = GeoWorld.flat(4, BASE_Y);
+        GeoWorld wet = GeoWorld.flat(4, BASE_Z);
         scoriaRamp(wet, 10, 30, 30);
         // 6 m of infiltrated rain in pore space 0.5 → wetting front 12 m deep, below the deposit
         Geomorphology h = geo(wet, new StubGround(Double.POSITIVE_INFINITY, 6, 15));
@@ -147,18 +146,18 @@ class GeomorphologyTest {
 
     @Test
     void earthquakeTriggersAMarginalSlope() {
-        GeoWorld calm = GeoWorld.flat(4, BASE_Y);
+        GeoWorld calm = GeoWorld.flat(4, BASE_Z);
         scoriaRamp(calm, 10, 30, 32);
         Geomorphology g = geo(calm, GroundState.DRY);
         g.activateArea(0, 0, calm.size - 1, calm.size - 1);
         calm.settle(calm.engine(1, 1, g), g, 50);
         assertEquals(0, g.failureCount(), "32° is below the 34° repose angle");
 
-        GeoWorld shaken = GeoWorld.flat(4, BASE_Y);
+        GeoWorld shaken = GeoWorld.flat(4, BASE_Z);
         scoriaRamp(shaken, 10, 30, 32);
         Geomorphology h = geo(shaken, GroundState.DRY);
         Engine engine = shaken.engine(1, 1, h);
-        h.queueQuake(new BlockPos(25, 0, 32), 4.0); // PGA ≈ 0.13 g → k_h ≈ 0.065 > 0.035 needed
+        h.queueQuake(new Point3(25.5, 0, 32.5), 4.0); // PGA ≈ 0.13 g → k_h ≈ 0.065 > 0.035 needed
         shaken.settle(engine, h, 300);
         assertTrue(h.failureCount() > 0, "shaking tips the marginal slope");
         assertEquals(Trigger.SEISMIC, shaken.events(SlopeFailure.class).get(0).trigger());
@@ -170,7 +169,7 @@ class GeomorphologyTest {
     }
 
     private static GeoWorld cliff(int chunks) {
-        return new GeoWorld(chunks, (x, z) -> x < 30 ? BASE_Y + 40 : Math.max(BASE_Y, BASE_Y + 40 - (int) Math.round((x - 30) * Math.tan(Math.toRadians(70)))));
+        return new GeoWorld(chunks, (x, z) -> x < 30 ? BASE_Z + 40 : Math.max(BASE_Z, BASE_Z + 40 - (x - 30) * Math.tan(Math.toRadians(70))));
     }
 
     @Test
@@ -215,18 +214,18 @@ class GeomorphologyTest {
         double[] energies = {1e10, 1e12};
         double[] radii = new double[2];
         for (int i = 0; i < 2; i++) {
-            GeoWorld w = GeoWorld.flat(20, BASE_Y);
+            GeoWorld w = GeoWorld.flat(20, BASE_Z);
             Geomorphology g = geo(w, GroundState.DRY);
             Engine engine = w.engine(1, 1, g);
             double before = w.solid(null, 0);
-            g.queueExplosion(new BlockPos(160, BASE_Y, 160), energies[i]);
+            g.queueExplosion(new Point3(160.5, BASE_Z, 160.5), energies[i]);
             w.run(engine, 1);
             CraterExcavated e = w.events(CraterExcavated.class).get(0);
             assertEquals(0.5 * CraterScaling.diameter(energies[i]), e.radiusM(), 1e-9);
             assertTrue(e.excavatedM3() > 0);
             // ejecta conserve the excavated solids
             assertEquals(before, w.solid(null, 0), 1e-7 * before);
-            Geomorphology.CraterShape shape = g.crater(new BlockPos(160, BASE_Y, 160), 200);
+            Geomorphology.CraterShape shape = g.crater(new Point3(160.5, BASE_Z, 160.5), 200);
             assertEquals(e.radiusM(), shape.radiusM(), 0.25 * e.radiusM() + 1.5, "measured rim radius");
             // measured from the rim crest, which the ejecta raise above the old surface
             assertTrue(shape.depthM() >= e.depthM() - 1 && shape.depthM() <= 1.6 * e.depthM() + 1,
@@ -240,9 +239,10 @@ class GeomorphologyTest {
     void openVentWithFalloutBuildsARimmedCrater() {
         // proximal fallout ∝ exp(−r/λ), including into the vent itself
         for (boolean open : new boolean[] {false, true}) {
-            GeoWorld w = GeoWorld.flat(5, BASE_Y);
+            GeoWorld w = GeoWorld.flat(5, BASE_Z);
             Geomorphology g = geo(w, GroundState.DRY);
-            g.setVents(List.of(VentSite.crater("main", new BlockPos(40, BASE_Y, 40), 2)), () -> open);
+            List<VentSite> vents = List.of(VentSite.crater("main", new Point3(40.5, BASE_Z, 40.5), 2));
+            g.setVents(() -> vents, () -> open ? vents : List.of());
             Engine engine = w.engine(1, 1, g);
             for (int burst = 0; burst < 60; burst++) {
                 for (int x = 0; x < w.size; x++) {
@@ -255,7 +255,7 @@ class GeomorphologyTest {
                 w.run(engine, 2);
             }
             w.settle(engine, g, 400);
-            Geomorphology.CraterShape crater = g.crater(new BlockPos(40, BASE_Y, 40), 40);
+            Geomorphology.CraterShape crater = g.crater(new Point3(40.5, BASE_Z, 40.5), 40);
             double slope = w.maxSlopeDeg(2, 2, w.size - 3, w.size - 3);
             assertTrue(slope <= 34.5, "walls and flanks at or below repose: " + slope);
             if (open) {
@@ -270,11 +270,11 @@ class GeomorphologyTest {
 
     @Test
     void ventFloorRisesWithWhatFillsItBetweenEruptions() {
-        GeoWorld w = GeoWorld.flat(5, BASE_Y);
+        GeoWorld w = GeoWorld.flat(5, BASE_Z);
         Geomorphology g = geo(w, GroundState.DRY);
         boolean[] open = {false};
-        VentSite vent = VentSite.crater("main", new BlockPos(40, BASE_Y, 40), 2);
-        g.setVents(List.of(vent), () -> open[0]);
+        VentSite vent = VentSite.crater("main", new Point3(40.5, BASE_Z, 40.5), 2);
+        g.setVents(() -> List.of(vent), () -> open[0] ? List.of(vent) : List.of());
         Engine engine = w.engine(1, 1, g);
         assertEquals(BASE_Z, g.ventFloorZ(vent), 1e-9, "the conduit mouth starts at the vent's ground");
         // a quiet spell: fall-back and slumped tephra fill the vent 3 m deep
@@ -291,10 +291,10 @@ class GeomorphologyTest {
 
     @Test
     void wetTephraSpikeRelaxesToItsAngleOfRepose() {
-        GeoWorld w = GeoWorld.flat(5, BASE_Y);
+        GeoWorld w = GeoWorld.flat(5, BASE_Z);
         for (int x = 0; x < w.size; x++) {
             for (int z = 0; z < w.size; z++) {
-                double h = 25 - 2.5 * Math.hypot(x - 40, z - 40); // ~68° flanks, the spikes block-wise deposits made
+                double h = 25 - 2.5 * Math.hypot(x - 40, z - 40); // ~68° flanks: a spike well above the angle of repose
                 if (h > 0) w.world.deposit(x, z, h, MaterialTable.ASH, UnitTable.UNATTRIBUTED, LayerFlags.LOOSE, 0.45, 0);
             }
         }
@@ -336,8 +336,8 @@ class GeomorphologyTest {
         g.setGround(new StubGround(5, 0.5, 120));
         for (int x = 0; x < 40; x++) for (int z = 0; z < 24; z++) g.setAlteration(x, z, 0.8);
         Engine engine = w.engine(9, threads, g, flow);
-        g.queueExplosion(new BlockPos(20, BASE_Y + 40, 40), 1e11);
-        g.queueQuake(new BlockPos(40, 0, 40), 3.5);
+        g.queueExplosion(new Point3(20.5, BASE_Z + 40, 40.5), 1e11);
+        g.queueQuake(new Point3(40.5, 0, 40.5), 3.5);
         for (int i = 0; i < STEPS; i++) {
             if (saveAt != null && i == saveStep) saveAt[0] = Saves.save(engine);
             w.run(engine, 1);

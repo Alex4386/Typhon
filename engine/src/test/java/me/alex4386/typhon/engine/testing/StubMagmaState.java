@@ -1,11 +1,11 @@
 package me.alex4386.typhon.engine.testing;
 
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.volcano.MagmaState;
 
 /** Mutable {@link MagmaState} for tests of subsystems that read magma state. */
 public final class StubMagmaState implements MagmaState {
-    public BlockPos center = new BlockPos(0, -40, 0);
+    public Point3 center = new Point3(0, -4000, 0);
     public double overpressure;
     public double overpressureRate;
     public double temperature = 1150;
@@ -28,7 +28,7 @@ public final class StubMagmaState implements MagmaState {
         return s;
     }
 
-    @Override public BlockPos chamberCenter() { return center; }
+    @Override public Point3 chamberCenter() { return center; }
     @Override public double overpressureMPa() { return overpressure; }
     @Override public double overpressureRateMPaPerSecond() { return overpressureRate; }
     @Override public double temperatureC() { return temperature; }

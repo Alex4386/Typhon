@@ -19,7 +19,7 @@ public final class DeformationEvents {
         }
     }
 
-    /** Accumulated uplift/subsidence crossed whole blocks and the model terrain was adjusted. */
+    /** The uplift field of the ground changed: columns raised and lowered by at least 5 mm since the last write. */
     public record GroundDeformed(double time, String volcanoId, int columnsRaised, int columnsLowered)
             implements EngineEvent {}
 }

@@ -12,15 +12,14 @@ import me.alex4386.typhon.engine.config.WorldDefinition;
 import me.alex4386.typhon.engine.config.Yaml;
 import me.alex4386.typhon.engine.expansion.ExpansionEvents.AreaExpanded;
 import me.alex4386.typhon.engine.lava.LavaSource;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
-import me.alex4386.typhon.engine.terrain.TerrainChunk;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
+import me.alex4386.typhon.engine.terrain.GroundColumn;
+import me.alex4386.typhon.engine.terrain.GroundImport;
+import me.alex4386.typhon.engine.testing.TestGround;
 import me.alex4386.typhon.engine.terrain.TerrainGenerator;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
-import me.alex4386.typhon.engine.world.BlockId;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -28,9 +27,8 @@ import org.junit.jupiter.api.Test;
  * stays deterministic for any thread count and across a save, and the caps hold.
  */
 class WorldExpansionTest {
-    /** A plane dipping east (1/16 block per column): lava from x = 24 runs off the core's east edge (x = 31). */
-    static final TerrainGenerator PLANE = (x, z) -> TerrainColumn.dry((int) Math.floor(60 - x / 16.0),
-            BlockId.minecraft("stone"));
+    /** A plane dipping east at 1/16 (4 m columns): lava from x = 24 runs off the core's east edge (x = 31). */
+    static final TerrainGenerator PLANE = (x, z) -> GroundColumn.dry(x, z, 244 - (x + 0.5) * 4 / 16.0, TestGround.ROCK);
 
     static WorldDefinition world(String expansion) {
         return WorldDefinition.parse(Yaml.parse("world.yaml", """
@@ -49,33 +47,27 @@ class WorldExpansionTest {
 
     static List<VolcanoDefinition> quiet() {
         return List.of(VolcanoDefinition.parse("west", Yaml.parse("west.yaml", """
-                vents: [{id: summit, kind: crater, x: -20, y: 66, z: 0, radius: 3}]
+                vents: [{id: summit, kind: crater, x: -78, y: 249, z: 2, radiusM: 12}]
                 magma:
-                  chamber: {center: {x: -20, y: -20, z: 0}, volume: 1.0e9, initialOverpressureMPa: 1, supplyRate: 0,
+                  chamber: {center: {x: -78, y: -3000, z: 2}, volume: 1.0e9, initialOverpressureMPa: 1, supplyRate: 0,
                             supplyVariability: 0}
-                geothermal: {radius: 16}
+                geothermal: {radiusM: 64}
                 """)));
     }
 
     /** The core: 64 × 64 columns (x, z in [−32, 32)) from the same generator. */
-    static TerrainSnapshot core() {
-        List<TerrainChunk> chunks = new ArrayList<>();
-        for (int cx = -2; cx < 2; cx++) {
-            for (int cz = -2; cz < 2; cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int x = cx * 16; x < cx * 16 + 16; x++) {
-                    for (int z = cz * 16; z < cz * 16 + 16; z++) chunk.set(x, z, PLANE.column(x, z));
-                }
-                chunks.add(chunk);
-            }
+    static GroundImport core() {
+        List<GroundColumn> columns = new ArrayList<>();
+        for (int x = -32; x < 32; x++) {
+            for (int z = -32; z < 32; z++) columns.add(PLANE.column(x, z));
         }
-        return new TerrainSnapshot(chunks);
+        return new GroundImport(columns);
     }
 
     static World create(String expansion, InMemorySaveStore state, InMemorySaveStore history) {
         World w = World.create(world(expansion), quiet(), core(), state, history);
         w.setTerrainGenerator(PLANE);
-        w.lava().addSource(LavaSource.at("test/vent", new BlockPos(24, 58, 0), 1, 1150, 50, 0.1));
+        w.lava().addSource(LavaSource.at("test/vent", new ColumnIndex(24, 0), 1, 1150, 50, 0.1));
         return w;
     }
 
@@ -102,13 +94,14 @@ class WorldExpansionTest {
         List<EngineFrame> frames = w.engine().runFor(LAVA * 240);
         List<AreaExpanded> grown = expansions(frames);
         assertFalse(grown.isEmpty(), "the flow near the east edge materialises ground beyond it");
-        assertTrue(w.terrain().isKnown(40, 0), "ground east of the old edge is simulated");
-        assertFalse(w.terrain().isKnown(-80, 0), "quiet ground far west is not");
+        assertTrue(w.terrain().world().isKnown(40, 0), "ground east of the old edge is simulated");
+        assertFalse(w.terrain().world().isKnown(-80, 0), "quiet ground far west is not");
         double beyond = 0;
         for (int x = 32; x < 96; x++) for (int z = -16; z < 16; z++) beyond += w.lava().thickness(x, z);
         assertTrue(beyond > 0, "lava flows on the new ground");
-        // generated columns match the generator (stratigraphy built like the core's)
-        assertEquals(PLANE.column(40, 3).groundY(), w.terrain().column(40, 3).groundY());
+        // generated columns the flow did not reach match the generator (stratigraphy built like the core's);
+        // under the flow its chilled base has frozen onto the ground
+        assertEquals(PLANE.column(40, 14).surfaceZ(), w.terrain().world().surfaceZ(40, 14), 1e-9);
         assertEquals(grown.get(grown.size() - 1).addedTiles(), w.expansion().addedTiles());
     }
 
@@ -127,7 +120,7 @@ class WorldExpansionTest {
         World reference = create(GROW, new InMemorySaveStore(), new InMemorySaveStore());
         List<EngineFrame> first = reference.engine().runFor(LAVA * 15);
         assertFalse(expansions(first).isEmpty(), "the save point lies after the first growth");
-        List<EngineFrame> rest = reference.engine().runFor(LAVA * 30);
+        List<EngineFrame> rest = reference.engine().runFor(LAVA * 75); // the flow next widens the area after ~LAVA·60
         assertFalse(expansions(rest).isEmpty(), "and the area keeps growing after it");
 
         InMemorySaveStore state = new InMemorySaveStore();
@@ -138,7 +131,7 @@ class WorldExpansionTest {
         World resumed = World.reopen(world(GROW), quiet(), state, history, World.ChangePolicy.REJECT);
         resumed.setTerrainGenerator(PLANE);
         assertEquals(firstPart.expansion().addedTiles(), resumed.expansion().addedTiles());
-        assertEquals(rest, resumed.engine().runFor(LAVA * 30));
+        assertEquals(rest, resumed.engine().runFor(LAVA * 75));
         assertEquals(reference.engine().stateHash(), resumed.engine().stateHash());
     }
 
@@ -154,7 +147,7 @@ class WorldExpansionTest {
                 new InMemorySaveStore(), new InMemorySaveStore());
         boxed.engine().runFor(LAVA * 240);
         assertEquals(0, boxed.expansion().addedTiles());
-        assertFalse(boxed.terrain().isKnown(40, 0));
+        assertFalse(boxed.terrain().world().isKnown(40, 0));
     }
 
     @Test
@@ -185,7 +178,7 @@ class WorldExpansionTest {
     @Test
     void withoutAGeneratorTheAreaStaysPut() {
         World w = World.create(world(GROW), quiet(), core());
-        w.lava().addSource(LavaSource.at("test/vent", new BlockPos(24, 58, 0), 1, 1150, 50, 0.1));
+        w.lava().addSource(LavaSource.at("test/vent", new ColumnIndex(24, 0), 1, 1150, 50, 0.1));
         assertNotNull(w.expansion());
         w.engine().runFor(LAVA * 120);
         assertEquals(0, w.expansion().addedTiles());

@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.world.SurfaceDetail;
 import me.alex4386.typhon.engine.world.WorldModel;
 import org.junit.jupiter.api.Test;
@@ -14,7 +14,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 /** The crater-resolving fine surface every preset gets around its main vent. */
 class SurfaceDetailPresetTest {
     @ParameterizedTest
-    @ValueSource(strings = {"stromboli", "kilauea", "stromboli-real", "st-helens-real"})
+    // presets whose synthetic terrain has a summit crater (Kīlauea's vent sits on a 1 km flat pit floor, pre-1980
+    // St. Helens has none)
+    @ValueSource(strings = {"stromboli", "surtsey"})
     void craterIsResolvedAndConsistentWithTheColumns(String name) {
         Scenario s = Presets.get(name).build(1);
         for (int i = 0; i < 40; i++) s.engine().step(); // import the terrain, reconcile once
@@ -23,7 +25,8 @@ class SurfaceDetailPresetTest {
         WorldModel world = s.terrain().world();
         double cell = d.cellMeters();
         assertTrue(cell >= 1 && cell <= 5, "crater-resolving cells: " + cell + " m");
-        BlockPos vent = s.volcano().vents().get(0).position();
+        double size = world.spec().metersPerColumn();
+        ColumnIndex vent = s.volcano().vents().get(0).position().column(size);
         int r = d.refinement();
         // Every detailed column averages to its column surface: no volume, no seams.
         for (int z = vent.z() - 6; z <= vent.z() + 6; z++) {
@@ -34,7 +37,7 @@ class SurfaceDetailPresetTest {
         // The vent's crater shows: the fine floor lies well below the surrounding rim.
         double floor = Double.POSITIVE_INFINITY;
         double rim = Double.NEGATIVE_INFINITY;
-        int radius = Math.max(2, s.volcano().vents().get(0).craterRadius());
+        int radius = Math.max(2, (int) Math.round(s.volcano().vents().get(0).craterRadiusM() / size));
         for (int fz = (vent.z() - 2 * radius) * r; fz < (vent.z() + 2 * radius + 1) * r; fz++) {
             for (int fx = (vent.x() - 2 * radius) * r; fx < (vent.x() + 2 * radius + 1) * r; fx++) {
                 double e = d.elevation(fx, fz);
@@ -44,7 +47,6 @@ class SurfaceDetailPresetTest {
                 rim = Math.max(rim, e);
             }
         }
-        double size = world.spec().metersPerColumn();
         assertTrue(rim - floor > size, name + ": crater relief " + (rim - floor) + " m at " + size + " m columns");
     }
 
@@ -53,8 +55,8 @@ class SurfaceDetailPresetTest {
         Scenario s = Presets.get("stromboli").build(1);
         for (int i = 0; i < 40; i++) s.engine().step();
         SurfaceDetail d = s.volcano().surfaceDetail();
-        BlockPos vent = s.volcano().vents().get(0).position();
         WorldModel world = s.terrain().world();
+        ColumnIndex vent = s.volcano().vents().get(0).position().column(world.spec().metersPerColumn());
         world.deposit(vent.x(), vent.z(), 3.0, me.alex4386.typhon.engine.world.MaterialTable.BASALT, 0);
         for (int i = 0; i < 40; i++) s.engine().step();
         assertEquals(world.surfaceZ(vent.x(), vent.z()), d.columnMean(vent.x(), vent.z()), 1e-3);

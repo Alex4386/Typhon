@@ -1,4 +1,4 @@
-package me.alex4386.typhon.engine.world;
+package me.alex4386.typhon.mc;
 
 import java.util.Objects;
 import java.util.regex.Pattern;

@@ -14,16 +14,15 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
-import me.alex4386.typhon.engine.terrain.TerrainChunk;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
-import me.alex4386.typhon.engine.world.MaterialTable;
+import me.alex4386.typhon.engine.terrain.GroundColumn;
+import me.alex4386.typhon.engine.terrain.GroundImport;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
-import me.alex4386.typhon.engine.world.BlockId;
-import me.alex4386.typhon.engine.world.BlockState;
+import me.alex4386.typhon.engine.testing.TestGround;
+import me.alex4386.typhon.engine.world.MaterialTable;
+import me.alex4386.typhon.engine.world.WorldModel;
 import org.junit.jupiter.api.Test;
 import me.alex4386.typhon.engine.testing.Saves;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
@@ -35,7 +34,8 @@ import me.alex4386.typhon.engine.save.FieldChunk;
 class LavaCrustTubeTest {
     private static final double BASALT_T = 1150;
     private static final double BASALT_SI = 50;
-    private static final int SEA = 72;
+    /** Sea surface elevation (m). */
+    private static final double SEA = 72;
 
     // ── Crust ──
 
@@ -71,11 +71,11 @@ class LavaCrustTubeTest {
 
     private static double runout(boolean crust) {
         // Gentle slope (≈3°): slow sheet flow, below the crust disruption speed.
-        LavaTestWorld world = new LavaTestWorld(-1, -2, 12, 1, (x, z) -> 120 - Math.floorDiv(x, 20)).coarse(10);
+        LavaTestWorld world = new LavaTestWorld(-1, -2, 12, 1, (x, z) -> 120 - x / 20.0).coarse(10);
         LavaFlow lava = new LavaFlow(world.terrain,
                 LavaConfig.defaults().toBuilder().coolingScale(20).crustEnabled(crust).build());
         Engine engine = world.engine(lava, 2);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 0.5, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 0.5, BASALT_T, BASALT_SI, 0.1));
         double farthest = 0;
         for (int i = 0; i < 4000; i++) {
             world.run(engine, 1);
@@ -99,13 +99,13 @@ class LavaCrustTubeTest {
 
     /** Crust along the proximal centreline of a steep (≈27°) channel where basalt runs at metres per second. */
     private static double channelCrust(double disruptionVelocity) {
-        LavaTestWorld world = new LavaTestWorld(-1, -2, 6, 1, (x, z) -> 200 - Math.floorDiv(x, 2));
+        LavaTestWorld world = new LavaTestWorld(-1, -2, 6, 1, (x, z) -> 200 - x / 2.0);
         world.coarse(5);
         LavaConfig config = LavaConfig.defaults().toBuilder().coolingScale(20)
                 .crustDisruptionVelocity(disruptionVelocity).build();
         LavaFlow lava = new LavaFlow(world.terrain, config);
         Engine engine = world.engine(lava, 3);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 4, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 4, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 300);
         double crust = 0;
         double melt = 0;
@@ -122,9 +122,9 @@ class LavaCrustTubeTest {
     // ── Tubes ──
 
     /** Sloping trough x ∈ [0, 19], z ∈ [-1, 1], dammed at x = 20, with a deep pit beyond. */
-    private static int trough(int x, int z, boolean breached) {
+    private static double trough(int x, int z, boolean breached) {
         if (z < -1 || z > 1 || x < 0) return 100;
-        if (x < 20) return 70 - x / 4;
+        if (x < 20) return 70 - x / 4.0;
         if (x == 20) return breached ? 50 : 100;
         if (x < 40) return 40;
         return 100;
@@ -137,7 +137,7 @@ class LavaCrustTubeTest {
         LavaTestWorld world = new LavaTestWorld(-1, -1, 2, 0, (x, z) -> trough(x, z, false)).coarse(20);
         LavaFlow lava = new LavaFlow(world.terrain, config);
         Engine engine = world.engine(lava, seed);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 1.0, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 1.0, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 300);
         lava.removeSource("vent");
         world.run(engine, 2000);
@@ -146,28 +146,16 @@ class LavaCrustTubeTest {
         return new TubeRun(world, lava, engine);
     }
 
-    /** The host re-sends the trough terrain with the dam removed (a breakout). */
-    private static TerrainSnapshot breach(TerrainModel terrain) {
-        List<TerrainChunk> chunks = new ArrayList<>();
-        for (int cx = -1; cx <= 2; cx++) {
-            for (int cz = -1; cz <= 0; cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int x = cx * 16; x < cx * 16 + 16; x++) {
-                    for (int z = cz * 16; z < cz * 16 + 16; z++) {
-                        TerrainColumn column = terrain.column(x, z);
-                        if (x == 20 && z >= -1 && z <= 1) column = TerrainColumn.dry(trough(x, z, true), column.surface());
-                        chunk.set(x, z, column);
-                    }
-                }
-                chunks.add(chunk);
-            }
-        }
-        return new TerrainSnapshot(chunks);
+    /** The host re-sends the dam columns of the trough lowered (a breakout). */
+    private static GroundImport breach(TerrainModel terrain) {
+        List<GroundColumn> columns = new ArrayList<>();
+        for (int z = -1; z <= 1; z++) columns.add(GroundColumn.dry(20, z, trough(20, z, true), TestGround.ROCK));
+        return new GroundImport(columns);
     }
 
     /** Tube runs step 1 s per tick ({@link #pondThenBreach} builds its world coarse). */
     private static LavaConfig tubeConfig() {
-        return LavaConfig.defaults().toBuilder().coolingScale(100).tubeMinRoofThickness(0.5).build();
+        return LavaConfig.defaults().toBuilder().coolingScale(100).build();
     }
 
     @Test
@@ -179,9 +167,11 @@ class LavaCrustTubeTest {
         assertFalse(run.world().events(LavaEvents.LavaTubesFormed.class).isEmpty());
 
         for (LavaTube tube : tubes) {
-            TerrainColumn column = run.world().terrain.column(tube.x(), tube.z());
-            assertTrue(column.groundY() > tube.topY(), "roof above the void at " + tube);
-            assertEquals(BlockId.minecraft("smooth_basalt"), column.surface(), "basaltic roof at " + tube);
+            WorldModel model = run.world().terrain.world();
+            assertTrue(model.surfaceZ(tube.x(), tube.z()) > tube.topZ(), "roof above the void at " + tube);
+            assertEquals(MaterialTable.BASALT,
+                    model.layer(tube.x(), tube.z(), model.layerCount(tube.x(), tube.z()) - 1).materialInfo(),
+                    "basaltic roof at " + tube);
             assertEquals(0, lava.thickness(tube.x(), tube.z()));
             assertEquals(0, lava.crustThickness(tube.x(), tube.z()));
 
@@ -207,9 +197,11 @@ class LavaCrustTubeTest {
 
     @Test
     void thinRoofCollapsesInsteadOfLeavingTube() {
-        LavaConfig config = tubeConfig().toBuilder().tubeMinRoofThickness(5).build();
+        // a crust with almost no tensile strength: over a 1 m span it needs a 5 m roof (ρ g L² / 2σ)
+        LavaConfig config = tubeConfig().toBuilder().roofTensileStrengthPa(2600 * 9.81 / (2 * 5)).build();
+        assertEquals(5, config.minRoofThickness(1), 1e-9);
         TubeRun run = pondThenBreach(config, 4, 3000);
-        assertTrue(run.lava().tubes().isEmpty(), "a roof thinner than the threshold must cave in");
+        assertTrue(run.lava().tubes().isEmpty(), "a roof too thin to span the channel must cave in");
     }
 
     @Test
@@ -242,13 +234,13 @@ class LavaCrustTubeTest {
         world.coarse(10);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults());
         Engine engine = world.engine(lava, 4);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 300);
 
         SubsystemState saved = new SubsystemState();
         lava.saveState(saved);
         assertNotNull(saved.field("cells"), "lava cells are stored as a region field");
-        assertEquals(5, saved.json().get("format").getAsInt());
+        assertEquals(7, saved.json().get("format").getAsInt());
 
         world.coarse(10);
         LavaFlow copy = new LavaFlow(world.terrain, LavaConfig.defaults());
@@ -270,14 +262,14 @@ class LavaCrustTubeTest {
 
     @Test
     void sustainedOceanEntryBuildsDeltaSeaward() {
-        // Coastal slope toward +x; the sea (y = 72) starts at x = 9 and deepens to y = 50.
+        // Coastal slope toward +x; the sea (surface 72 m) starts at x = 9 and deepens to 50 m.
         LavaTestWorld world = new LavaTestWorld(-1, -1, 3, 0, (x, z) -> Math.max(50, 80 - x), (x, z) -> SEA);
         // Flows now advance at their physical speed even when time-compressed (sub-steps), so lava
         // reaches deep water as a thick tongue; cooling ×50 lets its front freeze within the test.
         world.coarse(10);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(50));
         Engine engine = world.engine(lava, 5);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 3, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 3, BASALT_T, BASALT_SI, 0.1));
         int shoreBefore = shoreline(world.terrain);
         world.run(engine, 4000);
         int shoreAfter = shoreline(world.terrain);
@@ -285,7 +277,7 @@ class LavaCrustTubeTest {
         assertTrue(shoreAfter > shoreBefore, "shoreline " + shoreBefore + " → " + shoreAfter);
         int hyaloclastite = 0;
         var model = world.terrain.world();
-        double seaZ = model.spec().blockTop(SEA);
+        double seaZ = SEA;
         for (int x = shoreBefore + 1; x < 64; x++) {
             for (int z = -16; z < 16; z++) {
                 if (!model.isKnown(x, z)) continue;
@@ -307,7 +299,7 @@ class LavaCrustTubeTest {
     /** Last x along z = 0 whose ground is at or above sea level. */
     private static int shoreline(TerrainModel terrain) {
         int shore = Integer.MIN_VALUE;
-        for (int x = -16; x < 64; x++) if (terrain.column(x, 0).groundY() >= SEA) shore = x;
+        for (int x = -16; x < 64; x++) if (terrain.world().surfaceZ(x, 0) >= SEA) shore = x;
         return shore;
     }
 
@@ -326,7 +318,7 @@ class LavaCrustTubeTest {
         LavaConfig config = LavaConfig.defaults().toBuilder().coolingScale(1).littoralExplosionFluxM3s(0.5).build();
         LavaFlow lava = new LavaFlow(world.terrain, config);
         Engine engine = world.engine(lava, 6);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), rate, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), rate, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 400);
         List<LavaEvents.LavaOceanEntry> entries = world.events(LavaEvents.LavaOceanEntry.class);
         if (explosive) return entries.stream().filter(LavaEvents.LavaOceanEntry::littoralExplosion).count();

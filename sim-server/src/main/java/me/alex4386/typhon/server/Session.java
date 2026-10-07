@@ -44,7 +44,8 @@ import me.alex4386.typhon.engine.sim.EngineRunner;
 import me.alex4386.typhon.engine.subsurface.Subsurface;
 import me.alex4386.typhon.engine.tephra.TephraCommands;
 import me.alex4386.typhon.engine.tephra.WindField;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
+import me.alex4386.typhon.engine.terrain.GroundColumn;
+import me.alex4386.typhon.engine.terrain.GroundImport;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.VentCommands;
 import me.alex4386.typhon.engine.volcano.VentSite;
@@ -69,6 +70,12 @@ import me.alex4386.typhon.simulator.terrain.ColumnGrid;
 final class Session implements AutoCloseable {
     private static final Logger LOG = Logger.getLogger(Session.class.getName());
     static final double KEYFRAME_SECONDS = 300;
+    /**
+     * Keyframes are full saves (megabytes, seconds of engine time on a large world). At high speed 300
+     * simulated seconds pass many times per real second, so keyframes are also spaced in wall-clock time:
+     * at least this many times the last save's duration, so saving takes at most ~5% of the engine's time.
+     */
+    static final double KEYFRAME_COST_FACTOR = 20;
     static final int MAX_KEYFRAMES = 64;
     static final int EVENT_LOG_LIMIT = 20000;
     /** Milestones kept for attaching clients regardless of how many routine events followed them. */
@@ -138,6 +145,10 @@ final class Session implements AutoCloseable {
 
     private final List<Keyframe> keyframes = new ArrayList<>();
     private double lastKeyframeTime = Double.NEGATIVE_INFINITY;
+    /** Wall-clock end (ns) and duration (ns) of the last keyframe save; a keyframe in progress blocks the next. */
+    private volatile long lastKeyframeWallNanos = Long.MIN_VALUE;
+    private volatile long lastKeyframeCostNanos = 0;
+    private volatile boolean keyframeInProgress;
 
     private double rate;
     private long rateWallNanos;
@@ -223,7 +234,6 @@ final class Session implements AutoCloseable {
         int tile = size % 64 == 0 ? 64 : size % 32 == 0 ? 32 : 16; // fewer, larger tiles render cheaper in the client
         long base = tiles == null ? 0 : tiles.maxVersion();
         this.map = new GridMapping(cell, tile, grid.minX(), grid.minZ(), grid.maxX(), grid.maxZ());
-        installDepthStretch(map, scenario);
         this.tiles = new TileStore(map, base);
         this.lod = new LodTiles(scenario, map, base);
         this.tileOrder = order(map, scenario);
@@ -261,7 +271,7 @@ final class Session implements AutoCloseable {
         } else {
             VolcanoSystem first = scenario.volcanoes().get(0);
             WindField wind = first.tephra().wind();
-            windSpeed = wind.baseSpeed() / first.scaling().velocityScale();
+            windSpeed = wind.baseSpeed();
             windBearingDeg = normalizeDeg(Math.toDegrees(wind.baseDirectionRad() + Math.PI / 2));
             rainMmPerHour = first.lahars() == null ? 0 : first.lahars().rainfall();
         }
@@ -311,41 +321,12 @@ final class Session implements AutoCloseable {
         }
     }
 
-    /**
-     * Samples a coarse ground-elevation grid and the first volcano's depth compression so that
-     * subsurface points (chamber, hypocentres, dikes) are drawn at their physical depth. Runs while
-     * the engine is not stepping.
-     */
-    static void installDepthStretch(GridMapping map, Scenario scenario) {
-        var world = scenario.terrain().world();
-        int step = 8;
-        int w = (map.maxX - map.minX) / step + 1;
-        int h = (map.maxZ - map.minZ) / step + 1;
-        float[] ground = new float[w * h];
-        for (int j = 0; j < h; j++) {
-            for (int i = 0; i < w; i++) {
-                double s = world.surfaceZ(map.minX + i * step, map.minZ + j * step);
-                ground[j * w + i] = (float) (Double.isFinite(s) ? s : world.spec().datumZ());
-            }
-        }
-        double scale = 1;
-        for (VolcanoSystem v : scenario.volcanoes()) {
-            double physical = v.chamber().physicalDepthM();
-            var c = v.chamber().chamberCenter();
-            double g = world.surfaceZ(c.x(), c.z());
-            double blockDepth = g - (c.y() + 0.5) * map.cell - 2 * map.cell;
-            if (Double.isFinite(physical) && Double.isFinite(g) && blockDepth > 0) {
-                scale = Math.max(1, (physical - 2 * map.cell) / blockDepth);
-                break;
-            }
-        }
-        map.setDepthStretch(ground, step, w, h, scale);
-    }
-
     private static int[] order(GridMapping map, Scenario scenario) {
         List<double[]> vents = new ArrayList<>();
         for (VolcanoSystem v : scenario.volcanoes()) {
-            for (VentSite vent : v.vents()) vents.add(new double[] {map.x(vent.position().x()), map.y(vent.position().z())});
+            me.alex4386.typhon.engine.math.Point3 p = v.referencePoint(); // the first vent, or the ground above the chamber
+            vents.add(new double[] {p.x(), -p.z()});
+            for (VentSite vent : v.coupler().allVents()) vents.add(new double[] {vent.position().x(), -vent.position().z()});
         }
         int n = map.tilesX * map.tilesY;
         Integer[] idx = new Integer[n];
@@ -394,8 +375,7 @@ final class Session implements AutoCloseable {
         Grown grown = call(s -> {
             int[] b = s.expansion().simulatedBounds();
             GridMapping m = b == null ? old : old.covering(b[0], b[1], b[2], b[3]);
-            if (m != old && (m.tilesX != old.tilesX || m.tilesY != old.tilesY)) installDepthStretch(m, s);
-            else m = old;
+            if (m.tilesX == old.tilesX && m.tilesY == old.tilesY) m = old;
             return new Grown(m, Probe.simulatedTiles(s, m));
         }).get(60, TimeUnit.SECONDS);
         if (grown.map() != old) {
@@ -891,6 +871,19 @@ final class Session implements AutoCloseable {
         Scenario s = live;
         try {
             switch (kind) {
+                case "setChamberMagma" -> {
+                    String vid = Json.str(cmd, "volcanoId");
+                    VolcanoSystem v = volcano(s, vid);
+                    if (v == null) return done(CommandResult.error("unknownVolcano", "Unknown volcano " + vid));
+                    String chamberId = Json.str(cmd, "chamberId");
+                    if (chamberId != null && !v.chambers().containsKey(chamberId)) {
+                        return done(CommandResult.error("badRequest", "Unknown chamber " + chamberId));
+                    }
+                    MagmaCommands.MagmaCommand set = new MagmaCommands.SetChamberMagma(vid, Json.dbl(cmd, "temperatureC"),
+                            Json.dbl(cmd, "silicaWt"), Json.dbl(cmd, "waterWt"), Json.dbl(cmd, "co2Wt"));
+                    r.submit(chamberId == null ? set : new MagmaCommands.ChamberCommand(vid, chamberId, set));
+                    return done(CommandResult.ok(null));
+                }
                 case "startEruption", "stopEruption", "forceDike", "injectMagma" -> {
                     String vid = Json.str(cmd, "volcanoId");
                     VolcanoSystem v = volcano(s, vid);
@@ -1033,7 +1026,7 @@ final class Session implements AutoCloseable {
                     double dir = Math.toRadians(bearing) - Math.PI / 2; // engine: radians from +X towards +Z
                     for (VolcanoSystem v : s.volcanoes()) {
                         double variability = v.tephra().wind().variability();
-                        r.submit(new TephraCommands.SetWind(v.tephra().id(), speed * v.scaling().velocityScale(), dir,
+                        r.submit(new TephraCommands.SetWind(v.tephra().id(), speed, dir,
                                 variability));
                     }
                     windSpeed = speed;
@@ -1082,10 +1075,11 @@ final class Session implements AutoCloseable {
         }
     }
 
-    /** Lowers the ground of every column within {@code radius} m by {@code depth} m (whole blocks). */
+    /** Lowers the ground of every column within {@code radius} m by {@code depth} m. */
     static int dig(Scenario s, GridMapping m, double x, double y, double radius, double depth) {
         TerrainModel terrain = s.terrain();
-        int blocks = Math.max(1, (int) Math.ceil(depth / m.cell));
+        var world = terrain.world();
+        List<GroundColumn> lowered = new ArrayList<>();
         int r = (int) Math.ceil(radius / m.cell);
         int cx0 = m.columnAtX(x);
         int cz0 = m.columnAtY(y);
@@ -1096,12 +1090,12 @@ final class Session implements AutoCloseable {
                 int cz = cz0 + dz;
                 if (!m.inside(cx, cz)) continue;
                 if (Math.hypot(m.x(cx) - x, m.y(cz) - y) > radius) continue;
-                TerrainColumn col = terrain.column(cx, cz);
-                if (col == null) continue;
-                terrain.setGround(cx, cz, col.groundY() - blocks, col.surface());
+                if (!world.isKnown(cx, cz)) continue;
+                lowered.add(new GroundColumn(cx, cz, world.surfaceZ(cx, cz) - depth, world.waterZ(cx, cz), null));
                 n++;
             }
         }
+        terrain.apply(new GroundImport(lowered));
         return n;
     }
 
@@ -1331,7 +1325,7 @@ final class Session implements AutoCloseable {
         java.util.function.Function<String, Double> f = k -> fields != null && fields.has(k) && !fields.get(k).isJsonNull()
                 ? fields.get(k).getAsDouble() : null;
         Double depth = f.apply("depthM");
-        var request = new me.alex4386.typhon.engine.config.ChamberPlacement.Request(name, cx, cz,
+        var request = new me.alex4386.typhon.engine.config.ChamberPlacement.Request(name, m.x(cx), -m.y(cz),
                 depth != null ? depth : me.alex4386.typhon.engine.config.ChamberPlacement.defaultOf("depthM"),
                 f.apply("volumeM3"), f.apply("temperatureC"), f.apply("silicaWt"), f.apply("waterWt"), f.apply("co2Wt"),
                 f.apply("crystalFraction"), f.apply("supplyRateM3PerS"), f.apply("tensileStrengthMPa"),
@@ -1340,8 +1334,7 @@ final class Session implements AutoCloseable {
         int n = taken.size() + 1;
         while (taken.contains("volcano-" + n)) n++;
         String vid = "volcano-" + n;
-        var definition = me.alex4386.typhon.engine.config.ChamberPlacement.definition(vid, request, ground,
-                scenario.terrain().world().spec().metersPerColumn());
+        var definition = me.alex4386.typhon.engine.config.ChamberPlacement.definition(vid, request, ground);
         JsonObject volcanoes = new JsonObject();
         volcanoes.add(vid, Json.GSON.toJsonTree(definition.toTree()));
         ConfigOutcome outcome = applyConfig(new ConfigApi.Request(null, volcanoes, false, dryRun, null));
@@ -1394,7 +1387,8 @@ final class Session implements AutoCloseable {
                 double ground = groundAt(cx, cz);
                 if (chamberId == null) chamberId = freeId(ids(chambers), "chamber-");
                 if (chamberId.equals(main) || ids(chambers).contains(chamberId)) throw new IllegalArgumentException("Chamber " + chamberId + " exists");
-                chambers.add(me.alex4386.typhon.engine.config.ChamberPlacement.chamberElement(chamberId, placementRequest(cx, cz, fields), ground, l));
+                chambers.add(me.alex4386.typhon.engine.config.ChamberPlacement.chamberElement(chamberId,
+                        placementRequest(map.x(cx), -map.y(cz), fields), ground));
             }
             case "editChamber" -> {
                 if (chamberId == null) throw new IllegalArgumentException("editChamber needs chamberId");
@@ -1406,20 +1400,22 @@ final class Session implements AutoCloseable {
                     if (target == null) throw new IllegalArgumentException("No chamber " + chamberId);
                 }
                 Map<String, Object> center = new java.util.LinkedHashMap<>((Map<String, Object>) target.get("center"));
-                int cx = ((Number) center.get("x")).intValue();
-                int cz = ((Number) center.get("z")).intValue();
+                double xm = ((Number) center.get("x")).doubleValue();
+                double zm = ((Number) center.get("z")).doubleValue();
                 if (op.at() != null) {
-                    cx = map.columnAtX(op.at()[0]);
-                    cz = map.columnAtY(op.at()[1]);
+                    xm = map.x(map.columnAtX(op.at()[0]));
+                    zm = -map.y(map.columnAtY(op.at()[1]));
                 }
+                int cx = map.columnAtX(xm);
+                int cz = map.columnAtY(-zm);
                 double depth = fields.has("depthM") ? fields.get("depthM").getAsDouble() : ((Number) target.get("lithostaticDepth")).doubleValue();
                 Map<String, Object> changed = new java.util.LinkedHashMap<>();
                 if (op.at() != null || fields.has("depthM")) {
                     double ground = groundAt(cx, cz);
                     Map<String, Object> c = new java.util.LinkedHashMap<>();
-                    c.put("x", cx);
-                    c.put("y", me.alex4386.typhon.engine.config.ChamberPlacement.blockBelow(ground - depth, l));
-                    c.put("z", cz);
+                    c.put("x", xm);
+                    c.put("y", ground - depth);
+                    c.put("z", zm);
                     changed.put("center", c);
                     changed.put("lithostaticDepth", depth);
                 }
@@ -1487,10 +1483,11 @@ final class Session implements AutoCloseable {
         return ground;
     }
 
-    private static me.alex4386.typhon.engine.config.ChamberPlacement.Request placementRequest(int cx, int cz, JsonObject fields) {
+    /** A placement at engine position ({@code x}, {@code z}) (m). */
+    private static me.alex4386.typhon.engine.config.ChamberPlacement.Request placementRequest(double x, double z, JsonObject fields) {
         java.util.function.Function<String, Double> f = k -> fields.has(k) && !fields.get(k).isJsonNull() ? fields.get(k).getAsDouble() : null;
         Double depth = f.apply("depthM");
-        return new me.alex4386.typhon.engine.config.ChamberPlacement.Request(null, cx, cz,
+        return new me.alex4386.typhon.engine.config.ChamberPlacement.Request(null, x, z,
                 depth != null ? depth : me.alex4386.typhon.engine.config.ChamberPlacement.defaultOf("depthM"),
                 f.apply("volumeM3"), f.apply("temperatureC"), f.apply("silicaWt"), f.apply("waterWt"), f.apply("co2Wt"),
                 f.apply("crystalFraction"), f.apply("supplyRateM3PerS"), f.apply("tensileStrengthMPa"), f.apply("initialOverpressureMPa"));
@@ -1602,16 +1599,29 @@ final class Session implements AutoCloseable {
         if (replay) return;
         double t = live.engine().time();
         if (t - lastKeyframeTime < KEYFRAME_SECONDS) return;
+        if (keyframeInProgress) return;
+        long now = System.nanoTime();
+        if (lastKeyframeWallNanos != Long.MIN_VALUE
+                && now - lastKeyframeWallNanos < KEYFRAME_COST_FACTOR * lastKeyframeCostNanos) return;
         lastKeyframeTime = t;
+        keyframeInProgress = true;
         EngineRunner r = runner;
         Scenario s = live;
         Path worldDir = source.kind() == Kind.WORLD ? source.worldDir() : null;
         r.onEngineThread(e -> {
-            drainFramesNow(r, s);
-            SaveStore store = worldDir == null ? new InMemorySaveStore()
-                    : new DirectorySaveStore(worldDir.resolve(REPLAY_DIR).resolve(keyframeName(e.timeMicros())));
-            s.save(store);
-            return new Keyframe(e.time(), store);
+            long start = System.nanoTime();
+            try {
+                drainFramesNow(r, s);
+                SaveStore store = worldDir == null ? new InMemorySaveStore()
+                        : new DirectorySaveStore(worldDir.resolve(REPLAY_DIR).resolve(keyframeName(e.timeMicros())));
+                s.save(store);
+                return new Keyframe(e.time(), store);
+            } finally {
+                long end = System.nanoTime();
+                lastKeyframeCostNanos = end - start;
+                lastKeyframeWallNanos = end;
+                keyframeInProgress = false;
+            }
         }).thenAccept(k -> {
             synchronized (keyframes) {
                 keyframes.add(k);
@@ -1620,6 +1630,8 @@ final class Session implements AutoCloseable {
                     for (int i = 1; i < keyframes.size() / 2; i++) discard(keyframes.remove(i));
                 }
             }
+        }).whenComplete((v, ex) -> {
+            if (ex != null) keyframeInProgress = false; // never ran (engine replaced): allow the next one
         });
     }
 

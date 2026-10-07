@@ -29,6 +29,8 @@ public final class AlertLevelEstimator implements Subsystem {
 
     private AlertLevel level;
     private EruptionClassifier classifier;
+    /** Whether magma is rising towards the surface through a dike (none: never). */
+    private java.util.function.BooleanSupplier dikeRising = () -> false;
     /** Time at which a downgrade became possible (negative = not pending). */
     private double downgradeSince = -1;
 
@@ -75,6 +77,14 @@ public final class AlertLevelEstimator implements Subsystem {
         return new Snapshot(level, suggestedStyle());
     }
 
+    /**
+     * Tells the estimator when a dike is rising from the chamber: magma on its way to the surface is the
+     * imminent-eruption signal whatever the chamber pressure does (the dike draws the chamber down).
+     */
+    public void setDikeRising(java.util.function.BooleanSupplier rising) {
+        this.dikeRising = java.util.Objects.requireNonNull(rising);
+    }
+
     /** Attaches the style estimate reported alongside the level. */
     public void setClassifier(EruptionClassifier classifier) {
         this.classifier = classifier;
@@ -83,7 +93,9 @@ public final class AlertLevelEstimator implements Subsystem {
     @Override
     public void step(StepContext context) {
         double now = context.time();
-        double pressureRatio = magma.overpressureMPa() / config.failureOverpressureMPa();
+        double failure = magma.nextFailureOverpressureMPa();
+        // towards the failure that comes next: a molten conduit's plug, or else the chamber walls
+        double pressureRatio = magma.overpressureMPa() / (failure > 0 ? failure : config.failureOverpressureMPa());
         double vtRate = seismicity == null ? 0 : seismicity.vtRatePerMinute();
         double rsam = seismicity == null ? 0 : seismicity.rsam();
 
@@ -101,7 +113,7 @@ public final class AlertLevelEstimator implements Subsystem {
             return AlertLevel.ERUPTING;
         }
 
-        AlertLevel raw = indicated(pressureRatio, vtRate, rsam, 1);
+        AlertLevel raw = dikeRising.getAsBoolean() ? AlertLevel.ERUPTION_IMMINENT : indicated(pressureRatio, vtRate, rsam, 1);
         if (level == null) {
             return raw;
         }
@@ -110,7 +122,8 @@ public final class AlertLevelEstimator implements Subsystem {
             return raw;
         }
 
-        AlertLevel sustained = indicated(pressureRatio, vtRate, rsam, config.downgradeFactor());
+        AlertLevel sustained = dikeRising.getAsBoolean() ? AlertLevel.ERUPTION_IMMINENT
+                : indicated(pressureRatio, vtRate, rsam, config.downgradeFactor());
         if (!level.isAbove(sustained)) {
             downgradeSince = -1;
             return level;

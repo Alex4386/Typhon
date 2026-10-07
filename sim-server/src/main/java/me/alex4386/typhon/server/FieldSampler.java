@@ -10,6 +10,7 @@ import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.massflow.MassFlowField;
 import me.alex4386.typhon.engine.subsurface.Subsurface;
 import me.alex4386.typhon.engine.world.LayerView;
+import me.alex4386.typhon.engine.world.MaterialTable;
 import me.alex4386.typhon.engine.world.WorldModel;
 import me.alex4386.typhon.server.protocol.Field;
 import me.alex4386.typhon.simulator.scenario.Scenario;
@@ -128,10 +129,15 @@ final class FieldSampler {
                 return tC;
             }
             case TOP_UNIT -> {
-                int n = world.layerCount(x, z);
-                if (n <= 0) return 0;
-                LayerView top = world.layer(x, z, n - 1);
-                return top.unit() < 0 ? 0 : top.unit() + 1;
+                SurfaceCover c = surfaceCover(world, x, z);
+                return c.top() < 0 ? 0 : c.top() + 1;
+            }
+            case UNDER_UNIT -> {
+                SurfaceCover c = surfaceCover(world, x, z);
+                return c.under() < 0 ? 0 : c.under() + 1;
+            }
+            case UNDER_SHARE -> {
+                return surfaceCover(world, x, z).underShare();
             }
             case UPLIFT -> {
                 return world.uplift(x, z);
@@ -149,6 +155,69 @@ final class FieldSampler {
                 return 0;
             }
         }
+    }
+
+    /** What a column of ground shows from above: its most visible unit, the next one and that one's share. */
+    record SurfaceCover(int top, int under, double underShare) {}
+
+    /**
+     * The units a column shows, by areal coverage. From the top down each layer covers the fraction
+     * {@code 1 − exp(−t/d)} of what lies beneath it, {@code t} its thickness and {@code d} its grain size: the
+     * coverage of randomly deposited grains (a Poisson process). A millimetre of fine ash hides most of the
+     * ground, the same volume of scattered bombs a fraction of a percent. The top two units by visible share
+     * are returned, so the view blends them instead of flipping each column to its latest veneer.
+     */
+    static SurfaceCover surfaceCover(me.alex4386.typhon.engine.world.WorldModel world, int x, int z) {
+        int n = world.layerCount(x, z);
+        if (n <= 0) return new SurfaceCover(-1, -1, 0);
+        java.util.Map<Integer, Double> seen = new java.util.HashMap<>();
+        double hidden = 1; // share of the column not yet covered by the layers above
+        double surface = world.surfaceZ(x, z);
+        for (int k = n - 1; k >= 0 && hidden > 0.01; k--) {
+            LayerView layer = world.layer(x, z, k);
+            double t = Math.max(0, Math.min(layer.top(), surface) - layer.bottom());
+            if (t <= 0) continue;
+            double cover = 1 - Math.exp(-t / grainSizeM(layer));
+            seen.merge(layer.unit(), hidden * cover, Double::sum);
+            hidden *= 1 - cover;
+            if (surface - layer.bottom() > 5) break; // nothing deeper shows
+        }
+        int top = -1;
+        int under = -1;
+        double wTop = 0;
+        double wUnder = 0;
+        for (var e : seen.entrySet()) {
+            double w = e.getValue();
+            int u = e.getKey();
+            if (w > wTop || (w == wTop && u > top)) {
+                under = top;
+                wUnder = wTop;
+                top = u;
+                wTop = w;
+            } else if (w > wUnder || (w == wUnder && u > under)) {
+                under = u;
+                wUnder = w;
+            }
+        }
+        if (top < 0) top = world.layer(x, z, n - 1).unit();
+        double share = under >= 0 && wTop + wUnder > 0 ? wUnder / (wTop + wUnder) : 0;
+        return new SurfaceCover(top, under, share);
+    }
+
+    /**
+     * Characteristic grain size (m) of a layer for its areal coverage, by the volcaniclastic size classes of
+     * Fisher &amp; Schmincke (1984): ash &lt; 2 mm, lapilli 2–64 mm, bombs and blocks &gt; 64 mm. Loose solid rock is
+     * scattered bombs or blocks; coherent rock (a lava sheet) and fine soils cover fully from a thin film.
+     */
+    static double grainSizeM(LayerView layer) {
+        var m = layer.materialInfo();
+        if (m == MaterialTable.ASH || m == MaterialTable.SOIL || m == MaterialTable.CLAY) return 0.001;
+        if (m == MaterialTable.SCORIA || m == MaterialTable.PUMICE || m == MaterialTable.HYALOCLASTITE
+                || m == MaterialTable.GRAVEL || m == MaterialTable.LAHAR_DEPOSIT || m == MaterialTable.DEBRIS) {
+            return 0.016; // geometric mean of the lapilli class
+        }
+        if (layer.loose() && m.materialClass() == me.alex4386.typhon.engine.world.MaterialClass.ROCK) return 0.2;
+        return 0.001;
     }
 
     private static double depth(MassFlowField f, int x, int z) {

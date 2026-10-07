@@ -99,6 +99,8 @@ export function describeEvent(e: SimEvent): string {
       return `Magma intrusion (dike) rising, tip ${(e.path[e.path.length - 1][2] / 1000).toFixed(2)} km`;
     case 'fissureOpened':
       return `New fissure vent opened (${e.vent.id})`;
+    case 'ventFormed':
+      return `The fissure's eruption localised into a vent (${e.vent.id})`;
     case 'bombLaunched':
       return `Volcanic bomb thrown (${e.flightSeconds.toFixed(0)} s flight)`;
     case 'plume':
@@ -152,7 +154,7 @@ export function toastTone(e: SimEvent): 'info' | 'warn' | 'alert' | null {
 export const NOTABLE_FEATURES = new Set(['GEYSER', 'HOT_SPRING', 'SULFUR_SPRING', 'SUBMARINE_VENT']);
 
 /** Changes in what the volcano is doing: always their own row among the key events. */
-const MILESTONE_KINDS = new Set(['eruptionStarted', 'eruptionEnded', 'alertChanged', 'regimeChanged', 'styleEstimated', 'dikeStarted', 'dikeStalled', 'fissureOpened', 'ventState', 'message']);
+const MILESTONE_KINDS = new Set(['eruptionStarted', 'eruptionEnded', 'alertChanged', 'regimeChanged', 'styleEstimated', 'dikeStarted', 'ventFormed', 'dikeStalled', 'fissureOpened', 'ventState', 'message']);
 
 /** Key events that are aggregated rather than milestones (see {@link aggregateKey}). */
 const AGGREGATED_KINDS = new Set(['areaExpanded']);

@@ -68,6 +68,22 @@ class ReposeRelaxationTest {
         assertEquals(320 * L * L, volume(w, 0), 1e-3 * 320 * L * L);
     }
 
+    @Test
+    void deferredLoadsRelaxOnceTheSweepEnds() {
+        WorldModel w = flat(0);
+        w.withRelaxationDeferred(() -> {
+            for (int i = 0; i < 40; i++) {
+                w.deposit(i % 3, 0, 8, MaterialTable.ASH, 1 + i, LayerFlags.LOOSE, 0.45, 0);
+            }
+            // nothing cascades inside the sweep
+            assertTrue(w.surfaceZ(0, 0) >= 14 * 8 - 1e-6, "still a tower: " + w.surfaceZ(0, 0));
+            assertEquals(0, w.surfaceZ(5, 0), 1e-9);
+        });
+        assertTrue(worstExcess(w) <= 1e-4, "at repose after the sweep: " + worstExcess(w));
+        assertEquals(320 * L * L, volume(w, 0), 1e-3 * 320 * L * L, "volume conserved");
+        assertEquals(0, w.reposeRelaxation().pending());
+    }
+
     private static WorldModel sea(double floor) {
         WorldModel w = flat(floor);
         for (int x = -R; x <= R; x++) for (int z = -R; z <= R; z++) w.setWaterZ(x, z, 0);

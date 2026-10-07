@@ -10,7 +10,7 @@ import java.util.List;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionEnded;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
 import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
  * lava, quasi-periodic slug bursts of an open basaltic vent.
  */
 class EruptionDynamicsTest {
-    private static final BlockPos CENTER = new BlockPos(0, -40, 0);
+    private static final Point3 CENTER = new Point3(0, -4000, 0);
 
     /** St. Helens-like wet dacite under a sealed conduit, at failure. */
     static MagmaChamberConfig dacite() {
@@ -49,6 +49,8 @@ class EruptionDynamicsTest {
                 .initialTemperatureC(1140).rechargeTemperatureC(1150)
                 .initialOverpressureMPa(0)
                 .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
+                // bursts every ~10 s: a chamber step well below that keeps their times resolved
+                .stepPeriodSeconds(2)
                 .build();
     }
 
@@ -104,6 +106,7 @@ class EruptionDynamicsTest {
     void sealedWetChamberFailsExplosivelyThenReopensAtLowPressure() {
         MagmaChamber chamber = new MagmaChamber(dacite());
         Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
+        chamber.requestFlankEruption(); // the first eruption: a dike breaches the surface (there is no conduit yet)
         Run run = runFor(engine, chamber, 200 * 86_400.0); // an eruption, months of recharge, the next one
 
         ConduitSolution onset = run.flows().get(0);
@@ -173,21 +176,28 @@ class EruptionDynamicsTest {
     }
 
     @Test
-    void openConduitSealsDuringLongRepose() {
-        MagmaChamberConfig config = dacite().toBuilder().supplyRate(0).build();
+    void conduitSolidifiesAfterAnEruptionAndThenOnlyADikeCanReopen() {
+        // a basaltic feeder 1.5 m in radius solidifies in weeks (t = a²/κ·(1 + L/cΔT))
+        MagmaChamberConfig config = dacite().toBuilder().supplyRate(0).conduitRadius(1.5).build();
         MagmaChamber chamber = new MagmaChamber(config);
         Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
+        chamber.requestFlankEruption();
         boolean ended = false;
         for (int i = 0; i < 200_000 && !ended; i++) {
             ended = !of(engine.step().events(), EruptionEnded.class).isEmpty();
         }
         assertTrue(ended);
-        assertEquals(config.reopenOverpressureMPa(), chamber.failureOverpressureMPa(), 1e-9, "freshly open conduit");
+        assertEquals(1, chamber.conduitOpenness(), 1e-9, "the conduit is full of melt right after the eruption");
+        assertEquals(config.reopenOverpressureMPa(), chamber.failureOverpressureMPa(), 1e-9);
 
-        runFor(engine, chamber, 3.6e7); // over a year of repose
-        assertTrue(chamber.conduitOpenness() < 0.5);
-        assertTrue(chamber.failureOverpressureMPa() > 0.5 * config.tensileStrengthMPa(), "sealed again");
-        assertTrue(chamber.fragmented(), "the next failure of a sealed conduit would fragment again");
+        double freeze = chamber.conduitFreezeSeconds();
+        assertTrue(freeze > 7 * 86_400 && freeze < 365 * 86_400, "weeks to months for a 1.5 m conduit: " + freeze);
+        runFor(engine, chamber, freeze / 4);
+        // solid rim grows as √t: a quarter of the freezing time leaves half the radius molten
+        assertEquals(0.5, chamber.conduitOpenness(), 0.05);
+        runFor(engine, chamber, freeze);
+        assertEquals(0, chamber.conduitOpenness(), "frozen solid: no conduit");
+        assertEquals(config.tensileStrengthMPa(), chamber.failureOverpressureMPa(), 1e-9, "only rock is left to break");
     }
 
     @Test

@@ -4,11 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.FlowCell;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.world.BlockState;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerFlags;
 import me.alex4386.typhon.engine.world.Material;
@@ -55,17 +55,20 @@ public final class PyroclasticFlows extends MassFlowField {
 
     /**
      * Feeds a PDC from a collapsing eruption column: {@code collapseFraction} of the mass eruption
-     * rate falls back around the vent (within {@code radius} blocks) as dense flow.
+     * rate falls back around the vent (on the columns within {@code radiusM} metres of it) as dense flow.
      *
      * @return the source id ({@code "collapse:" + sourceId}), for {@link #setRate}/{@link #removeSource}
      */
-    public String columnCollapse(String sourceId, BlockPos vent, int radius, double massEruptionRateKgS,
+    public String columnCollapse(String sourceId, Point3 vent, double radiusM, double massEruptionRateKgS,
             double collapseFraction, double temperatureC) {
-        List<BlockPos> cells = new ArrayList<>();
-        int r = Math.max(0, radius);
+        List<ColumnIndex> cells = new ArrayList<>();
+        ColumnIndex center = vent.column(dx);
+        int r = (int) Math.ceil(Math.max(0, radiusM) / dx);
         for (int dz = -r; dz <= r; dz++) {
             for (int ddx = -r; ddx <= r; ddx++) {
-                if (ddx * ddx + dz * dz <= r * r) cells.add(vent.offset(ddx, 0, dz));
+                ColumnIndex c = center.offset(ddx, dz);
+                double d = Math.hypot((c.x() + 0.5) * dx - vent.x(), (c.z() + 0.5) * dx - vent.z());
+                if ((ddx == 0 && dz == 0) || d <= radiusM) cells.add(c);
             }
         }
         String fullId = "collapse:" + sourceId;
@@ -75,8 +78,8 @@ public final class PyroclasticFlows extends MassFlowField {
     }
 
     /** Collapse of a lava dome or crater wall: {@code volumeM3} of hot block-and-ash flow released at rest. */
-    public boolean domeCollapse(BlockPos center, int radius, double volumeM3, double temperatureC) {
-        return release(center, radius, volumeM3, temperatureC, 0, Trigger.DOME_COLLAPSE);
+    public boolean domeCollapse(Point3 center, double radiusM, double volumeM3, double temperatureC) {
+        return release(center, radiusM, volumeM3, temperatureC, 0, Trigger.DOME_COLLAPSE);
     }
 
     @Override
@@ -97,7 +100,7 @@ public final class PyroclasticFlows extends MassFlowField {
             }
             if (loss > 0 && steamEvents < config.maxSteamEventsPerStep) {
                 outbox.emit(new MassFlowEvents.PdcSteam(time, id,
-                        new BlockPos(c.worldX(i), c.waterY[i], c.worldZ(i)), loss * cellArea));
+                        Point3.columnCentre(c.worldX(i), c.worldZ(i), c.waterLevel[i], dx), loss * cellArea));
                 steamEvents++;
             }
             loseFlow(c, i, loss);
@@ -110,16 +113,6 @@ public final class PyroclasticFlows extends MassFlowField {
         double settled = c.depth[i] * (1 - StrictMath.exp(-rate * dt));
         if (c.depth[i] - settled < config.minDepth) settled = c.depth[i];
         depositFlow(c, i, settled, settled * config.depositThicknessFactor, outbox);
-    }
-
-    @Override
-    protected BlockState depositBlock(MassFlowChunk c, int i, double meanTemperatureC, double meanSpeed) {
-        return MassFlowPalette.ignimbrite(meanTemperatureC, config.weldingTemperatureC);
-    }
-
-    @Override
-    protected BlockState veneer(int tier) {
-        return MassFlowPalette.PDC_VENEER;
     }
 
     @Override
@@ -153,13 +146,13 @@ public final class PyroclasticFlows extends MassFlowField {
     }
 
     @Override
-    protected EngineEvent frontEvent(double time, BlockPos front, double runoutM, int cells, double volume,
+    protected EngineEvent frontEvent(double time, Point3 front, double runoutM, int cells, double volume,
             double maxSpeed, double tracer, List<FlowCell> reported) {
         return new MassFlowEvents.PdcFront(time, id, front, runoutM, cells, volume, maxSpeed, tracer, reported);
     }
 
     @Override
-    protected EngineEvent depositEvent(double time, int cells, double volume, int blocks) {
-        return new MassFlowEvents.PdcDeposit(time, id, cells, volume, blocks);
+    protected EngineEvent depositEvent(double time, int cells, double volume) {
+        return new MassFlowEvents.PdcDeposit(time, id, cells, volume);
     }
 }

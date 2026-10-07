@@ -7,10 +7,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
-import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.world.BlockId;
-import me.alex4386.typhon.engine.world.BlockMaterialPalette;
-import me.alex4386.typhon.engine.world.BlockState;
 import me.alex4386.typhon.engine.world.ColumnStacks;
 import me.alex4386.typhon.engine.world.Material;
 import me.alex4386.typhon.engine.world.WorldModel;
@@ -95,6 +91,11 @@ public final class BlockProjection {
     private final double crustBelowC;
     private SurfaceHint hint = SurfaceHint.NONE;
     private final Map<Long, ProjectedColumn> shown = new HashMap<>();
+    /**
+     * The surface block each column actually shows: the host's own until the projection replaces it (the
+     * projected surface in {@link #shown} only detects when the projection's surface changes).
+     */
+    private final Map<Long, BlockId> shownSurface = new HashMap<>();
     private final Map<Long, Long> shownTileVersions = new HashMap<>();
 
     public BlockProjection(WorldModel world, BlockMaterialPalette palette, QuantizationPolicy policy, PartialBlocks partials,
@@ -200,8 +201,10 @@ public final class BlockProjection {
         int bg = before.groundY();
         int ng = now.groundY();
         int top = Math.max(before.top(), now.top());
+        BlockId surfaceShown = previous != null ? shownSurface.getOrDefault(key, before.surface()) : hostSurface;
+        BlockId surfaceAfter = surfaceShown;
         for (int y = Math.min(bg, ng); y <= top; y++) {
-            BlockId expected = y < bg ? null : y == bg ? before.surface() : above(before, y).id();
+            BlockId expected = y < bg ? null : y == bg ? surfaceShown : above(before, y).id();
             BlockState next;
             if (y < ng) {
                 if (y <= bg) continue; // buried ground stays as the host shows it
@@ -212,6 +215,7 @@ public final class BlockProjection {
                 boolean retinted = previous != null && !Objects.equals(previous.surface(), now.surface());
                 if (!moved && !retinted) continue;
                 next = BlockState.of(now.surface());
+                surfaceAfter = now.surface();
             } else {
                 next = above(now, y);
                 if (y > bg && next.equals(above(before, y))) continue;
@@ -219,6 +223,7 @@ public final class BlockProjection {
             out.add(BlockChange.replace(new BlockPos(x, y, z), expected, next));
         }
         shown.put(key, now);
+        if (surfaceAfter != null) shownSurface.put(key, surfaceAfter);
         return out;
     }
 
@@ -265,6 +270,7 @@ public final class BlockProjection {
     /** Forgets what was shown (e.g. after the host reloaded its chunks): the next update starts over. */
     public void reset() {
         shown.clear();
+        shownSurface.clear();
         shownTileVersions.clear();
     }
 

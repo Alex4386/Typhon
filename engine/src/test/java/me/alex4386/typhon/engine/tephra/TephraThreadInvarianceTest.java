@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 
 /** Ash transport, settling and bombs must give bit-identical results for every thread count. */
 class TephraThreadInvarianceTest {
-    private static final VentSite VENT = VentSite.crater("v", new BlockPos(0, 100, 0), 3);
+    private static final VentSite VENT = VentSite.crater("v", new Point3(5, 100, 5), 30);
 
     private record Run(List<EngineFrame> frames, String hash) {}
 
@@ -24,7 +24,7 @@ class TephraThreadInvarianceTest {
         config.gridCells = 64;
         TephraSubsystem tephra = new TephraSubsystem("tephra", terrain, config);
         Engine engine = Engine.builder(5).threads(threads).add(terrain).add(tephra).build();
-        engine.submit(TephraTestSupport.flat(16, 99));
+        engine.submit(TephraTestSupport.flat(12, 100));
         tephra.setWind(7, 0.6, 0.3);
         tephra.startPhase(ExplosivePhase.vulcanian(VENT, 2e5));
         List<EngineFrame> frames = new ArrayList<>();

@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -23,7 +24,7 @@ import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.massflow.ColumnCollapse;
 import me.alex4386.typhon.engine.massflow.PyroclasticFlows;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
@@ -32,9 +33,7 @@ import me.alex4386.typhon.engine.tephra.Ballistics;
 import me.alex4386.typhon.engine.tephra.ExplosivePhase;
 import me.alex4386.typhon.engine.tephra.GrainSizeDistribution;
 import me.alex4386.typhon.engine.tephra.TephraSubsystem;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerFlags;
 import me.alex4386.typhon.engine.world.LayerView;
@@ -46,7 +45,6 @@ import me.alex4386.typhon.engine.volcano.VentEvents;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.volcano.VentStatus;
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
 
@@ -76,10 +74,9 @@ import me.alex4386.typhon.engine.save.StateWriter;
  *       ash puffs and explosion quakes; their ballistic share follows the same clast physics.
  * </ul>
  *
- * <p>Physics stays in real units: lava, tephra and mass flows all take real rates (m³/s, kg/s) and
- * map them onto the block world themselves (the lava grid is {@link VolcanoScaling#metersPerBlock()}
- * wide per column, set by {@link VolcanoSystem}). Register after the chamber, dikes and seismicity
- * and before the lava, tephra and mass-flow subsystems so changes apply in the same step.
+ * <p>Physics is in SI units: lava, tephra and mass flows all take real rates (m³/s, kg/s) on the world
+ * model's columns. Register after the chamber, dikes and seismicity and before the lava, tephra and
+ * mass-flow subsystems so changes apply in the same step.
  */
 public final class VolcanoCoupler implements Subsystem {
     /** Relative change in column parameters that restarts the explosive phase with new parameters. */
@@ -91,24 +88,21 @@ public final class VolcanoCoupler implements Subsystem {
     /** Share of the magma fragmented by water that starts / keeps the phreatomagmatic descriptor. */
     static final double PHREATOMAGMATIC_START_SHARE = 0.2;
     static final double PHREATOMAGMATIC_STOP_SHARE = 0.1;
-    /** Fine-ash-rich grain size of magma–water fragmentation (bursts of wet ash). */
-    static final GrainSizeDistribution PHREATOMAGMATIC_GRAIN = GrainSizeDistribution.of(0.10, 0.20, 0.35, 0.35);
     /** Seconds between steam telemetry events. */
     static final double STEAM_EVENT_SECONDS = 20;
-    /** Bulk density of fresh wet tuff (kg/m³). */
-    static final double TUFF_BULK_DENSITY = 1500;
-    /** Width (blocks) of the tuff ring beyond the crater rim. */
-    static final int TUFF_RING_WIDTH = 6;
-    static final int MAX_TUFF_BLOCKS_PER_STEP = 64;
     /** Porosity of fresh, wet Surtseyan tephra (ash and lapilli; ~0.4–0.5, Jakobsson &amp; Moore 1986). */
     static final double WET_TEPHRA_POROSITY = 0.45;
+    /** Density of basaltic glass (sideromelane, kg/m³; ~2.6–2.8 t/m³), the solid of hyaloclastite and wet tuff. */
+    static final double GLASS_DENSITY = 2700;
+    /** Bulk density of fresh wet tuff (kg/m³): its glass with {@link #WET_TEPHRA_POROSITY} pore space. */
+    static final double TUFF_BULK_DENSITY = GLASS_DENSITY * (1 - WET_TEPHRA_POROSITY);
+    /** The apron of in-place quenched tephra reaches this many e-folding lengths beyond the rim. */
+    static final double APRON_REACH = 4;
     /** Furthest a crater's ring is followed outwards when measuring its width at sea level (columns). */
     static final int MAX_RING_COLUMNS = 64;
     private static final int[] RING_DX = {1, 1, 0, -1, -1, -1, 0, 1};
     private static final int[] RING_DZ = {0, 1, 1, 1, 0, -1, -1, -1};
     static final int MAX_BOMBS_PER_SALVO = 10;
-    static final BlockId TUFF = BlockId.minecraft("tuff");
-    static final BlockId WATER = BlockId.minecraft("water");
     /** Median clast (m) of a slug burst tearing fluid magma, and of a plug shattering. */
     static final double SLUG_CLAST_M = 0.03;
     /**
@@ -117,8 +111,11 @@ public final class VolcanoCoupler implements Subsystem {
      */
     static final double LAPILLI_MIN_M = 2e-3;
     static final double PLUG_CLAST_M = 2e-3;
-    /** Most segments a fissure feeder is resolved into along strike. */
-    static final int MAX_FEEDER_SEGMENTS = 16;
+    /**
+     * Segments a fissure feeder is resolved into along strike (numerical resolution, independent of the
+     * world's columns): the finest scale at which the flow can localise into a vent.
+     */
+    static final int FEEDER_SEGMENTS = 16;
 
     private final String volcanoId;
     private final MagmaChamber chamber;
@@ -132,7 +129,6 @@ public final class VolcanoCoupler implements Subsystem {
     private final TephraSubsystem tephra;
     private final PyroclasticFlows pdc;
     private final Geothermal geothermal;
-    private VolcanoScaling scaling;
 
     private final TreeSet<String> activeLavaSources = new TreeSet<>();
     private final Set<String> eruptionVents = new LinkedHashSet<>();
@@ -140,6 +136,10 @@ public final class VolcanoCoupler implements Subsystem {
     private final TreeSet<String> knownFissures = new TreeSet<>();
     /** Thermal state of each dike-fed fissure's feeder, by vent id. */
     private final TreeMap<String, FissureFeeder> feeders = new TreeMap<>();
+    /** Vents the flow of a fissure localised into, by vent id (they outlive their fissure). */
+    private final TreeMap<String, LocalVent> localVents = new TreeMap<>();
+    /** Localised vents removed by the user since the last step, with their last state. */
+    private final TreeMap<String, VentStatus> removedLocalVents = new TreeMap<>();
     /** Vents sealed by the user. */
     private final TreeSet<String> sealed = new TreeSet<>();
     /** Last reported state of each vent. */
@@ -167,14 +167,9 @@ public final class VolcanoCoupler implements Subsystem {
     /** Collapse thresholds by rounded column parameters: a pure function, not saved. */
     private final Map<Long, Double> collapseThresholds = new HashMap<>();
 
-    /**
-     * @param ballisticFraction ignored: the ballistic share follows from clast physics (kept so
-     *     existing definitions still load)
-     */
     public VolcanoCoupler(String volcanoId, MagmaChamber chamber, SeismicityModel seismicity, List<VentSite> vents,
             DikePropagation dikes, TerrainModel terrain, LavaFlow lava, TephraSubsystem tephra, PyroclasticFlows pdc,
-            Geothermal geothermal, VolcanoScaling scaling, double ballisticFraction) {
-        if (vents.isEmpty()) throw new IllegalArgumentException("A volcano needs at least one vent");
+            Geothermal geothermal) {
         this.volcanoId = volcanoId;
         this.chamber = chamber;
         this.seismicity = seismicity;
@@ -185,7 +180,16 @@ public final class VolcanoCoupler implements Subsystem {
         this.tephra = tephra;
         this.pdc = pdc;
         this.geothermal = geothermal;
-        this.scaling = scaling;
+    }
+
+    /** Column width L (m) of the world. */
+    public double metersPerColumn() {
+        return terrain.world().spec().metersPerColumn();
+    }
+
+    /** A vent's crater radius in whole columns (at least one). */
+    private int craterColumns(VentSite vent) {
+        return Math.max(1, (int) Math.round(vent.craterRadiusM() / metersPerColumn()));
     }
 
     @Override
@@ -211,10 +215,6 @@ public final class VolcanoCoupler implements Subsystem {
     }
 
     /** Groundwater model the conduit draws aquifer water from (optional). */
-    /** Live retune: the volcano's scaling (length scales) from the next step. */
-    public void setScaling(VolcanoScaling scaling, double ballisticFraction) {
-        this.scaling = java.util.Objects.requireNonNull(scaling);
-    }
 
     public void setGround(HydrothermalField ground) {
         this.ground = ground;
@@ -253,6 +253,14 @@ public final class VolcanoCoupler implements Subsystem {
      * vent or an unknown id.
      */
     public boolean removeVent(String ventId) {
+        if (localVents.remove(ventId) != null) {
+            sealed.remove(ventId);
+            ventFlux.remove(ventId);
+            VentStatus previous = ventStates.remove(ventId);
+            if (previous != null) removedLocalVents.put(ventId, previous); // reported at the next step
+            pushOutlets();
+            return true;
+        }
         if (dikes == null) return false;
         for (VentSite vent : baseVents) if (vent.id().equals(ventId)) return false;
         return dikes.removeFissure(ventId);
@@ -264,7 +272,7 @@ public final class VolcanoCoupler implements Subsystem {
         List<ConduitBurst> bursts = chamber.drainBursts();
 
         List<VentSite> vents = outlets();
-        VentSite main = vents.isEmpty() ? baseVents.get(0) : vents.get(0);
+        VentSite main = vents.isEmpty() ? referenceSite() : vents.get(0);
         VentPartition.Water water = surveyWater(main);
         lastWater = water;
         chamber.setVentEnvironment(VentPartition.ambientPressurePa(water.surfaceDepthM()),
@@ -278,7 +286,12 @@ public final class VolcanoCoupler implements Subsystem {
             endBurstPhaseIfDue(context.time(), false);
             setPhreatomagmatic(context, false, null);
             lastPartition = null;
-            if (!flankPending && !chamber.erupting()) eruptionVents.clear();
+            if (!flankPending && !chamber.erupting()) {
+                // An eruption that ended without a vent of its own leaves no conduit behind: its fissures
+                // freeze as dikes, and the next eruption needs a new dike.
+                if (!eruptionVents.isEmpty() && !anyCrater(eruptionVents)) chamber.closeConduit();
+                eruptionVents.clear();
+            }
             ventFlux.clear();
             updateFeeders(context);
             for (ConduitBurst burst : bursts) fireBurst(context, main, burst, false);
@@ -297,47 +310,78 @@ public final class VolcanoCoupler implements Subsystem {
         }
         updateFeeders(context);
 
-        VentPartition.Result p = VentPartition.partition(flow, chamber.ventAmbientPressurePa(),
-                chamber.config().conduitRadius(), chamber.silicaWt(), water, this::criticalGasFraction);
-        lastPartition = p;
-        // The chamber's actual outflow (linearised between conduit solutions) sets the totals; the
-        // partition sets the shares.
+        // Each vent erupts into its own setting: a crater under a shallow sea is Surtseyan while a fissure on
+        // the deep sea floor (water pressure suppresses the steam explosions) pours pillow lava. The chamber's
+        // outflow is split by the vents' shares; each share is partitioned with that vent's water.
         double magmaMassRate = chamber.eruptionRate() * ExplosivePhase.DRE_DENSITY;
-        double scale = p.magmaMassFlux() > 0 ? magmaMassRate / p.magmaMassFlux() : 0;
         double stepSeconds = context.dtSeconds();
         if (water.openFraction() <= 0 && water.surfaceDepthM() > 0) {
             boilCraterLake(main, magmaMassRate * stepSeconds, flow.exitTemperatureC());
         }
+        double mainDepth = waterDepthM;
+        double mainOpen = openWaterFraction;
+        double[] lavaRates = new double[vents.size()];
+        double column = 0;
+        double columnBest = -1;
+        VentSite columnVent = main;
+        VentPartition.Result columnPartition = null;
+        double wetMass = 0;
+        double magmaMass = 0;
+        boolean steam = false;
+        for (int i = 0; i < vents.size(); i++) {
+            VentSite vent = vents.get(i);
+            VentPartition.Water w = i == 0 ? water : surveyWater(vent);
+            double ambient = i == 0 ? chamber.ventAmbientPressurePa() : VentPartition.ambientPressurePa(w.surfaceDepthM());
+            // the magma decompresses to this vent's own pressure: a deep fissure may not fragment at all
+            ConduitSolution ventFlow = i == 0 ? flow : chamber.conduitFlowAt(ambient);
+            if (ventFlow == null) ventFlow = flow;
+            VentPartition.Result p = VentPartition.partition(ventFlow, ambient, chamber.config().conduitRadius(),
+                    chamber.silicaWt(), w, this::criticalGasFraction);
+            if (i == 0) lastPartition = p;
+            // the chamber's actual outflow (linearised between conduit solutions) sets the totals; the
+            // partition sets the shares
+            double scale = p.magmaMassFlux() > 0 ? magmaMassRate * weights[i] / p.magmaMassFlux() : 0;
+            lavaRates[i] = p.lavaMassFlux() * scale / ExplosivePhase.DRE_DENSITY;
+            double col = p.columnMassFlux() * scale;
+            column += col;
+            if (col > columnBest) {
+                columnBest = col;
+                columnVent = vent;
+                columnPartition = p;
+            }
+            double ballistic = p.ballisticMassFlux() * scale * stepSeconds;
+            if (ballistic > 0) {
+                // Cooled fall-back of the fountain: its whole mass lands as loose scoria lapilli around the vent
+                // (and back into it); a few tracked bombs show the larger clasts.
+                double median = Double.isFinite(p.medianClastM()) ? Math.max(p.medianClastM(), LAPILLI_MIN_M) : LAPILLI_MIN_M;
+                tephra.proximalFallout(vent, ballistic, p.ballisticSpeed(), 0, 15, median, LAPILLI_MIN_M,
+                        Math.max(2 * LAPILLI_MIN_M, VentPartition.BALLISTIC_SIZE));
+                tephra.launchSalvo(vent, ballistic, p.ballisticSpeed(), 0, 15, chamber.silicaWt(), MAX_BOMBS_PER_SALVO, false);
+            }
+            wetMass += p.waterFragmentedMassFlux() * scale;
+            magmaMass += p.magmaMassFlux() * scale;
+            if (p.jetMassFlux() > 0) fireJets(context, vent, p.jetMassFlux() * scale * stepSeconds, p.jetSpeed());
+            if (p.wetFalloutMassFlux() > 0) buildTuffRing(context, vent, p.wetFalloutMassFlux() * scale * stepSeconds, w.surfaceDepthM());
+            if (p.steamMassFlux() > 0 && context.time() >= nextSteamEventTime) {
+                context.outbox().emit(new SurfaceEvents.PhreatomagmaticSteam(
+                        context.time(), volcanoId, vent.position(), p.steamMassFlux() * scale, w.surfaceDepthM()));
+                steam = true;
+            }
+        }
+        if (steam) nextSteamEventTime = context.time() + STEAM_EVENT_SECONDS;
+        waterDepthM = mainDepth; // the volcano reports its main vent's water
+        openWaterFraction = mainOpen;
 
-        double lavaRate = p.lavaMassFlux() * scale / ExplosivePhase.DRE_DENSITY;
-        if (lavaRate > MIN_LAVA_RATE) updateLava(vents, weights, lavaRate);
+        if (Arrays.stream(lavaRates).anyMatch(r -> r > MIN_LAVA_RATE)) updateLava(vents, lavaRates);
         else stopLava();
 
-        double column = p.columnMassFlux() * scale;
         boolean sustained = column >= MIN_COLUMN_MASS_FLUX;
-        if (sustained) updateExplosive(main, p, column);
+        if (sustained) updateExplosive(columnVent, columnPartition, column);
         else stopExplosive();
 
-        double ballistic = p.ballisticMassFlux() * scale * stepSeconds;
-        if (ballistic > 0) {
-            // Cooled fall-back of the fountain: its whole mass lands as loose scoria lapilli around the vent
-            // (and back into it); a few tracked bombs show the larger clasts.
-            double median = Double.isFinite(p.medianClastM()) ? Math.max(p.medianClastM(), LAPILLI_MIN_M) : LAPILLI_MIN_M;
-            tephra.proximalFallout(main, ballistic, p.ballisticSpeed(), 0, 15, median, LAPILLI_MIN_M,
-                    Math.max(2 * LAPILLI_MIN_M, VentPartition.BALLISTIC_SIZE));
-            tephra.launchSalvo(main, ballistic, p.ballisticSpeed(), 0, 15, chamber.silicaWt(), MAX_BOMBS_PER_SALVO);
-        }
-
-        double wetShare = p.magmaMassFlux() > 0 ? p.waterFragmentedMassFlux() / p.magmaMassFlux() : 0;
+        double wetShare = magmaMass > 0 ? wetMass / magmaMass : 0;
         setPhreatomagmatic(context, phreatomagmatic ? wetShare >= PHREATOMAGMATIC_STOP_SHARE
                 : wetShare >= PHREATOMAGMATIC_START_SHARE, main);
-        if (p.jetMassFlux() > 0) fireJets(context, main, p.jetMassFlux() * scale * stepSeconds, p.jetSpeed());
-        if (p.wetFalloutMassFlux() > 0) buildTuffRing(context, main, p.wetFalloutMassFlux() * scale * stepSeconds);
-        if (p.steamMassFlux() > 0 && context.time() >= nextSteamEventTime) {
-            context.outbox().emit(new SurfaceEvents.PhreatomagmaticSteam(
-                    context.time(), volcanoId, main.position(), p.steamMassFlux() * scale, waterDepthM));
-            nextSteamEventTime = context.time() + STEAM_EVENT_SECONDS;
-        }
 
         for (ConduitBurst burst : bursts) fireBurst(context, main, burst, sustained);
         endBurstPhaseIfDue(context.time(), sustained);
@@ -382,9 +426,30 @@ public final class VolcanoCoupler implements Subsystem {
     }
 
     private FissureFeeder openFeeder(Dike dike, VentSite vent, StepContext context) {
-        double length = vent.fissureLength() * scaling.metersPerBlock();
-        int segments = Math.max(1, Math.min(MAX_FEEDER_SEGMENTS, vent.fissureLength() / 2));
-        return FissureFeeder.open(dike.openingM(), length, dike.heightM(), segments, context.random());
+        double length = vent.fissureLengthM();
+        return FissureFeeder.open(dike.openingM(), length, dike.heightM(), wallRockC(vent, dike.heightM()),
+                FEEDER_SEGMENTS, context.random());
+    }
+
+    /** Average continental geotherm where the subsurface model does not reach: 15 °C + 30 °C/km (Turcotte &amp; Schubert). */
+    static final double FALLBACK_SURFACE_C = 15;
+    static final double FALLBACK_GRADIENT_C_PER_M = 0.030;
+
+    /**
+     * Mean host-rock temperature (°C) along a feeder dike {@code heightM} tall under {@code vent}: the
+     * subsurface model's ground temperature averaged over the height (8 depths), the average continental
+     * geotherm where the model does not know the column.
+     */
+    private double wallRockC(VentSite vent, double heightM) {
+        double l = metersPerColumn();
+        int x = vent.position().columnX(l);
+        int z = vent.position().columnZ(l);
+        double h = Math.max(1, heightM);
+        if (ground == null || !ground.known(x, z)) return FALLBACK_SURFACE_C + FALLBACK_GRADIENT_C_PER_M * h / 2;
+        double sum = 0;
+        int n = 8;
+        for (int i = 0; i < n; i++) sum += ground.temperatureC(x, z, (i + 0.5) / n * h);
+        return sum / n;
     }
 
     /**
@@ -398,28 +463,116 @@ public final class VolcanoCoupler implements Subsystem {
             if (feeder.frozen()) continue;
             feeder.advance(stepDt, ventFlux.getOrDefault(e.getKey(), 0.0), chamber.temperatureC(), chamber.silicaWt());
         }
+        if (chamber.erupting()) {
+            for (String id : new ArrayList<>(feeders.keySet())) {
+                if (eruptionVents.contains(id) && open(id)) localise(context, id, feeders.get(id));
+            }
+        }
         pushOutlets();
         reportStates(context);
+    }
+
+    /**
+     * A vent the flow of a fissure localised into: one feeder segment still carrying magma after the
+     * segments beside it froze (Bruce &amp; Huppert 1989; Wylie et al. 1999). It keeps that segment's
+     * hydraulic conductance, measured against its fissure's when it opened, as the chamber's conduit
+     * model describes the freshly opened dike ({@link #outletCapacity()}).
+     */
+    private record LocalVent(VentSite site, String fissureId, double conductance, double referenceConductance) {}
+
+    /**
+     * Turns every open segment of an erupting fissure whose neighbours froze into a vent: the flow has
+     * localised there and the fissure no longer carries it, so the segment leaves the feeder (which may
+     * then be frozen whole) and goes on as a crater on the fissure line.
+     */
+    private void localise(StepContext context, String fissureId, FissureFeeder feeder) {
+        int n = feeder.width.length;
+        if (n < 2) return; // nothing along strike to freeze around it
+        VentSite fissure = find(fissureId);
+        if (fissure == null) return;
+        double sum = 0;
+        for (double w : feeder.width) if (w > FissureFeeder.FREEZE_WIDTH_M) sum += w * w * w;
+        double fissureFlux = ventFlux.getOrDefault(fissureId, 0.0);
+        for (int i = 0; i < n; i++) {
+            double w = feeder.width[i];
+            if (w <= FissureFeeder.FREEZE_WIDTH_M) continue;
+            boolean leftFrozen = i == 0 || feeder.width[i - 1] <= FissureFeeder.FREEZE_WIDTH_M;
+            boolean rightFrozen = i == n - 1 || feeder.width[i + 1] <= FissureFeeder.FREEZE_WIDTH_M;
+            if (!leftFrozen || !rightFrozen) continue;
+            double conductance = w * w * w * feeder.segmentLengthM / 12;
+            // a pipe of the same conductance (π a⁴ / 8 = w³ ℓ / 12) is the vent's throat
+            double radius = Math.pow(8 * conductance / Math.PI, 0.25);
+            double along = (i + 0.5) * feeder.segmentLengthM - fissure.fissureLengthM() / 2;
+            double x = fissure.position().x() + along * Math.cos(fissure.fissureAngleRad());
+            double z = fissure.position().z() + along * Math.sin(fissure.fissureAngleRad());
+            double y = surfaceAt(x, z, fissure.position().y());
+            VentSite site = VentSite.crater(fissureId + "-vent-" + i, new Point3(x, y, z), radius);
+            feeder.width[i] = 0; // the flow goes on through the vent, no longer through the fissure
+            localVents.put(site.id(), new LocalVent(site, fissureId, conductance, feeder.initialConductance));
+            eruptionVents.add(site.id());
+            ventFlux.put(site.id(), sum > 0 ? fissureFlux * w * w * w / sum : 0); // its share until the next step
+            context.outbox().emit(new VentEvents.VentFormed(context.time(), volcanoId, site, fissureId));
+        }
+    }
+
+    /** Ground elevation (m) at a point (m), {@code fallback} where the ground is not known. */
+    private double surfaceAt(double x, double z, double fallback) {
+        if (terrain == null) return fallback;
+        WorldModel world = terrain.world();
+        double l = world.spec().metersPerColumn();
+        int cx = (int) Math.floor(x / l);
+        int cz = (int) Math.floor(z / l);
+        if (!world.isKnown(cx, cz)) return fallback;
+        double s = world.surfaceZ(cx, cz);
+        return Double.isFinite(s) ? s : fallback;
+    }
+
+    /** True if a crater (configured or localised) is among {@code ventIds}. */
+    private boolean anyCrater(Set<String> ventIds) {
+        for (String id : ventIds) if (crater(id)) return true;
+        return false;
+    }
+
+    /** A crater: a configured vent or one a fissure localised into (not a fissure). */
+    private boolean crater(String ventId) {
+        if (localVents.containsKey(ventId)) return true;
+        for (VentSite vent : baseVents) if (vent.id().equals(ventId)) return vent.kind() != VentKind.FISSURE;
+        return false;
+    }
+
+    /**
+     * Where the volcano meets its surroundings while it has no outlet: its main vent, or, before any vent
+     * has formed, the ground above the chamber.
+     */
+    private VentSite referenceSite() {
+        List<VentSite> all = allVents();
+        if (!all.isEmpty()) return all.get(0);
+        Point3 c = chamber.chamberCenter();
+        return VentSite.crater(volcanoId + "-surface", new Point3(c.x(), surfaceAt(c.x(), c.z(), 0), c.z()), 0);
     }
 
     /** Tells the chamber how much of its conduit's conductance the open outlets can carry. */
     private void pushOutlets() {
         redirectIfStranded();
+        // the chamber's own conduit leads to a crater; without an open one it can only erupt through a dike
         boolean summitOpen = false;
-        for (VentSite vent : baseVents) summitOpen |= !sealed.contains(vent.id());
+        for (VentSite vent : allVents()) summitOpen |= crater(vent.id()) && !sealed.contains(vent.id());
         chamber.setSummitBlocked(!summitOpen);
         chamber.setOutletCapacity(outletCapacity());
     }
 
     /**
      * When every vent of an ongoing eruption froze, was sealed or was removed, the pressurised magma
-     * takes the path left open: the summit vents, unless they are sealed too (then the eruption ends
-     * with its pressure kept, {@link MagmaChamber#setOutletCapacity}).
+     * takes the path left open: the craters, if a molten conduit still leads to them, and not sealed
+     * (otherwise the eruption ends with its pressure kept, {@link MagmaChamber#setOutletCapacity}).
      */
     private void redirectIfStranded() {
         if (!chamber.erupting() || eruptionVents.isEmpty()) return;
         for (VentSite vent : allVents()) if (eruptionVents.contains(vent.id()) && open(vent.id())) return;
-        for (VentSite vent : baseVents) if (!sealed.contains(vent.id())) eruptionVents.add(vent.id());
+        if (!(chamber.conduitOpenness() > 0)) return;
+        for (VentSite vent : allVents()) {
+            if (crater(vent.id()) && !sealed.contains(vent.id())) eruptionVents.add(vent.id());
+        }
     }
 
     /**
@@ -430,17 +583,29 @@ public final class VolcanoCoupler implements Subsystem {
     double outletCapacity() {
         double now = 0;
         double initial = 0;
+        Set<String> counted = new TreeSet<>(); // each fissure's opening conductance once, with its vents
         for (VentSite vent : outlets()) {
+            LocalVent local = localVents.get(vent.id());
+            if (local != null) {
+                now += local.conductance();
+                if (counted.add(local.fissureId())) initial += local.referenceConductance();
+                continue;
+            }
             FissureFeeder feeder = feeders.get(vent.id());
-            if (feeder == null) return 1; // a summit vent
+            if (feeder == null) return 1; // a configured crater
             now += feeder.conductance();
-            initial += feeder.initialConductance;
+            if (counted.add(vent.id())) initial += feeder.initialConductance;
         }
         if (initial <= 0) return 0;
         return Math.min(1, now / initial);
     }
 
     private void reportStates(StepContext context) {
+        for (Map.Entry<String, VentStatus> e : removedLocalVents.entrySet()) {
+            context.outbox().emit(new VentEvents.VentStateChanged(context.time(), volcanoId, e.getKey(), e.getValue(),
+                    VentStatus.REMOVED, Double.NaN));
+        }
+        removedLocalVents.clear();
         boolean erupting = chamber.erupting();
         Set<String> outlets = new TreeSet<>();
         for (VentSite vent : outlets()) outlets.add(vent.id());
@@ -479,8 +644,11 @@ public final class VolcanoCoupler implements Subsystem {
         double r = chamber.config().conduitRadius();
         double sum = 0;
         for (int i = 0; i < w.length; i++) {
-            FissureFeeder feeder = feeders.get(vents.get(i).id());
-            w[i] = feeder == null ? Math.PI * r * r * r * r / 8 : feeder.conductance();
+            String id = vents.get(i).id();
+            LocalVent local = localVents.get(id);
+            FissureFeeder feeder = feeders.get(id);
+            w[i] = local != null ? local.conductance()
+                    : feeder == null ? Math.PI * r * r * r * r / 8 : feeder.conductance();
             sum += w[i];
         }
         for (int i = 0; i < w.length; i++) w[i] = sum > 0 ? w[i] / sum : 1.0 / w.length;
@@ -492,10 +660,14 @@ public final class VolcanoCoupler implements Subsystem {
         return null;
     }
 
-    /** All vents of this volcano: the configured ones plus fissures opened by dikes (not removed). */
+    /**
+     * All vents of this volcano: the configured ones, fissures opened by dikes (not removed), and the
+     * vents their flow localised into.
+     */
     public List<VentSite> allVents() {
         List<VentSite> all = new ArrayList<>(baseVents);
         if (dikes != null) all.addAll(dikes.openedVents());
+        for (LocalVent local : localVents.values()) all.add(local.site());
         return all;
     }
 
@@ -557,25 +729,37 @@ public final class VolcanoCoupler implements Subsystem {
 
     // ── Lava ──
 
-    private void updateLava(List<VentSite> vents, double[] shares, double totalRate) {
-        // Lava sources take the eruption rate (m³/s DRE), split across the vents.
+    private void updateLava(List<VentSite> vents, double[] rates) {
+        // One lava source per crater, and per open segment of a fissure's feeder (the frozen stretches pour
+        // nothing), each with its own rate (m³/s DRE): a fissure's flow shares out by segment conductance (w³).
         Set<String> wanted = new TreeSet<>();
+        double l = metersPerColumn();
         for (int i = 0; i < vents.size(); i++) {
             VentSite vent = vents.get(i);
-            double perVent = totalRate * shares[i];
+            double perVent = rates[i];
             if (perVent <= MIN_LAVA_RATE) continue;
-            String sourceId = sourceId(vent);
-            wanted.add(sourceId);
-            if (activeLavaSources.add(sourceId)) {
-                int unit = units.unit(DepositType.LAVA, chamber.eruptionStartTime(), chamber.temperatureC());
-                lava.addSource(LavaSource.atVent(vent, perVent, chamber.temperatureC(), chamber.silicaWt(), chamber.ventWaterWt())
-                        .withId(sourceId).withUnit(unit));
+            FissureFeeder feeder = feeders.get(vent.id());
+            if (feeder == null) {
+                feedLava(wanted, sourceId(vent), perVent,
+                        () -> LavaSource.atVent(vent, l, perVent, chamber.temperatureC(), chamber.silicaWt(), chamber.ventWaterWt()));
             } else {
-                lava.setRate(sourceId, perVent);
+                double sum = 0;
+                for (double w : feeder.width) if (w > FissureFeeder.FREEZE_WIDTH_M) sum += w * w * w;
+                for (int s = 0; s < feeder.width.length; s++) {
+                    double w = feeder.width[s];
+                    if (w <= FissureFeeder.FREEZE_WIDTH_M || !(sum > 0)) continue;
+                    double rate = perVent * w * w * w / sum;
+                    if (rate <= MIN_LAVA_RATE) continue;
+                    double from = s * feeder.segmentLengthM - vent.fissureLengthM() / 2;
+                    double to = from + feeder.segmentLengthM;
+                    feedLava(wanted, sourceId(vent) + "#" + s, rate,
+                            () -> LavaSource.alongFissure(vent.id(), vent, from, to, l, rate, chamber.temperatureC(),
+                                    chamber.silicaWt(), chamber.ventWaterWt()));
+                }
             }
             if (geothermal != null) {
-                int x = vent.position().x();
-                int z = vent.position().z();
+                int x = vent.position().columnX(l);
+                int z = vent.position().columnZ(l);
                 geothermal.addLavaHeat(x, z, chamber.temperatureC(), Math.max(1.0, lava.thickness(x, z)));
             }
         }
@@ -584,6 +768,17 @@ public final class VolcanoCoupler implements Subsystem {
                 lava.removeSource(sourceId);
                 activeLavaSources.remove(sourceId);
             }
+        }
+    }
+
+    /** Keeps lava source {@code sourceId} pouring at {@code rate}, creating it from {@code source} if new. */
+    private void feedLava(Set<String> wanted, String sourceId, double rate, java.util.function.Supplier<LavaSource> source) {
+        wanted.add(sourceId);
+        if (activeLavaSources.add(sourceId)) {
+            int unit = units.unit(DepositType.LAVA, chamber.eruptionStartTime(), chamber.temperatureC());
+            lava.addSource(source.get().withId(sourceId).withUnit(unit));
+        } else {
+            lava.setRate(sourceId, rate);
         }
     }
 
@@ -662,7 +857,7 @@ public final class VolcanoCoupler implements Subsystem {
             collapseSource = null;
         }
         if (massRate > 0 && explosiveCollapse > 0.01) {
-            collapseSource = pdc.columnCollapse(volcanoId, vent.position(), Math.max(1, vent.craterRadius()), massRate,
+            collapseSource = pdc.columnCollapse(volcanoId, vent.position(), Math.max(metersPerColumn(), vent.craterRadiusM()), massRate,
                     1.0, temperatureC);
         }
     }
@@ -700,7 +895,7 @@ public final class VolcanoCoupler implements Subsystem {
         double lapilliShare = Math.max(0, 1 - ballisticShare - ashShare);
         double zenithSigma = slug ? 20 : 30;
         tephra.launchSalvo(vent, burst.ejectaMassKg() * ballisticShare, speed, 0, zenithSigma,
-                burst.silicaWt(), slug ? 40 : 120);
+                burst.silicaWt(), slug ? 40 : 120, true);
         tephra.proximalFallout(vent, burst.ejectaMassKg() * lapilliShare, speed, 0, zenithSigma, median,
                 LAPILLI_MIN_M, bombCut);
         if (!sustained && ashShare > 0) {
@@ -722,7 +917,7 @@ public final class VolcanoCoupler implements Subsystem {
         // the jets' coarse wet ejecta land around the vent with their whole mass; a few tracked bombs show them
         tephra.proximalFallout(vent, mass, speed, 40, 15, Math.max(LAPILLI_MIN_M, 4 * LAPILLI_MIN_M), LAPILLI_MIN_M,
                 VentPartition.BALLISTIC_SIZE);
-        tephra.launchSalvo(vent, mass, speed, 40, 15, chamber.silicaWt(), MAX_BOMBS_PER_SALVO);
+        tephra.launchSalvo(vent, mass, speed, 40, 15, chamber.silicaWt(), MAX_BOMBS_PER_SALVO, false);
         double energy = 0.5 * mass * speed * speed;
         if (seismicity != null) seismicity.queueExplosion(vent.position(), energy);
         if (explosionListener != null) explosionListener.accept(vent.position(), energy);
@@ -730,10 +925,10 @@ public final class VolcanoCoupler implements Subsystem {
                 vent.position(), mass, 0, speed, energy));
     }
 
-    private java.util.function.BiConsumer<BlockPos, Double> explosionListener;
+    private java.util.function.BiConsumer<Point3, Double> explosionListener;
 
     /** Receives each discrete vent explosion (position, kinetic energy J), e.g. to excavate a crater. */
-    public void setExplosionListener(java.util.function.BiConsumer<BlockPos, Double> listener) {
+    public void setExplosionListener(java.util.function.BiConsumer<Point3, Double> listener) {
         this.explosionListener = listener;
     }
 
@@ -759,17 +954,19 @@ public final class VolcanoCoupler implements Subsystem {
      * vent from the groundwater model.
      */
     private VentPartition.Water surveyWater(VentSite vent) {
-        BlockPos c = vent.position();
-        double table = ground != null && ground.known(c.x(), c.z())
-                ? ground.waterTableDepthM(c.x(), c.z()) : Double.POSITIVE_INFINITY;
         WorldModel world = terrain == null ? null : terrain.world();
-        if (world == null || !world.isKnown(c.x(), c.z())) {
+        double lc = world == null ? 1 : world.spec().metersPerColumn();
+        int cx = vent.position().columnX(lc);
+        int cz = vent.position().columnZ(lc);
+        double table = ground != null && ground.known(cx, cz)
+                ? ground.waterTableDepthM(cx, cz) : Double.POSITIVE_INFINITY;
+        if (world == null || !world.isKnown(cx, cz)) {
             waterDepthM = 0;
             openWaterFraction = 0;
             return new VentPartition.Water(0, 0, table);
         }
-        double l = world.spec().metersPerColumn();
-        int crater = Math.max(1, vent.craterRadius());
+        double l = lc;
+        int crater = craterColumns(vent);
         int ventColumns = 0;
         int ventSubmerged = 0;
         double depthSum = 0;
@@ -781,8 +978,8 @@ public final class VolcanoCoupler implements Subsystem {
             for (int dx = -outer; dx <= outer; dx++) {
                 int d2 = dx * dx + dz * dz;
                 if (d2 > outer * outer) continue;
-                int x = c.x() + dx;
-                int z = c.z() + dz;
+                int x = cx + dx;
+                int z = cz + dz;
                 if (!world.isKnown(x, z)) continue;
                 double level = world.waterZ(x, z);
                 double depth = Double.isFinite(level) ? Math.max(0, level - world.surfaceZ(x, z)) : 0;
@@ -803,15 +1000,15 @@ public final class VolcanoCoupler implements Subsystem {
         waterDepthM = wet ? depthSum / ventSubmerged : 0;
         // Open water reaches the vent freely only if the crater's water connects to the open sea; a lagoon
         // closed off by the ring is refilled only by seepage.
-        openWaterFraction = wet && rimColumns > 0 && connectedToOpenWater(world, c, crater + MAX_RING_COLUMNS)
+        openWaterFraction = wet && rimColumns > 0 && connectedToOpenWater(world, cx, cz, crater + MAX_RING_COLUMNS)
                 ? Math.max(rimSubmerged / (double) rimColumns, 1.0 / rimColumns) : 0;
 
         // The vent's fill of loose tephra, and how much of its mouth is water-saturated (a slurry).
-        double top = world.surfaceZ(c.x(), c.z());
+        double top = world.surfaceZ(cx, cz);
         double fill = 0;
         double pores = 0;
-        for (int k = world.layerCount(c.x(), c.z()) - 1; k > 0; k--) {
-            LayerView layer = world.layer(c.x(), c.z(), k);
+        for (int k = world.layerCount(cx, cz) - 1; k > 0; k--) {
+            LayerView layer = world.layer(cx, cz, k);
             if (!layer.loose() || !layer.materialInfo().solid()) break;
             fill += layer.thickness();
             pores += layer.thickness() * layer.porosity();
@@ -822,7 +1019,7 @@ public final class VolcanoCoupler implements Subsystem {
         double slurry = band > 0 && Double.isFinite(level) ? Math.max(0, Math.min(band, level - (top - band))) / mouth : 0;
         double porosity = fill > 0 ? pores / fill : 0;
         // Water drawn out of a crater cut off from open water comes back only by seepage through the edifice.
-        double seepage = wet && openWaterFraction > 0 ? Double.NaN : seepageIntoCrater(world, c, crater, top - band);
+        double seepage = wet && openWaterFraction > 0 ? Double.NaN : seepageIntoCrater(world, cx, cz, crater, top - band);
         return new VentPartition.Water(waterDepthM, openWaterFraction, table, slurry, porosity, seepage);
     }
 
@@ -837,15 +1034,17 @@ public final class VolcanoCoupler implements Subsystem {
         if (world == null || !(magmaKg > 0)) return;
         double boil = magmaKg * VentPartition.MAGMA_HEAT_CAPACITY * Math.max(0, temperatureC - 100)
                 / (VentPartition.WATER_HEAT_CAPACITY * 80 + VentPartition.WATER_LATENT_HEAT);
-        double area = world.spec().metersPerColumn() * world.spec().metersPerColumn();
-        BlockPos c = vent.position();
-        int crater = Math.max(1, vent.craterRadius());
+        double l = world.spec().metersPerColumn();
+        double area = l * l;
+        int cx = vent.position().columnX(l);
+        int cz = vent.position().columnZ(l);
+        int crater = craterColumns(vent);
         double lake = 0;
         for (int dz = -crater; dz <= crater; dz++) {
             for (int dx = -crater; dx <= crater; dx++) {
-                if (dx * dx + dz * dz > crater * crater || !world.isKnown(c.x() + dx, c.z() + dz)) continue;
-                double level = world.waterZ(c.x() + dx, c.z() + dz);
-                if (Double.isFinite(level)) lake += Math.max(0, level - world.surfaceZ(c.x() + dx, c.z() + dz));
+                if (dx * dx + dz * dz > crater * crater || !world.isKnown(cx + dx, cz + dz)) continue;
+                double level = world.waterZ(cx + dx, cz + dz);
+                if (Double.isFinite(level)) lake += Math.max(0, level - world.surfaceZ(cx + dx, cz + dz));
             }
         }
         lake *= area * VentPartition.WATER_DENSITY;
@@ -853,8 +1052,8 @@ public final class VolcanoCoupler implements Subsystem {
         double keep = Math.max(0, 1 - boil / lake);
         for (int dz = -crater; dz <= crater; dz++) {
             for (int dx = -crater; dx <= crater; dx++) {
-                int x = c.x() + dx;
-                int z = c.z() + dz;
+                int x = cx + dx;
+                int z = cz + dz;
                 if (dx * dx + dz * dz > crater * crater || !world.isKnown(x, z)) continue;
                 double level = world.waterZ(x, z);
                 double floor = world.surfaceZ(x, z);
@@ -865,23 +1064,24 @@ public final class VolcanoCoupler implements Subsystem {
     }
 
     /**
-     * Whether water standing at {@code c} connects through submerged columns (8-connected) to water beyond
-     * {@code radius} columns, i.e. to the open sea or a lake, rather than being a lagoon enclosed by land.
+     * Whether water standing at column ({@code cx}, {@code cz}) connects through submerged columns (8-connected)
+     * to water beyond {@code radius} columns, i.e. to the open sea or a lake, rather than being a lagoon
+     * enclosed by land.
      */
-    static boolean connectedToOpenWater(WorldModel world, BlockPos c, int radius) {
+    static boolean connectedToOpenWater(WorldModel world, int cx, int cz, int radius) {
         java.util.ArrayDeque<long[]> queue = new java.util.ArrayDeque<>();
-        java.util.HashSet<Long> seen = new java.util.HashSet<>();
-        queue.add(new long[] {c.x(), c.z()});
-        seen.add(BlockPos.pack(c.x(), 0, c.z()));
+        me.alex4386.typhon.engine.math.LongHashSet seen = new me.alex4386.typhon.engine.math.LongHashSet();
+        queue.add(new long[] {cx, cz});
+        seen.add(floodKey(cx, cz));
         while (!queue.isEmpty()) {
             long[] p = queue.poll();
             int x = (int) p[0];
             int z = (int) p[1];
-            if ((x - c.x()) * (x - c.x()) + (z - c.z()) * (z - c.z()) > radius * radius) return true;
+            if ((x - cx) * (x - cx) + (z - cz) * (z - cz) > radius * radius) return true;
             for (int d = 0; d < 8; d++) {
                 int nx = x + RING_DX[d];
                 int nz = z + RING_DZ[d];
-                if (!seen.add(BlockPos.pack(nx, 0, nz))) continue;
+                if (!seen.add(floodKey(nx, nz))) continue;
                 if (!world.isKnown(nx, nz)) return true; // water running off the simulated area: the open sea
                 double level = world.waterZ(nx, nz);
                 if (Double.isFinite(level) && level > world.surfaceZ(nx, nz)) queue.add(new long[] {nx, nz});
@@ -890,13 +1090,17 @@ public final class VolcanoCoupler implements Subsystem {
         return false;
     }
 
+    private static long floodKey(int x, int z) {
+        return ((long) x << 32) | (z & 0xffffffffL);
+    }
+
     /**
      * Sea water seeping through the saturated edifice into a crater drawn down to {@code floorZ} (kg/s):
      * Darcy flow {@code ρ K Δh / L} through the crater wall below sea level ({@code 2π r Δh}), with
      * {@code L} the ring's mean width at sea level and {@code K} the hydraulic conductivity of its
      * surface deposits (Freeze &amp; Cherry 1979; Surtsey's tephra ~10⁻⁴ m/s, Jakobsson &amp; Moore 1986).
      */
-    static double seepageIntoCrater(WorldModel world, BlockPos c, int crater, double floorZ) {
+    static double seepageIntoCrater(WorldModel world, int cx, int cz, int crater, double floorZ) {
         double sea = world.spec().seaLevelZ();
         if (!Double.isFinite(sea) || !(sea > floorZ)) return 0;
         double l = world.spec().metersPerColumn();
@@ -909,8 +1113,8 @@ public final class VolcanoCoupler implements Subsystem {
             int steps = 0;
             int first = -1;
             for (int r = crater + 1; r <= crater + MAX_RING_COLUMNS; r++) {
-                int rx = c.x() + RING_DX[d] * r;
-                int rz = c.z() + RING_DZ[d] * r;
+                int rx = cx + RING_DX[d] * r;
+                int rz = cz + RING_DZ[d] * r;
                 if (!world.isKnown(rx, rz)) break;
                 boolean land = world.surfaceZ(rx, rz) >= sea;
                 if (land) {
@@ -921,8 +1125,8 @@ public final class VolcanoCoupler implements Subsystem {
                 }
             }
             if (first < 0) continue;
-            int x = c.x() + RING_DX[d] * first;
-            int z = c.z() + RING_DZ[d] * first;
+            int x = cx + RING_DX[d] * first;
+            int z = cz + RING_DZ[d] * first;
             int n = world.layerCount(x, z);
             if (n == 0) continue;
             conductivity += Math.pow(10, world.layer(x, z, n - 1).materialInfo().log10HydraulicConductivity());
@@ -937,66 +1141,65 @@ public final class VolcanoCoupler implements Subsystem {
     }
 
     /**
-     * Wet jet and base-surge fallout around a water-fragmenting vent: loose wet tephra (and quench-granulated
-     * lava) of physical thickness, in a ring peaking just outside the crater rim; some falls back into the
-     * crater and fills the vent as a slurry (Kokelaar 1983). Slopes relax to the angle of repose in
-     * geomorphology. The block view gets a tuff block once a block is more than half full.
+     * Lays the wet fallout of vent {@code vent}: magma quenched and granulated where it meets the water, and
+     * the coarse share of a collapsing wet column, piled up around the vent (Kokelaar 1983, 1986). Jet ejecta
+     * are not part of it: they fly ballistically ({@link #fireJets}). The pile covers the crater floor (it
+     * falls back into the vent and fills it as a slurry, Kokelaar 1983) and thins beyond the rim exponentially
+     * over the vent's own size (the crater radius, at least one column); repose relaxation
+     * then shapes it to its angle of repose. A fissure builds a ridge along its whole length (distances to
+     * its segment). Under water ({@code waterDepthM > 0}) it is hyaloclastite; in air, loose wet ash (a tuff
+     * ring).
      */
-    private void buildTuffRing(StepContext context, VentSite vent, double massKg) {
+    private void buildTuffRing(StepContext context, VentSite vent, double massKg, double waterDepthM) {
         if (terrain == null) return;
         WorldModel world = terrain.world();
-        double mpb = scaling.metersPerBlock();
-        double bulkBlocks = massKg / TUFF_BULK_DENSITY * scaling.volumeScale();
-        int crater = Math.max(1, vent.craterRadius());
-        int outer = crater + TUFF_RING_WIDTH;
-        double peak = crater + 2;
-        BlockPos c = vent.position();
+        double l = world.spec().metersPerColumn();
+        double volume = massKg / TUFF_BULK_DENSITY;
+        double crater = Math.max(l, vent.craterRadiusM());
+        double scale = crater;
+        double outer = crater + APRON_REACH * scale;
+        Point3 c = vent.position();
+        double half = vent.kind() == VentKind.FISSURE ? vent.fissureLengthM() / 2 : 0;
+        double ux = Math.cos(vent.fissureAngleRad());
+        double uz = Math.sin(vent.fissureAngleRad());
+        int cx = c.columnX(l);
+        int cz = c.columnZ(l);
+        int reach = (int) Math.ceil((outer + half) / l);
         List<long[]> cells = new ArrayList<>();
         List<Double> weights = new ArrayList<>();
         double total = 0;
-        for (int dz = -outer; dz <= outer; dz++) {
-            for (int dx = -outer; dx <= outer; dx++) {
-                double r = Math.sqrt(dx * dx + dz * dz);
-                if (r > outer || !world.isKnown(c.x() + dx, c.z() + dz)) continue;
-                double w = Math.exp(-(r - peak) * (r - peak) / 8.0);
-                cells.add(new long[] {c.x() + dx, c.z() + dz});
+        for (int dz = -reach; dz <= reach; dz++) {
+            for (int dx = -reach; dx <= reach; dx++) {
+                int x = cx + dx;
+                int z = cz + dz;
+                double px = (x + 0.5) * l - c.x();
+                double pz = (z + 0.5) * l - c.z();
+                double along = Math.max(-half, Math.min(half, px * ux + pz * uz));
+                double r = Math.hypot(px - along * ux, pz - along * uz);
+                if (r > outer || !world.isKnown(x, z)) continue;
+                double w = Math.exp(-Math.max(0, r - crater) / scale);
+                cells.add(new long[] {x, z});
                 weights.add(w);
                 total += w;
             }
         }
         if (total <= 0) return;
-        int unit = units.unit(DepositType.FALL, context.time(), Double.NaN);
-        int placed = 0;
+        boolean submarine = waterDepthM > 0;
+        int unit = units.unit(submarine ? DepositType.HYALOCLASTITE : DepositType.FALL, context.time(), Double.NaN);
+        var material = submarine ? MaterialTable.HYALOCLASTITE : MaterialTable.ASH;
+        double area = l * l;
         for (int i = 0; i < cells.size(); i++) {
-            int x = (int) cells.get(i)[0];
-            int z = (int) cells.get(i)[1];
-            double thickness = bulkBlocks * weights.get(i) / total * mpb;
+            double thickness = volume * weights.get(i) / total / area;
             if (!(thickness > 0)) continue;
-            world.deposit(x, z, thickness, MaterialTable.ASH, unit, LayerFlags.LOOSE, WET_TEPHRA_POROSITY, 0);
-            placed += mirrorTuff(context, world, x, z, MAX_TUFF_BLOCKS_PER_STEP - placed);
+            world.deposit((int) cells.get(i)[0], (int) cells.get(i)[1], thickness, material, unit,
+                    LayerFlags.LOOSE, WET_TEPHRA_POROSITY, 0);
         }
-    }
-
-    /** Raises the block view of a column to its surface (whole blocks more than half full); returns blocks placed. */
-    private int mirrorTuff(StepContext context, WorldModel world, int x, int z, int budget) {
-        TerrainColumn column = terrain.column(x, z);
-        if (column == null || budget <= 0) return 0;
-        double l = world.spec().metersPerColumn();
-        int target = (int) Math.floor(world.surfaceZ(x, z) / l - 0.5);
-        int placed = 0;
-        while (column.groundY() < target && placed < budget) {
-            int y = column.groundY() + 1;
-            terrain.updateBlockCache(x, z, y, TUFF);
-            column = terrain.column(x, z);
-            placed++;
-        }
-        return placed;
     }
 
     private void setPhreatomagmatic(StepContext context, boolean active, VentSite vent) {
         if (active == phreatomagmatic) return;
         phreatomagmatic = active;
-        BlockPos at = vent != null ? vent.position() : baseVents.get(0).position();
+        Point3 at = (vent != null ? vent : referenceSite()).position();
         context.outbox().emit(new SurfaceEvents.PhreatomagmaticChanged(context.time(), volcanoId, active, at, waterDepthM));
     }
 
@@ -1068,6 +1271,18 @@ public final class VolcanoCoupler implements Subsystem {
         JsonObject feederState = new JsonObject();
         for (Map.Entry<String, FissureFeeder> e : feeders.entrySet()) feederState.add(e.getKey(), e.getValue().save());
         out.add("feeders", feederState);
+        JsonArray local = new JsonArray();
+        for (LocalVent v : localVents.values()) {
+            JsonObject o = new JsonObject();
+            o.addProperty("id", v.site().id());
+            o.add("position", v.site().position().toJson());
+            o.addProperty("radiusM", v.site().craterRadiusM());
+            o.addProperty("fissureId", v.fissureId());
+            o.addProperty("conductance", v.conductance());
+            o.addProperty("referenceConductance", v.referenceConductance());
+            local.add(o);
+        }
+        out.add("localVents", local);
         JsonArray sealedVents = new JsonArray();
         sealed.forEach(sealedVents::add);
         out.add("sealedVents", sealedVents);
@@ -1097,52 +1312,43 @@ public final class VolcanoCoupler implements Subsystem {
         activeLavaSources.clear();
         for (JsonElement e : in.getAsJsonArray("lavaSources")) activeLavaSources.add(e.getAsString());
         eruptionVents.clear();
-        if (in.has("eruptionVents")) {
-            for (JsonElement e : in.getAsJsonArray("eruptionVents")) eruptionVents.add(e.getAsString());
-        }
+        for (JsonElement e : in.getAsJsonArray("eruptionVents")) eruptionVents.add(e.getAsString());
         knownFissures.clear();
         feeders.clear();
         sealed.clear();
         ventStates.clear();
         ventFlux.clear();
-        if (in.has("knownFissureIds")) {
-            for (JsonElement e : in.getAsJsonArray("knownFissureIds")) knownFissures.add(e.getAsString());
-        } else if (in.has("knownFissures") && dikes != null) {
-            // Older saves counted fissures; their feeders open afresh on the next step.
-            List<VentSite> opened = dikes.openedVents();
-            int n = Math.min(opened.size(), in.get("knownFissures").getAsInt());
-            for (VentSite vent : opened.subList(0, n)) knownFissures.add(vent.id());
+        for (JsonElement e : in.getAsJsonArray("knownFissureIds")) knownFissures.add(e.getAsString());
+        for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("feeders").entrySet()) {
+            feeders.put(e.getKey(), FissureFeeder.load(e.getValue().getAsJsonObject()));
         }
-        if (in.has("feeders")) {
-            for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("feeders").entrySet()) {
-                feeders.put(e.getKey(), FissureFeeder.load(e.getValue().getAsJsonObject()));
-            }
+        localVents.clear();
+        for (JsonElement e : in.getAsJsonArray("localVents")) {
+            JsonObject o = e.getAsJsonObject();
+            VentSite site = VentSite.crater(o.get("id").getAsString(), Point3.fromJson(o.get("position")),
+                    o.get("radiusM").getAsDouble());
+            localVents.put(site.id(), new LocalVent(site, o.get("fissureId").getAsString(),
+                    o.get("conductance").getAsDouble(), o.get("referenceConductance").getAsDouble()));
         }
-        if (in.has("sealedVents")) {
-            for (JsonElement e : in.getAsJsonArray("sealedVents")) sealed.add(e.getAsString());
+        for (JsonElement e : in.getAsJsonArray("sealedVents")) sealed.add(e.getAsString());
+        for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("ventStates").entrySet()) {
+            ventStates.put(e.getKey(), VentStatus.valueOf(e.getValue().getAsString()));
         }
-        if (in.has("ventStates")) {
-            for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("ventStates").entrySet()) {
-                ventStates.put(e.getKey(), VentStatus.valueOf(e.getValue().getAsString()));
-            }
+        for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("ventFlux").entrySet()) {
+            ventFlux.put(e.getKey(), e.getValue().getAsDouble());
         }
-        if (in.has("ventFlux")) {
-            for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("ventFlux").entrySet()) {
-                ventFlux.put(e.getKey(), e.getValue().getAsDouble());
-            }
-        }
-        flankPending = in.has("flankPending") && in.get("flankPending").getAsBoolean();
+        flankPending = in.get("flankPending").getAsBoolean();
         explosiveRate = in.get("explosiveRate").getAsDouble();
-        explosiveCollapse = in.has("explosiveCollapse") ? in.get("explosiveCollapse").getAsDouble() : 0;
-        explosiveGas = in.has("explosiveGas") ? in.get("explosiveGas").getAsDouble() : 0;
+        explosiveCollapse = in.get("explosiveCollapse").getAsDouble();
+        explosiveGas = in.get("explosiveGas").getAsDouble();
         collapseSource = in.has("collapseSource") ? in.get("collapseSource").getAsString() : null;
         burstPhaseUntil = in.get("burstPhaseUntil").getAsDouble();
-        phreatomagmatic = in.has("phreatomagmatic") && in.get("phreatomagmatic").getAsBoolean();
-        waterDepthM = in.has("waterDepthM") ? in.get("waterDepthM").getAsDouble() : 0;
-        openWaterFraction = in.has("openWaterFraction") ? in.get("openWaterFraction").getAsDouble() : 0;
+        phreatomagmatic = in.get("phreatomagmatic").getAsBoolean();
+        waterDepthM = in.get("waterDepthM").getAsDouble();
+        openWaterFraction = in.get("openWaterFraction").getAsDouble();
         nextSteamEventTime = in.get("nextSteamEventTime").getAsDouble();
-        slugBursts = in.has("slugBursts") ? in.get("slugBursts").getAsLong() : 0;
-        plugBursts = in.has("plugBursts") ? in.get("plugBursts").getAsLong() : 0;
+        slugBursts = in.get("slugBursts").getAsLong();
+        plugBursts = in.get("plugBursts").getAsLong();
         lastPartition = null;
     }
 }

@@ -59,7 +59,7 @@ class ConfigApiTest {
         }
     }
 
-    /** A paused world session from the compact Kīlauea preset; returns its id. */
+    /** A paused world session from the Kīlauea preset; returns its id. */
     private static String world(TestClient c, String name) throws Exception {
         c.send("{\"type\":\"createSession\",\"requestId\":1,\"preset\":\"kilauea\",\"name\":\"" + name + "\",\"paused\":true}");
         return c.awaitType("attached", 120).json().get("sessionId").getAsString();

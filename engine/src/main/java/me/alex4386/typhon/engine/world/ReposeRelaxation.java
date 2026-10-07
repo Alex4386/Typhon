@@ -2,7 +2,7 @@ package me.alex4386.typhon.engine.world;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.TreeSet;
+import me.alex4386.typhon.engine.math.LongMinQueue;
 
 /**
  * Loose granular deposits never stand steeper than their angle of repose: wherever loose material lands
@@ -49,8 +49,10 @@ public final class ReposeRelaxation {
     private static final int[] DZ = {0, 1, 1, 1, 0, -1, -1, -1};
 
     private final WorldModel world;
-    private final TreeSet<Long> queue = new TreeSet<>();
+    private final LongMinQueue queue = new LongMinQueue();
     private boolean running;
+    /** Open {@link #hold()}s: while positive, touched columns are only queued. */
+    private int holds;
     private double submergedFactor = DEFAULT_SUBMERGED_FACTOR;
     private double waveBaseM = DEFAULT_WAVE_BASE_M;
     private long moves;
@@ -99,20 +101,35 @@ public final class ReposeRelaxation {
         return queue.size();
     }
 
-    /** Something changed at a column (a deposit, an excavation): relax it and its neighbourhood now. */
+    /**
+     * Something changed at a column (a deposit, an excavation): relax it and its neighbourhood now, or at the
+     * last {@link #release()} while held.
+     */
     public void touched(int x, int z) {
         enqueueAround(x, z);
-        if (!running) drain();
+        if (!running && holds == 0) drain();
     }
 
-    /** Queues a column for examination at the next {@link #drain()} (bulk sweeps). */
-    void enqueue(int x, int z) {
-        queue.add(pack(x, z));
+    /**
+     * Defers relaxation until the matching {@link #release()} (holds nest): a deposit sweep (an ash step, a
+     * salvo of proximal fallout) queues every column it touches and relaxes them in one drain, instead of
+     * cascading after each column. The end state obeys the same repose limit; which column a grain settles on
+     * may differ (a granular pile's final shape depends on the order it was built in). Code inside a hold must
+     * not rely on the relaxed surface.
+     */
+    public void hold() {
+        holds++;
+    }
+
+    /** Ends a {@link #hold()}; the last one relaxes everything queued meanwhile. */
+    public void release() {
+        if (holds <= 0) throw new IllegalStateException("release without hold");
+        if (--holds == 0) drain();
     }
 
     /** Relaxes everything queued. */
     public void drain() {
-        if (running) return;
+        if (running || holds > 0) return;
         running = true;
         try {
             int n = 0;
@@ -191,13 +208,29 @@ public final class ReposeRelaxation {
     double reposeTan(int x, int z) {
         int n = world.layerCount(x, z);
         if (n == 0) return Double.POSITIVE_INFINITY;
-        Material top = world.layer(x, z, n - 1).materialInfo();
-        double tan = Math.tan(Math.toRadians(MaterialTable.reposeAngleDeg(top)));
+        double tan = dryTan(world.layer(x, z, n - 1).material());
         double water = world.waterZ(x, z);
         double depth = Double.isFinite(water) ? water - world.surfaceZ(x, z) : 0;
         if (depth > 0 && waveBaseM > 0 && depth < waveBaseM) {
             // wave-reworked: the full factor at the surface, none at the wave base
             tan *= 1 - (1 - submergedFactor) * (1 - depth / waveBaseM);
+        }
+        return tan;
+    }
+
+    /** {@code tan φ} in air by material id, filled on first use (the same value the formula gives every time). */
+    private double[] dryTan = new double[0];
+
+    private double dryTan(short material) {
+        if (material >= dryTan.length) {
+            int from = dryTan.length;
+            dryTan = java.util.Arrays.copyOf(dryTan, material + 1);
+            java.util.Arrays.fill(dryTan, from, dryTan.length, Double.NaN);
+        }
+        double tan = dryTan[material];
+        if (Double.isNaN(tan)) {
+            tan = Math.tan(Math.toRadians(MaterialTable.reposeAngleDeg(MaterialTable.get(material))));
+            dryTan[material] = tan;
         }
         return tan;
     }

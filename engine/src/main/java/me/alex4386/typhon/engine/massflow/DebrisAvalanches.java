@@ -3,11 +3,10 @@ package me.alex4386.typhon.engine.massflow;
 import java.util.List;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.FlowCell;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.world.BlockState;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerFlags;
 import me.alex4386.typhon.engine.world.Material;
@@ -37,9 +36,9 @@ public final class DebrisAvalanches extends MassFlowField {
         this(id, terrain, MassFlowConfig.debrisAvalanche());
     }
 
-    /** Releases {@code volumeM3} of failed debris at rest within {@code radius} blocks of {@code center}. */
-    public boolean collapse(BlockPos center, int radius, double volumeM3) {
-        return release(center, radius, volumeM3, config.ambientC, 0, Trigger.SLOPE_FAILURE);
+    /** Releases {@code volumeM3} of failed debris at rest within {@code radiusM} metres of {@code center}. */
+    public boolean collapse(Point3 center, double radiusM, double volumeM3) {
+        return release(center, radiusM, volumeM3, config.ambientC, 0, Trigger.SLOPE_FAILURE);
     }
 
     @Override
@@ -55,16 +54,6 @@ public final class DebrisAvalanches extends MassFlowField {
         double settled = c.depth[i] * (1 - StrictMath.exp(-rate * dt));
         if (c.depth[i] - settled < config.minDepth) settled = c.depth[i];
         depositFlow(c, i, settled, settled * config.depositThicknessFactor, outbox);
-    }
-
-    @Override
-    protected BlockState depositBlock(MassFlowChunk c, int i, double meanTemperatureC, double meanSpeed) {
-        return MassFlowPalette.DEBRIS;
-    }
-
-    @Override
-    protected BlockState veneer(int tier) {
-        return MassFlowPalette.DEBRIS_VENEER;
     }
 
     @Override
@@ -93,13 +82,13 @@ public final class DebrisAvalanches extends MassFlowField {
     }
 
     @Override
-    protected EngineEvent frontEvent(double time, BlockPos front, double runoutM, int cells, double volume,
+    protected EngineEvent frontEvent(double time, Point3 front, double runoutM, int cells, double volume,
             double maxSpeed, double tracer, List<FlowCell> reported) {
         return new MassFlowEvents.AvalancheFront(time, id, front, runoutM, cells, volume, maxSpeed, reported);
     }
 
     @Override
-    protected EngineEvent depositEvent(double time, int cells, double volume, int blocks) {
-        return new MassFlowEvents.AvalancheDeposit(time, id, cells, volume, blocks);
+    protected EngineEvent depositEvent(double time, int cells, double volume) {
+        return new MassFlowEvents.AvalancheDeposit(time, id, cells, volume);
     }
 }

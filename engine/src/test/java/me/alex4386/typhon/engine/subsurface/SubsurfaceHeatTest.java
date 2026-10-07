@@ -124,15 +124,9 @@ class SubsurfaceHeatTest {
 
     @Test
     void boilingPointFollowsTheDepthCurve() {
-        assertEquals(100, SubsurfaceHeat.boilingPoint(0), 1e-9);
-        assertEquals(115, SubsurfaceHeat.boilingPoint(10), 1.5);
-        assertEquals(200, SubsurfaceHeat.boilingPoint(150), 10);
-        double previous = 0;
-        for (double d = 0; d < 1000; d += 25) {
-            double bp = SubsurfaceHeat.boilingPoint(d);
-            assertTrue(bp > previous);
-            previous = bp;
-        }
+        assertEquals(WaterSaturation.boilingPointC(0, 0), SubsurfaceHeat.boilingPoint(0, 0), 1e-12);
+        assertEquals(120.4, SubsurfaceHeat.boilingPoint(10, 0), 0.5);
+        assertTrue(SubsurfaceHeat.boilingPoint(0, 2000) < 94, "water boils cooler at altitude");
     }
 
     record FixedSources(List<Chamber> chambers, List<Vent> vents) implements HeatSources {}

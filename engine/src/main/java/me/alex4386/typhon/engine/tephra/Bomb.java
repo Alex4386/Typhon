@@ -10,23 +10,30 @@ final class Bomb {
     final double diameter;
     final double dragFactor;
     final double silicaWt;
-    /** Ground y assumed where the terrain model has no data (the launch column's ground). */
-    final int fallbackGroundY;
+    /** Ground elevation (m) assumed where the ground is not known (the launch point's ground). */
+    final double fallbackGroundZ;
     /** Simulation time (s) of launch. */
     final double launchTime;
+    /**
+     * Real bombs of this size the tracked one stands for: its landing lays {@code weight} times its own
+     * volume. 0 for a bomb that only shows ejecta whose mass is laid down elsewhere (proximal fallout).
+     */
+    final double weight;
 
-    Bomb(long id, double[] s, double diameter, double dragFactor, double silicaWt, int fallbackGroundY, double launchTime) {
+    Bomb(long id, double[] s, double diameter, double dragFactor, double silicaWt, double fallbackGroundZ, double launchTime,
+            double weight) {
         this.id = id;
         this.s = s;
         this.diameter = diameter;
         this.dragFactor = dragFactor;
         this.silicaWt = silicaWt;
-        this.fallbackGroundY = fallbackGroundY;
+        this.fallbackGroundZ = fallbackGroundZ;
         this.launchTime = launchTime;
+        this.weight = weight;
     }
 
     Bomb copy() {
-        return new Bomb(id, s.clone(), diameter, dragFactor, silicaWt, fallbackGroundY, launchTime);
+        return new Bomb(id, s.clone(), diameter, dragFactor, silicaWt, fallbackGroundZ, launchTime, weight);
     }
 
     Vec3d position() {
@@ -46,8 +53,9 @@ final class Bomb {
         out.addProperty("diameter", diameter);
         out.addProperty("dragFactor", dragFactor);
         out.addProperty("silica", silicaWt);
-        out.addProperty("fallbackGroundY", fallbackGroundY);
+        out.addProperty("fallbackGroundZ", fallbackGroundZ);
         out.addProperty("launchTime", launchTime);
+        out.addProperty("weight", weight);
         return out;
     }
 
@@ -61,7 +69,8 @@ final class Bomb {
                 in.get("diameter").getAsDouble(),
                 in.get("dragFactor").getAsDouble(),
                 in.get("silica").getAsDouble(),
-                in.get("fallbackGroundY").getAsInt(),
-                in.get("launchTime").getAsDouble());
+                in.get("fallbackGroundZ").getAsDouble(),
+                in.get("launchTime").getAsDouble(),
+                in.get("weight").getAsDouble());
     }
 }

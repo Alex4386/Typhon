@@ -31,7 +31,7 @@ import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.subsurface.Subsurface;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
+import me.alex4386.typhon.engine.terrain.GroundImport;
 import me.alex4386.typhon.engine.world.Edifice;
 import me.alex4386.typhon.engine.world.WorldModel;
 
@@ -69,7 +69,7 @@ public final class World {
     /** Builds the initial terrain of a fresh world (generator, DEM, a host's live world, ...). */
     @FunctionalInterface
     public interface TerrainProvider {
-        TerrainSnapshot initialTerrain(WorldDefinition world, List<VolcanoDefinition> volcanoes);
+        GroundImport initialTerrain(WorldDefinition world, List<VolcanoDefinition> volcanoes);
     }
 
     static final String WORLD_STATE = "world.json";
@@ -113,12 +113,12 @@ public final class World {
     // ── Creating and opening ──
 
     /** A fresh world kept in memory (tests, previews). Save with {@link #save()} into its in-memory stores. */
-    public static World create(WorldDefinition definition, Collection<VolcanoDefinition> volcanoes, TerrainSnapshot terrain) {
+    public static World create(WorldDefinition definition, Collection<VolcanoDefinition> volcanoes, GroundImport terrain) {
         return create(definition, volcanoes, terrain, new InMemorySaveStore(), new InMemorySaveStore());
     }
 
     /** A fresh world saving into the given stores. */
-    public static World create(WorldDefinition definition, Collection<VolcanoDefinition> volcanoes, TerrainSnapshot terrain,
+    public static World create(WorldDefinition definition, Collection<VolcanoDefinition> volcanoes, GroundImport terrain,
             SaveStore state, SaveStore history) {
         World world = new World(null, state, history, definition, volcanoes);
         world.build(null, Map.of(), Set.of());
@@ -278,8 +278,6 @@ public final class World {
         }
         terrain.world().setEdifices(edifices);
         lava = new LavaFlow(terrain, definition.lava());
-        // the field is in the world's columns from the start, also before any volcano exists
-        lava.setMetersPerBlock(definition.scaling().metersPerBlock());
         subsurface = new Subsurface(terrain.world(), definition.subsurfaceConfig());
         systems.clear();
         Engine.Builder builder = Engine.builder(definition.seed()).baseStepMicros(definition.baseStepMicros())

@@ -1,4 +1,5 @@
 import { currentTier } from '../util/device';
+import { withOpenedFissures } from './worldVents';
 import { create } from 'zustand';
 import { Field, type FieldId } from '../protocol/fields';
 import { DETAIL_TOLERANCE_M, detailMismatch } from '../scene/detail';
@@ -305,7 +306,7 @@ export const useStore = create<Store>((set, get) => ({
   tool: 'orbit',
   colorMode: 'natural',
   selectedVolcano: null,
-  verticalExaggeration: 1.5,
+  verticalExaggeration: 1,
   deformationExaggeration: 1,
   sectionPolyline: [],
   showHypocentres: true,
@@ -445,7 +446,7 @@ export const useStore = create<Store>((set, get) => ({
       keyEvents = mergeByTime(keyEvents, key);
       if (keyEvents.length > KEY_EVENT_CAP) keyEvents.splice(0, keyEvents.length - KEY_EVENT_CAP);
     }
-    set({ events: all, keyEvents, droppedEvents: get().droppedEvents + dropped });
+    set({ events: all, keyEvents, droppedEvents: get().droppedEvents + dropped, world: withOpenedFissures(get().world, events) });
   },
 
   clearForReplay: (time) => {

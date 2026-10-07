@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
-import java.util.function.IntBinaryOperator;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.LaharStarted;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.PdcDeposit;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.PdcFront;
@@ -13,19 +12,22 @@ import me.alex4386.typhon.engine.massflow.MassFlowEvents.PdcStarted;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.PdcSteam;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.TerrainNeeded;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
-import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.testing.TestGround.Elevation;
 import me.alex4386.typhon.engine.world.LayerView;
+import me.alex4386.typhon.engine.world.Material;
+import me.alex4386.typhon.engine.world.WorldModel;
 import me.alex4386.typhon.engine.world.MaterialTable;
 import org.junit.jupiter.api.Test;
 import me.alex4386.typhon.engine.testing.Saves;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 class MassFlowTest {
-    private static final IntBinaryOperator RAMP = MassFlowTestWorld.rampToPlain(0.4, 60, 64);
-    private static final BlockPos TOP = new BlockPos(8, 0, 32);
+    private static final Elevation RAMP = MassFlowTestWorld.rampToPlain(0.4, 60, 64);
+    private static final Point3 TOP = new Point3(8.5, 0, 32.5);
 
     private static MassFlowTestWorld rampWorld() {
         return new MassFlowTestWorld(0, 0, 15, 3, RAMP);
@@ -61,7 +63,7 @@ class MassFlowTest {
             }
             Engine e = w.engine(field, 3);
             field.release(TOP, 3, 2000, 600, kind == MassFlowKind.LAHAR ? 0.3 : 0, Trigger.MANUAL);
-            field.addSource(FlowSource.at("feed", new BlockPos(4, 0, 32), 20, 600, kind == MassFlowKind.LAHAR ? 0.2 : 0),
+            field.addSource(FlowSource.at("feed", new ColumnIndex(4, 32), 20, 600, kind == MassFlowKind.LAHAR ? 0.2 : 0),
                     Trigger.MANUAL);
             for (int t = 0; t < 600; t += 10) {
                 w.run(e, 10);
@@ -86,19 +88,19 @@ class MassFlowTest {
 
     @Test
     void flowsDownhillAndChannelisesIntoValley() {
-        // Same down-slope gradient, with and without a V-shaped valley (sides rising 0.6 per block).
-        double[] valley = depositCentroid((x, z) -> 120 - (int) Math.round(0.35 * x) + (int) Math.round(0.6 * Math.abs(z - 32)));
-        double[] open = depositCentroid((x, z) -> 120 - (int) Math.round(0.35 * x));
+        // Same down-slope gradient, with and without a V-shaped valley (sides rising 0.6 m per metre).
+        double[] valley = depositCentroid((x, z) -> 120 - 0.35 * x + 0.6 * Math.abs(z - 32));
+        double[] open = depositCentroid((x, z) -> 120 - 0.35 * x);
 
         assertTrue(valley[0] > 10 + 20, "centroid moved downhill: " + valley[0]);
         assertTrue(valley[1] < 0.5 * open[1], "valley confines the flow: lateral spread " + valley[1] + " vs " + open[1]);
     }
 
     /** Releases a PDC at (10, 32) and returns the deposit's x centroid and mean |z − 32|. */
-    private static double[] depositCentroid(IntBinaryOperator ground) {
+    private static double[] depositCentroid(Elevation ground) {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 11, 3, ground);
         PyroclasticFlows f = pdc(w);
-        f.release(new BlockPos(10, 0, 32), 4, 3000, 600, 0, Trigger.MANUAL);
+        f.release(new Point3(10.5, 0, 32.5), 4, 3000, 600, 0, Trigger.MANUAL);
         runout(w, f);
         double sum = 0, sx = 0, sz = 0;
         for (int x = 0; x < 192; x++) {
@@ -135,7 +137,7 @@ class MassFlowTest {
     void pdcComesToRestOnFlatGroundAndDeposits() {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 7, 7, (x, z) -> 64);
         PyroclasticFlows f = pdc(w);
-        BlockPos center = new BlockPos(64, 0, 64);
+        Point3 center = new Point3(64.5, 0, 64.5);
         f.release(center, 6, 500, 600, 0, Trigger.MANUAL); // ~4.4 m deep pile
         runout(w, f);
         assertTrue(w.depositVolume(f, 1) > 0);
@@ -168,12 +170,12 @@ class MassFlowTest {
 
     private static double beyondRidge(int height) {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 11, 3, (x, z) -> {
-            if (x < 50) return 64 + (int) Math.round((50 - x) * 0.5);
+            if (x < 50) return 64 + (50 - x) * 0.5;
             if (x >= 62 && x < 66) return 64 + height;
             return 64;
         });
         PyroclasticFlows f = pdc(w);
-        f.release(new BlockPos(6, 0, 32), 3, 1500, 600, 0, Trigger.MANUAL);
+        f.release(new Point3(6.5, 0, 32.5), 3, 1500, 600, 0, Trigger.MANUAL);
         runout(w, f);
         double beyond = 0;
         for (int x = 66; x < 192; x++) {
@@ -188,18 +190,17 @@ class MassFlowTest {
     void depositsRaiseTerrain() {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 3, 3, (x, z) -> 64);
         PyroclasticFlows f = pdc(w);
-        f.release(new BlockPos(32, 0, 32), 6, 2000, 400, 0, Trigger.MANUAL);
+        f.release(new Point3(32.5, 0, 32.5), 6, 2000, 400, 0, Trigger.MANUAL);
         runout(w, f);
 
         int raised = 0;
+        WorldModel world = w.terrain.world();
         for (int x = 0; x < 64; x++) {
             for (int z = 0; z < 64; z++) {
-                int g = w.terrain.column(x, z).groundY();
-                if (g > 64) {
+                if (world.surfaceZ(x, z) > 64 + 1e-6) {
                     raised++;
-                    BlockId top = w.terrain.column(x, z).surface();
-                    assertTrue(top.equals(MassFlowPalette.TUFF.id()) || top.equals(MassFlowPalette.PDC_VENEER.id()),
-                            "top of the deposit at " + x + "," + z + ": " + top);
+                    Material top = world.layer(x, z, world.layerCount(x, z) - 1).materialInfo();
+                    assertEquals(MaterialTable.TUFF, top, "top of the deposit at " + x + "," + z + ": " + top);
                 }
             }
         }
@@ -218,7 +219,7 @@ class MassFlowTest {
     private static List<LayerView> deposited(double temperature) {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 3, 3, (x, z) -> 64);
         PyroclasticFlows f = pdc(w);
-        f.release(new BlockPos(32, 0, 32), 4, 1500, temperature, 0, Trigger.MANUAL);
+        f.release(new Point3(32.5, 0, 32.5), 4, 1500, temperature, 0, Trigger.MANUAL);
         runout(w, f);
         return w.layers(64).stream().filter(l -> l.material() == MaterialTable.TUFF.id()).toList();
     }
@@ -247,7 +248,7 @@ class MassFlowTest {
         for (int x = 0; x < 40; x++) {
             for (int z = 24; z < 40; z++) l.addErodibleDeposit(x, z, 0.2);
         }
-        l.addErodibleDeposit(120, 32, 0.2); // on the flat plain: stays put
+        l.addErodibleDeposit(230, 32, 0.2); // far out on the flat plain, beyond the runout: stays put
         l.setRainfall(120);
 
         w.run(e, 20 * 180); // 30 min
@@ -261,7 +262,7 @@ class MassFlowTest {
         // (itself loose and erodible), not the 0.2 m fall layer
         assertTrue(l.erodibleThickness(20, 32) < 0.05, "slope deposit failed: " + l.erodibleThickness(20, 32));
         // the world model stores layer tops as float metres
-        assertEquals(0.2, l.erodibleThickness(120, 32), 1e-5, "flat deposit stays");
+        assertEquals(0.2, l.erodibleThickness(230, 32), 1e-5, "flat deposit stays");
         assertTrue(l.massBudget().entrained() > 0);
         assertTrue(w.reachX(l) > 60, "lahar reaches the plain");
     }
@@ -286,13 +287,12 @@ class MassFlowTest {
     }
 
     @Test
-    void laharsLeaveMudOrGravel() {
+    void laharsLeaveADeposit() {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 3, 3, (x, z) -> 64);
         Lahars l = new Lahars("lahar", w.terrain);
-        l.release(new BlockPos(32, 0, 32), 1, 3000, 15, 0.55, Trigger.MANUAL);
+        l.release(new Point3(32.5, 0, 32.5), 1, 3000, 15, 0.55, Trigger.MANUAL);
         runout(w, l);
-        List<BlockId> surfaces = w.surfaces(64);
-        assertTrue(surfaces.contains(MassFlowPalette.MUD.id()) || surfaces.contains(MassFlowPalette.GRAVEL.id()));
+        assertTrue(w.surfaces(64).contains(MaterialTable.LAHAR_DEPOSIT), "the lahar deposit surfaces");
         assertTrue(w.layers(64).stream().anyMatch(layer -> layer.material() == MaterialTable.LAHAR_DEPOSIT.id()),
                 "the world model holds the lahar deposit");
     }
@@ -304,7 +304,7 @@ class MassFlowTest {
         MassFlowTestWorld w = rampWorld();
         PyroclasticFlows f = pdc(w);
         Engine e = w.engine(f, 1);
-        String id = f.columnCollapse("vent", new BlockPos(8, 0, 32), 2, 2e5, 1.0, 650);
+        String id = f.columnCollapse("vent", new Point3(8.5, 0, 32.5), 2, 2e5, 1.0, 650);
         w.run(e, 200);
         f.removeSource(id);
         w.runUntilStill(e, f, 6000);
@@ -347,7 +347,7 @@ class MassFlowTest {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 1, 1, (x, z) -> 100 - x); // drops toward x = 32
         PyroclasticFlows f = pdc(w);
         Engine e = w.engine(f, 1);
-        f.release(new BlockPos(10, 0, 16), 2, 800, 600, 0, Trigger.MANUAL);
+        f.release(new Point3(10.5, 0, 16.5), 2, 800, 600, 0, Trigger.MANUAL);
         w.runUntilStill(e, f, 4000);
 
         List<TerrainNeeded> needed = w.events(TerrainNeeded.class);
@@ -383,14 +383,14 @@ class MassFlowTest {
         PyroclasticFlows refFlow = pdc(ref);
         Engine refEngine = ref.engine(refFlow, 7);
         refFlow.release(TOP, 3, 2500, 650, 0, Trigger.MANUAL);
-        refFlow.addSource(FlowSource.at("feed", new BlockPos(5, 0, 30), 15, 600, 0), Trigger.COLUMN_COLLAPSE);
+        refFlow.addSource(FlowSource.at("feed", new ColumnIndex(5, 30), 15, 600, 0), Trigger.COLUMN_COLLAPSE);
         ref.run(refEngine, before + after);
 
         MassFlowTestWorld first = rampWorld();
         PyroclasticFlows firstFlow = pdc(first);
         Engine firstEngine = first.engine(firstFlow, 7);
         firstFlow.release(TOP, 3, 2500, 650, 0, Trigger.MANUAL);
-        firstFlow.addSource(FlowSource.at("feed", new BlockPos(5, 0, 30), 15, 600, 0), Trigger.COLUMN_COLLAPSE);
+        firstFlow.addSource(FlowSource.at("feed", new ColumnIndex(5, 30), 15, 600, 0), Trigger.COLUMN_COLLAPSE);
         first.run(firstEngine, before);
         assertTrue(firstFlow.activeCellCount() > 0, "save mid-flow");
         InMemorySaveStore saved = Saves.save(firstEngine);

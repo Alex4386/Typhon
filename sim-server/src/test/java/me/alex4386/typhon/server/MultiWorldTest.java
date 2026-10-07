@@ -78,7 +78,6 @@ class MultiWorldTest {
             assertEquals("live", supply.get("apply").getAsString());
             assertEquals("live", param(schema, "volcano." + vid + ".magma.chamber.rechargeSilicaWt").get("apply").getAsString());
             assertEquals("reinit", param(schema, "volcano." + vid + ".magma.chamber.volume").get("apply").getAsString());
-            assertTrue(param(schema, "world.scaling.dormantTimeCompression") == null, "retired");
             JsonArray inject = schema.getAsJsonObject("commands").getAsJsonArray("injectMagma");
             assertTrue(inject.toString().contains("\"temperatureC\""), inject.toString());
 

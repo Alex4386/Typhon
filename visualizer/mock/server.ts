@@ -242,7 +242,7 @@ function handle(c: Client, msg: ClientMessage) {
       send(c, sessionsMessage());
       return;
     case 'listCatalog':
-      send(c, { type: 'catalog', presets: [{ name: 'mock', title: 'Mock island', description: 'Synthetic data for UI work', realScale: false }], worlds: [] });
+      send(c, { type: 'catalog', presets: [{ name: 'mock', title: 'Mock island', description: 'Synthetic data for UI work' }], worlds: [] });
       return;
     case 'sessionControl':
       if (msg.action === 'pause' || msg.action === 'resume') {

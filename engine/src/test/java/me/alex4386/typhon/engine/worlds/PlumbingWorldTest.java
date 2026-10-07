@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 class PlumbingWorldTest {
     /** The test cone with a deep chamber 3 km below its main one, fed from the mantle, joined by a conduit. */
     private static VolcanoDefinition twoChambers(double radius) {
-        VolcanoDefinition v = WorldTest.volcano("v", 0, 5, 0);
+        VolcanoDefinition v = WorldTest.volcano("v", 5, 5, 0);
         MagmaChamberConfig main = v.chamber();
         MagmaChamberConfig deep = main.toBuilder().chamberId("deep").lithostaticDepth(main.lithostaticDepth() + 3000)
                 .volume(main.volume() * 5).supplyRate(2).initialOverpressureMPa(6).build();
@@ -71,16 +71,15 @@ class PlumbingWorldTest {
         VolcanoSystem v = world.volcano("v");
         DeformationModel d = v.deformation();
         MagmaChamber deep = v.chambers().get("deep");
-        double x = 12.5;
-        double z = -7.5;
+        double x = 125;
+        double z = -75;
         Displacement both = d.displacementAt(x, z);
         d.setExtraSources(List::of);
         Displacement mainOnly = d.displacementAt(x, z);
-        double l = v.scaling().metersPerBlock();
         Displacement deepOnly = Mogi.displacement(
                 Mogi.volumeChange(deep.volumeM3() - deep.wallGrowthM3(), deep.overpressureMPa(), d.config().shearModulusPa)
                         + deep.inelasticVolumeChangeM3(),
-                deep.config().lithostaticDepth(), (x - (deep.config().center().x() + 0.5)) * l, -(z - (deep.config().center().z() + 0.5)) * l,
+                deep.config().lithostaticDepth(), x - deep.config().center().x(), -(z - deep.config().center().z()),
                 d.config().poissonRatio);
         assertEquals(mainOnly.up() + deepOnly.up(), both.up(), 1e-12);
         assertEquals(mainOnly.east() + deepOnly.east(), both.east(), 1e-12);

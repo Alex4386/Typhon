@@ -1,7 +1,7 @@
 package me.alex4386.typhon.engine.assembly;
 
 import java.util.function.DoubleBinaryOperator;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.save.FieldChunk;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
@@ -18,19 +18,19 @@ import me.alex4386.typhon.engine.world.WorldModel;
  * may be (they add any pending change evenly).
  */
 public final class VolcanoDetail implements Subsystem {
-    static final int SCHEMA = 1;
+    static final int SCHEMA = 2;
 
     private final String volcanoId;
     private final SurfaceDetailConfig config;
     private final SurfaceDetail detail;
 
-    VolcanoDetail(String volcanoId, SurfaceDetailConfig config, WorldModel world, BlockPos vent,
+    VolcanoDetail(String volcanoId, SurfaceDetailConfig config, WorldModel world, Point3 vent,
             DoubleBinaryOperator relief) {
         this.volcanoId = volcanoId;
         this.config = config;
         double size = world.spec().metersPerColumn();
-        this.detail = SurfaceDetail.around(world, vent.x(), vent.z(), config.radiusColumns(size), config.refinement(size),
-                relief);
+        this.detail = SurfaceDetail.around(world, vent.columnX(size), vent.columnZ(size), config.radiusColumns(size),
+                config.refinement(size), relief);
     }
 
     public SurfaceDetail detail() {
@@ -66,7 +66,7 @@ public final class VolcanoDetail implements Subsystem {
     @Override
     public void saveState(StateWriter out) {
         out.field("detail", SCHEMA).put(0, 0, new FieldChunk()
-                .floats("cells", detail.cells().clone())
+                .floats("residual", detail.residuals().clone())
                 .doubles("seen", detail.seenSurfaces().clone())
                 .ints("version", detail.seenVersions().clone()));
     }
@@ -74,10 +74,9 @@ public final class VolcanoDetail implements Subsystem {
     @Override
     public void loadState(StateReader in) {
         StateReader.Field field = in.field("detail");
-        if (field == null) return;
         for (StateReader.Entry entry : field.chunks()) {
             FieldChunk data = entry.data();
-            detail.restore(data.floats("cells"), data.doubles("seen"), data.ints("version"));
+            detail.restore(data.floats("residual"), data.doubles("seen"), data.ints("version"));
         }
     }
 }

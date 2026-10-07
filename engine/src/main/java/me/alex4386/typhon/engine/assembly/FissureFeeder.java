@@ -42,8 +42,6 @@ final class FissureFeeder {
     /** Wall rock conductivity (W/m/K) and diffusivity (m²/s). */
     static final double ROCK_CONDUCTIVITY = 2.5;
     static final double ROCK_DIFFUSIVITY = 1.0e-6;
-    /** Host-rock temperature (°C) of the shallow crust a fissure feeder cuts through. */
-    static final double WALL_ROCK_C = 200;
     /** Below this width (m) a segment is solid. */
     static final double FREEZE_WIDTH_M = 0.01;
     /** Widening is bounded: thermal erosion of a dike rarely exceeds a few times its initial width. */
@@ -59,6 +57,8 @@ final class FissureFeeder {
     final double initialWidth;
     final double segmentLengthM;
     final double heightM;
+    /** Mean temperature (°C) of the host rock along the dike's height, from the geotherm. */
+    final double wallRockC;
     /** Conductance when the fissure opened. */
     double initialConductance;
     /** Physical seconds since the fissure opened. */
@@ -68,11 +68,12 @@ final class FissureFeeder {
     /** Rate of change (m/s) of the widest open segment during the last update. */
     double widestRate;
 
-    private FissureFeeder(double[] width, double initialWidth, double segmentLengthM, double heightM) {
+    private FissureFeeder(double[] width, double initialWidth, double segmentLengthM, double heightM, double wallRockC) {
         this.width = width;
         this.initialWidth = initialWidth;
         this.segmentLengthM = segmentLengthM;
         this.heightM = heightM;
+        this.wallRockC = wallRockC;
         this.initialConductance = conductance();
     }
 
@@ -82,14 +83,16 @@ final class FissureFeeder {
      * @param openingM dike opening at the surface (m)
      * @param lengthM fissure length (m)
      * @param heightM dike height from the chamber to the surface (m)
+     * @param wallRockC mean host-rock temperature along the dike (°C)
      */
-    static FissureFeeder open(double openingM, double lengthM, double heightM, int segments, SimRandom random) {
+    static FissureFeeder open(double openingM, double lengthM, double heightM, double wallRockC, int segments,
+            SimRandom random) {
         double w0 = Math.max(4 * FREEZE_WIDTH_M, openingM);
         double[] width = new double[Math.max(1, segments)];
         for (int i = 0; i < width.length; i++) {
             width[i] = w0 * Math.max(0.3, 1 + WIDTH_SPREAD * random.nextGaussian());
         }
-        return new FissureFeeder(width, w0, Math.max(1, lengthM) / width.length, Math.max(100, heightM));
+        return new FissureFeeder(width, w0, Math.max(1, lengthM) / width.length, Math.max(100, heightM), wallRockC);
     }
 
     /** Solidus (°C) of magma with {@code silicaWt}, as in the lava rheology. */
@@ -134,7 +137,7 @@ final class FissureFeeder {
         this.flux = flux;
         double solidus = solidusC(silicaWt);
         double superheat = Math.max(0, magmaC - solidus);
-        double wallGap = Math.max(1, solidus - WALL_ROCK_C);
+        double wallGap = Math.max(1, solidus - wallRockC);
         double before = widestWidth();
         double remaining = dt;
         while (remaining > 0 && !frozen()) {
@@ -179,6 +182,7 @@ final class FissureFeeder {
         o.addProperty("initialConductance", initialConductance);
         o.addProperty("segmentLengthM", segmentLengthM);
         o.addProperty("heightM", heightM);
+        o.addProperty("wallRockC", wallRockC);
         o.addProperty("age", age);
         o.addProperty("flux", flux);
         o.addProperty("widestRate", widestRate);
@@ -190,7 +194,7 @@ final class FissureFeeder {
         double[] width = new double[a.size()];
         for (int i = 0; i < width.length; i++) width[i] = a.get(i).getAsDouble();
         FissureFeeder f = new FissureFeeder(width, o.get("initialWidth").getAsDouble(),
-                o.get("segmentLengthM").getAsDouble(), o.get("heightM").getAsDouble());
+                o.get("segmentLengthM").getAsDouble(), o.get("heightM").getAsDouble(), o.get("wallRockC").getAsDouble());
         f.initialConductance = o.get("initialConductance").getAsDouble();
         f.age = o.get("age").getAsDouble();
         f.flux = o.get("flux").getAsDouble();

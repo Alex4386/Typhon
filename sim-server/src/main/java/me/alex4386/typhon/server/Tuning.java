@@ -92,7 +92,6 @@ final class Tuning {
         META.put("volcano:magma.chamber.wallTemperatureC", m("Wall-rock temperature", "°C", 0.0, 1000.0, false, null));
         META.put("volcano:magma.chamber.coolingTimescale", m("Cooling time", "s", null, null, true, "e-folding time of chamber cooling into the wall rock."));
         META.put("volcano:magma.chamber.degassingTimescale", m("Degassing time", "s", null, null, true, null));
-        META.put("volcano:ballisticFraction", m("Share of erupted mass as bombs", null, 0.0, 1.0, false, null));
         META.put("volcano:magma.chamber.compressibilityPerMPa", m("Chamber compressibility", "/MPa", 1e-5, 1e-2, true, "How much the chamber (magma and walls) yields per MPa: a stiffer chamber pressurises faster."));
         META.put("volcano:magma.chamber.conduitRadius", m("Conduit radius", "m", 0.1, 200.0, true, "Radius of the summit conduit; flow scales with its fourth power."));
         META.put("volcano:magma.chamber.rechargeCo2Wt", m("New magma CO₂", "wt%", 0.0, 3.0, false, "Dissolved CO₂ in the magma supplied from depth; it exsolves deep and drives degassing."));
@@ -103,7 +102,6 @@ final class Tuning {
         META.put("volcano:magma.chamber.samplePeriodSeconds", m("Chamber sample interval", "s", 0.0, 600.0, false, "How often chamber readings are reported."));
         META.put("volcano:magma.conduit.initialOpenness", m("Conduit open at start", "fraction", 0.0, 1.0, false, "0 = sealed, 1 = open summit conduit at the start."));
         META.put("volcano:magma.conduit.reopenOverpressureMPa", m("Reopening pressure", "MPa", 0.0, 100.0, false, "Overpressure that reopens a partly open conduit."));
-        META.put("volcano:magma.conduit.conduitSealTimescale", m("Conduit sealing time", "s", 1e3, 1e10, true, "How fast an open conduit seals itself between eruptions (e-folding time)."));
         META.put("volcano:magma.conduit.fragmentationPorosity", m("Fragmentation porosity", "fraction", 0.3, 0.95, false, "Gas fraction at which the rising magma shatters into ash (explosive above it)."));
         META.put("volcano:magma.conduit.brittleStressPa", m("Brittle stress", "Pa", 1e5, 1e10, true, "Shear stress at which viscous magma breaks (strain-rate fragmentation)."));
         META.put("volcano:magma.conduit.foamStrengthPa", m("Foam strength", "Pa", 1e3, 1e9, true, "Bubble-wall strength the gas overpressure must exceed to fragment."));
@@ -128,27 +126,25 @@ final class Tuning {
         META.put("volcano:magma.conduit.wallFrictionCoefficient", m("Wall friction", null, 0.0, 1.0, false, null));
         META.put("volcano:magma.conduit.gridSteps", m("Conduit solver steps", null, 20.0, 2000.0, true, "Depth steps of the conduit flow solution (accuracy vs. speed)."));
         META.put("volcano:dikes.stepPeriodSeconds", m("Dike step", "s", 0.05, 60.0, true, null));
-        META.put("volcano:dikes.startOffsetBlocks", m("Dike start spread", "blocks", 0.0, 200.0, false, "Dikes start within this distance of the chamber centre."));
         META.put("volcano:dikes.shearModulusPa", m("Crust stiffness (shear modulus)", "Pa", 1e8, 1e11, true, "Stiffer crust opens dikes less for the same pressure."));
         META.put("volcano:dikes.poissonRatio", m("Poisson's ratio", null, 0.05, 0.49, false, null));
         META.put("volcano:dikes.rockDensity", m("Crust density", "kg/m³", 1500.0, 3300.0, false, "Denser crust buoys magma up (dense basalt otherwise needs pushing)."));
-        META.put("volcano:dikes.minOpening", m("Thinnest dike", "m", 0.01, 10.0, true, null));
-        META.put("volcano:dikes.maxOpening", m("Thickest dike", "m", 0.1, 50.0, true, null));
-        META.put("volcano:dikes.maxStrikeLength", m("Longest dike along strike", "m", 10.0, 50000.0, true, null));
+        META.put("volcano:dikes.fractureToughnessMPaSqrtM", m("Crust fracture toughness", "MPa·√m", 0.5, 200.0, true, "A dike stalls when the stress intensity at its tip falls below this (in-situ values ~1–100)."));
+        META.put("volcano:dikes.regionalSigma3AzimuthDeg", m("Regional least stress direction", "°", 0.0, 360.0, false, "Away from an edifice a dike strikes perpendicular to it; unset = no regional stress."));
+        META.put("volcano:dikes.wallRockDiffusivity", m("Wall-rock thermal diffusivity", "m²/s", 1e-7, 1e-5, true, null));
+        META.put("volcano:dikes.magmaLatentHeat", m("Magma latent heat", "J/kg", 1e5, 1e6, true, null));
+        META.put("volcano:dikes.specificHeat", m("Specific heat", "J/(kg·K)", 500.0, 2000.0, false, null));
+        META.put("volcano:dikes.geothermalGradientCPerKm", m("Geothermal gradient", "°C/km", 0.0, 200.0, false, "Hotter crust freezes a dike more slowly."));
+        META.put("volcano:dikes.surfaceTemperatureC", m("Surface temperature", "°C", -50.0, 60.0, false, null));
         META.put("volcano:dikes.minCharacteristicHeight", m("Smallest dike height used for driving pressure", "m", 10.0, 5000.0, true, null));
         META.put("volcano:dikes.maxSpeed", m("Fastest dike", "m/s", 0.01, 50.0, true, "Upper limit of the dike tip speed (basaltic dikes rise at ~0.1–5 m/s)."));
-        META.put("volcano:dikes.freezeSpeed", m("Dike freezing speed", "m/s", 1e-5, 1.0, true, "A dike slower than this freezes against the wall rock and stalls."));
-        META.put("volcano:dikes.stallPressureMPa", m("Dike stall pressure", "MPa", 0.0, 50.0, false, "Driving pressure below which a dike stops."));
         META.put("volcano:dikes.maxSubstepMeters", m("Dike sub-step", "m", 1.0, 1000.0, true, null));
         META.put("volcano:dikes.deflectionStrength", m("Steering by the edifice", null, 0.0, 20.0, false, "How strongly the volcano's slopes turn dikes towards the flanks."));
         META.put("volcano:dikes.edificeDepthScale", m("Edifice influence depth", "m", 10.0, 20000.0, true, null));
-        META.put("volcano:dikes.slopeSampleRadius", m("Slope sampling radius", "blocks", 1.0, 64.0, false, null));
+        META.put("volcano:dikes.slopeSampleRadiusM", m("Slope sampling radius", "m", 10.0, 2000.0, false, null));
         META.put("volcano:dikes.headingNoise", m("Dike wander", null, 0.0, 2.0, false, "Random wander of the dike path."));
         META.put("volcano:dikes.headingCorrelationLength", m("Dike wander length", "m", 1.0, 10000.0, true, null));
         META.put("volcano:dikes.hypocentersPerKm", m("Earthquakes per km of dike", "/km", 0.0, 500.0, false, null));
-        META.put("volcano:dikes.hypocenterJitterBlocks", m("Earthquake scatter", "blocks", 0.0, 50.0, false, null));
-        META.put("volcano:dikes.minFissureLength", m("Shortest fissure", "blocks", 1.0, 100.0, false, null));
-        META.put("volcano:dikes.maxFissureLength", m("Longest fissure", "blocks", 1.0, 1000.0, false, null));
         META.put("volcano:dikes.maxRecordedDikes", m("Dikes remembered", null, 1.0, 200.0, false, null));
         META.put("volcano:magma.chamber.wallRuptureRatio", m("Wall rupture limit", "× roof strength", 1.0, 10.0, false,
                 "Overpressure at which the chamber walls break, as a multiple of the roof strength (or eruption threshold)."
@@ -160,13 +156,8 @@ final class Tuning {
                 "Share of the magma beyond the rupture limit that the walls absorb by deforming (the chamber grows,"
                         + " the ground inflates) instead of feeding a dike. 0 = all into dikes, 1 = chamber growth only."));
         META.put("volcano:dikes.blocked", m("Block new dikes", null, null, null, false,
-                "Experiment: no new dike opens, neither from a wall rupture nor at random; the chamber grows instead."
-                        + " Off: dikes follow the physics (likelier while the summit conduit is sealed)."));
-        META.put("volcano:dikes.initiationPressureRatio", m("Dike onset", "× roof strength", 0.05, 0.99, false,
-                "Random dike nucleation starts once overpressure passes this share of the roof strength."));
-        META.put("volcano:dikes.maxInitiationRate", m("Dike rate at roof strength", "/s", 1e-6, 1.0, true,
-                "Random nucleation rate (per second) at full roof strength with the summit conduit sealed; an open"
-                        + " conduit vents the pressure instead, so the rate scales with how sealed it is."));
+                "Experiment: no new dike opens at a wall rupture; the chamber grows instead."
+                        + " Off: a dike opens when the chamber walls fail."));
         META.put("volcano:dikes.maxConcurrentDikes", m("Dikes at once", null, 0.0, 10.0, false,
                 "How many dikes may rise at the same time. 0 = no dikes at all (rupture magma grows the chamber)."));
     }
@@ -218,7 +209,6 @@ final class Tuning {
     /** Group headings by scope:path prefix (first match wins, in order). */
     private static final List<String[]> GROUPS = List.of(
             new String[] {"world:climate", "Weather"},
-            new String[] {"world:scaling", "Scale"},
             new String[] {"world:subsurface", "Underground heat and water (solver)"},
             new String[] {"volcano:magma.chamber.supply", "Magma supply"},
             new String[] {"volcano:magma.chamber.recharge", "Magma supply"},
@@ -388,7 +378,7 @@ final class Tuning {
                 "Width of the area simulated from the start; it grows on demand where lava, flows or ash reach.");
         size.add("default", Json.num(d.coreExtentM()));
         out.add(size);
-        JsonObject cell = spec("metersPerColumn", "Resolution", "m", "World", 2.0, 50.0, true, "Width of one ground column.");
+        JsonObject cell = spec("metersPerColumn", "Column width", "m", "World", 2.0, 50.0, true, "Horizontal resolution of the simulation grid: width of one ground column.");
         cell.add("default", Json.num(d.metersPerColumn()));
         out.add(cell);
         if (template.equals("ocean")) {

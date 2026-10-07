@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.assembly;
 
+import me.alex4386.typhon.engine.testing.TestConduits;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -12,20 +13,17 @@ import me.alex4386.typhon.engine.magma.MagmaEvents;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.seismic.SeismicEvent;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.tephra.TephraEvents.BombLaunched;
 import me.alex4386.typhon.engine.tephra.TephraEvents.PlumeColumn;
-import me.alex4386.typhon.engine.terrain.TerrainChunk;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
+import me.alex4386.typhon.engine.terrain.GroundImport;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
+import me.alex4386.typhon.engine.testing.TestGround;
 import me.alex4386.typhon.engine.volcano.VentSite;
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
-import me.alex4386.typhon.engine.world.BlockId;
 import org.junit.jupiter.api.Test;
 import me.alex4386.typhon.engine.testing.Runs;
 import me.alex4386.typhon.engine.testing.Saves;
@@ -34,47 +32,27 @@ import me.alex4386.typhon.engine.save.SaveStore;
 
 /** End-to-end: chamber → seismicity → alert → coupler → lava / tephra / geothermal on a cone. */
 class VolcanoSystemTest {
-    private static final BlockId STONE = BlockId.minecraft("stone");
-    private static final BlockId LAVA = BlockId.minecraft("lava");
+    /** Column width of these worlds (m): the default 10 m grid. */
+    static final double COLUMN_M = 10;
     private static final int CHUNK_RADIUS = 8;
-    private static final int SUMMIT_Y = 120;
-    static final VentSite CRATER = VentSite.crater("summit", new BlockPos(0, SUMMIT_Y - 3, 0), 4);
+    private static final double BASE_Z = 64;
+    private static final double SUMMIT_Z = 600;
+    static final VentSite CRATER = VentSite.crater("summit", new Point3(5, SUMMIT_Z - 20, 5), 40);
 
-    /** Cone rising from y=64 to a summit crater, sampled the way a host would send it. */
-    static TerrainSnapshot cone() {
-        List<TerrainChunk> chunks = new ArrayList<>();
-        for (int cx = -CHUNK_RADIUS; cx < CHUNK_RADIUS; cx++) {
-            for (int cz = -CHUNK_RADIUS; cz < CHUNK_RADIUS; cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int x = cx * 16; x < cx * 16 + 16; x++) {
-                    for (int z = cz * 16; z < cz * 16 + 16; z++) {
-                        double d = Math.sqrt(x * x + z * z);
-                        int y = (int) Math.max(64, SUMMIT_Y - 0.45 * d);
-                        if (d <= CRATER.craterRadius()) y = CRATER.position().y();
-                        chunk.set(x, z, TerrainColumn.dry(y, STONE));
-                    }
-                }
-                chunks.add(chunk);
-            }
-        }
-        return new TerrainSnapshot(chunks);
+    /** A 0.45-slope cone rising from 64 m to a 600 m summit with a 40 m crater, over ±1.28 km (10 m columns). */
+    static GroundImport cone() {
+        return TestGround.chunks(-CHUNK_RADIUS, -CHUNK_RADIUS, CHUNK_RADIUS - 1, CHUNK_RADIUS - 1, (x, z) -> {
+            double d = Math.hypot((x + 0.5) * COLUMN_M - CRATER.position().x(),
+                    (z + 0.5) * COLUMN_M - CRATER.position().z());
+            if (d <= CRATER.craterRadiusM()) return CRATER.position().y();
+            return Math.max(BASE_Z, SUMMIT_Z - 0.45 * d);
+        }, TestGround.DRY);
     }
 
-    /** Re-samples a terrain model over the test area (what a host does after a restart). */
-    static TerrainSnapshot resample(TerrainModel terrain) {
-        List<TerrainChunk> chunks = new ArrayList<>();
-        for (int cx = -CHUNK_RADIUS; cx < CHUNK_RADIUS; cx++) {
-            for (int cz = -CHUNK_RADIUS; cz < CHUNK_RADIUS; cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int x = cx * 16; x < cx * 16 + 16; x++) {
-                    for (int z = cz * 16; z < cz * 16 + 16; z++) {
-                        chunk.set(x, z, terrain.column(x, z));
-                    }
-                }
-                chunks.add(chunk);
-            }
-        }
-        return new TerrainSnapshot(chunks);
+    /** Re-sends the current ground over the test area (what a host does after a restart). */
+    static GroundImport resample(TerrainModel terrain) {
+        return TestGround.copy(terrain.world(), -CHUNK_RADIUS * 16, -CHUNK_RADIUS * 16, CHUNK_RADIUS * 16 - 1,
+                CHUNK_RADIUS * 16 - 1);
     }
 
     record World(Engine engine, TerrainModel terrain, LavaFlow lava, VolcanoSystem volcano) {}
@@ -89,7 +67,6 @@ class VolcanoSystemTest {
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder("test", List.of(CRATER), terrain, lava)
                 .chamber(chamber)
-                .scaling(VolcanoScaling.DEFAULT)
                 .dikesEnabled(dikes)
                 .build();
         Engine.Builder builder = Engine.builder(seed).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(terrain);
@@ -102,9 +79,13 @@ class VolcanoSystemTest {
         return new World(engine, terrain, lava, volcano);
     }
 
-    /** Basaltic 10 km³ chamber just below failure: recharge breaks it after ≈ 11 minutes. */
+    /**
+     * Basaltic 10 km³ chamber just below failure of its molten conduit: recharge breaks it after ≈ 19 minutes
+     * (gas escaping up the open conduit slows the pressurisation).
+     */
     static MagmaChamberConfig basalt() {
-        return MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
+        return MagmaChamberConfig.builder("test", new Point3(0, -3000, 0))
+                .conduit(TestConduits.molten())
                 .initialOverpressureMPa(14.9999)
                 .supplyVariability(0)
                 .build();
@@ -115,7 +96,8 @@ class VolcanoSystemTest {
      * failure pressurises far more slowly than a basaltic one.)
      */
     static MagmaChamberConfig rhyolite() {
-        return MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
+        return MagmaChamberConfig.builder("test", new Point3(0, -3000, 0))
+                .conduit(TestConduits.plugged(TestConduits.DEFAULT_TENSILE_MPA))
                 .initialOverpressureMPa(15.5)
                 .initialSilicaWt(72)
                 .initialWaterWt(6)
@@ -164,8 +146,8 @@ class VolcanoSystemTest {
         assertFalse(events(frames, SeismicEvent.class).isEmpty(), "unrest and eruption should be seismic");
 
         assertTrue(w.lava().totalLavaVolume() + w.lava().solidifiedVolume() > 0);
-        // The lava field receives the real erupted volume on an L-metre grid (V/L³ blocks).
-        assertEquals(VolcanoScaling.DEFAULT.metersPerBlock(), w.lava().metersPerBlock());
+        // The lava field receives the real erupted volume on the world's column grid.
+        assertEquals(COLUMN_M, w.lava().metersPerColumn());
         double erupted = w.volcano().chamber().eruptedVolume();
         assertTrue(w.lava().emittedVolume() <= erupted * 1.05 + 1, "lava never exceeds the erupted volume");
         assertTrue(w.lava().emittedVolume() >= erupted * 0.4,
@@ -189,8 +171,8 @@ class VolcanoSystemTest {
 
     @Test
     void sameSeedSameEruption() {
-        List<EngineFrame> a = run(world(5, basalt(), null).engine(), 900);
-        List<EngineFrame> b = run(world(5, basalt(), null).engine(), 900);
+        List<EngineFrame> a = run(world(5, basalt(), null).engine(), 1500);
+        List<EngineFrame> b = run(world(5, basalt(), null).engine(), 1500);
         assertFalse(Double.isNaN(onset(a)), "the window covers the onset");
         assertEquals(a, b);
     }
@@ -210,10 +192,10 @@ class VolcanoSystemTest {
         until(first.engine(), save);
         assertTrue(first.volcano().chamber().erupting(), "save point should be mid-eruption");
         InMemorySaveStore saved = Saves.save(first.engine());
-        TerrainSnapshot terrain = resample(first.terrain());
+        GroundImport terrain = resample(first.terrain());
 
         World second = world(9, effusive, saved);
-        second.engine().submit(terrain); // host re-sends the live terrain (unchanged blocks keep the exact surface)
+        second.engine().submit(terrain); // host re-sends the live ground (unchanged columns keep the exact surface)
         List<EngineFrame> resumed = until(second.engine(), end);
 
         long saveMicros = first.engine().timeMicros();
@@ -222,7 +204,7 @@ class VolcanoSystemTest {
 
     @Test
     void dikeOpensAFlankEruption() {
-        MagmaChamberConfig chamber = MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
+        MagmaChamberConfig chamber = MagmaChamberConfig.builder("test", new Point3(0, -3000, 0))
                 .initialOverpressureMPa(14.0) // above dike nucleation, below summit failure
                 .supplyVariability(0)
                 .build();

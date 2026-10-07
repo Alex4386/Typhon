@@ -214,9 +214,21 @@ final class SubsurfaceGrid {
                 for (int gx = g0x; gx <= g1x; gx++) dirty.add(new long[] {gx, gz});
             }
         }
-        // Columns straddling tiles may be listed twice; refreshing is idempotent.
+        // Columns straddling tiles may be listed twice; refreshing is idempotent. Inside a changed tile, only
+        // columns whose own footprint changed are recomputed (a column depends on nothing else).
         for (long[] g : dirty) {
-            if (refreshColumn((int) g[0], (int) g[1], initializer)) refreshed++;
+            int gx = (int) g[0];
+            int gz = (int) g[1];
+            long footprint = stacks.footprint(gx * ratio, gz * ratio, ratio, ratio);
+            int c = SolverChunk.column(gx, gz);
+            SolverChunk ch = chunkOf(gx, gz);
+            if (ch != null && ch.footprintValid[c] && ch.footprint[c] == footprint) continue;
+            if (refreshColumn(gx, gz, initializer)) refreshed++;
+            ch = chunkOf(gx, gz);
+            if (ch != null) {
+                ch.footprint[c] = footprint;
+                ch.footprintValid[c] = true;
+            }
         }
         return refreshed;
     }
@@ -224,6 +236,7 @@ final class SubsurfaceGrid {
     /** Forgets which tiles were seen, so the next {@link #refresh} recomputes every column. */
     void invalidate() {
         seenTileVersion.clear();
+        for (SolverChunk ch : chunks.values()) java.util.Arrays.fill(ch.footprintValid, false);
     }
 
     private boolean refreshColumn(int gx, int gz, ColumnInitializer initializer) {

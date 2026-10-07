@@ -10,7 +10,7 @@ public final class MagmaCommands {
     private MagmaCommands() {}
 
     public sealed interface MagmaCommand extends EngineCommand
-            permits SetSupplyRate, SetSupplyMagma, InjectRecharge, StartEruption, StopEruption, ChamberCommand {
+            permits SetSupplyRate, SetSupplyMagma, InjectRecharge, SetChamberMagma, StartEruption, StopEruption, ChamberCommand {
         String volcanoId();
     }
 
@@ -79,6 +79,23 @@ public final class MagmaCommands {
         /** A batch with the supply's CO₂ and crystal content. */
         public InjectRecharge(String volcanoId, double volume, double temperatureC, double silicaWt, double waterWt) {
             this(volcanoId, volume, temperatureC, silicaWt, waterWt, null, null);
+        }
+    }
+
+    /**
+     * Replaces the composition of the magma in the chamber now (an experiment, not a physical process):
+     * the bulk temperature, silica, water and CO₂ of the whole chamber take the given values (between
+     * steps). Crystals, exsolved gas and viscosity follow from them. Fields left {@code null} keep their value.
+     *
+     * @param temperatureC chamber magma temperature
+     * @param silicaWt bulk SiO₂ (wt%)
+     * @param waterWt bulk H₂O (wt%, dissolved and exsolved)
+     * @param co2Wt bulk CO₂ (wt%)
+     */
+    public record SetChamberMagma(String volcanoId, Double temperatureC, Double silicaWt, Double waterWt, Double co2Wt)
+            implements MagmaCommand {
+        public SetChamberMagma {
+            validateMagma(temperatureC, silicaWt, waterWt, co2Wt, null);
         }
     }
 

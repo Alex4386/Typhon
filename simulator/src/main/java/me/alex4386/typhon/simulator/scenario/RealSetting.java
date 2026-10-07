@@ -6,7 +6,7 @@ import me.alex4386.typhon.engine.world.Edifice;
 import me.alex4386.typhon.engine.world.WorldSpec;
 
 /**
- * The real-world setting of a real-scale preset: geology, initial conditions, the domain and where a
+ * The real-world setting of a preset: geology, initial conditions, the domain and where a
  * real DEM for it comes from.
  *
  * @param spec world-model grid and geology (metres per column, datum, basement cake, sea level, ...)

@@ -60,7 +60,7 @@ public final class Validation {
         };
     }
 
-    /** Real-scale presets: the ones with literature reference values. */
+    /** Presets: the ones with literature reference values. */
     public static List<Preset> realPresets() {
         return Presets.all().stream().filter(p -> p.realSetting() != null && !p.referenceValues().isEmpty()).toList();
     }

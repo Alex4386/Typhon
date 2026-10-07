@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.assembly;
 
+import me.alex4386.typhon.engine.testing.TestConduits;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -13,47 +14,42 @@ import me.alex4386.typhon.engine.assembly.SurfaceEvents.PhreatomagmaticChanged;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.ConduitConfig;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.seismic.SeismicEvent;
 import me.alex4386.typhon.engine.seismic.SeismicEventType;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.sim.SimTime;
-import me.alex4386.typhon.engine.terrain.TerrainChunk;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
+import me.alex4386.typhon.engine.terrain.GroundColumn;
+import me.alex4386.typhon.engine.terrain.GroundImport;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
+import me.alex4386.typhon.engine.world.MaterialTable;
+import me.alex4386.typhon.engine.world.WorldModel;
 import me.alex4386.typhon.engine.volcano.VentSite;
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
-import me.alex4386.typhon.engine.world.BlockId;
 import org.junit.jupiter.api.Test;
 
 /** Discrete explosions and magma–water interaction at the surface. */
 class SurfaceDynamicsTest {
-    private static final int SEA_LEVEL = 60;
-    private static final BlockId SAND = BlockId.minecraft("sand");
+    private static final double SEA_LEVEL = 0;
+    /** Column width (m): the default 10 m grid. */
+    private static final double COLUMN_M = 10;
 
-    /** Flat sea floor at {@code floorY} under water up to {@link #SEA_LEVEL}. */
-    static TerrainSnapshot seaFloor(int floorY) {
-        List<TerrainChunk> chunks = new ArrayList<>();
-        for (int cx = -5; cx < 5; cx++) {
-            for (int cz = -5; cz < 5; cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int x = cx * 16; x < cx * 16 + 16; x++) {
-                    for (int z = cz * 16; z < cz * 16 + 16; z++) {
-                        chunk.set(x, z, new TerrainColumn(floorY, SEA_LEVEL, SAND));
-                    }
-                }
-                chunks.add(chunk);
+    /** Flat sedimentary sea floor at {@code floorZ} (m) under water up to {@link #SEA_LEVEL}, over ±800 m. */
+    static GroundImport seaFloor(double floorZ) {
+        List<GroundColumn> columns = new ArrayList<>();
+        for (int x = -80; x < 80; x++) {
+            for (int z = -80; z < 80; z++) {
+                columns.add(new GroundColumn(x, z, floorZ, SEA_LEVEL, MaterialTable.SEDIMENT));
             }
         }
-        return new TerrainSnapshot(chunks);
+        return new GroundImport(columns);
     }
 
-    /** Surtsey-like alkali basalt erupting at once. */
-    static MagmaChamberConfig submarineBasalt(String id, BlockPos vent) {
-        return MagmaChamberConfig.builder(id, new BlockPos(vent.x(), Math.max(-56, vent.y() - 48), vent.z()))
+    /** Surtsey-like alkali basalt erupting at once through its molten conduit. */
+    static MagmaChamberConfig submarineBasalt(String id, Point3 vent) {
+        return MagmaChamberConfig.builder(id, vent.offset(0, -3000, 0))
+                .conduit(TestConduits.molten(12))
                 .volume(5e8).lithostaticDepth(3000).conduitRadius(2)
                 .tensileStrengthMPa(12).eruptionEndOverpressureMPa(1)
                 .supplyRate(2).supplyVariability(0)
@@ -66,18 +62,17 @@ class SurfaceDynamicsTest {
 
     record World(Engine engine, TerrainModel terrain, LavaFlow lava, VolcanoSystem volcano) {}
 
-    static World world(String id, TerrainSnapshot snapshot, VentSite vent, MagmaChamberConfig chamber) {
+    static World world(String id, GroundImport ground, VentSite vent, MagmaChamberConfig chamber) {
         TerrainModel terrain = new TerrainModel();
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder(id, List.of(vent), terrain, lava)
                 .chamber(chamber)
-                .scaling(VolcanoScaling.DEFAULT)
                 .dikesEnabled(false)
                 .build();
         Engine.Builder builder = Engine.builder(7).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(terrain);
         volcano.addTo(builder).add(lava);
         Engine engine = builder.build();
-        engine.submit(snapshot);
+        engine.submit(ground);
         return new World(engine, terrain, lava, volcano);
     }
 
@@ -95,8 +90,8 @@ class SurfaceDynamicsTest {
 
     @Test
     void strombolianBurstsComeWithExplosionQuakesAndBombs() {
-        VentSite vent = VentSite.crater("summit", new BlockPos(0, 117, 0), 4);
-        MagmaChamberConfig chamber = MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
+        VentSite vent = VolcanoSystemTest.CRATER;
+        MagmaChamberConfig chamber = MagmaChamberConfig.builder("test", new Point3(0, -3000, 0))
                 .volume(5e7).lithostaticDepth(3000).conduitRadius(0.8)
                 .tensileStrengthMPa(8).eruptionEndOverpressureMPa(0.5)
                 .supplyRate(0.002).supplyVariability(0)
@@ -111,7 +106,6 @@ class SurfaceDynamicsTest {
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder("test", List.of(vent), terrain, lava)
                 .chamber(chamber)
-                .scaling(VolcanoScaling.DEFAULT)
                 .dikesEnabled(false)
                 .build();
         Engine.Builder builder = Engine.builder(11).add(terrain);
@@ -141,8 +135,8 @@ class SurfaceDynamicsTest {
 
     @Test
     void shallowSubmarineVentIsSurtseyanUntilItsTuffRingSealsItOff() {
-        VentSite vent = VentSite.crater("surtur", new BlockPos(0, 56, 0), 3);
-        World w = world("sea", seaFloor(56), vent, submarineBasalt("sea", vent.position()));
+        VentSite vent = VentSite.crater("surtur", new Point3(5, -16, 5), 15);
+        World w = world("sea", seaFloor(-16), vent, submarineBasalt("sea", vent.position()));
         // the tuff ring needs minutes to rise above the sea
         List<EngineFrame> frames = new ArrayList<>();
         List<Double> emitted = new ArrayList<>(); // lava volume emitted by the end of each frame
@@ -173,11 +167,12 @@ class SurfaceDynamicsTest {
         assertTrue(w.lava().emittedVolume() > 0);
 
         // The rim of the ring now stands above the sea.
+        WorldModel world = w.terrain().world();
         int rimAbove = 0;
-        for (int dx = -6; dx <= 6; dx++) {
-            for (int dz = -6; dz <= 6; dz++) {
-                double r = Math.sqrt(dx * dx + dz * dz);
-                if (r > 4 && r <= 6 && w.terrain().column(dx, dz).groundY() >= SEA_LEVEL) rimAbove++;
+        for (int x = -10; x <= 10; x++) {
+            for (int z = -10; z <= 10; z++) {
+                double r = Math.hypot((x + 0.5) * COLUMN_M - vent.position().x(), (z + 0.5) * COLUMN_M - vent.position().z());
+                if (r > vent.craterRadiusM() && r <= vent.craterRadiusM() + 60 && world.surfaceZ(x, z) >= SEA_LEVEL) rimAbove++;
             }
         }
         assertTrue(rimAbove > 0, "a tuff ring emerged");
@@ -185,8 +180,8 @@ class SurfaceDynamicsTest {
 
     @Test
     void deepSubmarineVentErupsQuietlyAsPillowLava() {
-        VentSite vent = VentSite.crater("deep", new BlockPos(0, 20, 0), 3);
-        World w = world("deep", seaFloor(20), vent, submarineBasalt("deep", vent.position()));
+        VentSite vent = VentSite.crater("deep", new Point3(5, -160, 5), 15);
+        World w = world("deep", seaFloor(-160), vent, submarineBasalt("deep", vent.position()));
         List<EngineFrame> frames = w.engine().runFor(40 * 60);
 
         assertTrue(events(frames, PhreatomagmaticChanged.class).isEmpty(),

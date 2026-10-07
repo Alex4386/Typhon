@@ -12,7 +12,10 @@ import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.tephra.TephraEvents.BombLanded;
 import me.alex4386.typhon.engine.tephra.TephraEvents.BombLaunched;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.testing.TestGround;
+import me.alex4386.typhon.engine.world.Material;
+import me.alex4386.typhon.engine.world.MaterialTable;
+import me.alex4386.typhon.engine.world.WorldModel;
 import org.junit.jupiter.api.Test;
 
 class BallisticsTest {
@@ -81,7 +84,7 @@ class BallisticsTest {
         TerrainModel terrain = new TerrainModel();
         TephraSubsystem tephra = new TephraSubsystem("tephra", terrain, vacuum());
         Engine engine = Engine.builder(1).add(terrain).add(tephra).build();
-        engine.submit(TephraTestSupport.flat(20, 63));
+        engine.submit(TephraTestSupport.flat(20, 64));
         tephra.setWind(0, 0, 0);
         double v = 50, c = v / Math.sqrt(2);
         tephra.launchBomb(new Vec3d(0.5, 64, 0.5), new Vec3d(c, c, 0), 0.3, 50);
@@ -92,8 +95,8 @@ class BallisticsTest {
 
         double analyticX = 0.5 + v * v / G;
         assertEquals(analyticX, launched.predictedLanding().x(), 0.05);
-        assertEquals((int) Math.floor(analyticX), landed.position().x());
-        assertEquals(63, landed.position().y());
+        assertEquals(analyticX, landed.position().x(), 0.05);
+        assertEquals(64, landed.position().y(), 1e-6);
         double flightSeconds = 2 * c / G;
         assertEquals(flightSeconds, launched.expectedFlightSeconds(), 0.05);
         // landed during the step that started expectedFlight − one step after launch
@@ -107,13 +110,13 @@ class BallisticsTest {
         TerrainModel terrain = new TerrainModel();
         TephraSubsystem tephra = new TephraSubsystem("tephra", terrain, vacuum());
         Engine engine = Engine.builder(1).add(terrain).add(tephra).build();
-        // Plateau 30 blocks high from x >= 100.
-        engine.submit(TephraTestSupport.terrain(20, (x, z) -> x >= 100 ? 93 : 63));
+        // Plateau 30 m high from x >= 100 m (10 m columns).
+        engine.submit(TephraTestSupport.terrain(20, (x, z) -> x >= 10 ? 94 : 64));
         tephra.setWind(0, 0, 0);
         tephra.launchBomb(new Vec3d(0.5, 64, 0.5), new Vec3d(35, 35, 0), 0.3, 50);
 
         BombLanded landed = events(run(engine, 400), BombLanded.class).get(0);
-        assertEquals(93, landed.position().y());
+        assertEquals(94, landed.position().y(), 1e-6);
         assertTrue(landed.position().x() >= 100);
         // Shorter than the flat-ground range because it hit the plateau on the way down.
         assertTrue(landed.position().x() < 0.5 + 2 * 35 * 35 / G);
@@ -124,49 +127,62 @@ class BallisticsTest {
         TerrainModel terrain = new TerrainModel();
         TephraSubsystem tephra = new TephraSubsystem("tephra", terrain, vacuum());
         Engine engine = Engine.builder(1).add(terrain).add(tephra).build();
-        engine.submit(TephraTestSupport.flat(1, 40)); // only around the origin, far below launch
+        engine.submit(TephraTestSupport.flat(0, 40)); // only 160 m around the origin, far below launch
         tephra.setWind(0, 0, 0);
         tephra.launchBomb(new Vec3d(0.5, 100, 0.5), new Vec3d(30, 30, 0), 0.3, 50);
 
         List<EngineFrame> frames = run(engine, 400);
         BombLanded landed = events(frames, BombLanded.class).get(0);
-        assertEquals(99, landed.position().y());
+        assertEquals(100, landed.position().y(), 1e-6);
         assertEquals(0.5 + 2 * 30 * 30 / G, landed.position().x(), 1.0);
         // Nothing lands in the world model where the engine does not know the terrain.
-        assertFalse(terrain.world().isKnown((int) Math.floor(landed.position().x()), 0));
+        assertFalse(terrain.world().isKnown((int) Math.floor(landed.position().x() / 10), 0));
     }
 
     @Test
     void bigFastBombDigsAContinuousCrater() {
-        TerrainModel terrain = new TerrainModel();
+        TerrainModel terrain = TestGround.terrain(1.0);
         TephraConfig config = vacuum();
         TephraSubsystem tephra = new TephraSubsystem("tephra", terrain, config);
         Engine engine = Engine.builder(1).add(terrain).add(tephra).build();
-        engine.submit(TephraTestSupport.flat(20, 63));
+        engine.submit(TephraTestSupport.flat(20, 64));
         tephra.setWind(0, 0, 0);
         double a = Math.toRadians(85);
         tephra.launchBomb(new Vec3d(0.5, 64, 0.5), new Vec3d(100 * Math.cos(a), 100 * Math.sin(a), 0), 1.0, 50);
 
         List<EngineFrame> frames = run(engine, 2000);
         BombLanded landed = events(frames, BombLanded.class).get(0);
-        assertTrue(landed.craterRadius() >= 1, "crater radius " + landed.craterRadius());
+        assertTrue(landed.craterRadiusM() >= 1, "crater radius " + landed.craterRadiusM());
         assertEquals(1.0, landed.diameter());
 
-        int x = landed.position().x(), z = landed.position().z();
+        int x = (int) Math.floor(landed.position().x()), z = (int) Math.floor(landed.position().z());
         double surface = terrain.world().surfaceZ(x, z);
         double depth = 64 - surface;
         assertTrue(depth > 0.05, "the crater lowers the surface: " + depth);
-        // paraboloid of the crater radius in metres, not whole blocks
-        assertTrue(depth < 0.5 * landed.craterRadius() * 1.0 + 1e-6, "no deeper than the crater shape: " + depth);
-        assertEquals(0, tephra.pendingCoolings());
+        // a paraboloid of the crater radius (depth R/2 at its centre) on 1 m columns
+        assertTrue(depth < 0.5 * landed.craterRadiusM() + 1e-6, "no deeper than the crater shape: " + depth);
     }
 
     @Test
-    void cooledRockFollowsSilica() {
-        assertEquals(BlockId.minecraft("basalt"), Ballistics.cooledBombRock(49));
-        assertEquals(BlockId.minecraft("blackstone"), Ballistics.cooledBombRock(54));
-        assertEquals(BlockId.minecraft("andesite"), Ballistics.cooledBombRock(60));
-        assertEquals(BlockId.minecraft("tuff"), Ballistics.cooledBombRock(70));
+    void bombsCoolIntoRockOfTheirSilica() {
+        TerrainModel terrain = TestGround.terrain(1.0);
+        TephraSubsystem tephra = new TephraSubsystem("tephra", terrain, vacuum());
+        Engine engine = Engine.builder(1).add(terrain).add(tephra).build();
+        engine.submit(TephraTestSupport.flat(12, 64));
+        tephra.setWind(0, 0, 0);
+        double[] silica = {49, 60, 66, 72};
+        Material[] rock = {MaterialTable.BASALT, MaterialTable.ANDESITE, MaterialTable.DACITE, MaterialTable.RHYOLITE};
+        for (int i = 0; i < silica.length; i++) {
+            tephra.launchBomb(new Vec3d(40 * i + 0.5, 64, 0.5), new Vec3d(3, 3, 0), 0.3, silica[i]);
+        }
+        List<BombLanded> landed = events(run(engine, 400), BombLanded.class);
+        assertEquals(silica.length, landed.size());
+        WorldModel world = terrain.world();
+        for (BombLanded bomb : landed) {
+            int i = (int) Math.round((bomb.position().x() - 0.5) / 40);
+            int x = (int) Math.floor(bomb.position().x()), z = (int) Math.floor(bomb.position().z());
+            assertEquals(rock[i], world.layer(x, z, world.layerCount(x, z) - 1).materialInfo(), "silica " + silica[i]);
+        }
     }
 
     @Test

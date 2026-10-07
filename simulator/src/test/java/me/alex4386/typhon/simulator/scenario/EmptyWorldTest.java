@@ -57,21 +57,20 @@ class EmptyWorldTest {
     }
 
     @Test
-    void aPlacedChamberBecomesAVolcanoWithAnEmergentVentAndCanBeRemoved(@TempDir Path dir) {
+    void aPlacedChamberBecomesAVolcanoWithNoVentAndCanBeRemoved(@TempDir Path dir) {
         WorldTemplates.writeEmpty(smallOcean(), "sea", 7, dir);
         Scenario s = WorldScenarios.open(dir, World.ChangePolicy.REJECT);
         s.engine().step();
         World world = s.session();
         double ground = s.terrain().world().surfaceZ(0, 0);
         VolcanoDefinition v = ChamberPlacement.definition("first",
-                new ChamberPlacement.Request(null, 0, 0, 3000, null, null, null, null, null, null, null, null, null), ground,
-                s.terrain().world().spec().metersPerColumn());
+                new ChamberPlacement.Request(null, 5, 5, 3000, null, null, null, null, null, null, null, null, null), ground);
         world.addVolcano(v);
         assertEquals(1, s.volcanoes().size());
-        VentSite vent = s.volcano().vents().get(0);
-        assertTrue(vent.emergent(), "nothing built: the vent is where the conduit will meet the ground");
-        assertEquals((int) Math.ceil(ground / 10 - 1e-6) - 1, vent.position().y(), "the vent sits on the sea floor");
-        double chamberTop = s.volcano().chamber().config().center().y() * 10.0;
+        assertTrue(s.volcano().coupler().allVents().isEmpty(), "nothing built: no vent until a dike breaks out");
+        assertEquals(0, s.volcano().chamber().conduitOpenness(), "and no conduit");
+        assertEquals(ground, s.volcano().referencePoint().y(), 1e-9, "the volcano is anchored on the sea floor above it");
+        double chamberTop = s.volcano().chamber().config().center().y();
         assertTrue(ground - chamberTop > 2900 && ground - chamberTop < 3100, "3 km below the sea floor");
         assertEquals(ChamberPlacement.defaultOf("volumeM3"), s.volcano().chamber().config().volume(), 1e-3);
         s.engine().runFor(5);
@@ -79,7 +78,7 @@ class EmptyWorldTest {
         // the definition round-trips through YAML (the server writes volcanoes/<id>.yaml)
         VolcanoDefinition again = VolcanoDefinition.parse("first",
                 me.alex4386.typhon.engine.config.ConfigNode.root("first.yaml", v.toTree()));
-        assertTrue(again.vents().get(0).emergent());
+        assertTrue(again.vents().isEmpty());
 
         s.saveWorld();
         Scenario resumed = WorldScenarios.open(dir, World.ChangePolicy.REJECT);

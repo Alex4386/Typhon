@@ -36,6 +36,7 @@ import {
   type SceneInfo,
 } from './targets';
 import { frameDistance, SURFACE_KINDS, selectionAnchor } from '../scene/picking';
+import { volcanoAnchor } from '../store/worldVents';
 
 type OrbitControlsImpl = ComponentRef<typeof OrbitControls>;
 
@@ -368,7 +369,7 @@ export function CameraRig({ world }: { world: WorldInfo }) {
         s.awaitingGround = false;
       } else {
         const v = world.volcanoes.find((x) => x.id === si.volcanoId) ?? world.volcanoes[0];
-        const at = v?.vents[0]?.at;
+        const at = v ? volcanoAnchor(v) : undefined;
         if (!at || groundKnown(si, at[0], at[1])) {
           s.awaitingGround = false;
           applyPoseNow(summitPose(si));

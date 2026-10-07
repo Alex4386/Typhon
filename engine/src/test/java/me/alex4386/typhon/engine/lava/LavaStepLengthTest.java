@@ -3,7 +3,7 @@ package me.alex4386.typhon.engine.lava;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.sim.Engine;
 import org.junit.jupiter.api.Test;
 
@@ -22,7 +22,7 @@ class LavaStepLengthTest {
         LavaTestWorld world = slope();
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults());
         Engine engine = world.engine(lava, 1);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 20);
         assertEquals(2, lava.emittedVolume(), 1e-9, "1 s of a 2 m³/s source");
     }
@@ -32,7 +32,7 @@ class LavaStepLengthTest {
         LavaTestWorld world = slope().coarse(20); // 1 s steps
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 3);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 400);
         assertTrue(lava.lastSubsteps() > 1, "fluid basalt in 1 s steps needs sub-steps: " + lava.lastSubsteps());
         assertEquals(lava.emittedVolume(), lava.totalLavaVolume() + lava.solidifiedVolume() + lava.crustVolume(),
@@ -51,7 +51,7 @@ class LavaStepLengthTest {
         LavaTestWorld world = slope().coarse(stepFactor);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 3);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 1, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 1, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, steps);
         return LavaTestWorld.maxX(lava, -16, 79, -16, 31);
     }
@@ -87,7 +87,7 @@ class LavaStepLengthTest {
         LavaTestWorld world = slope().coarse(50);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(20));
         Engine engine = world.engine(lava, 9, threads);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 3, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 3, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 300);
         return engine.stateHash() + "/" + world.frames.hashCode();
     }

@@ -21,10 +21,11 @@ import { formatSimTime, worldExtent } from '../util/world';
 import { DESTRUCTIVE, contextActions, contextToggles, ventLifecycle, type ContextAction, type ContextToggle, type VentLifecycle } from './actions';
 import { budgetVerdict, type BudgetState } from './budget';
 import { formatVolume } from './events';
-import { buildPanel, type BuiltPanel } from './objectPanel';
+import { buildPanel, type BuiltPanel } from './panelSpec';
 import { OverridesBanner, PanelTabBody, Skeleton, Waiting } from './ObjectPanel';
 import { OVERLAY } from './Overlay';
 import { showServerResult } from './serverResult';
+import { SetMagmaForm } from './SetMagmaForm';
 import { useParamEdits } from './ParamRow';
 import { HIDDEN_PROPS, formatProp, propLabel } from './props';
 
@@ -131,6 +132,8 @@ export function Inspector({ world, sheet = false }: { world: WorldInfo; sheet?: 
         return vid ? <MagmaBudgetView volcanoId={vid} /> : null;
       case 'landscape':
         return vid ? <LandscapeSummary volcanoId={vid} /> : null;
+      case 'setMagma':
+        return entity && !replay ? <SetMagmaForm e={entity} /> : null;
       case 'ventState':
       case 'volcanoState':
         return entity ? <StateView e={entity} toggles={toggles} replay={replay} /> : null;

@@ -1,4 +1,5 @@
 import { scaledBudget } from '../util/device';
+import { fountainSources } from './fountains';
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -84,25 +85,32 @@ export function Atmosphere({ world }: { world: WorldInfo }) {
       let nf = 0;
       if (show && st.state) {
         const budget = Math.round(FOUNTAIN_PARTICLES * (st.quality === 'low' ? 0.4 : st.quality === 'medium' ? 0.7 : 1));
-        for (const v of world.volcanoes) {
-          const vs = st.state.volcanoes[v.id];
-          const rate = vs?.chamber.eruptionRate ?? 0;
-          if (!(rate > 0) || vs?.chamber.regime !== 'FOUNTAINING') continue;
-          // Kīlauea's fountains reached ~50–500 m at 10–500 m³/s
-          const H = Math.min(550, 25 * Math.sqrt(rate)) * vExag;
-          for (const vent of v.vents) {
-            const base = displayZ(world, vent.at[0], vent.at[1], vExag, dExag);
-            const per = Math.floor(budget / Math.max(1, v.vents.length * world.volcanoes.length));
-            for (let k = 0; k < per && nf < budget; k++, nf++) {
-              const life = (wall * (0.5 + hash(k + 7) * 0.3) + hash(k)) % 1;
-              const h = H * (0.6 + hash(k + 3) * 0.4) * 4 * life * (1 - life);
-              const ang = hash(k + 11) * Math.PI * 2;
-              const rr = (8 + hash(k + 17) * 25) * life * 2;
+        const sources = fountainSources(world, st.state.volcanoes);
+        const total = sources.reduce((sum, f) => sum + f.weight, 0);
+        for (const src of sources) {
+          const vent = src.vent;
+          const H = src.heightM * vExag;
+          const per = Math.floor((budget * src.weight) / Math.max(1, total));
+          const line = vent.kind === 'fissure' ? vent.line : undefined;
+          const base = line ? 0 : displayZ(world, vent.at[0], vent.at[1], vExag, dExag);
+          for (let k = 0; k < per && nf < budget; k++, nf++) {
+            const life = (wall * (0.5 + hash(k + 7) * 0.3) + hash(k)) % 1;
+            const h = H * (0.6 + hash(k + 3) * 0.4) * 4 * life * (1 - life);
+            const ang = hash(k + 11) * Math.PI * 2;
+            const rr = (8 + hash(k + 17) * 25) * life * 2;
+            if (line) {
+              // a curtain of fire along the fissure: each particle rises from its own point of the line
+              const f = hash(k + 23);
+              const x = line[0][0] + (line[1][0] - line[0][0]) * f;
+              const y = line[0][1] + (line[1][1] - line[0][1]) * f;
+              const b = displayZ(world, x, y, vExag, dExag);
+              p.set(x + Math.cos(ang) * rr * 0.3, b + h, -(y + Math.sin(ang) * rr * 0.3));
+            } else {
               p.set(vent.at[0] + Math.cos(ang) * rr, base + h, -(vent.at[1] + Math.sin(ang) * rr));
-              const size = 14 + 10 * (1 - life);
-              m.compose(p, q, s.set(size, size, size));
-              fm0.setMatrixAt(nf, m);
             }
+            const size = 14 + 10 * (1 - life);
+            m.compose(p, q, s.set(size, size, size));
+            fm0.setMatrixAt(nf, m);
           }
         }
       }

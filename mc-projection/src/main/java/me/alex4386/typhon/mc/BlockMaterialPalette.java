@@ -1,8 +1,10 @@
-package me.alex4386.typhon.engine.world;
+package me.alex4386.typhon.mc;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import me.alex4386.typhon.engine.world.Material;
+import me.alex4386.typhon.engine.world.MaterialTable;
 
 /**
  * Two-way mapping between block ids (host worlds, Minecraft) and world-model materials.

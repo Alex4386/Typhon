@@ -2,7 +2,7 @@ package me.alex4386.typhon.engine.dike;
 
 import java.util.Objects;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 
 /**
  * What a dike needs from its magma chamber: driving pressure, magma properties and the ability to
@@ -12,7 +12,7 @@ public interface DikeMagmaSource {
     String volcanoId();
 
     /** Chamber centre in world coordinates (dikes start here). */
-    BlockPos chamberCenter();
+    Point3 chamberCenter();
 
     double overpressureMPa();
 
@@ -33,9 +33,12 @@ public interface DikeMagmaSource {
     /** Removes {@code volume} m³ from the chamber; returns the overpressure drop (MPa). */
     double withdraw(double volume);
 
-    /** How open the summit conduit is, in [0, 1] (1 = open and venting: spontaneous dikes are unlikely). */
-    default double conduitOpenness() {
-        return 0.5;
+    /**
+     * True if a molten conduit leads from the chamber to an open crater: magma can then reach the surface
+     * without a dike (a forced eruption goes that way). False by default (a dike is the only way up).
+     */
+    default boolean conduitToSurface() {
+        return false;
     }
 
     /** Magma pushed out of the ruptured chamber walls, waiting for a dike (m³). */
@@ -48,6 +51,15 @@ public interface DikeMagmaSource {
         return 0;
     }
 
+    /**
+     * Radius (m) of the chamber (a sphere of its volume): dikes leave from its roof and are fed over at most its
+     * diameter. {@code NaN} when unknown (a point source: dikes start at the chamber depth, breadth unbounded by
+     * the source).
+     */
+    default double chamberRadiusM() {
+        return Double.NaN;
+    }
+
     /** Magma temperature (°C) at intrusion; basaltic by default. */
     default double temperatureC() {
         return 1150;
@@ -57,7 +69,7 @@ public interface DikeMagmaSource {
         Objects.requireNonNull(chamber, "chamber");
         return new DikeMagmaSource() {
             @Override public String volcanoId() { return chamber.config().volcanoId(); }
-            @Override public BlockPos chamberCenter() { return chamber.chamberCenter(); }
+            @Override public Point3 chamberCenter() { return chamber.chamberCenter(); }
             @Override public double overpressureMPa() { return chamber.overpressureMPa(); }
             @Override public double tensileStrengthMPa() { return chamber.config().tensileStrengthMPa(); }
             @Override public double chamberDepthM() { return chamber.config().lithostaticDepth(); }
@@ -66,8 +78,11 @@ public interface DikeMagmaSource {
             @Override public boolean erupting() { return chamber.erupting(); }
             @Override public double withdraw(double volume) { return chamber.withdraw(volume); }
             @Override public double temperatureC() { return chamber.temperatureC(); }
+            @Override public double chamberRadiusM() { return StrictMath.cbrt(3 * chamber.volumeM3() / (4 * Math.PI)); }
             @Override public double ruptureExcessM3() { return chamber.ruptureExcessM3(); }
-            @Override public double conduitOpenness() { return chamber.conduitOpenness(); }
+            @Override public boolean conduitToSurface() {
+                return chamber.conduitOpenness() > 0 && !chamber.summitBlocked();
+            }
             @Override public double takeRuptureExcess() { return chamber.takeRuptureExcess(); }
         };
     }

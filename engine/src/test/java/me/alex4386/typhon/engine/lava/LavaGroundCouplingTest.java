@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.lava;
 
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -66,7 +67,7 @@ class LavaGroundCouplingTest {
     private static RecordingGround run(int threads, double seconds, LavaSource source) {
         LavaTestWorld world = new LavaTestWorld(0, 0, 2, 1, (x, z) -> 64);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults());
-        RecordingGround ground = new RecordingGround(2.0, lava.metersPerBlock() * lava.metersPerBlock());
+        RecordingGround ground = new RecordingGround(2.0, lava.metersPerColumn() * lava.metersPerColumn());
         lava.setGround(ground);
         lava.addSource(source);
         Engine engine = world.engine(lava, 7, threads);
@@ -77,7 +78,7 @@ class LavaGroundCouplingTest {
     @Test
     void coolingLavaHeatsTheGroundUnderIt() {
         RecordingGround ground = run(1, 30,
-                LavaSource.at("dry", new me.alex4386.typhon.engine.math.BlockPos(4, 65, 8), 0.5, 1150, 50, 0.2));
+                LavaSource.at("dry", new ColumnIndex(4, 8), 0.5, 1150, 50, 0.2));
         assertTrue(ground.groundHeat > 0, "base conduction should reach the ground");
         // k ΔT / δ over the flow area for 30 s: order 10⁵–10⁸ J for a few m³ of lava
         assertTrue(ground.groundHeat < 1e10, "heat bounded: " + ground.groundHeat);
@@ -87,7 +88,7 @@ class LavaGroundCouplingTest {
     @Test
     void lavaInAPondBoilsTheWaterOff() {
         RecordingGround ground = run(1, 30,
-                LavaSource.at("pond", new me.alex4386.typhon.engine.math.BlockPos(24, 65, 8), 2.0, 1150, 50, 0.2));
+                LavaSource.at("pond", new ColumnIndex(24, 8), 2.0, 1150, 50, 0.2));
         assertTrue(ground.removed > 0, "lava quenched in standing water should boil some of it off");
         // energy bound: the lava's whole heat content could boil at most ~ (c ΔT + L)·ρ_l / (L_v ρ_w) per m³
         double emitted = 2.0 * 30;
@@ -96,7 +97,7 @@ class LavaGroundCouplingTest {
 
     @Test
     void exchangeDoesNotDependOnTheThreadCount() {
-        LavaSource source = LavaSource.at("pond", new me.alex4386.typhon.engine.math.BlockPos(14, 65, 8), 3.0, 1150, 50, 0.2);
+        LavaSource source = LavaSource.at("pond", new ColumnIndex(14, 8), 3.0, 1150, 50, 0.2);
         RecordingGround one = run(1, 15, source);
         RecordingGround four = run(4, 15, source);
         assertEquals(one.calls, four.calls);

@@ -13,15 +13,15 @@ import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
-import me.alex4386.typhon.engine.terrain.TerrainChunk;
-import me.alex4386.typhon.engine.terrain.TerrainChunkView;
+import me.alex4386.typhon.engine.terrain.GroundColumn;
 import me.alex4386.typhon.engine.terrain.TerrainGenerator;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
+import me.alex4386.typhon.engine.terrain.GroundImport;
+import me.alex4386.typhon.engine.world.ColumnStacks;
 
 /**
- * Grows the simulated area on demand, like a Minecraft server loading chunks — but driven by physics,
- * not by players or the camera.
+ * Grows the simulated area on demand, driven by physics: where lava, flows, dikes, slope failures,
+ * thick tephra or running water reach the edge of the known ground.
  *
  * <p><b>Generation vs simulation.</b> The landscape is unbounded: the host's {@link TerrainGenerator}
  * gives the column at any (x, z) as a pure function of the coordinates and the world definition. Only
@@ -162,7 +162,7 @@ public final class WorldExpansion implements Subsystem {
         if (grown.isEmpty()) return;
         revision++;
         double l = terrain.world().spec().metersPerColumn();
-        double areaKm2 = terrain.chunkCount() * 256.0 * l * l / 1e6;
+        double areaKm2 = knownColumns() * l * l / 1e6;
         context.outbox().emit(new ExpansionEvents.AreaExpanded(context.time(), grown, t, added.size(), areaKm2));
     }
 
@@ -180,7 +180,7 @@ public final class WorldExpansion implements Subsystem {
         int n = config.tileColumns() / 16;
         for (int cz = tz * n; cz < tz * n + n; cz++) {
             for (int cx = tx * n; cx < tx * n + n; cx++) {
-                if (!terrain.isKnown(cx << 4, cz << 4)) return false;
+                if (!terrain.world().isKnown(cx << 4, cz << 4)) return false;
             }
         }
         complete.add(k);
@@ -190,37 +190,48 @@ public final class WorldExpansion implements Subsystem {
     private void materialize(double time, int tx, int tz) {
         int t = config.tileColumns();
         int n = t / 16;
-        List<TerrainChunk> chunks = new ArrayList<>();
+        List<GroundColumn> columns = new ArrayList<>();
         for (int cz = tz * n; cz < tz * n + n; cz++) {
             for (int cx = tx * n; cx < tx * n + n; cx++) {
-                if (terrain.isKnown(cx << 4, cz << 4)) continue;
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
+                if (terrain.world().isKnown(cx << 4, cz << 4)) continue;
                 for (int z = cz << 4; z < (cz << 4) + 16; z++) {
-                    for (int x = cx << 4; x < (cx << 4) + 16; x++) chunk.set(x, z, generator.column(x, z));
+                    for (int x = cx << 4; x < (cx << 4) + 16; x++) columns.add(generator.column(x, z));
                 }
-                chunks.add(chunk);
             }
         }
-        if (!chunks.isEmpty()) terrain.apply(new TerrainSnapshot(chunks));
+        if (!columns.isEmpty()) terrain.apply(new GroundImport(columns));
         complete.add(key(tx, tz));
         for (ExpansionActivity.Listener listener : listeners) listener.materialized(time, tx * t, tz * t, t);
     }
 
     // ── Bounds of the simulated area ──
 
-    /** Bounding box {minX, minZ, maxX, maxZ} (columns) of all simulated chunks, or {@code null} if none. */
+    /** Bounding box {minX, minZ, maxX, maxZ} (columns) of the world model's tiles, or {@code null} if none. */
     public int[] simulatedBounds() {
         int minX = Integer.MAX_VALUE;
         int minZ = Integer.MAX_VALUE;
         int maxX = Integer.MIN_VALUE;
         int maxZ = Integer.MIN_VALUE;
-        for (TerrainChunkView c : terrain.chunks()) {
-            minX = Math.min(minX, c.chunkX() << 4);
-            minZ = Math.min(minZ, c.chunkZ() << 4);
-            maxX = Math.max(maxX, (c.chunkX() << 4) + 15);
-            maxZ = Math.max(maxZ, (c.chunkZ() << 4) + 15);
+        for (int[] t : terrain.world().stacks().tileCoords()) {
+            minX = Math.min(minX, t[0] * ColumnStacks.TILE);
+            minZ = Math.min(minZ, t[1] * ColumnStacks.TILE);
+            maxX = Math.max(maxX, t[0] * ColumnStacks.TILE + ColumnStacks.TILE - 1);
+            maxZ = Math.max(maxZ, t[1] * ColumnStacks.TILE + ColumnStacks.TILE - 1);
         }
         return minX > maxX ? null : new int[] {minX, minZ, maxX, maxZ};
+    }
+
+    /** Number of columns with known ground. */
+    private long knownColumns() {
+        long n = 0;
+        for (int[] t : terrain.world().stacks().tileCoords()) {
+            for (int z = t[1] * ColumnStacks.TILE; z < (t[1] + 1) * ColumnStacks.TILE; z++) {
+                for (int x = t[0] * ColumnStacks.TILE; x < (t[0] + 1) * ColumnStacks.TILE; x++) {
+                    if (terrain.world().isKnown(x, z)) n++;
+                }
+            }
+        }
+        return n;
     }
 
     // ── Keys ──
@@ -262,7 +273,7 @@ public final class WorldExpansion implements Subsystem {
             JsonArray c = e.getAsJsonArray();
             added.add(key(c.get(0).getAsInt(), c.get(1).getAsInt()));
         }
-        revision = o.has("revision") ? o.get("revision").getAsLong() : 0;
+        revision = o.get("revision").getAsLong();
     }
 
     /** UI summary. */

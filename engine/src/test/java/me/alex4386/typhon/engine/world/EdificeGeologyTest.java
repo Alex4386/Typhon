@@ -24,7 +24,7 @@ class EdificeGeologyTest {
     @Test
     void edificeReplacesCountryRockAboveItsBaseInsideItsRadius() {
         WorldModel world = new WorldModel(spec());
-        world.setEdifices(List.of(new Edifice("kilauea", 0.5, 0.5, 50, 200, "basalt")));
+        world.setEdifices(List.of(new Edifice("kilauea", 5, 5, 500, 200, "basalt")));
         world.importColumn(0, 0, 1200, null);   // on the cone
         world.importColumn(80, 0, 1200, null);  // same height, outside the edifice
 
@@ -47,10 +47,10 @@ class EdificeGeologyTest {
     void edificeWithoutBaseReachesTheBasementAndOverlapsGoToTheCloserCentre() {
         WorldModel world = new WorldModel(spec());
         world.setEdifices(List.of(
-                new Edifice("east", 100.5, 0.5, 120, Double.NaN, "basalt"),
-                new Edifice("west", -100.5, 0.5, 120, Double.NaN, "dacite")));
-        world.importColumn(60, 0, 500, null);   // 40 from east, 160 from west: east
-        world.importColumn(-30, 0, 500, null);  // 130 from east (outside), 70 from west
+                new Edifice("east", 1005, 5, 1200, Double.NaN, "basalt"),
+                new Edifice("west", -1005, 5, 1200, Double.NaN, "dacite")));
+        world.importColumn(60, 0, 500, null);   // 400 m from east, 1610 m from west: east
+        world.importColumn(-30, 0, 500, null);  // 1300 m from east (outside), 710 m from west
         assertEquals(MaterialTable.BASALT.id(), world.column(60, 0).layers().get(2).material());
         assertEquals(0, world.column(60, 0).layers().get(1).top(), 1e-3, "edifice starts on the basement cake");
         assertEquals(MaterialTable.DACITE.id(), world.column(-30, 0).layers().get(2).material());
@@ -58,7 +58,7 @@ class EdificeGeologyTest {
 
     @Test
     void unboundedEdificeCoversEverythingAndUnitsSurviveSaveAndLoad() {
-        List<Edifice> edifices = List.of(new Edifice("solo", 0.5, 0.5, Double.POSITIVE_INFINITY, Double.NaN, "rhyolite"));
+        List<Edifice> edifices = List.of(new Edifice("solo", 5, 5, Double.POSITIVE_INFINITY, Double.NaN, "rhyolite"));
         TerrainModel terrain = new TerrainModel(new WorldModel(spec()));
         WorldModel world = terrain.world();
         world.setEdifices(edifices);

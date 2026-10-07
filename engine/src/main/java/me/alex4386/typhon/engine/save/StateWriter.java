@@ -17,13 +17,13 @@ public interface StateWriter {
 
     /**
      * Opens spatial field {@code name}. Bump {@code schemaVersion} whenever the arrays a chunk holds
-     * change meaning, so loaders can migrate or reject old saves.
+     * change meaning, so loaders reject saves written with another layout.
      */
     Field field(String name, int schemaVersion);
 
     interface Field {
         /**
-         * Stores one chunk. Chunk coordinates are free-form keys (e.g. 16-block chunks for column
+         * Stores one chunk. Chunk coordinates are free-form keys (e.g. 16×16-column chunks for column
          * grids, or {@code (0, 0)} for a single fixed grid); region files group them 32×32.
          */
         void put(int chunkX, int chunkZ, FieldChunk chunk);

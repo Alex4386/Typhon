@@ -253,6 +253,20 @@ public final class VentPartition {
             lava = clastogenic;
         }
 
+        // Under water the magmatic jet is braked and quenched: only a vent shallow enough breaks the surface
+        // (the same hydrostatic suppression as for the steam interaction, nothing below SUPPRESSION_DEPTH_M).
+        // What stays under water — the fall-back clasts and the fines the jet would have lofted — is chilled in
+        // place and piles up at the vent as hyaloclastite (Kokelaar 1986; Head &amp; Wilson 2003), instead of
+        // flying as bombs or feeding an eruption column.
+        if (flooded) {
+            double breach = suppression;
+            double drowned = (ballistic + magmaticColumn) * (1 - breach);
+            ballistic *= breach;
+            magmaticColumn *= breach;
+            fountainHeight *= breach;
+            quenched += drowned;
+        }
+
         // Water-fragmented magma: fine ash, steam-driven; its wet share falls out as tuff, its coarse
         // tail flies in jets.
         double steam = 0;

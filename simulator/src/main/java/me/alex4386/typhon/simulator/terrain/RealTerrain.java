@@ -1,12 +1,11 @@
 package me.alex4386.typhon.simulator.terrain;
 
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
-import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.terrain.GroundColumn;
+import me.alex4386.typhon.engine.world.Material;
 
 /**
  * Real-scale synthetic landscapes: elevations in metres above sea level on columns
- * {@code metersPerColumn} wide, mapped onto blocks the way the world model and real DEMs are
- * ({@link DemImporter#groundBlock}: sea level is the top of block −1).
+ * {@code metersPerColumn} wide.
  *
  * <p>Shapes are simple profiles fitted to published edifice dimensions (see the presets that use
  * them); seeded fractal noise in metres adds gullies and lobes so flows do not run in perfect lines.
@@ -18,67 +17,62 @@ public final class RealTerrain {
         double at(double xm, double zm);
     }
 
-    /** Surface block of a column. */
+    /** Surface material of a column ({@code null} = the world's default surface). */
     @FunctionalInterface
     public interface Paint {
-        BlockId at(double xm, double zm, double elevation, boolean submerged);
+        Material at(double xm, double zm, double elevation, boolean submerged);
     }
 
     private RealTerrain() {}
 
     /**
      * Samples {@code elevation} at column centres over a domain {@code 2·halfExtentColumns} columns
-     * wide (rounded up to whole chunks), adds {@code roughnessM} of fractal noise with feature size
+     * wide (rounded up to whole tiles), adds {@code roughnessM} of fractal noise with feature size
      * {@code roughnessScaleM} and floods columns below {@code seaLevelZ} (unless {@code NaN}).
      */
     public static ColumnGrid build(double metersPerColumn, int halfExtentColumns, long seed, Elevation elevation,
             double roughnessM, double roughnessScaleM, double seaLevelZ, Paint paint) {
         ValueNoise noise = new ValueNoise(seed);
-        ColumnGrid.Relief relief = (cx, cz) -> {
-            double xm = cx * metersPerColumn;
-            double zm = cz * metersPerColumn;
+        ColumnGrid.Relief relief = (xm, zm) -> {
             double e = elevation.at(xm, zm);
             if (roughnessM > 0) e += roughnessM * noise.fbm(xm, zm, roughnessScaleM, 4);
-            return e / metersPerColumn;
+            return e;
         };
-        int waterY = Double.isNaN(seaLevelZ) ? TerrainColumn.NO_WATER : DemImporter.groundBlock(seaLevelZ, metersPerColumn);
         ColumnGrid.Source source = (x, z) -> {
             double xm = (x + 0.5) * metersPerColumn;
             double zm = (z + 0.5) * metersPerColumn;
-            double e = elevation.at(xm, zm);
-            if (roughnessM > 0) e += roughnessM * noise.fbm(xm, zm, roughnessScaleM, 4);
+            double e = relief.elevation(xm, zm);
             boolean submerged = !Double.isNaN(seaLevelZ) && e < seaLevelZ;
-            return new TerrainColumn(DemImporter.groundBlock(e, metersPerColumn), submerged ? waterY : TerrainColumn.NO_WATER,
-                    paint.at(xm, zm, e, submerged));
+            return new GroundColumn(x, z, e, submerged ? seaLevelZ : Double.NaN, paint.at(xm, zm, e, submerged));
         };
-        return ColumnGrid.generateCentered(halfExtentColumns, source, relief);
+        return ColumnGrid.generateCentered(halfExtentColumns, metersPerColumn, source, relief);
     }
 
     /**
-     * Flood every column whose ground lies below {@code waterZ} (m) within a circle — a lake. On a
-     * generated grid the lake becomes part of the generator, so columns materialised later get it too.
+     * Floods every column whose ground lies below {@code waterZ} (m) within a circle — a lake floored with
+     * {@code floor}. On a generated grid the lake becomes part of the generator, so columns materialised
+     * later get it too.
      */
-    public static void lake(ColumnGrid grid, double metersPerColumn, double centerXm, double centerZm, double radiusM,
-            double waterZ) {
-        int waterY = DemImporter.groundBlock(waterZ, metersPerColumn);
-        BlockId sand = BlockId.minecraft("sand");
+    public static void lake(ColumnGrid grid, double centerXm, double centerZm, double radiusM, double waterZ,
+            Material floor) {
+        double l = grid.metersPerColumn();
         ColumnGrid.Source base = grid.source();
         if (base != null) {
             grid.fill((x, z) -> {
-                TerrainColumn c = base.column(x, z);
-                double dx = (x + 0.5) * metersPerColumn - centerXm;
-                double dz = (z + 0.5) * metersPerColumn - centerZm;
-                if (dx * dx + dz * dz > radiusM * radiusM || c.groundY() >= waterY) return c;
-                return new TerrainColumn(c.groundY(), waterY, sand);
+                GroundColumn c = base.column(x, z);
+                double dx = (x + 0.5) * l - centerXm;
+                double dz = (z + 0.5) * l - centerZm;
+                if (dx * dx + dz * dz > radiusM * radiusM || c.surfaceZ() >= waterZ) return c;
+                return new GroundColumn(x, z, c.surfaceZ(), waterZ, floor);
             });
             return;
         }
         for (int z = grid.minZ(); z <= grid.maxZ(); z++) {
             for (int x = grid.minX(); x <= grid.maxX(); x++) {
-                double dx = (x + 0.5) * metersPerColumn - centerXm;
-                double dz = (z + 0.5) * metersPerColumn - centerZm;
+                double dx = (x + 0.5) * l - centerXm;
+                double dz = (z + 0.5) * l - centerZm;
                 if (dx * dx + dz * dz > radiusM * radiusM) continue;
-                if (grid.ground(x, z) < waterY) grid.set(x, z, grid.ground(x, z), waterY, sand);
+                if (grid.surfaceZ(x, z) < waterZ) grid.set(x, z, grid.surfaceZ(x, z), waterZ, floor);
             }
         }
     }

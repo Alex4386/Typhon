@@ -30,7 +30,6 @@ import me.alex4386.typhon.simulator.scenario.Presets;
 import me.alex4386.typhon.simulator.scenario.Scenario;
 import me.alex4386.typhon.simulator.terrain.ColumnGrid;
 import me.alex4386.typhon.simulator.scenario.RealSetting;
-import me.alex4386.typhon.simulator.terrain.DemImporter;
 import me.alex4386.typhon.simulator.terrain.DemTerrain;
 
 /**
@@ -40,8 +39,7 @@ import me.alex4386.typhon.simulator.terrain.DemTerrain;
  * list-presets
  * run --preset NAME [--seed N] [--hours H] [--out DIR] [--sample-seconds S] [--base-step-ms MS]
  *     [--save DIR] [--load DIR]
- *     [--skip-events Type,Type|none] [--dem FILE [--dem-lat D --dem-lon D] [--dem-cell M]
- *     [--dem-meters-per-block L]] [--quiet]
+ *     [--skip-events Type,Type|none] [--dem FILE [--dem-lat D --dem-lon D]] [--quiet]
  * run --world DIR [--hours H] [--out DIR] [--sample-seconds S] [--accept-config-change | --reset-changed]
  *     [--no-save] [--skip-events ...] [--quiet]
  * init-world (--preset NAME [--seed N] [--dem FILE] | --example twin) --out DIR
@@ -135,10 +133,6 @@ public final class Main {
             Preset preset = Presets.get(options.get("preset"));
             long seed = Long.parseLong(options.getOrDefault("seed", "1"));
             Path dem = options.containsKey("dem") ? Path.of(options.get("dem")) : null;
-            if (dem != null && preset.realSetting() == null) {
-                err.println("--dem needs a real-scale preset (" + realPresetNames() + ")");
-                return 1;
-            }
             WorldScenarios.writeFromPreset(preset, seed, dir, dem);
             out.println("Wrote world '" + preset.name() + "' (seed " + seed + (dem != null ? ", DEM " + dem : "")
                     + ") to " + dir);
@@ -225,7 +219,7 @@ public final class Main {
 
         ColumnGrid terrain = preset.terrain(seed);
         RealSetting real = preset.realSetting();
-        if (options.containsKey("dem") && real != null) {
+        if (options.containsKey("dem")) {
             Path dem = Path.of(options.get("dem"));
             double lat = Double.parseDouble(options.getOrDefault("dem-lat", Double.toString(real.dem().lat())));
             double lon = Double.parseDouble(options.getOrDefault("dem-lon", Double.toString(real.dem().lon())));
@@ -233,17 +227,7 @@ public final class Main {
                     lat, lon);
             out.printf(Locale.ROOT, "Terrain replaced by DEM %s around %.4f, %.4f (%d x %d columns of %s m, %d..%d m)%n",
                     dem, lat, lon, terrain.size(), terrain.size(), fmt(real.metersPerColumn()),
-                    Math.round((terrain.minGround() + 1) * real.metersPerColumn()),
-                    Math.round((terrain.maxGround() + 1) * real.metersPerColumn()));
-        } else if (options.containsKey("dem")) {
-            Path dem = Path.of(options.get("dem"));
-            double cell = Double.parseDouble(options.getOrDefault("dem-cell", "30"));
-            double mpb = Double.parseDouble(options.getOrDefault("dem-meters-per-block", "8"));
-            DemImporter.Dem data = dem.toString().toLowerCase(Locale.ROOT).endsWith(".png")
-                    ? DemImporter.readPng(dem, 0, Double.parseDouble(options.getOrDefault("dem-max-meters", "3000")), cell)
-                    : DemImporter.readAscii(dem, cell);
-            terrain = DemImporter.toGrid(data, mpb, 384);
-            out.println("Terrain replaced by DEM " + dem + " (" + terrain.size() + "x" + terrain.size() + " blocks)");
+                    Math.round(terrain.minSurfaceZ()), Math.round(terrain.maxSurfaceZ()));
         }
         double baseStepMs = Double.parseDouble(options.getOrDefault("base-step-ms", "50"));
         Scenario.Options engineOptions = Scenario.Options.DEFAULT.withBaseStepMicros(Math.round(baseStepMs * 1000));
@@ -294,9 +278,9 @@ public final class Main {
             out.printf(Locale.ROOT, "    %-14s %s → %s  %.3g m3 DRE  %s%n", e.volcanoId(), time(e.startSeconds()),
                     e.ongoing() ? "ongoing" : time(e.endSeconds()), e.volumeM3(), String.join(" → ", e.styles()));
         }
-        out.printf(Locale.ROOT, "  lava emitted=%.0f solidified=%.0f blocks, longest flow=%.0f m; plumeTop=%s; bombs=%d; quakes=%s%n",
-                last.get("lava_emitted_blocks"), last.get("lava_solidified_blocks"), summary.maxFlowLengthM,
-                summary.maxPlumeTopY == Integer.MIN_VALUE ? "none" : Integer.toString(summary.maxPlumeTopY),
+        out.printf(Locale.ROOT, "  lava emitted=%.3g solidified=%.3g m3, longest flow=%.0f m; plumeTop=%s; bombs=%d; quakes=%s%n",
+                last.get("lava_emitted_m3"), last.get("lava_solidified_m3"), summary.maxFlowLengthM,
+                Double.isNaN(summary.maxPlumeTopZ) ? "none" : String.format(Locale.ROOT, "%.0f m", summary.maxPlumeTopZ),
                 summary.bombsLaunched, summary.seismicCounts);
         if (!summary.featuresFormed.isEmpty()) out.println("  hydrothermal features: " + summary.featuresFormed);
         for (ReferenceComparison.Row row : ReferenceComparison.compare(preset, result)) {
@@ -338,7 +322,7 @@ public final class Main {
         String name = options.get("preset");
         Preset preset = name == null ? null : Presets.get(name);
         if (preset == null || preset.realSetting() == null) {
-            err.println("dem-info needs --preset with a real-scale preset: " + realPresetNames());
+            err.println("dem-info needs --preset: " + presetNames());
             return 1;
         }
         RealSetting real = preset.realSetting();
@@ -356,8 +340,8 @@ public final class Main {
         return 0;
     }
 
-    private static String realPresetNames() {
-        return Presets.all().stream().filter(p -> p.realSetting() != null).map(Preset::name).toList().toString();
+    private static String presetNames() {
+        return Presets.all().stream().map(Preset::name).toList().toString();
     }
 
     private static void progress(PrintStream out, Simulation.Progress p) {
@@ -374,15 +358,14 @@ public final class Main {
         out.println("  run --preset NAME [--seed N] [--hours H] [--out DIR] [--sample-seconds S]");
         out.println("      [--base-step-ms MS (default 50)] [--save DIR] [--load DIR]");
         out.println("      [--threads N (engine worker threads, default all cores; results identical for any N)]");
-        out.println("      [--skip-events Type,Type|none] [--dem FILE (GeoTIFF, .hgt, .asc, .png)");
-        out.println("      [--dem-lat D --dem-lon D (real-scale presets)] [--dem-cell M] [--dem-meters-per-block L]");
-        out.println("      [--dem-max-meters M (png)]] [--quiet]");
+        out.println("      [--skip-events Type,Type|none] [--dem FILE (GeoTIFF, .hgt) [--dem-lat D --dem-lon D]]");
+        out.println("      [--quiet]");
         out.println("  run --world DIR [--hours H] [--out DIR] [--sample-seconds S]");
         out.println("      [--accept-config-change | --reset-changed] [--no-save] [--quiet]");
         out.println("  init-world (--preset NAME [--seed N] [--dem FILE] | --example twin) --out DIR");
-        out.println("  dem-info --preset NAME-real   where to download a real DEM for a real-scale preset");
+        out.println("  dem-info --preset NAME        where to download a real DEM for a preset");
         out.println("  validate [--presets a,b] [--seed N] [--hours H] [--out DIR] [--no-reports]");
-        out.println("      run real-scale presets for their reference horizon and judge them against literature");
+        out.println("      run presets for their reference horizon and judge them against literature");
         out.println("      values (validation.json/.md/.html); exit 2 if any non-informative check fails");
         out.println("  events.ndjson omits " + DEFAULT_SKIPPED_EVENTS + " unless --skip-events is given.");
     }

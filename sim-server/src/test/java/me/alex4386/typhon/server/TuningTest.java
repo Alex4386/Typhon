@@ -6,14 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import org.junit.jupiter.api.Test;
 
 class TuningTest {
     @Test
     void sensibleRangesWarnOnlyOutsideThem() {
-        assertNull(Tuning.advise("world:scaling.eruptiveTimeCompression", "x", 500), "retired: no time compression");
-        assertNull(Tuning.META.get("volcano:timeCompression.eruptive"));
         assertNull(Tuning.advise("volcano:magma.chamber.supplyRate", "x", 0.3));
         assertNotNull(Tuning.advise("volcano:magma.chamber.supplyRate", "x", 50));
         assertNull(Tuning.advise("volcano:magma.chamber.coolingTimescale", "x", 1e30), "no advice, no warning");
@@ -28,7 +26,7 @@ class TuningTest {
 
     @Test
     void largeInjectionsAreFlagged() {
-        MagmaChamber chamber = new MagmaChamber(MagmaChamberConfig.builder("v", new BlockPos(0, -40, 0)).volume(5e7).build());
+        MagmaChamber chamber = new MagmaChamber(MagmaChamberConfig.builder("v", new Point3(0, -4000, 0)).volume(5e7).build());
         assertNull(Tuning.injectionWarning(1e6, chamber));
         String note = Tuning.injectionWarning(1e9, chamber);
         assertNotNull(note);

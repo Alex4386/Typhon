@@ -55,11 +55,14 @@ final class SubsurfaceHeat {
     }
 
     /** Critical temperature of pure water (°C); above it there is no liquid–vapour transition. */
-    static final double CRITICAL_TEMPERATURE_C = 374;
+    static final double CRITICAL_TEMPERATURE_C = WaterSaturation.CRITICAL_TEMPERATURE_C;
 
-    /** Boiling point (°C) at {@code depth} metres below the water table (hydrostatic, pure water). */
-    static double boilingPoint(double depth) {
-        return 100 + 3.0 * StrictMath.pow(Math.max(0, depth), 0.7);
+    /**
+     * Boiling point (°C) {@code depth} metres below a water table at elevation {@code waterTableZ}
+     * (IAPWS-IF97 saturation at the hydrostatic pressure; see {@link WaterSaturation}).
+     */
+    static double boilingPoint(double depth, double waterTableZ) {
+        return WaterSaturation.boilingPointC(depth, waterTableZ);
     }
 
     // ── Background, halo and initial state ──
@@ -164,7 +167,7 @@ final class SubsurfaceHeat {
             double elevation = grid.cellElevation(ch, c, k);
             if (elevation >= ch.head[c] || ch.porosity[i] <= 0) continue;
             if (chamberAt(chambers, l, x, z, ch.surfaceZ[c] - grid.centerDepth(k)) != null) continue;
-            double cap = Math.min(CRITICAL_TEMPERATURE_C, boilingPoint(ch.head[c] - elevation));
+            double cap = Math.min(CRITICAL_TEMPERATURE_C, boilingPoint(ch.head[c] - elevation, ch.head[c]));
             if (ch.temperature[i] > cap) ch.temperature[i] = cap;
         }
     }
@@ -724,12 +727,12 @@ final class SubsurfaceHeat {
                 continue;
             }
             double t = ch.temperature[i];
-            if (t <= 100) { // below the lowest boiling point: no need to evaluate the curve
+            if (t <= 60) { // below any boiling point on Earth's surface (≈ 70 °C at 9 km): skip the curve
                 ch.steam[i] *= collapse;
                 continue;
             }
             double depth = ch.head[c] - elevation;
-            double tbp = boilingPoint(depth);
+            double tbp = boilingPoint(depth, ch.head[c]);
             // No boiling beyond water's critical point (supercritical fluid) or in (partly) molten rock.
             boolean noPhaseChange = tbp >= CRITICAL_TEMPERATURE_C
                     || (!Double.isNaN(ch.solidus[i]) && t >= ch.solidus[i]);

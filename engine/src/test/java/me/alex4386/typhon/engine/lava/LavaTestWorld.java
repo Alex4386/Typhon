@@ -2,71 +2,53 @@ package me.alex4386.typhon.engine.lava;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.IntBinaryOperator;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
-import me.alex4386.typhon.engine.terrain.TerrainChunk;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
-import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.testing.TestGround;
+import me.alex4386.typhon.engine.testing.TestGround.Elevation;
 
-/** Synthetic terrain plus helpers for driving a {@link LavaFlow} in tests. */
+/** Synthetic terrain (1 m columns, elevations in metres) plus helpers for driving a {@link LavaFlow} in tests. */
 final class LavaTestWorld {
-    static final BlockId STONE = BlockId.minecraft("stone");
-    static final int NO_WATER = TerrainColumn.NO_WATER;
+    static final double NO_WATER = Double.NaN;
+    static final Elevation NO_WATER_EVERYWHERE = TestGround.DRY;
+    static final double COLUMN_M = 1.0;
 
     final int minChunkX, minChunkZ, maxChunkX, maxChunkZ;
-    final TerrainModel terrain = new TerrainModel();
+    final double metersPerColumn;
+    final TerrainModel terrain;
     final List<EngineFrame> frames = new ArrayList<>();
 
-    /** Terrain covering chunks [minChunk, maxChunk] inclusive. */
-    LavaTestWorld(int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ, IntBinaryOperator ground,
-            IntBinaryOperator waterY) {
+    /**
+     * Terrain of {@code metersPerColumn}-wide columns covering 16-column chunks [minChunk, maxChunk] inclusive;
+     * surface and water elevations in metres.
+     */
+    LavaTestWorld(double metersPerColumn, int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ,
+            Elevation ground, Elevation water) {
+        this.metersPerColumn = metersPerColumn;
+        this.terrain = TestGround.terrain(metersPerColumn);
         this.minChunkX = minChunkX;
         this.minChunkZ = minChunkZ;
         this.maxChunkX = maxChunkX;
         this.maxChunkZ = maxChunkZ;
-        List<TerrainChunk> chunks = new ArrayList<>();
-        for (int cx = minChunkX; cx <= maxChunkX; cx++) {
-            for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int lz = 0; lz < 16; lz++) {
-                    for (int lx = 0; lx < 16; lx++) {
-                        int x = cx * 16 + lx;
-                        int z = cz * 16 + lz;
-                        chunk.set(x, z, new TerrainColumn(ground.applyAsInt(x, z), waterY.applyAsInt(x, z), STONE));
-                    }
-                }
-                chunks.add(chunk);
-            }
-        }
-        terrain.apply(new TerrainSnapshot(chunks));
+        terrain.apply(TestGround.chunks(minChunkX, minChunkZ, maxChunkX, maxChunkZ, ground, water));
     }
 
-    LavaTestWorld(int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ, IntBinaryOperator ground) {
-        this(minChunkX, minChunkZ, maxChunkX, maxChunkZ, ground, (x, z) -> NO_WATER);
+    /** 1 m columns. */
+    LavaTestWorld(int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ, Elevation ground, Elevation water) {
+        this(COLUMN_M, minChunkX, minChunkZ, maxChunkX, maxChunkZ, ground, water);
+    }
+
+    LavaTestWorld(int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ, Elevation ground) {
+        this(minChunkX, minChunkZ, maxChunkX, maxChunkZ, ground, TestGround.DRY);
     }
 
     /** Copy of the current terrain (including engine edits), as a host would re-send after a restart. */
     TerrainModel copyTerrain() {
-        TerrainModel copy = new TerrainModel();
-        List<TerrainChunk> chunks = new ArrayList<>();
-        for (int cx = minChunkX; cx <= maxChunkX; cx++) {
-            for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int lz = 0; lz < 16; lz++) {
-                    for (int lx = 0; lx < 16; lx++) {
-                        int x = cx * 16 + lx;
-                        int z = cz * 16 + lz;
-                        chunk.set(x, z, terrain.column(x, z));
-                    }
-                }
-                chunks.add(chunk);
-            }
-        }
-        copy.apply(new TerrainSnapshot(chunks));
+        TerrainModel copy = TestGround.terrain(metersPerColumn);
+        copy.apply(TestGround.copy(terrain.world(), minChunkX * 16, minChunkZ * 16, maxChunkX * 16 + 15,
+                maxChunkZ * 16 + 15));
         return copy;
     }
 

@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.assembly;
 
+import me.alex4386.typhon.engine.testing.TestConduits;
 import static me.alex4386.typhon.engine.assembly.VolcanoSystemTest.CRATER;
 import static me.alex4386.typhon.engine.assembly.VolcanoSystemTest.cone;
 import static me.alex4386.typhon.engine.assembly.VolcanoSystemTest.run;
@@ -13,12 +14,11 @@ import me.alex4386.typhon.engine.lava.LavaConfig;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaCommands;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.tephra.ExplosivePhase;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.VentSite;
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerView;
 import me.alex4386.typhon.engine.world.SectionRaster;
@@ -70,14 +70,14 @@ class StratigraphyTest {
     }
 
     private static VolcanoSystem system(String id, VentSite vent, TerrainModel terrain, LavaFlow lava) {
-        MagmaChamberConfig chamber = MagmaChamberConfig.builder(id, new BlockPos(vent.position().x(), 40, vent.position().z()))
+        MagmaChamberConfig chamber = MagmaChamberConfig.builder(id, vent.position().offset(0, -3000, 0))
+                .conduit(TestConduits.molten())
                 .initialOverpressureMPa(14.9999)
                 .initialWaterWt(0.3).rechargeWaterWt(0.3) // gas-poor: lava rather than fountain tephra
                 .supplyVariability(0)
                 .build();
         return VolcanoSystem.builder(id, List.of(vent), terrain, lava)
                 .chamber(chamber)
-                .scaling(VolcanoScaling.DEFAULT)
                 .dikesEnabled(false)
                 .massFlowsEnabled(false)
                 .geothermalEnabled(false)
@@ -99,7 +99,7 @@ class StratigraphyTest {
         assertEquals(1, volcano.chamber().eruptionCount());
         e.submit(new MagmaCommands.StopEruption("test"));
         run(e, FREEZE); // the thinner parts of the flow freeze (the crater pond stays molten)
-        volcano.tephra().startPhase(ExplosivePhase.strombolian(CRATER, 5e5)); // ash on the cooled flow
+        volcano.tephra().startPhase(ExplosivePhase.strombolian(CRATER, 5e5)); // bombs and ash on the cooled flow
         run(e, 2 * 3600);
         volcano.tephra().stopPhase();
         run(e, 3600);
@@ -145,8 +145,18 @@ class StratigraphyTest {
 
         // The section through the column shows the same order, read from the top down.
         double surface = world.surfaceZ(x, z);
-        SectionRaster section = world.section(new double[] {x + 0.5, z - 0.5, x + 0.5, z + 1.5},
-                surface - 400, surface + 1, 1, 4010); // flows emplaced at ×20 are tens of metres thick
+        double l = world.spec().metersPerColumn();
+        // through the column's centre, 1 cm rows from below the older flow to the top (the fall may be cm or,
+        // next to the crater, tens of metres thick)
+        double base = surface;
+        for (int k = 0; k < world.layerCount(x, z); k++) {
+            LayerView layer = world.layer(x, z, k);
+            UnitRecord u = world.unit(layer.unit());
+            if (u.volcanoId() != null && (u.type() + "#" + u.eruptionId()).equals("LAVA#1")) base = Math.min(base, layer.bottom());
+        }
+        double bottom = base - 1;
+        SectionRaster section = world.section(new double[] {(x + 0.5) * l, (z + 0.5) * l, (x + 0.5) * l, (z + 1) * l},
+                bottom, surface + 1, 1, (int) Math.ceil((surface + 1 - bottom) / 0.01));
         List<String> rows = new ArrayList<>();
         for (int iz = 0; iz < section.nz(); iz++) {
             int unit = section.unit()[section.index(0, iz)];
@@ -159,15 +169,23 @@ class StratigraphyTest {
         assertTrue(rows.get(0).endsWith("#2"), "section top belongs to the youngest eruption: " + rows);
         assertEquals("LAVA#2", rows.stream().filter(r -> r.startsWith("LAVA")).findFirst().orElse(null),
                 "the uppermost lava is the youngest: " + rows);
-        assertTrue(rows.indexOf("FALL#1") < rows.lastIndexOf("LAVA#1"), "fall above the older lava: " + rows);
+        StringBuilder layers = new StringBuilder();
+        for (int k = 0; k < world.layerCount(x, z); k++) {
+            LayerView layer = world.layer(x, z, k);
+            UnitRecord u = world.unit(layer.unit());
+            if (u.volcanoId() != null) layers.append(String.format(" %s#%d %.3f..%.3f", u.type(), u.eruptionId(), layer.bottom(), layer.top()));
+        }
+        assertTrue(rows.indexOf("FALL#1") < rows.lastIndexOf("LAVA#1"),
+                "fall above the older lava: " + rows + " at " + x + "," + z + ":" + layers);
     }
 
     @Test
     void depositsAreAttributedToTheirOwnVolcano() {
         TerrainModel terrain = new TerrainModel();
         LavaFlow lava = new LavaFlow(terrain, FAST_COOLING);
-        VentSite eastVent = VentSite.crater("summit", new BlockPos(40, 101, 0), 3);
-        VentSite westVent = VentSite.crater("summit", new BlockPos(-40, 101, 0), 3);
+        // two flank craters 400 m east and west of the summit (columns ±40 at 10 m)
+        VentSite eastVent = VentSite.crater("summit", new Point3(405, 420, 5), 20);
+        VentSite westVent = VentSite.crater("summit", new Point3(-395, 420, 5), 20);
         VolcanoSystem east = system("east", eastVent, terrain, lava);
         VolcanoSystem west = system("west", westVent, terrain, lava);
         Engine.Builder builder = Engine.builder(5).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(terrain);

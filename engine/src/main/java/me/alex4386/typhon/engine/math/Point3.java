@@ -1,8 +1,11 @@
 package me.alex4386.typhon.engine.math;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+
 /**
  * A point in the engine's world frame, in metres: {@code x} east, {@code y} up (elevation), {@code z}
- * south (Minecraft's axes, real units). Column {@code (cx, cz)} of an {@code L}-metre grid covers
+ * south. Column {@code (cx, cz)} of an {@code L}-metre grid covers
  * {@code x ∈ [cx·L, (cx+1)·L)}, {@code z ∈ [cz·L, (cz+1)·L)}; see {@link ColumnIndex}.
  *
  * <p>Positions of things that are not on the grid (vents, chambers, dike tips, hypocentres, stations,
@@ -46,6 +49,20 @@ public record Point3(double x, double y, double z) {
 
     public double horizontalDistance(Point3 other) {
         return Math.hypot(x - other.x, z - other.z);
+    }
+
+    /** Saved form: {@code [x, y, z]}. */
+    public JsonArray toJson() {
+        JsonArray a = new JsonArray();
+        a.add(x);
+        a.add(y);
+        a.add(z);
+        return a;
+    }
+
+    public static Point3 fromJson(JsonElement e) {
+        JsonArray a = e.getAsJsonArray();
+        return new Point3(a.get(0).getAsDouble(), a.get(1).getAsDouble(), a.get(2).getAsDouble());
     }
 
     public double distance(Point3 other) {

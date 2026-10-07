@@ -1,9 +1,6 @@
 package me.alex4386.typhon.mc;
 
 import java.util.Objects;
-import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.world.BlockId;
-import me.alex4386.typhon.engine.world.BlockState;
 
 /**
  * A block mutation for a host that shows the world as blocks (computed by {@link BlockProjection}).

@@ -14,7 +14,7 @@ package me.alex4386.typhon.simulator.terrain;
  *
  * <p>Coordinates are fractional column coordinates of the core (column {@code x} spans
  * {@code [x, x+1)}), so levels align with the core's columns and tiles: a level-ℓ cell boundary is
- * a column boundary, and the core's chunk-aligned edges fall on cell boundaries for {@code ℓ ≤ 4}.
+ * a column boundary, and the core's tile-aligned edges fall on cell boundaries for {@code ℓ ≤ 4}.
  */
 public final class ContextTerrain {
     private final ColumnGrid core;
@@ -78,13 +78,13 @@ public final class ContextTerrain {
 
     /**
      * Initial ground elevation (m) at fractional column coordinates: the generator's surface, or the
-     * nearest core column's top. Inside the core this is the initial (not the live) surface.
+     * nearest core column's surface. Inside the core this is the initial (not the live) surface.
      */
     public double elevation(double cx, double cz) {
-        if (relief != null) return relief.topBlocks(cx, cz) * metersPerColumn;
+        if (relief != null) return relief.elevation(cx * metersPerColumn, cz * metersPerColumn);
         int x = (int) Math.max(core.minX(), Math.min(core.maxX(), Math.floor(cx)));
         int z = (int) Math.max(core.minZ(), Math.min(core.maxZ(), Math.floor(cz)));
-        return (core.ground(x, z) + 1) * metersPerColumn;
+        return core.surfaceZ(x, z);
     }
 
     /**

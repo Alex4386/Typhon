@@ -1,21 +1,25 @@
 package me.alex4386.typhon.engine.geothermal;
 
-import java.util.Set;
-import me.alex4386.typhon.engine.world.BlockId;
-
 /**
  * Tunables of the geothermal subsystem. Fields are public and mutable; adjust before constructing
  * {@link Geothermal} (it reads them on every step, so later changes also take effect).
  *
- * <p>Temperatures are absolute °C of the shallow reservoir sampled from the subsurface model.
- * Formation rates are expected occurrences per grid cell per hour at full strength.
+ * <p>Temperatures are absolute °C of the shallow reservoir sampled from the subsurface model. Which
+ * manifestation a cell can host follows from water's boiling point there (IAPWS-IF97 at the local
+ * pressure: altitude and depth below the water table, see {@code WaterSaturation}): steam
+ * (fumaroles, acid alteration) where the reservoir boils, geysers where its water is liquid but above
+ * the surface boiling point, hot springs below it. No fixed 100 °C anywhere.
+ *
+ * <p>Formation rates are expected occurrences per grid cell per hour at full strength: they set how fast
+ * a hydrothermal field develops (a tuning of time, not of where features can exist); spacings set how
+ * densely they pack. The {@code max*} counts are event and memory budgets, not physical limits.
  */
 public final class GeothermalConfig {
     // ── Grid & time ──
-    /** Half-extent of the square grid around the volcano centre, in blocks. */
-    public int radius = 128;
-    /** Edge length of one grid cell, in blocks. */
-    public int cellSize = 4;
+    /** Half-extent of the square feature grid around the volcano centre (m). */
+    public double radiusM = 1500;
+    /** Edge length of one grid cell (m). */
+    public double cellSizeM = 40;
     /** Seconds between steps. */
     public double stepSeconds = 2.0;
 
@@ -30,8 +34,8 @@ public final class GeothermalConfig {
     public double ventHeatPowerW = 1.0e8;
     /** Depth (m) over which that heat is released into the ground. */
     public double ventPipeDepthM = 300.0;
-    /** Extra Gaussian halo (blocks) added to a vent's radius for its heat footprint. */
-    public double ventHaloBlocks = 8.0;
+    /** Extra Gaussian halo (m) added to a vent's radius for its heat footprint. */
+    public double ventHaloM = 80.0;
     /**
      * Radius (m) of the magma chamber sphere whose conductive halo heats the ground, when the magma
      * model does not report a volume (always ≤ half its depth).
@@ -71,61 +75,67 @@ public final class GeothermalConfig {
     public double prewarmSeconds = 0;
 
     // ── Fumaroles & sulfur ──
-    public double fumaroleMinC = 100.0;
+    /**
+     * Reservoir temperature of full fumarole intensity (°C); intensity rises from the local boiling point.
+     * High-temperature fumaroles discharge at 300–500 °C (Giggenbach 1996).
+     */
     public double fumaroleFullC = 350.0;
     public double fumaroleFormationPerHour = 0.5;
-    public int maxFumaroles = 48;
-    public int fumaroleSpacing = 3;
+    public int maxFumaroles = 2000;
+    public double fumaroleSpacingM = 30;
     /** Sulfur crust / spike growth events per fumarole per hour at intensity 1. */
     public double sulfurDepositPerHour = 2.0;
-    public int sulfurDepositRadius = 2;
-    public int maxSpikeHeight = 3;
+    public double sulfurDepositRadiusM = 20;
+    /** Sulfur build-up stages a deposit grows through (each adds {@link Geothermal#SULFUR_STAGE_M}). */
+    public int maxSulfurStages = 3;
 
-    // ── Geysers (vanilla mechanic) ──
-    public double geyserMinC = 95.0;
-    public double geyserMaxC = 200.0;
+    // ── Geysers ──
     public double geyserMinWater = 0.6;
     public double geyserFormationPerHour = 0.05;
-    public int maxGeysers = 6;
-    public int geyserSpacing = 10;
+    public int maxGeysers = 1000;
+    /** Yellowstone's Upper Geyser Basin holds ~150 geysers in ~2.5 km² (mean spacing ~130 m; Bryan 2008). */
+    public double geyserSpacingM = 100;
 
     // ── Springs & mud ──
-    public double hotSpringMinC = 40.0;
-    public double hotSpringMaxC = 95.0;
+    /**
+     * Lower bound of a hot spring (°C): warmer than the human body, 36.7 °C (Pentecost, Jones &amp; Renaut
+     * 2003, Can. J. Earth Sci. 40:1443). The upper bound is the local surface boiling point.
+     */
+    public double hotSpringMinC = 36.7;
     public double hotSpringMinWater = 0.5;
-    /** Springs at or above this temperature become sulfur springs (potent sulfur floor). */
+    /** Springs at or above this temperature become sulfur springs (native sulfur floor). */
     public double sulfurSpringMinC = 70.0;
     public double hotSpringFormationPerHour = 0.08;
-    public int maxHotSprings = 10;
-    public int hotSpringSpacing = 6;
+    public int maxHotSprings = 2000;
+    public double hotSpringSpacingM = 60;
 
+    /** Mud pots are steam-heated acid pools (upper bound: the boiling point at the reservoir). Tuning value. */
     public double mudPotMinC = 70.0;
-    public double mudPotMaxC = 110.0;
     public double mudPotMinWater = 0.3;
     public double mudPotMaxWater = 0.7;
     public double mudPotFormationPerHour = 0.1;
-    public int maxMudPots = 12;
-    public int mudPotSpacing = 4;
+    public int maxMudPots = 2000;
+    public double mudPotSpacingM = 40;
 
     // ── Submarine vents ──
     public double submarineVentMinC = 120.0;
     public double submarineVentFormationPerHour = 0.1;
-    public int maxSubmarineVents = 12;
-    public int submarineVentSpacing = 4;
+    public int maxSubmarineVents = 2000;
+    public double submarineVentSpacingM = 40;
 
     // ── Alteration ──
     /**
      * Acid-sulfate (steam-heated) alteration: H₂S in condensing steam oxidises to sulfuric acid in the
-     * vadose zone. It spreads slowly from fumaroles and already altered ground (at any saturation);
+     * vadose zone, so it needs boiling at the reservoir. It spreads slowly from fumaroles and already
+     * altered ground (at any saturation);
      * isolated patches nucleate only on two-phase/vapour-dominated ground (below {@link #acidMaxWater})
      * and {@link #alterationNucleationFactor} times as often, so altered ground is patchy.
      */
-    public double acidMinC = 100.0;
     public double acidMaxWater = 0.5;
     public double acidAlterationPerHour = 0.08;
     public double alterationNucleationFactor = 0.1;
-    public int alterationGrowthRadius = 3;
-    public int maxAltered = 1500;
+    public double alterationGrowthRadiusM = 30;
+    public int maxAltered = 20000;
     /**
      * Siliceous sinter / travertine precipitates where hot spring and geyser water discharges and
      * cools, so it grows outward from springs, geysers and existing sinter (within
@@ -135,20 +145,20 @@ public final class GeothermalConfig {
     public double sinterMaxC = 180.0;
     public double sinterMinWater = 0.5;
     public double sinterPerHour = 0.6;
-    public int sinterGrowthRadius = 4;
+    public double sinterGrowthRadiusM = 40;
     public double sinterNucleationFactor = 0.02;
-    public int maxSinter = 600;
+    public int maxSinter = 20000;
     /**
      * Cinnabar (HgS) is a trace mineral of low-temperature epithermal systems: it precipitates from
      * cooling, liquid-dominated hot-spring fluids (e.g. the spring and sinter deposits of Sulphur
      * Bank and McLaughlin, California). It needs liquid-dominated ground in its band and a spring,
-     * geyser or sinter within {@link #cinnabarSpringRadius} blocks (0 disables that requirement).
+     * geyser or sinter within {@link #cinnabarSpringRadiusM} metres (0 disables that requirement).
      */
     public double cinnabarMinC = 80.0;
     public double cinnabarMaxC = 160.0;
     public double cinnabarMinWater = 0.5;
     public double cinnabarPerHour = 0.01;
-    public int cinnabarSpringRadius = 6;
+    public double cinnabarSpringRadiusM = 60;
     public int maxCinnabar = 32;
 
     // ── Events ──
@@ -175,12 +185,9 @@ public final class GeothermalConfig {
     public double gasFluxPpm = 2000.0;
     public double minHazardPpm = 1.0;
 
-    /** Surface blocks hydrothermal processes may replace. */
-    public Set<BlockId> alterableSurfaces = BlockId.sortedSet(GeothermalBlocks.DEFAULT_ALTERABLE);
-
     public void validate() {
-        if (radius < 1) throw new IllegalArgumentException("radius must be >= 1");
-        if (cellSize < 1) throw new IllegalArgumentException("cellSize must be >= 1");
+        if (!(radiusM > 0)) throw new IllegalArgumentException("radiusM must be > 0");
+        if (!(cellSizeM > 0)) throw new IllegalArgumentException("cellSizeM must be > 0");
         if (stepSeconds <= 0) throw new IllegalArgumentException("stepSeconds must be > 0");
         if (ventHeatPowerW < 0 || !(ventPipeDepthM > 0) || !(chamberRadiusM > 0)) {
             throw new IllegalArgumentException("bad heat source parameters");
@@ -190,7 +197,7 @@ public final class GeothermalConfig {
         if (!(vapourDominatedWater >= 0 && vapourDominatedWater < 1)) {
             throw new IllegalArgumentException("vapourDominatedWater must be in [0, 1)");
         }
-        if (fumaroleFullC <= fumaroleMinC) throw new IllegalArgumentException("fumaroleFullC must exceed fumaroleMinC");
+        if (!(fumaroleFullC > 100)) throw new IllegalArgumentException("fumaroleFullC must exceed 100 °C");
         if (activityFullChamberC <= activityMinChamberC) {
             throw new IllegalArgumentException("activityFullChamberC must exceed activityMinChamberC");
         }

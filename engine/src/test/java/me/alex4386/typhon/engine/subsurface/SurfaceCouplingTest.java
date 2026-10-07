@@ -6,13 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import me.alex4386.typhon.engine.lava.LavaConfig;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.lava.LavaSource;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.sim.Engine;
-import me.alex4386.typhon.engine.terrain.TerrainChunk;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
-import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.WorldModel;
 import org.junit.jupiter.api.Test;
 
@@ -39,24 +35,8 @@ class SurfaceCouplingTest {
     private static Run run(boolean withLava, boolean pond, double seconds, int threads) {
         WorldModel world = plain();
         TerrainModel terrain = new TerrainModel(world);
-        terrain.setMetersPerBlock(4);
-        // the block view hosts send (the lava field reads its bed through it)
-        java.util.List<TerrainChunk> chunks = new java.util.ArrayList<>();
-        for (int cx = 0; cx < N / 16; cx++) {
-            for (int cz = 0; cz < N / 16; cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int z = cz * 16; z < cz * 16 + 16; z++) {
-                    for (int x = cx * 16; x < cx * 16 + 16; x++) {
-                        chunk.set(x, z, TerrainColumn.dry(2, BlockId.minecraft("basalt")));
-                    }
-                }
-                chunks.add(chunk);
-            }
-        }
-        terrain.apply(new TerrainSnapshot(chunks));
         Subsurface s = new Subsurface(world, config());
         LavaFlow lava = new LavaFlow(terrain, LavaConfig.defaults());
-        lava.setMetersPerBlock(4);
         lava.setGround(s);
         Engine engine = Engine.builder(3).threads(threads).add(terrain).add(s).add(lava).build();
         engine.step();
@@ -66,7 +46,7 @@ class SurfaceCouplingTest {
             }
             engine.runFor(5);
         }
-        if (withLava) lava.addSource(LavaSource.at("vent", new BlockPos(24, 11, 24), 8, 1150, 50, 0.2));
+        if (withLava) lava.addSource(LavaSource.at("vent", new ColumnIndex(24, 24), 8, 1150, 50, 0.2));
         engine.runFor(seconds);
         return new Run(s, lava);
     }
@@ -108,8 +88,8 @@ class SurfaceCouplingTest {
         int level = s.grid().levelAtDepth(200);
         double depth = s.levelCenterDepth(level);
         double before = s.temperatureC(24, 24, depth);
-        // a 1 m thick dike segment 50 m tall along a 16 m cell at 1150 °C
-        s.addIntrusionHeat(24.5, 24.5, depth, 50 * 16, 1.0, 1150);
+        // a 1 m thick dike segment 50 m tall along a 16 m cell at 1150 °C, under column (24, 24)
+        s.addIntrusionHeat(24.5 * 4, 24.5 * 4, depth, 50 * 16, 1.0, 1150);
         s.macroStep(1, false);
         double after = s.temperatureC(24, 24, depth);
         assertTrue(after > before + 1, "rock beside the dike: " + before + " → " + after);

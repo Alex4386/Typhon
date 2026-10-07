@@ -10,25 +10,31 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.Parallel;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
 import me.alex4386.typhon.engine.subsurface.HeatSources;
 import me.alex4386.typhon.engine.subsurface.HydrothermalField;
+import me.alex4386.typhon.engine.subsurface.WaterSaturation;
 import me.alex4386.typhon.engine.subsurface.Subsurface;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.MagmaState;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
-import me.alex4386.typhon.engine.world.BlockId;
-import me.alex4386.typhon.engine.world.BlockState;
+import me.alex4386.typhon.engine.world.DepositType;
+import me.alex4386.typhon.engine.world.LayerView;
+import me.alex4386.typhon.engine.world.Material;
+import me.alex4386.typhon.engine.world.MaterialClass;
+import me.alex4386.typhon.engine.world.MaterialTable;
+import me.alex4386.typhon.engine.world.Provenance;
+import me.alex4386.typhon.engine.world.WorldModel;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
 
@@ -52,17 +58,18 @@ import me.alex4386.typhon.engine.save.StateWriter;
  *       boiling lowers the table where the aquifer cannot resupply the steam);
  *   <li>decides manifestations from those fields: per cell and feature, a Poisson number of
  *       formation attempts with mean {@code rate × strength × dt/3600} is drawn; each attempt picks
- *       a random column of the cell and builds the feature if local conditions allow (surface
- *       type, spacing, caps, containment).
+ *       a random column of the cell and forms the feature if local conditions allow (dry, solid
+ *       ground; spacing; caps; containment of pools).
  * </ul>
  * Wet ground is held near its boiling point by the subsurface model (liquid-dominated: springs,
  * geysers, sinter), while poorly supplied ground boils dry and heats up (vapour-dominated:
  * fumaroles, acid alteration) — the dichotomy of real hydrothermal systems emerges from the water
  * table and boiling physics rather than a parameterised saturation.
  *
- * <p>All surface edits are compare-and-set against the surface id from the {@link TerrainModel} and
- * are mirrored back into it. Blocks below the surface (geyser pipes, spring floors) are unknown to
- * the terrain model and are written unconditionally.
+ * <p>Features act on the world model: spring pools and geyser vents are shallow excavations holding
+ * water, siliceous sinter and native sulfur are thin precipitated layers, and acid-sulfate alteration
+ * turns the topmost rock into clay ({@link DepositType#HYDROTHERMAL} units of this volcano). The
+ * features themselves are listed ({@link #featuresByColumn()}) and announced with events.
  *
  * <p>References: Fournier (1989), Annu. Rev. Earth Planet. Sci. 17:13-53 (Yellowstone hydrothermal system); Haas (1971), Econ. Geol. 66:940-946 (boiling point with depth). See {@code docs/references.md}.
  */
@@ -72,11 +79,13 @@ public final class Geothermal implements Subsystem, HeatSources {
     private final GeothermalConfig config;
     private final MagmaState magma;
     private final TerrainModel terrain;
-    private final BlockPalette palette;
     private final HydrothermalField field;
     private final GeothermalGrid grid;
-    private final int referenceY;
-    private List<VentSite> vents;
+    /** Column width L (m). */
+    private final double l;
+    /** Ground elevation (m) assumed where the ground is unknown (the grid centre's). */
+    private final double referenceZ;
+    private Supplier<List<VentSite>> vents;
 
     private final TreeMap<Long, PlacedFeature> features = new TreeMap<>();
     private final Map<HydrothermalFeature, Integer> counts = new EnumMap<>(HydrothermalFeature.class);
@@ -94,19 +103,25 @@ public final class Geothermal implements Subsystem, HeatSources {
     // Derived each step from the terrain and the subsurface (not persisted).
     private final boolean[] known;
     private final boolean[] submerged;
-    private final int[] ground;
+    /** Ground elevation (m) at each cell centre. */
+    private final double[] ground;
     /** Mean ground height of the surrounding 5×5 cells (for gas pooling in depressions). */
     private final double[] localMean;
+    /**
+     * Boiling point (°C) of water at the reservoir depth (hydrostatic below the water table, atmospheric
+     * at the ground where the table lies deeper) and at the ground surface (altitude-dependent).
+     */
+    private final double[] boilingAtReservoir;
+    private final double[] boilingAtSurface;
 
-    private final BlockPos center;
+    private final Point3 center;
 
     public Geothermal(
             String volcanoId,
             GeothermalConfig config,
-            BlockPos center,
+            Point3 center,
             MagmaState magma,
             TerrainModel terrain,
-            BlockPalette palette,
             List<VentSite> vents,
             HydrothermalField field) {
         config.validate();
@@ -115,23 +130,34 @@ public final class Geothermal implements Subsystem, HeatSources {
         this.config = config;
         this.magma = Objects.requireNonNull(magma, "magma");
         this.terrain = Objects.requireNonNull(terrain, "terrain");
-        this.palette = Objects.requireNonNull(palette, "palette");
         this.field = Objects.requireNonNull(field, "field");
         this.center = center;
-        this.referenceY = center.y();
-        this.vents = List.copyOf(vents);
-        this.grid = GeothermalGrid.centeredOn(center.x(), center.z(), config.radius, config.cellSize);
+        this.referenceZ = center.y();
+        List<VentSite> initial = List.copyOf(vents);
+        this.vents = () -> initial;
+        this.l = terrain.world().spec().metersPerColumn();
+        this.grid = GeothermalGrid.centeredOn(center.columnX(l), center.columnZ(l), columns(config.radiusM),
+                columns(config.cellSizeM));
 
         int n = grid.cellCount();
         this.known = new boolean[n];
         this.submerged = new boolean[n];
-        this.ground = new int[n];
+        this.ground = new double[n];
         this.localMean = new double[n];
+        this.boilingAtReservoir = new double[n];
+        this.boilingAtSurface = new double[n];
+        java.util.Arrays.fill(boilingAtReservoir, 100);
+        java.util.Arrays.fill(boilingAtSurface, 100);
     }
 
-    /** Centre of the feature grid. */
-    public BlockPos center() {
+    /** Centre of the feature grid (m). */
+    public Point3 center() {
         return center;
+    }
+
+    /** A distance (m) in whole surface columns (at least one). */
+    private int columns(double meters) {
+        return Math.max(1, (int) Math.round(meters / l));
     }
 
     public String volcanoId() {
@@ -143,7 +169,7 @@ public final class Geothermal implements Subsystem, HeatSources {
     /** Live retune; the feature grid's layout (radius, cell size) is refused. */
     @Override
     public boolean reconfigure(Object c) {
-        if (!(c instanceof GeothermalConfig n) || !ConfigCopy.same(n, config, "radius", "cellSize")) return false;
+        if (!(c instanceof GeothermalConfig n) || !ConfigCopy.same(n, config, "radiusM", "cellSizeM")) return false;
         n.validate();
         ConfigCopy.into(n, config);
         return true;
@@ -208,24 +234,25 @@ public final class Geothermal implements Subsystem, HeatSources {
         return field;
     }
 
-    public void setVents(List<VentSite> vents) {
-        this.vents = List.copyOf(vents);
+    /** The vents whose heat pipes warm the ground (read each time: fissures open and vents form). */
+    public void setVents(Supplier<List<VentSite>> vents) {
+        this.vents = java.util.Objects.requireNonNull(vents);
     }
 
-    /** Shallow-reservoir temperature (°C) at a block column, as last sampled; ambient outside the grid. */
+    /** Shallow-reservoir temperature (°C) at a column, as last sampled; ambient outside the grid. */
     public double temperatureAt(int x, int z) {
-        return config.ambientC + grid.excessAtBlock(x, z);
+        return config.ambientC + grid.excessAtColumn(x, z);
     }
 
-    /** Shallow-reservoir liquid saturation at a block column, as last sampled; 0 outside the grid. */
+    /** Shallow-reservoir liquid saturation at a column, as last sampled; 0 outside the grid. */
     public double waterAt(int x, int z) {
-        int index = grid.indexOfBlock(x, z);
+        int index = grid.indexOfColumn(x, z);
         return index < 0 ? 0 : grid.water(index);
     }
 
     /**
-     * Heat from a lava column of {@code thicknessM} at {@code lavaTemperatureC} resting on block
-     * column {@code (x, z)} for one second: conduction through the flow's lower half,
+     * Heat from a lava column of {@code thicknessM} at {@code lavaTemperatureC} resting on column
+     * {@code (x, z)} for one second: conduction through the flow's lower half,
      * {@code k·(T_lava − T_ground)/(h/2)}, into the top of the ground.
      */
     public void addLavaHeat(int x, int z, double lavaTemperatureC, double thicknessM) {
@@ -233,7 +260,6 @@ public final class Geothermal implements Subsystem, HeatSources {
         lavaCover.put(PlacedFeature.key(x, z), now);
         double groundC = field.temperatureC(x, z, 0);
         double flux = config.lavaConductivity * Math.max(0, lavaTemperatureC - groundC) / Math.max(0.25, thicknessM / 2);
-        double l = terrain.world().spec().metersPerColumn();
         field.addSurfaceHeat(x, z, flux * l * l);
     }
 
@@ -260,9 +286,10 @@ public final class Geothermal implements Subsystem, HeatSources {
         sampleField();
     }
 
-    /** {@code T_bp(z) = 100 + 3·z^0.7}: fit to the boiling-point-with-depth curve of pure water. */
-    static double boilingPointAtDepth(double depthM) {
-        return 100 + 3.0 * StrictMath.pow(Math.max(0, depthM), 0.7);
+    /** Boiling point (°C) at the reservoir depth under the column, as last sampled (100 outside the grid). */
+    public double boilingPointAt(int x, int z) {
+        int idx = grid.indexOfColumn(x, z);
+        return idx < 0 ? 100 : boilingAtReservoir[idx];
     }
 
     /** True when the shallow system at the column is vapour-dominated (too dry to convect). */
@@ -292,44 +319,54 @@ public final class Geothermal implements Subsystem, HeatSources {
         return counts.getOrDefault(kind, 0);
     }
 
-    public double fumaroleIntensity(double temperatureC) {
-        return clamp((temperatureC - config.fumaroleMinC) / (config.fumaroleFullC - config.fumaroleMinC), 0, 1);
+    /**
+     * Fumarole intensity in [0, 1] of cell {@code idx} at reservoir temperature {@code temperatureC}: 0 below
+     * the local boiling point (no steam), rising to 1 at {@link GeothermalConfig#fumaroleFullC}.
+     */
+    double fumaroleIntensity(int idx, double temperatureC) {
+        double boiling = idx < 0 ? 100 : boilingAtReservoir[idx];
+        return clamp((temperatureC - boiling) / Math.max(1, config.fumaroleFullC - boiling), 0, 1);
+    }
+
+    /** Fumarole intensity at a column (see {@link #fumaroleIntensity(int, double)}). */
+    public double fumaroleIntensityAt(int x, int z) {
+        return fumaroleIntensity(grid.indexOfColumn(x, z), temperatureAt(x, z));
     }
 
     // ── Heat sources (HeatSources) ──
 
+    /** The chamber's conductive halo; positions in column coordinates (m / L), as {@link HeatSources} expects. */
     @Override
     public List<Chamber> chambers() {
         double t = magma.temperatureC();
         if (!(t > 0)) return List.of();
-        BlockPos c = magma.chamberCenter();
-        double l = terrain.world().spec().metersPerColumn();
-        double surface = terrain.world().isKnown(c.x(), c.z())
-                ? terrain.world().surfaceZ(c.x(), c.z()) : terrain.world().spec().blockTop(referenceY);
-        // Real chamber depth when the magma model knows it (the world's vertical scale is often
-        // compressed); otherwise the depth of its world position.
+        Point3 c = magma.chamberCenter();
+        WorldModel world = terrain.world();
+        int cx = c.columnX(l);
+        int cz = c.columnZ(l);
+        double surface = world.isKnown(cx, cz) ? world.surfaceZ(cx, cz) : referenceZ;
         double physical = magma.physicalDepthM();
-        double depth = physical > 0 ? physical : surface - (c.y() + 0.5) * l;
+        double depth = physical > 0 ? physical : surface - c.y();
         if (!(depth > 0)) return List.of();
         double centre = surface - depth;
         double volume = magma.volumeM3();
         double fromVolume = volume > 0 ? Math.cbrt(3 * volume / (4 * Math.PI)) : config.chamberRadiusM;
         double radius = Math.min(fromVolume, 0.5 * depth);
-        return List.of(new Chamber(c.x() + 0.5, c.z() + 0.5, centre, surface, radius, t, magma.wallHeatPowerW()));
+        return List.of(new Chamber(c.x() / l, c.z() / l, centre, surface, radius, t, magma.wallHeatPowerW()));
     }
 
+    /** The vents' heat pipes; positions in column coordinates (m / L), as {@link HeatSources} expects. */
     @Override
     public List<Vent> vents() {
         double activity = activity();
         if (activity <= 0 || config.ventHeatPowerW <= 0) return List.of();
-        double l = terrain.world().spec().metersPerColumn();
         List<Vent> list = new ArrayList<>();
-        for (VentSite vent : vents) {
-            BlockPos p = vent.position();
-            double sigma = (Math.max(config.cellSize, vent.craterRadius()) + config.ventHaloBlocks) * l;
-            double extent = vent.kind() == VentKind.FISSURE ? vent.fissureLength() * l / 2 : 0;
+        for (VentSite vent : vents.get()) {
+            Point3 p = vent.position();
+            double sigma = Math.max(config.cellSizeM, vent.craterRadiusM()) + config.ventHaloM;
+            double extent = vent.kind() == VentKind.FISSURE ? vent.fissureLengthM() / 2 : 0;
             // Gas and fluid rising from the magma cannot heat the rock above the magma's temperature.
-            list.add(new Vent(p.x() + 0.5, p.z() + 0.5, activity * config.ventHeatPowerW,
+            list.add(new Vent(p.x() / l, p.z() / l, activity * config.ventHeatPowerW,
                     Math.sqrt(sigma * sigma + extent * extent), config.ventPipeDepthM, magma.temperatureC()));
         }
         return list;
@@ -345,21 +382,21 @@ public final class Geothermal implements Subsystem, HeatSources {
 
     private void sampleTerrain() {
         int n = grid.cellCount();
+        WorldModel world = terrain.world();
         parallel.forEach(n, SAMPLE_GRAIN, idx -> {
             int x = grid.cellCenterX(idx);
             int z = grid.cellCenterZ(idx);
-            TerrainColumn column = terrain.column(x, z);
-            known[idx] = column != null;
-            ground[idx] = column == null ? referenceY : column.groundY();
-            submerged[idx] = column != null
-                    && (column.submerged() || field.surfaceWaterDepthM(x, z) >= config.submergedDepthM);
+            boolean k = world.isKnown(x, z);
+            known[idx] = k;
+            ground[idx] = k ? world.surfaceZ(x, z) : referenceZ;
+            submerged[idx] = k && submergedColumn(x, z);
         });
         int sx = grid.sizeX();
         int sz = grid.sizeZ();
         parallel.forEach(n, SAMPLE_GRAIN, idx -> {
             int ci = grid.cellI(idx);
             int cj = grid.cellJ(idx);
-            long sum = 0;
+            double sum = 0;
             int count = 0;
             for (int j = Math.max(0, cj - 2); j <= Math.min(sz - 1, cj + 2); j++) {
                 for (int i = Math.max(0, ci - 2); i <= Math.min(sx - 1, ci + 2); i++) {
@@ -370,7 +407,7 @@ public final class Geothermal implements Subsystem, HeatSources {
                     }
                 }
             }
-            localMean[idx] = count == 0 ? ground[idx] : (double) sum / count;
+            localMean[idx] = count == 0 ? ground[idx] : sum / count;
         });
     }
 
@@ -390,6 +427,20 @@ public final class Geothermal implements Subsystem, HeatSources {
             double temperature = field.temperatureC(x, z, r);
             grid.setExcess(idx, Math.max(0, temperature - config.ambientC));
             double depth = field.waterTableDepthM(x, z);
+            // the boiling point at the reservoir: hydrostatic below the water table (or the sea surface),
+            // the atmosphere's at the ground where the table lies deeper (Haas 1971, IAPWS-IF97)
+            double groundZ = ground[idx];
+            double sea = terrain.world().waterZ(x, z);
+            if (submerged[idx]) {
+                double tableZ = Double.isFinite(sea) && sea > groundZ ? sea : groundZ + field.surfaceWaterDepthM(x, z);
+                boilingAtReservoir[idx] = WaterSaturation.boilingPointC(tableZ - groundZ + r, tableZ);
+            } else {
+                double below = r - depth; // reservoir depth below the water table
+                boilingAtReservoir[idx] = below > 0
+                        ? WaterSaturation.boilingPointC(below, groundZ - depth)
+                        : WaterSaturation.boilingPointC(0, groundZ);
+            }
+            boilingAtSurface[idx] = WaterSaturation.boilingPointC(0, groundZ);
             double liquid = clamp(0.5 + (r - depth) / (2 * r), 0, 1);
             grid.setWater(idx, submerged[idx] ? 1 : liquid);
         });
@@ -399,12 +450,12 @@ public final class Geothermal implements Subsystem, HeatSources {
 
     private void formFeatures(StepContext context, double dtHours) {
         SimRandom random = context.random();
-        double minFeatureC = minFeatureTemperature();
-
         for (int idx = 0; idx < grid.cellCount(); idx++) {
             if (!known[idx]) continue;
             double temperature = config.ambientC + grid.excess(idx);
-            if (temperature < minFeatureC) continue;
+            if (temperature < minFeatureTemperature(idx)) continue;
+            double boiling = boilingAtReservoir[idx];
+            double surfaceBoiling = boilingAtSurface[idx];
             double w = grid.water(idx);
 
             if (submerged[idx]) {
@@ -416,27 +467,31 @@ public final class Geothermal implements Subsystem, HeatSources {
                 continue;
             }
 
-            if (temperature >= config.fumaroleMinC) {
-                double intensity = Math.max(0.1, fumaroleIntensity(temperature));
+            // steam reaches the surface where the reservoir water boils (Fournier 1989)
+            if (temperature >= boiling) {
+                double intensity = Math.max(0.1, fumaroleIntensity(idx, temperature));
                 attempts(context, idx, config.fumaroleFormationPerHour * intensity * dtHours,
                         (x, z) -> tryFumarole(context, x, z));
             }
-            if (inBand(temperature, config.geyserMinC, config.geyserMaxC) && w >= config.geyserMinWater) {
+            // a geyser's water is liquid at depth but above the surface boiling point, so it flashes as it
+            // rises (Hurwitz & Manga 2017)
+            if (inBand(temperature, surfaceBoiling, Math.max(surfaceBoiling, boiling)) && w >= config.geyserMinWater) {
                 double strength = 0.25 + 0.75 * (w - config.geyserMinWater) / Math.max(1e-9, 1 - config.geyserMinWater);
                 attempts(context, idx, config.geyserFormationPerHour * strength * dtHours,
                         (x, z) -> tryGeyser(context, x, z));
             }
-            if (inBand(temperature, config.hotSpringMinC, config.hotSpringMaxC) && w >= config.hotSpringMinWater) {
+            if (inBand(temperature, config.hotSpringMinC, surfaceBoiling) && w >= config.hotSpringMinWater) {
                 attempts(context, idx, config.hotSpringFormationPerHour * dtHours,
                         (x, z) -> trySpring(context, x, z, temperature >= config.sulfurSpringMinC));
             }
-            if (inBand(temperature, config.mudPotMinC, config.mudPotMaxC)
+            if (inBand(temperature, config.mudPotMinC, boiling)
                     && w >= config.mudPotMinWater
                     && w <= config.mudPotMaxWater) {
                 attempts(context, idx, config.mudPotFormationPerHour * dtHours, (x, z) -> tryMudPot(context, x, z));
             }
-            if (temperature >= config.acidMinC && count(HydrothermalFeature.ACID_ALTERATION) < config.maxAltered) {
-                double strength = clamp((temperature - config.acidMinC) / 100, 0.1, 1);
+            // acid-sulfate alteration needs steam carrying H₂S: boiling at the reservoir
+            if (temperature >= boiling && count(HydrothermalFeature.ACID_ALTERATION) < config.maxAltered) {
+                double strength = clamp((temperature - boiling) / 100, 0.1, 1);
                 boolean unsaturated = w < config.acidMaxWater;
                 attempts(context, idx, config.acidAlterationPerHour * strength * dtHours,
                         (x, z) -> tryAcidAlteration(context, x, z, unsaturated, random));
@@ -468,65 +523,60 @@ public final class Geothermal implements Subsystem, HeatSources {
         }
     }
 
+    /** Depth (m) of a hot-spring pool. */
+    static final double POOL_DEPTH_M = 1.0;
+    /** Thickness (m) of a sinter apron laid around a spring or geyser, or by spreading sinter. */
+    static final double SINTER_M = 0.05;
+    /** Thickness (m) of one sulfur build-up stage (sublimate crust, mound). */
+    static final double SULFUR_STAGE_M = 0.02;
+    /** Depth (m) of rock acid-sulfate alteration turns into clay. */
+    static final double ALTERATION_DEPTH_M = 0.5;
+    /** Thickness (m) of the clay-rich mud of a mud pot. */
+    static final double MUD_M = 0.3;
+    /** A pool's neighbours may stand at most this much (m) below or above its centre to share its water. */
+    static final double POOL_LEVEL_TOLERANCE_M = 0.25;
+
     private boolean tryFumarole(StepContext context, int x, int z) {
-        TerrainColumn column = buildableColumn(x, z);
-        if (column == null) return false;
+        if (!buildable(x, z)) return false;
         if (count(HydrothermalFeature.FUMAROLE) >= config.maxFumaroles) return false;
-        if (hasNearby(x, z, config.fumaroleSpacing, HydrothermalFeature.FUMAROLE)) return false;
-        register(new PlacedFeature(x, column.groundY(), z, HydrothermalFeature.FUMAROLE, 0));
-        formed(context, HydrothermalFeature.FUMAROLE, new BlockPos(x, column.groundY(), z));
+        if (hasNearby(x, z, config.fumaroleSpacingM, HydrothermalFeature.FUMAROLE)) return false;
+        register(new PlacedFeature(x, z, surface(x, z), HydrothermalFeature.FUMAROLE, 0));
+        formed(context, HydrothermalFeature.FUMAROLE, x, z);
         return true;
     }
 
     private boolean tryGeyser(StepContext context, int x, int z) {
-        if (!palette.supports(GeothermalBlocks.POTENT_SULFUR)
-                || !palette.supports(GeothermalBlocks.MAGMA_BLOCK)
-                || !palette.supports(GeothermalBlocks.WATER)) {
-            return false;
-        }
-        TerrainColumn column = buildableColumn(x, z);
-        if (column == null) return false;
+        if (!buildable(x, z)) return false;
         if (count(HydrothermalFeature.GEYSER) >= config.maxGeysers) return false;
-        if (hasNearby(x, z, config.geyserSpacing, HydrothermalFeature.GEYSER)) return false;
-        int g = column.groundY();
-        if (!contained(x, z, g, Set.of(PlacedFeature.key(x, z)))) return false;
+        if (hasNearby(x, z, config.geyserSpacingM, HydrothermalFeature.GEYSER)) return false;
+        double level = surface(x, z);
+        if (!contained(x, z, level, Set.of(PlacedFeature.key(x, z)))) return false;
 
-        int waterBlocks = 1 + context.random().nextInt(4);
-        int potentY = g - waterBlocks;
-
-        // the vent pit is waterBlocks feature blocks deep (≤ 1 m each), never whole 20 m columns
-        terrain.excavate(x, z, waterBlocks * featureBlockM(), true, GeothermalBlocks.POTENT_SULFUR);
-        register(new PlacedFeature(x, potentY, z, HydrothermalFeature.GEYSER, waterBlocks));
-
+        // the vent pit: 1–4 m deep, flooded to the old surface
+        int depth = 1 + context.random().nextInt(4);
+        excavate(x, z, depth, level);
+        register(new PlacedFeature(x, z, level, HydrothermalFeature.GEYSER, depth));
         for (int dz = -1; dz <= 1; dz++) {
             for (int dx = -1; dx <= 1; dx++) {
                 if ((dx != 0 || dz != 0) && context.random().chance(0.5)) {
-                    surfaceFeature(context, x + dx, z + dz, HydrothermalFeature.SINTER,
-                            pickSinterProduct(context.random()), false);
+                    precipitate(context, x + dx, z + dz, HydrothermalFeature.SINTER, MaterialTable.SINTER, SINTER_M, false);
                 }
             }
         }
-
-        BlockPos anchor = new BlockPos(x, potentY, z);
-        context.outbox().emit(new GeyserFormed(context.time(), anchor, waterBlocks));
-        formed(context, HydrothermalFeature.GEYSER, anchor);
+        formed(context, HydrothermalFeature.GEYSER, x, z);
         return true;
     }
 
-    private boolean trySpring(StepContext context, int x, int z, boolean wantSulfur) {
-        if (!palette.supports(GeothermalBlocks.WATER)) return false;
-        boolean sulfurSpring = wantSulfur && palette.supports(GeothermalBlocks.POTENT_SULFUR);
+    private boolean trySpring(StepContext context, int x, int z, boolean sulfurSpring) {
         HydrothermalFeature kind = sulfurSpring ? HydrothermalFeature.SULFUR_SPRING : HydrothermalFeature.HOT_SPRING;
-
-        TerrainColumn center = buildableColumn(x, z);
-        if (center == null) return false;
+        if (!buildable(x, z)) return false;
         if (count(HydrothermalFeature.HOT_SPRING) + count(HydrothermalFeature.SULFUR_SPRING) >= config.maxHotSprings) {
             return false;
         }
-        if (hasNearby(x, z, config.hotSpringSpacing, HydrothermalFeature.HOT_SPRING, HydrothermalFeature.SULFUR_SPRING)) {
+        if (hasNearby(x, z, config.hotSpringSpacingM, HydrothermalFeature.HOT_SPRING, HydrothermalFeature.SULFUR_SPRING)) {
             return false;
         }
-        int g = center.groundY();
+        double level = surface(x, z);
 
         List<int[]> pool = new ArrayList<>();
         Set<Long> poolKeys = new LinkedHashSet<>();
@@ -535,21 +585,22 @@ public final class Geothermal implements Subsystem, HeatSources {
         for (int[] d : CARDINALS) {
             int nx = x + d[0];
             int nz = z + d[1];
-            TerrainColumn neighbour = buildableColumn(nx, nz);
-            if (neighbour != null && neighbour.groundY() == g && context.random().chance(0.5)) {
+            if (buildable(nx, nz) && Math.abs(surface(nx, nz) - level) <= POOL_LEVEL_TOLERANCE_M
+                    && context.random().chance(0.5)) {
                 pool.add(new int[] {nx, nz});
                 poolKeys.add(PlacedFeature.key(nx, nz));
             }
         }
         for (int[] p : pool) {
-            if (!contained(p[0], p[1], g, poolKeys)) return false;
+            if (!contained(p[0], p[1], level, poolKeys)) return false;
         }
 
-        BlockId floor = sulfurSpring ? GeothermalBlocks.POTENT_SULFUR : null;
+        int unit = hydrothermalUnit(context);
         for (int[] p : pool) {
-            TerrainColumn column = terrain.column(p[0], p[1]);
-            terrain.excavate(p[0], p[1], featureBlockM(), true, floor != null ? floor : column.surface());
-            register(new PlacedFeature(p[0], g, p[1], kind, 0));
+            excavate(p[0], p[1], POOL_DEPTH_M, level);
+            // sulfur springs line their floor with native sulfur
+            if (sulfurSpring) terrain.world().deposit(p[0], p[1], SULFUR_STAGE_M, MaterialTable.SULFUR, unit);
+            register(new PlacedFeature(p[0], p[1], level, kind, 0));
         }
 
         Set<Long> rim = new LinkedHashSet<>();
@@ -565,49 +616,45 @@ public final class Geothermal implements Subsystem, HeatSources {
             if (!context.random().chance(0.6)) continue;
             int rx = (int) (key >> 32);
             int rz = (int) key;
-            TerrainColumn column = terrain.column(rx, rz);
-            if (column == null || column.groundY() < g || column.groundY() > g + 1) continue;
+            if (!terrain.world().isKnown(rx, rz)) continue;
+            double s = surface(rx, rz);
+            if (s < level || s > level + 1) continue;
             if (sulfurSpring) {
-                surfaceFeature(context, rx, rz, HydrothermalFeature.SULFUR_DEPOSIT, GeothermalBlocks.SULFUR, false);
+                precipitate(context, rx, rz, HydrothermalFeature.SULFUR_DEPOSIT, MaterialTable.SULFUR, SULFUR_STAGE_M, false);
             } else {
-                surfaceFeature(context, rx, rz, HydrothermalFeature.SINTER, pickSinterProduct(context.random()), false);
+                precipitate(context, rx, rz, HydrothermalFeature.SINTER, MaterialTable.SINTER, SINTER_M, false);
             }
         }
 
-        formed(context, kind, new BlockPos(x, g, z));
+        formed(context, kind, x, z);
         return true;
     }
 
     private boolean tryMudPot(StepContext context, int x, int z) {
-        TerrainColumn column = buildableColumn(x, z);
-        if (column == null) return false;
+        if (!buildable(x, z)) return false;
         if (count(HydrothermalFeature.MUD_POT) >= config.maxMudPots) return false;
-        if (hasNearby(x, z, config.mudPotSpacing, HydrothermalFeature.MUD_POT)) return false;
-        if (!surfaceFeature(context, x, z, HydrothermalFeature.MUD_POT, GeothermalBlocks.MUD, false)) return false;
+        if (hasNearby(x, z, config.mudPotSpacingM, HydrothermalFeature.MUD_POT)) return false;
+        if (!alter(context, x, z, HydrothermalFeature.MUD_POT, MUD_M, false)) return false;
         for (int[] d : CARDINALS) {
-            if (context.random().chance(0.5)) {
-                surfaceFeature(context, x + d[0], z + d[1], HydrothermalFeature.MUD_POT, GeothermalBlocks.MUD, false);
-            }
+            if (context.random().chance(0.5)) alter(context, x + d[0], z + d[1], HydrothermalFeature.MUD_POT, MUD_M, false);
         }
-        formed(context, HydrothermalFeature.MUD_POT, new BlockPos(x, column.groundY(), z));
+        formed(context, HydrothermalFeature.MUD_POT, x, z);
         return true;
     }
 
     private boolean trySubmarineVent(StepContext context, int x, int z) {
         if (features.containsKey(PlacedFeature.key(x, z))) return false;
-        TerrainColumn column = terrain.column(x, z);
-        if (column == null || !column.submerged() || !config.alterableSurfaces.contains(column.surface())) return false;
+        if (!terrain.world().isKnown(x, z) || !submergedColumn(x, z) || !solidTop(x, z)) return false;
         if (count(HydrothermalFeature.SUBMARINE_VENT) >= config.maxSubmarineVents) return false;
-        if (hasNearby(x, z, config.submarineVentSpacing, HydrothermalFeature.SUBMARINE_VENT)) return false;
-        if (!surfaceFeature(context, x, z, HydrothermalFeature.SUBMARINE_VENT, GeothermalBlocks.MAGMA_BLOCK, true)) {
-            return false;
-        }
+        if (hasNearby(x, z, config.submarineVentSpacingM, HydrothermalFeature.SUBMARINE_VENT)) return false;
+        register(new PlacedFeature(x, z, surface(x, z), HydrothermalFeature.SUBMARINE_VENT, 0));
         for (int[] d : CARDINALS) {
             if (context.random().chance(0.3)) {
-                surfaceFeature(context, x + d[0], z + d[1], HydrothermalFeature.SULFUR_DEPOSIT, GeothermalBlocks.SULFUR, true);
+                precipitate(context, x + d[0], z + d[1], HydrothermalFeature.SULFUR_DEPOSIT, MaterialTable.SULFUR,
+                        SULFUR_STAGE_M, true);
             }
         }
-        formed(context, HydrothermalFeature.SUBMARINE_VENT, new BlockPos(x, column.groundY(), z));
+        formed(context, HydrothermalFeature.SUBMARINE_VENT, x, z);
         return true;
     }
 
@@ -615,69 +662,99 @@ public final class Geothermal implements Subsystem, HeatSources {
      * Acid-sulfate alteration grows outward from fumaroles and altered ground, where condensing steam
      * acidifies the soil whatever the deeper saturation. An isolated patch nucleates only on
      * unsaturated (two-phase / vapour-dominated) ground, with probability
-     * {@code alterationNucleationFactor}.
+     * {@code alterationNucleationFactor}. The top {@link #ALTERATION_DEPTH_M} of rock becomes clay.
      */
     private boolean tryAcidAlteration(StepContext context, int x, int z, boolean unsaturated, SimRandom random) {
         if (count(HydrothermalFeature.ACID_ALTERATION) >= config.maxAltered) return false;
-        boolean adjacent = hasNearby(x, z, config.alterationGrowthRadius,
+        boolean adjacent = hasNearby(x, z, config.alterationGrowthRadiusM,
                 HydrothermalFeature.FUMAROLE, HydrothermalFeature.ACID_ALTERATION, HydrothermalFeature.SULFUR_DEPOSIT);
         if (!adjacent && !(unsaturated && random.chance(config.alterationNucleationFactor))) return false;
-        return tryAlteration(context, x, z, HydrothermalFeature.ACID_ALTERATION, pickAcidProduct(random));
+        if (!buildable(x, z)) return false;
+        if (!alter(context, x, z, HydrothermalFeature.ACID_ALTERATION, ALTERATION_DEPTH_M, false)) return false;
+        formed(context, HydrothermalFeature.ACID_ALTERATION, x, z);
+        return true;
     }
 
     /** Sinter spreads from springs, geysers and existing sinter; isolated seeps are rare. */
     private boolean trySinter(StepContext context, int x, int z, SimRandom random) {
         if (count(HydrothermalFeature.SINTER) >= config.maxSinter) return false;
-        boolean adjacent = hasNearby(x, z, config.sinterGrowthRadius, HydrothermalFeature.HOT_SPRING,
+        boolean adjacent = hasNearby(x, z, config.sinterGrowthRadiusM, HydrothermalFeature.HOT_SPRING,
                 HydrothermalFeature.SULFUR_SPRING, HydrothermalFeature.GEYSER, HydrothermalFeature.SINTER);
         if (!adjacent && !random.chance(config.sinterNucleationFactor)) return false;
-        return tryAlteration(context, x, z, HydrothermalFeature.SINTER, pickSinterProduct(random));
-    }
-
-    /** Cinnabar precipitates where cooling spring fluids reach the surface: next to springs, geysers or sinter. */
-    private boolean tryCinnabar(StepContext context, int x, int z) {
-        if (count(HydrothermalFeature.CINNABAR) >= config.maxCinnabar) return false;
-        if (config.cinnabarSpringRadius > 0 && !hasNearby(x, z, config.cinnabarSpringRadius,
-                HydrothermalFeature.HOT_SPRING, HydrothermalFeature.SULFUR_SPRING, HydrothermalFeature.GEYSER,
-                HydrothermalFeature.SINTER)) {
-            return false;
-        }
-        return tryAlteration(context, x, z, HydrothermalFeature.CINNABAR, GeothermalBlocks.CINNABAR);
-    }
-
-    private boolean tryAlteration(StepContext context, int x, int z, HydrothermalFeature kind, BlockId product) {
-        TerrainColumn column = buildableColumn(x, z);
-        if (column == null) return false;
-        if (!surfaceFeature(context, x, z, kind, product, false)) return false;
-        formed(context, kind, new BlockPos(x, column.groundY(), z));
+        if (!buildable(x, z)) return false;
+        if (!precipitate(context, x, z, HydrothermalFeature.SINTER, MaterialTable.SINTER, SINTER_M, false)) return false;
+        formed(context, HydrothermalFeature.SINTER, x, z);
         return true;
     }
 
     /**
-     * Replaces the surface block of an unoccupied, alterable column with {@code preferred} (resolved
-     * through the palette) and registers the feature. {@code underwater} selects submerged columns
-     * instead of dry ones.
+     * Cinnabar (HgS) precipitates where cooling spring fluids reach the surface: next to springs, geysers or
+     * sinter. Its volume is negligible; it is recorded as a feature only.
      */
-    private boolean surfaceFeature(
-            StepContext context, int x, int z, HydrothermalFeature kind, BlockId preferred, boolean underwater) {
-        if (features.containsKey(PlacedFeature.key(x, z))) return false;
-        TerrainColumn column = terrain.column(x, z);
-        if (column == null || column.submerged() != underwater) return false;
-        if (!config.alterableSurfaces.contains(column.surface())) return false;
-        BlockId resolved = palette.resolve(preferred);
-        if (resolved == null) return false;
-        terrain.setGround(x, z, column.groundY(), resolved);
-        register(new PlacedFeature(x, column.groundY(), z, kind, 0));
+    private boolean tryCinnabar(StepContext context, int x, int z) {
+        if (count(HydrothermalFeature.CINNABAR) >= config.maxCinnabar) return false;
+        if (config.cinnabarSpringRadiusM > 0 && !hasNearby(x, z, config.cinnabarSpringRadiusM,
+                HydrothermalFeature.HOT_SPRING, HydrothermalFeature.SULFUR_SPRING, HydrothermalFeature.GEYSER,
+                HydrothermalFeature.SINTER)) {
+            return false;
+        }
+        if (!buildable(x, z)) return false;
+        register(new PlacedFeature(x, z, surface(x, z), HydrothermalFeature.CINNABAR, 0));
+        formed(context, HydrothermalFeature.CINNABAR, x, z);
         return true;
+    }
+
+    /**
+     * Lays {@code thicknessM} of a hydrothermal precipitate on an unoccupied column with a solid top and
+     * registers the feature; {@code underwater} selects submerged columns instead of dry ones.
+     */
+    private boolean precipitate(StepContext context, int x, int z, HydrothermalFeature kind, Material material,
+            double thicknessM, boolean underwater) {
+        if (!vacantSurface(x, z, underwater)) return false;
+        terrain.world().deposit(x, z, thicknessM, material, hydrothermalUnit(context));
+        register(new PlacedFeature(x, z, surface(x, z), kind, 0));
+        return true;
+    }
+
+    /** Turns the top {@code depthM} of an unoccupied column's ground into clay and registers the feature. */
+    private boolean alter(StepContext context, int x, int z, HydrothermalFeature kind, double depthM, boolean underwater) {
+        if (!vacantSurface(x, z, underwater)) return false;
+        double s = surface(x, z);
+        terrain.world().fill(x, z, s - depthM, s, MaterialTable.CLAY, hydrothermalUnit(context));
+        register(new PlacedFeature(x, z, s, kind, 0));
+        return true;
+    }
+
+    /** Unoccupied, known column with a solid top, dry (or submerged when {@code underwater}). */
+    private boolean vacantSurface(int x, int z, boolean underwater) {
+        if (features.containsKey(PlacedFeature.key(x, z))) return false;
+        if (!terrain.world().isKnown(x, z) || submergedColumn(x, z) != underwater) return false;
+        return solidTop(x, z);
+    }
+
+    /**
+     * Lowers a column by {@code depthM} and fills the hollow with water up to {@code waterLevel} (a spring
+     * pool or a geyser vent).
+     */
+    private void excavate(int x, int z, double depthM, double waterLevel) {
+        WorldModel world = terrain.world();
+        world.erode(x, z, depthM, false);
+        double existing = world.waterZ(x, z);
+        world.setWaterZ(x, z, Double.isFinite(existing) ? Math.max(existing, waterLevel) : waterLevel);
+    }
+
+    private int hydrothermalUnit(StepContext context) {
+        return Provenance.unitFor(terrain.world(), volcanoId, -1, DepositType.HYDROTHERMAL, context.time(), Double.NaN,
+                Double.NaN);
     }
 
     // ── Sulfur deposition around fumaroles ──
 
     private void depositSulfur(StepContext context, double dtHours) {
         SimRandom random = context.random();
-        int r = config.sulfurDepositRadius;
+        int r = columns(config.sulfurDepositRadiusM);
         for (PlacedFeature fumarole : features(HydrothermalFeature.FUMAROLE)) {
-            double intensity = fumaroleIntensity(temperatureAt(fumarole.x(), fumarole.z()));
+            double intensity = fumaroleIntensityAt(fumarole.x(), fumarole.z());
             if (intensity <= 0) continue;
             int n = Math.min(3, random.nextPoisson(config.sulfurDepositPerHour * intensity * dtHours));
             for (int k = 0; k < n; k++) {
@@ -692,52 +769,28 @@ public final class Geothermal implements Subsystem, HeatSources {
         }
     }
 
+    /** The fumarole's opening gets a crust of sublimated sulfur. */
     private void coatFumarole(StepContext context, PlacedFeature fumarole) {
         if (fumarole.level() > 0) return;
-        TerrainColumn column = terrain.column(fumarole.x(), fumarole.z());
-        if (column == null || column.submerged() || column.groundY() != fumarole.y()) return;
-        if (!config.alterableSurfaces.contains(column.surface())) return;
-        BlockId sulfur = palette.resolve(GeothermalBlocks.SULFUR);
-        if (sulfur == null) return;
-        terrain.setGround(fumarole.x(), fumarole.z(), fumarole.y(), sulfur);
-        features.put(PlacedFeature.key(fumarole.x(), fumarole.z()), fumarole.withLevel(1));
+        int x = fumarole.x();
+        int z = fumarole.z();
+        if (!terrain.world().isKnown(x, z) || submergedColumn(x, z) || !solidTop(x, z)) return;
+        terrain.world().deposit(x, z, SULFUR_STAGE_M, MaterialTable.SULFUR, hydrothermalUnit(context));
+        features.put(PlacedFeature.key(x, z), fumarole.withLevel(1));
     }
 
     private void depositAt(StepContext context, int x, int z) {
         PlacedFeature existing = features.get(PlacedFeature.key(x, z));
         if (existing == null) {
-            if (surfaceFeature(context, x, z, HydrothermalFeature.SULFUR_DEPOSIT, GeothermalBlocks.SULFUR, false)) {
-                formed(context, HydrothermalFeature.SULFUR_DEPOSIT, new BlockPos(x, features.get(PlacedFeature.key(x, z)).y(), z));
+            if (precipitate(context, x, z, HydrothermalFeature.SULFUR_DEPOSIT, MaterialTable.SULFUR, SULFUR_STAGE_M, false)) {
+                formed(context, HydrothermalFeature.SULFUR_DEPOSIT, x, z);
             }
             return;
         }
-        if (existing.kind() != HydrothermalFeature.SULFUR_DEPOSIT || existing.level() >= config.maxSpikeHeight) return;
-        growSpike(context, existing);
-    }
-
-    private void growSpike(StepContext context, PlacedFeature deposit) {
-        int oldHeight = deposit.level();
-        int newHeight = oldHeight + 1;
-        // the spike is a feature level (a host draws it from the feature list), not engine blocks
-        for (int i = 0; i < newHeight; i++) {
-            if (palette.resolve(spikeState(i, newHeight)) == null) return;
-        }
-        features.put(PlacedFeature.key(deposit.x(), deposit.z()), deposit.withLevel(newHeight));
-    }
-
-    /**
-     * State of the {@code index}-th (from the bottom) block of an upward spike of {@code height},
-     * following pointed dripstone's thickness sequence: base, middle…, frustum, tip.
-     */
-    static BlockState spikeState(int index, int height) {
-        String thickness;
-        if (index == height - 1) thickness = "tip";
-        else if (index == height - 2) thickness = "frustum";
-        else if (index == 0) thickness = "base";
-        else thickness = "middle";
-        return BlockState.of(GeothermalBlocks.SULFUR_SPIKE)
-                .with("vertical_direction", "up")
-                .with("thickness", thickness);
+        if (existing.kind() != HydrothermalFeature.SULFUR_DEPOSIT || existing.level() >= config.maxSulfurStages) return;
+        // the deposit builds up: one more stage of sulfur
+        terrain.world().deposit(x, z, SULFUR_STAGE_M, MaterialTable.SULFUR, hydrothermalUnit(context));
+        features.put(PlacedFeature.key(x, z), existing.withLevel(existing.level() + 1));
     }
 
     // ── Events ──
@@ -751,7 +804,7 @@ public final class Geothermal implements Subsystem, HeatSources {
         for (PlacedFeature fumarole : features(HydrothermalFeature.FUMAROLE)) {
             long key = PlacedFeature.key(fumarole.x(), fumarole.z());
             double temperature = temperatureAt(fumarole.x(), fumarole.z());
-            double intensity = fumaroleIntensity(temperature);
+            double intensity = fumaroleIntensity(grid.indexOfColumn(fumarole.x(), fumarole.z()), temperature);
             double[] last = fumaroleReports.get(key);
             boolean report;
             if (intensity <= 0) {
@@ -765,7 +818,7 @@ public final class Geothermal implements Subsystem, HeatSources {
             fumaroleReports.put(key, new double[] {intensity, context.time()});
             context.outbox().emit(new FumaroleActivity(
                     context.time(),
-                    new BlockPos(fumarole.x(), fumarole.y() + 1, fumarole.z()),
+                    Point3.columnCentre(fumarole.x(), fumarole.z(), fumarole.elevation(), l),
                     intensity,
                     GasComposition.atTemperature(temperature)));
         }
@@ -782,7 +835,7 @@ public final class Geothermal implements Subsystem, HeatSources {
         int zonesX = (grid.sizeX() + zoneCells - 1) / zoneCells;
         int zonesZ = (grid.sizeZ() + zoneCells - 1) / zoneCells;
         GasSpecies[] speciesList = GasSpecies.values();
-        double radius = zoneCells * config.cellSize * Math.sqrt(0.5);
+        double radius = zoneCells * grid.cellSize() * l * Math.sqrt(0.5);
         double validFor = config.hazardRefreshSeconds + config.hazardIntervalSeconds;
 
         double[] peak = new double[speciesList.length];
@@ -794,14 +847,14 @@ public final class Geothermal implements Subsystem, HeatSources {
                         int idx = grid.index(i, j);
                         if (!known[idx]) continue;
                         double temperature = config.ambientC + grid.excess(idx);
-                        double intensity = fumaroleIntensity(temperature);
+                        double intensity = fumaroleIntensity(idx, temperature);
                         if (intensity <= 0) continue;
                         GasComposition gas = GasComposition.atTemperature(temperature);
                         for (int s = 0; s < speciesList.length; s++) {
                             double ppm = gas.fraction(speciesList[s]) * intensity * config.gasFluxPpm;
                             if (speciesList[s] == GasSpecies.CO2) {
                                 // CO₂ is denser than air and pools in depressions.
-                                ppm *= 1 + clamp((localMean[idx] - ground[idx]) / 4, 0, 2);
+                                ppm *= 1 + clamp((localMean[idx] - ground[idx]) / CO2_POOLING_DEPTH_M, 0, 2);
                             }
                             peak[s] = Math.max(peak[s], ppm);
                         }
@@ -832,49 +885,73 @@ public final class Geothermal implements Subsystem, HeatSources {
         }
     }
 
+    /** A depression this much (m) below its surroundings doubles the CO₂ concentration pooling in it. */
+    static final double CO2_POOLING_DEPTH_M = 5;
+
     /**
-     * Hazard centre: the middle of the zone, one block above its ground. It is the same for every
-     * event of a zone, so hosts can key hazards by centre and species.
+     * Hazard centre: the middle of the zone, on its ground (m). It is the same for every event of a zone,
+     * so hosts can key hazards by centre and species.
      */
-    private BlockPos zoneCenter(int zi, int zj, int zoneCells) {
+    private Point3 zoneCenter(int zi, int zj, int zoneCells) {
         int i = Math.min(grid.sizeX() - 1, zi * zoneCells + zoneCells / 2);
         int j = Math.min(grid.sizeZ() - 1, zj * zoneCells + zoneCells / 2);
         int idx = grid.index(i, j);
-        int y = known[idx] ? ground[idx] : referenceY;
-        return new BlockPos(grid.cellMinX(idx), y + 1, grid.cellMinZ(idx));
+        double y = known[idx] ? ground[idx] : referenceZ;
+        return Point3.columnCentre(grid.cellMinX(idx), grid.cellMinZ(idx), y, l);
     }
 
-    private void formed(StepContext context, HydrothermalFeature kind, BlockPos pos) {
-        context.outbox().emit(new HydrothermalFeatureFormed(context.time(), kind, pos));
+    private void formed(StepContext context, HydrothermalFeature kind, int x, int z) {
+        context.outbox().emit(new HydrothermalFeatureFormed(context.time(), kind,
+                Point3.columnCentre(x, z, surface(x, z), l)));
     }
 
     // ── Helpers ──
 
     private static final int[][] CARDINALS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 
-    /** Known, dry, alterable and unoccupied column, or {@code null}. */
-    private TerrainColumn buildableColumn(int x, int z) {
-        if (features.containsKey(PlacedFeature.key(x, z))) return null;
-        if (lavaCovered(x, z)) return null;
-        TerrainColumn column = terrain.column(x, z);
-        if (column == null || column.submerged()) return null;
-        if (!config.alterableSurfaces.contains(column.surface())) return null;
-        return column;
+    /** Known, dry, unoccupied column with a solid top that lava has not covered recently. */
+    private boolean buildable(int x, int z) {
+        if (features.containsKey(PlacedFeature.key(x, z))) return false;
+        if (lavaCovered(x, z)) return false;
+        if (!terrain.world().isKnown(x, z) || submergedColumn(x, z)) return false;
+        return solidTop(x, z);
     }
 
-    /** True if water placed at height {@code g} in column (x, z) is walled in by its neighbours. */
-    private boolean contained(int x, int z, int g, Set<Long> sameBody) {
+    /** Ground elevation (m) of a known column. */
+    private double surface(int x, int z) {
+        return terrain.world().surfaceZ(x, z);
+    }
+
+    /** Standing water over the column (the world's, or the subsurface model's surface water). */
+    private boolean submergedColumn(int x, int z) {
+        WorldModel world = terrain.world();
+        double w = world.waterZ(x, z);
+        return (Double.isFinite(w) && w > world.surfaceZ(x, z)) || field.surfaceWaterDepthM(x, z) >= config.submergedDepthM;
+    }
+
+    /** The top layer is rock, tephra or soil (not a cavity, water or ice). */
+    private boolean solidTop(int x, int z) {
+        WorldModel world = terrain.world();
+        int n = world.layerCount(x, z);
+        if (n == 0) return false;
+        MaterialClass cls = world.layer(x, z, n - 1).materialInfo().materialClass();
+        return cls == MaterialClass.ROCK || cls == MaterialClass.TEPHRA || cls == MaterialClass.SOIL;
+    }
+
+    /** True if water standing at {@code level} (m) in column (x, z) is walled in by its neighbours. */
+    private boolean contained(int x, int z, double level, Set<Long> sameBody) {
+        WorldModel world = terrain.world();
         for (int[] d : CARDINALS) {
             int nx = x + d[0];
             int nz = z + d[1];
             if (sameBody.contains(PlacedFeature.key(nx, nz))) continue;
-            TerrainColumn neighbour = terrain.column(nx, nz);
-            if (neighbour == null || neighbour.groundY() < g || neighbour.submerged()) return false;
+            if (!world.isKnown(nx, nz) || world.surfaceZ(nx, nz) < level || submergedColumn(nx, nz)) return false;
         }
         return true;
     }
 
-    private boolean hasNearby(int x, int z, int spacing, HydrothermalFeature... kinds) {
+    private boolean hasNearby(int x, int z, double spacingM, HydrothermalFeature... kinds) {
+        int spacing = columns(spacingM);
         for (int dz = -spacing; dz <= spacing; dz++) {
             for (int dx = -spacing; dx <= spacing; dx++) {
                 PlacedFeature feature = features.get(PlacedFeature.key(x + dx, z + dz));
@@ -911,7 +988,8 @@ public final class Geothermal implements Subsystem, HeatSources {
             PlacedFeature f = features.remove(e.getKey());
             if (f == null) continue;
             counts.merge(f.kind(), -1, Integer::sum);
-            context.outbox().emit(new HydrothermalFeatureBuried(context.time(), f.kind(), new BlockPos(f.x(), f.y(), f.z())));
+            context.outbox().emit(new HydrothermalFeatureBuried(context.time(), f.kind(),
+                    Point3.columnCentre(f.x(), f.z(), f.elevation(), l)));
         }
         for (long k : stale) lavaCover.remove(k);
     }
@@ -921,34 +999,9 @@ public final class Geothermal implements Subsystem, HeatSources {
         counts.merge(feature.kind(), 1, Integer::sum);
     }
 
-    private static final BlockId[] ACID_PRODUCTS = {
-        GeothermalBlocks.WHITE_TERRACOTTA,
-        GeothermalBlocks.CLAY,
-        GeothermalBlocks.YELLOW_TERRACOTTA,
-        GeothermalBlocks.ORANGE_TERRACOTTA,
-        GeothermalBlocks.RED_TERRACOTTA,
-    };
-    private static final double[] ACID_WEIGHTS = {3, 2, 2, 1, 1};
-
-    private static BlockId pickAcidProduct(SimRandom random) {
-        double total = 0;
-        for (double w : ACID_WEIGHTS) total += w;
-        double pick = random.nextDouble() * total;
-        for (int i = 0; i < ACID_PRODUCTS.length; i++) {
-            pick -= ACID_WEIGHTS[i];
-            if (pick < 0) return ACID_PRODUCTS[i];
-        }
-        return ACID_PRODUCTS[ACID_PRODUCTS.length - 1];
-    }
-
-    private static BlockId pickSinterProduct(SimRandom random) {
-        return random.chance(0.7) ? GeothermalBlocks.CALCITE : GeothermalBlocks.DIORITE;
-    }
-
-    private double minFeatureTemperature() {
-        return Math.min(
-                Math.min(Math.min(config.fumaroleMinC, config.geyserMinC), Math.min(config.hotSpringMinC, config.mudPotMinC)),
-                Math.min(Math.min(config.acidMinC, config.sinterMinC), Math.min(config.cinnabarMinC, config.submarineVentMinC)));
+    private double minFeatureTemperature(int idx) {
+        return Math.min(Math.min(Math.min(boilingAtSurface[idx], boilingAtReservoir[idx]), Math.min(config.hotSpringMinC, config.mudPotMinC)),
+                Math.min(Math.min(config.sinterMinC, config.cinnabarMinC), config.submarineVentMinC));
     }
 
     private static boolean inBand(double value, double min, double max) {
@@ -969,8 +1022,8 @@ public final class Geothermal implements Subsystem, HeatSources {
         for (PlacedFeature feature : features.values()) {
             JsonArray entry = new JsonArray();
             entry.add(feature.x());
-            entry.add(feature.y());
             entry.add(feature.z());
+            entry.add(feature.elevation());
             entry.add(feature.kind().name());
             entry.add(feature.level());
             list.add(entry);
@@ -1004,7 +1057,6 @@ public final class Geothermal implements Subsystem, HeatSources {
 
     private static void loadReports(JsonObject in, String name, TreeMap<Long, double[]> target) {
         target.clear();
-        if (!in.has(name)) return;
         for (JsonElement element : in.getAsJsonArray(name)) {
             JsonArray entry = element.getAsJsonArray();
             target.put(entry.get(0).getAsLong(), new double[] {
@@ -1023,29 +1075,20 @@ public final class Geothermal implements Subsystem, HeatSources {
             register(new PlacedFeature(
                     entry.get(0).getAsInt(),
                     entry.get(1).getAsInt(),
-                    entry.get(2).getAsInt(),
+                    entry.get(2).getAsDouble(),
                     HydrothermalFeature.valueOf(entry.get(3).getAsString()),
                     entry.get(4).getAsInt()));
         }
-        prewarmed = in.has("prewarmed") && in.get("prewarmed").getAsBoolean();
+        prewarmed = in.get("prewarmed").getAsBoolean();
         lavaCover.clear();
-        if (in.has("lavaCover")) {
-            for (JsonElement element : in.getAsJsonArray("lavaCover")) {
-                JsonArray entry = element.getAsJsonArray();
-                lavaCover.put(entry.get(0).getAsLong(), Double.longBitsToDouble(entry.get(1).getAsLong()));
-            }
+        for (JsonElement element : in.getAsJsonArray("lavaCover")) {
+            JsonArray entry = element.getAsJsonArray();
+            lavaCover.put(entry.get(0).getAsLong(), Double.longBitsToDouble(entry.get(1).getAsLong()));
         }
-        now = in.has("now") ? Double.longBitsToDouble(in.get("now").getAsLong()) : 0;
+        now = Double.longBitsToDouble(in.get("now").getAsLong());
         loadReports(in, "fumaroleReports", fumaroleReports);
         loadReports(in, "hazardReports", hazardReports);
     }
 
-    /**
-     * Size of one geothermal "feature block" (m): a block in a block-scaled world, but at most 1 m, so a
-     * spring pool or a geyser vent on 20 m real-scale columns is metres deep, not tens of metres.
-     */
-    private double featureBlockM() {
-        return Math.min(terrain.world().spec().metersPerColumn(), 1.0);
-    }
 
 }

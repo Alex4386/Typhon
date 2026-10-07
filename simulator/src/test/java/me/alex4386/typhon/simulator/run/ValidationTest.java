@@ -37,13 +37,13 @@ class ValidationTest {
 
     @Test
     void shortRunWritesJsonMarkdownAndHtml(@TempDir Path dir) throws Exception {
-        Validation.PresetResult r = Validation.run(Presets.get("stromboli-real"), 1, 60.0 / 3600, null, s -> { });
+        Validation.PresetResult r = Validation.run(Presets.get("stromboli"), 1, 60.0 / 3600, null, s -> { });
         assertFalse(r.checks().isEmpty());
         Validation.writeAll(dir, List.of(r));
         JsonObject json = com.google.gson.JsonParser.parseString(Files.readString(dir.resolve("validation.json")))
                 .getAsJsonObject();
         assertEquals(1, json.getAsJsonArray("presets").size());
-        assertTrue(Files.readString(dir.resolve("validation.md")).contains("stromboli-real"));
+        assertTrue(Files.readString(dir.resolve("validation.md")).contains("stromboli"));
         assertTrue(Files.readString(dir.resolve("validation.html")).contains("<table>"));
     }
 

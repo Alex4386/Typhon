@@ -11,24 +11,24 @@ import java.util.Objects;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 import me.alex4386.typhon.engine.geomorph.GeomorphEvents.FailureStyle;
 import me.alex4386.typhon.engine.geomorph.GeomorphEvents.Trigger;
 import me.alex4386.typhon.engine.massflow.DebrisAvalanches;
 import me.alex4386.typhon.engine.massflow.Lahars;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents;
 import me.alex4386.typhon.engine.massflow.PyroclasticFlows;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
+import me.alex4386.typhon.engine.math.LongMinQueue;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.save.FieldChunk;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
-import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.ColumnStacks;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerFlags;
@@ -42,7 +42,7 @@ import me.alex4386.typhon.engine.world.WorldModel;
 /**
  * Hillslope and crater geomorphology of one volcano: slope failure and mass wasting, hydrothermal
  * alteration, explosion craters, vent clearing and piston (caldera / pit) collapse. Everything acts
- * on the stratigraphic world model and is mirrored into blocks.
+ * on the stratigraphic world model.
  *
  * <h2>Slope stability</h2>
  *
@@ -108,7 +108,11 @@ public final class Geomorphology implements Subsystem {
     private static final double GAS_CONSTANT = 8.314;
     private static final double MIN_SLAB = 0.02;
     private static final double MIN_MOVE = 1e-3;
-    private static final BlockId WATER = BlockId.minecraft("water");
+    /**
+     * How far (m) from a vent the summit-crater survey looks for the rim: past the largest summit craters and
+     * pit craters (Kīlauea's caldera spans ~3 × 5 km, Halema'uma'u ~1 km), so any crater of a vent is found.
+     */
+    static final double CRATER_SURVEY_REACH_M = 2500;
 
     private final String id;
     private final String volcanoId;
@@ -123,13 +127,13 @@ public final class Geomorphology implements Subsystem {
     private Lahars lahars;
     private PyroclasticFlows pdc;
     private ChamberRoof roof;
-    private BooleanSupplier ventsOpen = () -> false;
-    private List<VentSite> vents = List.of();
+    private Supplier<List<VentSite>> vents = List::of;
+    private Supplier<List<VentSite>> activeVents = List::of;
 
     // persistent state
-    private final TreeSet<Long> active = new TreeSet<>();
-    private final List<double[]> pendingExplosions = new ArrayList<>(); // {x, y, z, energyJ}
-    private final List<double[]> pendingQuakes = new ArrayList<>(); // {x, y, z, magnitude}
+    private final LongMinQueue active = new LongMinQueue();
+    private final List<double[]> pendingExplosions = new ArrayList<>(); // {x, y, z (m), energyJ}
+    private final List<double[]> pendingQuakes = new ArrayList<>(); // {x, y, z (m), magnitude}
     private final TreeMap<Long, AlterationTile> alteration = new TreeMap<>();
     /** Real-clock time each world tile was last swept (alteration integrates from there). */
     private final TreeMap<Long, Double> tileClock = new TreeMap<>();
@@ -146,7 +150,6 @@ public final class Geomorphology implements Subsystem {
 
     // per-step scratch
     private final TreeMap<Long, Double> shaking = new TreeMap<>();
-    private final TreeSet<Long> changed = new TreeSet<>();
     /**
      * Crater and caldera centres of the latest step, kept until the next step (world expansion). Slope
      * failures are not listed: talus settles next to its source, and mobilised ones become debris
@@ -246,21 +249,21 @@ public final class Geomorphology implements Subsystem {
         this.roof = roof;
     }
 
-    /** The vents, and whether their conduits are open (erupting). */
-    public void setVents(List<VentSite> vents, BooleanSupplier open) {
-        this.vents = List.copyOf(vents);
-        this.ventsOpen = Objects.requireNonNull(open);
+    /** Every vent of the volcano (they change as fissures open and localise), and those erupting now. */
+    public void setVents(Supplier<List<VentSite>> all, Supplier<List<VentSite>> active) {
+        this.vents = Objects.requireNonNull(all);
+        this.activeVents = Objects.requireNonNull(active);
     }
 
     // ── Inputs ──
 
     /** An explosion of kinetic energy {@code energyJ} at a vent; excavated on the next step. */
-    public void queueExplosion(BlockPos center, double energyJ) {
+    public void queueExplosion(Point3 center, double energyJ) {
         if (energyJ > 0) pendingExplosions.add(new double[] {center.x(), center.y(), center.z(), energyJ});
     }
 
     /** An earthquake; its shaking loads slopes (pseudo-statically) on the next step. */
-    public void queueQuake(BlockPos hypocenter, double magnitude) {
+    public void queueQuake(Point3 hypocenter, double magnitude) {
         pendingQuakes.add(new double[] {hypocenter.x(), hypocenter.y(), hypocenter.z(), magnitude});
     }
 
@@ -327,7 +330,6 @@ public final class Geomorphology implements Subsystem {
         double dtReal = context.dtSeconds();
         realClock += dtReal;
         Outbox outbox = context.outbox();
-        changed.clear();
         moved.clear();
         shaking.clear();
         massWastingStep = 0;
@@ -335,13 +337,13 @@ public final class Geomorphology implements Subsystem {
 
         for (double[] e : pendingExplosions) excavate(e, outbox);
         pendingExplosions.clear();
-        if (ventsOpen.getAsBoolean()) clearVents();
-        else settleVentFloors();
+        List<VentSite> erupting = activeVents.get();
+        clearVents(erupting);
+        settleVentFloors(erupting);
         if (roof != null) pistonCollapse(outbox);
         shake(pendingQuakes);
         pendingQuakes.clear();
         sweep();
-        flushBlocks(outbox);
 
         relax(outbox);
         if (massWastingStep > 0) {
@@ -474,10 +476,9 @@ public final class Geomorphology implements Subsystem {
             double z1 = z0 + ColumnStacks.TILE - 1;
             double kh = 0;
             for (double[] q : quakes) {
-                double dx = Math.max(0, Math.max(x0 - q[0], q[0] - x1)) * l;
-                double dz = Math.max(0, Math.max(z0 - q[2], q[2] - z1)) * l;
+                double dx = Math.max(0, Math.max(x0 - q[0] / l, q[0] / l - x1)) * l;
+                double dz = Math.max(0, Math.max(z0 - q[2] / l, q[2] / l - z1)) * l;
                 double d = Math.sqrt(dx * dx + dz * dz);
-                if (d > config.maxShakingRadiusM) continue;
                 kh = Math.max(kh, GroundMotion.pseudoStatic(GroundMotion.pga(q[3], d / 1000)));
             }
             if (kh < minKh) continue;
@@ -806,8 +807,7 @@ public final class Geomorphology implements Subsystem {
             }
             if (moves.isEmpty()) continue;
             for (List<Failure> cluster : clusters(moves)) apply(cluster, outbox);
-            flushBlocks(outbox);
-        }
+            }
     }
 
     /** Groups failures into 8-connected clusters, in key order. */
@@ -930,7 +930,7 @@ public final class Geomorphology implements Subsystem {
 
         FailureStyle style = FailureStyle.TALUS;
         if (mobilise) {
-            style = release(flowCells, solids, water, temperature, saturation, new BlockPos(cx, terrain.groundY(cx, cz, 0), cz));
+            style = release(flowCells, solids, water, temperature, saturation, groundPoint(cx, cz));
             if (style == FailureStyle.TALUS) {
                 // no flow field: settle on the receivers after all
                 for (Failure f : cluster) {
@@ -968,7 +968,7 @@ public final class Geomorphology implements Subsystem {
             if (roof != null && roof.depthM() > 0) {
                 unloading = 3 * mass * G / (2 * Math.PI * roof.depthM() * roof.depthM()) / 1e6;
             }
-            outbox.emit(new GeomorphEvents.SlopeFailure(now, volcanoId, new BlockPos(cx, terrain.groundY(cx, cz, 0), cz),
+            outbox.emit(new GeomorphEvents.SlopeFailure(now, volcanoId, groundPoint(cx, cz),
                     volume, cluster.size(), drop, runout, style, trigger, minFs, depthSum / tSum, altSum / tSum,
                     saturation, temperature, unloading));
         } else {
@@ -979,7 +979,7 @@ public final class Geomorphology implements Subsystem {
 
     /** Sends a mobilised failure down the matching flow field; returns the style used (TALUS = none). */
     private FailureStyle release(List<double[]> cells, double solidsM, double waterM, double temperature,
-            double saturation, BlockPos origin) {
+            double saturation, Point3 origin) {
         if (temperature >= config.hotCollapseTemperatureC && pdc != null) {
             List<double[]> bulk = scale(cells, 1 / (1 - config.debrisPorosity));
             if (pdc.releaseCells(origin, bulk, temperature, 0, MassFlowEvents.Trigger.DOME_COLLAPSE) > 0) {
@@ -1054,8 +1054,8 @@ public final class Geomorphology implements Subsystem {
         radius = Math.min(radius, config.maxCraterRadiusM);
         double depth = CraterScaling.DEPTH_TO_DIAMETER * 2 * radius;
         double l = world.spec().metersPerColumn();
-        int cx = (int) e[0];
-        int cz = (int) e[2];
+        int cx = (int) Math.floor(e[0] / l);
+        int cz = (int) Math.floor(e[2] / l);
         int r = (int) Math.ceil(radius / l);
         // rim level: the mean surface just outside the crater
         double rimSum = 0;
@@ -1127,7 +1127,7 @@ public final class Geomorphology implements Subsystem {
         stats.maxCraterRadiusM = Math.max(stats.maxCraterRadiusM, radius);
         activateDisc(cx, cz, ro + 1);
         moved.add(key(cx, cz));
-        outbox.emit(new GeomorphEvents.CraterExcavated(now, volcanoId, new BlockPos(cx, terrain.blockForSurface(rim - depth), cz),
+        outbox.emit(new GeomorphEvents.CraterExcavated(now, volcanoId, Point3.columnCentre(cx, cz, rim - depth, l),
                 radius, depth, energy, removed * l * l));
     }
 
@@ -1142,14 +1142,16 @@ public final class Geomorphology implements Subsystem {
     /** The elevation of a vent's conduit mouth (m). */
     public double ventFloorZ(VentSite vent) {
         Double f = ventFloors.get(vent.id());
-        return f != null ? f : world.spec().blockTop(vent.position().y());
+        return f != null ? f : vent.position().y();
     }
 
     /** Between eruptions the vent's fill becomes its new floor: the next eruption starts from there. */
-    private void settleVentFloors() {
-        for (VentSite vent : vents) {
-            int x = vent.position().x();
-            int z = vent.position().z();
+    private void settleVentFloors(List<VentSite> erupting) {
+        double l = world.spec().metersPerColumn();
+        for (VentSite vent : vents.get()) {
+            if (erupting.contains(vent)) continue;
+            int x = vent.position().columnX(l);
+            int z = vent.position().columnZ(l);
             if (!world.isKnown(x, z)) continue;
             double surface = world.surfaceZ(x, z);
             if (surface > ventFloorZ(vent) + MIN_MOVE) ventFloors.put(vent.id(), surface);
@@ -1157,17 +1159,17 @@ public final class Geomorphology implements Subsystem {
     }
 
     /** Open conduits swallow whatever falls or slides into them, down to the conduit mouth. */
-    private void clearVents() {
+    private void clearVents(List<VentSite> erupting) {
         double l = world.spec().metersPerColumn();
-        for (VentSite vent : vents) {
+        for (VentSite vent : erupting) {
             double floor = ventFloorZ(vent);
-            for (long[] c : conduitColumns(vent)) {
+            for (long[] c : conduitColumns(vent, l)) {
                 int x = (int) c[0];
                 int z = (int) c[1];
                 if (!world.isKnown(x, z)) continue;
                 // a flooded vent belongs to the magma–water interaction (jets, tuff ring) in the coupler
-                TerrainColumn column = terrain.column(x, z);
-                if (column != null && column.submerged()) continue;
+                double water = world.waterZ(x, z);
+                if (Double.isFinite(water) && water > world.surfaceZ(x, z)) continue;
                 // only fallen, loose material: lava standing in the vent is the eruption itself
                 double excess = Math.min(world.surfaceZ(x, z) - floor, looseTop(x, z));
                 if (excess < MIN_MOVE) continue;
@@ -1189,24 +1191,24 @@ public final class Geomorphology implements Subsystem {
         return sum;
     }
 
-    /** Columns of a vent's conduit mouth: a disc of its crater radius, or the fissure line. */
-    private static List<long[]> conduitColumns(VentSite vent) {
+    /** Columns of a vent's conduit mouth on an {@code l}-metre grid: a disc of its crater radius, or the fissure line. */
+    private static List<long[]> conduitColumns(VentSite vent, double l) {
         List<long[]> out = new ArrayList<>();
-        int cx = vent.position().x();
-        int cz = vent.position().z();
+        int cx = vent.position().columnX(l);
+        int cz = vent.position().columnZ(l);
         if (vent.kind() == VentKind.FISSURE) {
-            int half = Math.max(0, vent.fissureLength() / 2);
+            int half = (int) Math.floor(vent.fissureLengthM() / 2 / l);
             double ax = Math.cos(vent.fissureAngleRad());
             double az = Math.sin(vent.fissureAngleRad());
             TreeSet<Long> seen = new TreeSet<>();
             for (int s = -half; s <= half; s++) {
-                int x = cx + (int) Math.round(s * ax);
-                int z = cz + (int) Math.round(s * az);
+                int x = (int) Math.floor((vent.position().x() + s * l * ax) / l);
+                int z = (int) Math.floor((vent.position().z() + s * l * az) / l);
                 if (seen.add(key(x, z))) out.add(new long[] {x, z});
             }
             return out;
         }
-        int r = Math.max(0, vent.craterRadius());
+        int r = (int) Math.floor(vent.craterRadiusM() / l);
         for (int dz = -r; dz <= r; dz++) {
             for (int dx = -r; dx <= r; dx++) {
                 if (dx * dx + dz * dz <= r * r) out.add(new long[] {cx + dx, cz + dz});
@@ -1218,10 +1220,10 @@ public final class Geomorphology implements Subsystem {
     /** Shape of the crater around a vent, measured from the surface: rim radius and depth below the rim. */
     public record CraterShape(double radiusM, double depthM, double rimZ, double floorZ) {}
 
-    public CraterShape crater(BlockPos center, double maxRadiusM) {
+    public CraterShape crater(Point3 center, double maxRadiusM) {
         double l = world.spec().metersPerColumn();
-        int cx = center.x();
-        int cz = center.z();
+        int cx = center.columnX(l);
+        int cz = center.columnZ(l);
         if (!world.isKnown(cx, cz)) return new CraterShape(0, 0, Double.NaN, Double.NaN);
         double floor = world.surfaceZ(cx, cz);
         int steps = (int) Math.ceil(maxRadiusM / l);
@@ -1269,12 +1271,14 @@ public final class Geomorphology implements Subsystem {
         double radius = diameter / 2;
         double l = world.spec().metersPerColumn();
         int r = (int) Math.ceil(radius / l);
-        BlockPos c = roof.center();
+        Point3 centre = roof.center();
+        int ccx = centre.columnX(l);
+        int ccz = centre.columnZ(l);
         List<long[]> cols = new ArrayList<>();
         for (int dz = -r; dz <= r; dz++) {
             for (int dx = -r; dx <= r; dx++) {
                 if (Math.sqrt((double) dx * dx + (double) dz * dz) * l > radius) continue;
-                if (world.isKnown(c.x() + dx, c.z() + dz)) cols.add(new long[] {c.x() + dx, c.z() + dz});
+                if (world.isKnown(ccx + dx, ccz + dz)) cols.add(new long[] {ccx + dx, ccz + dz});
             }
         }
         if (cols.isEmpty()) return;
@@ -1287,41 +1291,25 @@ public final class Geomorphology implements Subsystem {
         roof.subside(volume);
         calderaSubsidenceM += drop;
         stats.calderaSteps++;
-        activateDisc(c.x(), c.z(), r + 2);
-        moved.add(key(c.x(), c.z()));
-        outbox.emit(new GeomorphEvents.CalderaCollapse(now, volcanoId, c, radius, drop, calderaSubsidenceM, volume, under,
-                critical));
+        activateDisc(ccx, ccz, r + 2);
+        moved.add(key(ccx, ccz));
+        outbox.emit(new GeomorphEvents.CalderaCollapse(now, volcanoId, groundPoint(ccx, ccz), radius, drop,
+                calderaSubsidenceM, volume, under, critical));
     }
 
-    // ── Blocks ──
+    // ── Changed columns ──
 
+    /** A column's ground changed: it and its neighbours are re-examined for stability. */
     private void markChanged(int x, int z) {
         long k = key(x, z);
-        changed.add(k);
         for (int d = 0; d < 8; d++) active.add(key(x + DX[d], z + DZ[d]));
         active.add(k);
     }
 
-    /** Mirrors changed world-model columns into the block cache (whole blocks once more than half filled). */
-    private void flushBlocks(Outbox outbox) {
-        for (long k : changed) {
-            int x = keyX(k);
-            int z = keyZ(k);
-            TerrainColumn column = terrain.column(x, z);
-            if (column == null || !world.isKnown(x, z)) continue;
-            double s = world.surfaceZ(x, z);
-            int newY = terrain.blockForSurface(s);
-            int oldY = column.groundY();
-            if (newY == oldY) continue;
-            terrain.updateBlockCache(x, z, newY, blockAt(x, z, newY));
-        }
-        changed.clear();
-    }
-
-    private BlockId blockAt(int x, int z, int y) {
-        Material m = world.materialAt(x, z, world.spec().blockBottom(y) + 0.5 * world.spec().metersPerColumn());
-        if (m == null || !m.solid()) m = MaterialTable.DEBRIS;
-        return terrain.palette().block(m);
+    /** The ground surface at the centre of a column (m). */
+    private Point3 groundPoint(int x, int z) {
+        double s = world.isKnown(x, z) ? world.surfaceZ(x, z) + world.uplift(x, z) : 0;
+        return Point3.columnCentre(x, z, s, world.spec().metersPerColumn());
     }
 
     // ── Keys ──
@@ -1361,7 +1349,7 @@ public final class Geomorphology implements Subsystem {
     public void saveState(StateWriter out) {
         JsonObject o = out.json();
         JsonArray act = new JsonArray();
-        for (long k : active) act.add(k);
+        for (long k : active.toSortedArray()) act.add(k);
         o.add("active", act);
         JsonArray mv = new JsonArray();
         for (long k : moved) mv.add(k);
@@ -1399,7 +1387,7 @@ public final class Geomorphology implements Subsystem {
         active.clear();
         for (JsonElement e : o.getAsJsonArray("active")) active.add(e.getAsLong());
         moved.clear();
-        if (o.has("moved")) for (JsonElement e : o.getAsJsonArray("moved")) moved.add(e.getAsLong());
+        for (JsonElement e : o.getAsJsonArray("moved")) moved.add(e.getAsLong());
         pendingExplosions.clear();
         readArrays(o.getAsJsonArray("explosions"), pendingExplosions);
         pendingQuakes.clear();
@@ -1408,10 +1396,8 @@ public final class Geomorphology implements Subsystem {
         realClock = o.get("realClock").getAsDouble();
         calderaSubsidenceM = o.get("calderaSubsidenceM").getAsDouble();
         ventFloors.clear();
-        if (o.has("ventFloors")) {
-            for (Map.Entry<String, JsonElement> e : o.getAsJsonObject("ventFloors").entrySet()) {
-                ventFloors.put(e.getKey(), e.getValue().getAsDouble());
-            }
+        for (Map.Entry<String, JsonElement> e : o.getAsJsonObject("ventFloors").entrySet()) {
+            ventFloors.put(e.getKey(), e.getValue().getAsDouble());
         }
         stats.load(o.getAsJsonObject("stats"));
         tileClock.clear();
@@ -1461,7 +1447,7 @@ public final class Geomorphology implements Subsystem {
     @Override
     public Snapshot snapshot() {
         Map<String, CraterShape> shapes = new TreeMap<>();
-        for (VentSite v : vents) shapes.put(v.id(), crater(v.position(), 300 * world.spec().metersPerColumn()));
+        for (VentSite v : vents.get()) shapes.put(v.id(), crater(v.position(), CRATER_SURVEY_REACH_M));
         return new Snapshot(stats.failures, stats.failedM3, stats.avalanches, stats.craters, stats.excavatedM3,
                 stats.recycledM3, stats.maxCraterRadiusM, calderaSubsidenceM, active.size(), alteration.size(),
                 Map.copyOf(shapes));

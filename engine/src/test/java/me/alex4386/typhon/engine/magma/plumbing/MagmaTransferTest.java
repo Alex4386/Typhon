@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.magma.plumbing;
 
+import me.alex4386.typhon.engine.testing.TestConduits;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -9,7 +10,7 @@ import java.util.Map;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaCommands.StartEruption;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.testing.Saves;
@@ -17,11 +18,11 @@ import org.junit.jupiter.api.Test;
 
 /** Magma moving between a deep and a shallow chamber along a conduit. */
 class MagmaTransferTest {
-    private static final double METERS_PER_BLOCK = 10;
 
     /** A basaltic system: a shallow main chamber at 1.5 km over a deep one at 4 km, no own supply. */
     private static MagmaChamberConfig.Builder main() {
-        return MagmaChamberConfig.builder("v", new BlockPos(0, 0, 0)).volume(1e9).lithostaticDepth(1500).tensileStrengthMPa(10)
+        return MagmaChamberConfig.builder("v", new Point3(0, -1500, 0)).volume(1e9).lithostaticDepth(1500).tensileStrengthMPa(10)
+                .conduit(TestConduits.molten(10))
                 .eruptionEndOverpressureMPa(1).supplyRate(0).supplyVariability(0).initialSilicaWt(50).initialWaterWt(0.4)
                 .initialTemperatureC(1180);
     }
@@ -36,7 +37,7 @@ class MagmaTransferTest {
         MagmaChamber m = new MagmaChamber(mainConfig);
         MagmaChamber d = new MagmaChamber(deepConfig);
         d.setEruptive(false);
-        MagmaTransfer t = new MagmaTransfer("v", Map.of(MagmaChamberConfig.MAIN, m, "deep", d), m, List.of(link), METERS_PER_BLOCK);
+        MagmaTransfer t = new MagmaTransfer("v", Map.of(MagmaChamberConfig.MAIN, m, "deep", d), m, List.of(link));
         Engine.Builder b = Engine.builder(3).threads(threads).adaptive(3600).add(m).add(d).add(t);
         if (restore != null) b.restore(restore);
         return new Sys(b.build(), m, d, t);

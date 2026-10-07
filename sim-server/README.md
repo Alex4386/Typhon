@@ -4,7 +4,7 @@ Runs typhon-engine sessions and streams them to the web visualizer over WebSocke
 v1 ([`docs/protocol.md`](../docs/protocol.md)).
 
 ```sh
-./gradlew :sim-server:run --args="--preset kilauea"             # ws://localhost:8787/ws
+./gradlew :sim-server:run --args="--preset kilauea"           # ws://localhost:8787/ws
 ./gradlew :sim-server:run --args="--world worlds/twin --port 8787"
 # serve the production visualizer from the same port
 (cd visualizer && npm install && npm run build)
@@ -26,7 +26,7 @@ REALTIME multiplier, default 20), `--base-step-ms` (engine base step, default 50
 | `ClientConnection` | Per-client subscription and credit-window flow control |
 | `FieldSampler` / `TileStore` | Sample fields per tile on the engine thread; encode, hash and version tiles |
 | `SectionBuilder` | `WorldModel.section` raster + overlays (chamber, conduits, dikes) → section frame |
-| `EventTranslator` / `Probe` | Engine events and state → protocol JSON (block coordinates → metres) |
+| `EventTranslator` / `Probe` | Engine events and state → protocol JSON (engine metres, +z south, y up → protocol east/north/up via `GridMapping`) |
 | `protocol.Codecs` | Value codecs and frame layouts, byte-compatible with `visualizer/src/protocol/frames.ts` |
 
 All reads of simulation state run on the engine thread between steps (`EngineRunner.onEngineThread`);
@@ -41,8 +41,8 @@ a replay keyframe is viewed on a separate executor.
 | clock, state (chamber, seismic, alert, deformation stations, plume), events, units | implemented |
 | Tile fields 1–12 | implemented. Water depth combines standing water and the subsurface model's surface water; surface T is the subsurface top cell (1 m) raised by geothermal heat and lava; water-table depth and steam (max over 2–80 m) come from the subsurface model (NaN / 0 outside it) |
 | Credit-window flow control, change-detected versions, version floor across loads | implemented |
-| section (materials, units, flags, overlays) | implemented; temperature, saturation, steam and water table from the subsurface model (conductive geotherm fallback outside it); chamber, conduits, dikes and hypocentres drawn at physical depth (see `GridMapping.stretchZ`) |
-| commands: startEruption, stopEruption, forceDike, injectMagma, setWind, rain, dig, addWater | implemented. `rain` sets lahar rainfall and the subsurface rainfall (`Subsurface.SetRainfall`, persisted); `addWater` pours into the surface-water model, which spreads, infiltrates and recharges the water table; `dig` lowers whole blocks |
+| section (materials, units, flags, overlays) | implemented; temperature, saturation, steam and water table from the subsurface model (conductive geotherm fallback outside it); chamber, conduits, dikes and hypocentres drawn at their true positions |
+| commands: startEruption, stopEruption, forceDike, injectMagma, setWind, rain, dig, addWater | implemented. `rain` sets lahar rainfall and the subsurface rainfall (`Subsurface.SetRainfall`, persisted); `addWater` pours into the surface-water model, which spreads, infiltrates and recharges the water table; `dig` lowers the ground by the given depth in metres |
 | save / load | implemented (`worlds-dir/<name>/state`; world sessions save into their own directory) |
 | replay enter / seek / exit | keyframe-only, every 5 simulated min. Preset sessions keep keyframes in memory; world sessions write them to `<world>/replay/k-<micros>/` (reloaded on start; keyframes newer than the resumed state are deleted) |
 

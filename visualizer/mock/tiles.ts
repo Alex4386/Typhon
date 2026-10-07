@@ -16,6 +16,8 @@ export const CODEC_FOR: Record<FieldId, CodecId> = {
   [Field.SurfaceTemperature]: Codec.TemperatureU8Log,
   [Field.WaterTableDepth]: Codec.F32Raw,
   [Field.TopUnit]: Codec.U16Raw,
+  [Field.UnderUnit]: Codec.U16Raw,
+  [Field.UnderShare]: Codec.U8Linear,
   [Field.Uplift]: Codec.F32Raw,
   [Field.SteamFraction]: Codec.U8Linear,
 };
@@ -55,6 +57,8 @@ export const REFRESH_SECONDS: Record<FieldId, number> = {
   [Field.SurfaceTemperature]: 3,
   [Field.WaterTableDepth]: 4,
   [Field.TopUnit]: 2,
+  [Field.UnderUnit]: 2,
+  [Field.UnderShare]: 2,
   [Field.Uplift]: 4,
   [Field.SteamFraction]: 4,
 };

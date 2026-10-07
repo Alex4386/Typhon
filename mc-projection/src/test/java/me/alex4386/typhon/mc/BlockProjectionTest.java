@@ -7,15 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
+import java.util.ArrayList;
+import me.alex4386.typhon.engine.terrain.GroundColumn;
+import me.alex4386.typhon.engine.terrain.GroundImport;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.world.BlockId;
-import me.alex4386.typhon.engine.world.BlockMaterialPalette;
-import me.alex4386.typhon.engine.world.BlockState;
 import me.alex4386.typhon.engine.world.MaterialTable;
 import me.alex4386.typhon.engine.world.UnitTable;
 import me.alex4386.typhon.engine.world.WorldModel;
+import me.alex4386.typhon.engine.world.WorldSpec;
 import org.junit.jupiter.api.Test;
 
 class BlockProjectionTest {
@@ -23,12 +22,17 @@ class BlockProjectionTest {
     static final BlockId BASALT = BlockId.minecraft("basalt");
     static final int GROUND = 63;
 
-    /** A flat host world of stone, ground block 63 (surface at 64 L), {@code n}×{@code n} columns. */
+    /**
+     * A flat world of 1 m columns projected onto 1 m blocks: andesite ground with its surface at 64 m, so
+     * the host's ground block is 63; {@code n}×{@code n} columns.
+     */
     static TerrainModel flat(int n) {
-        TerrainModel terrain = new TerrainModel();
+        TerrainModel terrain = new TerrainModel(new WorldModel(WorldSpec.withColumns(1)));
+        List<GroundColumn> columns = new ArrayList<>();
         for (int x = 0; x < n; x++) {
-            for (int z = 0; z < n; z++) terrain.setColumn(x, z, TerrainColumn.dry(GROUND, STONE));
+            for (int z = 0; z < n; z++) columns.add(GroundColumn.dry(x, z, GROUND + 1, MaterialTable.ANDESITE));
         }
+        terrain.apply(new GroundImport(columns));
         return terrain;
     }
 
@@ -176,15 +180,15 @@ class BlockProjectionTest {
 
     @Test
     void surfaceHintRetintsTheSurfaceInPlace() {
-        TerrainModel terrain = flat(2);
-        WorldModel world = terrain.world();
-        BlockProjection p = BlockProjection.simple(world).withSurfaceHint((x, z, groundY) -> {
-            TerrainColumn c = terrain.column(x, z);
-            return c != null && c.groundY() == groundY ? c.surface() : null;
-        });
+        WorldModel world = flat(2).world();
+        // the host's own surface knowledge (e.g. a tint it keeps per column), keyed by column and ground block
+        Map<Long, BlockId> tints = new HashMap<>();
+        BlockProjection p = BlockProjection.simple(world).withSurfaceHint(
+                (x, z, groundY) -> groundY == GROUND ? tints.get(((long) x << 32) | (z & 0xffffffffL)) : null);
         assertTrue(p.update(0, 0, GROUND, STONE).isEmpty());
         BlockId sulfur = BlockId.minecraft("yellow_concrete");
-        terrain.updateBlockCache(0, 0, GROUND, sulfur);
+        tints.put(0L, sulfur);
+        // the host's own surface block is still shown, so that is what the change replaces
         assertEquals(List.of(BlockChange.replace(new BlockPos(0, GROUND, 0), STONE, BlockState.of(sulfur))),
                 p.update(0, 0, GROUND, STONE));
     }

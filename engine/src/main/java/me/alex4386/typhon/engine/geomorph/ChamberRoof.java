@@ -1,12 +1,12 @@
 package me.alex4386.typhon.engine.geomorph;
 
 import me.alex4386.typhon.engine.magma.MagmaChamber;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 
 /** The magma chamber as seen by its roof: what piston (caldera / pit) collapse needs. */
 public interface ChamberRoof {
-    /** Chamber centre (block coordinates; only x/z are used). */
-    BlockPos center();
+    /** Chamber centre (m). */
+    Point3 center();
 
     /** Depth of the chamber top below the surface (m). */
     double depthM();
@@ -25,7 +25,7 @@ public interface ChamberRoof {
     static ChamberRoof of(MagmaChamber chamber) {
         return new ChamberRoof() {
             @Override
-            public BlockPos center() {
+            public Point3 center() {
                 return chamber.chamberCenter();
             }
 

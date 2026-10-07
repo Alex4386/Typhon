@@ -21,7 +21,7 @@ public final class DikeCommands {
     public record RemoveDike(String volcanoId, int dikeId) implements EngineCommand {}
 
     /**
-     * Blocks (or allows again) the spontaneous nucleation of dikes from the chamber of
+     * Blocks (or allows again) the nucleation of dikes at wall rupture from the chamber of
      * {@code volcanoId}. Forced dikes ({@link ForceDike}) still start. Overpressure keeps building, so a
      * blocked volcano with a sealed summit stays pressurised.
      */

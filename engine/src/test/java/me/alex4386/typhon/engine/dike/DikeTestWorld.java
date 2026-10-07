@@ -2,55 +2,43 @@ package me.alex4386.typhon.engine.dike;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.IntBinaryOperator;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
-import me.alex4386.typhon.engine.terrain.TerrainChunk;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
+import me.alex4386.typhon.engine.terrain.GroundImport;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
-import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.testing.TestGround;
+import me.alex4386.typhon.engine.testing.TestGround.Elevation;
 import me.alex4386.typhon.engine.save.SaveStore;
 
-/** Shared fixtures: terrains, chambers and an engine wired with chamber → dike. */
+/** Shared fixtures: terrains (10 m columns, 3.84 km square), chambers and an engine wired with chamber → dike. */
 final class DikeTestWorld {
-    static final BlockId STONE = BlockId.minecraft("stone");
+    static final double COLUMN_M = 10;
     static final int CHUNK_RADIUS = 12;
 
     private DikeTestWorld() {}
 
-    static TerrainSnapshot terrain(IntBinaryOperator height) {
-        List<TerrainChunk> chunks = new ArrayList<>();
-        for (int cx = -CHUNK_RADIUS; cx < CHUNK_RADIUS; cx++) {
-            for (int cz = -CHUNK_RADIUS; cz < CHUNK_RADIUS; cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int x = cx * 16; x < cx * 16 + 16; x++) {
-                    for (int z = cz * 16; z < cz * 16 + 16; z++) {
-                        chunk.set(x, z, TerrainColumn.dry(height.applyAsInt(x, z), STONE));
-                    }
-                }
-                chunks.add(chunk);
-            }
-        }
-        return new TerrainSnapshot(chunks);
+    /** Dry ground over the test square; {@code height} gives the surface elevation (m) per column. */
+    static GroundImport terrain(Elevation height) {
+        return TestGround.chunks(-CHUNK_RADIUS, -CHUNK_RADIUS, CHUNK_RADIUS - 1, CHUNK_RADIUS - 1, height,
+                TestGround.DRY);
     }
 
-    static TerrainSnapshot flat() {
+    static GroundImport flat() {
         return terrain((x, z) -> 64);
     }
 
-    /** Cone rising from y=64 to y=184 at the axis, slope 0.6. */
-    static TerrainSnapshot cone() {
-        return terrain((x, z) -> (int) Math.max(64, 184 - 0.6 * Math.sqrt(x * x + z * z)));
+    /** Cone rising from 64 m to 1264 m at the axis, slope 0.6 (radius 2 km). */
+    static GroundImport cone() {
+        return terrain((x, z) -> Math.max(64, 1264 - 0.6 * COLUMN_M * Math.hypot(x + 0.5, z + 0.5)));
     }
 
     /** Hot, dry basaltic chamber (no exsolved gas, so its compressibility is constant). */
     static MagmaChamberConfig.Builder basalt(double overpressure) {
-        return MagmaChamberConfig.builder("v", new BlockPos(0, 0, 0))
+        return MagmaChamberConfig.builder("v", new Point3(0, -4000, 0))
                 .volume(1e11)
                 .initialOverpressureMPa(overpressure)
                 .initialTemperatureC(1180)
@@ -65,22 +53,21 @@ final class DikeTestWorld {
 
     static DikeConfig fastConfig() {
         DikeConfig c = DikeConfig.defaults();
-        c.maxInitiationRate = 0; // only forced and rupture dikes unless a test opts in
         return c;
     }
 
     record World(Engine engine, MagmaChamber chamber, DikePropagation dikes, TerrainModel terrain) {}
 
-    static World world(long seed, MagmaChamberConfig chamberConfig, DikeConfig config, TerrainSnapshot snapshot,
-            me.alex4386.typhon.engine.save.SaveStore restore) {
-        TerrainModel terrain = new TerrainModel();
+    static World world(long seed, MagmaChamberConfig chamberConfig, DikeConfig config, GroundImport ground,
+            SaveStore restore) {
+        TerrainModel terrain = TestGround.terrain(COLUMN_M);
         MagmaChamber chamber = new MagmaChamber(chamberConfig);
         DikePropagation dikes = new DikePropagation(config, DikeMagmaSource.of(chamber), terrain);
         // one-second ticks: dikes rise metres per second, so tests run minutes of propagation quickly
         Engine.Builder builder = Engine.builder(seed).baseStepMicros(TICK_MICROS).add(terrain).add(chamber).add(dikes);
         if (restore != null) builder.restore(restore);
         Engine engine = builder.build();
-        engine.submit(snapshot);
+        engine.submit(ground);
         return new World(engine, chamber, dikes, terrain);
     }
 

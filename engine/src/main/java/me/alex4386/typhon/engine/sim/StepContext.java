@@ -10,7 +10,7 @@ import me.alex4386.typhon.engine.random.SimRandom;
  * @param timeMicros simulation time at the start of this step
  * @param dtMicros time this subsystem's step covers (its period)
  * @param random the subsystem's own deterministic random stream
- * @param outbox sink for block changes and events
+ * @param outbox sink for events
  * @param parallel the engine's deterministic executor for data-parallel work (see {@link Parallel})
  */
 public record StepContext(long step, long timeMicros, long dtMicros, SimRandom random, Outbox outbox,

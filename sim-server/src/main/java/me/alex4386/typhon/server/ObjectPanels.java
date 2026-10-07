@@ -60,11 +60,12 @@ final class ObjectPanels {
     private static final List<Rule> CHAMBER = List.of(
             r("supplyRate", "supply", PRIMARY, 0),
             r("supplyVariability", "supply", MORE, 1),
-            r("rechargeTemperatureC", "magma", PRIMARY, 0),
-            r("rechargeSilicaWt", "magma", PRIMARY, 1),
-            r("rechargeWaterWt", "magma", PRIMARY, 2),
-            r("rechargeCo2Wt", "magma", MORE, 3),
-            r("rechargeCrystalFraction", "magma", MORE, 4),
+            // the magma the deep supply delivers belongs with the supply; the Magma tab edits the chamber's own
+            r("rechargeTemperatureC", "supply", PRIMARY, 2),
+            r("rechargeSilicaWt", "supply", PRIMARY, 3),
+            r("rechargeWaterWt", "supply", PRIMARY, 4),
+            r("rechargeCo2Wt", "supply", MORE, 5),
+            r("rechargeCrystalFraction", "supply", MORE, 6),
             r("initial.*", "magma", MORE, 10),
             r("crystalSilicaWt", "magma", MORE, 20),
             r("volume", "walls", PRIMARY, 0),
@@ -82,17 +83,15 @@ final class ObjectPanels {
             r("id|chamberId", "details", MORE, 90));
 
     private static final List<Rule> CONDUIT = List.of(
-            r("reopenOverpressureMPa|conduitSealTimescale|initialOpenness", "eruption", MORE, 20));
+            r("reopenOverpressureMPa|initialOpenness", "eruption", MORE, 20));
 
     private static final List<Rule> DIKES = List.of(
             r("blocked", "overrides", PRIMARY, 1),
-            r("initiationPressureRatio|maxInitiationRate", "dikes", MORE, 10),
-            r("shearModulusPa|poissonRatio|rockDensity", "dikes", MORE, 20),
+            r("shearModulusPa|poissonRatio|rockDensity|fractureToughnessMPaSqrtM|regionalSigma3AzimuthDeg", "dikes", MORE, 20),
             r("enabled", "dikes", MORE, 30));
 
     private static final List<Rule> VOLCANO_ROOT = List.of(
             r("active", "overview", PRIMARY, 0),
-            r("ballisticFraction", "ash", MORE, 30),
             r("name", "details", MORE, 90));
 
     /** Where a volcano setting at dotted {@code path} goes, or null for settings no object shows. */
@@ -119,7 +118,7 @@ final class ObjectPanels {
         if (path.startsWith("massFlows.")) return generic(v + ".massFlows", path.substring(10), "flows");
         if (path.startsWith("geothermal.")) return generic(v + ".geothermal", path.substring(11), "springs");
         if (path.startsWith("deformation.")) return generic(v + ".deformation", path.substring(12), "deformation");
-        if (path.startsWith("detail.") || path.startsWith("edifice.") || path.startsWith("timeCompression")) {
+        if (path.startsWith("detail.") || path.startsWith("edifice.")) {
             return new Place(v, "details", INTERNALS, 99);
         }
         if (!path.contains(".")) return place(v, path, VOLCANO_ROOT, "details");
@@ -234,9 +233,10 @@ final class ObjectPanels {
                         measure("waterWt", "Water (H₂O)", "wt%", null),
                         measure("crystalFraction", "Crystals", "fraction", null),
                         derived("viscosityLog10", "Viscosity (log₁₀ Pa·s)", null, "From temperature, silica, water and crystals", null)),
-                section("New magma from depth")));
+                section("Replace the chamber's magma", widget("setMagma"))));
         chamber.add(tab("supply", "Supply",
-                section(null, derived("supplyNowM3PerS", "Supply now", "m³/s", "The deep supply in effect (with its variability)", null))));
+                section(null, derived("supplyNowM3PerS", "Supply now", "m³/s", "The deep supply in effect (with its variability)", null)),
+                section("New magma from depth")));
         chamber.add(tab("walls", "Walls",
                 section(null,
                         derived("chamberRadiusM", "Radius", "m", "Of a sphere of the chamber's volume", null),

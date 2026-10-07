@@ -9,7 +9,7 @@ import java.util.List;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.save.SaveStore;
@@ -17,7 +17,6 @@ import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.sim.EngineRunner;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.testing.Saves;
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -39,7 +38,6 @@ class AdaptiveClockTest {
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder("test", List.of(VolcanoSystemTest.CRATER), terrain, lava)
                 .chamber(chamber)
-                .scaling(VolcanoScaling.DEFAULT)
                 .dikesEnabled(false)
                 .geothermalEnabled(geothermal)
                 .build();
@@ -51,21 +49,21 @@ class AdaptiveClockTest {
         return new Run(engine, volcano, terrain);
     }
 
-    /** The test basalt 0.1 MPa below failure: a week of quiet recharge before it erupts. */
+    /** The test basalt 0.1 MPa below failure: about two weeks of quiet recharge before it erupts. */
     static MagmaChamberConfig slowBasalt() {
         return VolcanoSystemTest.basalt().toBuilder().initialOverpressureMPa(14.9).build();
     }
 
     /** A chamber far below failure: recharges quietly for years. */
     static MagmaChamberConfig quiet() {
-        return MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
+        return MagmaChamberConfig.builder("test", new Point3(0, -3000, 0))
                 .initialOverpressureMPa(2)
                 .supplyVariability(0)
                 .build();
     }
 
-    /** The basalt chamber fails at ≈ 666 700 s (7.7 days); this is a few minutes into its eruption. */
-    static final double PAST_ONSET = 667_000;
+    /** The slow basalt fails at ≈ 1 166 700 s (13.5 days); this is a few minutes into its eruption. */
+    static final double PAST_ONSET = 1_167_000;
 
     static List<EngineFrame> until(Engine engine, double time) {
         List<EngineFrame> frames = new ArrayList<>();
@@ -163,7 +161,7 @@ class AdaptiveClockTest {
     @Test
     void physicsDoesNotDependOnPlayback() throws Exception {
         // As fast as possible, versus a day a second slowed to ×600 at the eruption (the session policy).
-        double end = 800; // the basalt fails after ≈ 11 minutes
+        double end = 1500; // the basalt fails after ≈ 19 minutes
         List<EngineFrame> max = played(EngineRunner.Mode.UNBOUNDED, 1, 1e7, end);
         List<EngineFrame> slowed = played(EngineRunner.Mode.REALTIME, 86_400, 600, end);
         assertTrue(max.stream().anyMatch(f -> f.events().stream().anyMatch(e -> e instanceof EruptionStarted)));

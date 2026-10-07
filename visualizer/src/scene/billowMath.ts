@@ -7,5 +7,6 @@ export function billowLight(dx: number, dy: number, dz: number, sx: number, sy: 
   const len = Math.hypot(dx, dy, dz);
   const facing = len > 1e-6 ? (dx * sx + dy * sy + dz * sz) / len : 0;
   // −1 (far side, in shadow) … +1 (facing the sun); the core (len→0) sits in between
-  return 0.42 + 0.38 * Math.max(-0.4, facing) + 0.22 * Math.max(0, sy);
+  // ambient floor: light scattered through the cloud keeps its shadowed side grey, not black
+  return 0.5 + 0.34 * Math.max(-0.4, facing) + 0.2 * Math.max(0, sy);
 }

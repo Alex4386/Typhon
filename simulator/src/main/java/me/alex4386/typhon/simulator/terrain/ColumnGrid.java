@@ -3,57 +3,68 @@ package me.alex4386.typhon.simulator.terrain;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import me.alex4386.typhon.engine.terrain.TerrainChunk;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
-import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.terrain.GroundColumn;
+import me.alex4386.typhon.engine.terrain.GroundImport;
+import me.alex4386.typhon.engine.terrain.TerrainGenerator;
+import me.alex4386.typhon.engine.world.Material;
 
 /**
- * A rectangular, chunk-aligned grid of surface columns: what a host would sample from its world.
+ * A rectangular grid of ground columns {@code metersPerColumn} wide: surface and water elevations (m)
+ * and the surface material, what a host hands the engine at start-up.
  *
- * <p>The grid covers {@code [minX, minX + size) × [minZ, minZ + size)}; {@code minX}, {@code minZ}
- * and {@code size} are multiples of 16 so it maps onto whole chunks.
+ * <p>The grid covers columns {@code [minX, minX + size) × [minZ, minZ + size)} (column {@code x} spans
+ * {@code [x·L, (x+1)·L)} metres); {@code minX}, {@code minZ} and {@code size} are multiples of
+ * {@link #TILE} so the grid maps onto whole tiles.
  */
 public final class ColumnGrid {
+    /** Tile width (columns) grids are aligned to. */
+    public static final int TILE = 16;
+
     private final int minX;
     private final int minZ;
     private final int size;
-    private final int[] ground;
-    private final int[] water;
-    private final BlockId[] surface;
+    private final double metersPerColumn;
+    private final double[] surface;
+    private final double[] water;
+    private final Material[] cover;
     private Relief relief;
     private Source source;
 
     /**
-     * The continuous surface a generator sampled the grid from: ground-block top in blocks at
-     * fractional column coordinates (column {@code x} spans {@code [x, x+1)}), defined beyond the grid
-     * too. Multiply by the block size for metres.
+     * The continuous surface a generator sampled the grid from: elevation (m) at a horizontal position
+     * (m; +x east, +z south), defined beyond the grid too.
      */
     @FunctionalInterface
     public interface Relief {
-        double topBlocks(double cx, double cz);
+        double elevation(double xm, double zm);
     }
 
     /**
-     * The generator itself: the column at any (x, z), a pure function of the coordinates (and the seed
-     * it was built with). A grid built from a source is a window onto an unbounded landscape; the
-     * engine materialises further columns from it on demand ({@code TerrainGenerator}).
+     * The generator itself: the column at any (x, z), a pure function of the indices (and the seed it was
+     * built with). A grid built from a source is a window onto an unbounded landscape; the engine
+     * materialises further columns from it on demand ({@link TerrainGenerator}).
      */
     @FunctionalInterface
-    public interface Source extends me.alex4386.typhon.engine.terrain.TerrainGenerator {}
+    public interface Source extends TerrainGenerator {}
 
     /** A {@code size}-wide grid at ({@code minX}, {@code minZ}) filled from {@code source}. */
-    public static ColumnGrid generate(int minX, int minZ, int size, Source source, Relief relief) {
-        ColumnGrid grid = new ColumnGrid(minX, minZ, size);
+    public static ColumnGrid generate(int minX, int minZ, int size, double metersPerColumn, Source source,
+            Relief relief) {
+        ColumnGrid grid = new ColumnGrid(minX, minZ, size, metersPerColumn);
         grid.relief = relief;
         grid.fill(source);
         return grid;
     }
 
     /** Square grid of {@code 2 * halfExtent} columns centred on the origin, filled from {@code source}. */
-    public static ColumnGrid generateCentered(int halfExtent, Source source, Relief relief) {
-        int half = Math.max(16, ((halfExtent + 15) / 16) * 16);
-        return generate(-half, -half, 2 * half, source, relief);
+    public static ColumnGrid generateCentered(int halfExtent, double metersPerColumn, Source source, Relief relief) {
+        int half = roundHalf(halfExtent);
+        return generate(-half, -half, 2 * half, metersPerColumn, source, relief);
+    }
+
+    /** {@code halfExtent} rounded up to whole tiles (at least one). */
+    public static int roundHalf(int halfExtent) {
+        return Math.max(TILE, ((halfExtent + TILE - 1) / TILE) * TILE);
     }
 
     /** Fills every column from {@code source} and keeps it as this grid's generator; returns this grid. */
@@ -61,44 +72,45 @@ public final class ColumnGrid {
         this.source = source;
         for (int z = minZ; z < minZ + size; z++) {
             for (int x = minX; x < minX + size; x++) {
-                TerrainColumn c = source.column(x, z);
-                set(x, z, c.groundY(), c.waterY(), c.surface());
+                GroundColumn c = source.column(x, z);
+                set(x, z, c.surfaceZ(), c.waterZ(), c.cover());
             }
         }
         return this;
     }
 
-    /** The generator this grid was filled from, or {@code null} (edited grids, compact DEMs). */
+    /** The generator this grid was filled from, or {@code null} (edited grids). */
     public Source source() {
         return source;
     }
 
     /**
      * The same landscape over a different centred window of {@code 2 * halfExtent} columns (rounded up
-     * to whole chunks); requires a {@link #source()}.
+     * to whole tiles); requires a {@link #source()}.
      */
     public ColumnGrid window(int halfExtent) {
         if (source == null) throw new IllegalStateException("this grid has no generator to re-window");
-        return generateCentered(halfExtent, source, relief);
+        return generateCentered(halfExtent, metersPerColumn, source, relief);
     }
 
-    public ColumnGrid(int minX, int minZ, int size) {
-        if (size <= 0 || size % 16 != 0) throw new IllegalArgumentException("size must be a positive multiple of 16");
-        if (minX % 16 != 0 || minZ % 16 != 0) throw new IllegalArgumentException("origin must be chunk-aligned");
+    public ColumnGrid(int minX, int minZ, int size, double metersPerColumn) {
+        if (size <= 0 || size % TILE != 0) throw new IllegalArgumentException("size must be a positive multiple of " + TILE);
+        if (minX % TILE != 0 || minZ % TILE != 0) throw new IllegalArgumentException("origin must be tile-aligned");
+        if (!(metersPerColumn > 0)) throw new IllegalArgumentException("metersPerColumn must be > 0");
         this.minX = minX;
         this.minZ = minZ;
         this.size = size;
-        this.ground = new int[size * size];
-        this.water = new int[size * size];
-        this.surface = new BlockId[size * size];
-        Arrays.fill(water, TerrainColumn.NO_WATER);
-        Arrays.fill(surface, BlockId.minecraft("stone"));
+        this.metersPerColumn = metersPerColumn;
+        this.surface = new double[size * size];
+        this.water = new double[size * size];
+        this.cover = new Material[size * size];
+        Arrays.fill(water, Double.NaN);
     }
 
-    /** Square grid of {@code 2 * halfExtent} blocks centred on the origin (rounded up to whole chunks). */
-    public static ColumnGrid centered(int halfExtent) {
-        int half = Math.max(16, ((halfExtent + 15) / 16) * 16);
-        return new ColumnGrid(-half, -half, 2 * half);
+    /** Square grid of {@code 2 * halfExtent} columns centred on the origin (rounded up to whole tiles). */
+    public static ColumnGrid centered(int halfExtent, double metersPerColumn) {
+        int half = roundHalf(halfExtent);
+        return new ColumnGrid(-half, -half, 2 * half, metersPerColumn);
     }
 
     /** Attaches the generator's continuous surface (see {@link Relief}); returns this grid. */
@@ -107,7 +119,7 @@ public final class ColumnGrid {
         return this;
     }
 
-    /** The generator's continuous surface, or {@code null} (DEMs, edited grids). */
+    /** The generator's continuous surface, or {@code null} (edited grids). */
     public Relief relief() {
         return relief;
     }
@@ -117,6 +129,7 @@ public final class ColumnGrid {
     public int maxX() { return minX + size - 1; }
     public int maxZ() { return minZ + size - 1; }
     public int size() { return size; }
+    public double metersPerColumn() { return metersPerColumn; }
 
     public boolean contains(int x, int z) {
         return x >= minX && x < minX + size && z >= minZ && z < minZ + size;
@@ -127,67 +140,64 @@ public final class ColumnGrid {
         return (z - minZ) * size + (x - minX);
     }
 
-    public int ground(int x, int z) { return ground[index(x, z)]; }
-    public int water(int x, int z) { return water[index(x, z)]; }
-    public BlockId surface(int x, int z) { return surface[index(x, z)]; }
+    /** Ground surface elevation (m). */
+    public double surfaceZ(int x, int z) { return surface[index(x, z)]; }
+    /** Standing water surface elevation (m), {@code NaN} where dry. */
+    public double waterZ(int x, int z) { return water[index(x, z)]; }
+    /** Surface material, or {@code null} for the world's default. */
+    public Material cover(int x, int z) { return cover[index(x, z)]; }
 
     /** The column at (x, z): from the grid inside it, from the generator outside ({@code null} without one). */
-    public TerrainColumn columnAnywhere(int x, int z) {
+    public GroundColumn columnAnywhere(int x, int z) {
         if (contains(x, z)) return column(x, z);
         return source == null ? null : source.column(x, z);
     }
 
-    public TerrainColumn column(int x, int z) {
+    public GroundColumn column(int x, int z) {
         int i = index(x, z);
-        return new TerrainColumn(ground[i], water[i], surface[i]);
+        return new GroundColumn(x, z, surface[i], water[i], cover[i]);
     }
 
-    public void set(int x, int z, int groundY, int waterY, BlockId surfaceId) {
+    public void set(int x, int z, double surfaceZ, double waterZ, Material material) {
         int i = index(x, z);
-        ground[i] = groundY;
-        water[i] = waterY;
-        surface[i] = surfaceId;
+        surface[i] = surfaceZ;
+        water[i] = waterZ;
+        cover[i] = material;
     }
 
-    /** Floods every column whose ground lies below {@code seaLevel} up to it. */
-    public void flood(int seaLevel) {
-        for (int i = 0; i < ground.length; i++) {
-            if (ground[i] < seaLevel) water[i] = seaLevel;
+    /** Floods every column whose ground lies below {@code seaLevelZ} (m) up to it. */
+    public void flood(double seaLevelZ) {
+        for (int i = 0; i < surface.length; i++) {
+            if (surface[i] < seaLevelZ) water[i] = seaLevelZ;
         }
     }
 
-    public int minGround() {
-        return Arrays.stream(ground).min().orElse(0);
+    /** Lowest ground surface (m). */
+    public double minSurfaceZ() {
+        return Arrays.stream(surface).min().orElse(0);
     }
 
-    public int maxGround() {
-        return Arrays.stream(ground).max().orElse(0);
+    /** Highest ground surface (m). */
+    public double maxSurfaceZ() {
+        return Arrays.stream(surface).max().orElse(0);
     }
 
     public ColumnGrid copy() {
-        ColumnGrid c = new ColumnGrid(minX, minZ, size);
-        System.arraycopy(ground, 0, c.ground, 0, ground.length);
-        System.arraycopy(water, 0, c.water, 0, water.length);
+        ColumnGrid c = new ColumnGrid(minX, minZ, size, metersPerColumn);
         System.arraycopy(surface, 0, c.surface, 0, surface.length);
+        System.arraycopy(water, 0, c.water, 0, water.length);
+        System.arraycopy(cover, 0, c.cover, 0, cover.length);
         c.relief = relief;
         c.source = source;
         return c;
     }
 
-    /** The whole grid as the snapshot command a host would send at start-up. */
-    public TerrainSnapshot toSnapshot() {
-        List<TerrainChunk> chunks = new ArrayList<>();
-        for (int cz = minZ >> 4; cz <= maxZ() >> 4; cz++) {
-            for (int cx = minX >> 4; cx <= maxX() >> 4; cx++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int z = cz << 4; z < (cz << 4) + 16; z++) {
-                    for (int x = cx << 4; x < (cx << 4) + 16; x++) {
-                        chunk.set(x, z, column(x, z));
-                    }
-                }
-                chunks.add(chunk);
-            }
+    /** The whole grid as the ground a host sends at start-up. */
+    public GroundImport toImport() {
+        List<GroundColumn> columns = new ArrayList<>(size * size);
+        for (int z = minZ; z < minZ + size; z++) {
+            for (int x = minX; x < minX + size; x++) columns.add(column(x, z));
         }
-        return new TerrainSnapshot(chunks);
+        return new GroundImport(columns);
     }
 }

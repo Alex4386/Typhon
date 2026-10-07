@@ -14,11 +14,9 @@ import me.alex4386.typhon.engine.geomorph.ChamberRoof;
 import me.alex4386.typhon.engine.geomorph.GeomorphConfig;
 import me.alex4386.typhon.engine.geomorph.Geomorphology;
 import me.alex4386.typhon.engine.geomorph.GroundState;
-import me.alex4386.typhon.engine.geothermal.BlockPalette;
 import me.alex4386.typhon.engine.geothermal.Geothermal;
 import me.alex4386.typhon.engine.subsurface.Subsurface;
 import me.alex4386.typhon.engine.subsurface.SubsurfaceConfig;
-import me.alex4386.typhon.engine.geothermal.GeothermalBlocks;
 import me.alex4386.typhon.engine.geothermal.GeothermalConfig;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
@@ -27,7 +25,7 @@ import me.alex4386.typhon.engine.massflow.DebrisAvalanches;
 import me.alex4386.typhon.engine.massflow.Lahars;
 import me.alex4386.typhon.engine.massflow.MassFlowConfig;
 import me.alex4386.typhon.engine.massflow.PyroclasticFlows;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.seismic.SeismicConfig;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -36,15 +34,13 @@ import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.tephra.TephraConfig;
 import me.alex4386.typhon.engine.tephra.TephraSubsystem;
 import me.alex4386.typhon.engine.volcano.VentSite;
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 
 /**
  * One volcano: magma chamber, dikes, seismicity, alert level, surface coupling, tephra, pyroclastic
- * flows, lahars, geothermal activity and ground deformation, wired together and consistently scaled.
+ * flows, lahars, geothermal activity and ground deformation, wired together. Everything is at real scale
+ * in SI units; the column width comes from the world model's spec.
  *
- * <p>Terrain and lava are shared by every volcano in an engine, so the caller registers them. The
- * lava grid takes its scale from the volcano's {@link VolcanoScaling#metersPerBlock()}; since the
- * field is shared, every volcano using it must have the same {@code metersPerBlock}.
+ * <p>Terrain and lava are shared by every volcano in an engine, so the caller registers them.
  *
  * <pre>{@code
  * TerrainModel terrain = new TerrainModel();
@@ -58,7 +54,6 @@ import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 public final class VolcanoSystem {
     private final String volcanoId;
     private final List<VentSite> vents;
-    private VolcanoScaling scaling;
     private final MagmaChamber chamber;
     /** Every chamber by id, the main one included (in id order). */
     private final java.util.Map<String, MagmaChamber> chambers;
@@ -82,18 +77,15 @@ public final class VolcanoSystem {
     private final VolcanoUnits units;
     private final VolcanoDetail detail;
 
-    private double ballisticFraction;
+    /** The volcano's surface reference point when it was built (see {@link #anchor}). */
+    private final Point3 anchor;
 
     private VolcanoSystem(Builder b) {
         this.volcanoId = b.volcanoId;
-        this.ballisticFraction = b.ballisticFraction;
         this.vents = b.vents;
-        this.scaling = b.scaling;
-        b.lava.setMetersPerBlock(scaling.metersPerBlock());
-        b.terrain.setMetersPerBlock(scaling.metersPerBlock());
-
-        BlockPos primary = vents.get(0).position();
         Derived d = derive(b);
+        Point3 primary = d.anchor();
+        this.anchor = primary;
         MagmaChamberConfig chamberConfig = d.chamber();
         this.chamber = new MagmaChamber(chamberConfig);
         java.util.Map<String, MagmaChamber> all = new java.util.TreeMap<>();
@@ -105,7 +97,7 @@ public final class VolcanoSystem {
         }
         this.chambers = java.util.Collections.unmodifiableMap(all);
         this.plumbing = all.size() > 1 || !d.connections().isEmpty()
-                ? new me.alex4386.typhon.engine.magma.plumbing.MagmaTransfer(volcanoId, all, chamber, d.connections(), scaling.metersPerBlock())
+                ? new me.alex4386.typhon.engine.magma.plumbing.MagmaTransfer(volcanoId, all, chamber, d.connections())
                 : null;
         MagmaChamber clockChamber = chamber;
 
@@ -115,6 +107,8 @@ public final class VolcanoSystem {
         if (b.dikes) {
             this.dikes = new DikePropagation(d.dike(), DikeMagmaSource.of(chamber), b.terrain);
             dikes.setHypocenterListener(seismicity::queueInducedVt);
+            DikePropagation rising = dikes;
+            alert.setDikeRising(() -> rising.activeCount() > 0);
         } else {
             this.dikes = null;
         }
@@ -126,7 +120,7 @@ public final class VolcanoSystem {
             this.ownsSubsurface = false;
         } else if (b.geothermal) {
             this.subsurface = new Subsurface(b.terrain.world(),
-                    b.subsurfaceConfig != null ? b.subsurfaceConfig.copy() : defaultSubsurfaceConfig(scaling));
+                    b.subsurfaceConfig != null ? b.subsurfaceConfig.copy() : new SubsurfaceConfig());
             this.ownsSubsurface = true;
         } else {
             this.subsurface = null;
@@ -134,7 +128,7 @@ public final class VolcanoSystem {
         }
 
         if (b.geothermal) {
-            this.geothermal = new Geothermal(volcanoId, d.geothermal(), d.geothermalCenter(), chamber, b.terrain, b.palette,
+            this.geothermal = new Geothermal(volcanoId, d.geothermal(), d.geothermalCenter(), chamber, b.terrain,
                     vents, subsurface);
             subsurface.setHeatSources(volcanoId, geothermal);
         } else {
@@ -173,9 +167,10 @@ public final class VolcanoSystem {
         // loose deposits of every kind (tephra, bombs, wet tephra, debris) stand at most at their angle of repose
         if (b.terrain != null) b.terrain.world().enableReposeRelaxation();
         this.coupler = new VolcanoCoupler(volcanoId, chamber, seismicity, vents, dikes, b.terrain, b.lava, tephra, pdc,
-                geothermal, scaling, b.ballisticFraction);
+                geothermal);
 
         if (subsurface != null) coupler.setGround(subsurface);
+        if (geothermal != null) geothermal.setVents(coupler::allVents); // fissures and vents that formed too
         this.classifier = new EruptionClassifier(volcanoId, chamber, coupler);
         alert.setClassifier(classifier);
 
@@ -201,7 +196,7 @@ public final class VolcanoSystem {
             geomorphology.setGround(GroundState.of(subsurface));
             geomorphology.setFlows(avalanches, lahars, pdc);
             geomorphology.setChamber(ChamberRoof.of(chamber));
-            geomorphology.setVents(vents, clockChamber::erupting);
+            geomorphology.setVents(coupler::allVents, coupler::activeVents);
             Geomorphology g = geomorphology;
             seismicity.setQuakeListener(e -> g.queueQuake(e.hypocenter(), e.magnitude()));
             coupler.setExplosionListener(g::queueExplosion);
@@ -223,24 +218,27 @@ public final class VolcanoSystem {
     }
 
     /**
-     * Every configuration this volcano's subsystems are built with, derived from a builder's settings
-     * and the volcano's scaling. Pure: it touches no shared world objects, so a live retune can derive
+     * Every configuration this volcano's subsystems are built with, derived from a builder's settings. Pure: it touches no shared world objects, so a live retune can derive
      * the configurations of a changed definition and hand them to the running subsystems.
      */
     record Derived(MagmaChamberConfig chamber, List<MagmaChamberConfig> extraChambers,
             List<me.alex4386.typhon.engine.magma.plumbing.ConnectionConfig> connections, SeismicConfig seismic, AlertConfig alert, DikeConfig dike,
-            TephraConfig tephra, GeothermalConfig geothermal, BlockPos geothermalCenter, MassFlowConfig pdc,
+            TephraConfig tephra, GeothermalConfig geothermal, Point3 geothermalCenter, MassFlowConfig pdc,
             MassFlowConfig lahar, MassFlowConfig avalanche, DeformationConfig deformation, GeomorphConfig geomorph,
-            me.alex4386.typhon.engine.world.SurfaceDetailConfig detail) {}
+            me.alex4386.typhon.engine.world.SurfaceDetailConfig detail, Point3 anchor) {}
 
     static Derived derive(Builder b) {
-        VolcanoScaling scaling = b.scaling;
         String volcanoId = b.volcanoId;
-        BlockPos primary = b.vents.get(0).position();
+        if (b.vents.isEmpty() && b.chamberConfig == null) {
+            throw new IllegalArgumentException("A volcano needs a vent or a chamber");
+        }
         MagmaChamberConfig chamberConfig = (b.chamberConfig != null
                         ? b.chamberConfig.toBuilder()
-                        : MagmaChamberConfig.builder(volcanoId, defaultChamberCenter(primary)))
+                        : MagmaChamberConfig.builder(volcanoId,
+                                defaultChamberCenter(b.vents.get(0).position(), MagmaChamberConfig.DEFAULT_LITHOSTATIC_DEPTH_M)))
                 .build();
+        // where the volcano meets the surface: its first vent, or before any vent formed the ground over the chamber
+        Point3 primary = anchor(b.vents, chamberConfig);
         if (!chamberConfig.volcanoId().equals(volcanoId)) {
             throw new IllegalArgumentException("Chamber config is for volcano " + chamberConfig.volcanoId());
         }
@@ -257,28 +255,25 @@ public final class VolcanoSystem {
 
         DikeConfig dike = null;
         if (b.dikes) {
-            dike = (b.dikeConfig != null ? b.dikeConfig : DikeConfig.defaults()).withScaling(scaling);
+            dike = (b.dikeConfig != null ? b.dikeConfig : DikeConfig.defaults()).copy();
         }
 
         TephraConfig tephra = b.tephraConfig != null ? b.tephraConfig.copy() : new TephraConfig();
-        tephra.ballisticSpeedScale = scaling.velocityScale();
-        tephra.plumeHeightScale = scaling.plumeHeightScale();
-        tephra.massScale = scaling.volumeScale();
         if (b.windSet) {
-            tephra.initialWindSpeed = b.windSpeed * scaling.velocityScale();
+            tephra.initialWindSpeed = b.windSpeed;
             tephra.initialWindDirectionRad = b.windBearing;
             tephra.initialWindVariability = b.windVariability;
         }
 
         GeothermalConfig geothermal = null;
-        BlockPos geothermalCenter = null;
+        Point3 geothermalCenter = null;
         if (b.geothermal) {
             geothermal = b.geothermalConfig != null ? b.geothermalConfig : new GeothermalConfig();
             if (b.geothermalPrewarmSeconds >= 0) geothermal.prewarmSeconds = b.geothermalPrewarmSeconds;
-            BlockPos chamberCenter = chamberConfig.center();
+            Point3 chamberCenter = chamberConfig.center();
             geothermalCenter = b.geothermalCenter != null
                     ? b.geothermalCenter
-                    : new BlockPos(chamberCenter.x(), primary.y(), chamberCenter.z());
+                    : new Point3(chamberCenter.x(), primary.y(), chamberCenter.z());
         }
 
         MassFlowConfig pdc = null;
@@ -286,37 +281,39 @@ public final class VolcanoSystem {
         MassFlowConfig avalanche = null;
         if (b.massFlows) {
             pdc = b.pdcConfig != null ? b.pdcConfig.copy() : MassFlowConfig.pdc();
-            pdc.metersPerBlock = scaling.metersPerBlock();
             lahar = b.laharConfig != null ? b.laharConfig.copy() : MassFlowConfig.lahar();
-            lahar.metersPerBlock = scaling.metersPerBlock();
             if (b.geomorphology) {
                 avalanche = b.avalancheConfig != null ? b.avalancheConfig.copy() : MassFlowConfig.debrisAvalanche();
-                avalanche.metersPerBlock = scaling.metersPerBlock();
             }
         }
 
         DeformationConfig deformation = null;
         if (b.deformation) {
-            deformation = DeformationConfig.forChamber(chamberConfig, scaling);
+            deformation = DeformationConfig.forChamber(chamberConfig);
             deformation.stations = new java.util.ArrayList<>(b.stations);
         }
 
         GeomorphConfig geomorph = b.geomorphology ? (b.geomorphConfig != null ? b.geomorphConfig : new GeomorphConfig()) : null;
         me.alex4386.typhon.engine.world.SurfaceDetailConfig detail = b.detailConfig != null ? b.detailConfig
-                : me.alex4386.typhon.engine.world.SurfaceDetailConfig.defaults(scaling.metersPerBlock(),
-                        b.vents.get(0).craterRadius() * scaling.metersPerBlock());
+                : me.alex4386.typhon.engine.world.SurfaceDetailConfig.defaults(b.terrain.world().spec().metersPerColumn(),
+                        b.vents.isEmpty() ? chamberConfig.conduitRadius() : b.vents.get(0).craterRadiusM());
         return new Derived(chamberConfig, List.copyOf(extraChambers), b.plumbing.connections(), seismic, alert, dike, tephra, geothermal, geothermalCenter, pdc, lahar,
-                avalanche, deformation, geomorph, detail);
+                avalanche, deformation, geomorph, detail, primary);
     }
 
-    /** Subsurface defaults for a volcano that runs its own (no world). */
-    public static SubsurfaceConfig defaultSubsurfaceConfig(VolcanoScaling scaling) {
-        return new SubsurfaceConfig();
+    /**
+     * The volcano's reference point at the surface: its first configured vent, or, for a volcano that has
+     * no vent yet, the ground straight above its chamber (the chamber's depth is measured from there).
+     */
+    public static Point3 anchor(List<VentSite> vents, MagmaChamberConfig chamber) {
+        if (!vents.isEmpty()) return vents.get(0).position();
+        Point3 c = chamber.center();
+        return new Point3(c.x(), c.y() + chamber.lithostaticDepth(), c.z());
     }
 
-    /** Chamber a few dozen blocks under the primary vent, kept inside the overworld. */
-    public static BlockPos defaultChamberCenter(BlockPos vent) {
-        return new BlockPos(vent.x(), Math.max(-56, vent.y() - 48), vent.z());
+    /** A chamber {@code depthM} metres below the primary vent. */
+    public static Point3 defaultChamberCenter(Point3 vent, double depthM) {
+        return new Point3(vent.x(), vent.y() - depthM, vent.z());
     }
 
     public static Builder builder(String volcanoId, List<VentSite> vents, TerrainModel terrain, LavaFlow lava) {
@@ -360,19 +357,27 @@ public final class VolcanoSystem {
     }
 
     /**
-     * Changes the wind tephra is carried by: real speed (m/s, scaled by
-     * {@link VolcanoScaling#velocityScale()}), bearing it blows towards and variability in [0, 1].
-     * Applied on the tephra subsystem's next step.
+     * Changes the wind tephra is carried by: speed (m/s), bearing it blows towards and variability in
+     * [0, 1]. Applied on the tephra subsystem's next step.
      */
-    public void setWind(double realSpeed, double bearingRad, double variability) {
-        tephra.setWind(realSpeed * scaling.velocityScale(), bearingRad, variability);
+    public void setWind(double speed, double bearingRad, double variability) {
+        tephra.setWind(speed, bearingRad, variability);
     }
 
     public String volcanoId() { return volcanoId; }
     /** Configured ballistic share; no longer used (ballistics follow clast physics). */
-    public double ballisticFraction() { return ballisticFraction; }
     public List<VentSite> vents() { return vents; }
-    public VolcanoScaling scaling() { return scaling; }
+
+    /**
+     * The volcano's main point at the surface now: its first vent (configured, or opened by a dike), or,
+     * while it has none, the ground above its chamber.
+     */
+    public Point3 referencePoint() {
+        List<VentSite> all = coupler.allVents();
+        return all.isEmpty() ? anchor : all.get(0).position();
+    }
+    /** Column width L (m) of the world this volcano lives in. */
+    public double metersPerColumn() { return coupler.metersPerColumn(); }
     public MagmaChamber chamber() { return chamber; }
     /** Every chamber of the plumbing by id (the main, eruptive one under {@link MagmaChamberConfig#MAIN}). */
     public java.util.Map<String, MagmaChamber> chambers() { return chambers; }
@@ -414,12 +419,10 @@ public final class VolcanoSystem {
         private final List<VentSite> vents;
         private final TerrainModel terrain;
         private final LavaFlow lava;
-        private VolcanoScaling scaling = VolcanoScaling.DEFAULT;
         private MagmaChamberConfig chamberConfig;
         private me.alex4386.typhon.engine.magma.plumbing.PlumbingConfig plumbing = me.alex4386.typhon.engine.magma.plumbing.PlumbingConfig.NONE;
         private TephraConfig tephraConfig;
         private GeothermalConfig geothermalConfig;
-        private BlockPalette palette = GeothermalBlocks.installFallbacks(BlockPalette.unrestricted());
         private boolean geothermal = true;
         private boolean dikes = true;
         private boolean massFlows = true;
@@ -431,12 +434,11 @@ public final class VolcanoSystem {
         private DikeConfig dikeConfig;
         private MassFlowConfig pdcConfig;
         private MassFlowConfig laharConfig;
-        private double ballisticFraction = 0.05;
         private boolean windSet;
         private double windSpeed;
         private double windBearing;
         private double windVariability;
-        private BlockPos geothermalCenter;
+        private Point3 geothermalCenter;
         private double geothermalPrewarmSeconds = -1;
         private Subsurface subsurface;
         private SubsurfaceConfig subsurfaceConfig;
@@ -446,33 +448,30 @@ public final class VolcanoSystem {
         private Builder(String volcanoId, List<VentSite> vents, TerrainModel terrain, LavaFlow lava) {
             this.volcanoId = Objects.requireNonNull(volcanoId, "volcanoId");
             this.vents = List.copyOf(vents);
-            if (this.vents.isEmpty()) throw new IllegalArgumentException("A volcano needs at least one vent");
             this.terrain = Objects.requireNonNull(terrain, "terrain");
             this.lava = Objects.requireNonNull(lava, "lava");
         }
 
-        public Builder scaling(VolcanoScaling scaling) { this.scaling = Objects.requireNonNull(scaling); return this; }
-        /** Chamber parameters; its time scales are overridden by {@link #scaling}. */
+        /** Chamber parameters. */
         public Builder chamber(MagmaChamberConfig config) { this.chamberConfig = config; return this; }
         /** Further chambers and the pathways between them (none: a single-chamber volcano). */
         public Builder plumbing(me.alex4386.typhon.engine.magma.plumbing.PlumbingConfig plumbing) {
             this.plumbing = Objects.requireNonNull(plumbing);
             return this;
         }
-        /** Tephra parameters; its scale factors are overridden by {@link #scaling}. */
+        /** Tephra parameters. */
         public Builder tephra(TephraConfig config) { this.tephraConfig = config; return this; }
         public Builder geothermal(GeothermalConfig config) { this.geothermalConfig = config; return this; }
         public Builder geothermalEnabled(boolean enabled) { this.geothermal = enabled; return this; }
 
         /**
-         * Initial wind for tephra transport: real speed (m/s, converted with
-         * {@link VolcanoScaling#velocityScale()}), bearing it blows towards (radians from +X towards
+         * Initial wind for tephra transport: speed (m/s), bearing it blows towards (radians from +X towards
          * +Z) and variability in [0, 1].
          */
-        public Builder wind(double realSpeed, double bearingRad, double variability) {
-            if (!(realSpeed >= 0)) throw new IllegalArgumentException("wind speed must be >= 0");
+        public Builder wind(double speed, double bearingRad, double variability) {
+            if (!(speed >= 0)) throw new IllegalArgumentException("wind speed must be >= 0");
             this.windSet = true;
-            this.windSpeed = realSpeed;
+            this.windSpeed = speed;
             this.windBearing = bearingRad;
             this.windVariability = variability;
             return this;
@@ -482,7 +481,7 @@ public final class VolcanoSystem {
          * Centre of the geothermal grid. Defaults to the volcano centre: above the magma chamber, at the
          * primary vent's height.
          */
-        public Builder geothermalCenter(BlockPos center) { this.geothermalCenter = Objects.requireNonNull(center); return this; }
+        public Builder geothermalCenter(Point3 center) { this.geothermalCenter = Objects.requireNonNull(center); return this; }
 
         /**
          * Physical seconds of subsurface spin-up run once on the first step with terrain (overrides
@@ -507,21 +506,18 @@ public final class VolcanoSystem {
         /** Slope stability, mass wasting, craters and caldera collapse (on by default). */
         public Builder geomorphologyEnabled(boolean enabled) { this.geomorphology = enabled; return this; }
         public Builder geomorphology(GeomorphConfig config) { this.geomorphConfig = config; return this; }
-        /** Debris-avalanche parameters; {@code metersPerBlock} is overridden by {@link #scaling}. */
+        /** Debris-avalanche parameters. */
         public Builder debrisAvalanches(MassFlowConfig config) { this.avalancheConfig = config; return this; }
-        /** Virtual GNSS/tilt stations sampled by the deformation model (world columns). */
+        /** Virtual GNSS/tilt stations sampled by the deformation model (m). */
         public Builder stations(List<me.alex4386.typhon.engine.deformation.GeodeticStation> stations) {
             this.stations = List.copyOf(stations);
             return this;
         }
-        /** Dike parameters; the length scale is overridden by {@link #scaling}. */
+        /** Dike parameters. */
         public Builder dikes(DikeConfig config) { this.dikeConfig = config; return this; }
-        /** Mass-flow parameters; {@code metersPerBlock} is overridden by {@link #scaling}. */
+        /** Mass-flow parameters. */
         public Builder pyroclasticFlows(MassFlowConfig config) { this.pdcConfig = config; return this; }
         public Builder lahars(MassFlowConfig config) { this.laharConfig = config; return this; }
-        /** Blocks the host supports; unsupported ones fall back along the default chains. */
-        public Builder palette(BlockPalette palette) { this.palette = Objects.requireNonNull(palette); return this; }
-        public Builder ballisticFraction(double fraction) { this.ballisticFraction = fraction; return this; }
         /** Fine surface around the primary vent; {@code null} (the default) derives it from the crater size. */
         public Builder detail(me.alex4386.typhon.engine.world.SurfaceDetailConfig config) { this.detailConfig = config; return this; }
         /**
@@ -579,8 +575,5 @@ public final class VolcanoSystem {
             if (Engine.configHash(e.getValue()).equals(engine.configHash(e.getKey()))) continue;
             engine.reconfigure(e.getKey(), e.getValue());
         }
-        this.ballisticFraction = changed.ballisticFraction;
-        this.scaling = changed.scaling;
-        coupler.setScaling(changed.scaling, changed.ballisticFraction);
     }
 }

@@ -32,7 +32,7 @@ final class StubField implements HydrothermalField {
 
     @Override
     public boolean known(int x, int z) {
-        return terrain.isKnown(x, z);
+        return terrain.world().isKnown(x, z);
     }
 
     @Override

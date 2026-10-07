@@ -8,15 +8,15 @@ import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.lava.LavaEvents.ChunkCoord;
 import me.alex4386.typhon.engine.lava.LavaTestWorld.FixedRheology;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
-import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.VentSite;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
-import me.alex4386.typhon.engine.world.BlockId;
-import me.alex4386.typhon.engine.world.BlockState;
+import me.alex4386.typhon.engine.world.Material;
+import me.alex4386.typhon.engine.world.MaterialTable;
+import me.alex4386.typhon.engine.world.WorldModel;
 import org.junit.jupiter.api.Test;
 import me.alex4386.typhon.engine.testing.Saves;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
@@ -25,9 +25,15 @@ class LavaFlowTest {
     private static final double BASALT_T = 1150;
     private static final double BASALT_SI = 50;
 
-    /** Inclined plane falling toward +x by one block every {@code run} blocks. */
+    /** Inclined plane falling toward +x by 1 m every {@code run} metres. */
     private static LavaTestWorld ramp(int run) {
-        return new LavaTestWorld(-1, -2, 6, 1, (x, z) -> 120 - Math.floorDiv(x, run));
+        return new LavaTestWorld(-1, -2, 6, 1, (x, z) -> 120 - (double) x / run);
+    }
+
+    /** Material of the topmost layer of a column. */
+    private static Material top(LavaTestWorld world, int x, int z) {
+        WorldModel model = world.terrain.world();
+        return model.layer(x, z, model.layerCount(x, z) - 1).materialInfo();
     }
 
     @Test
@@ -36,7 +42,7 @@ class LavaFlowTest {
         world.coarse(5);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(200));
         Engine engine = world.engine(lava, 1);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 3, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 3, BASALT_T, BASALT_SI, 0.1));
 
         for (int i = 0; i < 400; i++) {
             if (i == 200) lava.removeSource("vent");
@@ -56,12 +62,12 @@ class LavaFlowTest {
             boolean inBasin = x >= 30 && x <= 39 && z >= -5 && z <= 5;
             if (inBasin) return 60;
             if (x >= 30) return 90; // rim/walls around and beyond the basin
-            return 80 - x / 2;
+            return 80 - x / 2.0;
         });
         world.coarse(10);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 2);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 200);
         lava.removeSource("vent");
         world.run(engine, 2000);
@@ -77,8 +83,8 @@ class LavaFlowTest {
 
     @Test
     void yieldStrengthStopsFlowBelowCriticalSlope() {
-        // tau = 1e4 Pa ⇒ h_cr = tau / (rho g sinθ) ≥ 0.39 m. A 0.45 m column next to a 1-block drop
-        // (sinθ ≈ 0.82 ⇒ h_cr ≈ 0.48) must hold; next to a 4-block drop (h_cr ≈ 0.40) it must flow.
+        // tau = 1e4 Pa ⇒ h_cr = tau / (rho g sinθ) ≥ 0.39 m. A 0.45 m column next to a 1 m drop
+        // (sinθ ≈ 0.82 ⇒ h_cr ≈ 0.48) must hold; next to a 4 m drop (h_cr ≈ 0.40) it must flow.
         assertFalse(flowsOverDrop(1));
         assertTrue(flowsOverDrop(4));
     }
@@ -106,8 +112,8 @@ class LavaFlowTest {
 
     private static int footprint(double yieldStrength) {
         LavaTestWorld world = new LavaTestWorld(-2, -2, 1, 1, (x, z) -> 64);
-        LavaConfig config = new LavaConfig(0, 2600, 1150, 4e5, 0.95, 25, 15, 3000, 2, 0.5,
-                0.05, 0.2, 0.02, 1, 2, 20, 32);
+        LavaConfig config = new LavaConfig(0, 2600, 1150, 4e5, 0.95, 25, 15, 3000, 2, 2.4e6,
+                0.05, 0.2, 1, 20, 32);
         LavaFlow lava = new LavaFlow(world.terrain, config, new FixedRheology(100, yieldStrength));
         Engine engine = world.engine(lava, 4);
         lava.addLava(0, 0, 20, 1150, 50, 0);
@@ -129,7 +135,7 @@ class LavaFlowTest {
         world.coarse(10);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(50));
         Engine engine = world.engine(lava, 5);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, temperature, silica, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, temperature, silica, 0.1));
         double farthest = 0;
         for (int i = 0; i < 1500; i++) {
             if (i == 100) lava.removeSource("vent");
@@ -146,10 +152,10 @@ class LavaFlowTest {
         assertTrue(wet * 5 < dry, "submerged " + wet + " ticks vs dry " + dry);
     }
 
-    private static int ticksToSolidify(int waterY) {
+    private static int ticksToSolidify(double waterZ) {
         // Single-column pit so the lava cannot spread.
         LavaTestWorld world = new LavaTestWorld(-1, -1, 0, 0,
-                (x, z) -> x == 0 && z == 0 ? 60 : 100, (x, z) -> waterY);
+                (x, z) -> x == 0 && z == 0 ? 60 : 100, (x, z) -> waterZ);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(20));
         Engine engine = world.engine(lava, 6);
         lava.addLava(0, 0, 1, BASALT_T, BASALT_SI, 0.1);
@@ -168,11 +174,9 @@ class LavaFlowTest {
         Engine engine = world.engine(lava, 7);
         lava.addLava(0, 0, 1, BASALT_T, BASALT_SI, 0.1);
         world.run(engine, 20_000);
-        TerrainColumn column = world.terrain.column(0, 0);
-        assertTrue(column.groundY() >= 61, "pillows raise the ground: " + column);
-        BlockId rock = column.surface();
-        assertTrue(rock.equals(BlockId.minecraft("smooth_basalt")) || rock.equals(BlockId.minecraft("tuff")),
-                "pillow rock was " + rock);
+        double surface = world.terrain.world().surfaceZ(0, 0);
+        assertTrue(surface > 60.5, "pillows raise the ground: " + surface);
+        assertEquals(MaterialTable.BASALT, top(world, 0, 0), "pillow basalt");
     }
 
     @Test
@@ -187,28 +191,19 @@ class LavaFlowTest {
 
         for (int t = 0; t < 200_000 && lava.totalLavaVolume() > 0; t++) world.run(engine, 1);
         assertEquals(0, lava.totalLavaVolume());
-        assertEquals(63, world.terrain.column(0, 0).groundY());
-        assertEquals(0, lava.partialSolid(0, 0), 1e-6);
-
-        assertEquals(BlockId.minecraft("basalt"), world.terrain.column(0, 0).surface(), "columnar basalt on top");
-        // the pit is filled continuously: the world-model surface is the top of the frozen sheet
-        double l = world.terrain.world().spec().metersPerColumn();
-        assertEquals(64 * l, world.terrain.world().surfaceZ(0, 0), 0.05 * l);
+        assertEquals(MaterialTable.BASALT, top(world, 0, 0), "basalt on top");
+        // the pit is filled continuously: the surface is the top of the frozen 3 m³ sheet over a 1 m² column
+        assertEquals(63, world.terrain.world().surfaceZ(0, 0), 0.15);
     }
 
     @Test
-    void paletteChoosesRockByCompositionAndCooling() {
-        SimRandom random = new SimRandom(1);
-        for (int i = 0; i < 50; i++) {
-            assertTrue(LavaPalette.rock(72, false, true, false, random).id().path().contains("obsidian"));
-            assertTrue(LavaPalette.rock(72, true, false, false, random).id().path().contains("obsidian"));
-            assertFalse(LavaPalette.rock(72, false, false, false, random).id().path().contains("obsidian"));
-            assertEquals(BlockState.minecraft("basalt").with("axis", "y"), LavaPalette.rock(50, false, false, true, random));
-            String pillow = LavaPalette.rock(50, true, true, false, random).id().path();
-            assertTrue(pillow.equals("smooth_basalt") || pillow.equals("tuff"), pillow);
-            String andesite = LavaPalette.rock(60, false, false, false, random).id().path();
-            assertTrue(andesite.equals("andesite") || andesite.equals("tuff"), andesite);
-        }
+    void rockFollowsCompositionAndCooling() {
+        assertEquals(MaterialTable.OBSIDIAN, LavaRocks.rockMaterial(72, false, true));
+        assertEquals(MaterialTable.OBSIDIAN, LavaRocks.rockMaterial(72, true, false));
+        assertEquals(MaterialTable.RHYOLITE, LavaRocks.rockMaterial(72, false, false));
+        assertEquals(MaterialTable.BASALT, LavaRocks.rockMaterial(50, true, true));
+        assertEquals(MaterialTable.ANDESITE, LavaRocks.rockMaterial(60, false, false));
+        assertEquals(MaterialTable.DACITE, LavaRocks.rockMaterial(66, false, false));
     }
 
     @Test
@@ -221,7 +216,7 @@ class LavaFlowTest {
         world.coarse(5);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(200));
         Engine engine = world.engine(lava, seed);
-        lava.addSource(LavaSource.atVent(VentSite.crater("summit", new BlockPos(0, 0, 0), 4), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.atVent(VentSite.crater("summit", new Point3(0.5, 120, 0.5), 4), LavaTestWorld.COLUMN_M, 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, ticks);
         return world.frames;
     }
@@ -229,7 +224,7 @@ class LavaFlowTest {
     @Test
     void savedStateResumesBitForBit() {
         LavaConfig config = LavaConfig.defaults().withCoolingScale(200);
-        LavaSource source = LavaSource.atVent(VentSite.fissure("rift", new BlockPos(0, 0, 0), 0.3, 9), 2, BASALT_T, BASALT_SI, 0.1);
+        LavaSource source = LavaSource.atVent(VentSite.fissure("rift", new Point3(0.5, 120, 0.5), 0.3, 9, 0.5), LavaTestWorld.COLUMN_M, 2, BASALT_T, BASALT_SI, 0.1);
 
         LavaTestWorld reference = ramp(3).coarse(5);
         LavaFlow refLava = new LavaFlow(reference.terrain, config);
@@ -266,7 +261,7 @@ class LavaFlowTest {
         world.coarse(5);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 10);
-        lava.addSource(LavaSource.at("edge", new BlockPos(15, 0, 8), 1, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("edge", new ColumnIndex(15, 8), 1, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 100);
 
         assertEquals(0, lava.thickness(16, 8));
@@ -285,7 +280,7 @@ class LavaFlowTest {
         world.coarse(10);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 11);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 400);
         List<LavaEvents.LavaOceanEntry> entries = world.events(LavaEvents.LavaOceanEntry.class);
         assertFalse(entries.isEmpty());
@@ -298,7 +293,7 @@ class LavaFlowTest {
         world.coarse(5);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 12);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 400);
         List<LavaEvents.LavaFlowFront> fronts = world.events(LavaEvents.LavaFlowFront.class);
         assertTrue(fronts.size() >= 19);
@@ -312,7 +307,7 @@ class LavaFlowTest {
         LavaTestWorld world = ramp(3);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 13);
-        engine.submit(new LavaCommands.StartEffusion(LavaSource.at("vent", new BlockPos(0, 0, 0), 1, BASALT_T, BASALT_SI, 0.1)));
+        engine.submit(new LavaCommands.StartEffusion(LavaSource.at("vent", new ColumnIndex(0, 0), 1, BASALT_T, BASALT_SI, 0.1)));
         world.run(engine, 20);
         assertEquals(1.0, lava.emittedVolume(), 1e-9);
         engine.submit(new LavaCommands.SetEffusionRate("vent", 2));
@@ -324,26 +319,24 @@ class LavaFlowTest {
     }
 
     @Test
-    void renderedBlocksMatchFinalState() {
-        // Every lava block ever placed must be removed or replaced by rock once everything solidified.
+    void everythingSolidifiesToRock() {
+        // Once everything solidified no melt is left and every lava deposit is rock.
         LavaTestWorld world = ramp(3);
         world.coarse(5);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(300));
         Engine engine = world.engine(lava, 14);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 100);
         lava.removeSource("vent");
         for (int t = 0; t < 100_000 && lava.activeCellCount() > 0; t++) world.run(engine, 1);
         assertEquals(0, lava.activeCellCount());
 
-        // No melt is left anywhere and the block cache never shows a hot surface.
+        WorldModel model = world.terrain.world();
         for (int x = -32; x < 48; x++) {
             for (int z = -32; z < 32; z++) {
                 assertEquals(0, lava.thickness(x, z), "melt left at " + x + "," + z);
-                TerrainColumn column = world.terrain.column(x, z);
-                if (column == null) continue;
-                String id = column.surface().toString();
-                assertFalse(id.equals("minecraft:lava") || id.equals("minecraft:magma_block"), "hot surface at " + x + "," + z);
+                if (!model.isKnown(x, z)) continue;
+                assertTrue(top(world, x, z).solid(), "solid surface at " + x + "," + z);
             }
         }
     }

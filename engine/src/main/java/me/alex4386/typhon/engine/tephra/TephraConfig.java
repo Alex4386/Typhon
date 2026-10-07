@@ -1,8 +1,7 @@
 package me.alex4386.typhon.engine.tephra;
 
 /**
- * Tunables for {@link TephraSubsystem}. Physical defaults use SI units with 1 block = 1 m; the
- * {@code *Scale} factors map real-world magnitudes onto Minecraft-sized volcanoes.
+ * Tunables for {@link TephraSubsystem}, in SI units (lengths in metres, masses in kg, times in seconds).
  *
  * <p>The subsystem copies the config when constructed, so later edits do not affect it.
  */
@@ -13,28 +12,17 @@ public final class TephraConfig {
     public double bombDensity = 2500;
     /** Drag coefficient of irregular bombs (Mastin 2001 uses ~0.6–1.0). */
     public double dragCoefficient = 1.0;
-    /** Air density near the ground, kg/m³ (assumed constant over Minecraft heights). */
-    public double airDensity = 1.2;
+    /** Sea-level air density, kg/m³ (ISA); bomb drag follows the standard atmosphere's density with height. */
+    public double airDensity = 1.225;
     public double gravity = 9.81;
     /** Longest RK4 integration step for bomb trajectories, seconds (each engine step is sub-divided). */
     public double maxIntegrationStepSeconds = 0.0125;
 
-    /**
-     * Multiplier on the physical gas-thrust exit speed. Real Vulcanian bombs leave at 100–400 m/s and
-     * land kilometres away; 0.35 keeps most bombs within a few hundred blocks.
-     */
-    public double ballisticSpeedScale = 0.35;
-    /** Physical exit speed bounds before scaling, m/s. */
+    /** Physical exit speed bounds, m/s. */
     public double minExitSpeed = 20;
     public double maxExitSpeed = 400;
     public double maxBombsPerSecond = 20;
 
-    /**
-     * Multiplier from real erupted mass to deposited model mass. Plume height is computed from the
-     * real mass eruption rate, but bombs and ash fall carry {@code massScale} times that mass, so a
-     * volcano modelled at {@code L} metres per block uses {@code 1/L³}.
-     */
-    public double massScale = 1.0;
     /** Bombs still airborne after this long are dropped. */
     public double maxFlightSeconds = 120;
 
@@ -47,42 +35,25 @@ public final class TephraConfig {
     public double launchAngleSigmaDeg = 18;
     public double maxLaunchAngleDeg = 70;
 
-    /** Bombs at least this large leave a block where they land. */
-    public double minBlockDiameter = 0.5;
-    /** Crater radius r = k · E^(1/3) (E in J); 0.0107 gives r ≈ 2 for a 1 m bomb at 100 m/s. */
+    /** Impact crater radius r = k · E^(1/3) (m, E in J); 0.0107 gives r ≈ 2 m for a 1 m bomb at 100 m/s. */
     public double craterCoefficient = 0.0107;
-    /** Conductive cooling time ∝ d², compressed to game time: seconds per m² of diameter². */
-    public double coolingSecondsPerSquareMeter = 30;
-    public double minCoolingSeconds = 5;
-    /** Cooling time multiplier for bombs that land in water. */
-    public double waterCoolingFactor = 0.1;
 
     // ── Ash plume and fall ──
 
     /** Ash transport runs every this many seconds. */
     public double ashStepSeconds = 1.0;
-    /** Horizontal size of an ash grid cell, blocks. */
-    public int cellSize = 8;
+    /** Horizontal size of an ash grid cell (m); rounded to whole surface columns. */
+    public double cellSizeM = 100;
     /** Grid width and depth in cells (domain is centred on the first vent). */
     public int gridCells = 128;
     /** Horizontal eddy diffusivity, m²/s. */
     public double diffusivity = 20;
     /** Bulk density of fresh tephra deposits, kg/m³. */
     public double depositBulkDensity = 1000;
-    /**
-     * Plume height in blocks per real metre (Mastin et al. 2009 height × scale). 0.01 maps a 5 km
-     * Vulcanian column to 50 blocks and a 15 km Plinian column to 150 blocks.
-     */
-    public double plumeHeightScale = 0.01;
-    /** Plumes are capped at this world height. */
-    public int worldTopY = 320;
     /** Settling velocity per {@link GrainClass} ordinal, m/s. */
     public double[] settlingVelocities = defaultSettlingVelocities();
-    public AshPalette palette = AshPalette.defaults();
-    /** Deposit thickness change (m) that triggers a block update in a cell. */
-    public double depositUpdateThickness = 0.005;
-    /** Relative per-column jitter on thickness thresholds, to break up cell edges. */
-    public double depositJitter = 0.3;
+    /** A cell's new deposit is laid on the ground once it reaches this thickness (m). */
+    public double depositUpdateThickness = 0.001;
 
     /** Ash-fall events are emitted every this many seconds, aggregated over square regions. */
     public double ashEventSeconds = 2.0;
@@ -99,7 +70,7 @@ public final class TephraConfig {
     public double ashEventChangeFraction = 0.5;
     public double ashEventRefreshSeconds = 60;
 
-    /** Initial wind in model units (blocks/s), bearing it blows towards and variability in [0, 1]. */
+    /** Initial wind (m/s), bearing it blows towards and variability in [0, 1]. */
     public double initialWindSpeed = 5;
     public double initialWindDirectionRad = 0;
     public double initialWindVariability = 0;
@@ -124,11 +95,9 @@ public final class TephraConfig {
         c.airDensity = airDensity;
         c.gravity = gravity;
         c.maxIntegrationStepSeconds = maxIntegrationStepSeconds;
-        c.ballisticSpeedScale = ballisticSpeedScale;
         c.minExitSpeed = minExitSpeed;
         c.maxExitSpeed = maxExitSpeed;
         c.maxBombsPerSecond = maxBombsPerSecond;
-        c.massScale = massScale;
         c.maxFlightSeconds = maxFlightSeconds;
         c.bombMedianDiameter = bombMedianDiameter;
         c.bombDiameterSigma = bombDiameterSigma;
@@ -136,22 +105,14 @@ public final class TephraConfig {
         c.maxBombDiameter = maxBombDiameter;
         c.launchAngleSigmaDeg = launchAngleSigmaDeg;
         c.maxLaunchAngleDeg = maxLaunchAngleDeg;
-        c.minBlockDiameter = minBlockDiameter;
         c.craterCoefficient = craterCoefficient;
-        c.coolingSecondsPerSquareMeter = coolingSecondsPerSquareMeter;
-        c.minCoolingSeconds = minCoolingSeconds;
-        c.waterCoolingFactor = waterCoolingFactor;
         c.ashStepSeconds = ashStepSeconds;
-        c.cellSize = cellSize;
+        c.cellSizeM = cellSizeM;
         c.gridCells = gridCells;
         c.diffusivity = diffusivity;
         c.depositBulkDensity = depositBulkDensity;
-        c.plumeHeightScale = plumeHeightScale;
-        c.worldTopY = worldTopY;
         c.settlingVelocities = settlingVelocities.clone();
-        c.palette = palette;
         c.depositUpdateThickness = depositUpdateThickness;
-        c.depositJitter = depositJitter;
         c.ashEventSeconds = ashEventSeconds;
         c.ashEventRegionCells = ashEventRegionCells;
         c.ashFallRateThreshold = ashFallRateThreshold;
@@ -169,11 +130,10 @@ public final class TephraConfig {
     }
 
     public void validate() {
-        if (!(massScale > 0)) throw new IllegalArgumentException("massScale must be > 0");
         if (!(ashEventRefreshSeconds > 0)) throw new IllegalArgumentException("ashEventRefreshSeconds must be > 0");
         if (!(maxIntegrationStepSeconds > 0)) throw new IllegalArgumentException("maxIntegrationStepSeconds must be > 0");
         if (!(ashStepSeconds > 0) || !(ashEventSeconds > 0)) throw new IllegalArgumentException("ash periods must be > 0");
-        if (cellSize < 1 || gridCells < 1) throw new IllegalArgumentException("grid must be non-empty");
+        if (!(cellSizeM > 0) || gridCells < 1) throw new IllegalArgumentException("grid must be non-empty");
         if (settlingVelocities.length != GrainClass.COUNT) {
             throw new IllegalArgumentException("settlingVelocities needs " + GrainClass.COUNT + " entries");
         }

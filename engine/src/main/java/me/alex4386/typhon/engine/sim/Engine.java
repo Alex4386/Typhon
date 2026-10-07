@@ -590,7 +590,7 @@ public final class Engine {
                 for (JsonElement e : meta.getAsJsonArray("subsystems")) {
                     JsonObject entry = e.getAsJsonObject();
                     savedHashes.put(entry.get("id").getAsString(), entry.get("configHash").getAsString());
-                    if (entry.has("nextQuanta")) savedNext.put(entry.get("id").getAsString(), entry.get("nextQuanta").getAsLong());
+                    savedNext.put(entry.get("id").getAsString(), entry.get("nextQuanta").getAsLong());
                 }
             }
 
@@ -639,9 +639,7 @@ public final class Engine {
             }
 
             long startStep = meta == null ? 0 : meta.get("step").getAsLong();
-            // saves before adaptive stepping counted one quantum per step
-            long startQuanta = meta == null ? 0
-                    : meta.has("timeMicros") ? meta.get("timeMicros").getAsLong() / baseStepMicros : startStep;
+            long startQuanta = meta == null ? 0 : meta.get("timeMicros").getAsLong() / baseStepMicros;
             for (Registered r : registered) {
                 Long next = savedNext.get(r.subsystem.id());
                 r.nextQuanta = next != null ? next : r.nextPointAtOrAfter(startQuanta);
@@ -650,7 +648,7 @@ public final class Engine {
                     : Math.max(1, (long) Math.floor(maxStepSeconds * SimTime.MICROS_PER_SECOND / baseStepMicros));
             Engine engine = new Engine(seed, baseStepMicros, maxStride, startStep, startQuanta, List.copyOf(registered),
                     bus, Parallel.of(threads));
-            if (meta != null && meta.has("lastStrideQuanta")) engine.lastStrideQuanta = meta.get("lastStrideQuanta").getAsLong();
+            if (meta != null) engine.lastStrideQuanta = meta.get("lastStrideQuanta").getAsLong();
             if (meta != null) {
                 for (JsonElement e : meta.getAsJsonArray("pendingCommands")) {
                     JsonObject entry = e.getAsJsonObject();

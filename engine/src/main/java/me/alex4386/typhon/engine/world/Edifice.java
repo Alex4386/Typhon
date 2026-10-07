@@ -14,23 +14,24 @@ import java.util.Objects;
  * basement cake.
  *
  * @param volcanoId volcano the edifice belongs to (recorded on its stratigraphic unit)
- * @param centerX centre column x
- * @param centerZ centre column z
- * @param radiusColumns radius in columns; {@code +∞} covers the whole world
+ * @param centerX centre x (m)
+ * @param centerZ centre z (m)
+ * @param radiusM radius (m); {@code +∞} covers the whole world
  * @param baseZ elevation of the edifice's base (m), {@code NaN} = the top of the basement cake
  * @param material material name in {@link MaterialTable}
  */
-public record Edifice(String volcanoId, double centerX, double centerZ, double radiusColumns, double baseZ,
+public record Edifice(String volcanoId, double centerX, double centerZ, double radiusM, double baseZ,
         String material) {
     public Edifice {
         Objects.requireNonNull(volcanoId, "volcanoId");
         MaterialTable.require(material);
-        if (!(radiusColumns > 0)) throw new IllegalArgumentException("edifice radius must be > 0");
+        if (!(radiusM > 0)) throw new IllegalArgumentException("edifice radius must be > 0");
     }
 
-    double distance(int x, int z) {
-        double dx = x + 0.5 - centerX;
-        double dz = z + 0.5 - centerZ;
+    /** Horizontal distance (m) from the centre of column (x, z) of an {@code l}-metre grid. */
+    double distance(int x, int z, double l) {
+        double dx = (x + 0.5) * l - centerX;
+        double dz = (z + 0.5) * l - centerZ;
         return Math.sqrt(dx * dx + dz * dz);
     }
 
@@ -38,14 +39,14 @@ public record Edifice(String volcanoId, double centerX, double centerZ, double r
      * The edifice a column belongs to: among bounded edifices containing it the one it lies deepest
      * in (smallest distance / radius); otherwise the nearest unbounded one; {@code null} if none.
      */
-    static Edifice at(List<Edifice> edifices, int x, int z) {
+    static Edifice at(List<Edifice> edifices, int x, int z, double l) {
         Edifice best = null;
         double bestRatio = Double.POSITIVE_INFINITY;
         for (Edifice e : edifices) {
-            if (Double.isInfinite(e.radiusColumns())) continue;
-            double d = e.distance(x, z);
-            if (d > e.radiusColumns()) continue;
-            double ratio = d / e.radiusColumns();
+            if (Double.isInfinite(e.radiusM())) continue;
+            double d = e.distance(x, z, l);
+            if (d > e.radiusM()) continue;
+            double ratio = d / e.radiusM();
             if (ratio < bestRatio) {
                 bestRatio = ratio;
                 best = e;
@@ -54,8 +55,8 @@ public record Edifice(String volcanoId, double centerX, double centerZ, double r
         if (best != null) return best;
         double bestDistance = Double.POSITIVE_INFINITY;
         for (Edifice e : edifices) {
-            if (!Double.isInfinite(e.radiusColumns())) continue;
-            double d = e.distance(x, z);
+            if (!Double.isInfinite(e.radiusM())) continue;
+            double d = e.distance(x, z, l);
             if (d < bestDistance) {
                 bestDistance = d;
                 best = e;

@@ -12,6 +12,13 @@ public final class VentEvents {
      *
      * @param feederWidthM widest open feeder width (m) of a dike-fed vent at the change; NaN for craters
      */
+    /**
+     * The flow of fissure {@code fissureId} localised: a segment kept carrying magma after the segments
+     * beside it froze, and goes on erupting as the crater {@code vent} on the fissure line.
+     */
+    public record VentFormed(double time, String volcanoId, VentSite vent, String fissureId)
+            implements HistoricalEvent {}
+
     public record VentStateChanged(double time, String volcanoId, String ventId, VentStatus previous,
             VentStatus current, double feederWidthM) implements HistoricalEvent {}
 }

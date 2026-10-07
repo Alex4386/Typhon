@@ -1,8 +1,8 @@
 /* What Tailwind utilities cannot express (gradients behind the canvas, third-party chart markup). */
 @layer components {
-  /* sky behind the transparent 3D canvas; the scene fog fades into the horizon colour */
+  /* behind the transparent 3D canvas until the sky dome (scene/Sky.tsx) draws: the same daytime sky */
   .view {
-    background: linear-gradient(to bottom, #0e1726 0%, #24364d 38%, #5c6b7b 62%, #7d8189 72%, #2c2a29 100%);
+    background: linear-gradient(to bottom, #3b669f 0%, #5a83b5 30%, #8fa9c4 52%, #b9c4cc 60%, #b9c4cc 100%);
   }
 
   /* below the ground the sky gives way to dark rock, so the subsurface overlays read clearly */

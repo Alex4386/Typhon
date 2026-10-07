@@ -31,13 +31,22 @@ public final class ConduitModel {
     static final double R_CO2 = 188.9;
     /** CO₂ solubility in silicate melt, wt% per MPa (Henry's law, ~0.5 ppm/bar; Dixon 1997). */
     public static final double CO2_SOLUBILITY = 5e-4;
+    /**
+     * Density of vesicle-free magma (kg/m³): one value between basalt (~2700) and rhyolite (~2300), the
+     * mid-range of melt densities (simplification: no composition dependence).
+     */
     public static final double MAGMA_DENSITY = 2500;
     static final double WATER_DENSITY = 1000;
     /** H₂O solubility coefficient, wt% per √MPa (Wilson &amp; Head 1981). */
     public static final double SOLUBILITY = 0.411;
-    /** Melt viscosity (Pa·s) below which a fragmenting foam tears inertially into coarse clots. */
+    /**
+     * Melt viscosity (Pa·s) below which a fragmenting foam tears inertially into coarse clots (fluid basaltic
+     * fountains) rather than breaking brittlely (Namiki &amp; Manga 2008). The boundary is a convention within the
+     * gap between basaltic (≤ 10³) and andesitic (≥ 10⁵ Pa·s) melts, not a measured threshold.
+     */
     static final double INERTIAL_VISCOSITY = 1e4;
 
+    // Solver: the mass-flux search range (kg/m²/s), its scan density and bisection depth (numerical).
     static final double G_MIN = 1e-4;
     static final double G_MAX = 3e6;
     static final int SCAN_PER_DECADE = 4;

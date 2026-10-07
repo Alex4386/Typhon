@@ -52,6 +52,11 @@ public final class MaterialTable {
     public static final Material CLAY = add("clay", MaterialClass.SOIL, 1800, 1.2, 1100, -9, 0.40, NA, NA, 0.5, false);
     public static final Material SULFUR = add("sulfur", MaterialClass.ROCK, 2000, 0.27, 710, -8, 0.10, 115, 115, 0.5, false);
     /**
+     * Siliceous sinter (opal-A) precipitated by hot springs and geysers: porous, bulk density ≈ 1.8–2.2 t/m³
+     * (Lynne &amp; Campbell 2004, J. Sediment. Res. 74), conductivity of porous silica ≈ 1.2 W/m·K.
+     */
+    public static final Material SINTER = add("sinter", MaterialClass.ROCK, 2000, 1.2, 800, -6, 0.30, NA, NA, 0.3, false);
+    /**
      * Glacial outwash / alluvial sand and gravel, e.g. the permeable fill of Yellowstone's geyser
      * basins (White et al. 1975, USGS PP 892): K ≈ 10⁻⁴–10⁻² m/s (Freeze &amp; Cherry 1979, Table 2.2).
      */

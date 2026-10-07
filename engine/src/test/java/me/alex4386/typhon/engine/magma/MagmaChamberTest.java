@@ -17,7 +17,7 @@ import me.alex4386.typhon.engine.magma.MagmaCommands.StopEruption;
 import me.alex4386.typhon.engine.magma.MagmaEvents.Cause;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionEnded;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -26,7 +26,7 @@ import me.alex4386.typhon.engine.testing.Saves;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 class MagmaChamberTest {
-    private static final BlockPos CENTER = new BlockPos(0, -40, 0);
+    private static final Point3 CENTER = new Point3(0, -4000, 0);
 
     /** A small, weakly supplied chamber (0.05 km³) so mechanics tests cycle quickly. */
     private static MagmaChamberConfig.Builder steady() {
@@ -66,20 +66,31 @@ class MagmaChamberTest {
         runFor(engine, 3e6, EngineEvent.class); // about a month
         double seconds = engine.time();
 
-        double expected = config.supplyRate() * seconds / (config.volume() * config.compressibilityPerMPa());
+        double expected = config.supplyRate() * seconds / (config.volume() * new MagmaChamber(config).bubbleFreeCompressibility());
         assertEquals(expected, chamber.overpressureMPa(), expected * 0.01);
-        assertEquals(config.supplyRate() / (config.volume() * config.compressibilityPerMPa()),
+        assertEquals(config.supplyRate() / (config.volume() * new MagmaChamber(config).bubbleFreeCompressibility()),
                 chamber.overpressureRateMPaPerSecond(), 1e-12);
         assertFalse(chamber.erupting());
     }
 
+    /** A chamber whose vent has a fully molten conduit (a persistently active vent). */
+    private static MagmaChamberConfig.Builder openVent() {
+        return steady().conduit(ConduitConfig.DEFAULT.withInitialOpenness(1));
+    }
+
     @Test
-    void eruptsAtTensileStrengthAndDrainsToEndThreshold() {
+    void withoutAConduitOnlyADikeStartsAnEruptionWhichDrainsToTheEndThreshold() {
         MagmaChamberConfig config = steady().initialOverpressureMPa(14.5).conduitRadius(3).build();
         MagmaChamber chamber = new MagmaChamber(config);
         Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
 
-        // recharge to failure takes days; the eruption is resolved at fine steps
+        // no conduit: past its roof strength the chamber does not erupt by itself (only a dike gets magma up)
+        assertTrue(runFor(engine, 30 * 86_400, EruptionStarted.class).isEmpty(), "no way up without a conduit or dike");
+        assertTrue(chamber.overpressureMPa() >= config.tensileStrengthMPa(), "pressurised past the roof strength");
+        assertEquals(0, chamber.conduitOpenness());
+
+        // a dike reaching the surface starts the eruption at the pressure the chamber has
+        chamber.requestFlankEruption();
         List<EngineEvent> events = runFor(engine, 30 * 86_400, EngineEvent.class);
         EruptionStarted started = events.stream().filter(EruptionStarted.class::isInstance)
                 .map(EruptionStarted.class::cast).findFirst().orElse(null);
@@ -87,14 +98,14 @@ class MagmaChamberTest {
                 .map(EruptionEnded.class::cast).findFirst().orElse(null);
 
         assertNotNull(started);
-        assertEquals(Cause.AUTOMATIC, started.cause());
+        assertEquals(Cause.DIKE, started.cause());
         assertTrue(started.overpressureMPa() >= config.tensileStrengthMPa());
         assertNotNull(ended, "eruption should end once overpressure is relieved");
         assertEquals(Cause.AUTOMATIC, ended.cause());
         assertTrue(ended.time() > started.time());
 
         // Mass balance: erupted volume ≈ elastic storage released (supply is negligible while erupting).
-        double released = config.volume() * config.compressibilityPerMPa()
+        double released = config.volume() * new MagmaChamber(config).bubbleFreeCompressibility()
                 * (started.overpressureMPa() - config.eruptionEndOverpressureMPa());
         assertEquals(released, ended.eruptedVolume(), released * 0.05);
     }
@@ -104,6 +115,7 @@ class MagmaChamberTest {
         MagmaChamberConfig config = steady().initialOverpressureMPa(15).build();
         MagmaChamber chamber = new MagmaChamber(config);
         Engine engine = Engine.builder(0).add(chamber).build();
+        chamber.requestFlankEruption(); // a dike has reached the surface
 
         run(engine, 40, EngineEvent.class); // starts on first step, flows on the next
         assertTrue(chamber.erupting());
@@ -116,8 +128,30 @@ class MagmaChamberTest {
     }
 
     @Test
+    void chamberMagmaCanBeReplacedInPlace() {
+        MagmaChamber chamber = new MagmaChamber(steady().build());
+        Engine engine = Engine.builder(0).add(chamber).build();
+        run(engine, 5, EngineEvent.class);
+        double co2 = chamber.bulkCo2Wt();
+        engine.submit(new MagmaCommands.SetChamberMagma("v", 900.0, 66.0, 4.0, null));
+        engine.step();
+        assertEquals(900, chamber.temperatureC(), 5, "the chamber magma takes the new temperature");
+        assertEquals(66, chamber.bulkSilicaWt(), 0.5);
+        assertEquals(4.0, chamber.bulkWaterWt(), 0.05);
+        assertEquals(co2, chamber.bulkCo2Wt(), 1e-3, "an unset field keeps its value");
+        assertTrue(chamber.crystalFraction() > 0.1, "cool dacite is crystal-rich");
+        assertThrows(IllegalArgumentException.class, () -> new MagmaCommands.SetChamberMagma("v", null, 90.0, null, null));
+    }
+
+    @Test
     void forcedStartAndStopOverrideThePhysics() {
-        MagmaChamberConfig config = steady().build();
+        // without a conduit there is nothing to force magma through (the override is a forced dike)
+        MagmaChamber sealedChamber = new MagmaChamber(steady().build());
+        Engine sealedEngine = Engine.builder(0).add(sealedChamber).build();
+        sealedEngine.submit(new StartEruption("v"));
+        assertTrue(run(sealedEngine, 40, EruptionStarted.class).isEmpty(), "no conduit, no forced start");
+
+        MagmaChamberConfig config = openVent().build();
         MagmaChamber chamber = new MagmaChamber(config);
         Engine engine = Engine.builder(0).add(chamber).build();
         run(engine, 20, EngineEvent.class);
@@ -151,7 +185,7 @@ class MagmaChamberTest {
         engine.submit(new InjectRecharge("v", volume, 1250, 48, 1.0));
         engine.step();
 
-        double stiffness = config.volume() * config.compressibilityPerMPa();
+        double stiffness = config.volume() * new MagmaChamber(config).bubbleFreeCompressibility();
         assertEquals(volume / stiffness, chamber.overpressureMPa(), 1e-6);
         assertTrue(chamber.temperatureC() > 1000);
         assertTrue(chamber.bulkSilicaWt() < config.initialSilicaWt());
@@ -299,6 +333,7 @@ class MagmaChamberTest {
                 .build();
         MagmaChamber chamber = new MagmaChamber(config);
         Engine engine = Engine.builder(0).add(chamber).build();
+        chamber.requestFlankEruption();
         // The degassing (more viscous) conduit relaxes slowly (τ = Vβ/c ≈ 7 h here); run several τ.
         run(engine, 20 * 3600 * 48, EngineEvent.class);
         assertTrue(chamber.erupting());
@@ -307,8 +342,10 @@ class MagmaChamberTest {
 
     @Test
     void routesCommandsToTheRightChamber() {
-        MagmaChamber a = new MagmaChamber(MagmaChamberConfig.builder("a", CENTER).supplyVariability(0).build());
-        MagmaChamber b = new MagmaChamber(MagmaChamberConfig.builder("b", new BlockPos(500, -40, 0)).supplyVariability(0).build());
+        ConduitConfig open = ConduitConfig.DEFAULT.withInitialOpenness(1);
+        MagmaChamber a = new MagmaChamber(MagmaChamberConfig.builder("a", CENTER).supplyVariability(0).conduit(open).build());
+        MagmaChamber b = new MagmaChamber(MagmaChamberConfig.builder("b", new Point3(500, -4000, 0)).supplyVariability(0)
+                .conduit(open).build());
         Engine engine = Engine.builder(0).add(a).add(b).build();
 
         engine.submit(new StartEruption("b"));

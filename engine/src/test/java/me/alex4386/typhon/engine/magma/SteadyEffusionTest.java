@@ -1,9 +1,10 @@
 package me.alex4386.typhon.engine.magma;
 
+import me.alex4386.typhon.engine.testing.TestConduits;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.sim.Engine;
 import org.junit.jupiter.api.Test;
 
@@ -15,11 +16,12 @@ import org.junit.jupiter.api.Test;
  * take up the rest.
  */
 class SteadyEffusionTest {
-    private static final BlockPos CENTER = new BlockPos(0, 0, 0);
+    private static final Point3 CENTER = new Point3(0, -4000, 0);
 
     private static MagmaChamberConfig.Builder chamber(double supply) {
         return MagmaChamberConfig.builder("v", CENTER).volume(5e7).compressibilityPerMPa(2e-4).lithostaticDepth(3000)
                 .conduitRadius(0.8).tensileStrengthMPa(8).eruptionEndOverpressureMPa(0.5).supplyRate(supply)
+                .conduit(TestConduits.molten(8)) // an open system
                 .supplyVariability(0).initialOverpressureMPa(7.9);
     }
 

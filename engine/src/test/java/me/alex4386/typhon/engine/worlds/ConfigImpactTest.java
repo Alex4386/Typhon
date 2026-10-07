@@ -23,8 +23,7 @@ class ConfigImpactTest {
 
     @Test
     void volcanoTable() {
-        for (String live : new String[] {"name", "active", "ballisticFraction",
-                "magma.chamber.supplyRate", "magma.chamber.rechargeCo2Wt", "magma.chamber.tensileStrengthMPa",
+        for (String live : new String[] {"name", "active", "magma.chamber.supplyRate", "magma.chamber.rechargeCo2Wt", "magma.chamber.tensileStrengthMPa",
                 "magma.chamber.lithostaticDepth", "magma.chamber.wallRuptureRatio", "magma.chamber.coolingTimescale",
                 "magma.conduit.fragmentationPorosity", "magma.conduit.plugStrengthMPa", "dikes.maxSpeed", "dikes.shearModulusPa",
                 "massFlows.pdc.frictionCoefficient", "massFlows.lahar.erosionCoefficient", "tephra.diffusivity",
@@ -40,7 +39,7 @@ class ConfigImpactTest {
         volcano("massFlows.pdc.enabled", Kind.REINIT, Target.VOLCANO);
         volcano("*", Kind.REINIT, Target.VOLCANO);
         volcano("tephra.gridCells", Kind.REINIT, Target.TEPHRA);
-        volcano("geothermal.radius", Kind.REINIT, Target.GEOTHERMAL);
+        volcano("geothermal.radiusM", Kind.REINIT, Target.GEOTHERMAL);
         volcano("geothermal.center.y", Kind.REINIT, Target.GEOTHERMAL);
         volcano("detail.metersPerCell", Kind.REINIT, Target.DETAIL);
         volcano("edifice.material", Kind.RELOAD, Target.EDIFICE);
@@ -49,7 +48,7 @@ class ConfigImpactTest {
     @Test
     void worldTable() {
         for (String live : new String[] {"name", "climate.rainfallMmPerHour",
-                "scaling.plumeMetersPerBlock", "lava.emissivity", "subsurface.macroStepSeconds", "subsurface.specificYield",
+                "lava.emissivity", "subsurface.macroStepSeconds", "subsurface.specificYield",
                 "expansion.marginTiles"}) {
             world(live, Kind.LIVE, Target.NONE);
         }
@@ -72,7 +71,7 @@ class ConfigImpactTest {
     void messagesNameTheConsequence() {
         String m = ConfigImpact.volcano("magma.chamber.initialWaterWt").message("Kilauea");
         assertTrue(m.startsWith("Restarts Kilauea"), m);
-        assertTrue(ConfigImpact.volcano("tephra.cellSize").message("Kilauea").contains("ash"));
+        assertTrue(ConfigImpact.volcano("tephra.cellSizeM").message("Kilauea").contains("ash"));
         assertEquals("Applies at once; the simulation carries on.", ConfigImpact.volcano("dikes.maxSpeed").message("Kilauea"));
     }
 

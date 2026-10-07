@@ -14,31 +14,43 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.subsurface.Subsurface;
 import me.alex4386.typhon.engine.subsurface.SubsurfaceConfig;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.MagmaState;
 import me.alex4386.typhon.engine.volcano.VentSite;
-import me.alex4386.typhon.engine.world.BlockId;
-import me.alex4386.typhon.engine.world.BlockState;
+import me.alex4386.typhon.engine.testing.TestGround;
+import me.alex4386.typhon.engine.world.Material;
+import me.alex4386.typhon.engine.world.MaterialTable;
+import me.alex4386.typhon.engine.world.WorldModel;
 import org.junit.jupiter.api.Test;
 import me.alex4386.typhon.engine.testing.Saves;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 class GeothermalTest {
-    static final BlockId ANDESITE = BlockId.minecraft("andesite");
-    static final BlockId SAND = BlockId.minecraft("sand");
-    static final int SURFACE_Y = 64;
-    static final BlockPos CENTER = new BlockPos(0, SURFACE_Y, 0);
+    static final Material ANDESITE = MaterialTable.ANDESITE;
+    static final Material SAND = MaterialTable.SEDIMENT;
+    /**
+     * Column width (m). The tests model a small hydrothermal field (an 80 m square) at 1 m resolution, with
+     * the default spatial tunables scaled down tenfold ({@link #smallConfig}).
+     */
+    static final double L = 1;
+    /** Ground elevation (m) of the flat test terrains. */
+    static final double SURFACE_Z = 64;
+    /**
+     * Geyser ground: liquid at the 10 m reservoir about 2 m below the water table (boils at ~116 °C there)
+     * but above the surface boiling point (~99.8 °C at 64 m), so it flashes as it rises.
+     */
+    static final double GEYSER_C = 110;
+    static final Point3 CENTER = Point3.columnCentre(0, 0, SURFACE_Z, L);
 
     /** Test double for the magma system. */
     static final class StubMagma implements MagmaState {
-        BlockPos chamber = new BlockPos(0, 0, 0);
+        Point3 chamber = new Point3(0, -3000, 0);
         double temperature = 1100;
         double overpressure = 0;
         double eruptionRate = 0;
@@ -47,7 +59,7 @@ class GeothermalTest {
             this.temperature = temperature;
         }
 
-        @Override public BlockPos chamberCenter() { return chamber; }
+        @Override public Point3 chamberCenter() { return chamber; }
         @Override public double overpressureMPa() { return overpressure; }
         @Override public double overpressureRateMPaPerSecond() { return 0; }
         @Override public double temperatureC() { return temperature; }
@@ -57,30 +69,43 @@ class GeothermalTest {
         @Override public double eruptionRate() { return eruptionRate; }
     }
 
-    static TerrainModel flatTerrain(int radius, BlockId surface) {
-        TerrainModel terrain = new TerrainModel();
-        for (int x = -radius; x < radius; x++) {
-            for (int z = -radius; z < radius; z++) {
-                terrain.setColumn(x, z, TerrainColumn.dry(SURFACE_Y, surface));
-            }
-        }
-        return terrain;
+    /** Dry ground at {@link #SURFACE_Z} over columns {@code [−radius, radius)²}. */
+    static TerrainModel flatTerrain(int radius, Material surface) {
+        return terrain(radius, (x, z) -> SURFACE_Z, TestGround.DRY, surface);
     }
 
-    static TerrainModel seafloor(int radius, int floorY) {
-        TerrainModel terrain = new TerrainModel();
+    /** A sea floor at {@code floorZ} under water standing at {@link #SURFACE_Z}. */
+    static TerrainModel seafloor(int radius, double floorZ) {
+        return terrain(radius, (x, z) -> floorZ, (x, z) -> SURFACE_Z, SAND);
+    }
+
+    static TerrainModel terrain(int radius, TestGround.Elevation ground, TestGround.Elevation water, Material cover) {
+        TerrainModel terrain = TestGround.terrain(L);
+        java.util.List<me.alex4386.typhon.engine.terrain.GroundColumn> columns = new ArrayList<>();
         for (int x = -radius; x < radius; x++) {
             for (int z = -radius; z < radius; z++) {
-                terrain.setColumn(x, z, new TerrainColumn(floorY, SURFACE_Y, SAND));
+                columns.add(new me.alex4386.typhon.engine.terrain.GroundColumn(x, z, ground.at(x, z), water.at(x, z),
+                        cover));
             }
         }
+        terrain.apply(new me.alex4386.typhon.engine.terrain.GroundImport(columns));
         return terrain;
     }
 
     static GeothermalConfig smallConfig() {
         GeothermalConfig config = new GeothermalConfig();
-        config.radius = 32;
-        config.cellSize = 4;
+        config.radiusM = 32;
+        config.cellSizeM = 4;
+        config.ventHaloM /= 10;
+        config.fumaroleSpacingM /= 10;
+        config.sulfurDepositRadiusM /= 10;
+        config.geyserSpacingM /= 10;
+        config.hotSpringSpacingM /= 10;
+        config.mudPotSpacingM /= 10;
+        config.submarineVentSpacingM /= 10;
+        config.alterationGrowthRadiusM /= 10;
+        config.sinterGrowthRadiusM /= 10;
+        config.cinnabarSpringRadiusM /= 10;
         return config;
     }
 
@@ -107,10 +132,10 @@ class GeothermalTest {
     }
 
     /** Geothermal over a {@link StubField} pinned at {@code temperatureC} and the config's saturation. */
-    static Geothermal frozen(GeothermalConfig config, TerrainModel terrain, BlockPalette palette, double temperatureC) {
+    static Geothermal frozen(GeothermalConfig config, TerrainModel terrain, double temperatureC) {
         StubField field = new StubField(terrain, config.reservoirDepthM, temperatureC,
                 FROZEN_WATER.getOrDefault(config, 0.5));
-        return new Geothermal("test", config, CENTER, new StubMagma(0), terrain, palette, List.of(), field);
+        return new Geothermal("test", config, CENTER, new StubMagma(0), terrain, List.of(), field);
     }
 
     static StubField stub(Geothermal geothermal) {
@@ -125,12 +150,10 @@ class GeothermalTest {
     /** Geothermal heating a real {@link Subsurface} on the terrain's world model. */
     static Geothermal live(GeothermalConfig config, TerrainModel terrain, MagmaState magma, List<VentSite> vents,
             SubsurfaceConfig subsurfaceConfig) {
-        // A chamber 64 blocks (m) below a 1 m-block surface would bake the whole test area; put it at
-        // a realistic depth so the vents' heat pipes dominate the shallow system.
-        if (magma instanceof StubMagma stub) stub.chamber = new BlockPos(0, -3000, 0);
+        // a chamber at a realistic depth, so the vents' heat pipes dominate the shallow system
+        if (magma instanceof StubMagma stub) stub.chamber = new Point3(0, -3000, 0);
         Subsurface subsurface = new Subsurface(terrain.world(), subsurfaceConfig);
-        Geothermal geothermal = new Geothermal("test", config, CENTER, magma, terrain, BlockPalette.unrestricted(),
-                vents, subsurface);
+        Geothermal geothermal = new Geothermal("test", config, CENTER, magma, terrain, vents, subsurface);
         subsurface.setHeatSources("test", geothermal);
         return geothermal;
     }
@@ -173,13 +196,13 @@ class GeothermalTest {
         return result;
     }
 
-    /** The surface blocks the block cache shows within {@code radius} of the origin. */
-    static Set<BlockId> surfaces(TerrainModel terrain, int radius) {
-        Set<BlockId> set = new HashSet<>();
+    /** The top materials of the columns within {@code radius} of the origin. */
+    static Set<Material> surfaces(TerrainModel terrain, int radius) {
+        WorldModel world = terrain.world();
+        Set<Material> set = new HashSet<>();
         for (int x = -radius; x < radius; x++) {
             for (int z = -radius; z < radius; z++) {
-                TerrainColumn column = terrain.column(x, z);
-                if (column != null) set.add(column.surface());
+                if (world.isKnown(x, z)) set.add(world.layer(x, z, world.layerCount(x, z) - 1).materialInfo());
             }
         }
         return set;
@@ -196,9 +219,9 @@ class GeothermalTest {
     @Test
     void activeVolcanoHeatsGroundAroundVent() {
         GeothermalConfig config = smallConfig();
-        config.radius = 64;
+        config.radiusM = 64 * L;
         TerrainModel terrain = flatTerrain(72, ANDESITE);
-        Geothermal geothermal = live(config, terrain, new StubMagma(1100), List.of(VentSite.crater("main", CENTER, 3)),
+        Geothermal geothermal = live(config, terrain, new StubMagma(1100), List.of(VentSite.crater("main", CENTER, 3 * L)),
                 liveSubsurface());
         geothermal.equilibrate(30 * DAY);
 
@@ -211,7 +234,7 @@ class GeothermalTest {
 
     @Test
     void coldChamberDrivesNoVentHeat() {
-        Geothermal geothermal = frozen(smallConfig(), flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 15);
+        Geothermal geothermal = frozen(smallConfig(), flatTerrain(40, ANDESITE), 15);
         assertEquals(0, geothermal.activity());
         assertTrue(geothermal.vents().isEmpty());
     }
@@ -221,7 +244,7 @@ class GeothermalTest {
         StubMagma magma = new StubMagma(1100);
         TerrainModel terrain = flatTerrain(40, ANDESITE);
         Geothermal geothermal = new Geothermal("test", smallConfig(), CENTER, magma, terrain,
-                BlockPalette.unrestricted(), List.of(VentSite.crater("main", CENTER, 3)),
+                List.of(VentSite.crater("main", CENTER, 3 * L)),
                 new StubField(terrain, 10, 15, 0.5));
         List<me.alex4386.typhon.engine.subsurface.HeatSources.Chamber> chambers = geothermal.chambers();
         assertEquals(1, chambers.size());
@@ -238,7 +261,7 @@ class GeothermalTest {
         StubMagma magma = new StubMagma(1100);
         TerrainModel terrain = flatTerrain(40, ANDESITE);
         Geothermal geothermal = new Geothermal("test", smallConfig(), CENTER, magma, terrain,
-                BlockPalette.unrestricted(), List.of(), new StubField(terrain, 10, 15, 0.5));
+                List.of(), new StubField(terrain, 10, 15, 0.5));
         double quiet = geothermal.activity();
         magma.overpressure = 10;
         double pressurised = geothermal.activity();
@@ -250,9 +273,10 @@ class GeothermalTest {
     @Test
     void lavaHeatFlowsIntoTheGround() {
         GeothermalConfig config = smallConfig();
-        Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 15);
+        Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), 15);
         geothermal.addLavaHeat(5, 5, 1150, 2);
-        double expected = config.lavaConductivity * (1150 - 15) / 1.0; // W/m² through 1 m (half the flow), 1 m², 1 s
+        // W/m² through 1 m (half the flow), over the column's L² m², for 1 s
+        double expected = config.lavaConductivity * (1150 - 15) / 1.0 * L * L;
         assertEquals(expected, stub(geothermal).surfaceHeat, 1e-9);
     }
 
@@ -273,7 +297,7 @@ class GeothermalTest {
         config.ventPipeDepthM = 20;
         config.maxFumaroles = 1000;
         TerrainModel terrain = flatTerrain(40, ANDESITE);
-        Geothermal geothermal = live(config, terrain, new StubMagma(chamberC), List.of(VentSite.crater("main", CENTER, 3)),
+        Geothermal geothermal = live(config, terrain, new StubMagma(chamberC), List.of(VentSite.crater("main", CENTER, 3 * L)),
                 liveSubsurface());
         geothermal.equilibrate(30 * DAY);
         List<EngineFrame> frames = run(geothermal, 42, 100);
@@ -285,34 +309,20 @@ class GeothermalTest {
         GeothermalConfig config = frozenConfig(0.2);
         config.sulfurDepositPerHour = 5;
         TerrainModel terrain = flatTerrain(40, ANDESITE);
-        Geothermal geothermal = frozen(config, terrain, BlockPalette.unrestricted(), 300);
+        Geothermal geothermal = frozen(config, terrain, 300);
         List<EngineFrame> frames = run(geothermal, 7, 60);
 
         assertTrue(formed(frames, HydrothermalFeature.FUMAROLE) > 0);
-        assertTrue(surfaces(terrain, 40).contains(GeothermalBlocks.SULFUR), "sulfur crusts the ground");
+        assertTrue(surfaces(terrain, 40).contains(MaterialTable.SULFUR), "sulfur crusts the ground");
         assertTrue(geothermal.features(HydrothermalFeature.SULFUR_DEPOSIT).stream().anyMatch(f -> f.level() > 0),
-                "sulfur spikes grow on deposits");
+                "sulfur deposits build up in stages");
 
         List<FumaroleActivity> activity = events(frames, FumaroleActivity.class);
         assertFalse(activity.isEmpty());
         FumaroleActivity sample = activity.get(0);
-        assertEquals(SURFACE_Y + 1, sample.pos().y());
+        assertEquals(SURFACE_Z, sample.pos().y(), 1e-9);
         GasComposition gas = sample.gas();
         assertEquals(1.0, gas.h2o() + gas.co2() + gas.so2() + gas.h2s(), 1e-9);
-    }
-
-    @Test
-    void spikeThicknessFollowsDripstoneSequence() {
-        assertEquals(List.of("tip"), thicknesses(1));
-        assertEquals(List.of("frustum", "tip"), thicknesses(2));
-        assertEquals(List.of("base", "frustum", "tip"), thicknesses(3));
-        assertEquals(List.of("base", "middle", "frustum", "tip"), thicknesses(4));
-    }
-
-    private static List<String> thicknesses(int height) {
-        List<String> result = new ArrayList<>();
-        for (int i = 0; i < height; i++) result.add(Geothermal.spikeState(i, height).property("thickness"));
-        return result;
     }
 
     @Test
@@ -329,8 +339,8 @@ class GeothermalTest {
         GeothermalConfig config = frozenConfig(0.2);
         config.fumaroleFormationPerHour = 0;
         config.acidAlterationPerHour = 0;
-        List<GasHazard> hot = events(run(frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 340), 1, 10), GasHazard.class);
-        List<GasHazard> mild = events(run(frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 140), 1, 10), GasHazard.class);
+        List<GasHazard> hot = events(run(frozen(config, flatTerrain(40, ANDESITE), 340), 1, 10), GasHazard.class);
+        List<GasHazard> mild = events(run(frozen(config, flatTerrain(40, ANDESITE), 140), 1, 10), GasHazard.class);
 
         Set<GasSpecies> species = hot.stream().map(GasHazard::species).collect(Collectors.toSet());
         assertEquals(Set.of(GasSpecies.CO2, GasSpecies.SO2, GasSpecies.H2S), species);
@@ -340,7 +350,7 @@ class GeothermalTest {
         // Hazards stay valid until the zone's next update (refresh, change or clear).
         assertTrue(hot.stream().allMatch(h -> h.durationSeconds() == config.hazardRefreshSeconds + config.hazardIntervalSeconds));
 
-        List<GasHazard> cold = events(run(frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 60), 1, 10), GasHazard.class);
+        List<GasHazard> cold = events(run(frozen(config, flatTerrain(40, ANDESITE), 60), 1, 10), GasHazard.class);
         assertTrue(cold.isEmpty());
     }
 
@@ -358,35 +368,38 @@ class GeothermalTest {
         return config;
     }
 
+    static long geysersFormed(List<EngineFrame> frames) {
+        return formed(frames, HydrothermalFeature.GEYSER);
+    }
+
     @Test
     void geysersFormWhereHotAndWetAsFloodedPits() {
         TerrainModel terrain = flatTerrain(40, ANDESITE);
-        List<EngineFrame> frames = run(frozen(geyserOnlyConfig(0.9), terrain, BlockPalette.unrestricted(), 140), 3, 30);
-        List<GeyserFormed> geysers = events(frames, GeyserFormed.class);
+        GeothermalConfig config = geyserOnlyConfig(0.9);
+        Geothermal geothermal = frozen(config, terrain, GEYSER_C);
+        List<EngineFrame> frames = run(geothermal, 3, 30);
+        List<PlacedFeature> geysers = geothermal.features(HydrothermalFeature.GEYSER);
         assertFalse(geysers.isEmpty());
-        assertTrue(geysers.size() <= new GeothermalConfig().maxGeysers);
+        assertEquals(geysers.size(), geysersFormed(frames));
+        assertTrue(geysers.size() <= config.maxGeysers);
 
-        var world = terrain.world();
-        double ground = world.spec().blockTop(SURFACE_Y);
-        double featureM = Math.min(1, world.spec().metersPerColumn());
-        for (GeyserFormed geyser : geysers) {
-            int k = geyser.waterBlocks();
-            assertTrue(k >= 1 && k <= 4);
-            BlockPos ps = geyser.potentSulfur();
-            assertEquals(SURFACE_Y - k, ps.y());
-            // a pit k feature blocks (≤ 1 m each) deep, flooded to the old ground, sulfur at its floor
-            assertEquals(ground - k * featureM, world.surfaceZ(ps.x(), ps.z()), 1e-6);
-            assertEquals(ground, world.waterZ(ps.x(), ps.z()), 1e-6);
-            assertEquals(GeothermalBlocks.POTENT_SULFUR, terrain.column(ps.x(), ps.z()).surface());
+        WorldModel world = terrain.world();
+        for (PlacedFeature geyser : geysers) {
+            int depth = geyser.level();
+            assertTrue(depth >= 1 && depth <= 4);
+            // a pit 1–4 m deep, flooded to the old ground
+            assertEquals(SURFACE_Z, geyser.elevation(), 1e-9);
+            assertEquals(SURFACE_Z - depth, world.surfaceZ(geyser.x(), geyser.z()), 1e-6);
+            assertEquals(SURFACE_Z, world.waterZ(geyser.x(), geyser.z()), 1e-6);
         }
 
         // geysers keep their spacing
-        for (GeyserFormed a : geysers) {
-            for (GeyserFormed b : geysers) {
+        int spacing = (int) Math.round(config.geyserSpacingM / L);
+        for (PlacedFeature a : geysers) {
+            for (PlacedFeature b : geysers) {
                 if (a == b) continue;
-                int d = Math.max(Math.abs(a.potentSulfur().x() - b.potentSulfur().x()),
-                        Math.abs(a.potentSulfur().z() - b.potentSulfur().z()));
-                assertTrue(d > new GeothermalConfig().geyserSpacing);
+                int d = Math.max(Math.abs(a.x() - b.x()), Math.abs(a.z() - b.z()));
+                assertTrue(d > spacing);
             }
         }
     }
@@ -394,63 +407,54 @@ class GeothermalTest {
     @Test
     void noFeaturesFormOnFreshLava() {
         // the same hot, wet ground that grows geysers in the test above, but freshly covered by lava
-        Geothermal geothermal = frozen(geyserOnlyConfig(0.9), flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 140);
+        Geothermal geothermal = frozen(geyserOnlyConfig(0.9), flatTerrain(40, ANDESITE), GEYSER_C);
         for (int x = -40; x < 40; x++) {
             for (int z = -40; z < 40; z++) geothermal.addLavaHeat(x, z, 1150, 2);
         }
         assertTrue(geothermal.lavaCovered(0, 0));
         List<EngineFrame> frames = run(geothermal, 3, 30);
-        assertTrue(events(frames, GeyserFormed.class).isEmpty(), "no geyser on a lava flow");
+        assertEquals(0, geysersFormed(frames), "no geyser on a lava flow");
         assertTrue(geothermal.featuresByColumn().isEmpty());
     }
 
     @Test
     void lavaBuriesFeaturesItReaches() {
-        Geothermal geothermal = frozen(geyserOnlyConfig(0.9), flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 140);
+        Geothermal geothermal = frozen(geyserOnlyConfig(0.9), flatTerrain(40, ANDESITE), GEYSER_C);
         Engine engine = engine(geothermal, 3).build();
-        List<GeyserFormed> geysers = events(run(engine, geothermal, 30), GeyserFormed.class);
+        run(engine, geothermal, 30);
+        List<PlacedFeature> geysers = geothermal.features(HydrothermalFeature.GEYSER);
         assertFalse(geysers.isEmpty());
-        GeyserFormed first = geysers.get(0);
-        int x = first.potentSulfur().x();
-        int z = first.potentSulfur().z();
+        PlacedFeature first = geysers.get(0);
+        int x = first.x();
+        int z = first.z();
         assertNotNull(geothermal.featuresByColumn().get(PlacedFeature.key(x, z)));
 
         geothermal.addLavaHeat(x, z, 1150, 3);
         List<HydrothermalFeatureBuried> buried = events(run(engine, geothermal, 1), HydrothermalFeatureBuried.class);
-        assertEquals(1, buried.stream().filter(b -> b.pos().x() == x && b.pos().z() == z).count(), buried.toString());
+        assertEquals(1, buried.stream().filter(b -> b.pos().columnX(L) == x && b.pos().columnZ(L) == z).count(),
+                buried.toString());
         assertEquals(HydrothermalFeature.GEYSER, buried.get(0).feature());
         assertNull(geothermal.featuresByColumn().get(PlacedFeature.key(x, z)), "its entity goes with it");
     }
 
     @Test
-    void noGeysersWhenDryColdOrUnsupported() {
-        assertTrue(events(run(frozen(geyserOnlyConfig(0.3), flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 140), 3, 30),
-                GeyserFormed.class).isEmpty(), "dry");
-        assertTrue(events(run(frozen(geyserOnlyConfig(0.9), flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 60), 3, 30),
-                GeyserFormed.class).isEmpty(), "cold");
-        assertTrue(events(run(frozen(geyserOnlyConfig(0.9), flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 260), 3, 30),
-                GeyserFormed.class).isEmpty(), "too hot (vapour-dominated)");
-
-        BlockPalette legacy = GeothermalBlocks.defaultPalette(Set.of(
-                ANDESITE, GeothermalBlocks.WATER, GeothermalBlocks.MAGMA_BLOCK, GeothermalBlocks.CALCITE));
-        assertTrue(events(run(frozen(geyserOnlyConfig(0.9), flatTerrain(40, ANDESITE), legacy, 140), 3, 30),
-                GeyserFormed.class).isEmpty(), "no potent sulfur");
+    void noGeysersWhenDryOrCold() {
+        assertEquals(0, geysersFormed(run(frozen(geyserOnlyConfig(0.3), flatTerrain(40, ANDESITE), 140), 3, 30)), "dry");
+        assertEquals(0, geysersFormed(run(frozen(geyserOnlyConfig(0.9), flatTerrain(40, ANDESITE), 60), 3, 30)), "cold");
+        assertEquals(0, geysersFormed(run(frozen(geyserOnlyConfig(0.9), flatTerrain(40, ANDESITE), 260), 3, 30)),
+                "too hot (vapour-dominated)");
     }
 
     @Test
     void geysersNeedContainingWalls() {
-        // Single-block-wide ridges: every column has a lower neighbour, so water would spill.
-        TerrainModel terrain = new TerrainModel();
-        for (int x = -40; x < 40; x++) {
-            for (int z = -40; z < 40; z++) {
-                terrain.setColumn(x, z, TerrainColumn.dry(SURFACE_Y + ((x & 1) == 0 ? 2 : 0), ANDESITE));
-            }
-        }
+        // One-column-wide ridges 2 m high: every ridge column has a lower neighbour, so water would spill.
+        TerrainModel terrain = terrain(40, (x, z) -> SURFACE_Z + ((x & 1) == 0 ? 2 : 0), TestGround.DRY, ANDESITE);
         // Even columns are ridges (spill), odd columns are trenches (contained).
-        List<GeyserFormed> geysers = events(run(frozen(geyserOnlyConfig(0.9), terrain, BlockPalette.unrestricted(), 140), 3, 30),
-                GeyserFormed.class);
+        Geothermal geothermal = frozen(geyserOnlyConfig(0.9), terrain, GEYSER_C);
+        run(geothermal, 3, 30);
+        List<PlacedFeature> geysers = geothermal.features(HydrothermalFeature.GEYSER);
         assertFalse(geysers.isEmpty());
-        assertTrue(geysers.stream().allMatch(g -> (g.potentSulfur().x() & 1) == 1));
+        assertTrue(geysers.stream().allMatch(g -> (g.x() & 1) == 1));
     }
 
     // ── Springs, mud, alteration ──
@@ -460,12 +464,12 @@ class GeothermalTest {
         GeothermalConfig springs = frozenConfig(0.8);
         springs.hotSpringFormationPerHour = 5;
         TerrainModel warmGround = flatTerrain(40, ANDESITE);
-        Geothermal warmField = frozen(springs, warmGround, BlockPalette.unrestricted(), 55);
+        Geothermal warmField = frozen(springs, warmGround, 55);
         List<EngineFrame> warm = run(warmField, 5, 30);
         assertTrue(formed(warm, HydrothermalFeature.HOT_SPRING) > 0);
         assertEquals(0, formed(warm, HydrothermalFeature.SULFUR_SPRING));
         var world = warmGround.world();
-        double ground = world.spec().blockTop(SURFACE_Y);
+        double ground = SURFACE_Z;
         for (PlacedFeature pool : warmField.features(HydrothermalFeature.HOT_SPRING)) {
             // a shallow pit flooded to the old ground
             assertTrue(world.surfaceZ(pool.x(), pool.z()) < ground - 1e-6, "pool floor below the ground at " + pool);
@@ -473,26 +477,28 @@ class GeothermalTest {
         }
 
         TerrainModel hotGround = flatTerrain(40, ANDESITE);
-        Geothermal hotField = frozen(springs, hotGround, BlockPalette.unrestricted(), 85);
+        Geothermal hotField = frozen(springs, hotGround, 85);
         List<EngineFrame> hotter = run(hotField, 5, 30);
         assertTrue(formed(hotter, HydrothermalFeature.SULFUR_SPRING) > 0);
-        assertTrue(hotField.features(HydrothermalFeature.SULFUR_SPRING).stream().anyMatch(p -> {
-            TerrainColumn column = hotGround.column(p.x(), p.z());
-            return column.surface().equals(GeothermalBlocks.POTENT_SULFUR) && column.groundY() == SURFACE_Y - 1;
-        }), "sulfur-floored pools");
+        WorldModel hotWorld = hotGround.world();
+        assertTrue(hotField.features(HydrothermalFeature.SULFUR_SPRING).stream().anyMatch(p ->
+                hotWorld.layer(p.x(), p.z(), hotWorld.layerCount(p.x(), p.z()) - 1).materialInfo() == MaterialTable.SULFUR
+                        && Math.abs(hotWorld.surfaceZ(p.x(), p.z())
+                                - (SURFACE_Z - Geothermal.POOL_DEPTH_M + Geothermal.SULFUR_STAGE_M)) < 1e-6),
+                "sulfur-floored pools");
 
         GeothermalConfig mud = frozenConfig(0.5);
         mud.mudPotFormationPerHour = 5;
         TerrainModel mudGround = flatTerrain(40, ANDESITE);
-        List<EngineFrame> muddy = run(frozen(mud, mudGround, BlockPalette.unrestricted(), 90), 5, 30);
+        List<EngineFrame> muddy = run(frozen(mud, mudGround, 90), 5, 30);
         assertTrue(formed(muddy, HydrothermalFeature.MUD_POT) > 0);
-        assertTrue(surfaces(mudGround, 40).contains(GeothermalBlocks.MUD));
+        assertTrue(surfaces(mudGround, 40).contains(MaterialTable.CLAY), "clay-rich mud");
     }
 
     @Test
     void alterationAccumulatesOverTime() {
         GeothermalConfig config = frozenConfig(0.3);
-        Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), BlockPalette.unrestricted(), 200);
+        Geothermal geothermal = frozen(config, flatTerrain(40, ANDESITE), 200);
         Engine engine = engine(geothermal, 9).build();
         run(engine, geothermal, 5);
         int early = geothermal.count(HydrothermalFeature.ACID_ALTERATION);
@@ -511,12 +517,12 @@ class GeothermalTest {
     private static int cinnabar(double temperatureC) {
         GeothermalConfig config = frozenConfig(0.5);
         config.cinnabarPerHour = 5;
-        config.cinnabarSpringRadius = 0; // isolate the temperature band from the spring requirement
+        config.cinnabarSpringRadiusM = 0; // isolate the temperature band from the spring requirement
         TerrainModel terrain = flatTerrain(40, ANDESITE);
-        Geothermal geothermal = frozen(config, terrain, BlockPalette.unrestricted(), temperatureC);
+        Geothermal geothermal = frozen(config, terrain, temperatureC);
         run(geothermal, 11, 30);
         for (PlacedFeature f : geothermal.features(HydrothermalFeature.CINNABAR)) {
-            assertEquals(GeothermalBlocks.CINNABAR, terrain.column(f.x(), f.z()).surface(), "cinnabar at " + f);
+            assertEquals(terrain.world().surfaceZ(f.x(), f.z()), f.elevation(), 1e-6, "cinnabar on the ground at " + f);
         }
         return geothermal.count(HydrothermalFeature.CINNABAR);
     }
@@ -526,36 +532,19 @@ class GeothermalTest {
         GeothermalConfig config = frozenConfig(0.5);
         config.submarineVentFormationPerHour = 5;
         TerrainModel terrain = seafloor(40, 50);
-        Geothermal geothermal = frozen(config, terrain, BlockPalette.unrestricted(), 200);
+        Geothermal geothermal = frozen(config, terrain, 200);
         List<EngineFrame> frames = run(geothermal, 13, 20);
         assertTrue(formed(frames, HydrothermalFeature.SUBMARINE_VENT) > 0);
         for (PlacedFeature vent : geothermal.features(HydrothermalFeature.SUBMARINE_VENT)) {
-            TerrainColumn column = terrain.column(vent.x(), vent.z());
-            assertEquals(GeothermalBlocks.MAGMA_BLOCK, column.surface());
-            assertEquals(50, column.groundY());
+            assertEquals(50, vent.elevation(), 1e-9);
+            assertEquals(50, terrain.world().surfaceZ(vent.x(), vent.z()), 1e-6, "vents open on the sea floor");
         }
         // nothing dry-land forms underwater
         assertEquals(0, formed(frames, HydrothermalFeature.FUMAROLE));
         assertEquals(0, formed(frames, HydrothermalFeature.ACID_ALTERATION));
     }
 
-    // ── Palette & CAS ──
-
-    @Test
-    void fallbackPaletteReplacesMissingBlocks() {
-        BlockPalette legacy = GeothermalBlocks.defaultPalette(Set.of(
-                ANDESITE, GeothermalBlocks.YELLOW_TERRACOTTA, GeothermalBlocks.POINTED_DRIPSTONE,
-                GeothermalBlocks.TERRACOTTA, GeothermalBlocks.CLAY, GeothermalBlocks.RED_TERRACOTTA,
-                GeothermalBlocks.WHITE_TERRACOTTA, GeothermalBlocks.ORANGE_TERRACOTTA, GeothermalBlocks.WATER));
-        GeothermalConfig config = frozenConfig(0.2);
-        config.sulfurDepositPerHour = 5;
-        TerrainModel terrain = flatTerrain(40, ANDESITE);
-        run(frozen(config, terrain, legacy, 300), 7, 60);
-
-        Set<BlockId> placed = surfaces(terrain, 40);
-        assertFalse(placed.contains(GeothermalBlocks.SULFUR));
-        assertTrue(placed.contains(GeothermalBlocks.YELLOW_TERRACOTTA));
-    }
+    // ── Placement ──
 
     @Test
     void surfaceFeaturesSitOnTheGround() {
@@ -565,7 +554,7 @@ class GeothermalTest {
         config.hotSpringFormationPerHour = 2;
         config.mudPotFormationPerHour = 2;
         TerrainModel terrain = flatTerrain(40, ANDESITE);
-        Geothermal geothermal = frozen(config, terrain, BlockPalette.unrestricted(), 105);
+        Geothermal geothermal = frozen(config, terrain, 105);
         run(geothermal, 21, 40);
 
         Set<HydrothermalFeature> onTheGround = Set.of(HydrothermalFeature.FUMAROLE, HydrothermalFeature.SULFUR_DEPOSIT,
@@ -574,7 +563,10 @@ class GeothermalTest {
         int checked = 0;
         for (PlacedFeature f : geothermal.featuresByColumn().values()) {
             if (!onTheGround.contains(f.kind())) continue;
-            assertEquals(f.y(), terrain.column(f.x(), f.z()).groundY(), "block cache mirrors " + f);
+            // at most the sulfur stages laid since it formed above its recorded elevation
+            double above = terrain.world().surfaceZ(f.x(), f.z()) - f.elevation();
+            assertTrue(above >= -1e-6 && above <= (config.maxSulfurStages + 1) * Geothermal.SULFUR_STAGE_M + 1e-6,
+                    f + " sits " + above + " m below the ground");
             checked++;
         }
         assertTrue(checked > 0);
@@ -586,7 +578,7 @@ class GeothermalTest {
         GeothermalConfig config = smallConfig();
         GeothermalTest.stepTime(config, 900);
         Geothermal geothermal = live(config, terrain, new StubMagma(1150),
-                List.of(VentSite.crater("main", CENTER, 3), VentSite.fissure("rift", new BlockPos(12, 64, 0), 0.5, 20)),
+                List.of(VentSite.crater("main", CENTER, 3 * L), VentSite.fissure("rift", Point3.columnCentre(12, 0, SURFACE_Z, L), 0.5, 20 * L, 2)),
                 liveSubsurface());
         geothermal.equilibrate(30 * DAY);
         return geothermal;
@@ -616,7 +608,7 @@ class GeothermalTest {
         GeothermalConfig config = smallConfig();
         GeothermalTest.stepTime(config, 900);
         Geothermal second = live(config, world, new StubMagma(1150),
-                List.of(VentSite.crater("main", CENTER, 3), VentSite.fissure("rift", new BlockPos(12, 64, 0), 0.5, 20)),
+                List.of(VentSite.crater("main", CENTER, 3 * L), VentSite.fissure("rift", Point3.columnCentre(12, 0, SURFACE_Z, L), 0.5, 20 * L, 2)),
                 liveSubsurface());
         Engine after = engine(second, 5).restore(saved).build();
         // to the same absolute end as the reference (the first half may end past its mark)
@@ -635,7 +627,7 @@ class GeothermalTest {
         InMemorySaveStore saved = Saves.save(engine);
 
         GeothermalConfig other = smallConfig();
-        other.cellSize = 8;
+        other.cellSizeM = 8 * L;
         Geothermal mismatched = live(other, flatTerrain(40, ANDESITE), new StubMagma(1150), List.of(), liveSubsurface());
         assertThrows(IllegalStateException.class, () -> engine(mismatched, 1).restore(saved).build());
     }
@@ -646,10 +638,8 @@ class GeothermalTest {
         config.stepSeconds = 5;
         TerrainModel terrain = flatTerrain(40, ANDESITE);
         Geothermal geothermal = new Geothermal("v1", config, CENTER, new StubMagma(0), terrain,
-                BlockPalette.unrestricted(), List.of(), new StubField(terrain, 10, 15, 0.5));
+                List.of(), new StubField(terrain, 10, 15, 0.5));
         assertEquals(5.0, geothermal.periodSeconds());
         assertEquals("geothermal:v1", geothermal.id());
-        assertTrue(BlockState.parse("minecraft:sulfur_spike[thickness=tip,vertical_direction=up]")
-                .equals(Geothermal.spikeState(0, 1)));
     }
 }

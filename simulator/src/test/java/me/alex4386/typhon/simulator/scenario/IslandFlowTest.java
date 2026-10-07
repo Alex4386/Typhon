@@ -55,7 +55,7 @@ class IslandFlowTest {
 
     /** The user's chamber: 3 km under the vent, fed at Surtsey's mean rate (~1.1 km³ in 3.5 years ≈ 10 m³/s). */
     static ChamberPlacement.Request chamber() {
-        return new ChamberPlacement.Request("surtur", 0, 0, 3000, null, null, null, null, null, null, 10.0, null, null);
+        return new ChamberPlacement.Request("surtur", 5, 5, 3000, null, null, null, null, null, null, 10.0, null, null);
     }
 
     @Test
@@ -102,14 +102,14 @@ class IslandFlowTest {
 
         // ── the user places a chamber ──
         t = System.nanoTime();
-        VolcanoDefinition def = ChamberPlacement.definition("surtur", chamber(), floor, l);
+        VolcanoDefinition def = ChamberPlacement.definition("surtur", chamber(), floor);
         world.addVolcano(def);
         VolcanoSystem v = s.volcano();
-        assertTrue(v.vents().get(0).emergent(), "no vent yet");
+        assertTrue(v.coupler().allVents().isEmpty(), "no vent yet");
         assertEquals(floor, wm.surfaceZ(0, 0), 1e-9, "nothing built: the sea floor is untouched");
         long placedAt = s.engine().currentStep();
         report.stage("placed", t, "chamber 3 km under the sea floor, %.2g m³, supply %.0f m³/s, %s", v.chamber().config().volume(),
-                v.chamber().supplyRate(), "vent emergent (none yet)");
+                v.chamber().supplyRate(), "no vent yet");
 
         // ── what the eruptions do ──
         t = System.nanoTime();
@@ -199,7 +199,7 @@ class IslandFlowTest {
     private static void replay(Scenario s, long placedAt, long until, double floor) {
         while (s.engine().currentStep() < until) {
             if (s.engine().currentStep() == placedAt) {
-                s.session().addVolcano(ChamberPlacement.definition("surtur", chamber(), floor, s.terrain().world().spec().metersPerColumn()));
+                s.session().addVolcano(ChamberPlacement.definition("surtur", chamber(), floor));
             }
             s.engine().step();
         }

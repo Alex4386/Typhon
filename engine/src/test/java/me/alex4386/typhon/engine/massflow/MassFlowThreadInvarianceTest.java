@@ -5,7 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import org.junit.jupiter.api.Test;
@@ -18,8 +19,8 @@ class MassFlowThreadInvarianceTest {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 15, 3, MassFlowTestWorld.rampToPlain(0.25, 160, 64));
         PyroclasticFlows flow = new PyroclasticFlows("pdc", w.terrain);
         Engine engine = w.engine(flow, 7, threads);
-        flow.release(new BlockPos(8, 0, 32), 3, 2500, 650, 0, Trigger.MANUAL);
-        flow.addSource(FlowSource.at("feed", new BlockPos(5, 0, 30), 15, 600, 0), Trigger.COLUMN_COLLAPSE);
+        flow.release(new Point3(8.5, 0, 32.5), 3, 2500, 650, 0, Trigger.MANUAL);
+        flow.addSource(FlowSource.at("feed", new ColumnIndex(5, 30), 15, 600, 0), Trigger.COLUMN_COLLAPSE);
         w.run(engine, 500);
         return new Run(w.frames, engine.stateHash());
     }
@@ -29,7 +30,7 @@ class MassFlowThreadInvarianceTest {
         Lahars flow = new Lahars("lahar", w.terrain);
         Engine engine = w.engine(flow, 42, threads);
         for (int x = 0; x < 60; x++) flow.addErodibleDeposit(x, 32, 0.3);
-        flow.release(new BlockPos(8, 0, 32), 3, 1500, 15, 0.3, Trigger.MANUAL);
+        flow.release(new Point3(8.5, 0, 32.5), 3, 1500, 15, 0.3, Trigger.MANUAL);
         w.run(engine, 500);
         return new Run(w.frames, engine.stateHash());
     }

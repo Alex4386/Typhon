@@ -33,6 +33,7 @@ function placeOf(e: SimEvent): [number, number] | null {
     case 'geothermalFeature':
       return [e.at[0], e.at[1]];
     case 'fissureOpened':
+    case 'ventFormed':
       return e.vent.at;
     case 'seismic':
       return [e.hypocenter[0], e.hypocenter[1]];

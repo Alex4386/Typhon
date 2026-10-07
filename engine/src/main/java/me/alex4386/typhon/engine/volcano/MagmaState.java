@@ -2,18 +2,18 @@ package me.alex4386.typhon.engine.volcano;
 
 import me.alex4386.typhon.engine.magma.conduit.ConduitInput;
 import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 
 /**
  * Read-only view of a volcano's magma system, shared by the subsystems that react to it (seismicity,
  * geothermal activity, lava effusion, ...).
  *
- * <p>Units: 1 block = 1 m; pressures in MPa; temperatures in °C; compositions in weight percent;
+ * <p>Units: lengths in metres; pressures in MPa; temperatures in °C; compositions in weight percent;
  * rates per second.
  */
 public interface MagmaState {
-    /** Centre of the magma chamber. */
-    BlockPos chamberCenter();
+    /** Centre of the magma chamber (m; {@code y} is its elevation). */
+    Point3 chamberCenter();
 
     /** Pressure in excess of lithostatic; eruptions/dikes start when it exceeds rock strength. */
     double overpressureMPa();
@@ -36,9 +36,14 @@ public interface MagmaState {
     double eruptionRate();
 
     /**
-     * Real depth (m) of the chamber centre below the surface, which may differ from the world
-     * position of {@link #chamberCenter()} when the vertical scale is compressed; {@code NaN} if unknown.
+     * Overpressure (MPa) at which the system next fails and magma starts towards the surface: the plug of a
+     * molten conduit, or else the chamber walls (a dike breaks out). NaN when the source does not say.
      */
+    default double nextFailureOverpressureMPa() {
+        return Double.NaN;
+    }
+
+    /** Depth (m) of the chamber centre below the surface; {@code NaN} if unknown. */
     default double physicalDepthM() {
         return Double.NaN;
     }

@@ -16,7 +16,7 @@ class SurfaceDetailTest {
     }
 
     private static WorldModel world() {
-        WorldModel world = new WorldModel(WorldSpec.blocks(L));
+        WorldModel world = new WorldModel(WorldSpec.withColumns(L));
         for (int z = 0; z < 9; z++) {
             for (int x = 0; x < 9; x++) {
                 double mean = 0;
@@ -76,6 +76,34 @@ class SurfaceDetailTest {
     }
 
     @Test
+    void depositsOnASlopeDrapeItInsteadOfTerracingIt() {
+        // a uniform 31° flank (tan = 0.6) rising to the east, no relief: the detail starts as the bilinear slope
+        double tan = 0.6;
+        WorldModel world = new WorldModel(WorldSpec.withColumns(L));
+        for (int z = 0; z < 9; z++) {
+            for (int x = 0; x < 9; x++) world.importColumn(x, z, 100 + tan * L * x, MaterialTable.BASALT);
+        }
+        SurfaceDetail d = new SurfaceDetail(world, 0, 0, 9, R, null);
+        d.reconcileAll();
+        double before = total(d);
+        for (int k = 0; k < 20; k++) {
+            for (int z = 0; z < 9; z++) {
+                for (int x = 0; x < 9; x++) world.deposit(x, z, 1.0, MaterialTable.ASH, 0, LayerFlags.LOOSE, 0.4, 0);
+            }
+            d.reconcileAll();
+        }
+        assertEquals(before + 20.0 * 81 * R * R, total(d), 1e-1, "volume conserved");
+        // every interior column still rises to the east by tan·L/R per cell: no flat steps between columns
+        for (int x = 1; x < 8; x++) {
+            assertEquals(world.surfaceZ(x, 4), d.columnMean(x, 4), 1e-3);
+            for (int i = 1; i < R; i++) {
+                double rise = d.elevation(x * R + i, 4 * R + 1) - d.elevation(x * R + i - 1, 4 * R + 1);
+                assertEquals(tan * L / R, rise, 0.05, "column " + x + " cell " + i + " keeps the slope");
+            }
+        }
+    }
+
+    @Test
     void reconcilingIsPathIndependent() {
         WorldModel a = world();
         WorldModel b = world();
@@ -117,14 +145,22 @@ class SurfaceDetailTest {
     }
 
     @Test
-    void erosionCutsTheHighestCells() {
-        WorldModel world = world();
-        SurfaceDetail d = new SurfaceDetail(world, 0, 0, 9, R, SurfaceDetailTest::bowl);
+    void erosionCutsWhatStandsAboveTheSmoothSurfaceFirst() {
+        WorldModel world = new WorldModel(WorldSpec.withColumns(L));
+        for (int z = 0; z < 9; z++) {
+            for (int x = 0; x < 9; x++) world.importColumn(x, z, 100, MaterialTable.BASALT);
+        }
+        SurfaceDetail d = new SurfaceDetail(world, 0, 0, 9, R, null);
         d.reconcileAll();
-        double low = d.elevation(4 * R + 1, 4 * R + 1);
-        world.erode(4, 4, 0.05, false);
+        // a 1.6 m mound on one cell of column (4, 4); the column rises by 1.6 / R² = 0.1 m
+        assertTrue(d.raise(4 * R + 1, 4 * R + 1, 1.6, MaterialTable.SCORIA, 0));
+        double mound = d.elevation(4 * R + 1, 4 * R + 1);
+        double flat = d.elevation(4 * R + 3, 4 * R + 3);
+        world.erode(4, 4, 0.05, false); // half the mound's volume
         d.reconcileAll();
-        assertEquals(low, d.elevation(4 * R + 1, 4 * R + 1), 1e-3, "the crater floor is untouched by a little erosion");
+        // (within the base's own small change under the lowered column)
+        assertEquals(mound - 0.8, d.elevation(4 * R + 1, 4 * R + 1), 0.02, "the mound is cut first");
+        assertEquals(flat, d.elevation(4 * R + 3, 4 * R + 3), 0.02, "the flat ground is (nearly) untouched");
         assertEquals(world.surfaceZ(4, 4), d.columnMean(4, 4), 1e-4);
     }
 
@@ -135,7 +171,7 @@ class SurfaceDetailTest {
         d.reconcileAll();
         d.lower(5, 5, 1.0);
         SurfaceDetail e = new SurfaceDetail(world, 0, 0, 9, R, null);
-        e.restore(d.cells().clone(), d.seenSurfaces().clone(), d.seenVersions().clone());
+        e.restore(d.residuals().clone(), d.seenSurfaces().clone(), d.seenVersions().clone());
         for (int fz = 0; fz < 9 * R; fz++) {
             for (int fx = 0; fx < 9 * R; fx++) assertEquals(d.elevation(fx, fz), e.elevation(fx, fz));
         }

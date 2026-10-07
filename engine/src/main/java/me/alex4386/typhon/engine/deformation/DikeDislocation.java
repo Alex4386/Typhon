@@ -13,7 +13,9 @@ package me.alex4386.typhon.engine.deformation;
  * The walls are pushed apart (±b/2 at a dike that reaches the surface) and the ground rises in two
  * lobes flanking a low above the dike, the characteristic pattern of a shallow intrusion. This is a
  * parametric approximation of the elastic dislocation solution, adequate for monitoring signals and
- * landscape effects, not for inversion.
+ * landscape effects, not for inversion: the exact 3-D solution for a rectangular tensile dislocation is
+ * Okada (1985), Bull. Seismol. Soc. Am. 75; the Gaussian taper beyond the ends and the depth floors below
+ * are approximations (not derived), the floors numerical.
  */
 public final class DikeDislocation {
     private DikeDislocation() {}

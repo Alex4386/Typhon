@@ -377,7 +377,7 @@ function NewWorld({ disabled }: { disabled: boolean }) {
                 (p) =>
                   [
                     `p:${p.name}`,
-                    `Scenario: ${p.title || p.name}${p.realScale ? " (real scale)" : ""}`,
+                    `Scenario: ${p.title || p.name}`,
                   ] as const,
               ),
             ]}

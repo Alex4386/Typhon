@@ -15,16 +15,13 @@ import me.alex4386.typhon.engine.config.WorldDefinition;
 import me.alex4386.typhon.engine.subsurface.Subsurface;
 import me.alex4386.typhon.engine.subsurface.SubsurfaceConfig;
 import me.alex4386.typhon.engine.config.Yaml;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
-import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.terrain.GroundColumn;
 import me.alex4386.typhon.engine.world.Edifice;
+import me.alex4386.typhon.engine.world.MaterialTable;
 import me.alex4386.typhon.engine.worlds.World;
 import me.alex4386.typhon.engine.worlds.WorldDirectory;
 import me.alex4386.typhon.simulator.terrain.ColumnGrid;
-import me.alex4386.typhon.simulator.terrain.DemImporter;
 import me.alex4386.typhon.simulator.terrain.DemTerrain;
-import me.alex4386.typhon.simulator.terrain.TerrainGenerators;
 
 /**
  * Runs world directories ({@code worlds/<name>}) in the simulator and writes world templates.
@@ -34,13 +31,12 @@ import me.alex4386.typhon.simulator.terrain.TerrainGenerators;
  * <pre>
  * terrain: {source: preset, preset: kilauea, seed: 1}              # a preset's synthetic terrain
  * terrain: {source: dem, path: dem.tif, centerLat: 19.4069, centerLon: -155.2834, halfExtent: 256}
- *                                       # real scale: GeoTIFF / SRTM .hgt (or any DEM with mapping: real),
- *                                       # grid.metersPerColumn per column, sea level from world.yaml
- * terrain: {source: dem, path: dem.asc, cell: 30, maxMeters: 3000} # compact: ESRI ASCII grid or PNG heightmap
- * terrain: {source: twin-cones, separation: 160, height: 60, radius: 140, craterRadius: 5}
+ *                                       # GeoTIFF / SRTM .hgt / ESRI ASCII grid (cell: m), resampled onto
+ *                                       # grid.metersPerColumn columns, sea level from world.yaml
+ * terrain: {source: twin-cones, separationM: 3200, baseZ: 200, heightM: 1200, radiusM: 2800, craterRadiusM: 100}
  * </pre>
  * Any source may add {@code contextExtentM}: the width (m) of the coarse, static terrain shown
- * around the simulated domain ({@link Scenario#context()}; default 30 km at real scale), and
+ * around the simulated domain ({@link Scenario#context()}; default 30 km), and
  * {@code coreExtentM}: the width (m) of the initially simulated core (presets: their own window when
  * absent; DEMs: {@code halfExtent} columns). The landscape beyond is generated from the same source and
  * simulated on demand ({@code expansion:} in world.yaml).
@@ -62,7 +58,7 @@ public final class WorldScenarios {
         boolean restored = layout.hasState();
         WorldDefinition definition = layout.readWorld();
         ColumnGrid grid = terrain(definition, dir);
-        World world = World.open(dir, (w, volcanoes) -> grid.toSnapshot(), policy, threads);
+        World world = World.open(dir, (w, volcanoes) -> grid.toImport(), policy, threads);
         Scenario scenario = Scenario.fromWorld(definition.name(), world, grid, restored);
         Number context = number(definition.terrain(), "contextExtentM", Double.NaN);
         scenario.setContextExtent(context.doubleValue());
@@ -86,27 +82,16 @@ public final class WorldScenarios {
                 String file = string(t, "path", null);
                 if (file == null) throw new ConfigException("world.yaml: terrain.path: is required for source dem");
                 Path path = worldDir.resolve(file);
-                double cell = number(t, "cell", 30).doubleValue();
-                String lower = file.toLowerCase(Locale.ROOT);
-                boolean real = "real".equals(string(t, "mapping", null)) || t.containsKey("centerLat")
-                        || lower.endsWith(".tif") || lower.endsWith(".tiff") || lower.endsWith(".hgt");
+                double l = definition.spec().metersPerColumn();
+                double core = number(t, "coreExtentM", Double.NaN).doubleValue();
+                int half = Double.isNaN(core) ? number(t, "halfExtent", 256).intValue() : halfColumns(core, l);
+                // keep DEM data as far as the world may grow, so materialised ground is real too
+                int reach = definition.expansion().enabled()
+                        ? Math.max(half, halfColumns(definition.expansion().maxExtentM(), l)) : half;
                 try {
-                    if (real) {
-                        double l = definition.spec().metersPerColumn();
-                        double core = number(t, "coreExtentM", Double.NaN).doubleValue();
-                        int half = Double.isNaN(core) ? number(t, "halfExtent", 256).intValue() : halfColumns(core, l);
-                        // keep DEM data as far as the world may grow, so materialised ground is real too
-                        int reach = definition.expansion().enabled()
-                                ? Math.max(half, halfColumns(definition.expansion().maxExtentM(), l)) : half;
-                        return DemTerrain.load(path, l, half, reach, definition.spec().seaLevelZ(),
-                                number(t, "centerLat", Double.NaN).doubleValue(),
-                                number(t, "centerLon", Double.NaN).doubleValue());
-                    }
-                    DemImporter.Dem dem = file.toLowerCase(Locale.ROOT).endsWith(".png")
-                            ? DemImporter.readPng(path, 0, number(t, "maxMeters", 3000).doubleValue(), cell)
-                            : DemImporter.readAscii(path, cell);
-                    return DemImporter.toGrid(dem, definition.spec().metersPerColumn(),
-                            number(t, "maxHalfExtent", 384).intValue());
+                    return DemTerrain.load(path, l, half, reach, definition.spec().seaLevelZ(),
+                            number(t, "centerLat", Double.NaN).doubleValue(),
+                            number(t, "centerLon", Double.NaN).doubleValue());
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }
@@ -115,29 +100,41 @@ public final class WorldScenarios {
                 return WorldTemplates.terrain(definition);
             }
             case "twin-cones" -> {
-                return twinCones(number(t, "halfExtent", 192).intValue(), number(t, "separation", 160).intValue(),
-                        number(t, "height", 60).intValue(), number(t, "radius", 140).intValue(),
-                        number(t, "craterRadius", 5).intValue());
+                double l = definition.spec().metersPerColumn();
+                return twinCones(l, halfColumns(number(t, "coreExtentM", 7680).doubleValue(), l),
+                        number(t, "separationM", 3200).doubleValue(), number(t, "baseZ", 200).doubleValue(),
+                        number(t, "heightM", 1200).doubleValue(), number(t, "radiusM", 2800).doubleValue(),
+                        number(t, "craterRadiusM", 100).doubleValue());
             }
             default -> throw new ConfigException("world.yaml: terrain.source: unknown source '" + source
                     + "'; expected preset, template, dem or twin-cones");
         }
     }
 
-    /** Two cones on a plain, at x = ±separation/2, each with a small summit crater. */
-    public static ColumnGrid twinCones(int halfExtent, int separation, int height, int radius, int craterRadius) {
-        int[] centres = {-separation / 2, separation / 2};
-        return ColumnGrid.generateCentered(halfExtent, (x, z) -> {
+    /** Depth (m) of the twin cones' summit craters. */
+    static final double TWIN_CRATER_DEPTH_M = 60;
+
+    /**
+     * Two cones on a plain at {@code baseZ} (m), centred at x = ±separation/2 (m), each with a summit
+     * crater {@link #TWIN_CRATER_DEPTH_M} deep.
+     */
+    public static ColumnGrid twinCones(double metersPerColumn, int halfExtentColumns, double separationM, double baseZ,
+            double heightM, double radiusM, double craterRadiusM) {
+        double[] centres = {-separationM / 2, separationM / 2};
+        ColumnGrid.Relief relief = (xm, zm) -> {
             double h = 0;
-            for (int cx : centres) {
-                double d = Math.hypot(x - cx, z);
-                double cone = height * Math.max(0, 1 - d / radius);
-                if (d < craterRadius) cone = height - 3;
+            for (double cx : centres) {
+                double d = Math.hypot(xm - cx, zm);
+                double cone = heightM * Math.max(0, 1 - d / radiusM);
+                if (d < craterRadiusM) cone = heightM * (1 - craterRadiusM / radiusM) - TWIN_CRATER_DEPTH_M;
                 h = Math.max(h, cone);
             }
-            return new TerrainColumn(TerrainGenerators.BASE_Y + (int) Math.round(h), TerrainColumn.NO_WATER,
-                    BlockId.minecraft(h > 2 ? "basalt" : "grass_block"));
-        }, null);
+            return baseZ + h;
+        };
+        return ColumnGrid.generateCentered(halfExtentColumns, metersPerColumn, (x, z) -> {
+            double e = relief.elevation((x + 0.5) * metersPerColumn, (z + 0.5) * metersPerColumn);
+            return GroundColumn.dry(x, z, e, e > baseZ + 20 ? MaterialTable.BASALT : MaterialTable.SOIL);
+        }, relief);
     }
 
     /** Half width in columns of a core {@code extentM} metres wide. */
@@ -153,8 +150,7 @@ public final class WorldScenarios {
     }
 
     /**
-     * Writes a world directory for a built-in preset; with {@code dem} (real-scale presets only) the
-     * terrain comes from that DEM file, centred on the preset's coordinates, and vents are anchored
+     * Writes a world directory for a built-in preset; with {@code dem} the terrain comes from that DEM file, centred on the preset's coordinates, and vents are anchored
      * to it.
      */
     public static void writeFromPreset(Preset preset, long seed, Path out, Path dem) {
@@ -162,7 +158,6 @@ public final class WorldScenarios {
         Map<String, Object> terrain = new LinkedHashMap<>();
         Scenario scenario;
         if (dem != null) {
-            if (real == null) throw new IllegalArgumentException(preset.name() + " is not a real-scale preset");
             if (!real.dem().available()) throw new IllegalArgumentException(preset.name() + " is synthetic: " + real.dem().notes());
             double core = preset.worldCoreExtentM();
             int half = Double.isNaN(core) ? real.halfExtentColumns() : halfColumns(core, real.metersPerColumn());
@@ -185,35 +180,33 @@ public final class WorldScenarios {
             if (Double.isNaN(core)) {
                 scenario = preset.build(seed);
             } else {
-                double l = real != null ? real.metersPerColumn() : 1;
-                scenario = preset.build(seed, preset.terrain(seed, halfColumns(core, l)), Scenario.Options.DEFAULT);
+                scenario = preset.build(seed, preset.terrain(seed, halfColumns(core, real.metersPerColumn())),
+                        Scenario.Options.DEFAULT);
             }
             terrain.put("source", "preset");
             terrain.put("preset", preset.name());
             terrain.put("seed", seed);
             if (!Double.isNaN(core)) terrain.put("coreExtentM", core);
         }
-        VolcanoScaling scaling = scenario.volcano().scaling();
         // The preset's subsurface parameters (its own model, when a volcano created one) become the
-        // world's climate, geotherm, aquifer and subsurface sections. Real-scale presets keep their
-        // lapse rate, which the subsurface does not read yet.
+        // world's climate, geotherm, aquifer and subsurface sections. Presets keep their lapse rate,
+        // which the subsurface does not read yet.
         Subsurface subsurface = scenario.volcano().subsurface();
         SubsurfaceConfig sc = subsurface != null ? subsurface.configuration().copy()
-                : VolcanoSystem.defaultSubsurfaceConfig(scaling);
-        WorldDefinition.Geotherm geotherm = real != null
-                ? new WorldDefinition.Geotherm(sc.surfaceTemperatureC, sc.gradientCPerKm, real.geotherm().lapseRateCPerKm())
-                : new WorldDefinition.Geotherm(sc.surfaceTemperatureC, sc.gradientCPerKm);
+                : new SubsurfaceConfig();
+        WorldDefinition.Geotherm geotherm = new WorldDefinition.Geotherm(sc.surfaceTemperatureC, sc.gradientCPerKm,
+                real.geotherm().lapseRateCPerKm());
         WorldDefinition.Aquifer aquifer = new WorldDefinition.Aquifer(sc.initialWaterTableDepthM, sc.specificYield,
                 sc.waterTableTopographyFactor, sc.waterTableBaseLevelM, sc.rechargeFraction);
-        WorldDefinition world = new WorldDefinition(preset.name(), seed, 50, scenario.terrain().world().spec(), scaling,
+        WorldDefinition world = new WorldDefinition(preset.name(), seed, 50, scenario.terrain().world().spec(),
                 new WorldDefinition.Climate(sc.rainfallMmPerHour, sc.evaporationMmPerHour, Double.NaN, 0, 0.3),
                 geotherm, aquifer, terrain, scenario.lava().config(), sc);
         List<VolcanoDefinition> volcanoes = new ArrayList<>();
         for (VolcanoSystem v : scenario.volcanoes()) {
-            VolcanoDefinition definition = VolcanoDefinition.fromSystem(v, scaling);
+            VolcanoDefinition definition = VolcanoDefinition.fromSystem(v);
             for (Edifice e : scenario.terrain().world().edifices()) {
                 if (e.volcanoId().equals(v.volcanoId())) {
-                    definition = definition.withEdifice(e.material(), e.radiusColumns(), e.baseZ());
+                    definition = definition.withEdifice(e.material(), e.radiusM(), e.baseZ());
                 }
             }
             volcanoes.add(definition);
@@ -228,7 +221,7 @@ public final class WorldScenarios {
     }
 
     /**
-     * Writes an example world: {@code twin} has two cones 160 blocks apart — a basaltic one close to
+     * Writes an example world: {@code twin} has two 1.2 km cones 3.2 km apart — a basaltic one close to
      * failure (east) and a quieter andesitic one (west) — sharing terrain, lava field and history.
      */
     public static void writeExample(String name, Path out) {
@@ -237,33 +230,35 @@ public final class WorldScenarios {
                 name: twin
                 seed: 1
                 baseStepMs: 50
-                grid: {metersPerColumn: 4}
-                scaling: {plumeMetersPerBlock: 100}
+                grid: {metersPerColumn: 20}
                 climate:
                   wind: {speed: 6, bearingDeg: 60, variability: 0.3}
                 geology:
-                  basement: [{material: granite, top: -600, porosity: 0.01}]
+                  datum: -6000
+                  basement: [{material: granite, top: -3000, porosity: 0.01}]
                   edificeMaterial: basalt
-                terrain: {source: twin-cones, separation: 160, height: 60, radius: 140, craterRadius: 5}
+                terrain: {source: twin-cones, separationM: 3200, baseZ: 200, heightM: 1200, radiusM: 2800,
+                          craterRadiusM: 100, coreExtentM: 7680}
                 """));
+        // crater floors: 200 + 1200·(1 − 100/2800) − 60 m
         VolcanoDefinition east = VolcanoDefinition.parse("east", Yaml.parse("east.yaml", """
                 name: East cone (basaltic, near failure)
-                vents: [{id: summit, kind: crater, x: 80, y: 121, z: 0, radius: 5}]
+                vents: [{id: summit, kind: crater, x: 1610, y: 1297, z: 10, radiusM: 100}]
                 magma:
-                  chamber: {center: {x: 80, y: 20, z: 0}, volume: 2.0e9, lithostaticDepth: 2000, supplyRate: 1.0,
+                  chamber: {center: {x: 1610, y: -2000, z: 10}, volume: 2.0e9, lithostaticDepth: 3300, supplyRate: 1.0,
                             initialOverpressureMPa: 14.0, initialSilicaWt: 50, rechargeSilicaWt: 50,
                             initialWaterWt: 0.5, rechargeWaterWt: 0.5}
-                geothermal: {radius: 64}
+                geothermal: {radiusM: 1500}
                 """));
         VolcanoDefinition west = VolcanoDefinition.parse("west", Yaml.parse("west.yaml", """
                 name: West cone (andesitic, quiet)
-                vents: [{id: summit, kind: crater, x: -80, y: 121, z: 0, radius: 5}]
+                vents: [{id: summit, kind: crater, x: -1590, y: 1297, z: 10, radiusM: 100}]
                 magma:
-                  chamber: {center: {x: -80, y: 10, z: 0}, volume: 5.0e9, supplyRate: 0.2, initialOverpressureMPa: 4.0,
+                  chamber: {center: {x: -1590, y: -3500, z: 10}, volume: 5.0e9, supplyRate: 0.2, initialOverpressureMPa: 4.0,
                             initialSilicaWt: 60, rechargeSilicaWt: 58, initialWaterWt: 3.5, rechargeWaterWt: 3.5,
                             initialTemperatureC: 1000}
-                geothermal: {radius: 64, maxGeysers: 4}
-                edifice: {material: andesite, radius: 140}
+                geothermal: {radiusM: 1500, maxGeysers: 4}
+                edifice: {material: andesite, radiusM: 2800}
                 """));
         new WorldDirectory(out).writeDefinitions(world, List.of(east, west), HEADER + "# Example world 'twin'.\n");
     }

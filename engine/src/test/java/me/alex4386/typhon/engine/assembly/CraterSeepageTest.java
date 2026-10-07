@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
-import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.world.Material;
 import me.alex4386.typhon.engine.world.MaterialTable;
 import me.alex4386.typhon.engine.world.WorldModel;
@@ -31,7 +30,7 @@ class CraterSeepageTest {
     }
 
     private static double seepage(WorldModel world, double floorZ) {
-        return VolcanoCoupler.seepageIntoCrater(world, new BlockPos(0, 0, 0), CRATER, floorZ);
+        return VolcanoCoupler.seepageIntoCrater(world, 0, 0, CRATER, floorZ);
     }
 
     @Test
@@ -60,11 +59,11 @@ class CraterSeepageTest {
     void aLagoonIsOpenOnlyThroughABreach() {
         WorldModel enclosed = ring(6, MaterialTable.ASH);
         for (int x = -40; x <= 40; x++) for (int z = -40; z <= 40; z++) enclosed.setWaterZ(x, z, 0);
-        assertTrue(!VolcanoCoupler.connectedToOpenWater(enclosed, new BlockPos(0, 0, 0), 30), "a closed tuff ring holds a lagoon");
+        assertTrue(!VolcanoCoupler.connectedToOpenWater(enclosed, 0, 0, 30), "a closed tuff ring holds a lagoon");
         WorldModel breached = ring(6, MaterialTable.ASH);
         for (int x = -40; x <= 40; x++) for (int z = -40; z <= 40; z++) breached.setWaterZ(x, z, 0);
         for (int x = 0; x <= 12; x++) breached.importColumn(x, 0, -5, MaterialTable.ASH); // a channel cut through the ring
-        assertTrue(VolcanoCoupler.connectedToOpenWater(breached, new BlockPos(0, 0, 0), 30), "the sea comes in through the breach");
+        assertTrue(VolcanoCoupler.connectedToOpenWater(breached, 0, 0, 30), "the sea comes in through the breach");
         assertTrue(seepage(enclosed, -20) > 0, "the closed lagoon is fed by seepage through the ring");
     }
 }

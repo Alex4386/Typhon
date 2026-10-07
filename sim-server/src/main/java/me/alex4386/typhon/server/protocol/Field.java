@@ -16,7 +16,11 @@ public enum Field {
     WATER_TABLE_DEPTH(9, Codecs.F32_RAW, 4.0),
     TOP_UNIT(10, Codecs.U16_RAW, 2.0),
     UPLIFT(11, Codecs.F32_RAW, 4.0),
-    STEAM_FRACTION(12, Codecs.U8_LINEAR, 4.0);
+    STEAM_FRACTION(12, Codecs.U8_LINEAR, 4.0),
+    /** The second most visible unit of the surface (see {@code FieldSampler.surfaceCover}). */
+    UNDER_UNIT(13, Codecs.U16_RAW, 2.0),
+    /** Share of the second unit in what the top two show (0..1). */
+    UNDER_SHARE(14, Codecs.U8_LINEAR, 2.0);
 
     public final int id;
     public final int codec;

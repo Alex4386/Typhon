@@ -65,12 +65,11 @@ class WorldBuilderE2ETest {
             JsonObject after = c.await(m -> m.type().equals("attached")
                     && m.json().getAsJsonObject("world").getAsJsonArray("volcanoes").size() == 1, 120).json();
             JsonObject v = after.getAsJsonObject("world").getAsJsonArray("volcanoes").get(0).getAsJsonObject();
-            assertTrue(v.getAsJsonArray("vents").get(0).getAsJsonObject().get("emergent").getAsBoolean(),
-                    "no vent yet: it forms where magma first reaches the surface");
+            assertEquals(0, v.getAsJsonArray("vents").size(), "no vent yet: one forms where a dike breaks out");
             JsonObject entities = c.await(m -> m.type().equals("entities") && m.json().has("replace")
                     && m.json().get("replace").getAsBoolean(), 60).json();
             assertTrue(hasEntity(entities, "chamber:" + vid), "the chamber is an entity");
-            assertFalse(hasEntity(entities, "vent:" + vid + ":vent"), "its vent is not shown before it exists");
+            assertTrue(entities.toString().indexOf("\"vent:" + vid) < 0, "no vent is shown before one exists");
 
             // a live dial on it
             Reply live = http(port, "PATCH", "/api/sessions/" + id + "/config", "{\"volcanoes\":{\"" + vid + "\":{\"magma.chamber.supplyRate\":4}}}");

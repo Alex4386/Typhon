@@ -12,7 +12,8 @@ import java.util.Objects;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.deformation.DikeGeometry;
 import me.alex4386.typhon.engine.dike.DikeEvents.StallReason;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
+import me.alex4386.typhon.engine.magma.MagmaCommands;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
@@ -30,33 +31,48 @@ import me.alex4386.typhon.engine.save.StateWriter;
 /**
  * Dike nucleation and propagation from a magma chamber.
  *
- * <p><b>Nucleation.</b> Once chamber overpressure {@code P} exceeds {@code f₀·T} (roof tensile strength
- * {@code T}), dikes nucleate as a Poisson process with rate
- * {@code λ = λ_max · sealing · ((P/T − f₀)/(1 − f₀))²}. An open summit conduit ({@code sealing → 0})
- * vents pressure at the summit instead; no dikes form while the chamber erupts.
+ * <p><b>Nucleation.</b> A dike starts when the chamber walls fail in tension: at an overpressure of twice
+ * the rock's tensile strength, where the hoop stress on a pressurised sphere reaches it (Tait, Jaupart &amp;
+ * Vergniolle 1989; {@link me.alex4386.typhon.engine.magma.MagmaChamber#ruptureOverpressureMPa()}). The
+ * magma the walls can no longer hold leaves through it. A molten summit conduit fails first (at a lower
+ * pressure) and vents at the summit instead. Where on the roof it starts is the only random choice.
  *
- * <p><b>Mechanics.</b> The dike is a vertical crack of height {@code H} (chamber to tip) and strike
- * length {@code L = min(H, L_max)}. Its driving pressure is chamber overpressure plus buoyancy,
- * {@code ΔP = P + (ρ_rock − ρ_magma) g H} (basalt is denser than the crust and must be pushed;
- * silicic magma is buoyant). Opening follows the elastic crack estimate
- * {@code w = 2(1−ν) ΔP L / μ}, clamped to observed thicknesses, and the tip advances at the
- * Poiseuille slot velocity {@code v = w² (ΔP / H) / (12 η)} — basaltic dikes rise at ~0.1–5 m/s,
- * viscous silicic dikes are far slower. The intruded volume {@code w · L · H} is drawn from the
- * chamber, lowering its overpressure. The dike stalls when {@code ΔP} falls below
- * {@link DikeConfig#stallPressureMPa} or when {@code v} drops below {@link DikeConfig#freezeSpeed}
- * (magma freezes against the wall rock faster than it advances).
+ * <p><b>Geometry.</b> A dike leaves the chamber from its roof (hoop tension on a pressurised sphere in a
+ * gravitational stress field is greatest at its top) and is a vertical crack of height {@code H} (roof to
+ * tip) and breadth {@code b = min(H, D)}: a crack driven from a source grows about as broad as it is high
+ * (penny-shaped), and is fed over at most the chamber's diameter {@code D} (Rubin 1995; Rivalta et al.
+ * 2015). Its driving pressure is chamber overpressure plus buoyancy, {@code ΔP = P + (ρ_rock − ρ_magma) g H}
+ * (basalt is denser than the crust and must be pushed; silicic magma is buoyant). Its opening is the
+ * elastic estimate for a pressurised crack whose shorter dimension is {@code b},
+ * {@code w = 2(1−ν) ΔP b / μ} (Pollard 1987), and the tip advances at the laminar slot velocity
+ * {@code v = w² (ΔP / H) / (12 η)} (Lister &amp; Kerr 1991) — basaltic dikes rise at ~0.1–5 m/s, viscous
+ * silicic dikes far slower. The intruded volume {@code w · b · H} is drawn from the chamber, lowering its
+ * overpressure.
+ *
+ * <p><b>Arrest.</b> The dike stalls when the stress intensity at its tip, {@code K = ΔP √(π b / 2)}, falls
+ * below the rock's fracture toughness (it can no longer break rock), or when it freezes: a sheet of
+ * half-width {@code w/2} solidifies against wall rock at temperature {@code T₀} in
+ * {@code t_s = (w/2)² / (4 κ λ²)}, {@code λ} from the Stefan condition
+ * {@code L √π / (c (T_m − T₀)) = e^{−λ²} / (λ (1 + erf λ))} (Turcotte &amp; Schubert 2002, §4.18); magma
+ * that takes longer than that to rise through the dike ({@code H / v > t_s}) freezes in it.
  *
  * <p><b>Path.</b> Dikes rise vertically at depth. Within the edifice, gravitational stresses rotate
  * them down the topographic slope ({@code −∇h}, weighted by {@code exp(−depth / scale)}), so dikes
- * starting beneath a summit tend to surface on the flanks. A deterministic, mean-reverting
- * (Ornstein–Uhlenbeck) perturbation makes the heading wander. On reaching the surface a fissure
- * opens along the radial direction from the volcano axis (radial dikes, the least compressive
- * stress being circumferential around a cone).
+ * starting beneath a summit tend to surface on the flanks (Muller et al. 2001). A deterministic,
+ * mean-reverting (Ornstein–Uhlenbeck) perturbation stands for unresolved host-rock heterogeneity.
  *
- * <p>Depth is tracked in real metres; the model world compresses it between the chamber and the
- * surface, so the tip's world y is interpolated.
+ * <p><b>Fissure.</b> On reaching the surface the dike's top edge opens a fissure as long as the dike is
+ * broad and as wide as its opening. It strikes perpendicular to the least compressive stress: radial around
+ * the inflated chamber (circumferential hoop tension), else down the edifice's slope (the load's stress is
+ * radial on a cone; Acocella &amp; Neri 2009), else perpendicular to the regional σ₃ when one is given; only
+ * with none of these is the strike undetermined, and drawn at random.
  *
- * <p>References: Rubin (1995), Annu. Rev. Earth Planet. Sci. 23:287-336 (propagation of magma-filled cracks). See {@code docs/references.md}.
+ * <p>Positions and depths are in metres.
+ *
+ * <p>References: Rubin (1995), Annu. Rev. Earth Planet. Sci. 23:287-336; Pollard (1987), Geol. Assoc. Canada Spec.
+ * Pap. 34; Lister &amp; Kerr (1991), J. Geophys. Res. 96; Rivalta et al. (2015), Tectonophysics 638; Turcotte &amp;
+ * Schubert (2002), Geodynamics; Muller et al. (2001), J. Geophys. Res. 106; Acocella &amp; Neri (2009),
+ * Tectonophysics 471. See {@code docs/references.md}.
  */
 public final class DikePropagation implements Subsystem {
     static final double GRAVITY = 9.81;
@@ -71,14 +87,10 @@ public final class DikePropagation implements Subsystem {
     private int forcedPending;
     /** Dikes the user asked to stop, arrested at the next step. */
     private final TreeSet<Integer> pendingArrests = new TreeSet<>();
-    /** Spontaneous nucleation blocked by the user. */
+    /** Dike nucleation blocked by the user. */
     private boolean nucleationBlocked;
 
-    /**
-     * @param terrain surface model for slopes and fissure elevation; may be {@code null} (flat world
-     *     at the chamber's assumed surface)
-     */
-    private Consumer<List<BlockPos>> hypocenterListener;
+    private Consumer<List<Point3>> hypocenterListener;
     private me.alex4386.typhon.engine.volcano.GroundCoupling ground = me.alex4386.typhon.engine.volcano.GroundCoupling.NONE;
 
     /**
@@ -90,6 +102,10 @@ public final class DikePropagation implements Subsystem {
     }
     private UnitSource units = UnitSource.UNATTRIBUTED;
 
+    /**
+     * @param terrain ground for slopes and fissure elevation; may be {@code null} (a flat surface
+     *     {@link DikeMagmaSource#chamberDepthM()} above the chamber)
+     */
     public DikePropagation(DikeConfig config, DikeMagmaSource magma, TerrainModel terrain) {
         config.validate();
         this.config = config;
@@ -124,10 +140,8 @@ public final class DikePropagation implements Subsystem {
     @Override
     public double maxStepSeconds() {
         if (activeCount() > 0 || forcedPending > 0) return RISING_STEP_SECONDS;
-        // Keep a spontaneous dike unlikely within one step (≤ 10 %), so it starts, rises and erupts in
-        // steps of its own rather than all inside a day-long quiet step.
-        double rate = blocked() ? 0 : nucleationRate();
-        return rate > 0 ? Math.max(RISING_STEP_SECONDS, 0.1 / rate) : Double.POSITIVE_INFINITY;
+        // a dike nucleates only when the chamber walls fail; the chamber bounds its own step towards that
+        return Double.POSITIVE_INFINITY;
     }
 
     @Override
@@ -143,6 +157,10 @@ public final class DikePropagation implements Subsystem {
         });
         bus.register(DikeCommands.BlockDikes.class, c -> {
             if (c.volcanoId().equals(volcanoId)) nucleationBlocked = c.blocked();
+        });
+        // a forced eruption without a molten conduit to a crater needs a way up: a dike
+        bus.register(MagmaCommands.StartEruption.class, c -> {
+            if (c.volcanoId().equals(volcanoId) && !magma.erupting() && !magma.conduitToSurface()) forcedPending++;
         });
     }
 
@@ -174,7 +192,7 @@ public final class DikePropagation implements Subsystem {
         return false;
     }
 
-    /** Blocks or allows spontaneous dike nucleation (forced dikes still start). */
+    /** Blocks or allows dike nucleation at wall rupture (forced dikes still start). */
     public void setNucleationBlocked(boolean blocked) {
         this.nucleationBlocked = blocked;
     }
@@ -198,7 +216,7 @@ public final class DikePropagation implements Subsystem {
      * Receives the hypocentres of tip fracturing each time a dike advances (e.g.
      * {@code seismicity::queueInducedVt}). Not persisted: re-attach when building the engine.
      */
-    public void setHypocenterListener(Consumer<List<BlockPos>> listener) {
+    public void setHypocenterListener(Consumer<List<Point3>> listener) {
         this.hypocenterListener = listener;
     }
 
@@ -236,8 +254,6 @@ public final class DikePropagation implements Subsystem {
             }
             if (carrier == null && activeCount() < config.maxConcurrentDikes) carrier = start(context);
             if (carrier != null) carrier.volume += magma.takeRuptureExcess();
-        } else if (!blocked() && activeCount() < config.maxConcurrentDikes && random.chance(nucleationProbability(context))) {
-            start(context);
         }
 
         for (Dike dike : dikes) {
@@ -246,32 +262,29 @@ public final class DikePropagation implements Subsystem {
         prune();
     }
 
-    /** Probability that a dike nucleates during a step of this length. */
-    double nucleationProbability(StepContext context) {
-        return 1 - StrictMath.exp(-nucleationRate() * context.dtSeconds());
+    /** Depth (m) of the chamber roof the dikes leave from: the centre depth less the chamber's radius. */
+    double roofDepthM() {
+        double depth = magma.chamberDepthM();
+        double radius = magma.chamberRadiusM();
+        if (!(radius > 0)) return depth;
+        // numerical: a chamber reaching (nearly) to the surface still leaves a roof to rise through
+        return Math.max(Math.min(depth, MIN_ROOF_DEPTH_M), depth - radius);
     }
 
-    /** Spontaneous nucleation rate (per second) at the current overpressure. */
-    double nucleationRate() {
-        double ratio = magma.overpressureMPa() / magma.tensileStrengthMPa();
-        double f0 = config.initiationPressureRatio;
-        if (ratio < f0) return 0;
-        double x = Math.min(1, (ratio - f0) / (1 - f0));
-        // an open, venting summit conduit lets the pressure out there instead of through the walls
-        double sealing = 1 - Math.max(0, Math.min(1, magma.conduitOpenness()));
-        return config.maxInitiationRate * sealing * x * x;
+    /** Diameter (m) of the chamber feeding the dikes, or +∞ for a point source. */
+    double sourceDiameterM() {
+        double radius = magma.chamberRadiusM();
+        return radius > 0 ? 2 * radius : Double.POSITIVE_INFINITY;
     }
 
     private Dike start(StepContext context) {
-        SimRandom random = context.random();
-        BlockPos center = magma.chamberCenter();
-        double angle = random.nextDouble() * 2 * Math.PI;
-        double radius = Math.sqrt(random.nextDouble()) * config.startOffsetBlocks;
-        double x = center.x() + 0.5 + radius * StrictMath.cos(angle);
-        double z = center.z() + 0.5 + radius * StrictMath.sin(angle);
-        int surface = surfaceY(x, z, center.y() + 64);
-        Dike dike = new Dike(nextId++, context.time(), x, z, Math.max(surface, center.y() + 1), center.y(),
-                magma.chamberDepthM());
+        Point3 center = magma.chamberCenter();
+        // from the roof's apex, straight above the chamber centre
+        double x = center.x();
+        double z = center.z();
+        double depth = roofDepthM();
+        double surface = surfaceZ(x, z, center.y() + magma.chamberDepthM());
+        Dike dike = new Dike(nextId++, context.time(), x, z, surface, depth);
         dikes.add(dike);
         context.outbox().emit(new DikeEvents.DikeStarted(context.time(), volcanoId, dike.id, dike.origin(),
                 magma.overpressureMPa()));
@@ -283,26 +296,26 @@ public final class DikePropagation implements Subsystem {
         double remaining = stepDt;
         double travelled = 0;
         StallReason stall = null;
-        List<BlockPos> hypocenters = new ArrayList<>();
+        List<Point3> hypocenters = new ArrayList<>();
 
         while (remaining > 0 && dike.depth > 0) {
             double height = Math.max(0, dike.chamberDepth - dike.depth);
             double characteristic = Math.max(height, config.minCharacteristicHeight);
             double buoyancy = (config.rockDensity - magmaDensity(magma.silicaWt())) * GRAVITY * height / 1e6;
             double drive = magma.overpressureMPa() + buoyancy;
-            if (drive < config.stallPressureMPa) {
+            double breadth = Math.min(characteristic, sourceDiameterM());
+            // the tip breaks rock only while its stress intensity exceeds the rock's toughness
+            if (!(drive > 0) || drive * Math.sqrt(Math.PI * breadth / 2) < config.fractureToughnessMPaSqrtM) {
                 stall = StallReason.INSUFFICIENT_PRESSURE;
                 break;
             }
 
-            double strike = Math.min(characteristic, config.maxStrikeLength);
-            double opening = clamp(2 * (1 - config.poissonRatio) * drive * 1e6 * strike / config.shearModulusPa,
-                    config.minOpening, config.maxOpening);
+            double opening = 2 * (1 - config.poissonRatio) * drive * 1e6 * breadth / config.shearModulusPa;
             double viscosity = StrictMath.pow(10, magma.viscosityLog10());
             double speed = Math.min(config.maxSpeed, opening * opening * (drive * 1e6 / characteristic) / (12 * viscosity));
             dike.speed = speed;
             dike.opening = opening;
-            if (speed < config.freezeSpeed) {
+            if (speed < freezeSpeed(opening, characteristic, wallRockC(dike))) {
                 stall = StallReason.FROZE;
                 break;
             }
@@ -315,7 +328,7 @@ public final class DikePropagation implements Subsystem {
             double kick = config.headingNoise * Math.sqrt(1 - decay * decay);
             dike.noiseX = dike.noiseX * decay + random.nextGaussian() * kick;
             dike.noiseZ = dike.noiseZ * decay + random.nextGaussian() * kick;
-            double[] slope = slope(dike.x, dike.z, dike.surfaceStartY);
+            double[] slope = slope(dike.x, dike.z, dike.surfaceStartZ);
             double shallow = StrictMath.exp(-dike.depth / config.edificeDepthScale);
             double hx = -config.deflectionStrength * shallow * slope[0] + dike.noiseX;
             double hz = -config.deflectionStrength * shallow * slope[1] + dike.noiseZ;
@@ -331,8 +344,8 @@ public final class DikePropagation implements Subsystem {
             double moveZ = step * fraction * hz / norm;
             double depthBefore = dike.depth;
             dike.depth = Math.max(0, dike.depth - rise);
-            dike.x += moveX / config.metersPerBlock;
-            dike.z += moveZ / config.metersPerBlock;
+            dike.x += moveX;
+            dike.z += moveZ;
             double horizontal = Math.hypot(moveX, moveZ);
             if (horizontal > 1e-9) {
                 dike.travelX = moveX / horizontal;
@@ -342,7 +355,7 @@ public final class DikePropagation implements Subsystem {
             travelled += advanced;
 
             double newHeight = dike.chamberDepth - dike.depth;
-            dike.strikeLength = Math.min(newHeight, config.maxStrikeLength);
+            dike.strikeLength = Math.min(newHeight, sourceDiameterM());
             // The newly opened sheet (rise × strike, opening thick) cools into its host rock.
             ground.addIntrusionHeat(dike.x, dike.z, 0.5 * (depthBefore + dike.depth), rise * dike.strikeLength,
                     opening, magma.temperatureC());
@@ -352,17 +365,21 @@ public final class DikePropagation implements Subsystem {
                 dike.volume = target;
             }
 
+            // tip fracturing along the dike's leading edge: anywhere along its breadth, at the depths just broken
             int count = random.nextPoisson(config.hypocentersPerKm * advanced / 1000);
+            double strikeAngle = count > 0 ? strikeOf(dike, null) : 0;
+            double sx = StrictMath.cos(strikeAngle);
+            double sz = StrictMath.sin(strikeAngle);
             for (int i = 0; i < count; i++) {
-                double hxPos = dike.x + random.nextGaussian() * config.hypocenterJitterBlocks;
-                double hzPos = dike.z + random.nextGaussian() * config.hypocenterJitterBlocks;
+                double along = (random.nextDouble() - 0.5) * dike.strikeLength;
+                double hxPos = dike.x + along * sx;
+                double hzPos = dike.z + along * sz;
                 double hDepth = dike.depth + random.nextDouble() * (depthBefore - dike.depth);
-                hypocenters.add(new BlockPos((int) Math.floor(hxPos), worldY(dike, hxPos, hzPos, hDepth),
-                        (int) Math.floor(hzPos)));
+                hypocenters.add(new Point3(hxPos, surfaceZ(hxPos, hzPos, dike.surfaceStartZ) - hDepth, hzPos));
             }
         }
 
-        dike.tipY = worldY(dike, dike.x, dike.z, dike.depth);
+        dike.tipElevation = surfaceZ(dike.x, dike.z, dike.surfaceStartZ) - dike.depth;
         if (travelled > 0) {
             if (hypocenterListener != null && !hypocenters.isEmpty()) hypocenterListener.accept(hypocenters);
             context.outbox().emit(new DikeEvents.DikeAdvanced(context.time(), volcanoId, dike.id, dike.tip(), dike.depth,
@@ -395,12 +412,12 @@ public final class DikePropagation implements Subsystem {
         int unit = units.unit(DepositType.INTRUSION, time, Double.NaN);
         double dx = dike.x - dike.startX;
         double dz = dike.z - dike.startZ;
-        int steps = Math.max(1, (int) Math.ceil(2 * Math.hypot(dx, dz)));
+        int steps = Math.max(1, (int) Math.ceil(2 * Math.hypot(dx, dz) / l));
         TreeSet<Long> done = new TreeSet<>();
         for (int s = 0; s <= steps; s++) {
             double f = (double) s / steps;
-            int x = (int) Math.floor(dike.startX + f * dx);
-            int z = (int) Math.floor(dike.startZ + f * dz);
+            int x = (int) Math.floor((dike.startX + f * dx) / l);
+            int z = (int) Math.floor((dike.startZ + f * dz) / l);
             if (!done.add(((long) x << 32) | (z & 0xffffffffL))) continue;
             double surface = world.surfaceZ(x, z);
             if (Double.isNaN(surface)) continue;
@@ -423,62 +440,128 @@ public final class DikePropagation implements Subsystem {
     }
 
     private void openFissure(Dike dike, StepContext context) {
-        int x = (int) Math.floor(dike.x);
-        int z = (int) Math.floor(dike.z);
-        int y = surfaceY(dike.x, dike.z, dike.surfaceStartY);
+        double surface = surfaceZ(dike.x, dike.z, dike.surfaceStartZ);
         double angle = strikeOf(dike, context.random());
-        int length = (int) clamp(Math.round(dike.strikeLength / config.metersPerBlock),
-                config.minFissureLength, config.maxFissureLength);
-        dike.fissure = VentSite.fissure(volcanoId + "-dike-" + dike.id, new BlockPos(x, y, z), angle, length);
+        // the dike's top edge: as long as the dike is broad, as wide as it is open
+        dike.fissure = VentSite.fissure(volcanoId + "-dike-" + dike.id, new Point3(dike.x, surface, dike.z), angle,
+                dike.strikeLength, dike.opening / 2);
         dike.status = DikeStatus.ERUPTED;
-        dike.tipY = y;
+        dike.tipElevation = surface;
         context.outbox().emit(new DikeEvents.FissureOpened(context.time(), volcanoId, dike.id, dike.fissure, dike.volume));
     }
 
     /**
-     * Strike of the dike plane: radial from the volcano axis (the chamber's vertical), falling back to
-     * the travel direction near the axis.
+     * Strike of the dike plane, perpendicular to the least compressive stress: radial from the inflated
+     * chamber's axis (its hoop tension), else down the slope of the edifice (radial on a cone), else
+     * perpendicular to the regional σ₃, else along the dike's travel; with none of these, undetermined
+     * ({@code random} draws it; {@code null} gives 0).
      */
     private double strikeOf(Dike dike, SimRandom random) {
         if (dike.fissure != null) return dike.fissure.fissureAngleRad();
-        BlockPos center = magma.chamberCenter();
-        double dx = dike.x - (center.x() + 0.5);
-        double dz = dike.z - (center.z() + 0.5);
-        if (Math.hypot(dx, dz) >= 2) return StrictMath.atan2(dz, dx);
+        Point3 center = magma.chamberCenter();
+        double dx = dike.x - center.x();
+        double dz = dike.z - center.z();
+        if (Math.hypot(dx, dz) >= DIRECTION_EPS_M) return StrictMath.atan2(dz, dx);
+        double[] slope = slope(dike.x, dike.z, dike.surfaceStartZ);
+        if (Math.hypot(slope[0], slope[1]) >= SLOPE_EPS) return StrictMath.atan2(-slope[1], -slope[0]);
+        if (Double.isFinite(config.regionalSigma3AzimuthDeg)) {
+            return Math.toRadians(config.regionalSigma3AzimuthDeg) + Math.PI / 2;
+        }
         if (dike.travelX != 0 || dike.travelZ != 0) return StrictMath.atan2(dike.travelZ, dike.travelX);
         return random == null ? 0 : random.nextDouble() * Math.PI;
     }
 
+    /** Depths along a dike at which its wall rock is sampled. */
+    static final int WALL_SAMPLES = 8;
+
+    /**
+     * Mean temperature (°C) of the rock a dike has risen through, from its tip down to the chamber roof: the
+     * ground model's where it reaches (warmed by earlier dikes and flows: later dikes freeze less, as at
+     * Krafla), the configured geotherm below it.
+     */
+    double wallRockC(Dike dike) {
+        double sum = 0;
+        for (int i = 0; i < WALL_SAMPLES; i++) {
+            double depth = dike.depth + (i + 0.5) / WALL_SAMPLES * (dike.chamberDepth - dike.depth);
+            double t = ground.rockTemperatureC(dike.x, dike.z, depth);
+            sum += Double.isFinite(t) ? t : config.surfaceTemperatureC + config.geothermalGradientCPerKm * depth / 1000;
+        }
+        return sum / WALL_SAMPLES;
+    }
+
+    /**
+     * Slowest rise (m/s) at which magma in a dike of opening {@code w} and height {@code h} reaches its top
+     * before a sheet of that thickness freezes against wall rock at {@code wallC}: {@code h / t_s} with
+     * {@code t_s = (w/2)² / (4 κ λ²)} (Turcotte &amp; Schubert 2002, §4.18).
+     */
+    double freezeSpeed(double opening, double height, double wallC) {
+        double contrast = magma.temperatureC() - wallC;
+        if (!(contrast > 0) || !(opening > 0)) return 0;
+        double lambda = stefanLambda(config.magmaLatentHeat * Math.sqrt(Math.PI) / (config.specificHeat * contrast));
+        double half = opening / 2;
+        double solidification = half * half / (4 * config.wallRockDiffusivity * lambda * lambda);
+        return height / solidification;
+    }
+
+    /**
+     * The root λ of {@code e^{−λ²} / (λ (1 + erf λ)) = rhs} (Stefan condition for a solidifying sheet; the
+     * left side falls monotonically from +∞ to 0).
+     */
+    static double stefanLambda(double rhs) {
+        double lo = 1e-6;
+        double hi = 10;
+        for (int i = 0; i < 100; i++) {
+            double mid = 0.5 * (lo + hi);
+            double f = StrictMath.exp(-mid * mid) / (mid * (1 + erf(mid)));
+            if (f > rhs) lo = mid;
+            else hi = mid;
+        }
+        return 0.5 * (lo + hi);
+    }
+
+    /** Error function (Abramowitz &amp; Stegun 7.1.26, |error| < 1.5e-7). */
+    static double erf(double x) {
+        double t = 1 / (1 + 0.3275911 * Math.abs(x));
+        double y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592)
+                * t * StrictMath.exp(-x * x);
+        return x >= 0 ? y : -y;
+    }
+
     // ── Geometry helpers ──
 
-    /** Bulk magma density from silica (kg/m³): ~2750 for basalt to ~2510 for rhyolite. */
+    /**
+     * Bulk melt density from silica (kg/m³): ~2750 for basalt to ~2480 for rhyolite. A linear fit of the order
+     * of anhydrous melt densities from partial molar volumes (Lange &amp; Carmichael 1987); it ignores water,
+     * temperature and bubbles, which lower it.
+     */
     static double magmaDensity(double silicaWt) {
         return clamp(2750 - 10 * (silicaWt - 48), 2300, 2800);
     }
 
-    private int surfaceY(double x, double z, int fallback) {
+    /** Numerical: below this horizontal offset (m) from the chamber axis the radial direction is undefined. */
+    static final double DIRECTION_EPS_M = 1;
+    /** Numerical: below this slope the ground sets no direction. */
+    static final double SLOPE_EPS = 1e-3;
+    /** Numerical: shallowest roof (m) a chamber that nearly reaches the surface is given. */
+    static final double MIN_ROOF_DEPTH_M = 100;
+
+    /** Ground elevation (m) at a point (m), {@code fallback} where the ground is not known. */
+    private double surfaceZ(double x, double z, double fallback) {
         if (terrain == null) return fallback;
-        return terrain.groundY((int) Math.floor(x), (int) Math.floor(z), fallback);
+        WorldModel world = terrain.world();
+        double l = world.spec().metersPerColumn();
+        double s = world.surfaceZ((int) Math.floor(x / l), (int) Math.floor(z / l));
+        return Double.isFinite(s) ? s : fallback;
     }
 
-    /** Dimensionless topographic slope (dh/dx, dh/dz) around a point. */
-    private double[] slope(double x, double z, int fallback) {
+    /** Dimensionless topographic slope (dh/dx, dh/dz) around a point (m). */
+    private double[] slope(double x, double z, double fallback) {
         if (terrain == null) return new double[] {0, 0};
-        int ix = (int) Math.floor(x);
-        int iz = (int) Math.floor(z);
-        int r = config.slopeSampleRadius;
-        int center = terrain.groundY(ix, iz, fallback);
-        double gx = (terrain.groundY(ix + r, iz, center) - terrain.groundY(ix - r, iz, center)) / (2.0 * r);
-        double gz = (terrain.groundY(ix, iz + r, center) - terrain.groundY(ix, iz - r, center)) / (2.0 * r);
+        double r = config.slopeSampleRadiusM;
+        double center = surfaceZ(x, z, fallback);
+        double gx = (surfaceZ(x + r, z, center) - surfaceZ(x - r, z, center)) / (2 * r);
+        double gz = (surfaceZ(x, z + r, center) - surfaceZ(x, z - r, center)) / (2 * r);
         return new double[] {gx, gz};
-    }
-
-    /** World y for a real depth below the surface at (x, z). */
-    private int worldY(Dike dike, double x, double z, double depth) {
-        int surface = surfaceY(x, z, dike.surfaceStartY);
-        double span = dike.surfaceStartY - dike.chamberY;
-        int y = (int) Math.floor(surface - depth / dike.chamberDepth * span);
-        return Math.max(dike.chamberY, Math.min(surface, y));
     }
 
     /**
@@ -520,7 +603,10 @@ public final class DikePropagation implements Subsystem {
     /** World expansion activity: the tips of rising dikes. */
     public void reportActivity(me.alex4386.typhon.engine.expansion.ExpansionActivity.Sink sink) {
         for (Dike d : dikes) {
-            if (d.propagating()) sink.active((int) Math.floor(d.x), (int) Math.floor(d.z));
+            if (d.propagating() && terrain != null) {
+                double l = terrain.world().spec().metersPerColumn();
+                sink.active((int) Math.floor(d.x / l), (int) Math.floor(d.z / l));
+            }
         }
     }
 
@@ -567,11 +653,9 @@ public final class DikePropagation implements Subsystem {
         JsonObject in = reader.json();
         nextId = in.get("nextId").getAsInt();
         forcedPending = in.get("forcedPending").getAsInt();
-        nucleationBlocked = in.has("nucleationBlocked") && in.get("nucleationBlocked").getAsBoolean();
+        nucleationBlocked = in.get("nucleationBlocked").getAsBoolean();
         pendingArrests.clear();
-        if (in.has("pendingArrests")) {
-            for (JsonElement e : in.getAsJsonArray("pendingArrests")) pendingArrests.add(e.getAsInt());
-        }
+        for (JsonElement e : in.getAsJsonArray("pendingArrests")) pendingArrests.add(e.getAsInt());
         dikes.clear();
         for (JsonElement e : in.getAsJsonArray("dikes")) dikes.add(Dike.load(e.getAsJsonObject()));
     }

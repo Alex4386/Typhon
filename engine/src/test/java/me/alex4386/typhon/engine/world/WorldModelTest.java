@@ -11,17 +11,16 @@ import java.util.Map;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
-import me.alex4386.typhon.engine.terrain.TerrainChunk;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
+import me.alex4386.typhon.engine.terrain.GroundColumn;
+import me.alex4386.typhon.engine.terrain.GroundImport;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
 import org.junit.jupiter.api.Test;
 
 class WorldModelTest {
     private static final double TOL = 1e-3;
 
     private static WorldModel flatWorld(int size, double surface) {
-        WorldModel world = new WorldModel(WorldSpec.blocks(2.0));
+        WorldModel world = new WorldModel(WorldSpec.withColumns(2.0));
         List<WorldModel.ColumnImport> imports = new ArrayList<>();
         for (int x = 0; x < size; x++) {
             for (int z = 0; z < size; z++) imports.add(new WorldModel.ColumnImport(x, z, surface, null));
@@ -55,7 +54,7 @@ class WorldModelTest {
         assertEquals(MaterialTable.ANDESITE.id(), column.layers().get(1).material());
         LayerView cover = column.layers().get(column.layers().size() - 1);
         assertEquals(MaterialTable.SOIL.id(), cover.material());
-        assertEquals(2.0, cover.thickness(), TOL);
+        assertEquals(WorldSpec.DEFAULT_SURFACE_THICKNESS_M, cover.thickness(), TOL, "a soil cover of its own thickness, not a column's");
         assertEquals(DepositType.BASEMENT, world.unit(column.layers().get(0).unit()).type());
         assertEquals(DepositType.EDIFICE, world.unit(column.layers().get(1).unit()).type());
         assertFalse(world.isKnown(10, 10));
@@ -64,7 +63,7 @@ class WorldModelTest {
     @Test
     void batchImportMatchesColumnByColumnImport() {
         WorldModel batch = flatWorld(40, 37.5);
-        WorldModel single = new WorldModel(WorldSpec.blocks(2.0));
+        WorldModel single = new WorldModel(WorldSpec.withColumns(2.0));
         for (int x = 39; x >= 0; x--) {
             for (int z = 0; z < 40; z++) single.importColumn(x, z, 37.5, null);
         }
@@ -126,8 +125,9 @@ class WorldModelTest {
         assertEquals(0.7, all.byMaterial().get(MaterialTable.ASH.id()), TOL);
         ErodeResult loose = world.erode(0, 0, 5, true);
         assertEquals(0.8, loose.byMaterial().get(MaterialTable.ASH.id()), TOL, "the rest of the ash is loose");
-        assertEquals(2, loose.byMaterial().get(MaterialTable.SOIL.id()), TOL, "so is the soil cover beneath it");
-        assertEquals(8, world.surfaceZ(0, 0), TOL, "erosion stops at consolidated andesite");
+        assertEquals(WorldSpec.DEFAULT_SURFACE_THICKNESS_M, loose.byMaterial().get(MaterialTable.SOIL.id()), TOL,
+                "so is the soil cover beneath it");
+        assertEquals(10 - WorldSpec.DEFAULT_SURFACE_THICKNESS_M, world.surfaceZ(0, 0), TOL, "erosion stops at consolidated andesite");
     }
 
     @Test
@@ -207,7 +207,7 @@ class WorldModelTest {
             world.deposit(x, 5, 4, MaterialTable.BASALT, first);
             world.deposit(x, 5, 2, MaterialTable.ASH, second);
         }
-        SectionRaster section = world.section(new double[] {0.5, 5.5, 19.5, 5.5}, 0, 20, 10, 40);
+        SectionRaster section = world.section(new double[] {1, 11, 39, 11}, 0, 20, 10, 40); // metres (2 m columns)
         assertEquals(10, section.nu());
         for (int iu = 0; iu < section.nu(); iu++) {
             assertEquals(16, section.surfaceZ()[iu], TOL);
@@ -240,53 +240,48 @@ class WorldModelTest {
 
     // ── Terrain bridge and persistence ──
 
-    private static TerrainSnapshot snapshot(int chunks, int ground) {
-        List<TerrainChunk> list = new ArrayList<>();
-        for (int cx = 0; cx < chunks; cx++) {
-            for (int cz = 0; cz < chunks; cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int x = cx * 16; x < cx * 16 + 16; x++) {
-                    for (int z = cz * 16; z < cz * 16 + 16; z++) {
-                        chunk.set(x, z, TerrainColumn.dry(ground + (x + z) % 3, BlockId.minecraft("grass_block")));
-                    }
-                }
-                list.add(chunk);
-            }
+    /** Dry soil-covered ground over {@code chunks²} 16-column chunks, surface {@code ground} m plus a 0–1.4 m ripple. */
+    private static GroundImport ground(int chunks, double ground) {
+        List<GroundColumn> list = new ArrayList<>();
+        for (int x = 0; x < chunks * 16; x++) {
+            for (int z = 0; z < chunks * 16; z++) list.add(GroundColumn.dry(x, z, ground + 0.7 * ((x + z) % 3), null));
         }
-        return new TerrainSnapshot(list);
+        return new GroundImport(list);
     }
 
     @Test
-    void terrainEditsAreMirroredIntoTheStacks() {
-        TerrainModel terrain = new TerrainModel(new WorldModel(WorldSpec.blocks(4.0)));
-        terrain.apply(snapshot(2, 10));
+    void groundImportsBuildAndReconcileTheStacks() {
+        TerrainModel terrain = new TerrainModel(new WorldModel(WorldSpec.withColumns(4.0)));
+        terrain.apply(ground(2, 40));
         WorldModel world = terrain.world();
-        assertEquals((10 + 1) * 4.0, world.surfaceZ(0, 0), TOL);
+        assertEquals(40, world.surfaceZ(0, 0), TOL);
         assertEquals(MaterialTable.SOIL.id(), world.layer(0, 0, world.layerCount(0, 0) - 1).material());
 
+        // engine edits go to the world model directly, attributed to their unit
         int lava = world.newUnit(new UnitRecord("v", 0, DepositType.LAVA, 0, 1150, 50));
-        terrain.setGround(0, 0, 13, BlockId.minecraft("basalt"), lava);
-        assertEquals(14 * 4.0, world.surfaceZ(0, 0), TOL);
+        world.deposit(0, 0, 12, MaterialTable.BASALT, lava);
+        assertEquals(52, world.surfaceZ(0, 0), TOL);
         LayerView top = world.layer(0, 0, world.layerCount(0, 0) - 1);
         assertEquals(MaterialTable.BASALT.id(), top.material());
         assertEquals(lava, top.unit());
         assertEquals(12, top.thickness(), TOL);
 
-        terrain.setGround(0, 0, 8, BlockId.minecraft("andesite"));
-        assertEquals(9 * 4.0, world.surfaceZ(0, 0), TOL, "lowering the ground erodes the stack");
+        // a host import below the current surface erodes, above it deposits unattributed material
+        terrain.apply(new GroundImport(List.of(GroundColumn.dry(0, 0, 36, MaterialTable.ANDESITE))));
+        assertEquals(36, world.surfaceZ(0, 0), TOL, "lowering the ground erodes the stack");
 
-        // Re-sending an unchanged snapshot keeps the layer history.
+        // Re-sending unchanged ground keeps the layer history.
         int before = world.layerCount(1, 1);
-        terrain.apply(snapshot(2, 10));
+        terrain.apply(ground(2, 40));
         assertEquals(before, world.layerCount(1, 1));
-        assertEquals((10 + 1) * 4.0, world.surfaceZ(0, 0), TOL, "the host's surface wins");
+        assertEquals(40, world.surfaceZ(0, 0), TOL, "the host's surface wins");
     }
 
     @Test
     void regionRoundTripIsByteIdentical() {
-        TerrainModel terrain = new TerrainModel(new WorldModel(WorldSpec.blocks(2.0)));
+        TerrainModel terrain = new TerrainModel(new WorldModel(WorldSpec.withColumns(2.0)));
         Engine engine = Engine.builder(3).add(terrain).build();
-        engine.submit(snapshot(3, 20));
+        engine.submit(ground(3, 42));
         engine.step();
         WorldModel world = terrain.world();
         int unit = world.newUnit(new UnitRecord("v", 4, DepositType.PDC, 12.5, 650, 63));
@@ -298,7 +293,7 @@ class WorldModelTest {
         InMemorySaveStore first = new InMemorySaveStore();
         engine.save(first);
 
-        TerrainModel restoredTerrain = new TerrainModel(new WorldModel(WorldSpec.blocks(2.0)));
+        TerrainModel restoredTerrain = new TerrainModel(new WorldModel(WorldSpec.withColumns(2.0)));
         Engine restored = Engine.builder(3).add(restoredTerrain).restore(first).build();
         InMemorySaveStore second = new InMemorySaveStore();
         restored.save(second);

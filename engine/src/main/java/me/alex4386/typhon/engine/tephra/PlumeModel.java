@@ -9,9 +9,6 @@ package me.alex4386.typhon.engine.tephra;
  *   H = 2.00 · V̇^0.241   (H in km above the vent, V̇ in m³/s dense-rock equivalent)
  * </pre>
  *
- * Real columns (2–40 km) are far taller than a Minecraft world, so the engine multiplies the height
- * by {@link TephraConfig#plumeHeightScale} (default 0.01: 1 km → 10 blocks) and caps the top at
- * {@link TephraConfig#worldTopY}.
  */
 public final class PlumeModel {
     private PlumeModel() {}
@@ -28,13 +25,8 @@ public final class PlumeModel {
         return StrictMath.pow(heightMeters / 2000.0, 1 / 0.241);
     }
 
-    /**
-     * Scaled plume height in blocks above {@code baseY}, the y the column rises from; the top
-     * ({@code baseY + height}) never exceeds {@link TephraConfig#worldTopY}.
-     */
-    public static double minecraftHeight(double massEruptionRate, int baseY, TephraConfig config) {
-        double real = realHeightMeters(massEruptionRate / ExplosivePhase.DRE_DENSITY);
-        double scaled = real * config.plumeHeightScale;
-        return Math.max(0, Math.min(scaled, config.worldTopY - baseY));
+    /** Plume height above the vent (m) for a mass eruption rate (kg/s). */
+    public static double heightForMassRate(double massEruptionRate) {
+        return realHeightMeters(massEruptionRate / ExplosivePhase.DRE_DENSITY);
     }
 }

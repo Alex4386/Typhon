@@ -35,7 +35,7 @@ public interface WorldQuery {
     ColumnProfile column(int x, int z);
 
     /**
-     * Vertical section along a polyline given as {@code {x0, z0, x1, z1, ...}} in column coordinates,
+     * Vertical section along a polyline given as {@code {x0, z0, x1, z1, ...}} in metres,
      * sampled at {@code nu} evenly spaced points and {@code nz} rows between {@code zMin} and
      * {@code zMax}.
      */

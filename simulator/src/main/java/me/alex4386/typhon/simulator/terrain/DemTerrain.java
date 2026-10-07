@@ -38,7 +38,7 @@ public final class DemTerrain {
         double voidFill = Double.isNaN(seaLevelZ) ? crop.min() : seaLevelZ;
         crop = DemImporter.fillNoData(crop, Double.isFinite(voidFill) ? voidFill : 0);
         double[] c = byLatLon ? crop.locate(centerLat, centerLon) : crop.centre();
-        return DemImporter.toRealGrid(crop, metersPerColumn, c[0], c[1], halfExtentColumns, seaLevelZ,
+        return DemImporter.toGrid(crop, metersPerColumn, c[0], c[1], halfExtentColumns, seaLevelZ,
                 DemImporter.SurfacePainter.DEFAULT);
     }
 }

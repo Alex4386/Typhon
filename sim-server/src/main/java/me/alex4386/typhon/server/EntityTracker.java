@@ -22,7 +22,6 @@ import me.alex4386.typhon.engine.lava.LavaEvents;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents;
-import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.seismic.SeismicEvent;
 import me.alex4386.typhon.engine.tephra.ExplosivePhase;
@@ -74,7 +73,7 @@ final class EntityTracker {
     synchronized void observe(EngineEvent e) {
         switch (e) {
             case SeismicEvent q when q.magnitude() >= QUAKE_MIN_MAGNITUDE -> {
-                String id = "quake:" + q.volcanoId() + ":" + Math.round(q.time() * 1000) + ":" + q.hypocenter().pack();
+                String id = "quake:" + q.volcanoId() + ":" + Math.round(q.time() * 1000) + ":" + String.format(java.util.Locale.ROOT, "%.0f:%.0f:%.0f", q.hypocenter().x(), q.hypocenter().y(), q.hypocenter().z());
                 JsonObject o = entity(id, "quake", q.volcanoId(),
                         String.format("M%.1f %s quake", q.magnitude(), quakeType(q.type().name())), map.point(q.hypocenter()));
                 JsonObject p = o.getAsJsonObject("props");
@@ -168,6 +167,10 @@ final class EntityTracker {
             cp.add("silicaWt", Json.num(ch.silicaWt()));
             cp.add("waterWt", Json.num(ch.waterWt()));
             cp.add("crystalFraction", Json.num(ch.crystalFraction()));
+            // bulk composition (melt + crystals + exsolved gas): what setChamberMagma replaces
+            cp.add("bulkSilicaWt", Json.num(ch.bulkSilicaWt()));
+            cp.add("bulkWaterWt", Json.num(ch.bulkWaterWt()));
+            cp.add("bulkCo2Wt", Json.num(ch.bulkCo2Wt()));
             cp.add("volumeM3", Json.num(ch.volumeM3()));
             cp.add("depthM", Json.num(ch.physicalDepthM()));
             cp.add("eruptionRateM3PerS", Json.num(ch.eruptionRate()));
@@ -185,12 +188,8 @@ final class EntityTracker {
 
             // the volcano as a whole (its Inspector panel: activity, ash, flows, springs, deformation)
             double[] top = Probe.chamberCenter(v, map, world);
-            for (VentSite vent : v.coupler().allVents()) {
-                if (!vent.emergent()) {
-                    top = map.point(vent.position());
-                    break;
-                }
-            }
+            List<VentSite> ventsNow = v.coupler().allVents();
+            if (!ventsNow.isEmpty()) top = map.point(ventsNow.get(0).position());
             JsonObject volcano = entity("volcano:" + vid, "volcano", vid, Probe.displayName(vid), top);
             JsonObject vp = volcano.getAsJsonObject("props");
             vp.addProperty("erupting", ch.erupting());
@@ -213,6 +212,9 @@ final class EntityTracker {
                 p.add("silicaWt", Json.num(c.silicaWt()));
                 p.add("waterWt", Json.num(c.waterWt()));
                 p.add("crystalFraction", Json.num(c.crystalFraction()));
+                p.add("bulkSilicaWt", Json.num(c.bulkSilicaWt()));
+                p.add("bulkWaterWt", Json.num(c.bulkWaterWt()));
+                p.add("bulkCo2Wt", Json.num(c.bulkCo2Wt()));
                 p.add("volumeM3", Json.num(c.volumeM3()));
                 p.add("depthM", Json.num(c.physicalDepthM()));
                 p.add("supplyRateM3PerS", Json.num(c.supplyRate()));
@@ -255,17 +257,15 @@ final class EntityTracker {
             List<String> active = activeVents.getOrDefault(vid, List.of());
             boolean erupting = ch.erupting();
             for (VentSite vent : v.coupler().allVents()) {
-                // a placed chamber's vent exists once magma has first reached the surface there
-                if (vent.emergent() && ch.eruptionCount() == 0 && !(erupting && active.contains(vent.id()))) continue;
                 boolean fissure = vent.kind() == VentKind.FISSURE;
                 JsonObject o = entity("vent:" + vid + ":" + vent.id(), fissure ? "fissure" : "vent", vid,
                         fissure ? fissureLabel(vent.id()) : ventLabel(vent.id()), map.point(vent.position()));
                 JsonObject p = o.getAsJsonObject("props");
                 p.addProperty("ventId", vent.id());
                 p.addProperty("shape", vent.kind().name());
-                p.add("craterRadiusM", Json.num(vent.craterRadius() * map.cell));
+                p.add("craterRadiusM", Json.num(vent.craterRadiusM()));
                 if (fissure) {
-                    p.add("lengthM", Json.num(vent.fissureLength() * map.cell));
+                    p.add("lengthM", Json.num(vent.fissureLengthM()));
                     p.add("strikeDeg", Json.num(Math.toDegrees(vent.fissureAngleRad())));
                 }
                 p.addProperty("erupting", erupting && active.contains(vent.id()));
@@ -315,7 +315,7 @@ final class EntityTracker {
                         if (out.size() >= ENTITY_CAP) break;
                         String id = "feature:" + vid + ":" + kind.name() + ":" + f.x() + ":" + f.z();
                         JsonObject o = entity(id, "feature", vid, featureLabel(kind),
-                                map.point(new BlockPos(f.x(), f.y(), f.z())));
+                                new double[] {map.x(f.x()), map.y(f.z()), f.elevation()});
                         JsonObject p = o.getAsJsonObject("props");
                         p.addProperty("feature", kind.name());
                         // Whole degrees: finer changes every step would re-send thousands of features.
@@ -332,9 +332,8 @@ final class EntityTracker {
                 double[] base = map.point(phase.vent().position());
                 JsonObject o = entity("plume:" + vid, "plume", vid, "Eruption column", base);
                 JsonObject p = o.getAsJsonObject("props");
-                double ventZ = (phase.vent().position().y() + 1) * map.cell;
-                p.add("topZ", Json.num(ventZ + tephra.plumeHeight() * map.cell));
-                p.add("heightM", Json.num(tephra.plumeHeight() * map.cell));
+                p.add("topZ", Json.num(phase.vent().position().y() + tephra.plumeHeight()));
+                p.add("heightM", Json.num(tephra.plumeHeight()));
                 p.add("massRateKgS", Json.num(phase.massEruptionRate()));
                 out.put(o.get("id").getAsString(), o);
             }
@@ -342,8 +341,7 @@ final class EntityTracker {
             if (v.deformation() != null) {
                 for (GeodeticStation st : v.deformation().config().stations) {
                     JsonObject o = entity("station:" + vid + ":" + st.name(), "station", vid, "GNSS station " + st.name(),
-                            new double[] {map.x(st.x()), map.y(st.z()),
-                                    world.surfaceZ(st.x(), st.z())});
+                            new double[] {st.x(), -st.z(), stationGround(world, st)});
                     o.getAsJsonObject("props").addProperty("station", st.name());
                     out.put(o.get("id").getAsString(), o);
                 }
@@ -502,9 +500,15 @@ final class EntityTracker {
         return p.has(key) && p.get(key).isJsonPrimitive() ? p.get(key).getAsString() : null;
     }
 
-    /** A summit vent's name: "Summit vent" for the main one (preset "summit", emergent "vent"), else "Vent <id>". */
+    /**
+     * A crater's name: "Summit vent" for a preset's main one, "Vent on the fissure from dike 2" for one a
+     * fissure localised into, else "Vent <id>".
+     */
     static String ventLabel(String ventId) {
         if (ventId.equals("summit") || ventId.equals("vent")) return "Summit vent";
+        int k = ventId.lastIndexOf("-dike-");
+        int v = ventId.lastIndexOf("-vent-");
+        if (k >= 0 && v > k) return "Vent on the fissure from dike " + ventId.substring(k + 6, v);
         return "Vent " + ventId.replace('-', ' ').replace('_', ' ');
     }
 
@@ -518,6 +522,15 @@ final class EntityTracker {
     }
 
     /** {@code v} rounded to {@code digits} significant digits (0 stays 0). */
+    /** Ground elevation (m) under a station, {@code NaN} where the column is not simulated. */
+    static double stationGround(me.alex4386.typhon.engine.world.WorldModel world,
+            me.alex4386.typhon.engine.deformation.GeodeticStation st) {
+        double l = world.spec().metersPerColumn();
+        int x = (int) Math.floor(st.x() / l);
+        int z = (int) Math.floor(st.z() / l);
+        return world.isKnown(x, z) ? world.surfaceZ(x, z) : Double.NaN;
+    }
+
     static double roundSignificant(double v, int digits) {
         if (v == 0 || !Double.isFinite(v)) return v;
         double scale = Math.pow(10, digits - 1 - (int) Math.floor(Math.log10(Math.abs(v))));

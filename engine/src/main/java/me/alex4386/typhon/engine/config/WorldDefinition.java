@@ -8,7 +8,6 @@ import java.util.Set;
 import me.alex4386.typhon.engine.expansion.ExpansionConfig;
 import me.alex4386.typhon.engine.lava.LavaConfig;
 import me.alex4386.typhon.engine.subsurface.SubsurfaceConfig;
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import me.alex4386.typhon.engine.world.WorldSpec;
 
 /**
@@ -20,10 +19,8 @@ import me.alex4386.typhon.engine.world.WorldSpec;
  * seed: 42
  * baseStepMs: 50
  * grid:
- *   metersPerColumn: 8        # dxS: surface resolution = Minecraft block size (m)
- *   solverSpacing: 64         # dxG: heat/groundwater solver resolution (m)
- * scaling:
- *   plumeMetersPerBlock: 100
+ *   metersPerColumn: 10       # dxS: surface resolution (m)
+ *   solverSpacing: 40         # dxG: heat/groundwater solver resolution (m)
  * seaLevel: .nan              # metres; .nan = no sea
  * climate:
  *   rainfallMmPerHour: 0
@@ -35,7 +32,7 @@ import me.alex4386.typhon.engine.world.WorldSpec;
  *     - {material: granite, top: -500, porosity: 0.01}
  *   edificeMaterial: basalt
  *   surfaceMaterial: soil
- *   surfaceThickness: 8
+ *   surfaceThickness: 1        # soil/regolith cover (m; hillslope soils are ~0.3–2 m)
  * geotherm: {surfaceTemperatureC: 15, gradientCPerKm: 30, lapseRateCPerKm: 6.5}
  * aquifer: {waterTableDepth: 20, specificYield: 0.1, topographyFactor: 0.6, baseLevel: .nan, rechargeFraction: 0.3}
  * terrain: {source: preset, preset: kilauea}   # free-form, interpreted by the host
@@ -47,21 +44,20 @@ import me.alex4386.typhon.engine.world.WorldSpec;
  *
  * @param baseStepMs engine base step (simulation resolution)
  * @param spec world-model grid and geology
- * @param scaling Froude scaling (its {@code metersPerBlock} is {@code grid.metersPerColumn})
  * @param terrain free-form initial-terrain description for the host (generator, DEM, ...)
  * @param subsurface heat/groundwater/surface-water parameters, with the climate, geotherm and aquifer
  *     values filled in
  * @param expansion on-demand growth of the simulated area
  */
-public record WorldDefinition(String name, long seed, double baseStepMs, WorldSpec spec, VolcanoScaling scaling,
+public record WorldDefinition(String name, long seed, double baseStepMs, WorldSpec spec,
         Climate climate, Geotherm geotherm, Aquifer aquifer, Map<String, Object> terrain, LavaConfig lava,
         SubsurfaceConfig subsurface, ExpansionConfig expansion) {
 
     /** A definition with the default {@link ExpansionConfig}. */
-    public WorldDefinition(String name, long seed, double baseStepMs, WorldSpec spec, VolcanoScaling scaling,
+    public WorldDefinition(String name, long seed, double baseStepMs, WorldSpec spec,
             Climate climate, Geotherm geotherm, Aquifer aquifer, Map<String, Object> terrain, LavaConfig lava,
             SubsurfaceConfig subsurface) {
-        this(name, seed, baseStepMs, spec, scaling, climate, geotherm, aquifer, terrain, lava, subsurface,
+        this(name, seed, baseStepMs, spec, climate, geotherm, aquifer, terrain, lava, subsurface,
                 ExpansionConfig.DEFAULTS);
     }
 
@@ -139,7 +135,7 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
         if (name == null || name.isBlank()) throw new ConfigException("world name is required");
         if (!(baseStepMs > 0)) throw new ConfigException("baseStepMs must be > 0");
         terrain = new LinkedHashMap<>(terrain);
-        if (subsurface == null) subsurface = defaultSubsurface(scaling);
+        if (subsurface == null) subsurface = new SubsurfaceConfig();
         subsurface = withDerived(subsurface, climate, geotherm, aquifer);
         try {
             subsurface.validate();
@@ -149,19 +145,15 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
     }
 
     /** Definition with default subsurface parameters (derived from climate, geotherm and aquifer). */
-    public WorldDefinition(String name, long seed, double baseStepMs, WorldSpec spec, VolcanoScaling scaling,
+    public WorldDefinition(String name, long seed, double baseStepMs, WorldSpec spec,
             Climate climate, Geotherm geotherm, Aquifer aquifer, Map<String, Object> terrain, LavaConfig lava) {
-        this(name, seed, baseStepMs, spec, scaling, climate, geotherm, aquifer, terrain, lava, null);
+        this(name, seed, baseStepMs, spec, climate, geotherm, aquifer, terrain, lava, null);
     }
 
     /** {@link SubsurfaceConfig} fields set from the climate, geotherm and aquifer sections. */
     static final Set<String> SUBSURFACE_DERIVED = Set.of("rainfallMmPerHour", "evaporationMmPerHour",
             "surfaceTemperatureC", "gradientCPerKm", "initialWaterTableDepthM", "specificYield",
             "waterTableTopographyFactor", "waterTableBaseLevelM", "rechargeFraction");
-
-    static SubsurfaceConfig defaultSubsurface(VolcanoScaling scaling) {
-        return new SubsurfaceConfig();
-    }
 
     private static SubsurfaceConfig withDerived(SubsurfaceConfig base, Climate climate, Geotherm geotherm,
             Aquifer aquifer) {
@@ -198,28 +190,18 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
 
     // ── Parsing ──
 
+    /** Column width (m) when {@code grid.metersPerColumn} is not given. */
+    public static final double DEFAULT_METERS_PER_COLUMN = 10;
+
     public static WorldDefinition parse(ConfigNode root) {
         String name = root.requireString("name");
         long seed = root.longValue("seed", 0);
         double baseStep = root.number("baseStepMs", 50);
 
         ConfigNode grid = root.child("grid");
-        double dxS = grid.number("metersPerColumn", VolcanoScaling.DEFAULT.metersPerBlock());
+        double dxS = grid.number("metersPerColumn", DEFAULT_METERS_PER_COLUMN);
         double dxG = grid.number("solverSpacing", 8 * dxS);
         grid.finish();
-
-        ConfigNode scalingNode = root.child("scaling");
-        VolcanoScaling base = VolcanoScaling.DEFAULT;
-        VolcanoScaling scaling;
-        try {
-            scaling = new VolcanoScaling(dxS, scalingNode.number("plumeMetersPerBlock", base.plumeMetersPerBlock()));
-        } catch (IllegalArgumentException e) {
-            throw scalingNode.error(e.getMessage());
-        }
-        if (scalingNode.has("metersPerBlock")) {
-            throw scalingNode.error("metersPerBlock", "is grid.metersPerColumn (one block is one surface column)");
-        }
-        scalingNode.finish();
 
         double seaLevel = root.number("seaLevel", Double.NaN);
 
@@ -257,7 +239,7 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
         }
         String edifice = geology.string("edificeMaterial", "andesite");
         String surface = geology.string("surfaceMaterial", "soil");
-        double surfaceThickness = geology.number("surfaceThickness", dxS);
+        double surfaceThickness = geology.number("surfaceThickness", WorldSpec.DEFAULT_SURFACE_THICKNESS_M);
         geology.finish();
         WorldSpec spec;
         try {
@@ -285,17 +267,16 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
         Map<String, Object> terrain = root.has("terrain") ? root.child("terrain").asMap() : new LinkedHashMap<>();
         if (!root.has("terrain")) root.markUsed("terrain");
 
-        LavaConfig lava = ConfigBinder.bindRecord(root.child("lava"), LavaConfig.defaults(), Set.of(),
-                Set.of("metersPerBlock"));
+        LavaConfig lava = ConfigBinder.bindRecord(root.child("lava"), LavaConfig.defaults(), Set.of(), Set.of());
 
-        SubsurfaceConfig subsurface = defaultSubsurface(scaling);
+        SubsurfaceConfig subsurface = new SubsurfaceConfig();
         ConfigBinder.bindFields(root.child("subsurface"), subsurface, Set.of(), SUBSURFACE_DERIVED);
 
         ExpansionConfig expansion = ConfigBinder.bindRecord(root.child("expansion"), ExpansionConfig.DEFAULTS, Set.of(),
                 Set.of());
 
         root.finish();
-        return new WorldDefinition(name, seed, baseStep, spec, scaling,
+        return new WorldDefinition(name, seed, baseStep, spec,
                 new Climate(rain, evaporation, windSpeed, windBearing, windVariability), geotherm, aquifer, terrain, lava,
                 subsurface, expansion);
     }
@@ -309,7 +290,6 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
         root.put("seed", seed);
         root.put("baseStepMs", baseStepMs);
         root.put("grid", map("metersPerColumn", spec.metersPerColumn(), "solverSpacing", spec.solverSpacing()));
-        root.put("scaling", map("plumeMetersPerBlock", scaling.plumeMetersPerBlock()));
         root.put("seaLevel", ConfigBinder.export(spec.seaLevelZ()));
         Map<String, Object> climateTree = map("rainfallMmPerHour", climate.rainfallMmPerHour(),
                 "evaporationMmPerHour", climate.evaporationMmPerHour());
@@ -334,7 +314,7 @@ public record WorldDefinition(String name, long seed, double baseStepMs, WorldSp
                 "topographyFactor", aquifer.topographyFactor(), "baseLevel", aquifer.baseLevel(),
                 "rechargeFraction", aquifer.rechargeFraction()));
         root.put("terrain", new LinkedHashMap<>(terrain));
-        root.put("lava", ConfigBinder.exportRecord(lava, Set.of("metersPerBlock")));
+        root.put("lava", ConfigBinder.exportRecord(lava, Set.of()));
         root.put("subsurface", ConfigBinder.exportFields(subsurface, SUBSURFACE_DERIVED));
         root.put("expansion", ConfigBinder.exportRecord(expansion, Set.of()));
         return root;

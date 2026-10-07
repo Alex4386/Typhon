@@ -1,45 +1,36 @@
 package me.alex4386.typhon.engine.volcano;
 
 import java.util.Objects;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 
 /**
- * Geometry of a vent at the surface.
+ * Geometry of a vent at the surface, in metres.
  *
  * @param id stable vent identifier, unique within a volcano
  * @param position centre of the vent (crater floor / fissure midpoint)
- * @param craterRadius crater radius in blocks (fissure half-width for fissures)
- * @param fissureAngleRad fissure strike, radians clockwise from +X (ignored for craters)
- * @param fissureLength fissure length in blocks (ignored for craters)
+ * @param craterRadiusM crater radius (m; fissure half-width for fissures)
+ * @param fissureAngleRad fissure strike, radians clockwise from +x (ignored for craters)
+ * @param fissureLengthM fissure length (m; ignored for craters)
  */
-public record VentSite(String id, BlockPos position, VentKind kind, int craterRadius, double fissureAngleRad, int fissureLength,
-        boolean emergent) {
+public record VentSite(String id, Point3 position, VentKind kind, double craterRadiusM, double fissureAngleRad,
+        double fissureLengthM) {
     public VentSite {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(position, "position");
         Objects.requireNonNull(kind, "kind");
-        if (craterRadius < 0) throw new IllegalArgumentException("craterRadius must be >= 0");
-        if (fissureLength < 0) throw new IllegalArgumentException("fissureLength must be >= 0");
+        if (!(craterRadiusM >= 0)) throw new IllegalArgumentException("craterRadiusM must be >= 0");
+        if (!(fissureLengthM >= 0)) throw new IllegalArgumentException("fissureLengthM must be >= 0");
     }
 
-    public VentSite(String id, BlockPos position, VentKind kind, int craterRadius, double fissureAngleRad, int fissureLength) {
-        this(id, position, kind, craterRadius, fissureAngleRad, fissureLength, false);
+    public static VentSite crater(String id, Point3 position, double radiusM) {
+        return new VentSite(id, position, VentKind.CRATER, radiusM, 0, 0);
     }
 
-    /**
-     * A vent that does not exist yet: where the conduit from a user-placed chamber will meet the ground.
-     * Nothing is carved for it; it shows once magma first reaches the surface there, and the crater and
-     * edifice around it form from the eruption's own deposits and explosions.
-     */
-    public static VentSite emergent(String id, BlockPos position, int radius) {
-        return new VentSite(id, position, VentKind.CRATER, radius, 0, 0, true);
+    public static VentSite fissure(String id, Point3 position, double angleRad, double lengthM, double halfWidthM) {
+        return new VentSite(id, position, VentKind.FISSURE, halfWidthM, angleRad, lengthM);
     }
 
-    public static VentSite crater(String id, BlockPos position, int radius) {
-        return new VentSite(id, position, VentKind.CRATER, radius, 0, 0);
-    }
-
-    public static VentSite fissure(String id, BlockPos position, double angleRad, int length) {
-        return new VentSite(id, position, VentKind.FISSURE, 1, angleRad, length);
+    public VentSite withPosition(Point3 p) {
+        return new VentSite(id, p, kind, craterRadiusM, fissureAngleRad, fissureLengthM);
     }
 }

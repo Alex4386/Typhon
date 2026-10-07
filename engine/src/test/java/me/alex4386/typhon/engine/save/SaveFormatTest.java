@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.save;
 
+import me.alex4386.typhon.engine.testing.TestConduits;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -9,29 +10,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
-import me.alex4386.typhon.engine.terrain.TerrainChunk;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
+import me.alex4386.typhon.engine.terrain.GroundImport;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
+import me.alex4386.typhon.engine.testing.TestGround;
 import me.alex4386.typhon.engine.volcano.VentSite;
-import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import me.alex4386.typhon.engine.testing.Runs;
-import me.alex4386.typhon.engine.world.BlockId;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class SaveFormatTest {
-    private static final VentSite VENT = VentSite.crater("summit", new BlockPos(0, 97, 0), 3);
+    private static final VentSite VENT = VentSite.crater("summit", new Point3(5, 380, 5), 30);
 
     record World(Engine engine, TerrainModel terrain, LavaFlow lava, VolcanoSystem volcano) {}
 
@@ -40,9 +37,8 @@ class SaveFormatTest {
         TerrainModel terrain = new TerrainModel();
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder("v", List.of(VENT), terrain, lava)
-                .chamber(MagmaChamberConfig.builder("v", new BlockPos(0, 40, 0))
-                        .initialOverpressureMPa(14.9999).supplyVariability(0).build())
-                .scaling(VolcanoScaling.DEFAULT)
+                .chamber(MagmaChamberConfig.builder("v", new Point3(0, -3000, 0))
+                        .conduit(TestConduits.molten()).initialOverpressureMPa(14.9999).supplyVariability(0).build())
                 .dikesEnabled(false)
                 .build();
         Engine.Builder builder = Engine.builder(21).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(terrain);
@@ -53,23 +49,12 @@ class SaveFormatTest {
         return new World(engine, terrain, lava, volcano);
     }
 
-    static TerrainSnapshot cone() {
-        List<TerrainChunk> chunks = new ArrayList<>();
-        for (int cx = -4; cx < 4; cx++) {
-            for (int cz = -4; cz < 4; cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int x = cx * 16; x < cx * 16 + 16; x++) {
-                    for (int z = cz * 16; z < cz * 16 + 16; z++) {
-                        double d = Math.sqrt(x * x + z * z);
-                        int y = (int) Math.max(64, 100 - 0.5 * d);
-                        if (d <= VENT.craterRadius()) y = VENT.position().y();
-                        chunk.set(x, z, TerrainColumn.dry(y, BlockId.minecraft("stone")));
-                    }
-                }
-                chunks.add(chunk);
-            }
-        }
-        return new TerrainSnapshot(chunks);
+    /** A 0.5-slope cone from 64 m to a 400 m summit with a 30 m crater, over ±640 m (10 m columns). */
+    static GroundImport cone() {
+        return TestGround.chunks(-4, -4, 3, 3, (x, z) -> {
+            double d = Math.hypot((x + 0.5) * 10 - VENT.position().x(), (z + 0.5) * 10 - VENT.position().z());
+            return d <= VENT.craterRadiusM() ? VENT.position().y() : Math.max(64, 400 - 0.5 * d);
+        }, TestGround.DRY);
     }
 
     @Test
@@ -88,7 +73,7 @@ class SaveFormatTest {
         // Layout: meta, one JSON per subsystem, region files for spatial fields, history log.
         assertTrue(Files.isRegularFile(dir.resolve("meta.json")));
         assertTrue(Files.isRegularFile(dir.resolve("subsystems/magma%3Av.json")));
-        assertFalse(store.list("fields/terrain/columns/").isEmpty(), "terrain is persisted");
+        assertFalse(store.list("fields/terrain/stacks/").isEmpty(), "terrain is persisted");
         assertFalse(store.list("fields/lava/cells/").isEmpty(), "lava cells are region files");
         assertTrue(store.list("fields/").stream().allMatch(p -> p.matches(".*/r\\.-?\\d+\\.-?\\d+\\.bin")));
         String history = new String(store.read(SaveFormat.HISTORY), StandardCharsets.UTF_8);

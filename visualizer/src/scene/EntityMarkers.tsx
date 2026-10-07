@@ -318,7 +318,7 @@ function ShapedMarker({ p, vExag, selected, hovered }: { p: Placed; vExag: numbe
       b.scale.setScalar(k * (hovered || selected ? 1.15 : 1));
     }
     const m = b.material as THREE.MeshBasicMaterial;
-    m.opacity = op * (xray ? 0.85 : 1);
+    m.opacity = op * (xray ? 0.85 : e.kind === 'fissure' ? 0.6 : 1);
     m.color.copy(color);
     if (hovered || selected) m.color.lerp(WHITE, 0.35);
   });
@@ -337,8 +337,9 @@ function ShapedMarker({ p, vExag, selected, hovered }: { p: Placed; vExag: numbe
         </mesh>
       )}
       {e.kind === 'fissure' && (
-        <mesh ref={body} rotation={[0, -strike, 0]} position={[0, 6, 0]} renderOrder={6} {...handlers}>
-          <boxGeometry args={[fissureLen, 10, 18]} />
+        <mesh ref={body} rotation={[0, -strike, 0]} position={[0, 2, 0]} renderOrder={6} {...handlers}>
+          {/* a thin trace along the ground: the fire curtain (Atmosphere) shows an erupting fissure */}
+          <boxGeometry args={[fissureLen, 3, 6]} />
           <meshBasicMaterial transparent opacity={0} />
         </mesh>
       )}

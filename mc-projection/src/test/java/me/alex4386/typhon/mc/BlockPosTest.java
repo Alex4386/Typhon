@@ -1,4 +1,4 @@
-package me.alex4386.typhon.engine.math;
+package me.alex4386.typhon.mc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;

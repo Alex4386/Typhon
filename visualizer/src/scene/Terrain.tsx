@@ -14,6 +14,7 @@ import { bakedReader, gridReader, rebuildOrder, viewFocus } from './terrainMath'
 import { perfStats } from './perf';
 import { POND, SEA, compactWater, groundZ, seaSurfaceZ } from './waterIndex';
 import { CRUST_RGB, crackPattern, crustLight, lavaSurfaceColor, weightedTemperature } from './lavaColor';
+import { groundShade, naturalLand, shapeFrom, type GroundShape } from './groundColor';
 import { detailCovers, detailHeights, detailLevels, overlappingDetailTiles, refinement } from './detail';
 
 /**
@@ -77,7 +78,15 @@ export function detailGroundAt(world: WorldInfo, x: number, y: number, vExag: nu
  * vertex (a, b) ∈ [0, T]² sits on column (tx·T + a, ty·T + b). Camera collision and overlay placement
  * sample these so nothing ends up inside the smoothed surface that is actually drawn.
  */
-const displayHeights = new Map<string, { z: Float32Array; vExag: number; dExag: number }>();
+export const displayHeights = new Map<string, { z: Float32Array; vExag: number; dExag: number }>();
+/** Each core tile's drawn ground colours (linear RGB per vertex), for the refined ground near the camera. */
+export const displayColours = new Map<string, Float32Array>();
+/**
+ * Core tiles whose ground the near-camera refinement draws instead (NearTerrain), and the core ground meshes
+ * by tile, so it can hide and show them.
+ */
+export const refinedTiles = new Set<string>();
+export const coreGroundMeshes = new Map<string, THREE.Mesh>();
 
 /**
  * Shared ground material. Double-sided so the surface stays visible from below; while the camera
@@ -377,7 +386,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
     job.run = () => {
       // nothing to draw until this tile's elevation has arrived
       const loaded = getTile(Field.SurfaceElevation, tx, ty) !== undefined;
-      if (groundMesh.current) groundMesh.current.visible = loaded;
+      if (groundMesh.current) groundMesh.current.visible = loaded && !refinedTiles.has(key);
       if (!loaded) return;
       if (fillMesh.current) {
         fillMesh.current.visible = false;
@@ -409,6 +418,8 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
         temp: R(Field.SurfaceTemperature, 10),
         wt: R(Field.WaterTableDepth, 10),
         unit: R(Field.TopUnit),
+        under: R(Field.UnderUnit),
+        underShare: R(Field.UnderShare),
         uplift: upR,
         steam: R(Field.SteamFraction),
       };
@@ -426,6 +437,8 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       let anyTable = false;
       const fc = flow.getAttribute('color') as THREE.BufferAttribute;
       const c: RGB = [0, 0, 0];
+      const shape: GroundShape = { x: 0, y: 0, above: 0, t: 0, slope: 0, hollow: 0 };
+      const landBase = world.hasSea === false || !Number.isFinite(world.seaLevel) ? eLo : world.seaLevel;
       let anyLava = false;
       let anyWater = false;
       let shallowest = Infinity;
@@ -466,7 +479,13 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           const hy = ((elevR(a, b + 1) - elevR(a, b - 1)) * vExag) / (2 * world.cellSize);
           const inv = 1 / Math.hypot(hx, 1, hy);
           gn.setXYZ(v, -hx * inv, inv, hy * inv);
-          colourGround(mode, world, fields, a, b, elev, eLo, eHi, maxUplift, units, c);
+          shape.x = x;
+          shape.y = y;
+          shape.above = elev - landBase;
+          shape.t = Math.max(0, shape.above / Math.max(1, eHi - landBase));
+          shapeFrom(shape, elev, elevR(a + 1, b), elevR(a - 1, b), elevR(a, b + 1), elevR(a, b - 1), world.cellSize);
+          if (mode === 'natural') diffusedGround(world, fields, a, b, elev, eLo, eHi, maxUplift, units, c, shape);
+          else colourGround(mode, world, fields, a, b, elev, eLo, eHi, maxUplift, units, c, shape);
           const g0 = c[0];
           const g1 = c[1];
           const g2 = c[2];
@@ -565,6 +584,9 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       }
       gn.needsUpdate = true;
       displayHeights.set(key, { z: shown, vExag, dExag });
+      // under crater detail the near refinement stays out (the detail mesh is finer still)
+      if (keepG) displayColours.delete(key);
+      else displayColours.set(key, (gc.array as Float32Array).slice());
       // under loaded crater detail the coarse ground is left out (the detail mesh draws it)
       if (keepG || ground.userData.cut) {
         compactIndex(ground, keepG ?? new Uint8Array(n * n).fill(1), n, true);
@@ -619,10 +641,17 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       rebuildQueue.delete(tileKey(tx, ty));
       coreJobs.delete(tileKey(tx, ty));
       displayHeights.delete(tileKey(tx, ty));
+      displayColours.delete(tileKey(tx, ty));
+      coreGroundMeshes.delete(tileKey(tx, ty));
       elevationCache.delete(tileKey(tx, ty));
     },
     [tx, ty],
   );
+
+  useEffect(() => {
+    const m = groundMesh.current;
+    if (m) coreGroundMeshes.set(tileKey(tx, ty), m);
+  }, [tx, ty]);
 
   return (
     <group>
@@ -657,6 +686,9 @@ export interface GroundFields {
   temp: Reader;
   wt: Reader;
   unit: Reader;
+  /** The second most visible unit and its share of the top two (surface cover blending). */
+  under?: Reader;
+  underShare?: Reader;
   uplift: Reader;
   steam: Reader;
 }
@@ -673,6 +705,7 @@ export function colourGround(
   maxUplift: number,
   units: Record<number, { depositType: number; time: number | null }>,
   c: RGB,
+  shape?: GroundShape,
 ): void {
   switch (mode) {
     case 'surfaceTemperature':
@@ -721,8 +754,11 @@ export function colourGround(
       return;
     }
     case 'natural': {
-      if (elev >= world.seaLevel || world.hasSea === false) ramp(HYPSO, Math.max(0, (elev - world.seaLevel) / Math.max(1, eHi - world.seaLevel)), c);
-      else ramp(BATHY, (world.seaLevel - elev) / Math.max(1, world.seaLevel - eLo), c);
+      // land: vegetation, bare rock and sand by shape (see groundColor.ts); the hypsometric tint where no shape is given
+      if (elev >= world.seaLevel || world.hasSea === false) {
+        if (shape) naturalLand(shape, c);
+        else ramp(HYPSO, Math.max(0, (elev - world.seaLevel) / Math.max(1, eHi - world.seaLevel)), c);
+      } else ramp(BATHY, (world.seaLevel - elev) / Math.max(1, world.seaLevel - eLo), c);
       // tephra fall blankets the surface in proportion to its thickness (a few mm barely shows, decimetres
       // cover it): tinting by the FALL unit alone painted any dusting solid out to where the ash ends
       const ash = f.ash(i, j);
@@ -734,16 +770,35 @@ export function colourGround(
         c[1] += (t[1] - c[1]) * k;
         c[2] += (t[2] - c[2]) * k;
       }
-      // fresh lava rock / PDC / lahar / landslide deposits from the unit table (thick by nature)
-      const u = f.unit(i, j);
-      const info = units[u];
-      const bedrock = info && (info.depositType === depositId(world, 'EDIFICE') || info.depositType === depositId(world, 'BASEMENT') || info.depositType === depositId(world, 'FILL'));
-      if (info && info.time != null && !bedrock && info.depositType !== fall) {
-        const d = depositRgb(world, info.depositType);
-        c[0] += (d[0] - c[0]) * 0.8;
-        c[1] += (d[1] - c[1]) * 0.8;
-        c[2] += (d[2] - c[2]) * 0.8;
+      // fresh lava rock / PDC / lahar / landslide deposits from the unit table, blended by what the top two
+      // units cover of the column (the server's areal coverage), so a scattering of bombs barely tints it
+      const share = f.underShare ? Math.min(1, Math.max(0, f.underShare(i, j))) : 0;
+      const base0 = c[0];
+      const base1 = c[1];
+      const base2 = c[2];
+      let r = 0;
+      let g = 0;
+      let bl = 0;
+      for (const [u, w] of [[f.unit(i, j), 1 - share], [f.under ? f.under(i, j) : 0, share]] as const) {
+        if (w <= 0) continue;
+        const info = units[u];
+        const bedrock = info && (info.depositType === depositId(world, 'EDIFICE') || info.depositType === depositId(world, 'BASEMENT') || info.depositType === depositId(world, 'FILL'));
+        let t0 = base0;
+        let t1 = base1;
+        let t2 = base2;
+        if (info && info.time != null && !bedrock && info.depositType !== fall) {
+          const d = depositRgb(world, info.depositType);
+          t0 += (d[0] - t0) * 0.8;
+          t1 += (d[1] - t1) * 0.8;
+          t2 += (d[2] - t2) * 0.8;
+        }
+        r += t0 * w;
+        g += t1 * w;
+        bl += t2 * w;
       }
+      c[0] = r;
+      c[1] = g;
+      c[2] = bl;
       // steaming ground (> ~boiling) bleaches to ochre; only incandescent rock (> 450 °C) glows red
       const st = f.temp(i, j);
       if (st > 95) {
@@ -758,9 +813,54 @@ export function colourGround(
         c[1] += (0.3 - c[1]) * k;
         c[2] += (0.08 - c[2]) * k;
       }
+      if (shape && st <= 450) groundShade(shape, c);
       return;
     }
   }
+}
+
+/** Binomial weights of the colour diffusion (5 × 5 columns, σ ≈ 1 column). */
+const DIFFUSE = [1, 4, 6, 4, 1];
+const diffuseTmp: RGB = [0, 0, 0];
+
+/**
+ * The natural colour at vertex (i, j), diffused over the neighbouring columns: deposits, ash, hot ground
+ * and lava films are per-column fields, and painted as they come every column shows as a square patch.
+ * The colour is the binomially weighted mean of the colours the 5 × 5 columns around would give the
+ * vertex's own shape, so tints fade out over a couple of columns the way real ground grades into its
+ * surroundings. {@code step} is one column in the reader's units (detail meshes: cells per column).
+ */
+export function diffusedGround(
+  world: WorldInfo,
+  f: GroundFields,
+  i: number,
+  j: number,
+  elev: number,
+  eLo: number,
+  eHi: number,
+  maxUplift: number,
+  units: Record<number, { depositType: number; time: number | null }>,
+  out: RGB,
+  shape: GroundShape,
+  step = 1,
+): void {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let total = 0;
+  for (let dj = -2; dj <= 2; dj++) {
+    for (let di = -2; di <= 2; di++) {
+      const w = DIFFUSE[di + 2] * DIFFUSE[dj + 2];
+      colourGround('natural', world, f, i + di * step, j + dj * step, elev, eLo, eHi, maxUplift, units, diffuseTmp, shape);
+      r += diffuseTmp[0] * w;
+      g += diffuseTmp[1] * w;
+      b += diffuseTmp[2] * w;
+      total += w;
+    }
+  }
+  out[0] = r / total;
+  out[1] = g / total;
+  out[2] = b / total;
 }
 
 const focusDir = new THREE.Vector3();

@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.google.gson.JsonParser;
 import java.util.ArrayList;
 import java.util.List;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.random.SimRandom;
@@ -17,7 +17,7 @@ import me.alex4386.typhon.engine.testing.Saves;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 class SeismicityModelTest {
-    private static final BlockPos VENT = new BlockPos(0, 100, 0);
+    private static final Point3 VENT = new Point3(0, 100, 0);
 
     private static SeismicConfig.Builder config() {
         return SeismicConfig.builder("v", VENT);
@@ -149,7 +149,7 @@ class SeismicityModelTest {
         assertTrue(explosions.size() > 10);
         for (SeismicEvent e : explosions) {
             assertTrue(e.magnitude() >= 1 && e.magnitude() <= 3.5);
-            assertTrue(e.hypocenter().y() <= VENT.y() && e.hypocenter().y() > VENT.y() - 10);
+            assertTrue(e.hypocenter().y() <= VENT.y() && e.hypocenter().y() > VENT.y() - 100);
         }
     }
 
@@ -163,11 +163,11 @@ class SeismicityModelTest {
         List<SeismicEvent> events = run(engine, 1800);
 
         double vtDepth = events.stream().filter(e -> e.type() == SeismicEventType.VT)
-                .mapToInt(e -> e.hypocenter().y()).average().orElseThrow();
+                .mapToDouble(e -> e.hypocenter().y()).average().orElseThrow();
         double lpDepth = events.stream().filter(e -> e.type() == SeismicEventType.LP)
-                .mapToInt(e -> e.hypocenter().y()).average().orElseThrow();
-        assertTrue(vtDepth > magma.center.y() - 10 && vtDepth < VENT.y());
-        assertTrue(lpDepth > vtDepth + 40, "LP events are shallow");
+                .mapToDouble(e -> e.hypocenter().y()).average().orElseThrow();
+        assertTrue(vtDepth > magma.center.y() - 100 && vtDepth < VENT.y());
+        assertTrue(lpDepth > vtDepth + 400, "LP events are shallow");
     }
 
     @Test
@@ -185,16 +185,16 @@ class SeismicityModelTest {
 
     @Test
     void intensityDecaysWithDistanceAndGrowsWithMagnitude() {
-        BlockPos source = new BlockPos(0, 0, 0);
-        double near = SeismicIntensity.intensityAt(3, source, new BlockPos(5, 0, 0));
-        double mid = SeismicIntensity.intensityAt(3, source, new BlockPos(100, 0, 0));
-        double far = SeismicIntensity.intensityAt(3, source, new BlockPos(2000, 0, 0));
+        Point3 source = Point3.ORIGIN;
+        double near = SeismicIntensity.intensityAt(3, source, new Point3(50, 0, 0));
+        double mid = SeismicIntensity.intensityAt(3, source, new Point3(1000, 0, 0));
+        double far = SeismicIntensity.intensityAt(3, source, new Point3(20000, 0, 0));
         assertTrue(near > mid && mid > far);
-        assertTrue(SeismicIntensity.intensityAt(4, source, new BlockPos(100, 0, 0)) > mid);
+        assertTrue(SeismicIntensity.intensityAt(4, source, new Point3(1000, 0, 0)) > mid);
         assertEquals(1, SeismicIntensity.intensityAt(5, source, source));
-        assertEquals(0, SeismicIntensity.intensityAt(0, source, new BlockPos(5000, 0, 0)));
-        assertEquals(SeismicIntensity.amplitudeAt(2, source, new BlockPos(3, 0, 0)),
-                SeismicIntensity.amplitudeAt(2, source, new BlockPos(9, 0, 0)), 1e-12, "near-field saturation");
+        assertEquals(0, SeismicIntensity.intensityAt(0, source, new Point3(50000, 0, 0)));
+        assertEquals(SeismicIntensity.amplitudeAt(2, source, new Point3(30, 0, 0)),
+                SeismicIntensity.amplitudeAt(2, source, new Point3(90, 0, 0)), 1e-12, "near-field saturation");
     }
 
     @Test

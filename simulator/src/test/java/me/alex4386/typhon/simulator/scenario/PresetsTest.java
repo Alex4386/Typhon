@@ -28,15 +28,13 @@ class PresetsTest {
 
     @Test
     void presetsAreDocumented() {
-        assertEquals(12, Presets.all().size(), "six compact presets and their six real-scale counterparts");
+        assertEquals(6, Presets.all().size(), "six real-scale presets");
         for (Preset p : Presets.all()) {
             assertFalse(p.description().isBlank(), p.name());
             assertTrue(p.references().size() >= 3, p.name() + " should cite reference values");
             assertTrue(p.defaultHours() > 0);
-            if (p.name().endsWith("-real")) {
-                assertTrue(p.realSetting() != null, p.name() + " should describe its real setting");
-                assertFalse(p.referenceValues().isEmpty(), p.name() + " should list reference values for the report");
-            }
+            assertTrue(p.realSetting() != null, p.name() + " should describe its real setting");
+            assertFalse(p.referenceValues().isEmpty(), p.name() + " should list reference values for the report");
         }
     }
 
@@ -76,11 +74,13 @@ class PresetsTest {
         var kilauea = run("kilauea", 1, 60 / 3600.0);
         assertEquals("HAWAIIAN", last(kilauea).style());
         assertTrue(last(kilauea).get("effusing") > 0);
-        var stromboli = run("stromboli", 1, 60 / 3600.0);
-        assertEquals("STROMBOLIAN", last(stromboli).style());
+        // real Stromboli bursts every 10-20 min: within an hour the open vent shows Strombolian activity
+        var stromboli = run("stromboli", 1, 1);
+        assertTrue(stromboli.samples().stream().anyMatch(s -> s.style().equals("STROMBOLIAN")), "Strombolian bursts");
         var pinatubo = run("pinatubo", 1, 60 / 3600.0);
         assertEquals("PLINIAN", last(pinatubo).style());
-        assertTrue(pinatubo.summary().maxPlumeTopY > 250, "Plinian column reaches near the world top");
+        assertTrue(pinatubo.summary().maxPlumeTopZ > 20_000, "Plinian column reaches the stratosphere: "
+                + pinatubo.summary().maxPlumeTopZ + " m");
     }
 
     @Test

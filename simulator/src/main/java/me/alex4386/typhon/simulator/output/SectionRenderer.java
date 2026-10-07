@@ -14,7 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.imageio.ImageIO;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerView;
 import me.alex4386.typhon.engine.world.MaterialTable;
@@ -63,7 +63,7 @@ public final class SectionRenderer {
 
     /** Writes the section and column logs into {@code dir}, adding file name → caption to {@code maps}. */
     public void writeAll(Path dir, Map<String, String> maps) throws IOException {
-        BlockPos vent = scenario.volcano().vents().get(0).position();
+        ColumnIndex vent = scenario.volcano().referencePoint().column(world.spec().metersPerColumn());
         var grid = scenario.initialTerrain();
         int minX = grid.minX();
         int maxX = grid.minX() + grid.size() - 1;
@@ -108,7 +108,9 @@ public final class SectionRenderer {
         double zMax = surfaceMax + 0.08 * relief;
         double zMin = Math.min(surfaceMin - 0.25 * relief, deepest == Double.MAX_VALUE ? surfaceMin : deepest - 0.1 * relief);
         double dx = (double) columns / nu;
-        SectionRaster raster = world.section(new double[] {x0, z + 0.5, x1 + 1, z + 0.5}, zMin, zMax, nu, SECTION_HEIGHT);
+        double l = world.spec().metersPerColumn();
+        SectionRaster raster = world.section(new double[] {x0 * l, (z + 0.5) * l, (x1 + 1) * l, (z + 0.5) * l}, zMin, zMax, nu,
+                SECTION_HEIGHT);
 
         BufferedImage img = new BufferedImage(nu, SECTION_HEIGHT + LEGEND_HEIGHT, BufferedImage.TYPE_INT_RGB);
         int maxEruption = 1;

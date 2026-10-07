@@ -2,50 +2,31 @@ package me.alex4386.typhon.engine.geomorph;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.IntBinaryOperator;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.sim.Subsystem;
-import me.alex4386.typhon.engine.terrain.TerrainChunk;
-import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
-import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.testing.TestGround;
+import me.alex4386.typhon.engine.testing.TestGround.Elevation;
 import me.alex4386.typhon.engine.world.LayerView;
 import me.alex4386.typhon.engine.world.Material;
 import me.alex4386.typhon.engine.world.WorldModel;
 
-/** Synthetic terrain for geomorphology tests: 1 m columns of andesite ("stone"). */
+/** Synthetic terrain for geomorphology tests: 1 m columns of andesite. */
 final class GeoWorld {
-    static final BlockId STONE = BlockId.minecraft("stone");
-
     final int size;
-    final TerrainModel terrain = new TerrainModel();
+    final TerrainModel terrain = TestGround.terrain(1.0);
     final WorldModel world = terrain.world();
     final List<EngineFrame> frames = new ArrayList<>();
 
-    /** {@code chunks × chunks} terrain chunks from (0, 0) with ground {@code ground(x, z)}. */
-    GeoWorld(int chunks, IntBinaryOperator ground) {
+    /** {@code chunks × chunks} 16-column chunks from (0, 0) with surface elevation {@code ground(x, z)} (m). */
+    GeoWorld(int chunks, Elevation ground) {
         this.size = chunks * 16;
-        List<TerrainChunk> list = new ArrayList<>();
-        for (int cx = 0; cx < chunks; cx++) {
-            for (int cz = 0; cz < chunks; cz++) {
-                TerrainChunk chunk = new TerrainChunk(cx, cz);
-                for (int lz = 0; lz < 16; lz++) {
-                    for (int lx = 0; lx < 16; lx++) {
-                        int x = cx * 16 + lx;
-                        int z = cz * 16 + lz;
-                        chunk.set(x, z, new TerrainColumn(ground.applyAsInt(x, z), TerrainColumn.NO_WATER, STONE));
-                    }
-                }
-                list.add(chunk);
-            }
-        }
-        terrain.apply(new TerrainSnapshot(list));
+        terrain.apply(TestGround.chunks(0, 0, chunks - 1, chunks - 1, ground, TestGround.DRY));
     }
 
-    static GeoWorld flat(int chunks, int y) {
+    static GeoWorld flat(int chunks, double y) {
         return new GeoWorld(chunks, (x, z) -> y);
     }
 

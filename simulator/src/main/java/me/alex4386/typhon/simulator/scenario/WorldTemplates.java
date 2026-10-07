@@ -7,6 +7,7 @@ import java.util.Map;
 import me.alex4386.typhon.engine.config.ConfigException;
 import me.alex4386.typhon.engine.config.WorldDefinition;
 import me.alex4386.typhon.engine.config.Yaml;
+import me.alex4386.typhon.engine.world.MaterialTable;
 import me.alex4386.typhon.engine.worlds.WorldDirectory;
 import me.alex4386.typhon.simulator.terrain.ColumnGrid;
 import me.alex4386.typhon.simulator.terrain.RealTerrain;
@@ -101,7 +102,6 @@ public final class WorldTemplates {
                 seed: %d
                 baseStepMs: 50
                 grid: {metersPerColumn: %s, solverSpacing: %s}
-                scaling: {plumeMetersPerBlock: %s}
                 seaLevel: %s
                 climate:
                   rainfallMmPerHour: 0.0
@@ -117,7 +117,7 @@ public final class WorldTemplates {
                 geotherm: {surfaceTemperatureC: %s, gradientCPerKm: 60, lapseRateCPerKm: 6.5}
                 aquifer: {waterTableDepth: %s, specificYield: 0.2, topographyFactor: 0.0, baseLevel: %s, rechargeFraction: 0.5}
                 terrain: %s
-                """, name, seed, fmt(l), fmt(4 * l), fmt(l),
+                """, name, seed, fmt(l), fmt(4 * l),
                 sea ? fmt(template.seaLevelZ()) : "'.nan'", fmt(Math.min(template.elevation(0, 0), 0) - 400), surface,
                 fmt(2 * l), sea ? "5" : "15", sea ? "0" : "30", sea ? fmt(template.seaLevelZ()) : "'.nan'",
                 template.terrainSection(seed));
@@ -135,7 +135,7 @@ public final class WorldTemplates {
         int half = WorldScenarios.halfColumns(template.coreExtentM(), l);
         boolean ocean = template.kind().equals("ocean");
         return RealTerrain.build(l, half, seed, template::elevation, template.roughnessM(), 300,
-                definition.spec().seaLevelZ(), RealPresets.rock("basalt", ocean ? -1e9 : 1e9));
+                definition.spec().seaLevelZ(), RealPresets.rock(MaterialTable.BASALT, ocean ? -1e9 : 1e9));
     }
 
     private static double num(Map<String, Object> t, String key, double fallback) {

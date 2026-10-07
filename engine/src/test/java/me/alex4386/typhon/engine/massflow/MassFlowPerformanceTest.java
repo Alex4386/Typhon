@@ -3,7 +3,7 @@ package me.alex4386.typhon.engine.massflow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.sim.Engine;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -20,7 +20,7 @@ class MassFlowPerformanceTest {
         config.stopTimescale = 1e9;
         Lahars field = new Lahars("perf", world.terrain, config);
         Engine engine = world.engine(field, 1);
-        field.release(new BlockPos(60, 0, 64), 56, 10_000, 15, 0.2, Trigger.MANUAL);
+        field.release(new Point3(60.5, 0, 64.5), 56, 10_000, 15, 0.2, Trigger.MANUAL);
         world.run(engine, 20); // warm-up
 
         int steps = 100; // engine steps; the field steps every config.stepPeriodSeconds

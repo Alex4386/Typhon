@@ -24,7 +24,7 @@ class FissureLifecycleRun {
     @Test
     @EnabledIfEnvironmentVariable(named = "TYPHON_FISSURE_TIMELINE", matches = "1")
     void forcedDikeTimeline() {
-        Preset preset = Presets.get("kilauea-real");
+        Preset preset = Presets.get("kilauea");
         long stepMs = Long.parseLong(System.getenv().getOrDefault("TYPHON_FISSURE_STEP_MS", "50"));
         Scenario scenario = preset.build(1, preset.terrain(1), Scenario.Options.DEFAULT.withBaseStepMicros(stepMs * 1000));
         String vid = scenario.volcano().volcanoId();
@@ -32,7 +32,7 @@ class FissureLifecycleRun {
         scenario.engine().submit(new DikeCommands.ForceDike(vid));
         Simulation sim = new Simulation(scenario, 600).onEvent(e -> {
             String line = switch (e) {
-                case DikeEvents.FissureOpened f -> "fissure opened " + f.vent().id() + " length " + f.vent().fissureLength();
+                case DikeEvents.FissureOpened f -> "fissure opened " + f.vent().id() + " length " + f.vent().fissureLengthM() + " m";
                 case DikeEvents.DikeStalled s -> "dike " + s.dikeId() + " stalled " + s.reason();
                 case MagmaEvents.EruptionStarted s -> "eruption started " + s.cause() + " at " + fmt(s.overpressureMPa()) + " MPa";
                 case MagmaEvents.EruptionEnded s -> "eruption ended " + s.cause() + " " + fmt(s.eruptedVolume()) + " m3";

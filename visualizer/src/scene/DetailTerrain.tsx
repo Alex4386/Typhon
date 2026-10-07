@@ -12,7 +12,8 @@ import { sampleColumn } from '../util/world';
 import { CRUST_RGB, crackPattern, crustLight, lavaSurfaceColor } from './lavaColor';
 
 import { detailHeights, detailLevels, levelRect, refinement, wantsDetail } from './detail';
-import { cachedElevation, cancelRebuild, colourGround, forgetElevation, gridGeometry, groundMaterial, lin, queueRebuild, requeueCore, sceneProbe, type GroundFields } from './Terrain';
+import { shapeFrom, type GroundShape } from './groundColor';
+import { cachedElevation, cancelRebuild, colourGround, diffusedGround, forgetElevation, gridGeometry, groundMaterial, lin, queueRebuild, requeueCore, sceneProbe, type GroundFields } from './Terrain';
 
 /** How often (ms) the camera's distance to the crater regions is checked. */
 const CHECK_MS = 500;
@@ -154,6 +155,8 @@ function DetailTile({ world, level, tx, ty, onPick }: { world: WorldInfo; level:
         temp: smooth(Field.SurfaceTemperature, 10),
         wt: smooth(Field.WaterTableDepth, 10),
         unit: nearest(Field.TopUnit),
+        under: nearest(Field.UnderUnit),
+        underShare: smooth(Field.UnderShare),
         uplift: smooth(Field.Uplift),
         steam: smooth(Field.SteamFraction),
       };
@@ -167,6 +170,8 @@ function DetailTile({ world, level, tx, ty, onPick }: { world: WorldInfo; level:
       const gn = geo.getAttribute('normal') as THREE.BufferAttribute;
       const shown = new Float32Array(n * n);
       const rgb: RGB = [0, 0, 0];
+      const shape: GroundShape = { x: 0, y: 0, above: 0, t: 0, slope: 0, hollow: 0 };
+      const landBase = world.hasSea === false || !Number.isFinite(world.seaLevel) ? eLo : world.seaLevel;
       let maxUplift = 1e-6;
       if (mode === 'uplift') for (let b = 0; b < n; b += r) for (let a = 0; a < n; a += r) maxUplift = Math.max(maxUplift, Math.abs(fields.uplift(a, b)));
       for (let b = 0; b < n; b++) {
@@ -182,7 +187,13 @@ function DetailTile({ world, level, tx, ty, onPick }: { world: WorldInfo; level:
           const hy = ((elevR(a, b + 1) - elevR(a, b - 1)) * vExag) / (2 * c);
           const inv = 1 / Math.hypot(hx, 1, hy);
           gn.setXYZ(v, -hx * inv, inv, hy * inv);
-          colourGround(mode, world, fields, a, b, elev, eLo, eHi, maxUplift, units, rgb);
+          shape.x = x;
+          shape.y = y;
+          shape.above = elev - landBase;
+          shape.t = Math.max(0, shape.above / Math.max(1, eHi - landBase));
+          shapeFrom(shape, elev, elevR(a + 1, b), elevR(a - 1, b), elevR(a, b + 1), elevR(a, b - 1), c);
+          if (mode === 'natural') diffusedGround(world, fields, a, b, elev, eLo, eHi, maxUplift, units, rgb, shape, r);
+          else colourGround(mode, world, fields, a, b, elev, eLo, eHi, maxUplift, units, rgb, shape);
           const ld = mode === 'natural' ? lavaD(a, b) : 0;
           if (ld > 0.02) {
             lavaSurfaceColor(lavaT(a, b), CRUST_RGB, crustLight(-hx * inv, inv, hy * inv), lavaRgb, crackPattern(x, y));

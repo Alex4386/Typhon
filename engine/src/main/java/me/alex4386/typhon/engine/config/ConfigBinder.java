@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import me.alex4386.typhon.engine.world.BlockId;
 
 /**
  * Maps definition sections onto the engine's existing configuration objects by name, so every tunable
@@ -30,7 +29,7 @@ import me.alex4386.typhon.engine.world.BlockId;
  * </ul>
  *
  * Supported value types: numbers, booleans, strings, enums (by name), {@code double[]} and sets/lists
- * of block ids. Unknown keys are reported with the list of valid ones.
+ * of strings. Unknown keys are reported with the list of valid ones.
  */
 public final class ConfigBinder {
     private ConfigBinder() {}
@@ -50,13 +49,13 @@ public final class ConfigBinder {
 
     /**
      * Sets the public fields of {@code target} named by the node's keys. Keys in {@code reserved} are
-     * left to the caller; {@code derived} keys are rejected (they are set from world scaling).
+     * left to the caller; {@code derived} keys are rejected (they are set from other sections).
      */
     public static void bindFields(ConfigNode node, Object target, Set<String> reserved, Set<String> derived) {
         Map<String, Field> fields = fields(target.getClass());
         for (String key : node.keys()) {
             if (reserved.contains(key)) continue;
-            if (derived.contains(key)) throw node.error(key, "is derived from the world scaling and cannot be set here");
+            if (derived.contains(key)) throw node.error(key, "is derived from another section and cannot be set here");
             Field f = fields.get(key);
             if (f == null) continue;
             Object value = convert(node, key, f.getGenericType());
@@ -103,7 +102,7 @@ public final class ConfigBinder {
             names.add(c.getName());
             if (node.has(c.getName())) {
                 if (derived.contains(c.getName())) {
-                    throw node.error(c.getName(), "is derived from the world scaling and cannot be set here");
+                    throw node.error(c.getName(), "is derived from another section and cannot be set here");
                 }
                 args[i] = convert(node, c.getName(), c.getGenericType());
             }
@@ -145,7 +144,7 @@ public final class ConfigBinder {
         }
         for (String key : node.keys()) {
             if (reserved.contains(key)) continue;
-            if (derived.contains(key)) throw node.error(key, "is derived from the world scaling and cannot be set here");
+            if (derived.contains(key)) throw node.error(key, "is derived from another section and cannot be set here");
             Method m = setters.get(key);
             if (m == null) continue;
             try {
@@ -172,7 +171,7 @@ public final class ConfigBinder {
         if (type instanceof ParameterizedType p && p.getRawType() instanceof Class<?> raw
                 && Collection.class.isAssignableFrom(raw) && p.getActualTypeArguments().length == 1) {
             Type arg = p.getActualTypeArguments()[0];
-            return arg == BlockId.class || arg == String.class;
+            return arg == String.class;
         }
         return false;
     }
@@ -215,15 +214,12 @@ public final class ConfigBinder {
         if (type instanceof ParameterizedType p) {
             if (!(raw instanceof List<?> list)) throw node.error(key, "expected a list");
             Class<?> rawType = (Class<?>) p.getRawType();
-            boolean blocks = p.getActualTypeArguments()[0] == BlockId.class;
             // Sorted sets: configuration objects are hashed through their serialised form.
-            Collection result = Set.class.isAssignableFrom(rawType)
-                    ? (blocks ? new java.util.TreeSet<>(BlockId.BY_NAME) : new TreeSet<>())
-                    : new ArrayList<>();
+            Collection result = Set.class.isAssignableFrom(rawType) ? new TreeSet<>() : new ArrayList<>();
             for (Object item : list) {
                 if (!(item instanceof String s)) throw node.error(key, "expected a list of strings");
                 try {
-                    result.add(blocks ? BlockId.parse(s) : s);
+                    result.add(s);
                 } catch (IllegalArgumentException e) {
                     throw node.error(key, e.getMessage());
                 }

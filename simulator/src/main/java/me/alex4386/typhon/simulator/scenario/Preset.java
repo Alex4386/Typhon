@@ -19,7 +19,7 @@ public interface Preset {
     /** Hours that show the scenario's main behaviour. */
     double defaultHours();
 
-    /** Real-world setting of a real-scale preset, or {@code null} for compact (Minecraft-sized) ones. */
+    /** The preset's real-world setting (geology, domain, DEM source), or {@code null} for a world run. */
     default RealSetting realSetting() {
         return null;
     }
@@ -39,11 +39,11 @@ public interface Preset {
 
     /**
      * The preset's landscape over a centred window {@code 2·halfExtentColumns} columns wide (rounded up to
-     * whole chunks): the same generator as {@link #terrain(long)}, so any window agrees column for column.
+     * whole tiles): the same generator as {@link #terrain(long)}, so any window agrees column for column.
      */
     default ColumnGrid terrain(long seed, int halfExtentColumns) {
         ColumnGrid grid = terrain(seed);
-        if (grid.source() == null || grid.size() == 2 * Math.max(16, ((halfExtentColumns + 15) / 16) * 16)) return grid;
+        if (grid.source() == null || grid.size() == 2 * ColumnGrid.roundHalf(halfExtentColumns)) return grid;
         return grid.window(halfExtentColumns);
     }
 

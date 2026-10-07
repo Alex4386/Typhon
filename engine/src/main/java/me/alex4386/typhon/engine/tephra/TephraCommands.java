@@ -44,10 +44,14 @@ public final class TephraCommands {
      * @param exitSpeed real exit speed (m/s)
      * @param zenithMeanDeg mean launch angle from vertical (0 = straight up; ~40 for cock's-tail jets)
      * @param zenithSigmaDeg spread of the launch angle
-     * @param maxBombs cap on the number of bombs in this salvo
+     * @param maxBombs cap on the number of tracked bombs in this salvo
+     * @param carriesMass whether the salvo lays {@code ballisticMassKg} down itself (the tracked bombs stand for
+     *     all of it, each weighted); false when the mass is laid by a {@link ProximalFallout} and the bombs
+     *     only show the larger clasts
      */
     public record LaunchSalvo(String target, VentSite vent, double ballisticMassKg, double exitSpeed,
-            double zenithMeanDeg, double zenithSigmaDeg, double silicaWt, int maxBombs) implements EngineCommand {
+            double zenithMeanDeg, double zenithSigmaDeg, double silicaWt, int maxBombs, boolean carriesMass)
+            implements EngineCommand {
         public LaunchSalvo {
             Objects.requireNonNull(target, "target");
             Objects.requireNonNull(vent, "vent");

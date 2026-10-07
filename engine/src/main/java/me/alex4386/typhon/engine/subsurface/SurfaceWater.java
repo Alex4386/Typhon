@@ -3,9 +3,7 @@ package me.alex4386.typhon.engine.subsurface;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import me.alex4386.typhon.engine.world.ColumnStacks;
@@ -323,8 +321,7 @@ final class SurfaceWater {
         }
         if (fresh.isEmpty()) return;
         java.util.Set<Long> freshSet = new java.util.HashSet<>(fresh);
-        Map<Long, Integer> component = new HashMap<>();
-        int next = 0;
+        me.alex4386.typhon.engine.math.LongHashSet component = new me.alex4386.typhon.engine.math.LongHashSet();
         for (long key : fresh) {
             int tx = ColumnStacks.keyTileX(key);
             int tz = ColumnStacks.keyTileZ(key);
@@ -332,13 +329,13 @@ final class SurfaceWater {
                 int x = tx * TILE + (i & 31);
                 int z = tz * TILE + (i >> 5);
                 long column = columnKey(x, z);
-                if (component.containsKey(column) || waterAbove(x, z) <= 0) continue;
+                if (component.contains(column) || waterAbove(x, z) <= 0) continue;
                 // Flood-fill this water body.
                 List<long[]> members = new ArrayList<>();
                 boolean open = false;
                 ArrayDeque<long[]> queue = new ArrayDeque<>();
                 queue.add(new long[] {x, z});
-                component.put(column, next);
+                component.add(column);
                 while (!queue.isEmpty()) {
                     long[] p = queue.poll();
                     members.add(p);
@@ -353,12 +350,11 @@ final class SurfaceWater {
                             continue;
                         }
                         long nk = columnKey(nx, nz);
-                        if (component.containsKey(nk) || waterAbove(nx, nz) <= 0) continue;
-                        component.put(nk, next);
+                        if (component.contains(nk) || waterAbove(nx, nz) <= 0) continue;
+                        component.add(nk);
                         queue.add(new long[] {nx, nz});
                     }
                 }
-                next++;
                 members.sort((a, b) -> a[1] != b[1] ? Long.compare(a[1], b[1]) : Long.compare(a[0], b[0]));
                 for (long[] p : members) {
                     int mx = (int) p[0];

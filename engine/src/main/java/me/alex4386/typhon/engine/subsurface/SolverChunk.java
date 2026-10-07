@@ -34,6 +34,10 @@ final class SolverChunk {
     // ── Derived from the world model ──
     /** Column currently has at least one known surface column. */
     final boolean[] exists = new boolean[AREA];
+    /** {@link me.alex4386.typhon.engine.world.ColumnStacks#footprint} the column's properties were last computed from. */
+    final long[] footprint = new long[AREA];
+    /** Whether {@link #footprint} holds a value (cleared to force a recomputation). */
+    final boolean[] footprintValid = new boolean[AREA];
     /** Mean ground elevation of the known surface columns (m). */
     final double[] surfaceZ = new double[AREA];
     /** Known surface columns in the block. */

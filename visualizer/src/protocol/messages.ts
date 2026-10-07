@@ -135,6 +135,11 @@ export type SimCommand =
    * Adds magma to the chamber. Optional fields set the batch's properties (otherwise the volcano's
    * configured recharge magma); the server's `schema.commands.injectMagma` lists every accepted field.
    */
+  /**
+   * Replaces the composition of the magma in a chamber now (bulk values; crystals, gas and viscosity follow).
+   * Omitted fields keep their value; `chamberId` absent = the volcano's main chamber.
+   */
+  | { kind: 'setChamberMagma'; volcanoId: string; chamberId?: string; temperatureC?: number; silicaWt?: number; waterWt?: number; co2Wt?: number }
   | { kind: 'injectMagma'; volcanoId: string; volumeM3: number; temperatureC?: number; silicaWt?: number; waterWt?: number; [field: string]: string | number | undefined }
   /** Rain over the whole world (mm/h); 0 stops. */
   | { kind: 'rain'; mmPerHour: number }
@@ -535,8 +540,6 @@ export interface PresetInfo {
   name: string;
   title: string;
   description: string;
-  /** Real-volcano scale (km domains) rather than a compact demo. */
-  realScale: boolean;
 }
 
 export interface WorldListing {
@@ -646,8 +649,6 @@ export interface VentInfo {
   radius: number;
   /** Fissure end points (fissures only). */
   line?: [XY, XY];
-  /** Not formed yet: where a placed chamber's conduit will meet the ground. */
-  emergent?: boolean;
 }
 
 export interface MaterialInfo {
@@ -727,6 +728,8 @@ export interface VolcanoState {
   alert: { level: AlertLevel; style: EruptionStyle | null; vei?: number; styleForecast?: boolean };
   deformation: { maxUpliftM: number; stations: StationReading[] };
   plume?: { topZ: number; massRateKgS: number };
+  /** Ids of the vents erupting now (empty between eruptions; absent on older servers). */
+  activeVents?: string[];
   /** Landscape change so far (absent on servers without geomorphology). */
   geomorph?: { failures: number; failedM3: number; avalanches: number; craters: number; maxCraterRadiusM: number; calderaSubsidenceM: number };
 }
@@ -771,6 +774,8 @@ export type SimEvent =
   | { kind: 'dikeAdvanced'; time: number; volcanoId: string; dikeId: number; path: [number, number, number][] }
   | { kind: 'dikeStalled'; time: number; volcanoId: string; dikeId: number; tip: [number, number, number]; depthM: number; volumeM3: number; reason: string }
   | { kind: 'fissureOpened'; time: number; volcanoId: string; vent: VentInfo }
+  /** A fissure's flow localised: a segment still erupting after its neighbours froze is now a crater. */
+  | { kind: 'ventFormed'; time: number; volcanoId: string; vent: VentInfo; fissureId: string }
   | { kind: 'bombLaunched'; time: number; volcanoId: string; id: number; start: [number, number, number]; velocity: [number, number, number]; dragK: number; flightSeconds: number; landing: [number, number, number] }
   | { kind: 'plume'; time: number; volcanoId: string; base: [number, number, number]; topZ: number; radius: number; massRateKgS: number }
   | { kind: 'lightning'; time: number; volcanoId: string; at: [number, number, number] }
