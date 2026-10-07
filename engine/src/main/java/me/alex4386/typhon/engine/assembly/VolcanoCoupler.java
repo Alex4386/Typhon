@@ -306,6 +306,9 @@ public final class VolcanoCoupler implements Subsystem {
         double magmaMassRate = chamber.eruptionRate() * ExplosivePhase.DRE_DENSITY;
         double scale = p.magmaMassFlux() > 0 ? magmaMassRate / p.magmaMassFlux() : 0;
         double stepSeconds = context.dtSeconds();
+        if (water.openFraction() <= 0 && water.surfaceDepthM() > 0) {
+            boilCraterLake(main, magmaMassRate * stepSeconds, flow.exitTemperatureC());
+        }
 
         double lavaRate = p.lavaMassFlux() * scale / ExplosivePhase.DRE_DENSITY;
         if (lavaRate > MIN_LAVA_RATE) updateLava(vents, weights, lavaRate);
@@ -822,6 +825,44 @@ public final class VolcanoCoupler implements Subsystem {
         // Water drawn out of a crater cut off from open water comes back only by seepage through the edifice.
         double seepage = wet && openWaterFraction > 0 ? Double.NaN : seepageIntoCrater(world, c, crater, top - band);
         return new VentPartition.Water(waterDepthM, openWaterFraction, table, slurry, porosity, seepage);
+    }
+
+    /**
+     * A crater lake cut off from the sea is a finite pool: the magma rising through it boils it at up to
+     * {@code c_m (T − 100) / (c_w · 80 K + L)} kg of water per kg (~0.5), so it dries out within minutes to
+     * hours unless seepage keeps up (Surtsey 1964: once the ring sealed the vent off, the crater lagoon
+     * gave way to lava fountains and a lava lake; Thorarinsson 1967).
+     */
+    private void boilCraterLake(VentSite vent, double magmaKg, double temperatureC) {
+        WorldModel world = terrain == null ? null : terrain.world();
+        if (world == null || !(magmaKg > 0)) return;
+        double boil = magmaKg * VentPartition.MAGMA_HEAT_CAPACITY * Math.max(0, temperatureC - 100)
+                / (VentPartition.WATER_HEAT_CAPACITY * 80 + VentPartition.WATER_LATENT_HEAT);
+        double area = world.spec().metersPerColumn() * world.spec().metersPerColumn();
+        BlockPos c = vent.position();
+        int crater = Math.max(1, vent.craterRadius());
+        double lake = 0;
+        for (int dz = -crater; dz <= crater; dz++) {
+            for (int dx = -crater; dx <= crater; dx++) {
+                if (dx * dx + dz * dz > crater * crater || !world.isKnown(c.x() + dx, c.z() + dz)) continue;
+                double level = world.waterZ(c.x() + dx, c.z() + dz);
+                if (Double.isFinite(level)) lake += Math.max(0, level - world.surfaceZ(c.x() + dx, c.z() + dz));
+            }
+        }
+        lake *= area * VentPartition.WATER_DENSITY;
+        if (!(lake > 0)) return;
+        double keep = Math.max(0, 1 - boil / lake);
+        for (int dz = -crater; dz <= crater; dz++) {
+            for (int dx = -crater; dx <= crater; dx++) {
+                int x = c.x() + dx;
+                int z = c.z() + dz;
+                if (dx * dx + dz * dz > crater * crater || !world.isKnown(x, z)) continue;
+                double level = world.waterZ(x, z);
+                double floor = world.surfaceZ(x, z);
+                if (!Double.isFinite(level) || level <= floor) continue;
+                world.setWaterZ(x, z, keep > 1e-3 ? floor + (level - floor) * keep : Double.NaN);
+            }
+        }
     }
 
     /**

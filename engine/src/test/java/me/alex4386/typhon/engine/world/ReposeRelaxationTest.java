@@ -74,6 +74,21 @@ class ReposeRelaxationTest {
         return w;
     }
 
+    /** Mean flank slope (°) of a cone dropped on a floor at {@code floor}: its height over its base radius. */
+    private static double coneSlopeDeg(WorldModel w, double floor) {
+        w.deposit(0, 0, 150, MaterialTable.ASH, 1, LayerFlags.LOOSE, 0.45, 0);
+        assertTrue(worstExcess(w) <= 1e-4);
+        double top = Double.NEGATIVE_INFINITY;
+        double base = 0;
+        for (int x = -R; x <= R; x++) {
+            for (int z = -R; z <= R; z++) {
+                top = Math.max(top, w.surfaceZ(x, z));
+                if (w.surfaceZ(x, z) > floor + 0.5) base = Math.max(base, Math.hypot(x, z) * L);
+            }
+        }
+        return Math.toDegrees(Math.atan((top - floor) / base));
+    }
+
     /** Repose angle (°) of a loose top at column (0, 0). */
     private static double reposeDeg(WorldModel w) {
         w.deposit(0, 0, 0.5, MaterialTable.ASH, 1, LayerFlags.LOOSE, 0.45, 0);
@@ -86,11 +101,9 @@ class ReposeRelaxationTest {
         // Cassar et al. 2005): submergence alone does not flatten a pile.
         double dry = reposeDeg(flat(0));
         assertEquals(dry, reposeDeg(sea(-100)), 1e-9, "deep: the dry angle");
-        WorldModel w = sea(-200);
-        w.deposit(0, 0, 150, MaterialTable.ASH, 1, LayerFlags.LOOSE, 0.45, 0);
-        assertTrue(worstExcess(w) <= 1e-4);
-        double slope = Math.toDegrees(Math.atan((w.surfaceZ(0, 0) - w.surfaceZ(1, 0)) / L));
-        assertTrue(slope > 28, "a deep submarine cone is steep: " + slope);
+        double submerged = coneSlopeDeg(sea(-200), -200);
+        double inAir = coneSlopeDeg(flat(-200), -200);
+        assertEquals(inAir, submerged, 1.0, "a deep submarine cone is as steep as one in air");
     }
 
     @Test
