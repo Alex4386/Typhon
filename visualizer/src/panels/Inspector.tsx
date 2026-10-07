@@ -21,7 +21,7 @@ import { formatSimTime, worldExtent } from '../util/world';
 import { DESTRUCTIVE, contextActions, contextToggles, ventLifecycle, type ContextAction, type ContextToggle, type VentLifecycle } from './actions';
 import { budgetVerdict, type BudgetState } from './budget';
 import { formatVolume } from './events';
-import { buildPanel, type BuiltPanel } from './objectPanel';
+import { buildPanel, type BuiltPanel } from './panelSpec';
 import { OverridesBanner, PanelTabBody, Skeleton, Waiting } from './ObjectPanel';
 import { OVERLAY } from './Overlay';
 import { showServerResult } from './serverResult';

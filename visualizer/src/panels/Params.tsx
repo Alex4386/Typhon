@@ -7,7 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useStore } from '../store/store';
-import { buildPanel, ownerEntity } from './objectPanel';
+import { buildPanel, ownerEntity } from './panelSpec';
 import { PanelTabBody, Skeleton, Waiting } from './ObjectPanel';
 import { formatParam } from './ParamInput';
 import { ApplyBadge, ParamRow, useParamEdits } from './ParamRow';

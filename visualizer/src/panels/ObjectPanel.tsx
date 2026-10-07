@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import type { EntityProp, PanelField, ParamSpec, ParamValue } from '../protocol/messages';
 import { loadPref, savePref } from '../store/prefs';
 import { useStore } from '../store/store';
-import { buildPanel, fieldShown, pinParam, type BuiltPanel, type BuiltTab } from './objectPanel';
+import { buildPanel, fieldShown, pinParam, type BuiltPanel, type BuiltTab } from './panelSpec';
 import { formatParam } from './ParamInput';
 import { ParamRow } from './ParamRow';
 import { atRest } from './paramState';

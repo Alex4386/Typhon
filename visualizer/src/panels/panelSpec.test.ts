@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ObjectPanelLayout, ParamSpec } from '../protocol/messages';
-import { buildPanel, ownerEntity, pinParam, tierCounts } from './objectPanel';
+import { buildPanel, ownerEntity, pinParam, tierCounts } from './panelSpec';
 
 const p = (id: string, owner: string, tab: string, tier: ParamSpec['tier'], extra: Partial<ParamSpec> = {}): ParamSpec => ({
   id,
