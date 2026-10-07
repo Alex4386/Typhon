@@ -10,6 +10,7 @@ import { CameraRig } from '../camera/CameraRig';
 import { useCamera } from '../camera/cameraStore';
 import { command } from '../net/connection';
 import type { SimEvent, WorldInfo, XY } from '../protocol/messages';
+import { KIND_LABEL } from '../store/entities';
 import { QUALITY, useStore } from '../store/store';
 import { worldExtent } from '../util/world';
 import { Atmosphere } from './Atmosphere';
@@ -136,6 +137,48 @@ function Sun({ position, target, span, shadows }: { position: [number, number, n
  * meshes are always nearer, so they keep the click; this only fills the gaps (tiles still queued for
  * building, ground under open water drawn by the far field).
  */
+/**
+ * Hover for dikes and magma pathways, which are picked by screen distance (see `nearestDikeOnScreen`):
+ * near one's drawn path, the hover label names it, as a click there would select it.
+ */
+function LineHover() {
+  const { gl, camera } = useThree();
+  useEffect(() => {
+    const el = gl.domElement;
+    let frame = 0;
+    let shown: string | null = null;
+    const v = new THREE.Vector3();
+    const onMove = (ev: PointerEvent) => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const s = useStore.getState();
+        const rect = el.getBoundingClientRect();
+        const toScreen = (q: readonly number[]): XY | null => {
+          v.set(q[0], q[2] * s.verticalExaggeration, -q[1]).project(camera);
+          return v.z > 1 ? null : [((v.x + 1) / 2) * rect.width, ((1 - v.y) / 2) * rect.height];
+        };
+        const line = s.tool === 'orbit' && s.showChambers ? nearestDikeOnScreen(s.entities, toScreen, [ev.clientX - rect.left, ev.clientY - rect.top]) : null;
+        if (line) {
+          shown = line.label;
+          s.set({ hover: { label: line.label, detail: KIND_LABEL[line.kind], x: ev.clientX, y: ev.clientY }, hoverId: line.id });
+          el.style.cursor = 'pointer';
+        } else if (shown) {
+          if (s.hover?.label === shown) s.set({ hover: null, hoverId: null });
+          shown = null;
+          el.style.cursor = '';
+        }
+      });
+    };
+    el.addEventListener('pointermove', onMove);
+    return () => {
+      el.removeEventListener('pointermove', onMove);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [gl, camera]);
+  return null;
+}
+
 function PickPlane({ world, onPick }: { world: WorldInfo; onPick: (xy: XY, e: ThreeEvent<MouseEvent>) => void }) {
   const vExag = useStore((s) => s.verticalExaggeration);
   const ext = world.lod?.extent ?? (() => { const e = worldExtent(world); return [e.minX, e.minY, e.maxX, e.maxY]; })();
@@ -152,11 +195,12 @@ function PickPlane({ world, onPick }: { world: WorldInfo; onPick: (xy: XY, e: Th
         const st = useStore.getState();
         const mid = ((world.elevationRange[0] + world.elevationRange[1]) / 2) * st.verticalExaggeration;
         const p = rayGround(e.ray.origin, e.ray.direction, (x, z) => displayZ(world, x, -z, st.verticalExaggeration, st.deformationExaggeration), mid);
-        if (p) onPick([p[0], -p[2]], e);
+        // from a camera underground (framing a deep chamber) the ray may never meet the ground: use the plane
+        onPick(p ? [p[0], -p[2]] : [e.point.x, -e.point.z], e);
       }}
     >
       <planeGeometry args={[w, h]} />
-      <meshBasicMaterial visible={false} />
+      <meshBasicMaterial visible={false} side={THREE.DoubleSide} />
     </mesh>
   );
 }
@@ -273,6 +317,7 @@ export function Viewer({ world }: { world: WorldInfo }) {
         <Terrain world={world} onPick={onPick} />
         <PickPlane world={world} onPick={onPick} />
         <Plumbing world={world} />
+        <LineHover />
         <DetailTerrain world={world} onPick={onPick} />
       </group>
       <FarField world={world} />

@@ -20,6 +20,16 @@ describe('dike picking on screen', () => {
     expect(nearestDikeOnScreen(dikes, toScreen, [40, 40])).toBeNull(); // 30 px off
     expect(nearestDikeOnScreen(dikes, toScreen, [50, 50])).toBeNull(); // only the removed dike runs here
   });
+
+  it('picks a pathway between two chambers between them, the chambers at its ends', () => {
+    const plumbing: EntityMap = {
+      a: view('a', 'chamber', [0, 500, -2000], { props: { radiusM: 300 } }),
+      b: view('b', 'chamber', [2000, 500, -4000], { props: { radiusM: 300 } }),
+      link: view('link', 'connection', [1000, 500, -3000], { path: [[0, 500, -2000], [2000, 500, -4000]] }),
+    };
+    expect(nearestDikeOnScreen(plumbing, toScreen, [100, 52])?.id).toBe('link'); // halfway, 2 px off
+    expect(nearestDikeOnScreen(plumbing, toScreen, [1, 50])).toBeNull(); // inside chamber a: the chamber's
+  });
 });
 
 function view(id: string, kind: string, at: [number, number, number], extra: Partial<EntityView> = {}): EntityView {

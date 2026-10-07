@@ -119,34 +119,45 @@ export function segmentDistance(p: XY, a: XY, b: XY): number {
   return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
 }
 
+/** Kinds drawn as thin lines underground, picked by screen distance: dikes and magma pathways. */
+const LINE_KINDS = new Set(['dike', 'connection']);
+
+/** Pieces each path segment is cut into, so a segment's stretch inside a chamber can be left out. */
+const PIECES = 16;
+
 /**
- * The dike whose path, projected to the screen by `toScreen` (null for points behind the camera),
- * passes nearest the click `at` (px), if within `maxPx`. Dikes are thin sheets far below the
- * surface, so they are picked by screen distance rather than by hitting their mesh.
+ * The dike or magma pathway whose path, projected to the screen by `toScreen` (null for points behind
+ * the camera), passes nearest the click `at` (px), if within `maxPx`. They are thin sheets and pipes far
+ * below the surface, so they are picked by screen distance rather than by hitting their mesh. The
+ * stretch of a path inside a magma chamber belongs to the chamber: clicking there picks the chamber.
  */
 export function nearestDikeOnScreen(entities: EntityMap, toScreen: (p: readonly number[]) => XY | null, at: XY, maxPx = DIKE_PICK_PX): Entity | null {
-  // the stretch of a dike inside a magma chamber belongs to the chamber: clicking there picks the chamber
   const chambers = Object.values(entities).filter((c) => c.kind === 'chamber' && typeof c.props.radiusM === 'number');
   const inside = (q: readonly number[]) => chambers.some((c) => Math.hypot(q[0] - c.at[0], q[1] - c.at[1], q[2] - c.at[2]) < Number(c.props.radiusM));
   let best: Entity | null = null;
   let bestD = maxPx;
   for (const e of Object.values(entities)) {
-    if (e.kind !== 'dike' || e.hidden || ('removedAt' in e && e.removedAt !== undefined) || !e.path || e.path.length < 2) continue;
-    let prev: XY | null = null;
-    let prevInside = false;
-    for (const q of e.path) {
-      const s = toScreen(q);
-      const ins = inside(q);
-      const skip = ins && prevInside;
-      prevInside = ins;
-      if (s && prev && !skip) {
-        const d = segmentDistance(at, prev, s);
-        if (d <= bestD) {
-          best = e;
-          bestD = d;
+    if (!LINE_KINDS.has(e.kind) || e.hidden || ('removedAt' in e && e.removedAt !== undefined) || !e.path || e.path.length < 2) continue;
+    for (let k = 1; k < e.path.length; k++) {
+      const a = e.path[k - 1];
+      const b = e.path[k];
+      let prev: XY | null = null;
+      let prevInside = false;
+      for (let i = 0; i <= PIECES; i++) {
+        const t = i / PIECES;
+        const q = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+        const s = toScreen(q);
+        const ins = inside(q);
+        if (s && prev && !ins && !prevInside) {
+          const d = segmentDistance(at, prev, s);
+          if (d <= bestD) {
+            best = e;
+            bestD = d;
+          }
         }
+        prev = s;
+        prevInside = ins;
       }
-      prev = s;
     }
   }
   return best;

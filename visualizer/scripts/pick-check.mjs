@@ -39,7 +39,9 @@ for (const kind of kinds) {
     // fissure it opened at the surface)
     let p = at;
     if (path && path.length > 1) {
-      const mid = path.slice(Math.floor(path.length * 0.3), Math.ceil(path.length * 0.7));
+      // a two-point path (a pathway between chambers): points along it, not its ends inside the chambers
+      const along = path.length === 2 ? [0.5, 0.4, 0.6, 0.3, 0.7].map((t) => path[0].map((a, i) => a + (path[1][i] - a) * t)) : path;
+      const mid = path.length === 2 ? along : along.slice(Math.floor(along.length * 0.3), Math.ceil(along.length * 0.7));
       p =
         mid.find((x) => {
           const t = cam.position.clone().set(x[0], x[2] * v, -x[1]).project(cam);
