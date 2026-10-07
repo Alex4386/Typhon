@@ -213,6 +213,15 @@ public final class Geomorphology implements Subsystem {
         this.units = UnitSource.typed(world);
         // fresh deposits may overload or oversteepen a slope: re-examine where anything lands
         world.addDepositObserver((x, z, thickness, unit, flags) -> active.add(key(x, z)));
+        applyReposeDials();
+    }
+
+    /** The world's repose relaxation takes this volcano's submerged-slope dials (see ReposeRelaxation). */
+    private void applyReposeDials() {
+        me.alex4386.typhon.engine.world.ReposeRelaxation r = world.reposeRelaxation();
+        if (r == null) return;
+        r.setSubmergedFactor(config.submergedReposeFactor);
+        r.setWaveBaseM(config.waveBaseM);
     }
 
     public Geomorphology(String id, String volcanoId, TerrainModel terrain) {
@@ -292,6 +301,7 @@ public final class Geomorphology implements Subsystem {
     public boolean reconfigure(Object c) {
         if (!(c instanceof GeomorphConfig n)) return false;
         ConfigCopy.into(n, config);
+        applyReposeDials();
         return true;
     }
 

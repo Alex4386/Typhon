@@ -291,6 +291,17 @@ final class AshGrid {
         java.util.Arrays.fill(depositionRate, 0);
     }
 
+    /**
+     * Records deposit (kg, model mass) that was already laid down on the ground column by column (proximal
+     * fallout): it counts in the cell's mass and thickness record but is not applied a second time.
+     */
+    void addAppliedDeposit(int cell, double mass, double bulkDensity) {
+        deposit[cell] += mass;
+        emitted += mass;
+        deposited += mass;
+        applied[cell] += mass / (bulkDensity * cellArea());
+    }
+
     /** Adds deposit directly (kg) to a cell. Package-private for tests and scripted events. */
     void addDeposit(int cell, double mass) {
         deposit[cell] += mass;
@@ -332,7 +343,8 @@ final class AshGrid {
                 int cell = index(i, j);
                 double t1 = thickness(cell, config.depositBulkDensity);
                 double t0 = applied[cell];
-                if (t1 - t0 < config.depositUpdateThickness) continue;
+                // thicknesses are in columns; the update threshold is in metres
+                if ((t1 - t0) * metersPerBlock < config.depositUpdateThickness) continue;
                 boolean visible = t1 * (1 + jitter) >= minVisible;
 
                 int x0 = originX + i * cellSize;

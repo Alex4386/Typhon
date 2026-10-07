@@ -68,14 +68,41 @@ class ReposeRelaxationTest {
         assertEquals(320 * L * L, volume(w, 0), 1e-3 * 320 * L * L);
     }
 
-    @Test
-    void submergedDepositsStandGentler() {
-        WorldModel w = flat(-200);
+    private static WorldModel sea(double floor) {
+        WorldModel w = flat(floor);
         for (int x = -R; x <= R; x++) for (int z = -R; z <= R; z++) w.setWaterZ(x, z, 0);
+        return w;
+    }
+
+    /** Repose angle (°) of a loose top at column (0, 0). */
+    private static double reposeDeg(WorldModel w) {
+        w.deposit(0, 0, 0.5, MaterialTable.ASH, 1, LayerFlags.LOOSE, 0.45, 0);
+        return Math.toDegrees(Math.atan(w.reposeRelaxation().limit(0, 0, L) / L));
+    }
+
+    @Test
+    void belowTheWaveBaseLooseTephraStandsAtAboutItsDryAngle() {
+        // Grains avalanching under water stand at about their dry angle (Courrech du Pont et al. 2003;
+        // Cassar et al. 2005): submergence alone does not flatten a pile.
+        double dry = reposeDeg(flat(0));
+        assertEquals(dry, reposeDeg(sea(-100)), 1e-9, "deep: the dry angle");
+        WorldModel w = sea(-200);
         w.deposit(0, 0, 150, MaterialTable.ASH, 1, LayerFlags.LOOSE, 0.45, 0);
         assertTrue(worstExcess(w) <= 1e-4);
         double slope = Math.toDegrees(Math.atan((w.surfaceZ(0, 0) - w.surfaceZ(1, 0)) / L));
-        assertTrue(slope < 26, "under water about 20–25°: " + slope);
+        assertTrue(slope > 28, "a deep submarine cone is steep: " + slope);
+    }
+
+    @Test
+    void wavesReworkShallowSlopesGentler() {
+        double dry = reposeDeg(flat(0));
+        double shallow = reposeDeg(sea(-2));
+        double mid = reposeDeg(sea(-15));
+        assertTrue(shallow < mid && mid < dry, "gentler the nearer the waves: " + shallow + " < " + mid + " < " + dry);
+        assertTrue(shallow > 20 && shallow < 27, "a wave-worked apron, ~20–25° (Moore 1985): " + shallow);
+        WorldModel off = sea(-2);
+        off.reposeRelaxation().setWaveBaseM(0);
+        assertEquals(dry, reposeDeg(off), 1e-9, "no wave base: the dry angle everywhere");
     }
 
     @Test

@@ -40,6 +40,14 @@ public final class GeomorphConfig {
     public double debrisFlowSaturation = 0.8;
     /** Failed masses at least this hot run as pyroclastic block-and-ash flows (°C). */
     public double hotCollapseTemperatureC = 400;
+    /**
+     * {@code tan φ} of wave-reworked loose slopes at the water surface over {@code tan φ} in air. Below the
+     * wave base the dry angle applies: grains settle under water at about their dry angle (Courrech du Pont
+     * et al. 2003). Shallow submarine tephra aprons stand at ~20–25° (Moore 1985).
+     */
+    public double submergedReposeFactor = me.alex4386.typhon.engine.world.ReposeRelaxation.DEFAULT_SUBMERGED_FACTOR;
+    /** Depth (m) below which waves no longer rework loose slopes (storm wave base ~20–50 m); 0 = never. */
+    public double waveBaseM = me.alex4386.typhon.engine.world.ReposeRelaxation.DEFAULT_WAVE_BASE_M;
 
     // ── Seismic shaking ──
     /**
@@ -94,6 +102,8 @@ public final class GeomorphConfig {
         c.debrisPorosity = debrisPorosity;
         c.debrisFlowSaturation = debrisFlowSaturation;
         c.hotCollapseTemperatureC = hotCollapseTemperatureC;
+        c.submergedReposeFactor = submergedReposeFactor;
+        c.waveBaseM = waveBaseM;
         c.minPgaG = minPgaG;
         c.maxShakingRadiusM = maxShakingRadiusM;
         c.alterationTimescaleSeconds = alterationTimescaleSeconds;
@@ -113,6 +123,10 @@ public final class GeomorphConfig {
     void validate() {
         if (!(stepPeriodSeconds > 0)) throw new IllegalArgumentException("stepPeriodSeconds must be > 0");
         if (!(maxSlabDepthM > 0)) throw new IllegalArgumentException("maxSlabDepthM must be > 0");
+        if (!(submergedReposeFactor > 0 && submergedReposeFactor <= 1)) {
+            throw new IllegalArgumentException("submergedReposeFactor must be in (0, 1]");
+        }
+        if (!(waveBaseM >= 0)) throw new IllegalArgumentException("waveBaseM must be >= 0");
         if (maxIterations < 1 || maxColumnsPerStep < 1 || sweepTilesPerStep < 0 || reliefSteps < 1) {
             throw new IllegalArgumentException("budgets must be positive");
         }

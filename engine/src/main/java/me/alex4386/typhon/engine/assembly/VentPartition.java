@@ -48,8 +48,25 @@ public final class VentPartition {
     static final double INERTIAL_MEDIAN = 0.02;
     /** Median of brittle/foam fragmentation at negligible expansion (m). */
     static final double BRITTLE_MEDIAN = 5e-4;
-    /** Median of magma–water (MFCI) fragmentation (m). */
-    static final double WATER_MEDIAN = 1e-4;
+    /**
+     * Median of magma–water (Surtseyan) fragmentation (m): Surtsey's tephra has Md_φ ≈ 1–2.5, i.e. 0.2–0.5 mm,
+     * very poorly sorted (Walker &amp; Croasdale 1972; Thorarinsson 1967).
+     */
+    static final double WATER_MEDIAN = 3e-4;
+    /**
+     * Water/magma mass ratio below which water cannot reach all the magma (it is consumed before contact
+     * spreads through the melt); above it every bit of magma passing a flooded vent meets water (Wohletz &amp;
+     * Sheridan 1983: interaction regimes begin at R ≈ 0.1).
+     */
+    static final double CONTACT_WATER_RATIO = 0.1;
+    /**
+     * Share of the fine (plume-supported) wet ash that aggregates (accretionary lapilli, ash clusters) in the
+     * steam-saturated plume and falls out near the vent with the jets: wet aggregation removes most fine ash
+     * proximally (Van Eaton et al. 2012; Brown, Bonadonna &amp; Durant 2012).
+     */
+    static final double WET_AGGREGATION = 0.7;
+    /** Latent heat of vaporisation of water (J/kg). */
+    static final double WATER_LATENT_HEAT = 2.26e6;
     static final double CLAST_HEAT_CAPACITY = 1100;
     /** Heat transfer coefficient of a clast in flight (W/m²/K, forced convection + radiation). */
     static final double CLAST_HEAT_TRANSFER = 700;
@@ -176,10 +193,18 @@ public final class VentPartition {
         double suppression = (1 - submergence) * (1 - submergence);
         // Clasts falling back into water standing in the crater are quenched, never welded into lava.
         boolean flooded = water.surfaceDepthM() > 0;
+        // Two separate things (they were conflated before): how much of the magma meets water at all, and how
+        // explosively the part that does reacts. Contact is set by water supply: magma rising through a flooded
+        // or slurry-filled vent all meets water once R exceeds ~0.1. The Wohletz–Sheridan efficiency curve (with
+        // hydrostatic suppression) is the thermal-to-mechanical conversion of that interaction: it sets the
+        // explosive share; in shallow water the rest is quenched and granulated in place (hyaloclastite,
+        // Kokelaar 1983, 1986), deeper it carries on as it would have (pillows, quenched fall-back).
+        double contact = slurry * contactShare(slurryRatio) + (1 - slurry) * contactShare(openRatio);
         double efficiency = (slurry * interactionEfficiency(slurryRatio) + (1 - slurry) * interactionEfficiency(openRatio))
                 * suppression;
-        double wetShare = Math.min(1, efficiency);
-        double wetMagma = magma * wetShare;
+        double explosive = magma * contact * Math.min(1, efficiency);
+        double granulatedWet = (magma * contact - explosive) * (1 - submergence);
+        double wetMagma = explosive + granulatedWet;
         double dryMagma = magma - wetMagma;
 
         // Magmatic jet.
@@ -239,21 +264,29 @@ public final class VentPartition {
         double wetCutoff = BALLISTIC_SIZE;
         double wetTemperature = tC;
         if (wetMagma > 0) {
-            // Heat the magma gives up boils the water it meets (efficiency-limited).
-            steam = ratio * wetMagma * efficiency;
-            wetGas = steam / (steam + wetMagma);
+            // the quenched remainder granulates where it meets the water and piles up at the vent
+            wetFallout = granulatedWet;
+            // Steam raised by the explosive share: the magma's heat above 100 °C boils at most
+            // c_m (T − 100) / (c_w · 80 K + L) of water per kg (~0.5), and no more than the water present.
+            double boilable = MAGMA_HEAT_CAPACITY * Math.max(0, tC - 100) / (WATER_HEAT_CAPACITY * 80 + WATER_LATENT_HEAT);
+            steam = explosive * Math.min(ratio, boilable);
+            // The jet is a dense mixture: tephra, steam and the liquid water (slurry) it entrains; only the steam
+            // expands, so its speed follows the steam's share of the whole mixture. Observed cock's-tail jets reach
+            // 200–500 m, i.e. leave at ~60–100 m/s (Thorarinsson 1967; Moore 1985).
+            double liquid = Math.max(0, explosive * ratio - steam);
+            wetGas = explosive > 0 ? steam / (steam + explosive + liquid) : 0;
             double hydrostatic = WATER_DENSITY * GRAVITY * Math.max(0, water.surfaceDepthM());
             double drivePa = Math.max(1e5, hydrostatic);
             jetSpeed = Math.sqrt(2 * wetGas * R_STEAM * 373.15 * Math.log(1 + drivePa / ambientPa));
             wetTemperature = 100 + (tC - 100) / (1 + ratio * WATER_HEAT_CAPACITY / MAGMA_HEAT_CAPACITY);
-            wetFallout = wetMagma * ratio / (ratio + OPTIMAL_WATER_RATIO);
-            double remaining = wetMagma - wetFallout;
             double gasDensity = ambientPa / (R_STEAM * (wetTemperature + 273.15));
             double supported = 3 * DRAG_COEFFICIENT * gasDensity * jetSpeed * jetSpeed / (4 * CLAST_DENSITY * GRAVITY);
-            wetCutoff = Math.min(Math.min(supported, plumeSupportedSize(remaining)), BALLISTIC_SIZE);
+            wetCutoff = Math.min(Math.min(supported, plumeSupportedSize(explosive)), BALLISTIC_SIZE);
             double coarse = 1 - lognormalCdf(wetCutoff, WATER_MEDIAN);
-            jetMass = remaining * coarse;
-            wetColumn = remaining - jetMass;
+            // the jets carry the coarse tephra and the aggregated fine ash; only the rest of the fines is lofted
+            double fine = explosive * (1 - coarse);
+            jetMass = explosive * coarse + fine * WET_AGGREGATION;
+            wetColumn = fine * (1 - WET_AGGREGATION);
         }
 
         // The column: magmatic and phreatomagmatic tephra rise together.
@@ -301,6 +334,11 @@ public final class VentPartition {
         return new Result(magma, lava, clastogenic, ballistic, jet, fountainHeight, column, collapsing, columnGas,
                 columnTemperature, columnVelocity, grain, ratio, wetMagma, wetFallout, steam, jetMass, jetSpeed,
                 median);
+    }
+
+    /** Share of the magma that meets water at water/magma mass ratio {@code r} (see {@link #CONTACT_WATER_RATIO}). */
+    static double contactShare(double r) {
+        return r > 0 ? Math.min(1, r / CONTACT_WATER_RATIO) : 0;
     }
 
     /**

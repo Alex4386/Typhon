@@ -18,10 +18,13 @@ import java.util.TreeSet;
  * unit, porosity and flags (volume and provenance are conserved). Consolidated rock (lava, welded tuff)
  * keeps its strength-based failure in geomorphology.
  *
- * <p>Repose angles come from {@link MaterialTable#reposeAngleDeg}. Under water the stable angle of fresh
- * volcaniclastic slopes is lower: wave and current agitation and pore-pressure transients during
- * deposition hold submarine tephra aprons at ~20–25° (Surtsey's submarine flanks; Moore 1985, Bull.
- * Volcanol. 47; Kokelaar &amp; Durant 1983), so {@code tan φ} is scaled by {@link #submergedFactor()}.
+ * <p>Repose angles come from {@link MaterialTable#reposeAngleDeg}. Under water, cohesionless grains stop at
+ * nearly the same angle as in air (buoyancy lowers normal and shear stress alike; immersed granular
+ * avalanches: Courrech du Pont et al. 2003, PRL 90; Cassar et al. 2005, Phys. Fluids 17). What keeps
+ * shallow submarine tephra aprons at ~20–25° (Surtsey; Moore 1985, Bull. Volcanol. 47; Kokelaar &amp; Durant
+ * 1983) is reworking by waves and currents above the wave base. So by default {@code tan φ} is scaled by
+ * {@link #submergedFactor()} only near the surface: by the full factor at the water surface, fading to none
+ * at {@link #waveBaseM()} and below. Both are dials (geomorphology config).
  */
 public final class ReposeRelaxation {
     /** Moves thinner than this are ignored (m). */
@@ -37,8 +40,10 @@ public final class ReposeRelaxation {
      * drain ends; this only guards against a bug). Anything left stays queued for the next deposit.
      */
     static final int MAX_MOVES = 100_000_000;
-    /** {@code tan φ} under water over {@code tan φ} in air (≈ 24° for 33°; see the class note). */
+    /** {@code tan φ} of wave-reworked slopes at the water surface over {@code tan φ} in air (≈ 24° for 33°). */
     public static final double DEFAULT_SUBMERGED_FACTOR = 0.7;
+    /** Depth (m) below which waves no longer rework the bed (storm wave base off Iceland ~20–50 m). */
+    public static final double DEFAULT_WAVE_BASE_M = 30;
 
     private static final int[] DX = {1, 1, 0, -1, -1, -1, 0, 1};
     private static final int[] DZ = {0, 1, 1, 1, 0, -1, -1, -1};
@@ -47,6 +52,7 @@ public final class ReposeRelaxation {
     private final TreeSet<Long> queue = new TreeSet<>();
     private boolean running;
     private double submergedFactor = DEFAULT_SUBMERGED_FACTOR;
+    private double waveBaseM = DEFAULT_WAVE_BASE_M;
     private long moves;
     private long boundHits;
 
@@ -56,6 +62,16 @@ public final class ReposeRelaxation {
 
     public double submergedFactor() {
         return submergedFactor;
+    }
+
+    public double waveBaseM() {
+        return waveBaseM;
+    }
+
+    /** Depth (m) where wave reworking of slopes ends; 0 disables it (the dry angle everywhere under water). */
+    public void setWaveBaseM(double depth) {
+        if (!(depth >= 0)) throw new IllegalArgumentException("wave base must be ≥ 0");
+        this.waveBaseM = depth;
     }
 
     public void setSubmergedFactor(double factor) {
@@ -178,7 +194,11 @@ public final class ReposeRelaxation {
         Material top = world.layer(x, z, n - 1).materialInfo();
         double tan = Math.tan(Math.toRadians(MaterialTable.reposeAngleDeg(top)));
         double water = world.waterZ(x, z);
-        if (Double.isFinite(water) && water > world.surfaceZ(x, z)) tan *= submergedFactor;
+        double depth = Double.isFinite(water) ? water - world.surfaceZ(x, z) : 0;
+        if (depth > 0 && waveBaseM > 0 && depth < waveBaseM) {
+            // wave-reworked: the full factor at the surface, none at the wave base
+            tan *= 1 - (1 - submergedFactor) * (1 - depth / waveBaseM);
+        }
         return tan;
     }
 

@@ -135,7 +135,7 @@ class VentPartitionTest {
         double deep = wetShare(f, new VentPartition.Water(140, 1, 0, 1, 0.45, Double.NaN));
         double sealed = wetShare(f, new VentPartition.Water(0, 0, 50, 1, 0.45, 50));
         assertTrue(shallow > 0.4, "shallow slurry-filled vent: Surtseyan jets " + shallow);
-        assertTrue(deep < 0.05, "deep water suppresses steam expansion: " + deep);
+        assertTrue(deep < 0.1, "deep water suppresses steam expansion: " + deep);
         assertTrue(sealed < 0.15, "a sealed crater dries out: " + sealed);
     }
 

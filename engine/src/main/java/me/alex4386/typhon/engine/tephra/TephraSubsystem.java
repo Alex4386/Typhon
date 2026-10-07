@@ -222,7 +222,8 @@ public final class TephraSubsystem implements Subsystem {
     public double depositThickness(int x, int z) {
         if (grid == null) return 0;
         int cell = grid.cellAt(x, z);
-        return cell < 0 ? 0 : grid.thickness(cell, config.depositBulkDensity);
+        // the grid's thickness is in columns (blocks): convert to metres
+        return cell < 0 ? 0 : grid.thickness(cell, config.depositBulkDensity) * terrain.world().spec().metersPerColumn();
     }
 
     /** Suspended ash load (kg/m²) above a column; 0 outside the ash grid. */
@@ -408,9 +409,53 @@ public final class TephraSubsystem implements Subsystem {
             Vec3d at = sampleVentPoint(f.vent(), random);
             double x = at.x() + r * StrictMath.cos(azimuth) + w.x() * v * drift;
             double z = at.z() + r * StrictMath.sin(azimuth) + w.z() * v * drift;
-            int cell = grid.cellAt((int) Math.floor(x), (int) Math.floor(z));
-            if (cell >= 0) grid.addDeposit(cell, parcelMass);
+            depositParcel(context, x, z, parcelMass);
         }
+    }
+
+    /**
+     * Bulk density of proximal lapilli/ash fall (kg/m³): fresh Surtseyan tephra ~1.4–1.6 t/m³ dry bulk
+     * (Jakobsson &amp; Moore 1986), proximal scoria-lapilli fall 1.0–1.6 t/m³.
+     */
+    static final double PROXIMAL_BULK_DENSITY = 1400;
+
+    /**
+     * Lays one proximal parcel (model mass) on the ground where it lands, at column resolution (a 3×3
+     * footprint, the centre weighted twice), not spread over an ash-grid cell: near the vent the cone is built
+     * column by column and relaxes to its angle of repose. The ash grid keeps the record (for maps and
+     * world growth) without applying it again. Off the simulated ground the grid holds it for the backfill.
+     */
+    private void depositParcel(StepContext context, double x, double z, double parcelMass) {
+        int cx = (int) Math.floor(x);
+        int cz = (int) Math.floor(z);
+        int cell = grid.cellAt(cx, cz);
+        if (cell < 0) {
+            grid.discarded += parcelMass;
+            return;
+        }
+        WorldModel world = terrain.world();
+        double l = world.spec().metersPerColumn();
+        if (!world.isKnown(cx, cz)) {
+            grid.addDeposit(cell, parcelMass); // applied (or backfilled) through the grid later
+            return;
+        }
+        double realMass = parcelMass / config.massScale;
+        int unit = units.unit(DepositType.FALL, context.time(), Double.NaN);
+        double weightSum = 10; // centre 2, eight neighbours 1
+        for (int dz = -1; dz <= 1; dz++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                double w = (dx == 0 && dz == 0) ? 2 : 1;
+                int px = cx + dx;
+                int pz = cz + dz;
+                if (!world.isKnown(px, pz)) {
+                    px = cx;
+                    pz = cz;
+                }
+                double thickness = realMass * w / weightSum / (PROXIMAL_BULK_DENSITY * l * l);
+                world.deposit(px, pz, thickness, MaterialTable.ASH, unit, LayerFlags.LOOSE, 1 - PROXIMAL_BULK_DENSITY / ExplosivePhase.DRE_DENSITY, 0);
+            }
+        }
+        grid.addAppliedDeposit(cell, parcelMass, config.depositBulkDensity);
     }
 
     private static Vec3d sampleVentPoint(VentSite vent, SimRandom random) {
