@@ -15,6 +15,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.Parallel;
 import me.alex4386.typhon.engine.sim.StepContext;
@@ -508,7 +509,7 @@ public final class Geothermal implements Subsystem, HeatSources {
         }
 
         BlockPos anchor = new BlockPos(x, potentY, z);
-        context.outbox().emit(new GeyserFormed(context.time(), anchor, waterBlocks));
+        context.outbox().emit(new GeyserFormed(context.time(), point(anchor), waterBlocks));
         formed(context, HydrothermalFeature.GEYSER, anchor);
         return true;
     }
@@ -765,7 +766,7 @@ public final class Geothermal implements Subsystem, HeatSources {
             fumaroleReports.put(key, new double[] {intensity, context.time()});
             context.outbox().emit(new FumaroleActivity(
                     context.time(),
-                    new BlockPos(fumarole.x(), fumarole.y() + 1, fumarole.z()),
+                    point(new BlockPos(fumarole.x(), fumarole.y() + 1, fumarole.z())),
                     intensity,
                     GasComposition.atTemperature(temperature)));
         }
@@ -816,7 +817,7 @@ public final class Geothermal implements Subsystem, HeatSources {
                     if (ppm == 0) {
                         if (last == null) continue;
                         hazardReports.remove(key);
-                        context.outbox().emit(new GasHazard(context.time(), zoneCenter(zi, zj, zoneCells), radius,
+                        context.outbox().emit(new GasHazard(context.time(), point(zoneCenter(zi, zj, zoneCells)), radius,
                                 speciesList[s], 0, 0));
                         continue;
                     }
@@ -825,7 +826,7 @@ public final class Geothermal implements Subsystem, HeatSources {
                             || context.time() - last[1] >= config.hazardRefreshSeconds;
                     if (!report) continue;
                     hazardReports.put(key, new double[] {ppm, context.time()});
-                    context.outbox().emit(new GasHazard(context.time(), zoneCenter(zi, zj, zoneCells), radius,
+                    context.outbox().emit(new GasHazard(context.time(), point(zoneCenter(zi, zj, zoneCells)), radius,
                             speciesList[s], ppm, validFor));
                 }
             }
@@ -844,8 +845,13 @@ public final class Geothermal implements Subsystem, HeatSources {
         return new BlockPos(grid.cellMinX(idx), y + 1, grid.cellMinZ(idx));
     }
 
+    /** The centre of a feature block in metres, for events. */
+    private Point3 point(BlockPos block) {
+        return Point3.ofBlock(block, terrain.world().spec().metersPerColumn());
+    }
+
     private void formed(StepContext context, HydrothermalFeature kind, BlockPos pos) {
-        context.outbox().emit(new HydrothermalFeatureFormed(context.time(), kind, pos));
+        context.outbox().emit(new HydrothermalFeatureFormed(context.time(), kind, point(pos)));
     }
 
     // ── Helpers ──
@@ -911,7 +917,7 @@ public final class Geothermal implements Subsystem, HeatSources {
             PlacedFeature f = features.remove(e.getKey());
             if (f == null) continue;
             counts.merge(f.kind(), -1, Integer::sum);
-            context.outbox().emit(new HydrothermalFeatureBuried(context.time(), f.kind(), new BlockPos(f.x(), f.y(), f.z())));
+            context.outbox().emit(new HydrothermalFeatureBuried(context.time(), f.kind(), point(new BlockPos(f.x(), f.y(), f.z()))));
         }
         for (long k : stale) lavaCover.remove(k);
     }

@@ -3,6 +3,7 @@ package me.alex4386.typhon.engine.dike;
 import com.google.gson.JsonObject;
 import me.alex4386.typhon.engine.deformation.DikeGeometry;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
 
@@ -73,8 +74,10 @@ public final class Dike {
     public double speedMPerS() { return speed; }
     public double x() { return x; }
     public double z() { return z; }
-    public BlockPos origin() { return new BlockPos((int) Math.floor(startX), chamberY, (int) Math.floor(startZ)); }
-    public BlockPos tip() { return new BlockPos((int) Math.floor(x), tipY, (int) Math.floor(z)); }
+    /** Where the dike left the chamber (m) on an {@code l}-metre grid. */
+    public Point3 origin(double l) { return new Point3(startX * l, (chamberY + 0.5) * l, startZ * l); }
+    /** The upper tip (m) on an {@code l}-metre grid; horizontally continuous. */
+    public Point3 tip(double l) { return new Point3(x * l, (tipY + 0.5) * l, z * l); }
     /** The fissure this dike opened, or {@code null}. */
     public VentSite fissure() { return fissure; }
     /** True once the user deleted the dike: it is kept only as an intrusion (deformation, rock). */

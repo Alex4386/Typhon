@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -249,7 +250,7 @@ class AshTest {
                 aggregated.size() + " aggregated vs " + everyEvaluation.size() + " unaggregated");
 
         // The last event of every region announced after the phase ended and the ash settled is a clear.
-        java.util.Map<BlockPos, AshFall> last = new java.util.LinkedHashMap<>();
+        java.util.Map<Point3, AshFall> last = new java.util.LinkedHashMap<>();
         for (AshFall fall : aggregated) last.put(fall.center(), fall);
         assertFalse(last.isEmpty());
         assertTrue(last.values().stream().allMatch(f -> f.fallRate() == 0 && f.airborneLoad() == 0),

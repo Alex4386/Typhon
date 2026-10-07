@@ -13,6 +13,7 @@ import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.deformation.DikeGeometry;
 import me.alex4386.typhon.engine.dike.DikeEvents.StallReason;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
@@ -78,7 +79,7 @@ public final class DikePropagation implements Subsystem {
      * @param terrain surface model for slopes and fissure elevation; may be {@code null} (flat world
      *     at the chamber's assumed surface)
      */
-    private Consumer<List<BlockPos>> hypocenterListener;
+    private Consumer<List<Point3>> hypocenterListener;
     private me.alex4386.typhon.engine.volcano.GroundCoupling ground = me.alex4386.typhon.engine.volcano.GroundCoupling.NONE;
 
     /**
@@ -198,7 +199,7 @@ public final class DikePropagation implements Subsystem {
      * Receives the hypocentres of tip fracturing each time a dike advances (e.g.
      * {@code seismicity::queueInducedVt}). Not persisted: re-attach when building the engine.
      */
-    public void setHypocenterListener(Consumer<List<BlockPos>> listener) {
+    public void setHypocenterListener(Consumer<List<Point3>> listener) {
         this.hypocenterListener = listener;
     }
 
@@ -220,7 +221,7 @@ public final class DikePropagation implements Subsystem {
             if (dike == null || !dike.propagating()) continue;
             dike.status = DikeStatus.STALLED;
             emplaceIntrusion(dike, context.time());
-            context.outbox().emit(new DikeEvents.DikeStalled(context.time(), volcanoId, dike.id, dike.tip(), dike.depth,
+            context.outbox().emit(new DikeEvents.DikeStalled(context.time(), volcanoId, dike.id, dike.tip(config.metersPerBlock), dike.depth,
                     dike.volume, StallReason.ARRESTED));
         }
         pendingArrests.clear();
@@ -273,7 +274,7 @@ public final class DikePropagation implements Subsystem {
         Dike dike = new Dike(nextId++, context.time(), x, z, Math.max(surface, center.y() + 1), center.y(),
                 magma.chamberDepthM());
         dikes.add(dike);
-        context.outbox().emit(new DikeEvents.DikeStarted(context.time(), volcanoId, dike.id, dike.origin(),
+        context.outbox().emit(new DikeEvents.DikeStarted(context.time(), volcanoId, dike.id, dike.origin(config.metersPerBlock),
                 magma.overpressureMPa()));
         return dike;
     }
@@ -283,7 +284,7 @@ public final class DikePropagation implements Subsystem {
         double remaining = stepDt;
         double travelled = 0;
         StallReason stall = null;
-        List<BlockPos> hypocenters = new ArrayList<>();
+        List<Point3> hypocenters = new ArrayList<>();
 
         while (remaining > 0 && dike.depth > 0) {
             double height = Math.max(0, dike.chamberDepth - dike.depth);
@@ -357,15 +358,15 @@ public final class DikePropagation implements Subsystem {
                 double hxPos = dike.x + random.nextGaussian() * config.hypocenterJitterBlocks;
                 double hzPos = dike.z + random.nextGaussian() * config.hypocenterJitterBlocks;
                 double hDepth = dike.depth + random.nextDouble() * (depthBefore - dike.depth);
-                hypocenters.add(new BlockPos((int) Math.floor(hxPos), worldY(dike, hxPos, hzPos, hDepth),
-                        (int) Math.floor(hzPos)));
+                double l = config.metersPerBlock;
+                hypocenters.add(new Point3(hxPos * l, (worldY(dike, hxPos, hzPos, hDepth) + 0.5) * l, hzPos * l));
             }
         }
 
         dike.tipY = worldY(dike, dike.x, dike.z, dike.depth);
         if (travelled > 0) {
             if (hypocenterListener != null && !hypocenters.isEmpty()) hypocenterListener.accept(hypocenters);
-            context.outbox().emit(new DikeEvents.DikeAdvanced(context.time(), volcanoId, dike.id, dike.tip(), dike.depth,
+            context.outbox().emit(new DikeEvents.DikeAdvanced(context.time(), volcanoId, dike.id, dike.tip(config.metersPerBlock), dike.depth,
                     dike.speed, dike.opening, dike.volume, hypocenters));
         }
 
@@ -375,7 +376,7 @@ public final class DikePropagation implements Subsystem {
         } else if (stall != null) {
             dike.status = DikeStatus.STALLED;
             emplaceIntrusion(dike, context.time());
-            context.outbox().emit(new DikeEvents.DikeStalled(context.time(), volcanoId, dike.id, dike.tip(), dike.depth,
+            context.outbox().emit(new DikeEvents.DikeStalled(context.time(), volcanoId, dike.id, dike.tip(config.metersPerBlock), dike.depth,
                     dike.volume, stall));
         }
     }

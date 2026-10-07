@@ -2,6 +2,7 @@ package me.alex4386.typhon.engine.lava;
 
 import java.util.List;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 
 /** Events emitted by {@link LavaFlow}. */
@@ -15,7 +16,7 @@ public final class LavaEvents {
      * @param lengthM horizontal distance from the nearest source to {@code front}, real metres
      * @param volumeM3 molten volume, real m³
      */
-    public record LavaFlowFront(double time, BlockPos front, double lengthM, int activeCells, double volumeM3)
+    public record LavaFlowFront(double time, Point3 front, double lengthM, int activeCells, double volumeM3)
             implements EngineEvent {}
 
     /**
@@ -43,7 +44,7 @@ public final class LavaEvents {
      * @param littoralExplosion some column's entry flux exceeded
      *     {@link LavaConfig#littoralExplosionFluxM3s()}: hosts may render steam blasts and spatter
      */
-    public record LavaOceanEntry(double time, double intervalSeconds, BlockPos pos, int columns, double moltenVolumeM3,
+    public record LavaOceanEntry(double time, double intervalSeconds, Point3 pos, int columns, double moltenVolumeM3,
             double inflowM3PerS, double powerMW, double steamKgPerS, boolean littoralExplosion) implements EngineEvent {}
 
     /** Drained lava tubes left hollow this step (see {@link LavaFlow#tubes()}). */

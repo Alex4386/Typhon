@@ -13,6 +13,7 @@ import java.util.TreeMap;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.command.EngineCommand;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
@@ -56,8 +57,8 @@ import me.alex4386.typhon.engine.save.StateWriter;
  *
  * <p><b>Ash</b>: every {@link TephraConfig#ashStepSeconds} seconds the non-ballistic mass is injected
  * around the vent at the plume height from {@link PlumeModel}, transported and settled on an
- * {@link AshGrid}, and the accumulated deposit is turned into block changes via the
- * {@link AshPalette}. The subsystem emits {@link PlumeColumn}, {@link AshFall} and
+ * {@link AshGrid}, and the accumulated deposit goes into the world model (block cache covers via the
+ * {@link AshPalette}). The subsystem emits {@link PlumeColumn}, {@link AshFall} and
  * {@link VolcanicLightning} events for hosts to render.
  *
  * <p>Must be registered after the {@link TerrainModel} it reads.
@@ -489,16 +490,18 @@ public final class TephraSubsystem implements Subsystem {
             landing = advance(probe, context.time() + flight, dt);
             flight += dt;
         }
+        // the flight is integrated in block units; hosts get metres (and drag per metre)
+        double l = metersPerBlock();
         context.outbox().emit(new BombLaunched(
                 context.time(),
                 id,
                 bomb.id,
-                start,
-                velocity,
+                metres(start, l),
+                velocity.scale(l),
                 diameter,
-                k,
+                k / l,
                 flight,
-                landing == null ? probe.position() : landing.position()));
+                metres(landing == null ? probe.position() : landing.position(), l)));
         bombs.add(bomb);
     }
 
@@ -560,8 +563,10 @@ public final class TephraSubsystem implements Subsystem {
             }
             if (bomb.diameter >= config.minBlockDiameter) placeBomb(context, x, z, bomb);
         }
-        context.outbox().emit(new BombLanded(
-                context.time(), id, bomb.id, new BlockPos(x, impactGround, z), speed, energy, bomb.diameter, dug));
+        double l = metersPerBlock();
+        context.outbox().emit(new BombLanded(context.time(), id, bomb.id,
+                new Point3(landing.position().x() * l, (impactGround + 1) * l, landing.position().z() * l), speed, energy,
+                bomb.diameter, dug));
     }
 
     /**
@@ -588,6 +593,11 @@ public final class TephraSubsystem implements Subsystem {
                 }
             }
         }
+    }
+
+    /** A point in the ballistic frame (block units, integers on block edges) in metres. */
+    private static Point3 metres(Vec3d v, double l) {
+        return new Point3(v.x() * l, v.y() * l, v.z() * l);
     }
 
     private double metersPerBlock() {
@@ -659,7 +669,7 @@ public final class TephraSubsystem implements Subsystem {
                     vent.z() + 0.5,
                     sigma);
             context.outbox().emit(new PlumeColumn(
-                    context.time(), id, base, base.y() + (int) Math.round(height), 2 * sigma,
+                    context.time(), id, Point3.ofBlock(base, metersPerBlock()), base.y() + (int) Math.round(height), 2 * sigma,
                     phase.massEruptionRate()));
             lightning(context, base, height, sigma, dt);
         }
@@ -697,7 +707,7 @@ public final class TephraSubsystem implements Subsystem {
             int x = (int) Math.floor(base.x() + 0.5 + random.nextGaussian() * sigma * 0.5);
             int z = (int) Math.floor(base.z() + 0.5 + random.nextGaussian() * sigma * 0.5);
             int y = base.y() + (int) Math.round(height * (0.4 + 0.6 * random.nextDouble()));
-            context.outbox().emit(new VolcanicLightning(context.time(), id, new BlockPos(x, Math.min(y, BlockPos.MAX_Y), z)));
+            context.outbox().emit(new VolcanicLightning(context.time(), id, Point3.ofBlocks(x, y, z, metersPerBlock())));
         }
     }
 
@@ -732,7 +742,7 @@ public final class TephraSubsystem implements Subsystem {
                 if (fallRate < config.ashFallRateThreshold && airborneLoad < config.ashLoadThreshold) {
                     if (last != null) {
                         ashReports.remove(region);
-                        context.outbox().emit(new AshFall(context.time(), id, center, half, 0, 0));
+                        context.outbox().emit(new AshFall(context.time(), id, Point3.ofBlock(center, metersPerBlock()), half, 0, 0));
                     }
                     continue;
                 }
@@ -742,7 +752,7 @@ public final class TephraSubsystem implements Subsystem {
                         || context.time() - last[2] >= config.ashEventRefreshSeconds;
                 if (!report) continue;
                 ashReports.put(region, new double[] {fallRate, airborneLoad, context.time()});
-                context.outbox().emit(new AshFall(context.time(), id, center, half, fallRate, airborneLoad));
+                context.outbox().emit(new AshFall(context.time(), id, Point3.ofBlock(center, metersPerBlock()), half, fallRate, airborneLoad));
             }
         }
     }

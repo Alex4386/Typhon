@@ -24,6 +24,7 @@ import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.massflow.ColumnCollapse;
 import me.alex4386.typhon.engine.massflow.PyroclasticFlows;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
@@ -335,7 +336,7 @@ public final class VolcanoCoupler implements Subsystem {
         if (p.wetFalloutMassFlux() > 0) buildTuffRing(context, main, p.wetFalloutMassFlux() * scale * stepSeconds);
         if (p.steamMassFlux() > 0 && context.time() >= nextSteamEventTime) {
             context.outbox().emit(new SurfaceEvents.PhreatomagmaticSteam(
-                    context.time(), volcanoId, main.position(), p.steamMassFlux() * scale, waterDepthM));
+                    context.time(), volcanoId, Point3.ofBlock(main.position(), scaling.metersPerBlock()), p.steamMassFlux() * scale, waterDepthM));
             nextSteamEventTime = context.time() + STEAM_EVENT_SECONDS;
         }
 
@@ -710,10 +711,10 @@ public final class VolcanoCoupler implements Subsystem {
                     GrainSizeDistribution.of(f[0] + 1e-6, f[1] + 1e-6, f[2] + 1e-6, f[3] + 1e-6));
         }
         double energy = 0.5 * burst.ejectaMassKg() * speed * speed;
-        if (seismicity != null) seismicity.queueExplosion(vent.position().offset(0, -2, 0), energy);
+        if (seismicity != null) seismicity.queueExplosion(Point3.ofBlock(vent.position().offset(0, -2, 0), scaling.metersPerBlock()), energy);
         if (explosionListener != null) explosionListener.accept(vent.position(), energy);
         context.outbox().emit(new SurfaceEvents.ExplosiveBurst(context.time(), volcanoId,
-                slug ? BurstKind.STROMBOLIAN : BurstKind.VULCANIAN, vent.position(), burst.ejectaMassKg(),
+                slug ? BurstKind.STROMBOLIAN : BurstKind.VULCANIAN, Point3.ofBlock(vent.position(), scaling.metersPerBlock()), burst.ejectaMassKg(),
                 burst.gasMassKg(), speed, energy));
     }
 
@@ -724,10 +725,10 @@ public final class VolcanoCoupler implements Subsystem {
                 VentPartition.BALLISTIC_SIZE);
         tephra.launchSalvo(vent, mass, speed, 40, 15, chamber.silicaWt(), MAX_BOMBS_PER_SALVO);
         double energy = 0.5 * mass * speed * speed;
-        if (seismicity != null) seismicity.queueExplosion(vent.position(), energy);
+        if (seismicity != null) seismicity.queueExplosion(Point3.ofBlock(vent.position(), scaling.metersPerBlock()), energy);
         if (explosionListener != null) explosionListener.accept(vent.position(), energy);
         context.outbox().emit(new SurfaceEvents.ExplosiveBurst(context.time(), volcanoId, BurstKind.SURTSEYAN_JET,
-                vent.position(), mass, 0, speed, energy));
+                Point3.ofBlock(vent.position(), scaling.metersPerBlock()), mass, 0, speed, energy));
     }
 
     private java.util.function.BiConsumer<BlockPos, Double> explosionListener;
@@ -997,7 +998,7 @@ public final class VolcanoCoupler implements Subsystem {
         if (active == phreatomagmatic) return;
         phreatomagmatic = active;
         BlockPos at = vent != null ? vent.position() : baseVents.get(0).position();
-        context.outbox().emit(new SurfaceEvents.PhreatomagmaticChanged(context.time(), volcanoId, active, at, waterDepthM));
+        context.outbox().emit(new SurfaceEvents.PhreatomagmaticChanged(context.time(), volcanoId, active, Point3.ofBlock(at, scaling.metersPerBlock()), waterDepthM));
     }
 
     /** Attributes lava sources and tuff-ring deposits to this volcano's eruptions. */

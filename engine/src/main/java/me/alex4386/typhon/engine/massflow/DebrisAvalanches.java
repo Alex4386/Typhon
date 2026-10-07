@@ -4,6 +4,7 @@ import java.util.List;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.FlowCell;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
@@ -89,11 +90,11 @@ public final class DebrisAvalanches extends MassFlowField {
 
     @Override
     protected EngineEvent startedEvent(double time, PendingStart start) {
-        return new MassFlowEvents.AvalancheStarted(time, id, start.trigger(), start.position(), start.volumeM3());
+        return new MassFlowEvents.AvalancheStarted(time, id, start.trigger(), Point3.ofBlock(start.position(), dx), start.volumeM3());
     }
 
     @Override
-    protected EngineEvent frontEvent(double time, BlockPos front, double runoutM, int cells, double volume,
+    protected EngineEvent frontEvent(double time, Point3 front, double runoutM, int cells, double volume,
             double maxSpeed, double tracer, List<FlowCell> reported) {
         return new MassFlowEvents.AvalancheFront(time, id, front, runoutM, cells, volume, maxSpeed, reported);
     }

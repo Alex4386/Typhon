@@ -32,7 +32,7 @@ class ScoriaDistributionProbe {
         boolean first = true;
         for (double t = 0; t < hours * 3600; t += 60) {
             for (EngineFrame f : s.engine().runFor(60)) {
-                for (EngineEvent e : f.events()) if (e instanceof BombLanded b) landings.add(b.position());
+                for (EngineEvent e : f.events()) if (e instanceof BombLanded b) landings.add(b.position().block(s.world().spec().metersPerColumn()));
             }
             if (first) {
                 s.runAfterFirstTick();

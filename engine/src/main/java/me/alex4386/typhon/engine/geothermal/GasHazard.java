@@ -1,6 +1,7 @@
 package me.alex4386.typhon.engine.geothermal;
 
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 
 /**
@@ -13,5 +14,5 @@ import me.alex4386.typhon.engine.output.EngineEvent;
  * @param concentrationPpm peak concentration in the zone (0 = cleared)
  */
 public record GasHazard(
-        double time, BlockPos center, double radius, GasSpecies species, double concentrationPpm, double durationSeconds)
+        double time, Point3 center, double radius, GasSpecies species, double concentrationPpm, double durationSeconds)
         implements EngineEvent {}

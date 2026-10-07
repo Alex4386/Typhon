@@ -50,8 +50,8 @@ class DikePropagationTest {
         assertEquals(0, dike.depthM(), 1e-9);
         assertEquals(vent, dike.fissure());
         assertEquals(List.of(vent), w.dikes().openedVents());
-        assertEquals(dike.tip().x(), vent.position().x());
-        assertEquals(dike.tip().z(), vent.position().z());
+        assertEquals((int) Math.floor(dike.x()), vent.position().x());
+        assertEquals((int) Math.floor(dike.z()), vent.position().z());
 
         List<DikeAdvanced> advances = events(frames, DikeAdvanced.class);
         assertFalse(advances.isEmpty());
@@ -65,7 +65,7 @@ class DikePropagationTest {
         int hypocenters = advances.stream().mapToInt(a -> a.hypocenters().size()).sum();
         assertTrue(hypocenters > 20, "rising dike should be seismically active: " + hypocenters);
         // hypocentres migrate upward with the tip
-        int firstY = advances.stream().filter(a -> !a.hypocenters().isEmpty()).findFirst().orElseThrow()
+        double firstY = advances.stream().filter(a -> !a.hypocenters().isEmpty()).findFirst().orElseThrow()
                 .hypocenters().get(0).y();
         DikeAdvanced last = advances.stream().filter(a -> !a.hypocenters().isEmpty()).reduce((a, b) -> b).orElseThrow();
         assertTrue(last.hypocenters().get(0).y() > firstY);
@@ -185,7 +185,7 @@ class DikePropagationTest {
         assertEquals(dike.depthM(), g.topDepthM(), 1e-9);
         assertEquals(4000, g.bottomDepthM(), 1e-9);
         assertEquals(dike.openingM(), g.openingM(), 1e-12);
-        assertNotNull(dike.tip());
+        assertNotNull(dike.tip(1));
     }
 
     @Test

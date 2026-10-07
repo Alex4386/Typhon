@@ -11,6 +11,7 @@ import com.google.gson.JsonParser;
 import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.tephra.TephraCommands.SetWind;
@@ -87,7 +88,7 @@ class TephraSubsystemTest {
 
         // Bombs leave from the crater and land around it, a few tens of blocks away.
         for (BombLaunched l : launched) {
-            assertTrue(l.start().subtract(new Vec3d(0.5, 81, 0.5)).horizontalLength() <= 3.0001);
+            assertTrue(l.start().horizontalDistance(new Point3(0.5, 81, 0.5)) <= 3.0001); // 1-m blocks
             assertTrue(l.velocity().y() > 0);
         }
         double meanDistance = landed.stream()

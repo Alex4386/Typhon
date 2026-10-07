@@ -1,11 +1,12 @@
 package me.alex4386.typhon.engine.seismic;
 
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.HistoricalEvent;
 
 /**
  * A volcanic earthquake (or the onset of a tremor episode).
  *
+ * @param hypocenter source position (m, engine frame)
  * @param magnitude local magnitude; for tremor, the equivalent magnitude of the sustained amplitude
  * @param durationSeconds shaking duration; long for tremor episodes, a few seconds for transients
  * @param swarm true when the event belongs to an earthquake swarm
@@ -15,7 +16,7 @@ public record SeismicEvent(
         String volcanoId,
         SeismicEventType type,
         double magnitude,
-        BlockPos hypocenter,
+        Point3 hypocenter,
         double durationSeconds,
         boolean swarm)
         implements HistoricalEvent {

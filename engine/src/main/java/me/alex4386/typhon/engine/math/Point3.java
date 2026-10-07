@@ -21,6 +21,40 @@ public record Point3(double x, double y, double z) {
         return columnCentre(c.x(), c.z(), y, l);
     }
 
+    /**
+     * The point at fractional block coordinates {@code (bx, by, bz)} of an {@code l}-metre grid, where an
+     * integer coordinate is the centre of that block: block {@code (x, y, z)} is the cube
+     * {@code [x·l, (x+1)·l) × [y·l, (y+1)·l) × [z·l, (z+1)·l)}.
+     */
+    public static Point3 ofBlocks(double bx, double by, double bz, double l) {
+        return new Point3((bx + 0.5) * l, (by + 0.5) * l, (bz + 0.5) * l);
+    }
+
+    /** The centre of block {@code b} of an {@code l}-metre grid. */
+    public static Point3 ofBlock(BlockPos b, double l) {
+        return ofBlocks(b.x(), b.y(), b.z(), l);
+    }
+
+    /** Fractional block x (inverse of {@link #ofBlocks}). */
+    public double blockX(double l) {
+        return x / l - 0.5;
+    }
+
+    /** Fractional block y (inverse of {@link #ofBlocks}). */
+    public double blockY(double l) {
+        return y / l - 0.5;
+    }
+
+    /** Fractional block z (inverse of {@link #ofBlocks}). */
+    public double blockZ(double l) {
+        return z / l - 0.5;
+    }
+
+    /** The block of an {@code l}-metre grid this point lies in. */
+    public BlockPos block(double l) {
+        return new BlockPos((int) Math.floor(x / l), (int) Math.floor(y / l), (int) Math.floor(z / l));
+    }
+
     /** The column of an {@code l}-metre grid this point lies in. */
     public ColumnIndex column(double l) {
         return new ColumnIndex((int) Math.floor(x / l), (int) Math.floor(z / l));

@@ -109,7 +109,7 @@ public final class VolcanoSystem {
                 : null;
         MagmaChamber clockChamber = chamber;
 
-        this.seismicity = new SeismicityModel(d.seismic(), chamber);
+        this.seismicity = new SeismicityModel(d.seismic(), chamber, scaling.metersPerBlock());
         this.alert = new AlertLevelEstimator(d.alert(), chamber, seismicity);
 
         if (b.dikes) {

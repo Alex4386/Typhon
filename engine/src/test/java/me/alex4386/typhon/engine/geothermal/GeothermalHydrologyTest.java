@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import me.alex4386.typhon.engine.geothermal.GeothermalTest.StubMagma;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
@@ -181,7 +182,7 @@ class GeothermalHydrologyTest {
         List<GasHazard> cleared = events(run(engine, geothermal, 10), GasHazard.class);
         assertEquals(zoneSpecies, cleared.size());
         assertTrue(cleared.stream().allMatch(h -> h.concentrationPpm() == 0));
-        Set<BlockPos> activeCentres = active.stream().map(GasHazard::center).collect(Collectors.toSet());
+        Set<Point3> activeCentres = active.stream().map(GasHazard::center).collect(Collectors.toSet());
         assertTrue(cleared.stream().allMatch(h -> activeCentres.contains(h.center())), "zones keep their centre");
     }
 
@@ -198,7 +199,7 @@ class GeothermalHydrologyTest {
 
         List<FumaroleActivity> activity = events(frames, FumaroleActivity.class);
         assertFalse(activity.isEmpty());
-        Map<BlockPos, Integer> perFumarole = new HashMap<>();
+        Map<Point3, Integer> perFumarole = new HashMap<>();
         for (FumaroleActivity a : activity) perFumarole.merge(a.pos(), 1, Integer::sum);
         long maxReports = 1 + Math.round(180 / config.fumaroleRefreshSeconds);
         assertTrue(perFumarole.values().stream().allMatch(n -> n <= maxReports), "per fumarole: " + perFumarole);

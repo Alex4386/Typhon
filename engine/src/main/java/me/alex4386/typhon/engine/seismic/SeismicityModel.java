@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.magma.MeltViscosity;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
@@ -41,7 +42,7 @@ public final class SeismicityModel implements Subsystem {
     private SeismicConfig config;
     private final MagmaState magma;
 
-    private final List<BlockPos> induced = new ArrayList<>();
+    private final List<Point3> induced = new ArrayList<>();
     private final List<QueuedExplosion> explosions = new ArrayList<>();
     private double rsam;
     private double vtRatePerMinute;
@@ -56,9 +57,13 @@ public final class SeismicityModel implements Subsystem {
     private double expectedExplosionRate;
     private double lastTime = -1;
 
-    public SeismicityModel(SeismicConfig config, MagmaState magma) {
+    /** Metres per block of the volcano's geometry (chamber centre, conduit top), for hypocentres in metres. */
+    private final double metersPerBlock;
+
+    public SeismicityModel(SeismicConfig config, MagmaState magma, double metersPerBlock) {
         this.config = config;
         this.magma = magma;
+        this.metersPerBlock = metersPerBlock;
     }
 
     @Override
@@ -123,7 +128,7 @@ public final class SeismicityModel implements Subsystem {
             boolean swarm = swarmActive(t);
             double b = swarm ? config.swarmBValue() : config.vtBValue();
             double m = GutenbergRichter.sample(random, b, config.minMagnitude(), config.maxMagnitude());
-            BlockPos hypocenter = hypocenter(random, 0, 0.7, 1.0);
+            Point3 hypocenter = hypocenter(random, 0, 0.7, 1.0);
             transientAmplitude += emit(context, t, SeismicEventType.VT, m, hypocenter, transientSeconds(0.5, m), swarm);
             if (!swarm && random.chance(config.swarmTriggerProbability())) {
                 swarmUntil = t + random.nextExponential(1 / config.swarmMeanDurationSeconds());
@@ -131,7 +136,7 @@ public final class SeismicityModel implements Subsystem {
         }
 
         // Induced VT events (e.g. dike-tip fracturing) at the hypocentres other subsystems reported.
-        for (BlockPos hypocenter : induced) {
+        for (Point3 hypocenter : induced) {
             double m = GutenbergRichter.sample(random, config.swarmBValue(), config.minMagnitude(), config.maxMagnitude());
             transientAmplitude += emit(context, SeismicEventType.VT, m, hypocenter, transientSeconds(0.5, m), true);
         }
@@ -142,7 +147,7 @@ public final class SeismicityModel implements Subsystem {
         for (int i = 0; i < lpCount; i++) {
             double t = within(now, dt, i, lpCount, random);
             double m = GutenbergRichter.sample(random, config.lpBValue(), config.minMagnitude(), config.lpMaxMagnitude());
-            BlockPos hypocenter = hypocenter(random, 0.6, 1.0, 0.4);
+            Point3 hypocenter = hypocenter(random, 0.6, 1.0, 0.4);
             transientAmplitude += emit(context, t, SeismicEventType.LP, m, hypocenter, transientSeconds(1.0, m), false);
         }
 
@@ -151,7 +156,7 @@ public final class SeismicityModel implements Subsystem {
             double t = within(now, dt, i, explosionCount, random);
             double m = GutenbergRichter.sample(
                     random, config.explosionBValue(), config.explosionMinMagnitude(), config.explosionMaxMagnitude());
-            BlockPos hypocenter = config.conduitTop().offset(0, -random.nextInt(0, 10), 0);
+            Point3 hypocenter = Point3.ofBlock(config.conduitTop().offset(0, -random.nextInt(0, 10), 0), metersPerBlock);
             transientAmplitude += emit(context, t, SeismicEventType.EXPLOSION, m, hypocenter, transientSeconds(1.0, m), false);
         }
         for (QueuedExplosion q : explosions) {
@@ -198,7 +203,7 @@ public final class SeismicityModel implements Subsystem {
      * Queues VT events at given hypocentres (e.g. a propagating dike's tip); they are emitted with
      * swarm statistics on this model's next step and count towards VT rate and RSAM.
      */
-    public void queueInducedVt(List<BlockPos> hypocenters) {
+    public void queueInducedVt(List<Point3> hypocenters) {
         induced.addAll(hypocenters);
     }
 
@@ -208,7 +213,7 @@ public final class SeismicityModel implements Subsystem {
      * kinetic energy, converted with {@code log10 E = 1.5 M + 4.8} (Gutenberg–Richter) and clamped to
      * the configured explosion magnitude range.
      */
-    public void queueExplosion(BlockPos hypocenter, double energyJ) {
+    public void queueExplosion(Point3 hypocenter, double energyJ) {
         double seismic = Math.max(1, energyJ * EXPLOSION_SEISMIC_EFFICIENCY);
         double m = (Math.log10(seismic) - 4.8) / 1.5;
         m = Math.max(config.minMagnitude(), Math.min(config.explosionMaxMagnitude(), m));
@@ -228,7 +233,7 @@ public final class SeismicityModel implements Subsystem {
     /** Fraction of an explosion's kinetic energy radiated seismically (observed ~1e-5–1e-3). */
     public static final double EXPLOSION_SEISMIC_EFFICIENCY = 1e-4;
 
-    private record QueuedExplosion(BlockPos hypocenter, double magnitude) {}
+    private record QueuedExplosion(Point3 hypocenter, double magnitude) {}
 
     /** Expected VT rate (events/s) for the current magma state. */
     private double vtRate(double now) {
@@ -265,11 +270,11 @@ public final class SeismicityModel implements Subsystem {
         return now + dt * (i + random.nextDouble()) / n;
     }
 
-    private double emit(StepContext context, SeismicEventType type, double magnitude, BlockPos hypocenter, double durationSeconds, boolean swarm) {
+    private double emit(StepContext context, SeismicEventType type, double magnitude, Point3 hypocenter, double durationSeconds, boolean swarm) {
         return emit(context, context.time(), type, magnitude, hypocenter, durationSeconds, swarm);
     }
 
-    private double emit(StepContext context, double time, SeismicEventType type, double magnitude, BlockPos hypocenter,
+    private double emit(StepContext context, double time, SeismicEventType type, double magnitude, Point3 hypocenter,
             double durationSeconds, boolean swarm) {
         SeismicEvent event = new SeismicEvent(time, config.volcanoId(), type, magnitude, hypocenter, durationSeconds, swarm);
         context.outbox().emit(event);
@@ -286,7 +291,7 @@ public final class SeismicityModel implements Subsystem {
      * (0 = chamber, 1 = vent), skewed towards {@code tMin}, with lateral scatter scaled by
      * {@code spreadScale}.
      */
-    private BlockPos hypocenter(SimRandom random, double tMin, double tMax, double spreadScale) {
+    private Point3 hypocenter(SimRandom random, double tMin, double tMax, double spreadScale) {
         BlockPos bottom = magma.chamberCenter();
         BlockPos top = config.conduitTop();
         double u = random.nextDouble();
@@ -295,8 +300,7 @@ public final class SeismicityModel implements Subsystem {
         double x = bottom.x() + t * (top.x() - bottom.x()) + random.nextGaussian() * spread;
         double y = bottom.y() + t * (top.y() - bottom.y()) + random.nextGaussian() * spread * 0.5;
         double z = bottom.z() + t * (top.z() - bottom.z()) + random.nextGaussian() * spread;
-        int yi = (int) Math.round(Math.max(BlockPos.MIN_Y, Math.min(BlockPos.MAX_Y, y)));
-        return new BlockPos((int) Math.round(x), yi, (int) Math.round(z));
+        return Point3.ofBlocks(x, y, z, metersPerBlock); // continuous: no rounding to blocks
     }
 
     private static double clamp01(double v) {
@@ -375,12 +379,12 @@ public final class SeismicityModel implements Subsystem {
         out.addProperty("expectedExplosionRate", expectedExplosionRate);
         out.addProperty("lastTime", lastTime);
         JsonArray pendingInduced = new JsonArray();
-        for (BlockPos p : induced) pendingInduced.add(p.pack());
+        for (Point3 p : induced) pendingInduced.add(xyz(p));
         out.add("induced", pendingInduced);
         JsonArray pendingExplosions = new JsonArray();
         for (QueuedExplosion q : explosions) {
             JsonObject o = new JsonObject();
-            o.addProperty("at", q.hypocenter().pack());
+            o.add("at", xyz(q.hypocenter()));
             o.addProperty("m", q.magnitude());
             pendingExplosions.add(o);
         }
@@ -403,14 +407,31 @@ public final class SeismicityModel implements Subsystem {
         lastTime = in.get("lastTime").getAsDouble();
         induced.clear();
         if (in.has("induced")) {
-            for (JsonElement e : in.getAsJsonArray("induced")) induced.add(BlockPos.unpack(e.getAsLong()));
+            for (JsonElement e : in.getAsJsonArray("induced")) induced.add(point(e));
         }
         explosions.clear();
         if (in.has("explosions")) {
             for (JsonElement e : in.getAsJsonArray("explosions")) {
                 JsonObject o = e.getAsJsonObject();
-                explosions.add(new QueuedExplosion(BlockPos.unpack(o.get("at").getAsLong()), o.get("m").getAsDouble()));
+                explosions.add(new QueuedExplosion(point(o.get("at")), o.get("m").getAsDouble()));
             }
         }
+    }
+
+    private static JsonArray xyz(Point3 p) {
+        JsonArray a = new JsonArray();
+        a.add(p.x());
+        a.add(p.y());
+        a.add(p.z());
+        return a;
+    }
+
+    /** A saved hypocentre: {@code [x, y, z]} in metres, or (older saves) a packed block position. */
+    private Point3 point(JsonElement e) {
+        if (e.isJsonArray()) {
+            JsonArray a = e.getAsJsonArray();
+            return new Point3(a.get(0).getAsDouble(), a.get(1).getAsDouble(), a.get(2).getAsDouble());
+        }
+        return Point3.ofBlock(BlockPos.unpack(e.getAsLong()), metersPerBlock);
     }
 }

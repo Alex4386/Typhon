@@ -20,6 +20,7 @@ import me.alex4386.typhon.engine.massflow.MassFlowEvents.ChunkCoord;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.FlowCell;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.sim.Parallel;
@@ -360,7 +361,7 @@ public abstract class MassFlowField implements Subsystem {
 
     protected abstract EngineEvent startedEvent(double time, PendingStart start);
 
-    protected abstract EngineEvent frontEvent(double time, BlockPos front, double runoutM, int cells, double volume,
+    protected abstract EngineEvent frontEvent(double time, Point3 front, double runoutM, int cells, double volume,
             double maxSpeed, double tracer, List<FlowCell> reported);
 
     protected abstract EngineEvent depositEvent(double time, int cells, double volume, int blocks);
@@ -851,7 +852,7 @@ public abstract class MassFlowField implements Subsystem {
                     double ddz = z - o.z();
                     nearest = Math.min(nearest, ddx * ddx + ddz * ddz);
                 }
-                FlowCell cell = new FlowCell(new BlockPos(x, c.ground[i], z), h, u,
+                FlowCell cell = new FlowCell(Point3.ofBlock(new BlockPos(x, c.ground[i], z), dx), h, u,
                         kind == MassFlowKind.PDC ? c.temperature[i] : config.ambientC, c.sediment[i]);
                 candidates.add(new Candidate(cell, nearest, BlockPos.pack(x, 0, z)));
             }

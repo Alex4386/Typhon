@@ -127,7 +127,7 @@ class AlertLevelEstimatorTest {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.overpressureRate = 0.3; // fast pressurisation, but overpressure itself still low
         SeismicityModel seismic = new SeismicityModel(
-                SeismicConfig.builder("v", new BlockPos(0, 100, 0)).swarmTriggerProbability(0).build(), magma);
+                SeismicConfig.builder("v", new BlockPos(0, 100, 0)).swarmTriggerProbability(0).build(), magma, 1);
         AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v").withStepPeriodSeconds(1), magma, seismic);
         Engine engine = Engine.builder(1).add(seismic).add(estimator).build();
 

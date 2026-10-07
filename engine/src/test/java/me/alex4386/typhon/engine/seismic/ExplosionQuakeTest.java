@@ -7,6 +7,7 @@ import com.google.gson.JsonParser;
 import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.testing.StubMagmaState;
@@ -16,7 +17,7 @@ import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 class ExplosionQuakeTest {
     static SeismicityModel model() {
-        return new SeismicityModel(SeismicConfig.builder("v", new BlockPos(0, 100, 0)).build(), StubMagmaState.basalt());
+        return new SeismicityModel(SeismicConfig.builder("v", new BlockPos(0, 100, 0)).build(), StubMagmaState.basalt(), 1);
     }
 
     static List<SeismicEvent> explosions(Engine engine, int ticks) {
@@ -33,8 +34,8 @@ class ExplosionQuakeTest {
     void biggerExplosionsMakeBiggerQuakes() {
         SeismicityModel model = model();
         Engine engine = Engine.builder(0).add(model).build();
-        model.queueExplosion(new BlockPos(0, 98, 0), 1e10);
-        model.queueExplosion(new BlockPos(0, 98, 0), 1e13);
+        model.queueExplosion(new Point3(0.5, 98.5, 0.5), 1e10);
+        model.queueExplosion(new Point3(0.5, 98.5, 0.5), 1e13);
         List<SeismicEvent> quakes = explosions(engine, 40);
         assertEquals(2, quakes.size());
         assertTrue(quakes.get(1).magnitude() > quakes.get(0).magnitude());
@@ -47,7 +48,7 @@ class ExplosionQuakeTest {
         SeismicityModel model = model();
         Engine engine = Engine.builder(0).add(model).build();
         engine.step(); // step at tick 0 consumes nothing; the next step is later
-        model.queueExplosion(new BlockPos(0, 98, 0), 1e11);
+        model.queueExplosion(new Point3(0.5, 98.5, 0.5), 1e11);
         InMemorySaveStore saved = Saves.save(engine);
 
         SeismicityModel restored = model();

@@ -12,6 +12,7 @@ import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.FlowCell;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
@@ -200,7 +201,7 @@ public final class Lahars extends MassFlowField {
         }
         if (mobilised > 0 && !rainLaharActive) {
             rainLaharActive = true;
-            outbox.emit(new MassFlowEvents.LaharStarted(time, id, Trigger.RAIN, strongest, mobilised, mobilised / dt));
+            outbox.emit(new MassFlowEvents.LaharStarted(time, id, Trigger.RAIN, Point3.ofBlock(strongest, dx), mobilised, mobilised / dt));
         }
     }
 
@@ -283,12 +284,12 @@ public final class Lahars extends MassFlowField {
 
     @Override
     protected EngineEvent startedEvent(double time, PendingStart start) {
-        return new MassFlowEvents.LaharStarted(time, id, start.trigger(), start.position(), start.volumeM3(),
+        return new MassFlowEvents.LaharStarted(time, id, start.trigger(), Point3.ofBlock(start.position(), dx), start.volumeM3(),
                 start.rateM3PerS());
     }
 
     @Override
-    protected EngineEvent frontEvent(double time, BlockPos front, double runoutM, int cells, double volume,
+    protected EngineEvent frontEvent(double time, Point3 front, double runoutM, int cells, double volume,
             double maxSpeed, double tracer, List<FlowCell> reported) {
         return new MassFlowEvents.LaharFront(time, id, front, runoutM, cells, volume, maxSpeed, tracer, reported);
     }

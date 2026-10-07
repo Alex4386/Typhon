@@ -21,6 +21,7 @@ import me.alex4386.typhon.engine.lava.LavaEvents;
 import me.alex4386.typhon.engine.magma.MagmaEvents;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.seismic.SeismicEvent;
 import me.alex4386.typhon.engine.tephra.TephraEvents;
@@ -153,11 +154,11 @@ final class EventTranslator {
             case TephraEvents.BombLaunched e -> {
                 JsonObject o = base("bombLaunched", e.time(), strip(e.source()));
                 o.addProperty("id", e.bombId());
-                o.add("start", Json.xyz(point(e.start())));
+                o.add("start", Json.xyz(map.point(e.start())));
                 o.add("velocity", Json.xyz(velocity(e.velocity())));
-                o.add("dragK", Json.num(e.dragFactor() / map.cell));
+                o.add("dragK", Json.num(e.dragFactor()));
                 o.add("flightSeconds", Json.num(e.expectedFlightSeconds()));
-                o.add("landing", Json.xyz(point(e.predictedLanding())));
+                o.add("landing", Json.xyz(map.point(e.predictedLanding())));
                 yield o;
             }
             case TephraEvents.PlumeColumn e -> {
@@ -245,7 +246,7 @@ final class EventTranslator {
                 JsonObject o = new JsonObject();
                 o.addProperty("kind", "oceanEntry");
                 o.add("time", Json.num(e.time()));
-                o.add("at", Json.xy(map.x(e.pos().x()), map.y(e.pos().z())));
+                o.add("at", Json.xy(e.pos().x(), -e.pos().z()));
                 o.add("powerMW", Json.num(e.powerMW()));
                 o.addProperty("littoralExplosion", e.littoralExplosion());
                 yield o;
@@ -298,7 +299,7 @@ final class EventTranslator {
         int n = 0;
         for (MassFlowEvents.FlowCell c : cells) {
             if (n++ >= 256) break;
-            xy.add(Json.xy(map.x(c.pos().x()), map.y(c.pos().z())));
+            xy.add(Json.xy(c.pos().x(), -c.pos().z()));
         }
         o.add("cells", xy);
         o.add("speed", Json.num(speed));
@@ -306,7 +307,7 @@ final class EventTranslator {
         return o;
     }
 
-    private JsonObject feature(double time, String feature, BlockPos pos) {
+    private JsonObject feature(double time, String feature, Point3 pos) {
         JsonObject o = base("geothermalFeature", time, nearestVolcano(pos));
         o.addProperty("feature", feature);
         o.add("at", Json.xyz(map.point(pos)));
@@ -321,13 +322,9 @@ final class EventTranslator {
         return o;
     }
 
-    private double[] point(Vec3d v) {
-        return map.point(v.x(), v.y(), v.z());
-    }
-
-    /** Engine velocities are in blocks/s; the protocol uses m/s in the (east, north, up) frame. */
+    /** Engine velocities are m/s on engine axes (x east, y up, z south); the protocol uses (east, north, up). */
     private double[] velocity(Vec3d v) {
-        return new double[] {v.x() * map.cell, -v.z() * map.cell, v.y() * map.cell};
+        return new double[] {v.x(), -v.z(), v.y()};
     }
 
     /** Subsystem ids look like {@code tephra:<volcanoId>}. */
@@ -345,12 +342,12 @@ final class EventTranslator {
         return strip(flowId);
     }
 
-    private String nearestVolcano(BlockPos pos) {
+    private String nearestVolcano(Point3 pos) {
         String best = volcanoes.isEmpty() ? null : volcanoes.get(0).volcanoId();
         double bestD = Double.POSITIVE_INFINITY;
         for (VolcanoSystem v : volcanoes) {
             for (VentSite vent : v.vents()) {
-                double d = vent.position().horizontalDistance(pos);
+                double d = Point3.ofBlock(vent.position(), map.cell).horizontalDistance(pos);
                 if (d < bestD) {
                     bestD = d;
                     best = v.volcanoId();

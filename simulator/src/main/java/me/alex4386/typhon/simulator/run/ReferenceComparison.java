@@ -111,7 +111,7 @@ public final class ReferenceComparison {
             case EXPLOSIONS_PER_HOUR -> result.simulatedSeconds() > 0
                     ? s.seismicCounts.getOrDefault(SeismicEventType.EXPLOSION, 0L) / (result.simulatedSeconds() / 3600)
                     : Double.NaN;
-            case MAX_BALLISTIC_RANGE_M -> s.bombsLanded > 0 ? s.maxBombDistance * L : Double.NaN;
+            case MAX_BALLISTIC_RANGE_M -> s.bombsLanded > 0 ? s.maxBombDistance : Double.NaN;
             case GEYSERS -> s.geysers;
             case ERUPTIONS -> s.eruptions;
             case SPRINGS -> s.featuresFormed.getOrDefault(HydrothermalFeature.HOT_SPRING, 0L)

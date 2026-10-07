@@ -74,7 +74,8 @@ final class EntityTracker {
     synchronized void observe(EngineEvent e) {
         switch (e) {
             case SeismicEvent q when q.magnitude() >= QUAKE_MIN_MAGNITUDE -> {
-                String id = "quake:" + q.volcanoId() + ":" + Math.round(q.time() * 1000) + ":" + q.hypocenter().pack();
+                String id = "quake:" + q.volcanoId() + ":" + Math.round(q.time() * 1000) + ":" + Math.round(q.hypocenter().x()) + "," + Math.round(q.hypocenter().y()) + ","
+                        + Math.round(q.hypocenter().z());
                 JsonObject o = entity(id, "quake", q.volcanoId(),
                         String.format("M%.1f %s quake", q.magnitude(), quakeType(q.type().name())), map.point(q.hypocenter()));
                 JsonObject p = o.getAsJsonObject("props");
@@ -289,10 +290,10 @@ final class EntityTracker {
                 cp.addProperty("dikesBlocked", dikes.nucleationBlocked());
                 for (Dike d : dikes.dikes()) {
                     if (d.removed()) continue;
-                    JsonObject o = entity("dike:" + vid + ":" + d.id(), "dike", vid, "Dike " + d.id(), map.point(d.tip()));
+                    JsonObject o = entity("dike:" + vid + ":" + d.id(), "dike", vid, "Dike " + d.id(), map.point(d.tip(map.cell)));
                     JsonArray path = new JsonArray();
-                    path.add(Json.xyz(map.point(d.origin())));
-                    path.add(Json.xyz(map.point(d.tip())));
+                    path.add(Json.xyz(map.point(d.origin(map.cell))));
+                    path.add(Json.xyz(map.point(d.tip(map.cell))));
                     o.add("path", path);
                     JsonObject p = o.getAsJsonObject("props");
                     p.addProperty("status", d.status().name());

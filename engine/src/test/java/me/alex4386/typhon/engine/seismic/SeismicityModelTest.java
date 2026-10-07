@@ -7,6 +7,7 @@ import com.google.gson.JsonParser;
 import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.random.SimRandom;
@@ -69,7 +70,7 @@ class SeismicityModelTest {
     @Test
     void vtRateGrowsWithPressurisationAndAcceleratesTowardFailure() {
         StubMagmaState magma = StubMagmaState.basalt();
-        SeismicityModel model = new SeismicityModel(config().swarmTriggerProbability(0).build(), magma);
+        SeismicityModel model = new SeismicityModel(config().swarmTriggerProbability(0).build(), magma, 1);
         Engine engine = Engine.builder(3).add(model).build();
 
         stepOnce(engine);
@@ -97,7 +98,7 @@ class SeismicityModelTest {
     void observedVtCountsAndSmoothedRateMatchTheModel() {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.overpressureRate = 0.02;
-        SeismicityModel model = new SeismicityModel(config().swarmTriggerProbability(0).build(), magma);
+        SeismicityModel model = new SeismicityModel(config().swarmTriggerProbability(0).build(), magma, 1);
         Engine engine = Engine.builder(4).add(model).build();
 
         List<SeismicEvent> events = run(engine, 3600);
@@ -108,7 +109,7 @@ class SeismicityModelTest {
 
     @Test
     void quietVolcanoIsNearlySilent() {
-        SeismicityModel model = new SeismicityModel(config().build(), StubMagmaState.basalt());
+        SeismicityModel model = new SeismicityModel(config().build(), StubMagmaState.basalt(), 1);
         Engine engine = Engine.builder(5).add(model).build();
         List<SeismicEvent> events = run(engine, 600);
         assertTrue(events.size() < 5);
@@ -119,7 +120,7 @@ class SeismicityModelTest {
     void eruptionsProduceLpTremorAndHighRsam() {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.eruptionRate = 25;
-        SeismicityModel model = new SeismicityModel(config().build(), magma);
+        SeismicityModel model = new SeismicityModel(config().build(), magma, 1);
         Engine engine = Engine.builder(6).add(model).build();
 
         List<SeismicEvent> events = run(engine, 1800);
@@ -142,14 +143,15 @@ class SeismicityModelTest {
         assertTrue(SeismicityModel.explosivity(magma) > 0.5);
         assertTrue(SeismicityModel.explosivity(StubMagmaState.basalt()) < 0.05);
 
-        SeismicityModel model = new SeismicityModel(config().build(), magma);
+        SeismicityModel model = new SeismicityModel(config().build(), magma, 1);
         Engine engine = Engine.builder(7).add(model).build();
         List<SeismicEvent> events = run(engine, 1200);
         List<SeismicEvent> explosions = events.stream().filter(e -> e.type() == SeismicEventType.EXPLOSION).toList();
         assertTrue(explosions.size() > 10);
         for (SeismicEvent e : explosions) {
             assertTrue(e.magnitude() >= 1 && e.magnitude() <= 3.5);
-            assertTrue(e.hypocenter().y() <= VENT.y() && e.hypocenter().y() > VENT.y() - 10);
+            // 1-m blocks: a hypocentre is the centre of its block
+            assertTrue(e.hypocenter().y() <= VENT.y() + 1 && e.hypocenter().y() > VENT.y() - 10);
         }
     }
 
@@ -158,14 +160,14 @@ class SeismicityModelTest {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.overpressureRate = 0.05;
         magma.eruptionRate = 10;
-        SeismicityModel model = new SeismicityModel(config().build(), magma);
+        SeismicityModel model = new SeismicityModel(config().build(), magma, 1);
         Engine engine = Engine.builder(8).add(model).build();
         List<SeismicEvent> events = run(engine, 1800);
 
         double vtDepth = events.stream().filter(e -> e.type() == SeismicEventType.VT)
-                .mapToInt(e -> e.hypocenter().y()).average().orElseThrow();
+                .mapToDouble(e -> e.hypocenter().y()).average().orElseThrow();
         double lpDepth = events.stream().filter(e -> e.type() == SeismicEventType.LP)
-                .mapToInt(e -> e.hypocenter().y()).average().orElseThrow();
+                .mapToDouble(e -> e.hypocenter().y()).average().orElseThrow();
         assertTrue(vtDepth > magma.center.y() - 10 && vtDepth < VENT.y());
         assertTrue(lpDepth > vtDepth + 40, "LP events are shallow");
     }
@@ -174,7 +176,7 @@ class SeismicityModelTest {
     void swarmsBoostRatesAndAreRichInSmallEvents() {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.overpressureRate = 1e-4; // ~9 MPa a day: a fast pressurisation
-        SeismicityModel model = new SeismicityModel(config().swarmTriggerProbability(1).swarmMeanDurationSeconds(600).build(), magma);
+        SeismicityModel model = new SeismicityModel(config().swarmTriggerProbability(1).swarmMeanDurationSeconds(600).build(), magma, 1);
         Engine engine = Engine.builder(9).add(model).build();
         List<SeismicEvent> events = run(engine, 3600);
         List<SeismicEvent> swarm = events.stream().filter(SeismicEvent::swarm).toList();
@@ -185,16 +187,17 @@ class SeismicityModelTest {
 
     @Test
     void intensityDecaysWithDistanceAndGrowsWithMagnitude() {
-        BlockPos source = new BlockPos(0, 0, 0);
-        double near = SeismicIntensity.intensityAt(3, source, new BlockPos(5, 0, 0));
-        double mid = SeismicIntensity.intensityAt(3, source, new BlockPos(100, 0, 0));
-        double far = SeismicIntensity.intensityAt(3, source, new BlockPos(2000, 0, 0));
+        // distances in metres (near field 200 m)
+        Point3 source = Point3.ORIGIN;
+        double near = SeismicIntensity.intensityAt(3, source, new Point3(100, 0, 0));
+        double mid = SeismicIntensity.intensityAt(3, source, new Point3(2000, 0, 0));
+        double far = SeismicIntensity.intensityAt(3, source, new Point3(40000, 0, 0));
         assertTrue(near > mid && mid > far);
-        assertTrue(SeismicIntensity.intensityAt(4, source, new BlockPos(100, 0, 0)) > mid);
+        assertTrue(SeismicIntensity.intensityAt(4, source, new Point3(2000, 0, 0)) > mid);
         assertEquals(1, SeismicIntensity.intensityAt(5, source, source));
-        assertEquals(0, SeismicIntensity.intensityAt(0, source, new BlockPos(5000, 0, 0)));
-        assertEquals(SeismicIntensity.amplitudeAt(2, source, new BlockPos(3, 0, 0)),
-                SeismicIntensity.amplitudeAt(2, source, new BlockPos(9, 0, 0)), 1e-12, "near-field saturation");
+        assertEquals(0, SeismicIntensity.intensityAt(0, source, new Point3(100000, 0, 0)));
+        assertEquals(SeismicIntensity.amplitudeAt(2, source, new Point3(60, 0, 0)),
+                SeismicIntensity.amplitudeAt(2, source, new Point3(180, 0, 0)), 1e-12, "near-field saturation");
     }
 
     @Test
@@ -204,12 +207,12 @@ class SeismicityModelTest {
         magma.overpressure = 10;
         magma.eruptionRate = 3;
 
-        Engine a = Engine.builder(10).add(new SeismicityModel(config().build(), magma)).build();
-        Engine b = Engine.builder(10).add(new SeismicityModel(config().build(), magma)).build();
+        Engine a = Engine.builder(10).add(new SeismicityModel(config().build(), magma, 1)).build();
+        Engine b = Engine.builder(10).add(new SeismicityModel(config().build(), magma, 1)).build();
         for (int i = 0; i < 20 * 300; i++) assertEquals(a.step(), b.step());
 
         InMemorySaveStore saved = Saves.save(a);
-        Engine resumed = Engine.builder(10).add(new SeismicityModel(config().build(), magma))
+        Engine resumed = Engine.builder(10).add(new SeismicityModel(config().build(), magma, 1))
                 .restore(saved).build();
         List<EngineFrame> expected = new ArrayList<>();
         List<EngineFrame> actual = new ArrayList<>();
@@ -222,7 +225,7 @@ class SeismicityModelTest {
 
     @Test
     void emitsPeriodicRsamSamples() {
-        SeismicityModel model = new SeismicityModel(config().samplePeriodSeconds(5).build(), StubMagmaState.basalt());
+        SeismicityModel model = new SeismicityModel(config().samplePeriodSeconds(5).build(), StubMagmaState.basalt(), 1);
         Engine engine = Engine.builder(11).add(model).build();
         int samples = 0;
         for (int i = 0; i < 1000; i++) {

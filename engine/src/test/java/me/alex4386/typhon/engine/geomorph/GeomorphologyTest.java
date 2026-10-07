@@ -11,6 +11,7 @@ import me.alex4386.typhon.engine.geomorph.GeomorphEvents.SlopeFailure;
 import me.alex4386.typhon.engine.geomorph.GeomorphEvents.Trigger;
 import me.alex4386.typhon.engine.massflow.DebrisAvalanches;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.testing.Saves;
@@ -158,7 +159,7 @@ class GeomorphologyTest {
         scoriaRamp(shaken, 10, 30, 32);
         Geomorphology h = geo(shaken, GroundState.DRY);
         Engine engine = shaken.engine(1, 1, h);
-        h.queueQuake(new BlockPos(25, 0, 32), 4.0); // PGA ≈ 0.13 g → k_h ≈ 0.065 > 0.035 needed
+        h.queueQuake(Point3.ofBlock(new BlockPos(25, 0, 32), shaken.world.spec().metersPerColumn()), 4.0); // PGA ≈ 0.13 g → k_h ≈ 0.065 > 0.035 needed
         shaken.settle(engine, h, 300);
         assertTrue(h.failureCount() > 0, "shaking tips the marginal slope");
         assertEquals(Trigger.SEISMIC, shaken.events(SlopeFailure.class).get(0).trigger());
@@ -337,7 +338,7 @@ class GeomorphologyTest {
         for (int x = 0; x < 40; x++) for (int z = 0; z < 24; z++) g.setAlteration(x, z, 0.8);
         Engine engine = w.engine(9, threads, g, flow);
         g.queueExplosion(new BlockPos(20, BASE_Y + 40, 40), 1e11);
-        g.queueQuake(new BlockPos(40, 0, 40), 3.5);
+        g.queueQuake(Point3.ofBlock(new BlockPos(40, 0, 40), w.world.spec().metersPerColumn()), 3.5);
         for (int i = 0; i < STEPS; i++) {
             if (saveAt != null && i == saveStep) saveAt[0] = Saves.save(engine);
             w.run(engine, 1);

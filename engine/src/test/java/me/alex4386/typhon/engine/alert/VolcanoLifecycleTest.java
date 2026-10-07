@@ -30,7 +30,7 @@ class VolcanoLifecycleTest {
     private static Volcano build(long seed) {
         // 1 km³: the small end of real chambers, so a full unrest → eruption cycle fits in a test.
         MagmaChamber chamber = new MagmaChamber(MagmaChamberConfig.builder("v", CHAMBER).volume(1e9).build());
-        SeismicityModel seismic = new SeismicityModel(SeismicConfig.builder("v", VENT).build(), chamber);
+        SeismicityModel seismic = new SeismicityModel(SeismicConfig.builder("v", VENT).build(), chamber, 1);
         AlertLevelEstimator alert = new AlertLevelEstimator(AlertConfig.defaults("v"), chamber, seismic);
         Engine engine = Engine.builder(seed).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(chamber).add(seismic).add(alert).build();
         return new Volcano(engine, chamber, seismic, alert);

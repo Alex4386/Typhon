@@ -296,7 +296,7 @@ class GeothermalTest {
         List<FumaroleActivity> activity = events(frames, FumaroleActivity.class);
         assertFalse(activity.isEmpty());
         FumaroleActivity sample = activity.get(0);
-        assertEquals(SURFACE_Y + 1, sample.pos().y());
+        assertEquals(SURFACE_Y + 1.5, sample.pos().y()); // centre of the block above the ground (1-m blocks)
         GasComposition gas = sample.gas();
         assertEquals(1.0, gas.h2o() + gas.co2() + gas.so2() + gas.h2s(), 1e-9);
     }
@@ -372,7 +372,7 @@ class GeothermalTest {
         for (GeyserFormed geyser : geysers) {
             int k = geyser.waterBlocks();
             assertTrue(k >= 1 && k <= 4);
-            BlockPos ps = geyser.potentSulfur();
+            BlockPos ps = geyser.potentSulfur().block(1); // 1-m blocks
             assertEquals(SURFACE_Y - k, ps.y());
             // a pit k feature blocks (≤ 1 m each) deep, flooded to the old ground, sulfur at its floor
             assertEquals(ground - k * featureM, world.surfaceZ(ps.x(), ps.z()), 1e-6);
@@ -384,8 +384,8 @@ class GeothermalTest {
         for (GeyserFormed a : geysers) {
             for (GeyserFormed b : geysers) {
                 if (a == b) continue;
-                int d = Math.max(Math.abs(a.potentSulfur().x() - b.potentSulfur().x()),
-                        Math.abs(a.potentSulfur().z() - b.potentSulfur().z()));
+                int d = Math.max(Math.abs(a.potentSulfur().block(1).x() - b.potentSulfur().block(1).x()),
+                        Math.abs(a.potentSulfur().block(1).z() - b.potentSulfur().block(1).z()));
                 assertTrue(d > new GeothermalConfig().geyserSpacing);
             }
         }
@@ -411,13 +411,13 @@ class GeothermalTest {
         List<GeyserFormed> geysers = events(run(engine, geothermal, 30), GeyserFormed.class);
         assertFalse(geysers.isEmpty());
         GeyserFormed first = geysers.get(0);
-        int x = first.potentSulfur().x();
-        int z = first.potentSulfur().z();
+        int x = first.potentSulfur().block(1).x();
+        int z = first.potentSulfur().block(1).z();
         assertNotNull(geothermal.featuresByColumn().get(PlacedFeature.key(x, z)));
 
         geothermal.addLavaHeat(x, z, 1150, 3);
         List<HydrothermalFeatureBuried> buried = events(run(engine, geothermal, 1), HydrothermalFeatureBuried.class);
-        assertEquals(1, buried.stream().filter(b -> b.pos().x() == x && b.pos().z() == z).count(), buried.toString());
+        assertEquals(1, buried.stream().filter(b -> b.pos().block(1).x() == x && b.pos().block(1).z() == z).count(), buried.toString());
         assertEquals(HydrothermalFeature.GEYSER, buried.get(0).feature());
         assertNull(geothermal.featuresByColumn().get(PlacedFeature.key(x, z)), "its entity goes with it");
     }
@@ -450,7 +450,7 @@ class GeothermalTest {
         List<GeyserFormed> geysers = events(run(frozen(geyserOnlyConfig(0.9), terrain, BlockPalette.unrestricted(), 140), 3, 30),
                 GeyserFormed.class);
         assertFalse(geysers.isEmpty());
-        assertTrue(geysers.stream().allMatch(g -> (g.potentSulfur().x() & 1) == 1));
+        assertTrue(geysers.stream().allMatch(g -> (g.potentSulfur().block(1).x() & 1) == 1));
     }
 
     // ── Springs, mud, alteration ──

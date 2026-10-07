@@ -101,7 +101,7 @@ public final class ReportWriter {
         row(h, "Highest plume top", s.maxPlumeTopY == Integer.MIN_VALUE ? "none" : "y=" + s.maxPlumeTopY
                 + " (MER " + fmt(s.maxPlumeMassRate) + " kg/s)");
         row(h, "Ballistic bombs launched / landed", s.bombsLaunched + " / " + s.bombsLanded
-                + (s.bombsLanded > 0 ? " (farthest " + fmt(s.maxBombDistance) + " blocks)" : ""));
+                + (s.bombsLanded > 0 ? " (farthest " + fmt(s.maxBombDistance) + " m)" : ""));
         row(h, "Volcanic lightning", Long.toString(s.lightning));
         row(h, "Earthquakes", s.seismicCounts.toString() + (s.maxMagnitude > -10 ? ", max M" + fmt(s.maxMagnitude) : ""));
         row(h, "Hydrothermal features formed", s.featuresFormed.isEmpty() ? "none" : s.featuresFormed.toString());

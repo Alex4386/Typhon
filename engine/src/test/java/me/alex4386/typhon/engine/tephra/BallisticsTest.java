@@ -92,8 +92,9 @@ class BallisticsTest {
 
         double analyticX = 0.5 + v * v / G;
         assertEquals(analyticX, launched.predictedLanding().x(), 0.05);
-        assertEquals((int) Math.floor(analyticX), landed.position().x());
-        assertEquals(63, landed.position().y());
+        // positions are metres (1-m blocks): the impact point is on top of ground block 63
+        assertEquals((int) Math.floor(analyticX), (int) Math.floor(landed.position().x()));
+        assertEquals(64, landed.position().y());
         double flightSeconds = 2 * c / G;
         assertEquals(flightSeconds, launched.expectedFlightSeconds(), 0.05);
         // landed during the step that started expectedFlight − one step after launch
@@ -113,7 +114,7 @@ class BallisticsTest {
         tephra.launchBomb(new Vec3d(0.5, 64, 0.5), new Vec3d(35, 35, 0), 0.3, 50);
 
         BombLanded landed = events(run(engine, 400), BombLanded.class).get(0);
-        assertEquals(93, landed.position().y());
+        assertEquals(94, landed.position().y()); // top of the plateau's ground block 93
         assertTrue(landed.position().x() >= 100);
         // Shorter than the flat-ground range because it hit the plateau on the way down.
         assertTrue(landed.position().x() < 0.5 + 2 * 35 * 35 / G);
@@ -130,7 +131,7 @@ class BallisticsTest {
 
         List<EngineFrame> frames = run(engine, 400);
         BombLanded landed = events(frames, BombLanded.class).get(0);
-        assertEquals(99, landed.position().y());
+        assertEquals(100, landed.position().y()); // top of ground block 99 (launch height)
         assertEquals(0.5 + 2 * 30 * 30 / G, landed.position().x(), 1.0);
         // Nothing lands in the world model where the engine does not know the terrain.
         assertFalse(terrain.world().isKnown((int) Math.floor(landed.position().x()), 0));
@@ -152,7 +153,7 @@ class BallisticsTest {
         assertTrue(landed.craterRadius() >= 1, "crater radius " + landed.craterRadius());
         assertEquals(1.0, landed.diameter());
 
-        int x = landed.position().x(), z = landed.position().z();
+        int x = (int) Math.floor(landed.position().x()), z = (int) Math.floor(landed.position().z());
         double surface = terrain.world().surfaceZ(x, z);
         double depth = 64 - surface;
         assertTrue(depth > 0.05, "the crater lowers the surface: " + depth);

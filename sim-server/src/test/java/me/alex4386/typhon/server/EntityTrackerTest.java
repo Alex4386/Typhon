@@ -9,7 +9,7 @@ import com.google.gson.JsonObject;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.seismic.SeismicEvent;
 import me.alex4386.typhon.engine.seismic.SeismicEventType;
 import org.junit.jupiter.api.Test;
@@ -72,8 +72,8 @@ class EntityTrackerTest {
     @Test
     void notableQuakesAppearAndExpire() {
         EntityTracker t = new EntityTracker(MAP, List.of("v"));
-        t.observe(new SeismicEvent(5, "v", SeismicEventType.VT, 3.1, new BlockPos(10, -20, 10), 1, false));
-        t.observe(new SeismicEvent(5, "v", SeismicEventType.VT, 0.5, new BlockPos(11, -20, 10), 1, false));
+        t.observe(new SeismicEvent(5, "v", SeismicEventType.VT, 3.1, new Point3(10.5, -19.5, 10.5), 1, false));
+        t.observe(new SeismicEvent(5, "v", SeismicEventType.VT, 0.5, new Point3(11.5, -19.5, 10.5), 1, false));
         JsonObject d = t.delta(Map.of(), 6, false);
         assertEquals(1, d.getAsJsonArray("upsert").size(), "only notable quakes become entities");
         assertEquals("quake", d.getAsJsonArray("upsert").get(0).getAsJsonObject().get("kind").getAsString());

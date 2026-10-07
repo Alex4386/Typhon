@@ -17,6 +17,7 @@ import java.util.TreeSet;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.lava.LavaEvents.ChunkCoord;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.Parallel;
@@ -932,7 +933,7 @@ public final class LavaFlow implements Subsystem {
             double powerW = seconds > 0 ? e.heatJ / seconds : 0;
             double steam = powerW / (WATER_HEAT_CAPACITY * Math.max(0, 100 - config.waterC()) + WATER_LATENT_HEAT);
             BlockPos pos = BlockPos.unpack(e.maxFluxM3s >= 0 ? e.maxPos : largest);
-            outbox.emit(new LavaEvents.LavaOceanEntry(now, interval, pos, columns, molten,
+            outbox.emit(new LavaEvents.LavaOceanEntry(now, interval, Point3.ofBlock(pos, metersPerBlock), columns, molten,
                     seconds > 0 ? e.inflowM3 / seconds : 0, powerW / 1e6, steam, e.explosive));
         }
         oceanEntries.clear();
@@ -1345,7 +1346,7 @@ public final class LavaFlow implements Subsystem {
             }
         }
         if (front != null) {
-            outbox.emit(new LavaEvents.LavaFlowFront(now, front, Math.sqrt(best) * metersPerBlock, cells, volume));
+            outbox.emit(new LavaEvents.LavaFlowFront(now, Point3.ofBlock(front, metersPerBlock), Math.sqrt(best) * metersPerBlock, cells, volume));
         }
     }
 

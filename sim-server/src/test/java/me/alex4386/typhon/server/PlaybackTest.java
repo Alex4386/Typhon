@@ -12,7 +12,7 @@ import me.alex4386.typhon.engine.dike.DikeEvents.DikeStarted;
 import me.alex4386.typhon.engine.magma.MagmaEvents.Cause;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionEnded;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -105,7 +105,7 @@ class PlaybackTest {
         p.apply(json("{\"slowOnEruption\":false,\"eruptionSpeed\":600,\"slowOnEvents\":[\"dike\"],\"eventHoldSeconds\":100}"), r);
         p.observe(frame(1, start(1, "a")), r);
         assertEquals(1e6, r.speed(), "eruptions no longer slow down");
-        p.observe(frame(5, new DikeStarted(5, "a", 1, new BlockPos(0, 0, 0), 10)), r);
+        p.observe(frame(5, new DikeStarted(5, "a", 1, new Point3(0.5, 0.5, 0.5), 10)), r);
         assertEquals(600, r.speed());
         assertEquals("dike", p.slowedBy());
         p.observe(frame(50), r);

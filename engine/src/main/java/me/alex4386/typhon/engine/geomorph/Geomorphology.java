@@ -18,6 +18,7 @@ import me.alex4386.typhon.engine.massflow.Lahars;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents;
 import me.alex4386.typhon.engine.massflow.PyroclasticFlows;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.save.FieldChunk;
 import me.alex4386.typhon.engine.save.StateReader;
@@ -260,8 +261,9 @@ public final class Geomorphology implements Subsystem {
     }
 
     /** An earthquake; its shaking loads slopes (pseudo-statically) on the next step. */
-    public void queueQuake(BlockPos hypocenter, double magnitude) {
-        pendingQuakes.add(new double[] {hypocenter.x(), hypocenter.y(), hypocenter.z(), magnitude});
+    public void queueQuake(Point3 hypocenter, double magnitude) {
+        double l = world.spec().metersPerColumn();
+        pendingQuakes.add(new double[] {hypocenter.blockX(l), hypocenter.blockY(l), hypocenter.blockZ(l), magnitude});
     }
 
     /** Queues a column for a stability check. */
@@ -968,7 +970,8 @@ public final class Geomorphology implements Subsystem {
             if (roof != null && roof.depthM() > 0) {
                 unloading = 3 * mass * G / (2 * Math.PI * roof.depthM() * roof.depthM()) / 1e6;
             }
-            outbox.emit(new GeomorphEvents.SlopeFailure(now, volcanoId, new BlockPos(cx, terrain.groundY(cx, cz, 0), cz),
+            outbox.emit(new GeomorphEvents.SlopeFailure(now, volcanoId,
+                    Point3.columnCentre(cx, cz, world.isKnown(cx, cz) ? world.surfaceZ(cx, cz) : 0, world.spec().metersPerColumn()),
                     volume, cluster.size(), drop, runout, style, trigger, minFs, depthSum / tSum, altSum / tSum,
                     saturation, temperature, unloading));
         } else {
@@ -1127,7 +1130,7 @@ public final class Geomorphology implements Subsystem {
         stats.maxCraterRadiusM = Math.max(stats.maxCraterRadiusM, radius);
         activateDisc(cx, cz, ro + 1);
         moved.add(key(cx, cz));
-        outbox.emit(new GeomorphEvents.CraterExcavated(now, volcanoId, new BlockPos(cx, terrain.blockForSurface(rim - depth), cz),
+        outbox.emit(new GeomorphEvents.CraterExcavated(now, volcanoId, Point3.columnCentre(cx, cz, rim - depth, l),
                 radius, depth, energy, removed * l * l));
     }
 
@@ -1289,7 +1292,7 @@ public final class Geomorphology implements Subsystem {
         stats.calderaSteps++;
         activateDisc(c.x(), c.z(), r + 2);
         moved.add(key(c.x(), c.z()));
-        outbox.emit(new GeomorphEvents.CalderaCollapse(now, volcanoId, c, radius, drop, calderaSubsidenceM, volume, under,
+        outbox.emit(new GeomorphEvents.CalderaCollapse(now, volcanoId, Point3.ofBlock(c, world.spec().metersPerColumn()), radius, drop, calderaSubsidenceM, volume, under,
                 critical));
     }
 

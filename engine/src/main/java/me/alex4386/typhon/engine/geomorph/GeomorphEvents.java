@@ -1,6 +1,7 @@
 package me.alex4386.typhon.engine.geomorph;
 
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.HistoricalEvent;
 
@@ -49,7 +50,7 @@ public final class GeomorphEvents {
      * @param unloadingMPa vertical stress drop at the magma chamber from removing the mass (Boussinesq
      *     point load {@code 3Mg/(2π z²)}); 0 without a chamber
      */
-    public record SlopeFailure(double time, String volcanoId, BlockPos position, double volumeM3, int columns,
+    public record SlopeFailure(double time, String volcanoId, Point3 position, double volumeM3, int columns,
             double dropM, double runoutM, FailureStyle style, Trigger trigger, double minFactorOfSafety,
             double slipDepthM, double alteration, double saturation, double temperatureC, double unloadingMPa)
             implements HistoricalEvent {}
@@ -67,7 +68,7 @@ public final class GeomorphEvents {
      * @param depthM crater depth below the rim level (m)
      * @param excavatedM3 bulk volume removed
      */
-    public record CraterExcavated(double time, String volcanoId, BlockPos center, double radiusM, double depthM,
+    public record CraterExcavated(double time, String volcanoId, Point3 center, double radiusM, double depthM,
             double energyJ, double excavatedM3) implements HistoricalEvent {}
 
     /**
@@ -76,7 +77,7 @@ public final class GeomorphEvents {
      * @param subsidenceM roof subsidence this step (m)
      * @param totalSubsidenceM cumulative subsidence (m)
      */
-    public record CalderaCollapse(double time, String volcanoId, BlockPos center, double radiusM, double subsidenceM,
+    public record CalderaCollapse(double time, String volcanoId, Point3 center, double radiusM, double subsidenceM,
             double totalSubsidenceM, double volumeM3, double underpressureMPa, double criticalUnderpressureMPa)
             implements HistoricalEvent {}
 }

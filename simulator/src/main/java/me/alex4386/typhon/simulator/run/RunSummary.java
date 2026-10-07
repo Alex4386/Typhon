@@ -86,6 +86,7 @@ public final class RunSummary {
     public long bombsLaunched;
     public long bombsLanded;
     public double maxBombEnergy;
+    /** Farthest bomb landing from the world origin, horizontally (m). */
     public double maxBombDistance;
     public long lightning;
     public long geysers;

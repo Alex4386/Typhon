@@ -1,6 +1,7 @@
 package me.alex4386.typhon.server;
 
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 
 /**
  * Maps between the engine's column/block grid and the protocol's real-scale frame.
@@ -134,6 +135,11 @@ public final class GridMapping {
     public double[] point(BlockPos p) {
         double z = (p.y() + 0.5) * cell;
         return new double[] {x(p.x()), y(p.z()), stretchZ(p.x() + 0.5, p.z() + 0.5, z)};
+    }
+
+    /** World coordinates of an engine point in metres (x east, y up, z south). */
+    public double[] point(Point3 p) {
+        return new double[] {p.x(), -p.z(), stretchZ(p.x() / cell, p.z() / cell, p.y())};
     }
 
     /** World coordinates of an engine-space point given in fractional block units. */
