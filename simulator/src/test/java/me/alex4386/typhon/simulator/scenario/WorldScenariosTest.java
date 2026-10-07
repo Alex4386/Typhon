@@ -100,7 +100,10 @@ class WorldScenariosTest {
         String second = run("run", "--world", world.toString(), "--hours", "0.01", "--quiet", "--out",
                 dir.resolve("out2").toString());
         assertTrue(second.contains("Resuming world 'twin'"), second);
-        assertTrue(second.contains("at t=0:01:12"), "continues where the first run stopped: " + second);
+        // the first run ends with the step that crosses 72 s; the second starts there
+        java.util.regex.Matcher saved = java.util.regex.Pattern.compile("Saved world at t=(\\S+)").matcher(first);
+        assertTrue(saved.find(), first);
+        assertTrue(second.contains("at t=" + saved.group(1) + " "), "continues where the first run stopped: " + second);
 
         Path west = world.resolve("volcanoes/west.yaml");
         Files.writeString(west, Files.readString(west).replace("volume: 5.0E9", "volume: 6.0E9"));

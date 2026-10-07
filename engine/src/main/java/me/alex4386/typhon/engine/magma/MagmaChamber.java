@@ -150,6 +150,11 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private double outletCapacity = 1;
     /** True while the summit vent is sealed: the roof cannot fail there, only a dike can open a path. */
     private boolean summitBlocked;
+    /**
+     * Time (s) the rising gas takes to fill one mean slug, as of the last step (∞ when no gas
+     * coalesces; 0 = not known yet, before the first step): open-vent activity is resolved at this.
+     */
+    private double slugFillSeconds = 0;
     private EruptiveRegime regime = EruptiveRegime.QUIESCENT;
     private double conduitOpenness;
     private double ventAmbientPa = ConduitInput.ATMOSPHERE_PA;
@@ -247,12 +252,14 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     @Override
     public double maxStepSeconds() {
         if (erupting || pendingStart || pendingFlank) return ERUPTING_STEP_SECONDS;
-        if (!eruptive || summitBlocked) return QUIET_STEP_SECONDS;
+        // Open-vent (Strombolian) activity: about one slug per step, so bursts keep their cadence.
+        double slugs = Math.max(config.stepPeriodSeconds(), slugFillSeconds);
+        if (!eruptive || summitBlocked) return Math.min(QUIET_STEP_SECONDS, slugs);
         double gap = failureOverpressureMPa() - overpressure;
         if (gap <= 0) return ERUPTING_STEP_SECONDS;
         double rate = Math.max(overpressureRate, Math.max(0, supplyRate) / (volume * effectiveCompressibility()));
-        if (!(rate > 0)) return QUIET_STEP_SECONDS;
-        return Math.max(config.stepPeriodSeconds(), Math.min(QUIET_STEP_SECONDS, 0.25 * gap / rate));
+        if (!(rate > 0)) return Math.min(QUIET_STEP_SECONDS, slugs);
+        return Math.min(slugs, Math.max(config.stepPeriodSeconds(), Math.min(QUIET_STEP_SECONDS, 0.25 * gap / rate)));
     }
 
     @Override
@@ -618,7 +625,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         double slugGasKg = flow.fragmented() ? 0 : flow.slugGasFluxKgPerS() * dt + chamberGas;
         double gasConstant = flow.slugGasFluxKgPerS() > 0 || chamberGas <= 0 ? flow.exitGasConstant()
                 : gasConstant(chamberWaterKg, chamberCo2Kg);
-        accumulateSlugs(context, slugGasKg, gasConstant);
+        accumulateSlugs(context, slugGasKg, gasConstant, dt);
 
         // Plug: degassing-induced crystallisation stiffens coherent lava; the gas it outgasses is trapped
         // beneath the stiff cap until the cap fails.
@@ -655,8 +662,11 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         plugGas = 0;
         resealRemaining = 0;
         double gas = (waterKg + co2Kg) * coalescence(Math.pow(10, viscosityLog10()));
-        if (gas > 0) accumulateSlugs(context, gas, gasConstant(waterKg, co2Kg));
-        else slugGas = 0;
+        if (gas > 0) accumulateSlugs(context, gas, gasConstant(waterKg, co2Kg), dt);
+        else {
+            slugGas = 0;
+            slugFillSeconds = Double.POSITIVE_INFINITY;
+        }
     }
 
     /** Share of rising gas that coalesces into slugs in magma of viscosity {@code eta} (Pa·s). */
@@ -673,9 +683,10 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      * Adds slug gas and bursts every slug that is complete. A slug fills {@link
      * ConduitConfig#slugLengthDiameters()} conduit diameters at the pressure of the melt head it lifts.
      */
-    private void accumulateSlugs(StepContext context, double gasKg, double gasConstant) {
+    private void accumulateSlugs(StepContext context, double gasKg, double gasConstant, double dt) {
         if (!(gasKg > 0)) {
             slugGas = 0;
+            slugFillSeconds = Double.POSITIVE_INFINITY;
             return;
         }
         ConduitConfig c = config.conduit();
@@ -697,6 +708,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         }
         // Bound the backlog: a gas flux too high for discrete slugs is continuous churn flow.
         slugGas = Math.min(slugGas, 8 * meanMass);
+        slugFillSeconds = dt > 0 ? meanMass / (gasKg / dt) : Double.POSITIVE_INFINITY;
     }
 
     /** 0 for soft lava, 1 for a gas-tight crystal-rich plug, from the vent viscosity. */
@@ -1300,6 +1312,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             out.addProperty("previousSolvedRate", previousSolvedRate);
         }
         out.addProperty("slugGas", slugGas);
+        out.addProperty("slugFillSeconds", Double.isFinite(slugFillSeconds) ? slugFillSeconds : -1);
         out.addProperty("nextSlugMass", nextSlugMass);
         out.addProperty("plugGas", plugGas);
         out.addProperty("resealRemaining", resealRemaining);
@@ -1367,6 +1380,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             conduit = null;
         }
         slugGas = number(in, "slugGas", 0);
+        double fill = number(in, "slugFillSeconds", -1);
+        slugFillSeconds = fill >= 0 ? fill : Double.POSITIVE_INFINITY;
         nextSlugMass = number(in, "nextSlugMass", 0);
         plugGas = number(in, "plugGas", 0);
         resealRemaining = number(in, "resealRemaining", 0);

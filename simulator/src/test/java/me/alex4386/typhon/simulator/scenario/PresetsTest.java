@@ -64,9 +64,10 @@ class PresetsTest {
             Simulation.Result r = run(name, 1, 60 / 3600.0);
             assertEquals(1, r.summary().eruptions, name + " should erupt within a minute");
         }
-        // Stromboli: persistent explosions through the open conduit, no chamber eruption needed.
-        Simulation.Result stromboli = run("stromboli", 1, 60 / 3600.0);
-        assertTrue(!stromboli.summary().explosionTimes.isEmpty(), "stromboli should be exploding within a minute");
+        // Stromboli: persistent explosions through the open conduit, no chamber eruption needed (real
+        // Stromboli explodes every 10-20 minutes).
+        Simulation.Result stromboli = run("stromboli", 1, 2);
+        assertTrue(!stromboli.summary().explosionTimes.isEmpty(), "stromboli should be exploding within two hours");
         assertEquals(0, run("yellowstone", 1, 60 / 3600.0).summary().eruptions);
     }
 
