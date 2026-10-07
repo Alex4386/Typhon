@@ -182,7 +182,7 @@ export function Inspector({ world, sheet = false }: { world: WorldInfo; sheet?: 
 
   return (
     <aside className={sheet ? 'flex min-h-0 flex-1 flex-col text-sm' : cn(OVERLAY, 'flex max-h-full min-h-0 w-80 max-w-full flex-col text-sm')} aria-label="Inspector">
-      <div className="flex items-start gap-2 p-3 pb-2">
+      <div className="flex shrink-0 items-start gap-2 p-3 pb-2">
         <span className="mt-1 size-3 shrink-0 rounded-full ring-1 ring-black/40" style={{ background: color }} aria-hidden />
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-semibold" title={title}>
@@ -212,7 +212,7 @@ export function Inspector({ world, sheet = false }: { world: WorldInfo; sheet?: 
 function RelatedRow({ related }: { related: { id: string; kind: string; label: string }[] }) {
   const entities = useStore((s) => s.entities);
   return (
-    <nav className="flex items-center gap-1.5 overflow-x-auto px-3 pb-2 text-xs [scrollbar-width:none]" aria-label="Related">
+    <nav className="flex shrink-0 items-center gap-1.5 overflow-x-auto px-3 pb-2 text-xs [scrollbar-width:none]" aria-label="Related">
       <span className="shrink-0 text-muted-foreground">Related</span>
       {related.map((r) => (
         <Tip key={r.id} content={`Select ${r.label} and show its properties`}>
@@ -649,7 +649,7 @@ function ActionRow({ onFrame, onSection }: { onFrame: () => void; onSection: () 
   if (actions.length === 0) return null;
   return (
     <>
-      <div className="flex flex-wrap gap-1.5 px-3 pb-2" role="toolbar" aria-label="Actions">
+      <div className="flex shrink-0 flex-wrap gap-1.5 px-3 pb-2" role="toolbar" aria-label="Actions">
         {actions.map((a) => (
           <Tip key={a.id} content={ACTION_TIP[a.id]}>
             <Button

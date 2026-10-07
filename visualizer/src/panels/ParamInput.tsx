@@ -12,6 +12,8 @@ export function formatParam(v: ParamValue | null | undefined, spec?: ParamSpec):
   if (v === null || v === undefined) return '—';
   if (typeof v === 'boolean') return v ? 'on' : 'off';
   if (typeof v === 'string') return v;
+  // a whole part (an added chamber or pathway in the change history)
+  if (typeof v !== 'number') return typeof v === 'object' && v && 'id' in v ? String((v as { id: unknown }).id) : 'set';
   const a = Math.abs(v);
   const s = a !== 0 && (a >= 1e6 || a < 1e-3) ? v.toExponential(2) : String(Number(v.toPrecision(4)));
   return spec?.unit ? `${s} ${spec.unit}` : s;

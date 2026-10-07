@@ -171,7 +171,7 @@ export function OverridesBanner({ panel, onTab }: { panel: BuiltPanel; onTab: (t
   return (
     <button
       type="button"
-      className="mx-3 mb-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-left text-xs text-amber-200 hover:bg-amber-500/15"
+      className="mx-3 mb-2 shrink-0 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-left text-xs text-amber-200 hover:bg-amber-500/15"
       onClick={() => onTab('overrides')}
     >
       <span className="font-medium">Physics overridden:</span> {panel.overrides.map((p) => `${p.label} ${formatParam(p.value, p)}`).join(', ')}
