@@ -10,7 +10,7 @@ import { BATHY, DIVERGING, HYPSO, THERMAL, hexToRgb, ramp, shadeFor, type RGB } 
 import { interpolateGrid } from '../util/grid';
 import { sampleColumn } from '../util/world';
 import type { TileFrame } from '../protocol/frames';
-import { bakedReader, clampedReader, elevationQuantum, gridReader, rebuildOrder, viewFocus } from './terrainMath';
+import { bakedReader, gridReader, rebuildOrder, viewFocus } from './terrainMath';
 import { perfStats } from './perf';
 import { POND, SEA, compactWater, groundZ, seaSurfaceZ } from './waterIndex';
 import { CRUST_RGB, crackPattern, crustLight, lavaSurfaceColor, weightedTemperature } from './lavaColor';
@@ -196,19 +196,18 @@ export function smoothedReader(raw: Reader, n: number, r: number): Reader {
  * were made from: lava, ash or temperature updates rebuild a tile far more often than its ground
  * changes, and the smoothing is the costliest part of a rebuild.
  */
-const elevationCache = new Map<string, { deps: (TileFrame | undefined)[]; smoothR: number; q: number; grid: Float32Array }>();
+const elevationCache = new Map<string, { deps: (TileFrame | undefined)[]; grid: Float32Array }>();
 
 /**
- * Display elevations for vertices [−1, n]² under `key`: `raw` smoothed by radius `smoothR` without
- * moving further than one step `q` from the data, baked into a grid. Reused while `deps` (the
- * elevation tiles `raw` reads) are the same objects.
+ * Display elevations for vertices [−1, n]² under `key`: the continuous surface the server sends, baked into
+ * a grid (no step smoothing: the engine's surface has no block steps, and crater rims must stay sharp).
+ * Reused while `deps` (the elevation tiles `raw` reads) are the same objects.
  */
-export function cachedElevation(key: string, deps: (TileFrame | undefined)[], n: number, smoothR: number, q: number, raw: Reader): Reader {
+export function cachedElevation(key: string, deps: (TileFrame | undefined)[], n: number, raw: Reader): Reader {
   const hit = elevationCache.get(key);
-  if (hit && hit.smoothR === smoothR && hit.q === q && hit.deps.length === deps.length && hit.deps.every((d, k) => d === deps[k])) return gridReader(hit.grid, n);
-  const shown = smoothR > 0 && q > 0 ? clampedReader(raw, smoothedReader(raw, n, smoothR), q) : raw;
-  const { grid, read } = bakedReader(shown, n);
-  elevationCache.set(key, { deps, smoothR, q, grid });
+  if (hit && hit.deps.length === deps.length && hit.deps.every((d, k) => d === deps[k])) return gridReader(hit.grid, n);
+  const { grid, read } = bakedReader(raw, n);
+  elevationCache.set(key, { deps, grid });
   return read;
 }
 
@@ -217,20 +216,10 @@ export function forgetElevation(key: string): void {
 }
 
 /** Display elevations of core tile (tx, ty). */
-function displayElevation(key: string, tx: number, ty: number, n: number, smoothR: number, q: number, raw: Reader): Reader {
+function displayElevation(key: string, tx: number, ty: number, n: number, raw: Reader): Reader {
   const deps: (TileFrame | undefined)[] = [];
   for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) deps.push(getTile(Field.SurfaceElevation, tx + ox, ty + oy));
-  return cachedElevation(key, deps, n, smoothR, q, raw);
-}
-
-/** One quantum per world (estimated from the first tile that shows one), so tile seams agree. */
-const QUANTUM = new Map<string, number>();
-export function worldQuantum(world: WorldInfo, values: Float32Array | undefined): number {
-  const known = QUANTUM.get(world.name);
-  if (known !== undefined) return known;
-  const q = elevationQuantum(values);
-  if (q > 0) QUANTUM.set(world.name, q);
-  return q;
+  return cachedElevation(key, deps, n, raw);
 }
 
 /** sRGB → linear, so ramps defined in sRGB display as intended. */
@@ -399,8 +388,7 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       const rawElev = R(Field.SurfaceElevation, 0);
       // smoothing only removes the block terraces: the shown height stays within one elevation step of
       // the data, so crater rims, vents and scarps keep their real shape
-      const q = worldQuantum(world, getTile(Field.SurfaceElevation, tx, ty)?.values);
-      const elevR = displayElevation(key, tx, ty, n, smoothR, q, rawElev);
+      const elevR = displayElevation(key, tx, ty, n, rawElev);
       const seaOn = world.hasSea !== false && Number.isFinite(world.seaLevel);
       const upR = R(Field.Uplift);
       // lava thickness varies by tens of metres between cells; smooth it lightly so the lake/flow top is not jagged

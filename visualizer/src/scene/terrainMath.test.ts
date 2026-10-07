@@ -1,26 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { distanceOutside, farFieldElevation, median, sampleLevel, stackedContext, stretch, type Extrapolation, type LevelGrid } from './farFieldMath';
-import { bakedReader, clampedReader, elevationQuantum, gridReader, rayGround, rebuildOrder, viewFocus } from './terrainMath';
+import { bakedReader, gridReader, rayGround, rebuildOrder, viewFocus } from './terrainMath';
 
 describe('display smoothing', () => {
-  it('finds the block step of stepped elevations, none for continuous ones', () => {
-    const stepped = new Float32Array(64 * 64).map((_, k) => Math.floor((k % 64) / 5) + Math.floor(k / 64 / 7));
-    expect(elevationQuantum(stepped)).toBe(1);
-    const smooth = new Float32Array(64 * 64).map((_, k) => Math.sin(k * 0.37) * 3.1 + k * 0.0137);
-    expect(elevationQuantum(smooth)).toBe(0);
-    expect(elevationQuantum(undefined)).toBe(0);
-  });
-
-  it('keeps a crater: smoothing never moves a vertex more than one step', () => {
-    // a 40 m deep crater floor next to its rim
-    const raw = (a: number) => (a < 5 ? 100 : 60);
-    const blurred = (a: number) => (a < 3 ? 100 : a > 7 ? 60 : 100 - ((a - 3) / 4) * 40);
-    const shown = clampedReader(raw, blurred, 1);
-    expect(shown(4, 0)).toBe(99);
-    expect(shown(5, 0)).toBe(61);
-    expect(shown(0, 0)).toBe(100);
-  });
-
   it('bakes a reader over [−1, n]² and clamps reads outside it', () => {
     let calls = 0;
     const r = (a: number, b: number) => (calls++, a * 10 + b);

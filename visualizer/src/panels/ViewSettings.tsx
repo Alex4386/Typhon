@@ -209,8 +209,8 @@ export function ViewSettings() {
           </div>
           <CheckboxRow
             id="smooth"
-            label="Smooth terrain"
-            help="Smooth the stepped block elevations for display"
+            label="Smooth lava sheets"
+            help="Lightly smooth the lava sheet between columns (the ground itself is shown exactly as simulated)"
             checked={s.smoothTerrain}
             onChange={(v) => s.set({ smoothTerrain: v })}
           />

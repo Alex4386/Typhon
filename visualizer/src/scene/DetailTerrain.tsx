@@ -6,13 +6,13 @@ import * as THREE from 'three';
 import { setDetailLevels } from '../net/connection';
 import { Field, type FieldId } from '../protocol/fields';
 import type { LodLevelInfo, WorldInfo, XY } from '../protocol/messages';
-import { QUALITY, getLodTile, getTile, lodKey, tileKey, useStore } from '../store/store';
+import { QUALITY, getLodTile, lodKey, tileKey, useStore } from '../store/store';
 import type { RGB } from '../util/color';
 import { sampleColumn } from '../util/world';
 import { CRUST_RGB, crackPattern, crustLight, lavaSurfaceColor } from './lavaColor';
 
 import { detailHeights, detailLevels, levelRect, refinement, wantsDetail } from './detail';
-import { cachedElevation, cancelRebuild, colourGround, forgetElevation, gridGeometry, groundMaterial, lin, queueRebuild, requeueCore, sceneProbe, worldQuantum, type GroundFields } from './Terrain';
+import { cachedElevation, cancelRebuild, colourGround, forgetElevation, gridGeometry, groundMaterial, lin, queueRebuild, requeueCore, sceneProbe, type GroundFields } from './Terrain';
 
 /** How often (ms) the camera's distance to the crater regions is checked. */
 const CHECK_MS = 500;
@@ -128,12 +128,9 @@ function DetailTile({ world, level, tx, ty, onPick }: { world: WorldInfo; level:
         return;
       }
       const rawElev = lodReader(level.level, tx, ty, t);
-      // the same edge-preserving smoothing as the core (block steps go, craters and rims stay), over
-      // one column's worth of detail cells
-      const q = worldQuantum(world, getTile(Field.SurfaceElevation, Math.floor(tx / r), Math.floor(ty / r))?.values);
       const deps = [];
       for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) deps.push(getLodTile(level.level, tx + ox, ty + oy));
-      const elevR = cachedElevation(key, deps, n, r, q, rawElev);
+      const elevR = cachedElevation(key, deps, n, rawElev);
       const c = level.cellSize;
       // column fields interpolated between column centres, so colours do not come in column squares
       const fc = (a: number) => (tx * t + a + 0.5) / r - 0.5;
