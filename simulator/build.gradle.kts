@@ -31,7 +31,7 @@ tasks.named<JavaExec>("run") {
 
 tasks.test {
     useJUnitPlatform {
-        excludeTags("perf", "slow", "validation", "flow")
+        excludeTags("perf", "slow", "validation", "flow", "budget")
     }
     // Real-scale presets (now with a full subsurface model each) run concurrently: 1 GB is too small.
     maxHeapSize = "4g"
@@ -68,6 +68,23 @@ val islandFlow by tasks.registering(Test::class) {
     outputs.upToDateWhen { false } // a flow is run to be watched
     testLogging.showStandardStreams = true
     systemProperty("flow.steps", System.getProperty("flow.steps", "300000"))
+}
+
+// Diagnostic tephra mass budget of a submarine/Surtseyan eruption (tagged 'budget'):
+// ./gradlew :simulator:tephraBudget [-Dbudget.depth=130] [-Dbudget.hours=3]
+val tephraBudget by tasks.registering(Test::class) {
+    description = "Prints where the erupted mass of a Surtseyan eruption goes (tagged 'budget')."
+    group = "verification"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform {
+        includeTags("budget")
+    }
+    maxHeapSize = "3g"
+    outputs.upToDateWhen { false }
+    testLogging.showStandardStreams = true
+    systemProperty("budget.depth", System.getProperty("budget.depth", "130"))
+    systemProperty("budget.hours", System.getProperty("budget.hours", "3"))
 }
 
 // Validation against observations (real-scale presets at their reference horizons, ~20 min):
