@@ -1,4 +1,5 @@
 import type { EntityProp } from '../protocol/messages';
+import { formatNumber, formatQuantity } from '../util/quantity';
 
 /** Unit suffixes used in entity property names, longest first. */
 const UNITS: [string, string, number?][] = [
@@ -77,27 +78,19 @@ export function propLabel(key: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-function num(v: number): string {
-  const a = Math.abs(v);
-  if (a === 0) return '0';
-  if (a >= 1e6 || a < 1e-3) return v.toExponential(2);
-  if (a >= 100) return Math.round(v).toLocaleString('en-US');
-  return String(Number(v.toPrecision(3)));
-}
+const num = (v: number) => formatNumber(v);
 
 /** Value of a property with its unit ("12.3 MPa", "1 200 °C", "yes"). */
 export function formatProp(key: string, v: EntityProp): string {
   if (v === null || v === undefined) return '—';
   if (typeof v === 'boolean') return v ? 'yes' : 'no';
   if (typeof v === 'string') return v.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
-  if (key === 'crystalFraction' || key === 'sedimentFraction') return `${Math.round(v * 100)} %`;
+  if (key.endsWith('Fraction')) return formatQuantity(v, 'fraction');
   if (key === 'durationSeconds') return `${num(v)} s`;
   if (key === 'magnitude') return `M ${v.toFixed(1)}`;
   for (const [suffix, unit] of UNITS) {
     if (key.endsWith(suffix) && key.length > suffix.length) {
-      if (unit === 'm³' && Math.abs(v) >= 1e6) return `${num(v / 1e6)} million m³`;
-      if (unit === 'm' && Math.abs(v) >= 10_000) return `${num(v / 1000)} km`;
-      return `${num(v)} ${unit}`;
+      return unit === 'm³' || unit === 'm' ? formatQuantity(v, unit) : `${num(v)} ${unit}`;
     }
   }
   return num(v);

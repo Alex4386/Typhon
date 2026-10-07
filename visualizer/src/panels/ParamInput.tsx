@@ -5,18 +5,24 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import type { ParamSpec, ParamValue } from '../protocol/messages';
+import { displayUnit, formatQuantity, type DisplayUnit } from '../util/quantity';
 import { fromSlider, toSlider } from './inject';
 
 /** Number display that keeps significant digits without trailing noise. */
+/** The unit a setting is edited in: chosen from its range and default, so it stays put while editing. */
+export function editUnit(spec: ParamSpec): DisplayUnit {
+  // the default's magnitude (else the range's top): typical values read naturally in it
+  const ref = typeof spec.default === 'number' && spec.default !== 0 ? spec.default : Math.abs(spec.max ?? 0);
+  return displayUnit(spec.unit, ref);
+}
+
 export function formatParam(v: ParamValue | null | undefined, spec?: ParamSpec): string {
   if (v === null || v === undefined) return '—';
   if (typeof v === 'boolean') return v ? 'on' : 'off';
   if (typeof v === 'string') return v;
   // a whole part (an added chamber or pathway in the change history)
   if (typeof v !== 'number') return typeof v === 'object' && v && 'id' in v ? String((v as { id: unknown }).id) : 'set';
-  const a = Math.abs(v);
-  const s = a !== 0 && (a >= 1e6 || a < 1e-3) ? v.toExponential(2) : String(Number(v.toPrecision(4)));
-  return spec?.unit ? `${s} ${spec.unit}` : s;
+  return formatQuantity(v, spec?.unit);
 }
 
 /**
@@ -25,9 +31,12 @@ export function formatParam(v: ParamValue | null | undefined, spec?: ParamSpec):
  */
 export function ParamInput({ spec, value, onChange, invalid }: { spec: ParamSpec; value: ParamValue | null | undefined; onChange: (v: ParamValue) => void; invalid?: boolean }) {
   // null: an auto parameter the engine computes (or no value yet): show an empty box, not "null"
-  const [text, setText] = useState(value === undefined || value === null ? '' : String(value));
+  // the box edits in a unit fit for the range (km³, %, MW), fixed per setting so it does not jump
+  const shown = editUnit(spec);
+  const toText = (v: number) => String(Number((v * shown.factor).toPrecision(6)));
+  const [text, setText] = useState(typeof value === 'number' ? toText(value) : '');
   useEffect(() => {
-    if (typeof value === 'number' && Number(text) !== value) setText(String(Number(value.toPrecision(6))));
+    if (typeof value === 'number' && Number(text) / shown.factor !== value) setText(toText(value));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
   const id = `p-${spec.id}`;
@@ -61,11 +70,11 @@ export function ParamInput({ spec, value, onChange, invalid }: { spec: ParamSpec
         value={text}
         onChange={(e) => {
           setText(e.target.value);
-          const v = Number(e.target.value.replace(/[\s,_]/g, ''));
+          const v = Number(e.target.value.replace(/[\s,_]/g, '')) / shown.factor;
           onChange(e.target.value.trim() === '' ? NaN : v);
         }}
       />
-      {spec.unit && <span className="min-w-8 text-xs text-muted-foreground">{spec.unit}</span>}
+      {shown.unit && <span className="min-w-8 text-xs text-muted-foreground">{shown.unit}</span>}
     </span>
   );
 }

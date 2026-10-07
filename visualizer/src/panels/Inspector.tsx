@@ -152,7 +152,7 @@ export function Inspector({ world, sheet = false }: { world: WorldInfo; sheet?: 
         body: (
           <>
             {schema && !schema.tunable && k === 0 && t.params.primary.length + t.params.more.length > 0 && <p className="text-xs text-muted-foreground">{schema.reason ?? 'The settings of this world cannot be changed.'}</p>}
-            <PanelTabBody tab={t} kind={obj.kind} owners={obj.owners} props={obj.props} widget={widget} pending={pending} onEdit={edit} onTab={setTab} />
+            <PanelTabBody tab={t} kind={obj.kind} owners={obj.owners} props={obj.props} widget={widget} pending={pending} onEdit={edit} onTab={setTab} entityId={entity?.id} />
             {k === 0 && entity && <AllValues e={entity} />}
           </>
         ),

@@ -76,6 +76,11 @@ export function contextActions(sel: Selection | null, entities: EntityMap, volca
       if (v) out.push({ id: 'removeVolcano', label: 'Remove volcano…', volcanoId: v });
       return out;
     case 'chamber':
+      // a further chamber has no eruption or dikes of its own: those are the volcano's (its main chamber)
+      if (e.props.chamberId !== undefined && e.props.chamberId !== 'main') {
+        out.push({ id: 'frame', label: 'Frame' }, { id: 'section', label: 'Cross-section' });
+        return out;
+      }
       if (v) {
         out.push({ id: 'inject', label: 'Add magma…', volcanoId: v }, eruptionToggle(v, volcanoes?.[v]), { id: 'forceDike', label: 'Push magma up (dike)', volcanoId: v });
       }

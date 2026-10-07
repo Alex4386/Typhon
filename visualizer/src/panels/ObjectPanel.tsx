@@ -12,6 +12,7 @@ import { formatParam } from './ParamInput';
 import { ParamRow } from './ParamRow';
 import { atRest } from './paramState';
 import { formatProp } from './props';
+import { formatQuantity } from '../util/quantity';
 
 /** Built-in views a panel field can name (rendered by the Inspector, which knows the selection). */
 export type WidgetRenderer = (id: string) => ReactNode;
@@ -42,11 +43,12 @@ function Remembered({ prefKey, title, count, children, className }: { prefKey: s
 }
 
 /** A measured or derived value, read-only; a derived one says so and offers its pin. */
-function FieldRow({ f, props, owners, onTab, onEdit }: { f: PanelField; props?: Record<string, EntityProp>; owners: string[]; onTab?: (tab: string) => void; onEdit: (p: ParamSpec, v: ParamValue | null) => void }) {
+function FieldRow({ f, props, owners, onTab, onEdit, entityId }: { f: PanelField; props?: Record<string, EntityProp>; owners: string[]; onTab?: (tab: string) => void; onEdit: (p: ParamSpec, v: ParamValue | null) => void; entityId?: string }) {
   const schema = useStore((s) => s.schema);
+  const preview = useStore((s) => (entityId && f.measure ? s.panelPreview[entityId]?.[f.measure] : undefined));
   const v = f.measure ? props?.[f.measure] : undefined;
   if (v === undefined || v === null || !f.measure) return null;
-  const text = typeof v === 'number' ? `${formatParam(v)}${f.unit ? ` ${f.unit}` : ''}` : formatProp(f.measure, v);
+  const text = typeof v === 'number' ? (f.unit ? formatQuantity(v, f.unit) : formatProp(f.measure, v)) : formatProp(f.measure, v);
   const pin = pinParam(schema, owners, f);
   const pinned = pin ? !atRest(pin, undefined) : false;
   return (
@@ -63,6 +65,11 @@ function FieldRow({ f, props, owners, onTab, onEdit }: { f: PanelField; props?: 
       </dt>
       <dd className="flex items-center justify-end gap-1 text-right tabular-nums">
         {text}
+        {typeof preview === 'number' && typeof v === 'number' && Math.abs(preview - v) > 1e-9 * Math.max(1, Math.abs(v)) && (
+          <Tip content="What it would be with the change you are making (a preview; nothing is applied yet)">
+            <span className="text-sky-300">→ {f.unit ? formatQuantity(preview, f.unit) : formatProp(f.measure, preview)}</span>
+          </Tip>
+        )}
         {pin && pinned && <PinReset p={pin} onEdit={onEdit} />}
         {pin && !pinned && onTab && (
           <Tip content={`Pin it: “${pin.label}” under Overrides`}>
@@ -100,6 +107,7 @@ export function PanelTabBody({
   pending,
   onEdit,
   onTab,
+  entityId,
 }: {
   tab: BuiltTab;
   kind: string;
@@ -109,6 +117,8 @@ export function PanelTabBody({
   pending: Record<string, ParamValue | null>;
   onEdit: (p: ParamSpec, v: ParamValue | null) => void;
   onTab?: (tab: string) => void;
+  /** The entity shown, for dry-run previews of its derived values. */
+  entityId?: string;
 }) {
   const { primary, more, internals } = tab.params;
   return (
@@ -126,7 +136,7 @@ export function PanelTabBody({
             {values.length > 0 && (
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs" aria-label={s.title ?? tab.title}>
                 {values.map((f) => (
-                  <FieldRow key={f.measure} f={f} props={props} owners={owners} onTab={onTab} onEdit={onEdit} />
+                  <FieldRow key={f.measure} f={f} props={props} owners={owners} onTab={onTab} onEdit={onEdit} entityId={entityId} />
                 ))}
               </dl>
             )}
