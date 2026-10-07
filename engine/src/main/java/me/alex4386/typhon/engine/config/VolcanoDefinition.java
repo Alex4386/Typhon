@@ -44,7 +44,7 @@ import me.alex4386.typhon.engine.world.SurfaceDetailConfig;
  * magma:
  *   chamber: {center: {x: 0, y: -40, z: 0}, volume: 1.0e10, supplyRate: 3, initialSilicaWt: 50}
  *   conduit: {initialOpenness: 1}
- * dikes: {enabled: true, conduitSealing: 0.5}
+ * dikes: {enabled: true, blocked: false}
  * geothermal: {enabled: true, maxGeysers: 6}
  * massFlows: {enabled: true, pdc: {frictionCoefficient: 0.18}, lahar: {}}
  * deformation: {enabled: true}

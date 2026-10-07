@@ -189,4 +189,18 @@ class DefinitionsTest {
                 .getMessage();
         assertTrue(scale.contains("grid.metersPerColumn"), scale);
     }
+
+    @Test
+    void oldDikeSwitchesLoadAndAreIgnored() {
+        VolcanoDefinition v = volcano("old", """
+                name: Old cone
+                vents: [{id: main, x: 0, y: 64, z: 0}]
+                magma:
+                  chamber: {center: {x: 0, y: -20, z: 0}, volume: 1.0e9}
+                dikes: {enabled: true, conduitSealing: 0.9, ruptureNucleation: false, nucleateDuringEruption: true}
+                """);
+        assertNotNull(v.dikes(), "the old switches leave dikes on");
+        assertTrue(!v.dikes().blocked, "the merged switches do not block dikes; dikes.blocked does");
+    }
 }
+
