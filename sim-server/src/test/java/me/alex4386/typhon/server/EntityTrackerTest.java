@@ -80,4 +80,33 @@ class EntityTrackerTest {
         JsonObject later = t.delta(Map.of(), 5 + EntityTracker.QUAKE_LIFETIME + 1, false);
         assertEquals(1, later.getAsJsonArray("remove").size(), "an expired quake is removed");
     }
+
+    @Test
+    void relatedObjectsLinkVentsDikesAndChambers() {
+        Map<String, JsonObject> out = new LinkedHashMap<>();
+        java.util.function.BiFunction<String, String, JsonObject> put = (id, kind) -> {
+            JsonObject o = EntityTracker.entity(id, kind, "a", id, new double[] {0, 0, 0});
+            out.put(id, o);
+            return o;
+        };
+        put.apply("volcano:a", "volcano");
+        put.apply("chamber:a", "chamber").getAsJsonObject("props").addProperty("chamberId", "main");
+        put.apply("chamber:a:deep", "chamber").getAsJsonObject("props").addProperty("chamberId", "deep");
+        JsonObject link = put.apply("connection:a:c1", "connection");
+        link.getAsJsonObject("props").addProperty("from", "deep");
+        link.getAsJsonObject("props").addProperty("to", "main");
+        put.apply("vent:a:f1", "fissure").getAsJsonObject("props").addProperty("ventId", "f1");
+        put.apply("dike:a:3", "dike").getAsJsonObject("props").addProperty("fissure", "f1");
+        put.apply("dike:a:4", "dike").getAsJsonObject("props").addProperty("fissure", "other");
+        java.util.function.Function<String, List<String>> rel = id -> {
+            JsonObject e = out.get(id);
+            return ids(EntityTracker.related(e.get("kind").getAsString(), "a", e.getAsJsonObject("props"), out));
+        };
+        assertEquals(List.of("dike:a:3", "chamber:a"), rel.apply("vent:a:f1"), "a vent: the dikes feeding it, its chamber");
+        assertEquals(List.of("vent:a:f1", "chamber:a"), rel.apply("dike:a:3"), "a dike: its fissure, its chamber");
+        assertEquals(List.of("volcano:a", "vent:a:f1", "dike:a:3", "dike:a:4", "connection:a:c1"), rel.apply("chamber:a"));
+        assertEquals(List.of("connection:a:c1"), rel.apply("chamber:a:deep"), "a further chamber: its pathways");
+        assertEquals(List.of("chamber:a:deep", "chamber:a"), rel.apply("connection:a:c1"));
+        assertEquals(List.of("chamber:a", "chamber:a:deep", "vent:a:f1"), rel.apply("volcano:a"));
+    }
 }

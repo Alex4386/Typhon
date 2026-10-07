@@ -221,6 +221,10 @@ export interface Entity {
   updatedAt: number;
   /** Statistics only, not drawn. */
   hidden?: boolean;
+  /** Owners of the settings this object's Inspector shows (see `ParamSpec.owner`). */
+  paramOwners?: string[];
+  /** Linked objects, for the Inspector's Related row. */
+  related?: RelatedObject[];
 }
 
 /** Entity delta: `replace` = full set (attach, replay seek), else upserts and removals since the last one. */
@@ -295,6 +299,54 @@ export interface ParamSpec {
   impact?: Impact;
   /** Volcano the parameter belongs to (absent for world-level ones). */
   volcanoId?: string;
+  /** The object the setting describes (an id prefix an entity lists in `paramOwners`), e.g. "volcano.v.magma.chamber". */
+  owner?: string;
+  /** The Inspector tab of that object it is shown on (see `objectPanels`). */
+  tab?: string;
+  /** How prominent: a dial, under "More" in its tab, or under "Solver internals". */
+  tier?: ParamTier;
+  /** Position among the dials of its tab. */
+  order?: number;
+}
+
+export type ParamTier = 'primary' | 'more' | 'internals';
+
+/** A field of an Inspector panel: a measured or derived entity property, or a built-in widget. */
+export interface PanelField {
+  /** Entity property shown read-only. */
+  measure?: string;
+  label?: string;
+  unit?: string;
+  help?: string;
+  /** Computed by the physics from settings (updates live). */
+  derived?: boolean;
+  /** For a derived value: the setting (relative to the object's first owner) that can pin it. */
+  pin?: string;
+  /** A built-in view: magmaBudget, landscape, ventState, weatherNow, volcanoState. */
+  widget?: string;
+}
+
+export interface PanelSection {
+  title?: string;
+  fields: PanelField[];
+}
+
+export interface PanelTab {
+  id: string;
+  title: string;
+  sections: PanelSection[];
+}
+
+/** The Inspector layout of one kind of object; settings join the tab their `tab` names. */
+export interface ObjectPanelLayout {
+  tabs: PanelTab[];
+}
+
+/** An object linked to an entity (its chamber, the dikes feeding a vent, ...). */
+export interface RelatedObject {
+  id: string;
+  kind: string;
+  label: string;
 }
 
 /** How the server applies a change: in place, rebuilt keeping state, or reset to its new initial state. */
@@ -391,6 +443,10 @@ export interface SchemaMessage {
   audit: ParamChange[];
   /** Parameter ids the server shows in Inspector panels (e.g. a chamber's settings, by volcano id). */
   panels?: { chamber?: Record<string, string[]> };
+  /** Inspector layouts per entity kind (chamber, dike, vent, volcano, world, ...). */
+  objectPanels?: Record<string, ObjectPanelLayout>;
+  /** Setting owners of the objects that have panels: "volcano:<id>" and "world". */
+  objectOwners?: Record<string, string[]>;
   /** Forms of builder parts with server defaults: a further chamber, a pathway between chambers. */
   components?: { chamber?: ParamSpec[]; connection?: ParamSpec[] };
   /** Typical magmas for chamber and injection forms. */

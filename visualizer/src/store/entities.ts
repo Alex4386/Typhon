@@ -85,6 +85,8 @@ export function pulsePhase(e: Pick<EntityView, 'seenAt' | 'fresh' | 'removedAt'>
 }
 
 export const KIND_LABEL: Record<string, string> = {
+  world: 'World',
+  volcano: 'Volcano',
   vent: 'Vent',
   fissure: 'Fissure',
   dike: 'Dike',
@@ -140,6 +142,10 @@ export function entityColor(e: Pick<Entity, 'kind' | 'props'>, featureColors: Re
       return e.props.status === 'PROPAGATING' ? '#ff3b6b' : e.props.status === 'ERUPTED' ? '#ff8c42' : '#b05a7a';
     case 'chamber':
       return '#ff7b39';
+    case 'volcano':
+      return e.props.erupting ? '#ff3b1f' : '#c2410c';
+    case 'world':
+      return '#7dd3fc';
     case 'plume':
       return '#c8c8d0';
     case 'station':

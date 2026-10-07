@@ -32,6 +32,8 @@ const kind = (k: string) => (e: Pick<Entity, 'kind' | 'props'>) => e.kind === k;
  * from the openings (fumaroles, springs, geysers) that produce them.
  */
 export const CATEGORIES: EntityCategory[] = [
+  { key: 'world', label: 'World', tab: 'volcano', match: kind('world'), drawn: false },
+  { key: 'volcanoes', label: 'Volcanoes', tab: 'volcano', match: kind('volcano'), drawn: false },
   { key: 'chambers', label: 'Magma chambers', tab: 'volcano', match: kind('chamber'), drawn: false },
   { key: 'pathways', label: 'Magma pathways', tab: 'volcano', match: kind('connection'), drawn: false },
   { key: 'vents', label: 'Vents', tab: 'volcano', match: kind('vent'), drawn: true },

@@ -496,7 +496,7 @@ export function EntityMarkers({ world }: { world: WorldInfo }) {
     const quakeShown = new Set(filterQuakes(quakes, Math.max(now, clockTime), quakeFilter).map((q) => q.e.id));
     const out: Placed[] = [];
     for (const e of Object.values(entities)) {
-      if (e.hidden || e.kind === 'chamber' || e.kind === 'connection' || e.kind === 'lavaField') continue;
+      if (e.hidden || e.kind === 'chamber' || e.kind === 'connection' || e.kind === 'lavaField' || e.kind === 'volcano' || e.kind === 'world') continue;
       const selected = e.id === selectedId;
       if (!selected) {
         if (e.kind === 'feature' && !showFeatures) continue;

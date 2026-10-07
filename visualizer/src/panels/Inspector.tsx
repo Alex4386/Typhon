@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowRight, ArrowUpFromDot, Crosshair, Droplets, Pickaxe, Plus, Ruler, Square, Trash2, Triangle, X } from 'lucide-react';
+import { ArrowUpFromDot, ChevronRight, Crosshair, Droplets, Pickaxe, Plus, RefreshCw, Ruler, Square, Trash2, Triangle, X } from 'lucide-react';
 import { Tip } from '@/components/tip';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Kbd } from '@/components/ui/kbd';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -20,34 +21,52 @@ import { formatSimTime, worldExtent } from '../util/world';
 import { DESTRUCTIVE, contextActions, contextToggles, ventLifecycle, type ContextAction, type ContextToggle, type VentLifecycle } from './actions';
 import { budgetVerdict, type BudgetState } from './budget';
 import { formatVolume } from './events';
+import { buildPanel, type BuiltPanel } from './objectPanel';
+import { OverridesBanner, PanelTabBody, Skeleton, Waiting } from './ObjectPanel';
 import { OVERLAY } from './Overlay';
 import { showServerResult } from './serverResult';
-import { ParamRow, useParamEdits } from './ParamRow';
+import { useParamEdits } from './ParamRow';
 import { HIDDEN_PROPS, formatProp, propLabel } from './props';
 
 /** The selection's column is asked about again this often while it stays selected (ms). */
 const REFRESH_MS = 2000;
+/** A ground request unanswered this long offers a retry (ms). */
+const GROUND_TIMEOUT_MS = 8000;
 
 /** Where to ask the server about: the selection's map position, if it has one on the map. */
 function inspectAt(sel: Selection | null, e: EntityView | undefined): [number, number] | null {
   if (!sel) return null;
   if (sel.type === 'point') return sel.at;
   if (sel.type === 'quake') return [sel.event.hypocenter[0], sel.event.hypocenter[1]];
-  if (!e || e.kind === 'lavaField') return null;
+  if (!e || e.kind === 'lavaField' || e.kind === 'world') return null;
   return [e.at[0], e.at[1]];
 }
 
+/** The tab last shown per kind of object, so moving between two chambers keeps the tab. */
+const lastTab = new Map<string, string>();
+
+interface TabDef {
+  id: string;
+  title: string;
+  body: ReactNode;
+}
+
 /**
- * Properties of what is selected in the 3D view or the Entities panel, live: the entity's own
- * values plus everything the server knows about the ground column there (layers, heat, water).
+ * Properties of what is selected in the 3D view or the Entities panel, live, laid out by the server's
+ * panel spec for its kind: tabs of measured and derived values with the object's own settings (dials,
+ * then "More" and "Solver internals" collapsed), plus the ground column under it.
  */
 export function Inspector({ world, sheet = false }: { world: WorldInfo; sheet?: boolean }) {
   const selection = useStore((s) => s.selection);
   const entity = useStore((s) => (s.selection?.type === 'entity' ? s.entities[s.selection.id] : undefined));
-  const inspection = useStore((s) => s.inspection);
+  const worldEntity = useStore((s) => s.entities.world);
+  const schema = useStore((s) => s.schema);
+  const replay = useStore((s) => s.clock?.replay ?? false);
+  const { pending, edit } = useParamEdits();
   const at = inspectAt(selection, entity);
   const ax = at?.[0];
   const ay = at?.[1];
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     if (ax === undefined || ay === undefined) return;
@@ -57,7 +76,22 @@ export function Inspector({ world, sheet = false }: { world: WorldInfo; sheet?: 
       if (c && c.mode !== 'PAUSED' && !document.hidden) inspect(ax, ay);
     }, REFRESH_MS);
     return () => window.clearInterval(id);
-  }, [ax, ay]);
+  }, [ax, ay, retry]);
+
+  // the object whose panel shows: the selected entity, or the world for a point on the map
+  const obj =
+    selection?.type === 'entity' && entity
+      ? { kind: entity.kind, owners: entity.paramOwners ?? [], props: entity.props as Record<string, EntityProp> }
+      : selection?.type === 'point'
+        ? { kind: 'world', owners: worldEntity?.paramOwners ?? schema?.objectOwners?.world ?? ['world'], props: worldEntity?.props as Record<string, EntityProp> | undefined }
+        : null;
+  const kindKey = selection?.type === 'entity' ? (entity?.kind ?? 'gone') : (selection?.type ?? 'none');
+  const [tab, setTabState] = useState<string>(() => lastTab.get(kindKey) ?? '');
+  const setTab = (t: string) => {
+    lastTab.set(kindKey, t);
+    setTabState(t);
+  };
+  useEffect(() => setTabState(lastTab.get(kindKey) ?? ''), [kindKey]);
 
   if (!selection) return null;
   const close = () => useStore.getState().select(null);
@@ -83,17 +117,68 @@ export function Inspector({ world, sheet = false }: { world: WorldInfo; sheet?: 
     color = '#ffd166';
   } else {
     title = 'Ground';
-    kind = 'Point on the map';
+    kind = 'Point on the map · the world’s settings';
   }
   const anchor = selectionAnchor(selection, useStore.getState().entities);
-  const ground =
-    inspection && inspection.inside && at && Math.hypot(inspection.at[0] - at[0], inspection.at[1] - at[1]) <= world.cellSize * 1.5 ? (
-      <Column c={inspection} world={world} />
-    ) : inspection && !inspection.inside ? (
-      <p className="text-muted-foreground">Outside the simulated area.</p>
-    ) : null;
-  const toggles = contextToggles(selection, useStore.getState().entities);
-  const settings = toggles.length > 0 || (entity?.kind === 'chamber' && !!entity.volcanoId);
+  const toggles = contextToggles(selection, useStore.getState().entities).filter((t) => t.id !== 'blockDikes' || !schema?.params.some((p) => p.id.endsWith('.dikes.blocked')));
+  const layout = obj ? schema?.objectPanels?.[obj.kind] : undefined;
+  const panel: BuiltPanel | null = obj && schema && layout ? buildPanel(schema, obj.kind, obj.owners, obj.props) : null;
+  const vid = entity?.volcanoId;
+
+  const widget = (id: string): ReactNode => {
+    switch (id) {
+      case 'magmaBudget':
+        return vid ? <MagmaBudgetView volcanoId={vid} /> : null;
+      case 'landscape':
+        return vid ? <LandscapeSummary volcanoId={vid} /> : null;
+      case 'ventState':
+      case 'volcanoState':
+        return entity ? <StateView e={entity} toggles={toggles} replay={replay} /> : null;
+      case 'weatherNow':
+        return <WeatherNow />;
+      default:
+        return null;
+    }
+  };
+
+  const tabs: TabDef[] = [];
+  if (selection.type === 'quake') tabs.push({ id: 'overview', title: 'Overview', body: <QuakeProps q={selection.event} /> });
+  else if (selection.type === 'entity' && !entity) tabs.push({ id: 'overview', title: 'Overview', body: <p className="text-muted-foreground">This no longer exists.</p> });
+  else if (panel && obj) {
+    panel.tabs.forEach((t, k) =>
+      tabs.push({
+        id: t.id,
+        title: t.title,
+        body: (
+          <>
+            {schema && !schema.tunable && k === 0 && t.params.primary.length + t.params.more.length > 0 && <p className="text-xs text-muted-foreground">{schema.reason ?? 'The settings of this world cannot be changed.'}</p>}
+            <PanelTabBody tab={t} kind={obj.kind} owners={obj.owners} props={obj.props} widget={widget} pending={pending} onEdit={edit} onTab={setTab} />
+            {k === 0 && entity && <AllValues e={entity} />}
+          </>
+        ),
+      }),
+    );
+  } else if (entity) {
+    // no layout for this kind (or the schema is still on its way): the entity's own values
+    tabs.push({
+      id: 'overview',
+      title: 'Overview',
+      body: (
+        <>
+          {toggles.length > 0 && <Toggles toggles={toggles} replay={replay} />}
+          <EntityProps e={entity} />
+          {!schema && (entity.paramOwners?.length ?? 0) > 0 && <Waiting>Loading its settings…</Waiting>}
+        </>
+      ),
+    });
+  } else if (selection.type === 'point' && !schema) {
+    tabs.push({ id: 'world', title: 'World', body: <><Waiting>Loading the world’s settings…</Waiting><Skeleton /></> });
+  }
+  if (at) {
+    const groundTab = { id: 'ground', title: 'Ground', body: <GroundTab at={at} world={world} onRetry={() => setRetry((r) => r + 1)} /> };
+    if (selection.type === 'point') tabs.unshift(groundTab);
+    else tabs.push(groundTab);
+  }
 
   return (
     <aside className={sheet ? 'flex min-h-0 flex-1 flex-col text-sm' : cn(OVERLAY, 'flex max-h-full min-h-0 w-80 max-w-full flex-col text-sm')} aria-label="Inspector">
@@ -105,7 +190,7 @@ export function Inspector({ world, sheet = false }: { world: WorldInfo; sheet?: 
           </h2>
           <p className="text-xs text-muted-foreground">
             {kind}
-            {anchor && ` · ${formatPlace(anchor)}`}
+            {anchor && selection.type !== 'point' && ` · ${formatPlace(anchor)}`}
           </p>
         </div>
         <Tip content={<span>Close <Kbd>Esc</Kbd></span>}>
@@ -115,33 +200,152 @@ export function Inspector({ world, sheet = false }: { world: WorldInfo; sheet?: 
         </Tip>
       </div>
       <ActionRow onFrame={frame} onSection={cut} />
+      {entity?.related && entity.related.length > 0 && <RelatedRow related={entity.related} />}
+      {panel && <OverridesBanner panel={panel} onTab={setTab} />}
       <Separator />
-      <InspectorTabs
-        key={selection.type === 'entity' ? (entity?.kind ?? 'gone') : selection.type}
-        tabs={inspectorTabs(selection, entity, ground !== null, settings)}
-        render={(t) => {
-          switch (t) {
-            case 'overview':
-              if (selection.type === 'quake') return <QuakeProps q={selection.event} />;
-              if (!entity) return <p className="text-muted-foreground">This no longer exists.</p>;
-              return entity.kind === 'chamber' && entity.volcanoId ? (
-                <>
-                  <MagmaBudgetView volcanoId={entity.volcanoId} />
-                  <LandscapeSummary volcanoId={entity.volcanoId} />
-                </>
-              ) : (
-                <EntityProps e={entity} />
-              );
-            case 'details':
-              return entity ? <EntityProps e={entity} /> : null;
-            case 'settings':
-              return <SettingsTab toggles={toggles} volcanoId={entity?.kind === 'chamber' ? entity.volcanoId : undefined} />;
-            case 'ground':
-              return ground;
-          }
-        }}
-      />
+      <InspectorTabs key={kindKey} tabs={tabs} tab={tab} onTab={setTab} />
     </aside>
+  );
+}
+
+/** Links to the objects related to this one (its chamber, the dikes feeding it, ...), from the server. */
+function RelatedRow({ related }: { related: { id: string; kind: string; label: string }[] }) {
+  const entities = useStore((s) => s.entities);
+  return (
+    <nav className="flex items-center gap-1.5 overflow-x-auto px-3 pb-2 text-xs [scrollbar-width:none]" aria-label="Related">
+      <span className="shrink-0 text-muted-foreground">Related</span>
+      {related.map((r) => (
+        <Tip key={r.id} content={`Select ${r.label} and show its properties`}>
+          <Button
+            size="xs"
+            variant="outline"
+            className="h-6 shrink-0 gap-1 px-1.5"
+            disabled={!entities[r.id]}
+            onClick={() => useStore.getState().select({ type: 'entity', id: r.id })}
+          >
+            <span className="size-2 rounded-full" style={{ background: entities[r.id] ? entityColor(entities[r.id], FEATURE_COLORS) : '#888' }} aria-hidden />
+            {r.label}
+          </Button>
+        </Tip>
+      ))}
+    </nav>
+  );
+}
+
+/** The ground column under the selection; shown at once, with a spinner until the server answers. */
+function GroundTab({ at, world, onRetry }: { at: [number, number]; world: WorldInfo; onRetry: () => void }) {
+  const inspection = useStore((s) => s.inspection);
+  const pendingId = useStore((s) => s.inspectPending);
+  const [since, setSince] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  const fresh = inspection && Math.hypot(inspection.at[0] - at[0], inspection.at[1] - at[1]) <= world.cellSize * 1.5 ? inspection : null;
+  useEffect(() => {
+    setSince(Date.now());
+  }, [at[0], at[1]]);
+  useEffect(() => {
+    if (fresh) return;
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [fresh]);
+  if (fresh && fresh.inside) return <Column c={fresh} world={world} />;
+  if (fresh && !fresh.inside) return <p className="text-muted-foreground">Outside the simulated area.</p>;
+  const late = now - since > GROUND_TIMEOUT_MS || (pendingId === null && now - since > 1500);
+  if (late) {
+    return (
+      <div className="flex flex-col items-start gap-2 text-xs text-muted-foreground">
+        <p>The server has not answered about the ground here yet.</p>
+        <Button
+          size="xs"
+          variant="secondary"
+          onClick={() => {
+            setSince(Date.now());
+            onRetry();
+          }}
+        >
+          <RefreshCw /> Try again
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <>
+      <Waiting>Reading the ground here…</Waiting>
+      <Skeleton rows={5} />
+    </>
+  );
+}
+
+/** Every value the server sends for the object, collapsed (the tabs show the curated ones). */
+function AllValues({ e }: { e: EntityView }) {
+  return (
+    <Collapsible className="rounded-md border">
+      <CollapsibleTrigger className="group flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-muted/50">
+        <ChevronRight className="size-3.5 transition-transform group-data-[panel-open]:rotate-90" />
+        All values
+      </CollapsibleTrigger>
+      <CollapsibleContent className="border-t p-2">
+        <EntityProps e={e} />
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/** A vent's or volcano's state now, with its lasting switches (a vent's seal). */
+function StateView({ e, toggles, replay }: { e: EntityView; toggles: ContextToggle[]; replay: boolean }) {
+  const removed = e.removedAt !== undefined;
+  const rows: [string, string][] = [];
+  if (e.kind === 'volcano') {
+    rows.push(['Erupting', e.props.erupting ? 'yes' : 'no']);
+    if (typeof e.props.regime === 'string') rows.push(['Regime', e.props.regime]);
+    if (typeof e.props.eruptions === 'number') rows.push(['Eruptions so far', String(e.props.eruptions)]);
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {(e.kind === 'vent' || e.kind === 'fissure') && !removed && (
+        <div>
+          <Tip content={VENT_STATE[ventLifecycle(e.props)].tip}>
+            <Badge variant="outline" className={VENT_STATE[ventLifecycle(e.props)].className}>
+              {VENT_STATE[ventLifecycle(e.props)].label}
+            </Badge>
+          </Tip>
+        </div>
+      )}
+      {removed && <Badge variant="destructive">removed</Badge>}
+      {rows.length > 0 && <PropTable rows={rows} />}
+      {toggles.length > 0 && <Toggles toggles={toggles} replay={replay} />}
+    </div>
+  );
+}
+
+/** Weather now (what the world's weather settings are doing). */
+function WeatherNow() {
+  const w = useStore((s) => s.state?.world);
+  if (!w) return <Skeleton rows={2} />;
+  const rows: [string, string][] = [['Rain', `${(w.rainMmPerHour ?? 0).toFixed(0)} mm/h`]];
+  if (w.wind) rows.push(['Wind', `${w.wind.speed.toFixed(0)} m/s towards ${w.wind.bearingDeg.toFixed(0)}°`]);
+  return <PropTable rows={rows} />;
+}
+
+/** Checkbox states of the selection (a vent's seal). */
+function Toggles({ toggles, replay }: { toggles: ContextToggle[]; replay: boolean }) {
+  const flip = (t: ContextToggle, on: boolean) => {
+    if (t.id === 'blockDikes') command({ kind: 'blockDikes', volcanoId: t.volcanoId, blocked: on });
+    else command({ kind: on ? 'sealVent' : 'unsealVent', volcanoId: t.volcanoId, ventId: t.ventId });
+  };
+  return (
+    <section className="flex flex-col gap-2">
+      {toggles.map((t) => (
+        <div key={t.id} className="flex items-start gap-2">
+          <Checkbox id={`t-${t.id}`} className="mt-0.5" checked={t.checked} disabled={replay || !!('disabled' in t && t.disabled)} onCheckedChange={(on) => flip(t, on === true)} />
+          <div className="flex flex-col gap-0.5">
+            <Label htmlFor={`t-${t.id}`} className="font-normal">
+              {t.label}
+            </Label>
+            <span className="text-xs text-muted-foreground">{'disabled' in t && t.disabled ? t.disabled : t.help}</span>
+          </div>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -365,7 +569,6 @@ function Column({ c, world }: { c: InspectionMessage; world: WorldInfo }) {
 }
 
 const ACTION_ICON: Record<ContextAction['id'], ReactNode> = {
-  inspect: <ArrowRight />,
   inject: <Plus />,
   startEruption: <Triangle />,
   stopEruption: <Square />,
@@ -380,7 +583,6 @@ const ACTION_ICON: Record<ContextAction['id'], ReactNode> = {
 };
 
 const ACTION_TIP: Partial<Record<ContextAction['id'], ReactNode>> = {
-  inspect: 'Select it and show its properties',
   inject: 'Add a batch of magma to this chamber; the form starts from the magma its supply delivers',
   startEruption: 'Open a vent and start an eruption of this volcano now',
   stopEruption: 'End the eruption of this volcano now',
@@ -422,8 +624,6 @@ function ActionRow({ onFrame, onSection }: { onFrame: () => void; onSection: () 
       case 'stopEruption':
       case 'forceDike':
         return command({ kind: a.id, volcanoId: a.volcanoId });
-      case 'inspect':
-        return s.select({ type: 'entity', id: a.target });
       case 'frame':
         return onFrame();
       case 'section':
@@ -451,7 +651,7 @@ function ActionRow({ onFrame, onSection }: { onFrame: () => void; onSection: () 
     <>
       <div className="flex flex-wrap gap-1.5 px-3 pb-2" role="toolbar" aria-label="Actions">
         {actions.map((a) => (
-          <Tip key={a.id === 'inspect' ? `inspect:${a.target}` : a.id} content={ACTION_TIP[a.id]}>
+          <Tip key={a.id} content={ACTION_TIP[a.id]}>
             <Button
               size="xs"
               variant={a.id === 'stopEruption' || (DESTRUCTIVE.has(a.id) && armed === a.id) ? 'destructive' : a.id === 'startEruption' || a.id === 'inject' ? 'default' : 'secondary'}
@@ -467,92 +667,26 @@ function ActionRow({ onFrame, onSection }: { onFrame: () => void; onSection: () 
   );
 }
 
-type InspectorTab = 'overview' | 'details' | 'settings' | 'ground';
-
-const TAB_TITLE: Record<InspectorTab, string> = { overview: 'Overview', details: 'Details', settings: 'Settings', ground: 'Ground' };
-
-/**
- * The Inspector's tabs for a selection: Overview (what matters now; a chamber's magma budget),
- * Details (a chamber's full property list), Settings (checkbox states and live settings), Ground
- * (the column under it). A map point only has its ground.
- */
-function inspectorTabs(sel: Selection, e: EntityView | undefined, hasGround: boolean, hasSettings: boolean): InspectorTab[] {
-  if (sel.type === 'point') return ['ground'];
-  const tabs: InspectorTab[] = ['overview'];
-  if (e?.kind === 'chamber') tabs.push('details');
-  if (hasSettings) tabs.push('settings');
-  if (hasGround) tabs.push('ground');
-  return tabs;
-}
-
-/** Tabs over the scrolling body; a single tab shows its content without a tab bar. */
-function InspectorTabs({ tabs, render }: { tabs: InspectorTab[]; render: (t: InspectorTab) => ReactNode }) {
-  const [tab, setTab] = useState<InspectorTab>(tabs[0]);
-  const current = tabs.includes(tab) ? tab : tabs[0];
-  const body = (t: InspectorTab) => <div className="flex min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain p-3">{render(t)}</div>;
+/** Tabs over the scrolling body (a row that scrolls sideways); a single tab shows without a tab bar. */
+function InspectorTabs({ tabs, tab, onTab }: { tabs: TabDef[]; tab: string; onTab: (t: string) => void }) {
+  if (tabs.length === 0) return null;
+  const current = tabs.some((t) => t.id === tab) ? tab : tabs[0].id;
+  const body = (t: TabDef) => <div className="flex min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain p-3">{t.body}</div>;
   if (tabs.length === 1) return body(tabs[0]);
   return (
-    <Tabs value={current} onValueChange={(v) => setTab(v as InspectorTab)} className="flex min-h-0 flex-col gap-0">
+    <Tabs value={current} onValueChange={(v) => onTab(String(v))} className="flex min-h-0 flex-col gap-0">
       <TabsList className="mx-3 mt-2 w-[calc(100%-1.5rem)] shrink-0 justify-start overflow-x-auto overflow-y-hidden [scrollbar-width:none]" aria-label="Inspector sections">
         {tabs.map((t) => (
-          <TabsTrigger key={t} value={t} className="min-w-fit flex-1 px-2">
-            {TAB_TITLE[t]}
+          <TabsTrigger key={t.id} value={t.id} className="min-w-fit flex-none px-2">
+            {t.title}
           </TabsTrigger>
         ))}
       </TabsList>
       {tabs.map((t) => (
-        <TabsContent key={t} value={t} className="flex min-h-0 flex-col">
+        <TabsContent key={t.id} value={t.id} className="flex min-h-0 flex-col">
           {body(t)}
         </TabsContent>
       ))}
     </Tabs>
-  );
-}
-
-/** Checkbox states of the selection, then (for a chamber) its live magma, wall and dike settings. */
-function SettingsTab({ toggles, volcanoId }: { toggles: ContextToggle[]; volcanoId?: string }) {
-  const replay = useStore((s) => s.clock?.replay ?? false);
-  const schema = useStore((s) => s.schema);
-  const { pending, edit } = useParamEdits();
-  // the server lists what a chamber's panel shows; the client decides nothing about it
-  const ids = volcanoId ? (schema?.panels?.chamber?.[volcanoId] ?? []) : [];
-  const params = ids.map((id) => schema?.params.find((p) => p.id === id)).filter((p): p is NonNullable<typeof p> => !!p);
-  const flip = (t: ContextToggle, on: boolean) => {
-    if (t.id === 'blockDikes') command({ kind: 'blockDikes', volcanoId: t.volcanoId, blocked: on });
-    else command({ kind: on ? 'sealVent' : 'unsealVent', volcanoId: t.volcanoId, ventId: t.ventId });
-  };
-  const groups = [...new Set(params.map((p) => p.group.slice(p.group.indexOf(' · ') + 3)))];
-  return (
-    <>
-      {toggles.length > 0 && (
-        <section className="flex flex-col gap-2">
-          {toggles.map((t) => (
-            <div key={t.id} className="flex items-start gap-2">
-              <Checkbox id={`t-${t.id}`} className="mt-0.5" checked={t.checked} disabled={replay || !!('disabled' in t && t.disabled)} onCheckedChange={(on) => flip(t, on === true)} />
-              <div className="flex flex-col gap-0.5">
-                <Label htmlFor={`t-${t.id}`} className="font-normal">
-                  {t.label}
-                </Label>
-                <span className="text-xs text-muted-foreground">{'disabled' in t && t.disabled ? t.disabled : t.help}</span>
-              </div>
-            </div>
-          ))}
-        </section>
-      )}
-      {volcanoId && !schema?.tunable && <p className="text-xs text-muted-foreground">{schema?.reason ?? 'The settings of this world cannot be changed.'}</p>}
-      {groups.map((g) => (
-        <section key={g} className="flex flex-col">
-          <span className="text-xs font-medium text-muted-foreground">{g}</span>
-          <div className="flex flex-col divide-y">
-            {params
-              .filter((p) => p.group.endsWith(g))
-              .map((p) => (
-                <ParamRow key={p.id} p={p} pending={pending[p.id]} onEdit={edit} compact />
-              ))}
-          </div>
-        </section>
-      ))}
-      {volcanoId && <p className="text-xs text-muted-foreground">Settings that rebuild the volcano are on the Settings page.</p>}
-    </>
   );
 }

@@ -104,4 +104,4 @@ export function formatProp(key: string, v: EntityProp): string {
 }
 
 /** Keys shown elsewhere (header, times) rather than in the property table. */
-export const HIDDEN_PROPS = new Set(['startedAt', 'time']);
+export const HIDDEN_PROPS = new Set(['startedAt', 'time', 'configPath']);
