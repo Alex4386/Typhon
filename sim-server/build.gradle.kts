@@ -39,6 +39,8 @@ tasks.test {
     }
     // world sessions (and the config API test's rebuilds) need more than the 512 MB default
     maxHeapSize = "1g"
+    // engine worker threads per test JVM, within the test CPU budget (-Ptyphon.testCpus=N, default 4)
+    systemProperty("typhon.threads", ((findProperty("typhon.testCpus") as String?)?.toIntOrNull() ?: 4).toString())
 }
 
 // Long tests (e.g. every configuration change applied for real): ./gradlew :sim-server:slowTest

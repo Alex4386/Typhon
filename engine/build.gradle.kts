@@ -28,8 +28,12 @@ tasks.test {
     useJUnitPlatform {
         excludeTags("perf")
     }
-    // Test classes run in parallel JVMs (each test is self-contained; results are deterministic).
-    maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+    // Test classes run in parallel JVMs (each test is self-contained; results are deterministic), within a
+    // CPU budget so a test run never takes the whole machine: -Ptyphon.testCpus=N (default 4).
+    val cpus = (findProperty("typhon.testCpus") as String?)?.toIntOrNull() ?: 4
+    maxParallelForks = minOf(cpus, (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)).coerceAtLeast(1)
+    // the engine's own worker pool per test JVM shares the same budget
+    systemProperty("typhon.threads", (cpus / maxParallelForks).coerceAtLeast(1).toString())
 }
 
 // Performance smoke tests: ./gradlew :engine:perfTest

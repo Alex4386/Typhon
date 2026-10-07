@@ -40,10 +40,17 @@ tasks.test {
     systemProperty("junit.jupiter.execution.parallel.enabled", "true")
     systemProperty("junit.jupiter.execution.parallel.mode.default", "same_thread")
     systemProperty("junit.jupiter.execution.parallel.mode.classes.default", "concurrent")
+    // A CPU budget (-Ptyphon.testCpus=N, default 4): that many scenarios at once, one engine thread each.
+    val cpus = (findProperty("typhon.testCpus") as String?)?.toIntOrNull() ?: 4
+    systemProperty("junit.jupiter.execution.parallel.config.strategy", "fixed")
+    systemProperty("junit.jupiter.execution.parallel.config.fixed.parallelism", cpus.toString())
+    systemProperty("junit.jupiter.execution.parallel.config.fixed.max-pool-size", cpus.toString())
+    systemProperty("typhon.threads", "1")
 }
 
 // Long scenario runs: ./gradlew :simulator:slowTest
 val slowTest by tasks.registering(Test::class) {
+    systemProperty("typhon.threads", ((findProperty("typhon.testCpus") as String?)?.toIntOrNull() ?: 4).toString())
     description = "Runs long simulator scenarios (tagged 'slow' or 'perf')."
     group = "verification"
     testClassesDirs = sourceSets.test.get().output.classesDirs
@@ -57,6 +64,7 @@ val slowTest by tasks.registering(Test::class) {
 // End-to-end world-builder flow (empty ocean, a placed chamber, the island it builds, live dial,
 // save/restore, thread count; prints a report): ./gradlew :simulator:islandFlow [-Dflow.steps=N]
 val islandFlow by tasks.registering(Test::class) {
+    systemProperty("typhon.threads", ((findProperty("typhon.testCpus") as String?)?.toIntOrNull() ?: 4).toString())
     description = "Runs the island test flow (tagged 'flow') and prints its report."
     group = "verification"
     testClassesDirs = sourceSets.test.get().output.classesDirs
