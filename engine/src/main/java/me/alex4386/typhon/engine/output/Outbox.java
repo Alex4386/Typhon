@@ -1,52 +1,30 @@
 package me.alex4386.typhon.engine.output;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import me.alex4386.typhon.engine.world.BlockId;
 
 /**
- * Collects block changes and events emitted during a step.
+ * Collects the events emitted during a step.
  *
- * <p>Multiple changes to the same position within one step are coalesced: the final target wins and
- * the earliest {@code expected} is kept, so the host performs a single compare-and-set against the
- * state the engine originally observed.
+ * <p>The engine emits no block changes: its state is the continuous world model, and a host that shows
+ * blocks (Minecraft) projects that state itself (module {@code mc-projection}).
  */
 public final class Outbox {
-    private final Map<Long, BlockChange> blockChanges = new LinkedHashMap<>();
     private final List<EngineEvent> events = new ArrayList<>();
-
-    public void setBlock(BlockChange change) {
-        blockChanges.merge(change.pos().pack(), change, (previous, next) -> {
-            BlockId expected = previous.expected();
-            return new BlockChange(previous.pos(), expected, next.to());
-        });
-    }
 
     public void emit(EngineEvent event) {
         events.add(event);
     }
 
-    /**
-     * Moves everything {@code other} collected into this outbox, as if {@code other}'s calls had been
-     * made here (coalescing keeps the earliest {@code expected} and the latest target either way).
-     */
+    /** Moves everything {@code other} collected into this outbox, as if {@code other}'s calls had been made here. */
     public void absorb(Outbox other) {
-        for (BlockChange change : other.blockChanges.values()) setBlock(change);
         events.addAll(other.events);
-        other.blockChanges.clear();
         other.events.clear();
-    }
-
-    public int pendingBlockChanges() {
-        return blockChanges.size();
     }
 
     /** Takes everything collected so far as a frame. Called by the engine at the end of a step. */
     public EngineFrame drain(long step, long timeMicros) {
-        EngineFrame frame = new EngineFrame(step, timeMicros, new ArrayList<>(blockChanges.values()), events);
-        blockChanges.clear();
+        EngineFrame frame = new EngineFrame(step, timeMicros, events);
         events.clear();
         return frame;
     }

@@ -19,6 +19,7 @@ import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.seismic.SeismicEvent;
 import me.alex4386.typhon.engine.seismic.SeismicEventType;
 import me.alex4386.typhon.engine.sim.Engine;
+import me.alex4386.typhon.engine.sim.SimTime;
 import me.alex4386.typhon.engine.terrain.TerrainChunk;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
@@ -142,7 +143,14 @@ class SurfaceDynamicsTest {
     void shallowSubmarineVentIsSurtseyanUntilItsTuffRingSealsItOff() {
         VentSite vent = VentSite.crater("surtur", new BlockPos(0, 56, 0), 3);
         World w = world("sea", seaFloor(56), vent, submarineBasalt("sea", vent.position()));
-        List<EngineFrame> frames = w.engine().runFor(40 * 60); // the tuff ring needs minutes to rise above the sea
+        // the tuff ring needs minutes to rise above the sea
+        List<EngineFrame> frames = new ArrayList<>();
+        List<Double> emitted = new ArrayList<>(); // lava volume emitted by the end of each frame
+        long endMicros = w.engine().timeMicros() + SimTime.micros(40 * 60);
+        while (w.engine().timeMicros() < endMicros) {
+            frames.add(w.engine().step());
+            emitted.add(w.lava().emittedVolume());
+        }
 
         List<PhreatomagmaticChanged> changes = events(frames, PhreatomagmaticChanged.class);
         assertFalse(changes.isEmpty());
@@ -153,13 +161,13 @@ class SurfaceDynamicsTest {
         double sealedAt = changes.stream().filter(c -> !c.active()).mapToDouble(PhreatomagmaticChanged::time).findFirst()
                 .orElseThrow(() -> new AssertionError("the tuff ring should isolate the vent"));
         // Little lava while the sea floods the vent (clasts and lava are quenched); effusion once it is sealed off.
-        double lavaBefore = frames.stream().filter(f -> f.time() < sealedAt)
-                .flatMap(f -> f.blockChanges().stream()).filter(c -> c.to().id().path().equals("lava")).count() / sealedAt;
+        int sealedFrame = 0;
+        while (frames.get(sealedFrame).time() < sealedAt) sealedFrame++;
+        double atSeal = sealedFrame == 0 ? 0 : emitted.get(sealedFrame - 1);
         double end = frames.get(frames.size() - 1).time();
-        double lavaAfter = frames.stream().filter(f -> f.time() >= sealedAt)
-                .flatMap(f -> f.blockChanges().stream()).filter(c -> c.to().id().path().equals("lava")).count()
-                / (end - sealedAt);
-        assertTrue(lavaBefore < 0.3 * lavaAfter, "lava block changes per second " + lavaBefore + " → " + lavaAfter);
+        double lavaBefore = atSeal / sealedAt;
+        double lavaAfter = (emitted.get(emitted.size() - 1) - atSeal) / (end - sealedAt);
+        assertTrue(lavaBefore < 0.3 * lavaAfter, "lava emitted (m³/s) " + lavaBefore + " → " + lavaAfter);
         // (the sea floods the crater again now and then, and the vent may be fountaining at the end)
         assertTrue(lavaAfter > 0, "lava flows once the ring is sealed");
         assertTrue(w.lava().emittedVolume() > 0);

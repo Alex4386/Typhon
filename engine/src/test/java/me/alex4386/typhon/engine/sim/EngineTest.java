@@ -9,15 +9,12 @@ import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.command.EngineCommand;
-import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
 import me.alex4386.typhon.engine.testing.Saves;
-import me.alex4386.typhon.engine.world.BlockId;
 import org.junit.jupiter.api.Test;
 
 class EngineTest {
@@ -48,15 +45,14 @@ class EngineTest {
 
     record Noise(double time, double value) implements EngineEvent {}
 
-    /** Emits one random event and one random block change per step. */
+    /** Emits two random events per step. */
     static final class NoiseMaker implements Subsystem {
         @Override public String id() { return "noise"; }
 
         @Override
         public void step(StepContext context) {
             context.outbox().emit(new Noise(context.time(), context.random().nextGaussian()));
-            BlockPos pos = new BlockPos(context.random().nextInt(-8, 8), 64, context.random().nextInt(-8, 8));
-            context.outbox().setBlock(BlockChange.set(pos, BlockId.minecraft("basalt")));
+            context.outbox().emit(new Noise(context.time(), context.random().nextInt(-8, 8)));
         }
     }
 

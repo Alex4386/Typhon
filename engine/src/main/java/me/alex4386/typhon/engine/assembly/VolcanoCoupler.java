@@ -24,7 +24,6 @@ import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.massflow.ColumnCollapse;
 import me.alex4386.typhon.engine.massflow.PyroclasticFlows;
 import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
@@ -987,8 +986,6 @@ public final class VolcanoCoupler implements Subsystem {
         int placed = 0;
         while (column.groundY() < target && placed < budget) {
             int y = column.groundY() + 1;
-            BlockId expected = column.waterY() != TerrainColumn.NO_WATER && column.waterY() >= y ? WATER : BlockId.AIR;
-            context.outbox().setBlock(BlockChange.replace(new BlockPos(x, y, z), expected, TUFF));
             terrain.updateBlockCache(x, z, y, TUFF);
             column = terrain.column(x, z);
             placed++;

@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -84,14 +83,16 @@ class AshTest {
         assertTrue(downwind > crosswind, "downwind " + downwind + " vs crosswind " + crosswind);
         assertTrue(near > far && far > 0, "near " + near + " far " + far);
 
-        // Deposits became blocks: covers near the vent, palette blocks somewhere downwind.
-        List<BlockChange> changes = new ArrayList<>();
-        frames.forEach(f -> changes.addAll(f.blockChanges()));
-        assertFalse(changes.isEmpty());
+        // Deposits show in the block cache as ash covers or whole ash blocks downwind.
         AshPalette palette = AshPalette.defaults();
-        assertTrue(changes.stream().allMatch(c -> palette.wholeBlock().equals(c.to().id())
-                || palette.covers().stream().anyMatch(cover -> cover.block().equals(c.to().id()))));
-        assertTrue(changes.stream().allMatch(BlockChange::isConditional), "ash edits are compare-and-set");
+        long covered = 0;
+        for (int x = 0; x <= 240; x += 8) {
+            TerrainColumn column = terrain.column(x, 0);
+            if (column == null) continue;
+            BlockId s = column.surface();
+            if (palette.wholeBlock().equals(s) || palette.covers().stream().anyMatch(c -> c.block().equals(s))) covered++;
+        }
+        assertTrue(covered > 0, "ash covers downwind");
     }
 
     @Test
@@ -148,7 +149,6 @@ class AshTest {
         grid.addDeposit(grid.index(1, 0), 0.15 * config.depositBulkDensity * cellArea); // 15 cm
         Outbox outbox = new Outbox();
         grid.applyDeposits(terrain, outbox, config);
-        List<BlockChange> changes = outbox.drain(0, 0).blockChanges();
 
         BlockId tuff = BlockId.minecraft("tuff");
         BlockId gravel = BlockId.minecraft("gravel");
@@ -162,20 +162,18 @@ class AshTest {
                 assertEquals(gravel, thin.surface());
             }
         }
-        assertTrue(changes.contains(BlockChange.replace(new BlockPos(0, 64, 0), BlockId.AIR, tuff)));
-        assertTrue(changes.contains(BlockChange.replace(new BlockPos(0, 65, 0), BlockId.AIR, tuff)));
-        assertTrue(changes.contains(BlockChange.replace(new BlockPos(8, 63, 0), TephraTestSupport.GRASS, gravel)));
-        assertEquals(64 * 2 + 64, changes.size());
 
         // Re-applying with no new deposit changes nothing.
         grid.applyDeposits(terrain, outbox, config);
-        assertTrue(outbox.drain(1, 0).blockChanges().isEmpty());
+        assertEquals(65, terrain.column(0, 0).groundY());
+        assertEquals(gravel, terrain.column(8, 0).surface());
 
-        // Growing the thin deposit upgrades the cover in place (CAS against the previous cover).
+        // Growing the thin deposit upgrades the cover in place.
         grid.addDeposit(grid.index(1, 0), 0.30 * config.depositBulkDensity * cellArea);
         grid.applyDeposits(terrain, outbox, config);
         BlockId powder = BlockId.minecraft("light_gray_concrete_powder");
-        assertTrue(outbox.drain(2, 0).blockChanges().contains(BlockChange.replace(new BlockPos(8, 63, 0), gravel, powder)));
+        assertEquals(powder, terrain.column(8, 0).surface());
+        assertEquals(63, terrain.column(8, 0).groundY());
     }
 
     @Test
@@ -188,8 +186,12 @@ class AshTest {
         grid.addDeposit(grid.index(0, 0), 0.10 * config.depositBulkDensity * 64);
         Outbox outbox = new Outbox();
         grid.applyDeposits(terrain, outbox, config);
-        long gravel = outbox.drain(0, 0).blockChanges().stream()
-                .filter(c -> c.to().id().equals(BlockId.minecraft("gravel"))).count();
+        long gravel = 0;
+        for (int z = 0; z < 8; z++) {
+            for (int x = 0; x < 8; x++) {
+                if (terrain.column(x, z).surface().equals(BlockId.minecraft("gravel"))) gravel++;
+            }
+        }
         assertTrue(gravel > 5 && gravel < 59, "gravel columns " + gravel);
         assertEquals(AshGrid.columnNoise(3, -7), AshGrid.columnNoise(3, -7));
     }

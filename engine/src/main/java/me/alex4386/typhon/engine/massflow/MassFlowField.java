@@ -4,7 +4,6 @@ import me.alex4386.typhon.engine.config.ConfigCopy;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -21,7 +20,6 @@ import me.alex4386.typhon.engine.massflow.MassFlowEvents.ChunkCoord;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.FlowCell;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
 import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.sim.Parallel;
@@ -34,7 +32,6 @@ import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerFlags;
 import me.alex4386.typhon.engine.world.Material;
 import me.alex4386.typhon.engine.world.UnitSource;
-import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.BlockState;
 import me.alex4386.typhon.engine.save.FieldChunk;
 import me.alex4386.typhon.engine.save.StateReader;
@@ -360,9 +357,6 @@ public abstract class MassFlowField implements Subsystem {
 
     /** Veneer for thin deposit (tier 1 thin, 2 thick). */
     protected abstract BlockState veneer(int tier);
-
-    /** Lets a kind react to a block it just laid (e.g. compacting the block below). */
-    protected void afterBlockPlaced(MassFlowChunk c, int i, BlockId previousSurface, int y, Outbox outbox) {}
 
     protected abstract EngineEvent startedEvent(double time, PendingStart start);
 
@@ -791,17 +785,11 @@ public abstract class MassFlowField implements Subsystem {
         int x = c.worldX(i);
         int z = c.worldZ(i);
         int y = c.ground[i] + 1;
-        TerrainColumn column = terrain.column(x, z);
-        BlockId previousSurface = column == null ? BlockId.AIR : column.surface();
-        BlockId expected = c.waterY[i] != TerrainColumn.NO_WATER && c.waterY[i] >= y
-                ? MassFlowPalette.WATER.id() : MassFlowPalette.AIR.id();
         BlockState block = depositBlock(c, i, meanT, meanU);
-        outbox.setBlock(BlockChange.replace(new BlockPos(x, y, z), expected, block));
         terrain.updateBlockCache(x, z, y, block.id()); // the world model already holds the deposit
         c.ground[i] = y;
         c.veneer[i] = 0;
         stats.blocks++;
-        afterBlockPlaced(c, i, previousSurface, y, outbox);
     }
 
     private void renderVeneers(Outbox outbox) {
@@ -818,7 +806,6 @@ public abstract class MassFlowField implements Subsystem {
                 if (column == null) continue;
                 BlockState state = veneer(tier);
                 if (!state.id().equals(column.surface())) {
-                    outbox.setBlock(BlockChange.replace(new BlockPos(x, c.ground[i], z), column.surface(), state));
                     terrain.updateBlockCache(x, z, c.ground[i], state.id());
                 }
                 c.veneer[i] = (byte) tier;

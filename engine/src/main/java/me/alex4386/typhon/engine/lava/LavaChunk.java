@@ -24,15 +24,6 @@ final class LavaChunk {
     final byte[] crustKind = new byte[AREA]; // LavaPalette.crustKind of the crust
     int[] unit = new int[AREA]; // stratigraphic unit (eruption) of the melt; kept after it drains (roofs, films)
 
-    // What is currently shown in the world (persisted, for compare-and-set diffs). From renderBottom
-    // upward: renderMelt lava blocks, renderGap air blocks, renderRoof roof blocks.
-    final int[] renderBottom = new int[AREA];
-    final short[] renderMelt = new short[AREA];
-    final short[] renderGap = new short[AREA];
-    final short[] renderRoof = new short[AREA];
-    final byte[] renderTop = new byte[AREA]; // top melt block: kind << 3 | level; kind 1 lava, 2 magma crust
-    final byte[] renderRoofKind = new byte[AREA];
-
     // Double buffers and per-step scratch (transient)
     double[] nextThickness = new double[AREA];
     double[] nextTemperature = new double[AREA];
@@ -81,7 +72,6 @@ final class LavaChunk {
     double oceanHeat;
     int actionCount; // cooling actions deferred to the sequential pass (cell << 4 | kind flags)
     final int[] actions = new int[AREA];
-    java.util.List<me.alex4386.typhon.engine.output.BlockChange> rendered = new java.util.ArrayList<>();
 
     LavaChunk(int cx, int cz) {
         this.cx = cx;
@@ -101,10 +91,6 @@ final class LavaChunk {
 
     int worldZ(int i) {
         return (cz << 4) | (i >> 4);
-    }
-
-    int renderCount(int i) {
-        return renderMelt[i] + renderGap[i] + renderRoof[i];
     }
 
     void swapBuffers() {
@@ -143,7 +129,7 @@ final class LavaChunk {
     boolean hasPersistentState() {
         if (isActive()) return true;
         for (int i = 0; i < AREA; i++) {
-            if (solid[i] != 0 || renderCount(i) != 0) return true;
+            if (solid[i] != 0) return true;
         }
         return false;
     }

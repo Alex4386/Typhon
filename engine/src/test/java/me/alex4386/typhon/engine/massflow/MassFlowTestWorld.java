@@ -1,12 +1,8 @@
 package me.alex4386.typhon.engine.massflow;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.function.IntBinaryOperator;
-import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -15,7 +11,8 @@ import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
 import me.alex4386.typhon.engine.world.BlockId;
-import me.alex4386.typhon.engine.world.BlockState;
+import me.alex4386.typhon.engine.world.LayerView;
+import me.alex4386.typhon.engine.world.WorldModel;
 
 /** Synthetic terrain plus helpers for driving mass-flow fields in tests. */
 final class MassFlowTestWorld {
@@ -108,17 +105,28 @@ final class MassFlowTestWorld {
         return t;
     }
 
-    Map<BlockPos, BlockState> appliedBlocks() {
-        Map<BlockPos, BlockState> blocks = new HashMap<>();
-        for (EngineFrame frame : frames) {
-            for (BlockChange change : frame.blockChanges()) blocks.put(change.pos(), change.to());
+    /** Every world-model layer of the columns in {@code [0, size)²}. */
+    List<LayerView> layers(int size) {
+        WorldModel world = terrain.world();
+        List<LayerView> list = new ArrayList<>();
+        for (int x = 0; x < size; x++) {
+            for (int z = 0; z < size; z++) {
+                if (!world.isKnown(x, z)) continue;
+                for (int k = 0; k < world.layerCount(x, z); k++) list.add(world.layer(x, z, k));
+            }
         }
-        return blocks;
+        return list;
     }
 
-    List<BlockChange> blockChanges() {
-        List<BlockChange> list = new ArrayList<>();
-        for (EngineFrame frame : frames) list.addAll(frame.blockChanges());
+    /** The surface blocks the block cache shows over {@code [0, size)²}. */
+    List<BlockId> surfaces(int size) {
+        List<BlockId> list = new ArrayList<>();
+        for (int x = 0; x < size; x++) {
+            for (int z = 0; z < size; z++) {
+                TerrainColumn column = terrain.column(x, z);
+                if (column != null) list.add(column.surface());
+            }
+        }
         return list;
     }
 

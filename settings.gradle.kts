@@ -4,3 +4,4 @@ rootProject.name = "typhon"
 include("engine")
 include("simulator")
 include("sim-server")
+include("mc-projection")

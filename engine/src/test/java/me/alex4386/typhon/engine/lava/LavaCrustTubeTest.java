@@ -19,6 +19,7 @@ import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainChunk;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
+import me.alex4386.typhon.engine.world.MaterialTable;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
 import me.alex4386.typhon.engine.world.BlockId;
@@ -177,19 +178,10 @@ class LavaCrustTubeTest {
         assertFalse(tubes.isEmpty(), "the drained pond should leave tube voids");
         assertFalse(run.world().events(LavaEvents.LavaTubesFormed.class).isEmpty());
 
-        Map<BlockPos, BlockState> blocks = run.world().appliedBlocks();
         for (LavaTube tube : tubes) {
-            int surface = run.world().terrain.column(tube.x(), tube.z()).groundY();
-            assertTrue(surface > tube.topY(), "roof above the void at " + tube);
-            for (int y = tube.bottomY(); y <= tube.topY(); y++) {
-                BlockState state = blocks.get(new BlockPos(tube.x(), y, tube.z()));
-                assertTrue(state == null || state.equals(BlockState.AIR), "void block " + y + " is " + state);
-            }
-            for (int y = tube.topY() + 1; y <= surface; y++) {
-                BlockState roof = blocks.get(new BlockPos(tube.x(), y, tube.z()));
-                assertNotNull(roof, "roof block at " + y);
-                assertEquals(BlockId.minecraft("smooth_basalt"), roof.id(), "basaltic roof at " + y);
-            }
+            TerrainColumn column = run.world().terrain.column(tube.x(), tube.z());
+            assertTrue(column.groundY() > tube.topY(), "roof above the void at " + tube);
+            assertEquals(BlockId.minecraft("smooth_basalt"), column.surface(), "basaltic roof at " + tube);
             assertEquals(0, lava.thickness(tube.x(), tube.z()));
             assertEquals(0, lava.crustThickness(tube.x(), tube.z()));
 
@@ -292,9 +284,16 @@ class LavaCrustTubeTest {
 
         assertTrue(shoreAfter > shoreBefore, "shoreline " + shoreBefore + " → " + shoreAfter);
         int hyaloclastite = 0;
-        for (Map.Entry<BlockPos, BlockState> e : world.appliedBlocks().entrySet()) {
-            BlockPos p = e.getKey();
-            if (e.getValue().equals(LavaPalette.HYALOCLASTITE) && p.y() < SEA && p.x() > shoreBefore) hyaloclastite++;
+        var model = world.terrain.world();
+        double seaZ = model.spec().blockTop(SEA);
+        for (int x = shoreBefore + 1; x < 64; x++) {
+            for (int z = -16; z < 16; z++) {
+                if (!model.isKnown(x, z)) continue;
+                for (int k = 0; k < model.layerCount(x, z); k++) {
+                    var layer = model.layer(x, z, k);
+                    if (layer.material() == MaterialTable.HYALOCLASTITE.id() && layer.bottom() < seaZ) hyaloclastite++;
+                }
+            }
         }
         assertTrue(hyaloclastite > 0, "quench fragments should be shed down the delta front");
 

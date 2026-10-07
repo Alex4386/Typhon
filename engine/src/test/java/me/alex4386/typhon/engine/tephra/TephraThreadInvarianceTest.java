@@ -37,7 +37,7 @@ class TephraThreadInvarianceTest {
     @Test
     void framesAndStateDoNotDependOnThreadCount() {
         Run one = run(1);
-        assertTrue(one.frames.stream().anyMatch(f -> !f.blockChanges().isEmpty()), "ash and bombs should land");
+        assertTrue(one.frames.stream().anyMatch(f -> !f.isEmpty()), "ash and bombs should land");
         for (int threads : new int[] {2, 3, 4}) {
             Run other = run(threads);
             assertEquals(one.hash, other.hash, "state hash with " + threads + " threads");

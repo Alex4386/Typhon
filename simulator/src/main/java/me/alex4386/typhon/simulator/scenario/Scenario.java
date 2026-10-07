@@ -16,12 +16,11 @@ import me.alex4386.typhon.engine.world.WorldSpec;
 import me.alex4386.typhon.engine.worlds.World;
 import me.alex4386.typhon.simulator.terrain.ColumnGrid;
 import me.alex4386.typhon.simulator.terrain.ContextTerrain;
-import me.alex4386.typhon.simulator.world.VoxelWorld;
 
 /**
- * A ready-to-run simulation: engine, shared terrain and lava, the volcanoes, and the in-memory world
- * that receives the engine's block changes. A fresh scenario has the initial terrain snapshot queued;
- * a restored one (see {@link Options#restore()}) resumes the saved engine and host world instead.
+ * A ready-to-run simulation: engine, shared terrain and lava, and the volcanoes. The world is the engine's
+ * continuous world model (no host block world). A fresh scenario has the initial terrain snapshot queued; a
+ * restored one (see {@link Options#restore()}) resumes the saved engine instead.
  */
 public final class Scenario {
     private final String presetName;
@@ -31,7 +30,6 @@ public final class Scenario {
     private final LavaFlow lava;
     private final List<VolcanoSystem> volcanoes;
     private final Engine engine;
-    private final VoxelWorld world;
     private final List<Consumer<Scenario>> afterFirstTick;
     private final boolean restored;
     private final World session;
@@ -79,13 +77,11 @@ public final class Scenario {
         SaveStore restore = b.options.restore();
         if (restore != null) engineBuilder.restore(restore);
         this.engine = engineBuilder.build();
-        this.world = new VoxelWorld(initialTerrain);
         attachRelief(terrain, initialTerrain);
         this.restored = restore != null;
         this.session = null;
         if (restored) {
-            byte[] edits = restore.read(VoxelWorld.SAVE_PATH);
-            if (edits != null) world.loadEdits(edits);
+            warnLegacyVoxelLog(restore);
         } else {
             this.engine.submit(initialTerrain.toSnapshot());
         }
@@ -100,7 +96,6 @@ public final class Scenario {
         this.volcanoes = List.copyOf(session.volcanoes().values());
         this.afterFirstTick = List.of();
         this.engine = session.engine();
-        this.world = new VoxelWorld(initialTerrain);
         ColumnGrid.Relief relief = initialTerrain.relief();
         if (relief != null) {
             double size = terrain.world().spec().metersPerColumn();
@@ -110,9 +105,20 @@ public final class Scenario {
         this.expansion = session.expansion();
         this.restored = restored;
         this.session = session;
-        if (restored) {
-            byte[] edits = session.stateStore().read(VoxelWorld.SAVE_PATH);
-            if (edits != null) world.loadEdits(edits);
+        if (restored) warnLegacyVoxelLog(session.stateStore());
+    }
+
+    /** Where saves before the continuous engine kept the simulator's block world (an edit log). */
+    public static final String LEGACY_VOXEL_PATH = "host/voxel-world.bin";
+
+    /**
+     * Saves from before the continuous engine also hold a block edit log; the world model in the engine
+     * state is the whole world now, so the log is ignored (with a warning).
+     */
+    private static void warnLegacyVoxelLog(SaveStore store) {
+        if (store.read(LEGACY_VOXEL_PATH) != null) {
+            System.err.println("warning: ignoring the legacy voxel edit log " + LEGACY_VOXEL_PATH
+                    + " (the engine's world model is the world now)");
         }
     }
 
@@ -175,17 +181,15 @@ public final class Scenario {
         return session;
     }
 
-    /** Saves the engine and the simulator's host world (between steps). */
+    /** Saves the engine, world model included (between steps). */
     public void save(SaveStore store) {
         engine.save(store);
-        store.write(VoxelWorld.SAVE_PATH, world.saveEdits());
     }
 
-    /** Saves a world scenario into its own world directory (state, history, host world). */
+    /** Saves a world scenario into its own world directory (state and history). */
     public void saveWorld() {
         if (session == null) throw new IllegalStateException("not a world scenario");
         session.save();
-        session.stateStore().write(VoxelWorld.SAVE_PATH, world.saveEdits());
     }
 
     /** Whether this scenario resumed from a save. */
@@ -205,7 +209,8 @@ public final class Scenario {
     }
 
     public Engine engine() { return session != null ? session.engine() : engine; }
-    public VoxelWorld world() { return world; }
+    /** The continuous world model (layer stacks, uplift, water) the engine keeps. */
+    public WorldModel world() { return terrain().world(); }
     /** On-demand growth of the simulated area. */
     public me.alex4386.typhon.engine.expansion.WorldExpansion expansion() { return session != null ? session.expansion() : expansion; }
 

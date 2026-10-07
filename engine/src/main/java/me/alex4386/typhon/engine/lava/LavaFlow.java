@@ -3,7 +3,6 @@ package me.alex4386.typhon.engine.lava;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -15,11 +14,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.function.DoubleSupplier;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.lava.LavaEvents.ChunkCoord;
 import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.Parallel;
@@ -285,11 +282,6 @@ public final class LavaFlow implements Subsystem {
 
     private WorldModel world() {
         return terrain.world();
-    }
-
-    /** Rock above the ground block's top that is not shown as a block (real m, ≥ 0). */
-    private double partialAboveBlock(LavaChunk c, int i) {
-        return Math.max(0, c.bed[i] - (c.ground[i] + 1) * metersPerBlock);
     }
 
     public void addSource(LavaSource source) {
@@ -618,15 +610,8 @@ public final class LavaFlow implements Subsystem {
             flushGroundExchange(c);
         }
 
-        // 4. rendering
-        parallel.forEach(update, CHUNK_GRAIN, c -> {
-            c.recount();
-            render(c);
-        });
-        for (LavaChunk c : update) {
-            for (BlockChange change : c.rendered) outbox.setBlock(change);
-            c.rendered.clear();
-        }
+        // 4. counts (the engine renders no blocks: hosts project the lava field themselves, mc-projection)
+        parallel.forEach(update, CHUNK_GRAIN, LavaChunk::recount);
 
         // 5. events & cleanup
         double interval = config.eventPeriodSeconds();
@@ -1205,26 +1190,6 @@ public final class LavaFlow implements Subsystem {
         int x = c.worldX(i);
         int z = c.worldZ(i);
         BlockState roof = LavaPalette.roof(kind);
-        int oldBottom = c.renderBottom[i];
-        int oldEnd = oldBottom + c.renderCount(i);
-        for (int y = Math.min(voidBottom, oldBottom); y < Math.max(roofEnd, oldEnd); y++) {
-            if (y < voidBottom) continue;
-            BlockState old = renderedState(c, i, y);
-            BlockState next;
-            if (y < roofBottom) {
-                next = BlockState.AIR;
-            } else if (y < roofEnd) {
-                next = roof;
-            } else {
-                next = c.waterY[i] != TerrainColumn.NO_WATER && y <= c.waterY[i] ? LavaPalette.WATER : LavaPalette.AIR;
-            }
-            BlockPos pos = new BlockPos(x, y, z);
-            if (old == null) {
-                if (!next.equals(BlockState.AIR)) outbox.setBlock(BlockChange.set(pos, next));
-            } else if (!old.equals(next)) {
-                outbox.setBlock(BlockChange.replace(pos, old.id(), next));
-            }
-        }
 
         double hc = c.crust[i];
         double cavity = Math.max(0, (c.roofTop[i] - hc) - c.bed[i]);
@@ -1248,7 +1213,6 @@ public final class LavaFlow implements Subsystem {
         int surface = roofEnd - 1;
         c.ground[i] = surface;
         terrain.updateBlockCache(x, z, surface, roof.id());
-        setRender(c, i, roofEnd, 0, 0, 0, (byte) 0, (byte) 0);
         formed.add(new LavaTube(x, z, voidBottom, roofBottom - 1));
     }
 
@@ -1348,121 +1312,9 @@ public final class LavaFlow implements Subsystem {
             c.ground[i] = y;
             BlockState rock = forced != null ? forced : LavaPalette.rock(silica, submerged, quenched, columnar, random);
             terrain.updateBlockCache(x, z, y, rock.id());
-            outbox.setBlock(BlockChange.set(new BlockPos(x, y, z), rock));
             stats.blocks++;
         }
         c.solid[i] = Math.max(0, s);
-    }
-
-    // ── Rendering ──
-
-    /** Parallel-safe: renders into the chunk's own {@link LavaChunk#rendered} buffer. */
-    private void render(LavaChunk c) {
-        List<BlockChange> outbox = c.rendered;
-        double l = metersPerBlock;
-        double minThickness = config.renderMinThickness() * l;
-        for (int i = 0; i < AREA; i++) {
-            int g = c.ground[i];
-            if (g == UNKNOWN) continue;
-            double h = c.thickness[i];
-            double hc = c.crust[i];
-            int bottom = g + 1;
-            int melt = 0;
-            int gap = 0;
-            int roof = 0;
-            byte top = 0;
-            byte roofKind = 0;
-            double partial = partialAboveBlock(c, i);
-            if (h >= minThickness) {
-                melt = Math.max(1, (int) Math.ceil((partial + h) / l - 1e-9));
-            }
-            if (hc > 0) {
-                roofKind = c.crustKind[i];
-                int roofBottom = (int) Math.ceil((c.roofTop[i] - hc) / l - 0.5);
-                int roofEnd = (int) Math.ceil(c.roofTop[i] / l - 0.5);
-                if (roofEnd > roofBottom) {
-                    roofBottom = Math.max(roofBottom, bottom);
-                    melt = Math.min(melt, roofBottom - bottom);
-                    gap = roofBottom - bottom - melt;
-                    roof = Math.max(0, roofEnd - roofBottom);
-                }
-            }
-            if (melt > 0) {
-                if (gap > 0 || roof > 0) {
-                    top = (byte) (1 << 3); // full lava block under a gap or roof
-                } else {
-                    double total = (partial + h) / l;
-                    double frac = total - (melt - 1);
-                    double si = c.silica[i];
-                    double crustT = rheology.solidusC(si) + 0.3 * (rheology.liquidusC(si) - rheology.solidusC(si));
-                    if (c.temperature[i] >= crustT && hc < config.crustRenderThickness()) {
-                        int level = (int) Math.max(0, Math.min(7, Math.round((1 - frac) * 7)));
-                        top = (byte) ((1 << 3) | level);
-                    } else {
-                        top = (byte) (2 << 3);
-                    }
-                }
-            }
-
-            int oldBottom = c.renderBottom[i];
-            int oldCount = c.renderCount(i);
-            if (oldBottom == bottom && c.renderMelt[i] == melt && c.renderGap[i] == gap && c.renderRoof[i] == roof
-                    && c.renderTop[i] == top && c.renderRoofKind[i] == roofKind) {
-                continue;
-            }
-            int newCount = melt + gap + roof;
-            if (oldCount == 0 && newCount == 0) {
-                c.renderBottom[i] = bottom;
-                continue;
-            }
-
-            int x = c.worldX(i);
-            int z = c.worldZ(i);
-            int oldEnd = oldBottom + oldCount;
-            int newEnd = bottom + newCount;
-            for (int y = oldBottom; y < oldEnd; y++) {
-                if (y <= g) continue; // overwritten by rock
-                BlockState old = renderedState(c, i, y);
-                BlockState next = y >= bottom && y < newEnd ? layoutState(bottom, melt, gap, top, roofKind, y) : null;
-                if (next == null) {
-                    next = c.waterY[i] != TerrainColumn.NO_WATER && y <= c.waterY[i] ? LavaPalette.WATER : LavaPalette.AIR;
-                }
-                if (!next.equals(old)) outbox.add(BlockChange.replace(new BlockPos(x, y, z), old.id(), next));
-            }
-            for (int y = bottom; y < newEnd; y++) {
-                if (y >= oldBottom && y < oldEnd) continue;
-                BlockState next = layoutState(bottom, melt, gap, top, roofKind, y);
-                if (next.equals(BlockState.AIR)) continue;
-                outbox.add(BlockChange.set(new BlockPos(x, y, z), next));
-            }
-            setRender(c, i, bottom, melt, gap, roof, top, roofKind);
-        }
-    }
-
-    private static void setRender(LavaChunk c, int i, int bottom, int melt, int gap, int roof, byte top, byte roofKind) {
-        c.renderBottom[i] = bottom;
-        c.renderMelt[i] = (short) melt;
-        c.renderGap[i] = (short) gap;
-        c.renderRoof[i] = (short) roof;
-        c.renderTop[i] = top;
-        c.renderRoofKind[i] = roofKind;
-    }
-
-    /** What the last render placed at {@code y}, or {@code null} outside the rendered range. */
-    private static BlockState renderedState(LavaChunk c, int i, int y) {
-        int bottom = c.renderBottom[i];
-        if (y < bottom || y >= bottom + c.renderCount(i)) return null;
-        return layoutState(bottom, c.renderMelt[i], c.renderGap[i], c.renderTop[i], c.renderRoofKind[i], y);
-    }
-
-    private static BlockState layoutState(int bottom, int melt, int gap, byte top, byte roofKind, int y) {
-        int k = y - bottom;
-        if (k < melt) {
-            if (k != melt - 1) return LavaPalette.lava(0);
-            return (top >> 3) == 2 ? LavaPalette.MAGMA_CRUST : LavaPalette.lava(top & 7);
-        }
-        if (k < melt + gap) return BlockState.AIR;
-        return LavaPalette.roof(roofKind);
     }
 
     private void emitFront(double now, List<LavaChunk> update, Outbox outbox) {
@@ -1774,25 +1626,9 @@ public final class LavaFlow implements Subsystem {
                     .doubles("solid", c.solid.clone())
                     .doubles("crust", c.crust.clone())
                     .doubles("roofTop", c.roofTop.clone())
-                    .ints("renderBottom", c.renderBottom.clone())
-                    .ints("renderMelt", widen(c.renderMelt))
-                    .ints("renderGap", widen(c.renderGap))
-                    .ints("renderRoof", widen(c.renderRoof))
-                    .bytes("renderTop", c.renderTop.clone())
-                    .bytes("renderRoofKind", c.renderRoofKind.clone())
                     .bytes("crustKind", c.crustKind.clone())
                     .ints("unit", c.unit.clone()));
         }
-    }
-
-    private static int[] widen(short[] values) {
-        int[] out = new int[values.length];
-        for (int i = 0; i < values.length; i++) out[i] = values[i];
-        return out;
-    }
-
-    private static void narrow(int[] values, short[] target) {
-        for (int i = 0; i < target.length; i++) target[i] = (short) values[i];
     }
 
     @Override
@@ -1867,12 +1703,6 @@ public final class LavaFlow implements Subsystem {
             System.arraycopy(f.doubles("crust"), 0, c.crust, 0, AREA);
             System.arraycopy(f.doubles("roofTop"), 0, c.roofTop, 0, AREA);
             System.arraycopy(f.ints("unit"), 0, c.unit, 0, AREA);
-            System.arraycopy(f.ints("renderBottom"), 0, c.renderBottom, 0, AREA);
-            narrow(f.ints("renderMelt"), c.renderMelt);
-            narrow(f.ints("renderGap"), c.renderGap);
-            narrow(f.ints("renderRoof"), c.renderRoof);
-            System.arraycopy(f.bytes("renderTop"), 0, c.renderTop, 0, AREA);
-            System.arraycopy(f.bytes("renderRoofKind"), 0, c.renderRoofKind, 0, AREA);
             System.arraycopy(f.bytes("crustKind"), 0, c.crustKind, 0, AREA);
             c.recount();
             chunks.put(c.key, c);

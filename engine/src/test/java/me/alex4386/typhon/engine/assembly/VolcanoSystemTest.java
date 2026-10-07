@@ -4,8 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.alert.AlertLevel;
@@ -15,7 +13,6 @@ import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
 import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.seismic.SeismicEvent;
@@ -166,9 +163,6 @@ class VolcanoSystemTest {
         assertTrue(p.lavaShare() > 0.4, "fountains fall back molten and feed lava: " + p);
         assertFalse(events(frames, SeismicEvent.class).isEmpty(), "unrest and eruption should be seismic");
 
-        boolean lavaPlaced = frames.stream().flatMap(f -> f.blockChanges().stream())
-                .map(BlockChange::to).anyMatch(s -> s.id().equals(LAVA));
-        assertTrue(lavaPlaced, "lava blocks should appear at the surface");
         assertTrue(w.lava().totalLavaVolume() + w.lava().solidifiedVolume() > 0);
         // The lava field receives the real erupted volume on an L-metre grid (V/L³ blocks).
         assertEquals(VolcanoScaling.DEFAULT.metersPerBlock(), w.lava().metersPerBlock());

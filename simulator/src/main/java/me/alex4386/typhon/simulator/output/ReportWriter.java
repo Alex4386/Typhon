@@ -106,7 +106,7 @@ public final class ReportWriter {
         row(h, "Earthquakes", s.seismicCounts.toString() + (s.maxMagnitude > -10 ? ", max M" + fmt(s.maxMagnitude) : ""));
         row(h, "Hydrothermal features formed", s.featuresFormed.isEmpty() ? "none" : s.featuresFormed.toString());
         row(h, "Lava ocean-entry reports", Long.toString(s.lavaWaterEntries));
-        row(h, "World changes applied / CAS conflicts", fmt(last.get("world_changes")) + " / " + fmt(last.get("world_conflicts")));
+        row(h, "World-model column edits", fmt(last.get("world_edits")));
         row(h, "Scaling", String.format(Locale.ROOT, "1 block = %s m, plume 1 block = %s m",
                 fmt(scaling.metersPerBlock()), fmt(scaling.plumeMetersPerBlock())));
         h.append("</table>");

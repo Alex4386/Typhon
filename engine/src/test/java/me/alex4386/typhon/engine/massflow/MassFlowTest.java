@@ -4,9 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.gson.JsonParser;
 import java.util.List;
-import java.util.Map;
 import java.util.function.IntBinaryOperator;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.LaharStarted;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.PdcDeposit;
@@ -16,10 +14,11 @@ import me.alex4386.typhon.engine.massflow.MassFlowEvents.PdcSteam;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.TerrainNeeded;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
 import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
-import me.alex4386.typhon.engine.world.BlockState;
+import me.alex4386.typhon.engine.world.BlockId;
+import me.alex4386.typhon.engine.world.LayerView;
+import me.alex4386.typhon.engine.world.MaterialTable;
 import org.junit.jupiter.api.Test;
 import me.alex4386.typhon.engine.testing.Saves;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
@@ -186,45 +185,42 @@ class MassFlowTest {
     // ── Deposits ──
 
     @Test
-    void depositsRaiseTerrainWithCompareAndSetBlocks() {
+    void depositsRaiseTerrain() {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 3, 3, (x, z) -> 64);
         PyroclasticFlows f = pdc(w);
         f.release(new BlockPos(32, 0, 32), 6, 2000, 400, 0, Trigger.MANUAL);
         runout(w, f);
 
-        Map<BlockPos, BlockState> blocks = w.appliedBlocks();
         int raised = 0;
         for (int x = 0; x < 64; x++) {
             for (int z = 0; z < 64; z++) {
                 int g = w.terrain.column(x, z).groundY();
                 if (g > 64) {
                     raised++;
-                    BlockState top = blocks.get(new BlockPos(x, g, z));
-                    assertTrue(top.equals(MassFlowPalette.TUFF) || top.equals(MassFlowPalette.PDC_VENEER),
+                    BlockId top = w.terrain.column(x, z).surface();
+                    assertTrue(top.equals(MassFlowPalette.TUFF.id()) || top.equals(MassFlowPalette.PDC_VENEER.id()),
                             "top of the deposit at " + x + "," + z + ": " + top);
                 }
             }
         }
         assertTrue(raised > 0, "deposit should raise the ground");
-        for (BlockChange change : w.blockChanges()) {
-            assertTrue(change.isConditional(), "every edit is compare-and-set: " + change);
-        }
     }
 
     @Test
     void hotDepositsWeld() {
-        assertTrue(depositedBlocks(750).contains(MassFlowPalette.WELDED_TUFF));
-        List<BlockState> cool = depositedBlocks(300);
-        assertTrue(cool.contains(MassFlowPalette.TUFF));
-        assertFalse(cool.contains(MassFlowPalette.WELDED_TUFF));
+        assertTrue(deposited(750).stream().anyMatch(l -> l.welding() >= 1), "hot ignimbrite welds");
+        List<LayerView> cool = deposited(300);
+        assertFalse(cool.isEmpty(), "the cool flow deposits");
+        assertTrue(cool.stream().allMatch(l -> l.welding() == 0 && l.loose()), "cool ignimbrite stays loose");
     }
 
-    private static List<BlockState> depositedBlocks(double temperature) {
+    /** The flow's own deposit layers (not the host's ground). */
+    private static List<LayerView> deposited(double temperature) {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 3, 3, (x, z) -> 64);
         PyroclasticFlows f = pdc(w);
         f.release(new BlockPos(32, 0, 32), 4, 1500, temperature, 0, Trigger.MANUAL);
         runout(w, f);
-        return w.blockChanges().stream().map(BlockChange::to).toList();
+        return w.layers(64).stream().filter(l -> l.material() == MaterialTable.TUFF.id()).toList();
     }
 
     // ── Water ──
@@ -290,16 +286,15 @@ class MassFlowTest {
     }
 
     @Test
-    void buriedMudCompacts() {
+    void laharsLeaveMudOrGravel() {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 3, 3, (x, z) -> 64);
         Lahars l = new Lahars("lahar", w.terrain);
         l.release(new BlockPos(32, 0, 32), 1, 3000, 15, 0.55, Trigger.MANUAL);
         runout(w, l);
-        List<BlockState> placed = w.blockChanges().stream().map(BlockChange::to).toList();
-        assertTrue(placed.contains(MassFlowPalette.MUD) || placed.contains(MassFlowPalette.GRAVEL));
-        if (w.terrain.column(32, 32).groundY() >= 66) {
-            assertTrue(placed.contains(MassFlowPalette.PACKED_MUD), "lower mud compacts under later deposit");
-        }
+        List<BlockId> surfaces = w.surfaces(64);
+        assertTrue(surfaces.contains(MassFlowPalette.MUD.id()) || surfaces.contains(MassFlowPalette.GRAVEL.id()));
+        assertTrue(w.layers(64).stream().anyMatch(layer -> layer.material() == MaterialTable.LAHAR_DEPOSIT.id()),
+                "the world model holds the lahar deposit");
     }
 
     // ── Sources, events, commands ──

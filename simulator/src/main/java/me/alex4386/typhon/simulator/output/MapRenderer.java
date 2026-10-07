@@ -14,10 +14,8 @@ import me.alex4386.typhon.engine.geothermal.HydrothermalFeature;
 import me.alex4386.typhon.engine.geothermal.PlacedFeature;
 import me.alex4386.typhon.engine.tephra.TephraSubsystem;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
-import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.simulator.scenario.Scenario;
 import me.alex4386.typhon.simulator.terrain.ColumnGrid;
-import me.alex4386.typhon.simulator.world.VoxelWorld;
 
 /**
  * Renders top-down maps of a finished run (north up, +X right) with {@code javax.imageio} only.
@@ -30,8 +28,8 @@ public final class MapRenderer {
     private final ColumnGrid grid;
     private final int step;
     private final int width;
-    private final double[][] top;      // final top solid y
-    private final double[][] initial;  // initial ground y
+    private final double[][] top;      // final ground surface, in blocks (world-model surface + uplift over L)
+    private final double[][] initial;  // initial ground surface, in blocks (the top of the initial ground block)
 
     public MapRenderer(Scenario scenario) {
         this.scenario = scenario;
@@ -40,13 +38,14 @@ public final class MapRenderer {
         this.width = grid.size() / step;
         this.top = new double[width][width];
         this.initial = new double[width][width];
-        VoxelWorld world = scenario.world();
+        var world = scenario.world();
+        double l = world.spec().metersPerColumn();
         for (int j = 0; j < width; j++) {
             for (int i = 0; i < width; i++) {
                 int x = x(i);
                 int z = z(j);
-                top[j][i] = world.topSolidY(x, z);
-                initial[j][i] = grid.ground(x, z);
+                initial[j][i] = grid.ground(x, z) + 1;
+                top[j][i] = world.isKnown(x, z) ? (world.surfaceZ(x, z) + world.uplift(x, z)) / l : initial[j][i];
             }
         }
     }
@@ -98,15 +97,17 @@ public final class MapRenderer {
         double min = Double.MAX_VALUE, max = -Double.MAX_VALUE;
         for (double[] row : top) for (double v : row) { min = Math.min(min, v); max = Math.max(max, v); }
         BufferedImage img = image();
-        VoxelWorld world = scenario.world();
+        var world = scenario.world();
+        var lava = scenario.lava();
+        double l = world.spec().metersPerColumn();
         for (int j = 0; j < width; j++) {
             for (int i = 0; i < width; i++) {
                 double shade = hillshade(top, i, j);
                 double t = (top[j][i] - min) / Math.max(1, max - min);
                 Color c = ramp(t, TERRAIN);
-                BlockId topId = world.topBlock(x(i), z(j)).id();
-                if (topId.equals(VoxelWorld.LAVA)) c = new Color(255, 120, 20);
-                else if (topId.equals(VoxelWorld.WATER)) c = new Color(40, 90, 200);
+                int x = x(i), z = z(j);
+                if (lava.thickness(x, z) > 0) c = new Color(255, 120, 20);
+                else if (world.isKnown(x, z) && world.waterZ(x, z) > top[j][i] * l) c = new Color(40, 90, 200);
                 img.setRGB(i, j, shadeColor(c, shade).getRGB());
             }
         }

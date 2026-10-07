@@ -37,7 +37,7 @@ class MassFlowThreadInvarianceTest {
     @Test
     void pyroclasticFlowsDoNotDependOnThreadCount() {
         Run one = pdc(1);
-        assertTrue(one.frames.stream().anyMatch(f -> !f.blockChanges().isEmpty()), "the PDC should deposit");
+        assertTrue(one.frames.stream().anyMatch(f -> !f.isEmpty()), "the PDC should report");
         for (int threads : new int[] {2, 3, 4}) {
             Run other = pdc(threads);
             assertEquals(one.hash, other.hash, "state hash with " + threads + " threads");

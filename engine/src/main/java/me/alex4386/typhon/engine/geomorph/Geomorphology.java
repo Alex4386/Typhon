@@ -11,7 +11,6 @@ import java.util.Objects;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.BooleanSupplier;
-import java.util.function.DoubleSupplier;
 import me.alex4386.typhon.engine.geomorph.GeomorphEvents.FailureStyle;
 import me.alex4386.typhon.engine.geomorph.GeomorphEvents.Trigger;
 import me.alex4386.typhon.engine.massflow.DebrisAvalanches;
@@ -19,7 +18,6 @@ import me.alex4386.typhon.engine.massflow.Lahars;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents;
 import me.alex4386.typhon.engine.massflow.PyroclasticFlows;
 import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.save.FieldChunk;
 import me.alex4386.typhon.engine.save.StateReader;
@@ -31,7 +29,6 @@ import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.world.BlockId;
-import me.alex4386.typhon.engine.world.BlockState;
 import me.alex4386.typhon.engine.world.ColumnStacks;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerFlags;
@@ -1305,7 +1302,7 @@ public final class Geomorphology implements Subsystem {
         active.add(k);
     }
 
-    /** Mirrors changed world-model columns into blocks (whole blocks once more than half filled). */
+    /** Mirrors changed world-model columns into the block cache (whole blocks once more than half filled). */
     private void flushBlocks(Outbox outbox) {
         for (long k : changed) {
             int x = keyX(k);
@@ -1316,22 +1313,7 @@ public final class Geomorphology implements Subsystem {
             int newY = terrain.blockForSurface(s);
             int oldY = column.groundY();
             if (newY == oldY) continue;
-            BlockId top = blockAt(x, z, newY);
-            if (newY < oldY) {
-                for (int y = oldY; y > newY; y--) {
-                    boolean wet = column.waterY() != TerrainColumn.NO_WATER && y <= column.waterY();
-                    BlockId expected = y == oldY ? column.surface() : null;
-                    outbox.setBlock(new BlockChange(new BlockPos(x, y, z), expected,
-                            BlockState.of(wet ? WATER : BlockId.AIR)));
-                }
-                outbox.setBlock(BlockChange.set(new BlockPos(x, newY, z), top));
-            } else {
-                for (int y = oldY + 1; y <= newY; y++) {
-                    boolean wet = column.waterY() != TerrainColumn.NO_WATER && y <= column.waterY();
-                    outbox.setBlock(BlockChange.replace(new BlockPos(x, y, z), wet ? WATER : BlockId.AIR, blockAt(x, z, y)));
-                }
-            }
-            terrain.updateBlockCache(x, z, newY, top);
+            terrain.updateBlockCache(x, z, newY, blockAt(x, z, newY));
         }
         changed.clear();
     }

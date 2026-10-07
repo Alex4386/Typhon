@@ -12,11 +12,9 @@ import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.FlowCell;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
 import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
-import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.BlockState;
 import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerFlags;
@@ -276,14 +274,6 @@ public final class Lahars extends MassFlowField {
     @Override
     protected BlockState depositBlock(MassFlowChunk c, int i, double meanTemperatureC, double meanSpeed) {
         return MassFlowPalette.laharBlock(meanSpeed, config.coarseSpeed);
-    }
-
-    @Override
-    protected void afterBlockPlaced(MassFlowChunk c, int i, BlockId previousSurface, int y, Outbox outbox) {
-        if (previousSurface.equals(MassFlowPalette.MUD.id())) {
-            outbox.setBlock(BlockChange.replace(new BlockPos(c.worldX(i), y - 1, c.worldZ(i)), MassFlowPalette.MUD.id(),
-                    MassFlowPalette.PACKED_MUD));
-        }
     }
 
     @Override

@@ -3,7 +3,6 @@ package me.alex4386.typhon.simulator.run;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -82,7 +81,6 @@ public final class Simulation {
             EngineFrame frame = engine.step();
             long stepMicros = engine.timeMicros() - frame.timeMicros();
             boolean last = engine.timeMicros() >= endMicros;
-            for (BlockChange change : frame.blockChanges()) scenario.world().apply(change);
             for (EngineEvent event : frame.events()) {
                 summary.observe(event);
                 eventSink.accept(event);

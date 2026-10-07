@@ -27,7 +27,7 @@ class PlaybackTest {
     }
 
     static EngineFrame frame(double time, EngineEvent... events) {
-        return new EngineFrame(0, Math.round(time * 1e6), List.of(), List.of(events));
+        return new EngineFrame(0, Math.round(time * 1e6), List.of(events));
     }
 
     static EruptionStarted start(double t, String v) {

@@ -7,13 +7,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
-import me.alex4386.typhon.engine.world.BlockId;
 import org.junit.jupiter.api.Test;
 
 /** Stages of lane-declaring subsystems run concurrently but produce exactly the sequential output. */
@@ -43,8 +40,6 @@ class ConcurrencyLaneTest {
             THREADS.add(Thread.currentThread().getName());
             position += context.random().nextInt(-3, 4) + (upstream == null ? 0 : upstream.position % 3);
             context.outbox().emit(new Tick(context.time(), id, position));
-            BlockPos pos = new BlockPos((int) (position % 16), 64, lane.hashCode() & 15);
-            context.outbox().setBlock(BlockChange.set(pos, BlockId.minecraft(position % 2 == 0 ? "stone" : "basalt")));
         }
 
         @Override public void saveState(StateWriter writer) { writer.json().addProperty("p", position); }
@@ -55,7 +50,7 @@ class ConcurrencyLaneTest {
     static final class Barrier implements Subsystem {
         @Override public String id() { return "barrier"; }
         @Override public void step(StepContext context) {
-            context.outbox().setBlock(BlockChange.set(new BlockPos(0, 64, 0), BlockId.minecraft("sand")));
+            context.outbox().emit(new Tick(context.time(), id(), -1));
         }
     }
 

@@ -3,7 +3,6 @@ package me.alex4386.typhon.engine.tephra;
 import me.alex4386.typhon.engine.sim.Parallel;
 import com.google.gson.JsonObject;
 import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.save.FieldChunk;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
@@ -375,8 +374,6 @@ final class AshGrid {
             for (int b = whole0; b < whole1; b++) {
                 y++;
                 if (y > BlockPos.MAX_Y) break;
-                BlockId expected = column.waterY() != TerrainColumn.NO_WATER && y <= column.waterY() ? WATER : BlockId.AIR;
-                outbox.setBlock(BlockChange.replace(new BlockPos(x, y, z), expected, palette.wholeBlock()));
                 terrain.updateBlockCache(x, z, y, palette.wholeBlock());
             }
             return;
@@ -388,7 +385,6 @@ final class AshGrid {
         if (stage1 <= stage0 || column.submerged() || NOT_COVERABLE.contains(column.surface())) return;
         BlockId cover = palette.covers().get(stage1).block();
         if (cover.equals(column.surface())) return;
-        outbox.setBlock(BlockChange.replace(new BlockPos(x, column.groundY(), z), column.surface(), cover));
         terrain.updateBlockCache(x, z, column.groundY(), cover);
     }
 

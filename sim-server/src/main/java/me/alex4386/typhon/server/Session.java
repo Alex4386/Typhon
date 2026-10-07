@@ -34,9 +34,7 @@ import me.alex4386.typhon.engine.dike.DikeCommands;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaCommands;
 import me.alex4386.typhon.engine.massflow.MassFlowCommands;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineEvent;
-import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.save.DirectorySaveStore;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.save.SaveStore;
@@ -104,7 +102,6 @@ final class Session implements AutoCloseable {
     private volatile Scenario live;
     private volatile EngineRunner runner;
     private Thread drainThread;
-    private final Object voxelLock = new Object();
 
     private volatile boolean replay;
     private volatile Scenario replayScenario;
@@ -215,8 +212,7 @@ final class Session implements AutoCloseable {
         this.source = newSource;
         boolean fresh = !scenario.restored() && scenario.engine().currentStep() == 0;
         if (fresh) {
-            EngineFrame first = scenario.engine().step();
-            for (BlockChange c : first.blockChanges()) scenario.world().apply(c);
+            scenario.engine().step();
             scenario.runAfterFirstTick();
         }
         this.live = scenario;
@@ -300,24 +296,18 @@ final class Session implements AutoCloseable {
     private void drainLoop(EngineRunner r, Scenario scenario) {
         try {
             while (r.isRunning() || r.pendingFrames() > 0) {
-                EngineFrame f = r.pollFrame(100, TimeUnit.MILLISECONDS);
-                if (f == null) continue;
-                synchronized (voxelLock) {
-                    for (BlockChange c : f.blockChanges()) scenario.world().apply(c);
-                }
+                // frames carry only events (clients read them from the event ring): drain so the runner never waits
+                r.pollFrame(100, TimeUnit.MILLISECONDS);
             }
         } catch (InterruptedException e) {
             // closing
         }
     }
 
-    /** Applies block changes still queued (engine thread, before saving). */
+    /** Drops frames still queued (engine thread, before saving). */
     private void drainFramesNow(EngineRunner r, Scenario scenario) {
-        synchronized (voxelLock) {
-            EngineFrame f;
-            while ((f = r.pollFrame()) != null) {
-                for (BlockChange c : f.blockChanges()) scenario.world().apply(c);
-            }
+        while (r.pollFrame() != null) {
+            // events only; the world model is already in the engine state
         }
     }
 

@@ -1,12 +1,8 @@
 package me.alex4386.typhon.engine.lava;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.function.IntBinaryOperator;
-import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -15,7 +11,6 @@ import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
 import me.alex4386.typhon.engine.world.BlockId;
-import me.alex4386.typhon.engine.world.BlockState;
 
 /** Synthetic terrain plus helpers for driving a {@link LavaFlow} in tests. */
 final class LavaTestWorld {
@@ -94,15 +89,6 @@ final class LavaTestWorld {
 
     void run(Engine engine, int ticks) {
         for (int i = 0; i < ticks; i++) frames.add(engine.step());
-    }
-
-    /** Final block state per position after applying all frames in order. */
-    Map<BlockPos, BlockState> appliedBlocks() {
-        Map<BlockPos, BlockState> blocks = new HashMap<>();
-        for (EngineFrame frame : frames) {
-            for (BlockChange change : frame.blockChanges()) blocks.put(change.pos(), change.to());
-        }
-        return blocks;
     }
 
     <T extends EngineEvent> List<T> events(Class<T> type) {

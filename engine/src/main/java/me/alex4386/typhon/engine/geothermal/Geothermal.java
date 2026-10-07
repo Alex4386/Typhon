@@ -4,10 +4,8 @@ import me.alex4386.typhon.engine.config.ConfigCopy;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashSet;
@@ -17,7 +15,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.Parallel;
 import me.alex4386.typhon.engine.sim.StepContext;
@@ -496,14 +493,7 @@ public final class Geothermal implements Subsystem, HeatSources {
 
         int waterBlocks = 1 + context.random().nextInt(4);
         int potentY = g - waterBlocks;
-        int magmaY = potentY - 1;
 
-        set(context, new BlockPos(x, magmaY, z), null, BlockState.of(GeothermalBlocks.MAGMA_BLOCK));
-        set(context, new BlockPos(x, potentY, z), null, BlockState.of(GeothermalBlocks.POTENT_SULFUR));
-        for (int y = potentY + 1; y <= g; y++) {
-            BlockId expected = y == g ? column.surface() : null;
-            set(context, new BlockPos(x, y, z), expected, BlockState.of(GeothermalBlocks.WATER));
-        }
         // the vent pit is waterBlocks feature blocks deep (≤ 1 m each), never whole 20 m columns
         terrain.excavate(x, z, waterBlocks * featureBlockM(), true, GeothermalBlocks.POTENT_SULFUR);
         register(new PlacedFeature(x, potentY, z, HydrothermalFeature.GEYSER, waterBlocks));
@@ -558,8 +548,6 @@ public final class Geothermal implements Subsystem, HeatSources {
         BlockId floor = sulfurSpring ? GeothermalBlocks.POTENT_SULFUR : null;
         for (int[] p : pool) {
             TerrainColumn column = terrain.column(p[0], p[1]);
-            set(context, new BlockPos(p[0], g, p[1]), column.surface(), BlockState.of(GeothermalBlocks.WATER));
-            if (floor != null) set(context, new BlockPos(p[0], g - 1, p[1]), null, BlockState.of(floor));
             terrain.excavate(p[0], p[1], featureBlockM(), true, floor != null ? floor : column.surface());
             register(new PlacedFeature(p[0], g, p[1], kind, 0));
         }
@@ -678,7 +666,6 @@ public final class Geothermal implements Subsystem, HeatSources {
         if (!config.alterableSurfaces.contains(column.surface())) return false;
         BlockId resolved = palette.resolve(preferred);
         if (resolved == null) return false;
-        set(context, new BlockPos(x, column.groundY(), z), column.surface(), BlockState.of(resolved));
         terrain.setGround(x, z, column.groundY(), resolved);
         register(new PlacedFeature(x, column.groundY(), z, kind, 0));
         return true;
@@ -712,7 +699,6 @@ public final class Geothermal implements Subsystem, HeatSources {
         if (!config.alterableSurfaces.contains(column.surface())) return;
         BlockId sulfur = palette.resolve(GeothermalBlocks.SULFUR);
         if (sulfur == null) return;
-        set(context, new BlockPos(fumarole.x(), fumarole.y(), fumarole.z()), column.surface(), BlockState.of(sulfur));
         terrain.setGround(fumarole.x(), fumarole.z(), fumarole.y(), sulfur);
         features.put(PlacedFeature.key(fumarole.x(), fumarole.z()), fumarole.withLevel(1));
     }
@@ -732,15 +718,9 @@ public final class Geothermal implements Subsystem, HeatSources {
     private void growSpike(StepContext context, PlacedFeature deposit) {
         int oldHeight = deposit.level();
         int newHeight = oldHeight + 1;
-        BlockState[] column = new BlockState[newHeight];
+        // the spike is a feature level (a host draws it from the feature list), not engine blocks
         for (int i = 0; i < newHeight; i++) {
-            BlockState resolved = palette.resolve(spikeState(i, newHeight));
-            if (resolved == null) return;
-            column[i] = resolved;
-        }
-        for (int i = 0; i < newHeight; i++) {
-            BlockId expected = i < oldHeight ? column[i].id() : GeothermalBlocks.AIR;
-            set(context, new BlockPos(deposit.x(), deposit.y() + 1 + i, deposit.z()), expected, column[i]);
+            if (palette.resolve(spikeState(i, newHeight)) == null) return;
         }
         features.put(PlacedFeature.key(deposit.x(), deposit.z()), deposit.withLevel(newHeight));
     }
@@ -939,12 +919,6 @@ public final class Geothermal implements Subsystem, HeatSources {
     private void register(PlacedFeature feature) {
         features.put(PlacedFeature.key(feature.x(), feature.z()), feature);
         counts.merge(feature.kind(), 1, Integer::sum);
-    }
-
-    private void set(StepContext context, BlockPos pos, BlockId expected, BlockState preferred) {
-        BlockState resolved = palette.resolve(preferred);
-        if (resolved == null) return;
-        context.outbox().setBlock(BlockChange.replace(pos, expected, resolved));
     }
 
     private static final BlockId[] ACID_PRODUCTS = {

@@ -2,11 +2,11 @@ package me.alex4386.typhon.engine.tephra;
 
 import static me.alex4386.typhon.engine.tephra.TephraTestSupport.events;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.tephra.TephraEvents.BombLanded;
@@ -132,8 +132,8 @@ class BallisticsTest {
         BombLanded landed = events(frames, BombLanded.class).get(0);
         assertEquals(99, landed.position().y());
         assertEquals(0.5 + 2 * 30 * 30 / G, landed.position().x(), 1.0);
-        // No block changes where the engine does not know the terrain.
-        assertTrue(frames.stream().allMatch(f -> f.blockChanges().isEmpty()));
+        // Nothing lands in the world model where the engine does not know the terrain.
+        assertFalse(terrain.world().isKnown((int) Math.floor(landed.position().x()), 0));
     }
 
     @Test

@@ -13,7 +13,6 @@ import java.util.TreeMap;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.command.EngineCommand;
 import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
@@ -35,11 +34,9 @@ import me.alex4386.typhon.engine.world.DepositType;
 import me.alex4386.typhon.engine.world.LayerFlags;
 import me.alex4386.typhon.engine.world.MaterialTable;
 import me.alex4386.typhon.engine.world.UnitSource;
-import me.alex4386.typhon.engine.world.WorldModel;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.world.BlockId;
-import me.alex4386.typhon.engine.world.BlockState;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
 
@@ -606,19 +603,17 @@ public final class TephraSubsystem implements Subsystem {
 
     private void placeBomb(StepContext context, int x, int z, Bomb bomb) {
         TerrainColumn column = terrain.column(x, z);
-        int y = column.groundY() + 1;
-        if (y > BlockPos.MAX_Y) return;
-        boolean inWater = column.waterY() != TerrainColumn.NO_WATER && y <= column.waterY();
-        BlockPos pos = new BlockPos(x, y, z);
-        context.outbox().setBlock(BlockChange.replace(pos, inWater ? WATER : BlockId.AIR, MAGMA_BLOCK));
-        terrain.updateBlockCache(x, z, y, MAGMA_BLOCK);
-        // The world model gets the bomb's real volume spread over the column (a bomb is far smaller
-        // than a column; the block above only shows it).
+        boolean inWater = column.submerged();
+        // The world model gets the bomb's real volume spread over the column (a bomb is far smaller than a
+        // column); the block cache shows the hot clast as the surface of whatever block that surface is in.
         double l = metersPerBlock();
         double thickness = Math.PI / 6 * bomb.diameter * bomb.diameter * bomb.diameter / (l * l);
         // a landed bomb is a loose clast among the scoria (cohesionless; it rolls to the angle of repose)
         terrain.world().deposit(x, z, thickness, bombRock(bomb.silicaWt),
                 units.unit(DepositType.FALL, context.time(), Double.NaN), LayerFlags.LOOSE, 0.3, 0);
+        int y = terrain.blockForSurface(terrain.world().surfaceZ(x, z));
+        BlockPos pos = new BlockPos(x, y, z);
+        terrain.updateBlockCache(x, z, y, MAGMA_BLOCK);
 
         double seconds = Math.max(config.minCoolingSeconds, config.coolingSecondsPerSquareMeter * bomb.diameter * bomb.diameter);
         if (inWater) seconds *= config.waterCoolingFactor;
@@ -634,7 +629,6 @@ public final class TephraSubsystem implements Subsystem {
             if (cooling.dueTime() > now) continue;
             it.remove();
             BlockPos pos = cooling.pos();
-            context.outbox().setBlock(BlockChange.replace(pos, MAGMA_BLOCK, cooling.target()));
             TerrainColumn column = terrain.column(pos.x(), pos.z());
             if (column != null && column.groundY() == pos.y() && column.surface().equals(MAGMA_BLOCK)) {
                 terrain.updateBlockCache(pos.x(), pos.z(), pos.y(), cooling.target());

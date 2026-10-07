@@ -2,17 +2,12 @@ package me.alex4386.typhon.engine.deformation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.deformation.DeformationEvents.DeformationSample;
 import me.alex4386.typhon.engine.deformation.DeformationEvents.GroundDeformed;
-import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -22,7 +17,6 @@ import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.terrain.TerrainSnapshot;
 import me.alex4386.typhon.engine.testing.StubMagmaState;
 import me.alex4386.typhon.engine.world.BlockId;
-import me.alex4386.typhon.engine.world.BlockState;
 import org.junit.jupiter.api.Test;
 import me.alex4386.typhon.engine.testing.Saves;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
@@ -188,7 +182,6 @@ class DeformationModelTest {
         assertEquals(w.model().upliftAt(4, 0), world.uplift(4, 0), 0.01, "a continuous field, not whole blocks");
         assertEquals(64, w.terrain().column(0, 0).groundY(), "the stratigraphy is not raised in blocks");
         assertFalse(events(first, GroundDeformed.class).isEmpty());
-        assertTrue(first.stream().allMatch(f -> f.blockChanges().isEmpty()), "no block edits");
 
         magma.overpressure = 0;
         run(w.engine(), 20 * 20);

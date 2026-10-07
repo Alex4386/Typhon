@@ -2,22 +2,19 @@ package me.alex4386.typhon.engine.lava;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.gson.JsonParser;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import me.alex4386.typhon.engine.lava.LavaEvents.ChunkCoord;
 import me.alex4386.typhon.engine.lava.LavaTestWorld.FixedRheology;
 import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.VentSite;
+import me.alex4386.typhon.engine.terrain.TerrainColumn;
 import me.alex4386.typhon.engine.world.BlockId;
 import me.alex4386.typhon.engine.world.BlockState;
 import org.junit.jupiter.api.Test;
@@ -171,9 +168,10 @@ class LavaFlowTest {
         Engine engine = world.engine(lava, 7);
         lava.addLava(0, 0, 1, BASALT_T, BASALT_SI, 0.1);
         world.run(engine, 20_000);
-        BlockState rock = world.appliedBlocks().get(new BlockPos(0, 61, 0));
-        assertNotNull(rock);
-        assertTrue(rock.id().equals(BlockId.minecraft("smooth_basalt")) || rock.id().equals(BlockId.minecraft("tuff")),
+        TerrainColumn column = world.terrain.column(0, 0);
+        assertTrue(column.groundY() >= 61, "pillows raise the ground: " + column);
+        BlockId rock = column.surface();
+        assertTrue(rock.equals(BlockId.minecraft("smooth_basalt")) || rock.equals(BlockId.minecraft("tuff")),
                 "pillow rock was " + rock);
     }
 
@@ -185,19 +183,17 @@ class LavaFlowTest {
         lava.addLava(0, 0, 3, BASALT_T, BASALT_SI, 0.1);
 
         world.run(engine, 1);
-        Map<BlockPos, BlockState> early = world.appliedBlocks();
-        assertEquals("minecraft:lava", early.get(new BlockPos(0, 63, 0)).id().toString(), "lava rendered while molten");
+        assertTrue(lava.thickness(0, 0) > 2, "molten lava stands in the pit");
 
         for (int t = 0; t < 200_000 && lava.totalLavaVolume() > 0; t++) world.run(engine, 1);
         assertEquals(0, lava.totalLavaVolume());
         assertEquals(63, world.terrain.column(0, 0).groundY());
         assertEquals(0, lava.partialSolid(0, 0), 1e-6);
 
-        Map<BlockPos, BlockState> blocks = world.appliedBlocks();
-        BlockState columnar = BlockState.minecraft("basalt").with("axis", "y");
-        for (int y = 61; y <= 63; y++) assertEquals(columnar, blocks.get(new BlockPos(0, y, 0)), "y=" + y);
-        BlockState above = blocks.get(new BlockPos(0, 64, 0));
-        assertTrue(above == null || above.id().equals(BlockId.AIR), "no lava left above: " + above);
+        assertEquals(BlockId.minecraft("basalt"), world.terrain.column(0, 0).surface(), "columnar basalt on top");
+        // the pit is filled continuously: the world-model surface is the top of the frozen sheet
+        double l = world.terrain.world().spec().metersPerColumn();
+        assertEquals(64 * l, world.terrain.world().surfaceZ(0, 0), 0.05 * l);
     }
 
     @Test
@@ -340,21 +336,15 @@ class LavaFlowTest {
         for (int t = 0; t < 100_000 && lava.activeCellCount() > 0; t++) world.run(engine, 1);
         assertEquals(0, lava.activeCellCount());
 
-        for (Map.Entry<BlockPos, BlockState> e : world.appliedBlocks().entrySet()) {
-            String id = e.getValue().id().toString();
-            assertFalse(id.equals("minecraft:lava") || id.equals("minecraft:magma_block"), "leftover " + id + " at " + e.getKey());
-            BlockPos p = e.getKey();
-            if (!id.equals("minecraft:air") && !id.equals("minecraft:water")) {
-                assertTrue(p.y() <= world.terrain.column(p.x(), p.z()).groundY(), "rock above ground at " + p);
+        // No melt is left anywhere and the block cache never shows a hot surface.
+        for (int x = -32; x < 48; x++) {
+            for (int z = -32; z < 32; z++) {
+                assertEquals(0, lava.thickness(x, z), "melt left at " + x + "," + z);
+                TerrainColumn column = world.terrain.column(x, z);
+                if (column == null) continue;
+                String id = column.surface().toString();
+                assertFalse(id.equals("minecraft:lava") || id.equals("minecraft:magma_block"), "hot surface at " + x + "," + z);
             }
         }
-        // Thin edges render as partial lava levels at some point.
-        boolean sawPartialLevel = false;
-        for (EngineFrame f : world.frames) {
-            for (BlockChange c : f.blockChanges()) {
-                if (c.to().id().path().equals("lava") && !"0".equals(c.to().property("level"))) sawPartialLevel = true;
-            }
-        }
-        assertTrue(sawPartialLevel);
     }
 }

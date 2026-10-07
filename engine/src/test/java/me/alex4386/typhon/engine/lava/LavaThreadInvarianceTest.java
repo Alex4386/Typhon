@@ -42,7 +42,6 @@ class LavaThreadInvarianceTest {
     @Test
     void framesAndStateDoNotDependOnThreadCount() {
         Run one = run(1);
-        assertTrue(one.frames.stream().anyMatch(f -> !f.blockChanges().isEmpty()), "lava should render");
         assertFalse(one.frames.stream().allMatch(f -> f.events().isEmpty()), "lava should report");
         assertTrue(has(one, LavaEvents.LavaSolidified.class), "scenario should solidify lava");
         assertTrue(has(one, LavaEvents.LavaOceanEntry.class), "scenario should enter the sea");

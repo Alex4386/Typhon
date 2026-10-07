@@ -10,18 +10,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import me.alex4386.typhon.engine.math.BlockPos;
-import me.alex4386.typhon.engine.output.BlockChange;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
-import me.alex4386.typhon.engine.world.BlockId;
 import org.junit.jupiter.api.Test;
 
 class EngineRunnerTest {
     record Ping(double time, double value) implements EngineEvent {}
 
-    /** Random events plus one random block change per step. */
+    /** One random event per step. */
     static Subsystem pinger() {
         return new Subsystem() {
             @Override public String id() { return "ping"; }
@@ -29,8 +26,6 @@ class EngineRunnerTest {
             @Override
             public void step(StepContext context) {
                 context.outbox().emit(new Ping(context.time(), context.random().nextGaussian()));
-                context.outbox().setBlock(BlockChange.set(new BlockPos(context.random().nextInt(0, 16), 64, 0),
-                        BlockId.minecraft("basalt")));
             }
         };
     }

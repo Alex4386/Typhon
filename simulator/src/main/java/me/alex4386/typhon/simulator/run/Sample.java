@@ -15,7 +15,6 @@ import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
 import me.alex4386.typhon.engine.tephra.TephraSubsystem;
 import me.alex4386.typhon.simulator.scenario.Scenario;
-import me.alex4386.typhon.simulator.world.VoxelWorld;
 
 /**
  * One row of the time series: the state of the primary volcano and the world at an engine step.
@@ -38,7 +37,6 @@ public record Sample(long step, double timeSeconds, Map<String, Double> values, 
         TephraSubsystem tephra = volcano.tephra();
         Geothermal geothermal = volcano.geothermal();
         LavaFlow lava = scenario.lava();
-        VoxelWorld world = scenario.world();
 
         Map<String, Double> v = new LinkedHashMap<>();
         v.put("overpressure_mpa", chamber.overpressureMPa());
@@ -103,8 +101,7 @@ public record Sample(long step, double timeSeconds, Map<String, Double> values, 
             v.put("vent_water_table_depth_m", subsurface.waterTableDepthM(x, z));
             v.put("vent_ground_temperature_10m_c", subsurface.temperatureC(x, z, 10));
         }
-        v.put("world_changes", (double) world.appliedChanges());
-        v.put("world_conflicts", (double) world.conflicts());
+        v.put("world_edits", (double) scenario.world().stacks().editCount());
         return new Sample(frame.step(), frame.time(), v, volcano.alert().level().name(),
                 style == null ? "NONE" : style.name());
     }
