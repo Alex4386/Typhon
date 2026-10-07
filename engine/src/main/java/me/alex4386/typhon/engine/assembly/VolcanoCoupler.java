@@ -1069,6 +1069,17 @@ public final class VolcanoCoupler implements Subsystem {
      * enclosed by land.
      */
     static boolean connectedToOpenWater(WorldModel world, int cx, int cz, int radius) {
+        // most often a straight line of water leads out (one of the paths the search below would find)
+        for (int d = 0; d < 8; d++) {
+            for (int k = 1; ; k++) {
+                int x = cx + RING_DX[d] * k;
+                int z = cz + RING_DZ[d] * k;
+                if (!world.isKnown(x, z)) return true;
+                double level = world.waterZ(x, z);
+                if (!(Double.isFinite(level) && level > world.surfaceZ(x, z))) break;
+                if ((x - cx) * (x - cx) + (z - cz) * (z - cz) > radius * radius) return true;
+            }
+        }
         java.util.ArrayDeque<long[]> queue = new java.util.ArrayDeque<>();
         me.alex4386.typhon.engine.math.LongHashSet seen = new me.alex4386.typhon.engine.math.LongHashSet();
         queue.add(new long[] {cx, cz});

@@ -219,8 +219,8 @@ public final class WorldModel implements WorldQuery, WorldEdit {
     }
 
     public void setUplift(int x, int z, double meters) {
+        // no relaxation: the repose limit compares layer tops, which uplift does not move
         stacks.setUplift(x, z, meters);
-        relaxAround(x, z);
     }
 
     @Override

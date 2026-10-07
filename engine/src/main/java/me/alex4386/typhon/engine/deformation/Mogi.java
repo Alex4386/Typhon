@@ -25,9 +25,24 @@ public final class Mogi {
      */
     public static Displacement displacement(double volumeChangeM3, double depthM, double eastM, double northM,
             double poissonRatio) {
-        double r2 = eastM * eastM + northM * northM;
-        double denominator = StrictMath.pow(depthM * depthM + r2, 1.5);
-        double c = (1 - poissonRatio) * volumeChangeM3 / Math.PI / denominator;
-        return new Displacement(c * eastM, c * northM, c * depthM);
+        double g = geometry(depthM, eastM, northM);
+        double c = (1 - poissonRatio) * volumeChangeM3 / Math.PI * g;
+        return new Displacement(c * eastM, c * northM, upliftScale(volumeChangeM3, depthM, poissonRatio) * g);
+    }
+
+    /** The vertical component of {@link #displacement} alone (the same value). */
+    public static double uplift(double volumeChangeM3, double depthM, double eastM, double northM, double poissonRatio) {
+        return upliftScale(volumeChangeM3, depthM, poissonRatio) * geometry(depthM, eastM, northM);
+    }
+
+    /** {@code (1 − ν) ΔV d / π}: the uplift is this times {@link #geometry}. */
+    public static double upliftScale(double volumeChangeM3, double depthM, double poissonRatio) {
+        return (1 - poissonRatio) * volumeChangeM3 / Math.PI * depthM;
+    }
+
+    /** {@code 1 / (d² + r²)^{3/2}}: where a point is relative to the source, whatever its volume change. */
+    public static double geometry(double depthM, double eastM, double northM) {
+        double s = depthM * depthM + (eastM * eastM + northM * northM);
+        return 1 / (s * StrictMath.sqrt(s));
     }
 }

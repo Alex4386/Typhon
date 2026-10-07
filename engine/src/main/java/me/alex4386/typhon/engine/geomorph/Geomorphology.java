@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -483,14 +484,44 @@ public final class Geomorphology implements Subsystem {
             }
             if (kh < minKh) continue;
             shaking.put(key, kh);
-            for (int lz = 0; lz < ColumnStacks.TILE; lz++) {
-                for (int lx = 0; lx < ColumnStacks.TILE; lx++) {
-                    int x = (int) x0 + lx;
-                    int z = (int) z0 + lz;
-                    if (steepestTan(x, z) >= config.minSlope) active.add(key(x, z));
-                }
+            for (long column : steepColumns(key, tx, tz)) active.add(column);
+        }
+    }
+
+    /** A tile's columns steep enough to shake loose, and what they were worked out from. */
+    private record SteepColumns(long layerVersions, int tileCount, double minSlope, long[] columns) {}
+
+    /** Not saved: a pure function of the world, rebuilt on demand. */
+    private final Map<Long, SteepColumns> steepColumns = new HashMap<>();
+
+    /**
+     * Columns of a tile at least {@link GeomorphConfig#minSlope} steep (row by row), worked out again only when
+     * a layer under the tile or its rim changed (or tiles came and went): quakes shake the same slopes many
+     * times over.
+     */
+    private long[] steepColumns(long tileKey, int tx, int tz) {
+        int x0 = tx * ColumnStacks.TILE;
+        int z0 = tz * ColumnStacks.TILE;
+        ColumnStacks stacks = world.stacks();
+        long versions = stacks.layerVersionSum(x0 - 1, z0 - 1, ColumnStacks.TILE + 2, ColumnStacks.TILE + 2);
+        int tiles = stacks.tileCount();
+        SteepColumns cached = steepColumns.get(tileKey);
+        if (cached != null && cached.layerVersions() == versions && cached.tileCount() == tiles
+                && cached.minSlope() == config.minSlope) {
+            return cached.columns();
+        }
+        long[] found = new long[ColumnStacks.TILE_AREA];
+        int n = 0;
+        for (int lz = 0; lz < ColumnStacks.TILE; lz++) {
+            for (int lx = 0; lx < ColumnStacks.TILE; lx++) {
+                int x = x0 + lx;
+                int z = z0 + lz;
+                if (steepestTan(x, z) >= config.minSlope) found[n++] = key(x, z);
             }
         }
+        long[] columns = java.util.Arrays.copyOf(found, n);
+        steepColumns.put(tileKey, new SteepColumns(versions, tiles, config.minSlope, columns));
+        return columns;
     }
 
     private double khAt(int x, int z) {

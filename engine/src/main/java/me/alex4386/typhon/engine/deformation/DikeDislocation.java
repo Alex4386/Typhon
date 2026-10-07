@@ -25,26 +25,61 @@ public final class DikeDislocation {
      * @param northM north offset (m)
      */
     public static Displacement displacement(DikeGeometry dike, double eastM, double northM) {
-        if (dike.openingM() <= 0) return Displacement.ZERO;
-        // strike unit vector in (east, north): strike is clockwise from +X in x/z, i.e. (cos, sin) in x/z,
-        // and north = −z.
-        double sx = StrictMath.cos(dike.strikeRad());
-        double sn = -StrictMath.sin(dike.strikeRad());
-        double nx = -sn; // normal (rotated +90° in east/north)
-        double nn = sx;
+        Resolved resolved = Resolved.of(dike);
+        return resolved == null ? Displacement.ZERO : resolved.displacement(eastM, northM);
+    }
 
-        double along = eastM * sx + northM * sn;
-        double across = eastM * nx + northM * nn;
+    /**
+     * A dike with its strike and depths worked out once, for evaluating it at many points; {@code null} for a
+     * closed dike (no displacement).
+     */
+    public static final class Resolved {
+        /** Numerical: beyond this exponent the taper's exp underflows to exactly 0. */
+        private static final double TAPER_UNDERFLOW = 746;
 
-        double half = dike.strikeLengthM() / 2;
-        double d1 = Math.max(0.5, dike.topDepthM());
-        double d2 = Math.max(d1 + 1, dike.bottomDepthM());
-        double beyond = Math.abs(along) - half;
-        double taper = beyond <= 0 ? 1 : StrictMath.exp(-(beyond * beyond) / (d1 * d1 + 1));
+        private final double sx, sn, nx, nn, half, d1, d2, taperScale, k;
 
-        double k = dike.openingM() / Math.PI * taper;
-        double perpendicular = k * (StrictMath.atan(across / d1) - StrictMath.atan(across / d2));
-        double up = k * (d2 * d2 / (across * across + d2 * d2) - d1 * d1 / (across * across + d1 * d1));
-        return new Displacement(perpendicular * nx, perpendicular * nn, up);
+        private Resolved(DikeGeometry dike) {
+            // strike unit vector in (east, north): strike is clockwise from +X in x/z, i.e. (cos, sin) in x/z,
+            // and north = −z.
+            sx = StrictMath.cos(dike.strikeRad());
+            sn = -StrictMath.sin(dike.strikeRad());
+            nx = -sn; // normal (rotated +90° in east/north)
+            nn = sx;
+            half = dike.strikeLengthM() / 2;
+            d1 = Math.max(0.5, dike.topDepthM());
+            d2 = Math.max(d1 + 1, dike.bottomDepthM());
+            taperScale = d1 * d1 + 1;
+            k = dike.openingM() / Math.PI;
+        }
+
+        public static Resolved of(DikeGeometry dike) {
+            return dike.openingM() <= 0 ? null : new Resolved(dike);
+        }
+
+        private double taper(double along) {
+            double beyond = Math.abs(along) - half;
+            if (beyond <= 0) return 1;
+            double exponent = (beyond * beyond) / taperScale;
+            return exponent > TAPER_UNDERFLOW ? 0 : StrictMath.exp(-exponent);
+        }
+
+        public Displacement displacement(double eastM, double northM) {
+            double along = eastM * sx + northM * sn;
+            double across = eastM * nx + northM * nn;
+            double kt = k * taper(along);
+            double perpendicular = kt * (StrictMath.atan(across / d1) - StrictMath.atan(across / d2));
+            return new Displacement(perpendicular * nx, perpendicular * nn, vertical(kt, across));
+        }
+
+        /** The vertical component of {@link #displacement} alone. */
+        public double uplift(double eastM, double northM) {
+            double kt = k * taper(eastM * sx + northM * sn);
+            return kt == 0 ? 0 : vertical(kt, eastM * nx + northM * nn);
+        }
+
+        private double vertical(double kt, double across) {
+            return kt * (d2 * d2 / (across * across + d2 * d2) - d1 * d1 / (across * across + d1 * d1));
+        }
     }
 }

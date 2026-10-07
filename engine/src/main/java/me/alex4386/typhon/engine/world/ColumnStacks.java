@@ -74,6 +74,8 @@ public final class ColumnStacks {
         final float[] uplift = new float[TILE_AREA];
         final float[] water = new float[TILE_AREA];
         final int[] version = new int[TILE_AREA];
+        /** How many of the {@link #version} changes were uplift alone (which moves no layer). */
+        final int[] upliftEdits = new int[TILE_AREA];
 
         Tile(int tx, int tz) {
             this.tx = tx;
@@ -385,9 +387,27 @@ public final class ColumnStacks {
     }
 
     /**
-     * Fingerprint of a rectangle of columns: changes whenever any column under it is edited or its standing
-     * water changes (which {@link #version} does not count). A 64-bit mix per column, so per-column caches
-     * can skip columns that did not change inside a tile that did.
+     * Sum of the change counters of a rectangle of columns, leaving out uplift: changes whenever the layers of
+     * any column under it are edited (the counters only grow).
+     */
+    public long layerVersionSum(int x0, int z0, int width, int depth) {
+        long sum = 0;
+        for (int z = z0; z < z0 + depth; z++) {
+            for (int x = x0; x < x0 + width; x++) {
+                Tile t = tile(x, z);
+                if (t != null) {
+                    int c = local(x, z);
+                    sum += t.version[c] - t.upliftEdits[c];
+                }
+            }
+        }
+        return sum;
+    }
+
+    /**
+     * Fingerprint of a rectangle of columns: changes whenever the layers of any column under it are edited or
+     * its standing water changes (which {@link #version} does not count); uplift alone does not change it. A
+     * 64-bit mix per column, so per-column caches can skip columns that did not change inside a tile that did.
      */
     public long footprint(int x0, int z0, int width, int depth) {
         long sum = 0;
@@ -396,7 +416,7 @@ public final class ColumnStacks {
                 Tile t = tile(x, z);
                 if (t == null) continue;
                 int c = local(x, z);
-                long h = ((long) t.version[c] << 32) ^ (Float.floatToRawIntBits(t.water[c]) & 0xffffffffL);
+                long h = ((long) (t.version[c] - t.upliftEdits[c]) << 32) ^ (Float.floatToRawIntBits(t.water[c]) & 0xffffffffL);
                 h ^= pack(x, z) * 0x9e3779b97f4a7c15L;
                 h = (h ^ (h >>> 30)) * 0xbf58476d1ce4e5b9L;
                 h = (h ^ (h >>> 27)) * 0x94d049bb133111ebL;
@@ -440,6 +460,7 @@ public final class ColumnStacks {
         int c = local(x, z);
         t.uplift[c] = (float) meters;
         t.version[c]++;
+        t.upliftEdits[c]++;
         editCount++;
     }
 
@@ -519,6 +540,7 @@ public final class ColumnStacks {
             fresh.uplift[c] = t.uplift[c];
             fresh.water[c] = t.water[c];
             fresh.version[c] = t.version[c] + (r != null ? 1 : 0);
+            fresh.upliftEdits[c] = t.upliftEdits[c];
         }
         fresh.start[TILE_AREA] = pos;
         for (int c : replacements.keySet()) enforceCap(fresh, c);
