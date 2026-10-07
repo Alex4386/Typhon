@@ -1139,15 +1139,39 @@ final class Session implements AutoCloseable {
 
     /** The value the engine computes for an {@link Tuning#AUTO} parameter of a volcano (NaN if unknown). */
     double computedParam(String volcanoId, String metaKey) {
+        return computedParam(volcanoId, null, metaKey);
+    }
+
+    /** The value the engine computes for an auto parameter of a chamber ({@code chamberId} null = main). */
+    double computedParam(String volcanoId, String chamberId, String metaKey) {
         for (VolcanoSystem v : live.volcanoes()) {
             if (volcanoId != null && !v.volcanoId().equals(volcanoId)) continue;
+            me.alex4386.typhon.engine.magma.MagmaChamber ch = chamberId == null ? v.chamber() : v.chambers().get(chamberId);
+            if (ch == null) return Double.NaN;
             return switch (metaKey) {
-                case "volcano:magma.chamber.wallRuptureRatio" -> v.chamber().wallRuptureRatio();
-                case "volcano:magma.chamber.wallYieldFraction" -> v.chamber().wallYieldFraction();
+                case "volcano:magma.chamber.wallRuptureRatio" -> ch.wallRuptureRatio();
+                case "volcano:magma.chamber.wallYieldFraction" -> ch.wallYieldFraction();
                 default -> Double.NaN;
             };
         }
         return Double.NaN;
+    }
+
+    /**
+     * Every further chamber's settings as in effect (volcano id → chamber id → settings), so each is a dial of
+     * that chamber even where its definition leaves it to follow the main chamber.
+     */
+    Map<String, Map<String, Map<String, Object>>> extraChamberSettings() {
+        Map<String, Map<String, Map<String, Object>>> out = new java.util.TreeMap<>();
+        for (VolcanoSystem v : live.volcanoes()) {
+            for (var e : v.chambers().entrySet()) {
+                if (e.getValue() == v.chamber()) continue;
+                Map<String, Object> settings = me.alex4386.typhon.engine.config.ConfigBinder.exportRecord(e.getValue().config(),
+                        java.util.Set.of("volcanoId", "chamberId", "center", "conduit"));
+                out.computeIfAbsent(v.volcanoId(), k -> new java.util.TreeMap<>()).put(e.getKey(), settings);
+            }
+        }
+        return out;
     }
 
     // ── Configuration API ──

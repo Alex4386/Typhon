@@ -183,6 +183,21 @@ final class EntityTracker {
             }
             out.put(chamber.get("id").getAsString(), chamber);
 
+            // the volcano as a whole (its Inspector panel: activity, ash, flows, springs, deformation)
+            double[] top = Probe.chamberCenter(v, map, world);
+            for (VentSite vent : v.coupler().allVents()) {
+                if (!vent.emergent()) {
+                    top = map.point(vent.position());
+                    break;
+                }
+            }
+            JsonObject volcano = entity("volcano:" + vid, "volcano", vid, Probe.displayName(vid), top);
+            JsonObject vp = volcano.getAsJsonObject("props");
+            vp.addProperty("erupting", ch.erupting());
+            vp.addProperty("eruptions", ch.eruptionCount());
+            vp.addProperty("regime", EventTranslator.regime(ch.eruptiveRegime()));
+            out.put(volcano.get("id").getAsString(), volcano);
+
             // further chambers of the plumbing and the pathways between them
             for (Map.Entry<String, MagmaChamber> ce : v.chambers().entrySet()) {
                 MagmaChamber c = ce.getValue();
@@ -345,7 +360,119 @@ final class EntityTracker {
             o.addProperty("hidden", true); // statistics only; the front entity carries the position
             out.put("lava:field", o);
         }
+        // the world itself (its Inspector panel: weather, the underground, the map's extent)
+        JsonObject w = entity("world", "world", null, "World", new double[] {0, 0, 0});
+        w.add("paramOwners", ObjectPanels.owners("world", null, ""));
+        out.put("world", w);
+        panelProps(s, out);
         return out;
+    }
+
+    /**
+     * What the Inspector needs to lay an entity out (ObjectPanels): where its settings live
+     * ({@code configPath}, {@code paramOwners}) and, for chambers, the values the physics derives from them.
+     */
+    private static void panelProps(Scenario s, Map<String, JsonObject> out) {
+        for (JsonObject o : out.values()) {
+            String kind = o.get("kind").getAsString();
+            String vid = o.has("volcanoId") && !o.get("volcanoId").isJsonNull() ? o.get("volcanoId").getAsString() : null;
+            if (vid == null) continue;
+            JsonObject p = o.getAsJsonObject("props");
+            String configPath = null;
+            if (kind.equals("chamber")) {
+                String cid = p.has("chamberId") ? p.get("chamberId").getAsString() : MagmaChamberConfig.MAIN;
+                configPath = cid.equals(MagmaChamberConfig.MAIN) ? "magma.chamber" : "magma.chambers[" + cid + "]";
+                for (VolcanoSystem v : s.volcanoes()) {
+                    if (!v.volcanoId().equals(vid)) continue;
+                    MagmaChamber ch = cid.equals(MagmaChamberConfig.MAIN) ? v.chamber() : v.chambers().get(cid);
+                    if (ch == null) continue;
+                    p.add("failureOverpressureMPa", Json.num(roundSignificant(ch.failureOverpressureMPa(), 3)));
+                    p.add("ruptureOverpressureMPa", Json.num(roundSignificant(ch.ruptureOverpressureMPa(), 3)));
+                    p.add("wallYieldFraction", Json.num(roundSignificant(ch.wallYieldFraction(), 2)));
+                    p.add("viscosityLog10", Json.num(roundSignificant(ch.viscosityLog10(), 3)));
+                    p.add("supplyNowM3PerS", Json.num(roundSignificant(ch.supplyRate(), 3)));
+                }
+            } else if (kind.equals("connection") && p.has("connectionId")) {
+                configPath = "magma.connections[" + p.get("connectionId").getAsString() + "]";
+            }
+            if (configPath != null) p.addProperty("configPath", configPath);
+            com.google.gson.JsonArray owners = ObjectPanels.owners(kind, vid, configPath == null ? "" : configPath);
+            if (!owners.isEmpty()) o.add("paramOwners", owners);
+            JsonArray related = related(kind, vid, p, out);
+            if (!related.isEmpty()) o.add("related", related);
+        }
+    }
+
+    /**
+     * Objects linked to this one, for the Inspector's "Related" row: a vent → the dikes feeding it and its
+     * chamber; a dike → its fissure and source chamber; a chamber → its vents, dikes and pathways; a pathway →
+     * the chambers at its ends.
+     */
+    static JsonArray related(String kind, String vid, JsonObject p, Map<String, JsonObject> out) {
+        java.util.List<JsonObject> found = new java.util.ArrayList<>();
+        String main = "chamber:" + vid;
+        switch (kind) {
+            case "vent", "fissure" -> {
+                String ventId = p.has("ventId") ? p.get("ventId").getAsString() : null;
+                for (JsonObject d : out.values()) {
+                    if (isOf(d, "dike", vid) && ventId != null && ventId.equals(str(d.getAsJsonObject("props"), "fissure"))) found.add(d);
+                }
+                found.sort(java.util.Comparator.comparing(d -> d.get("id").getAsString()));
+                if (out.containsKey(main)) found.add(out.get(main));
+            }
+            case "dike" -> {
+                String fissure = str(p, "fissure");
+                if (fissure != null && out.containsKey("vent:" + vid + ":" + fissure)) found.add(out.get("vent:" + vid + ":" + fissure));
+                if (out.containsKey(main)) found.add(out.get(main));
+            }
+            case "chamber" -> {
+                String cid = p.has("chamberId") ? p.get("chamberId").getAsString() : MagmaChamberConfig.MAIN;
+                boolean isMain = cid.equals(MagmaChamberConfig.MAIN);
+                if (isMain && out.containsKey("volcano:" + vid)) found.add(out.get("volcano:" + vid));
+                for (String k : new String[] {"vent", "fissure", "dike", "connection"}) {
+                    if (!isMain && !k.equals("connection")) continue;
+                    out.values().stream()
+                            .filter(e -> isOf(e, k, vid))
+                            .filter(e -> !k.equals("connection") || cid.equals(str(e.getAsJsonObject("props"), "from"))
+                                    || cid.equals(str(e.getAsJsonObject("props"), "to")))
+                            .sorted(java.util.Comparator.comparing(e -> e.get("id").getAsString()))
+                            .forEach(found::add);
+                }
+            }
+            case "volcano" -> {
+                for (String k : new String[] {"chamber", "vent", "fissure"}) {
+                    out.values().stream().filter(e -> isOf(e, k, vid))
+                            .sorted(java.util.Comparator.comparing(e -> e.get("id").getAsString()))
+                            .forEach(found::add);
+                }
+            }
+            case "connection" -> {
+                for (String end : new String[] {str(p, "from"), str(p, "to")}) {
+                    if (end == null) continue;
+                    String id = end.equals(MagmaChamberConfig.MAIN) ? main : main + ":" + end;
+                    if (out.containsKey(id)) found.add(out.get(id));
+                }
+            }
+            default -> { }
+        }
+        JsonArray arr = new JsonArray();
+        for (JsonObject e : found) {
+            JsonObject r = new JsonObject();
+            r.addProperty("id", e.get("id").getAsString());
+            r.addProperty("kind", e.get("kind").getAsString());
+            r.addProperty("label", e.get("label").getAsString());
+            arr.add(r);
+        }
+        return arr;
+    }
+
+    private static boolean isOf(JsonObject e, String kind, String vid) {
+        return e.get("kind").getAsString().equals(kind) && e.has("volcanoId") && !e.get("volcanoId").isJsonNull()
+                && e.get("volcanoId").getAsString().equals(vid);
+    }
+
+    private static String str(JsonObject p, String key) {
+        return p.has(key) && p.get(key).isJsonPrimitive() ? p.get(key).getAsString() : null;
     }
 
     /** A summit vent's name: "Summit vent" for the main one (preset "summit", emergent "vent"), else "Vent <id>". */

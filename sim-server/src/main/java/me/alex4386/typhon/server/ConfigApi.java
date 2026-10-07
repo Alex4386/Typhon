@@ -332,16 +332,46 @@ final class ConfigApi {
         for (Map.Entry<String, JsonElement> e : leaves.entrySet()) {
             String path = e.getKey();
             String id = idPrefix + path;
-            String metaKey = (volcanoId == null ? "world:" : "volcano:") + path;
+            // a further chamber's setting shares the main chamber's metadata (labels, ranges, auto)
+            String metaPath = path.startsWith("magma.chambers[") && path.indexOf(']') > 0
+                    ? "magma.chamber." + path.substring(Math.min(path.length(), path.indexOf(']') + 2)) : path;
+            String metaKey = (volcanoId == null ? "world:" : "volcano:") + metaPath;
             String[] parts = path.split("\\.");
             Map<String, Object> node = tree;
             boolean found = true;
+            boolean listElement = false;
             for (int i = 0; i < parts.length - 1 && found; i++) {
-                Object child = node.get(parts[i]);
+                String part = parts[i];
+                int open = part.indexOf('[');
+                if (open > 0 && part.endsWith("]")) {
+                    // `chambers[deep]`: the element of a keyed list with that id
+                    Object list = node.get(part.substring(0, open));
+                    String elementId = part.substring(open + 1, part.length() - 1);
+                    Map<String, Object> element = null;
+                    if (list instanceof List<?> l) {
+                        for (Object el : l) if (el instanceof Map<?, ?> m && elementId.equals(String.valueOf(m.get("id")))) element = (Map<String, Object>) m;
+                    }
+                    if (element == null) found = false;
+                    else {
+                        node = element;
+                        listElement = true;
+                    }
+                    continue;
+                }
+                Object child = node.get(part);
                 if (child instanceof Map<?, ?> m) node = (Map<String, Object>) m;
                 else found = false;
             }
             String key = parts[parts.length - 1];
+            if (found && listElement && !node.containsKey(key) && !e.getValue().isJsonNull()) {
+                // a further chamber follows the main chamber for settings it does not list; setting one adds it
+                // (the definition parser rejects keys a chamber does not have)
+                JsonElement v = e.getValue();
+                if (v.isJsonPrimitive() && v.getAsJsonPrimitive().isBoolean()) node.put(key, v.getAsBoolean());
+                else if (v.isJsonPrimitive() && v.getAsJsonPrimitive().isNumber() && Double.isFinite(v.getAsDouble())) node.put(key, v.getAsDouble());
+                else errors.add(new FieldError(id, "expected a number or true/false"));
+                continue;
+            }
             if (found && me.alex4386.typhon.engine.worlds.ConfigImpact.keyedList(path)) {
                 // the plumbing lists are set as a whole (the classifier diffs them element by element)
                 JsonElement v = e.getValue();

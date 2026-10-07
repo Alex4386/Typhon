@@ -159,19 +159,16 @@ final class Tuning {
         META.put("volcano:magma.chamber.wallYieldFraction", m("Wall yielding", "fraction", 0.0, 1.0, false,
                 "Share of the magma beyond the rupture limit that the walls absorb by deforming (the chamber grows,"
                         + " the ground inflates) instead of feeding a dike. 0 = all into dikes, 1 = chamber growth only."));
-        META.put("volcano:dikes.ruptureNucleation", m("Wall rupture opens a dike", null, null, null, false,
-                "When the walls rupture, a dike opens at once and carries the excess magma, even during an eruption."
-                        + " Off: the chamber grows instead and dikes only form at random."));
-        META.put("volcano:dikes.nucleateDuringEruption", m("Dikes during eruptions", null, null, null, false,
-                "Allow random dike nucleation while the summit erupts (flank fissures mid-eruption)."));
+        META.put("volcano:dikes.blocked", m("Block new dikes", null, null, null, false,
+                "Experiment: no new dike opens, neither from a wall rupture nor at random; the chamber grows instead."
+                        + " Off: dikes follow the physics (likelier while the summit conduit is sealed)."));
         META.put("volcano:dikes.initiationPressureRatio", m("Dike onset", "× roof strength", 0.05, 0.99, false,
                 "Random dike nucleation starts once overpressure passes this share of the roof strength."));
         META.put("volcano:dikes.maxInitiationRate", m("Dike rate at roof strength", "/s", 1e-6, 1.0, true,
-                "Random nucleation rate (per second) at full roof strength and a fully sealed conduit."));
+                "Random nucleation rate (per second) at full roof strength with the summit conduit sealed; an open"
+                        + " conduit vents the pressure instead, so the rate scales with how sealed it is."));
         META.put("volcano:dikes.maxConcurrentDikes", m("Dikes at once", null, 0.0, 10.0, false,
                 "How many dikes may rise at the same time. 0 = no dikes at all (rupture magma grows the chamber)."));
-        META.put("volcano:dikes.conduitSealing", m("Summit conduit sealing", "fraction", 0.0, 1.0, false,
-                "0 = open summit conduit (pressure vents there, no random dikes); 1 = sealed (dikes likely)."));
     }
 
     /**
@@ -487,8 +484,20 @@ final class Tuning {
             return volcanoId == null ? ConfigImpact.world(path) : ConfigImpact.volcano(path);
         }
 
+        /** Key into META/ADVICE/AUTO: a further chamber's setting shares the main chamber's metadata. */
         String metaKey() {
-            return (volcanoId == null ? "world:" : "volcano:") + path;
+            String p = path.startsWith("magma.chambers[") ? "magma.chamber." + path.substring(Math.min(path.length(), path.indexOf(']') + 2)) : path;
+            return (volcanoId == null ? "world:" : "volcano:") + p;
+        }
+
+        /** The further chamber this setting belongs to, or null (main chamber or not a chamber setting). */
+        String chamberId() {
+            return path.startsWith("magma.chambers[") ? path.substring(path.indexOf('[') + 1, path.indexOf(']')) : null;
+        }
+
+        /** Which object shows it, in which tab and how prominently ({@link ObjectPanels}). */
+        ObjectPanels.Place place() {
+            return volcanoId == null ? ObjectPanels.worldPlace(path) : ObjectPanels.volcanoPlace(volcanoId, path);
         }
     }
 
@@ -517,7 +526,12 @@ final class Tuning {
             String path = prefix.isEmpty() ? e.getKey() : prefix + "." + e.getKey();
             Object v = e.getValue();
             if (v instanceof Map<?, ?> m) flatten(path, (Map<String, Object>) m, out);
-            else if (v instanceof Number || v instanceof Boolean) out.put(path, v);
+            else if (v instanceof List<?> list && me.alex4386.typhon.engine.worlds.ConfigImpact.keyedList(path)) {
+                // keyed lists (further chambers, pathways): one leaf per element setting, `path[id].key`
+                for (Object el : list) {
+                    if (el instanceof Map<?, ?> em && em.get("id") != null) flatten(path + "[" + em.get("id") + "]", (Map<String, Object>) em, out);
+                }
+            } else if (v instanceof Number || v instanceof Boolean) out.put(path, v);
             else if (".nan".equalsIgnoreCase(String.valueOf(v))) out.put(path, Double.NaN); // a computed (auto) value
         }
     }
@@ -613,6 +627,18 @@ final class Tuning {
         Definitions now = s.live().session() != null ? Definitions.of(s.live().session()) : Definitions.read(dir);
         Map<String, Object> defaults = baselineValues(dir, now);
         List<Leaf> leaves = new ArrayList<>(leaves(now));
+        // a further chamber lists only the settings it sets; the rest follow the main chamber's values, and
+        // every one of them is a dial of that chamber: offer them all, at the value in effect
+        java.util.Set<String> have = new java.util.HashSet<>();
+        for (Leaf l : leaves) have.add(l.id());
+        s.extraChamberSettings().forEach((vid, byChamber) -> byChamber.forEach((cid, settings) -> {
+            Map<String, Object> flat = new LinkedHashMap<>();
+            flatten("magma.chambers[" + cid + "]", settings, flat);
+            for (Map.Entry<String, Object> e : flat.entrySet()) {
+                String id = "volcano." + vid + "." + e.getKey();
+                if (have.add(id)) leaves.add(new Leaf(id, "volcano:" + vid, vid, e.getKey(), e.getValue()));
+            }
+        }));
         List<String> metaOrder = new ArrayList<>(META.keySet());
         leaves.sort((a, b) -> {
             int g = Integer.compare(groupRank(a), groupRank(b));
@@ -632,7 +658,7 @@ final class Tuning {
             JsonObject spec = paramSpec(l, now.names(), defaults.get(l.id()));
             if (AUTO.contains(l.metaKey())) {
                 spec.addProperty("auto", true);
-                spec.add("computed", Json.num(s.computedParam(l.volcanoId(), l.metaKey())));
+                spec.add("computed", Json.num(s.computedParam(l.volcanoId(), l.chamberId(), l.metaKey())));
             }
             params.add(spec);
         }
@@ -646,6 +672,12 @@ final class Tuning {
         JsonObject panels = new JsonObject();
         panels.add("chamber", chamberPanel);
         o.add("panels", panels);
+        o.add("objectPanels", ObjectPanels.layouts());
+        // the objects that are not entities: each volcano as a whole, and the world
+        JsonObject objectOwners = new JsonObject();
+        for (String vid : now.volcanoes().keySet()) objectOwners.add("volcano:" + vid, ObjectPanels.owners("volcano", vid, ""));
+        objectOwners.add("world", ObjectPanels.owners("world", null, ""));
+        o.add("objectOwners", objectOwners);
         o.add("audit", readAudit(dir));
         return o;
     }
@@ -671,6 +703,13 @@ final class Tuning {
         j.addProperty("apply", ConfigApi.kindName(impact.kind()));
         j.add("impact", ConfigApi.impactJson(impact, l.volcanoId() == null ? null : names.getOrDefault(l.volcanoId(), l.volcanoId())));
         if (l.volcanoId() != null) j.addProperty("volcanoId", l.volcanoId());
+        ObjectPanels.Place place = l.place();
+        if (place != null) {
+            j.addProperty("owner", place.owner());
+            j.addProperty("tab", place.tab());
+            j.addProperty("tier", place.tier());
+            j.addProperty("order", place.order());
+        }
         Advice a = ADVICE.get(l.metaKey());
         if (a != null) {
             JsonObject r = new JsonObject();

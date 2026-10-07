@@ -67,13 +67,43 @@ class PlumbingBuilderE2ETest {
             Reply link = http(port, "POST", base + "/connections", "{\"from\":\"deep\",\"to\":\"main\",\"kind\":\"conduit\"}");
             assertEquals(201, link.status(), link.body().toString());
             String lid = link.body().get("connectionId").getAsString();
-            JsonObject entities = c.await(m -> m.type().equals("entities") && has(m.json(), "connection:" + vid + ":" + lid), 120).json();
+            java.util.Map<String, JsonObject> seen = new java.util.LinkedHashMap<>();
+            c.await(m -> {
+                if (!m.type().equals("entities") || !m.json().has("upsert")) return false;
+                for (JsonElement e : m.json().getAsJsonArray("upsert")) seen.put(e.getAsJsonObject().get("id").getAsString(), e.getAsJsonObject());
+                return seen.containsKey("connection:" + vid + ":" + lid) && seen.containsKey("chamber:" + vid);
+            }, 120);
+            JsonObject entities = new JsonObject();
+            com.google.gson.JsonArray upsert = new com.google.gson.JsonArray();
+            seen.values().forEach(upsert::add);
+            entities.add("upsert", upsert);
             assertTrue(has(entities, "chamber:" + vid + ":deep"), "the deep chamber is an entity");
 
             // a wider conduit is a live dial
             Reply wider = http(port, "PATCH", base + "/connections/" + lid, "{\"fields\":{\"radiusM\":3}}");
             assertEquals(200, wider.status(), wider.body().toString());
             assertEquals("live", wider.body().get("applied").getAsString(), wider.body().toString());
+
+            // the deep chamber's own settings are in the schema, laid out on its Inspector tabs
+            c.send("{\"type\":\"getSchema\"}");
+            JsonObject spec = c.await(m -> m.type().equals("schema") && m.json().toString().contains("magma.chambers[deep]"), 60).json();
+            assertPanelsReachable(spec, entities, vid);
+            JsonObject deepSupply = param(spec, "volcano." + vid + ".magma.chambers[deep].supplyRate");
+            assertEquals("volcano." + vid + ".magma.chambers[deep]", deepSupply.get("owner").getAsString());
+            assertEquals("supply", deepSupply.get("tab").getAsString());
+            assertEquals("primary", deepSupply.get("tier").getAsString());
+            JsonObject deepEntity = entity(entities, "chamber:" + vid + ":deep");
+            assertTrue(deepEntity.getAsJsonArray("paramOwners").toString().contains("magma.chambers[deep]"), deepEntity.toString());
+            assertTrue(deepEntity.getAsJsonArray("related").toString().contains("connection:" + vid + ":" + lid), "its pathway is related");
+
+            // editing that chamber's supply changes only that chamber
+            double mainSupply = server.session(id).live().volcanoes().get(0).chamber().supplyRate();
+            c.send("{\"type\":\"setParams\",\"requestId\":41,\"values\":{\"volcano." + vid + ".magma.chambers[deep].supplyRate\":7}}");
+            JsonObject ack = c.await(m -> m.type().equals("ack") && m.json().get("requestId").getAsLong() == 41, 60).json();
+            assertTrue(ack.get("ok").getAsBoolean(), ack.toString());
+            var live = server.session(id).live().volcanoes().get(0);
+            assertEquals(7, live.chambers().get("deep").config().supplyRate(), 1e-9);
+            assertEquals(mainSupply, live.chamber().supplyRate(), 1e-9, "the main chamber keeps its supply");
 
             // moving the deep chamber: the server's plan resets only that chamber
             Reply plan = http(port, "PATCH", base + "/chambers/deep?dryRun=true", "{\"x\":300,\"y\":-50}");
@@ -92,6 +122,60 @@ class PlumbingBuilderE2ETest {
         } finally {
             server.close();
         }
+    }
+
+    /**
+     * Every placed volcano param belongs to an owner some entity shows, on a tab that entity's layout has,
+     * and each layout field is a measure, a derived value or a widget.
+     */
+    private static void assertPanelsReachable(JsonObject schema, JsonObject entities, String vid) {
+        JsonObject kinds = schema.getAsJsonObject("objectPanels");
+        java.util.Map<String, java.util.Set<String>> tabsByOwner = new java.util.HashMap<>();
+        for (JsonElement el : entities.getAsJsonArray("upsert")) {
+            JsonObject e = el.getAsJsonObject();
+            if (!e.has("paramOwners") || !kinds.has(e.get("kind").getAsString())) continue;
+            java.util.Set<String> tabs = new java.util.HashSet<>();
+            for (JsonElement t : kinds.getAsJsonObject(e.get("kind").getAsString()).getAsJsonArray("tabs")) {
+                JsonObject tab = t.getAsJsonObject();
+                tabs.add(tab.get("id").getAsString());
+                for (JsonElement s : tab.getAsJsonArray("sections")) {
+                    for (JsonElement f : s.getAsJsonObject().getAsJsonArray("fields")) {
+                        JsonObject field = f.getAsJsonObject();
+                        assertTrue(field.has("measure") || field.has("widget"), field.toString());
+                    }
+                }
+            }
+            for (JsonElement o : e.getAsJsonArray("paramOwners")) tabsByOwner.computeIfAbsent(o.getAsString(), k -> new java.util.HashSet<>()).addAll(tabs);
+        }
+        // the volcano as a whole and the world, which are not entities
+        for (var o : schema.getAsJsonObject("objectOwners").entrySet()) {
+            String kind = o.getKey().contains(":") ? o.getKey().substring(0, o.getKey().indexOf(':')) : o.getKey();
+            java.util.Set<String> tabs = new java.util.HashSet<>();
+            for (JsonElement t : kinds.getAsJsonObject(kind).getAsJsonArray("tabs")) tabs.add(t.getAsJsonObject().get("id").getAsString());
+            for (JsonElement owner : o.getValue().getAsJsonArray()) tabsByOwner.computeIfAbsent(owner.getAsString(), k -> new java.util.HashSet<>()).addAll(tabs);
+        }
+        int checked = 0;
+        for (JsonElement el : schema.getAsJsonArray("params")) {
+            JsonObject p = el.getAsJsonObject();
+            boolean world = !p.has("volcanoId");
+            if (!world && !vid.equals(p.get("volcanoId").getAsString())) continue;
+            assertTrue(p.has("owner") && p.has("tab") && p.has("tier"), "placed: " + p.get("id"));
+            java.util.Set<String> tabs = tabsByOwner.get(p.get("owner").getAsString());
+            assertTrue(tabs != null, "some object shows " + p.get("owner") + " (" + p.get("id") + ")");
+            assertTrue(tabs.contains(p.get("tab").getAsString()), p.get("id") + " on a tab its object has: " + p.get("tab"));
+            checked++;
+        }
+        assertTrue(checked > 20, "checked " + checked);
+    }
+
+    private static JsonObject param(JsonObject schema, String id) {
+        for (JsonElement el : schema.getAsJsonArray("params")) if (id.equals(el.getAsJsonObject().get("id").getAsString())) return el.getAsJsonObject();
+        throw new AssertionError("no param " + id);
+    }
+
+    private static JsonObject entity(JsonObject entities, String id) {
+        for (JsonElement e : entities.getAsJsonArray("upsert")) if (id.equals(e.getAsJsonObject().get("id").getAsString())) return e.getAsJsonObject();
+        throw new AssertionError("no entity " + id);
     }
 
     private static boolean has(JsonObject entities, String id) {
