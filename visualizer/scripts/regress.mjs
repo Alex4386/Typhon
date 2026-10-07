@@ -5,7 +5,7 @@
 //
 // Scenario ("regress" world): the empty `ocean` template (server defaults, fixed seed), a magma chamber
 // placed at map (0, 0) 3 km below the sea floor with a 10 m³/s supply, a forced eruption, then a fixed
-// number of engine steps, paused. Run the server with its own scratch worlds directory, e.g.
+// span of time (SECONDS), paused. Run the server with its own scratch worlds directory, e.g.
 //   sim-server --worlds-dir <scratch> --port 8797 --ui visualizer/dist
 // Views (relative to the first vent): low (across the water at the cone), top (over shallow water),
 // horizon (far, out to the horizon), vent (close-up of the crater), plume (the eruption column),
@@ -14,7 +14,8 @@
 import { mkdirSync } from 'node:fs';
 
 const [cmd = 'shots', ...rest] = process.argv.slice(2);
-const STEPS = 6000;
+/** Seconds of eruption before the shots (the engine picks its own step lengths). */
+const SECONDS = 6000;
 
 async function setup(url = 'ws://127.0.0.1:8797/ws') {
   const ws = new WebSocket(url, 'typhon.v1');
@@ -47,15 +48,15 @@ async function setup(url = 'ws://127.0.0.1:8797/ws') {
   const vid = placed.volcanoId ?? 'volcano-1';
   console.log('place', placed.ok ?? placed.code, vid);
   await call({ type: 'command', command: { kind: 'startEruption', volcanoId: vid } });
-  ws.send(JSON.stringify({ type: 'step', steps: STEPS }));
-  // wait until the session has run the steps
+  ws.send(JSON.stringify({ type: 'step', seconds: SECONDS }));
+  // wait until the session has run that long
   const t0 = Date.now();
   for (;;) {
     sessions = null;
     ws.send(JSON.stringify({ type: 'listSessions' }));
     await new Promise((r) => setTimeout(r, 2000));
     const s = sessions?.find((x) => x.world === 'regress');
-    if (s && s.time >= STEPS * 0.05 - 0.01) {
+    if (s && s.time >= SECONDS - 0.01) {
       console.log('ready at', s.time, 's after', Math.round((Date.now() - t0) / 1000), 's');
       break;
     }
