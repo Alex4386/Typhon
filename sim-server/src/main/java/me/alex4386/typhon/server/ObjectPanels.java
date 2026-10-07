@@ -63,20 +63,20 @@ final class ObjectPanels {
             r("rechargeTemperatureC", "magma", PRIMARY, 0),
             r("rechargeSilicaWt", "magma", PRIMARY, 1),
             r("rechargeWaterWt", "magma", PRIMARY, 2),
-            r("rechargeCo2Wt", "magma", PRIMARY, 3),
-            r("rechargeCrystalFraction", "magma", PRIMARY, 4),
+            r("rechargeCo2Wt", "magma", MORE, 3),
+            r("rechargeCrystalFraction", "magma", MORE, 4),
             r("initial.*", "magma", MORE, 10),
             r("crystalSilicaWt", "magma", MORE, 20),
             r("volume", "walls", PRIMARY, 0),
             r("tensileStrengthMPa", "walls", PRIMARY, 1),
-            r("wallTemperatureC", "walls", PRIMARY, 2),
+            r("wallTemperatureC", "walls", MORE, 2),
             r("compressibilityPerMPa", "walls", MORE, 10),
             r("coolingTimescale", "walls", MORE, 11),
             r("degassingTimescale", "magma", MORE, 21),
             r("conduitRadius", "eruption", PRIMARY, 0),
             r("eruptionEndOverpressureMPa", "eruption", MORE, 10),
-            r("wallRuptureRatio", "overrides", PRIMARY, 2),
-            r("wallYieldFraction", "overrides", PRIMARY, 3),
+            r("wallRuptureRatio", "overrides", MORE, 2),
+            r("wallYieldFraction", "overrides", MORE, 3),
             r("freezeVolume", "overrides", PRIMARY, 4),
             // (position and depth are set in Build mode: see BUILD_ONLY)
             r("id|chamberId", "details", MORE, 90));
@@ -132,7 +132,7 @@ final class ObjectPanels {
         String tier;
         if (path.startsWith("climate.")) {
             tab = "weather";
-            tier = path.matches("climate\\.(rainfallMmPerHour|wind\\..*)") ? PRIMARY : MORE;
+            tier = path.matches("climate\\.(rainfallMmPerHour|wind\\.(speed|bearingDeg))") ? PRIMARY : MORE;
         } else if (path.startsWith("subsurface.") || path.startsWith("aquifer") || path.startsWith("geotherm")) {
             tab = "underground";
             tier = path.matches("aquifer\\.(waterTableDepth|rechargeFraction)|geotherm\\.gradientCPerKm") ? PRIMARY : MORE;
@@ -239,7 +239,7 @@ final class ObjectPanels {
                 section(null, derived("supplyNowM3PerS", "Supply now", "m³/s", "The deep supply in effect (with its variability)", null))));
         chamber.add(tab("walls", "Walls",
                 section(null,
-                        derived("radiusM", "Radius", "m", "From the volume", null),
+                        derived("chamberRadiusM", "Radius", "m", "Of a sphere of the chamber's volume", null),
                         derived("ruptureOverpressureMPa", "Walls rupture at", "MPa", "Twice the rock strength (hoop stress on a sphere)", "wallRuptureRatio"),
                         derived("wallYieldFraction", "Wall yielding", null, "Share of excess magma the hot walls absorb, from wall temperature and supply", "wallYieldFraction"))));
         chamber.add(tab("eruption", "Eruption", section(null)));
