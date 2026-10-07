@@ -14,6 +14,7 @@ import { bakedReader, gridReader, rebuildOrder, viewFocus } from './terrainMath'
 import { perfStats } from './perf';
 import { POND, SEA, compactWater, groundZ, seaSurfaceZ } from './waterIndex';
 import { CRUST_RGB, crackPattern, crustLight, lavaSurfaceColor, weightedTemperature } from './lavaColor';
+import { groundShade, naturalLand, shapeFrom, type GroundShape } from './groundColor';
 import { detailCovers, detailHeights, detailLevels, overlappingDetailTiles, refinement } from './detail';
 
 /**
@@ -426,6 +427,8 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
       let anyTable = false;
       const fc = flow.getAttribute('color') as THREE.BufferAttribute;
       const c: RGB = [0, 0, 0];
+      const shape: GroundShape = { x: 0, y: 0, above: 0, t: 0, slope: 0, hollow: 0 };
+      const landBase = world.hasSea === false || !Number.isFinite(world.seaLevel) ? eLo : world.seaLevel;
       let anyLava = false;
       let anyWater = false;
       let shallowest = Infinity;
@@ -466,7 +469,12 @@ function TerrainTile({ world, tx, ty, onPick }: TileProps) {
           const hy = ((elevR(a, b + 1) - elevR(a, b - 1)) * vExag) / (2 * world.cellSize);
           const inv = 1 / Math.hypot(hx, 1, hy);
           gn.setXYZ(v, -hx * inv, inv, hy * inv);
-          colourGround(mode, world, fields, a, b, elev, eLo, eHi, maxUplift, units, c);
+          shape.x = x;
+          shape.y = y;
+          shape.above = elev - landBase;
+          shape.t = Math.max(0, shape.above / Math.max(1, eHi - landBase));
+          shapeFrom(shape, elev, elevR(a + 1, b), elevR(a - 1, b), elevR(a, b + 1), elevR(a, b - 1), world.cellSize);
+          colourGround(mode, world, fields, a, b, elev, eLo, eHi, maxUplift, units, c, shape);
           const g0 = c[0];
           const g1 = c[1];
           const g2 = c[2];
@@ -673,6 +681,7 @@ export function colourGround(
   maxUplift: number,
   units: Record<number, { depositType: number; time: number | null }>,
   c: RGB,
+  shape?: GroundShape,
 ): void {
   switch (mode) {
     case 'surfaceTemperature':
@@ -721,8 +730,11 @@ export function colourGround(
       return;
     }
     case 'natural': {
-      if (elev >= world.seaLevel || world.hasSea === false) ramp(HYPSO, Math.max(0, (elev - world.seaLevel) / Math.max(1, eHi - world.seaLevel)), c);
-      else ramp(BATHY, (world.seaLevel - elev) / Math.max(1, world.seaLevel - eLo), c);
+      // land: vegetation, bare rock and sand by shape (see groundColor.ts); the hypsometric tint where no shape is given
+      if (elev >= world.seaLevel || world.hasSea === false) {
+        if (shape) naturalLand(shape, c);
+        else ramp(HYPSO, Math.max(0, (elev - world.seaLevel) / Math.max(1, eHi - world.seaLevel)), c);
+      } else ramp(BATHY, (world.seaLevel - elev) / Math.max(1, world.seaLevel - eLo), c);
       // tephra fall blankets the surface in proportion to its thickness (a few mm barely shows, decimetres
       // cover it): tinting by the FALL unit alone painted any dusting solid out to where the ash ends
       const ash = f.ash(i, j);
@@ -758,6 +770,7 @@ export function colourGround(
         c[1] += (0.3 - c[1]) * k;
         c[2] += (0.08 - c[2]) * k;
       }
+      if (shape && st <= 450) groundShade(shape, c);
       return;
     }
   }

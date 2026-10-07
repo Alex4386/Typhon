@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { WorldInfo } from '../protocol/messages';
 import { getLodTile, tileKey, useStore } from '../store/store';
-import { BATHY, HYPSO, ramp, type RGB } from '../util/color';
+import { BATHY, ramp, type RGB } from '../util/color';
+import { groundShade, naturalLand, type GroundShape } from './groundColor';
 import { worldExtent } from '../util/world';
 import {
   contextTerrain,
@@ -240,7 +241,8 @@ function build(world: WorldInfo, geo: THREE.BufferGeometry, sea: THREE.BufferGeo
       heights[v] = h;
       pos.setXYZ(v, x, h * vExag - (inside ? 0 : 0.5 * vExag), -y);
       // land below seaLevel in a world without sea (context terrain falling away) stays land
-      if (h >= world.seaLevel || world.hasSea === false) ramp(HYPSO, Math.max(0, (h - world.seaLevel) / Math.max(1, eHi - world.seaLevel)), c);
+      // land is coloured with the normals below (its colour follows the slope)
+      if (h >= world.seaLevel || world.hasSea === false) c.fill(0);
       else {
         ramp(BATHY, (world.seaLevel - h) / Math.max(1, world.seaLevel - eLo), c);
         if (!inside) anySea = true;
@@ -252,6 +254,8 @@ function build(world: WorldInfo, geo: THREE.BufferGeometry, sea: THREE.BufferGeo
   }
   // normals from the height grid (non-uniform spacing)
   const nrm = geo.getAttribute('normal') as THREE.BufferAttribute;
+  const shape: GroundShape = { x: 0, y: 0, above: 0, t: 0, slope: 0, hollow: 0 };
+  const landBase = world.hasSea === false || !Number.isFinite(world.seaLevel) ? eLo : world.seaLevel;
   for (let b = 0; b < N; b++) {
     for (let a = 0; a < N; a++) {
       const a0 = Math.max(0, a - 1);
@@ -262,6 +266,16 @@ function build(world: WorldInfo, geo: THREE.BufferGeometry, sea: THREE.BufferGeo
       const hy2 = ((heights[b1 * N + a] - heights[b0 * N + a]) * vExag) / Math.max(1e-6, ys[b1] - ys[b0]);
       const inv = 1 / Math.hypot(hx2, 1, hy2);
       nrm.setXYZ(b * N + a, -hx2 * inv, inv, hy2 * inv);
+      const h = heights[b * N + a];
+      if (h >= world.seaLevel || world.hasSea === false) {
+        shape.x = xs[a];
+        shape.y = ys[b];
+        shape.above = h - landBase;
+        shape.t = Math.max(0, shape.above / Math.max(1, eHi - landBase));
+        shape.slope = Math.hypot(hx2, hy2) / vExag;
+        groundShade(shape, naturalLand(shape, c, false), false);
+        col.setXYZ(b * N + a, lin(c[0]), lin(c[1]), lin(c[2]));
+      }
     }
   }
   pos.needsUpdate = true;

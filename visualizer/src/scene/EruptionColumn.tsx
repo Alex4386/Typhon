@@ -17,8 +17,11 @@ const SPREAD = 0.12;
 /** Neutral-buoyancy height as a share of the column top: H_T ≈ 1.32·H_B (Sparks 1986). */
 const NEUTRAL = 0.76;
 
-/** Base colours in linear RGB: ash ≈ 30 % grey (sRGB), steam near white. */
-const ASH: [number, number, number] = [0.075, 0.066, 0.06];
+/**
+ * Base colours in linear RGB: ash ≈ 42 % warm grey-brown (sRGB; fine andesitic and basaltic ash in
+ * sunlight), steam near white. The shading darkens the core and shadowed side.
+ */
+const ASH: [number, number, number] = [0.15, 0.13, 0.11];
 const STEAM: [number, number, number] = [0.72, 0.75, 0.78];
 
 function hash(i: number): number {
@@ -91,7 +94,7 @@ export function EruptionColumn({ world }: { world: WorldInfo }) {
         const x = ax + Math.cos(ang) * off;
         const y = ay + Math.sin(ang) * off;
         const zz = base + z * vExag;
-        billows.push({ x, y: zz, z: -y, size: r * 1.6, flat: 1, cx: ax, cy: zz, cz: -ay, r: col[0], g: col[1], b: col[2], fade: 0.85 + 0.15 * phase, seed });
+        billows.push({ x, y: zz, z: -y, size: r * 1.6, flat: 1, cx: ax, cy: zz, cz: -ay, r: col[0], g: col[1], b: col[2], fade: 0.9 + 0.1 * phase, seed });
       }
       // umbrella: spreading at neutral buoyancy up to the top, stretched downwind
       const bTop = b(Hnb);
@@ -116,10 +119,10 @@ export function EruptionColumn({ world }: { world: WorldInfo }) {
         const x = ux + wx * d - wy * lateral;
         const y = uy + wy * d + wx * lateral;
         const zz = base + Hnb * (1 - 0.25 * f) * vExag;
-        // overlapping, widening and thinning downwind: a continuous drifting cloud, not separate puffs
-        // diluting downwind: lighter and thinner
-        const lift = 0.1 * f;
-        billows.push({ x, y: zz, z: -y, size: Ru * (1 + f * 1.6), flat: 0.42, cx: x, cy: zz - bTop * vExag, cz: -y, r: col[0] * 1.3 + lift, g: col[1] * 1.3 + lift, b: col[2] * 1.3 + lift, fade: 0.9 - 0.45 * f, seed });
+        // overlapping, widening and thinning downwind: a continuous drifting cloud, not separate puffs;
+        // diluting downwind: paler and more transparent (never darker)
+        const lift = 0.12 * f;
+        billows.push({ x, y: zz, z: -y, size: Ru * (1 + f * 1.6), flat: 0.42, cx: x, cy: zz - bTop * vExag, cz: -y, r: col[0] + lift, g: col[1] + lift, b: col[2] + lift, fade: 1, alpha: 0.85 - 0.6 * f, seed });
       }
     }
   });

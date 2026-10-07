@@ -26,7 +26,7 @@ export const waterUniforms = {
   uSunDir: uniform(new THREE.Vector3(0.4, 0.8, 0.3).normalize()),
   uSunColor: uniform(new THREE.Color('#fff1dc')),
   /** Sky colour seen in reflection (kept muted: a bright sky turns the horizon band white). */
-  uSky: uniform(new THREE.Color('#6f8296')),
+  uSky: uniform(new THREE.Color('#7690ab')),
   /** Light attenuation length of the water (m): open ocean ≈ 20–30, coastal ≈ 5–10 (View → Graphics). */
   uClarity: uniform(25),
   /** See-through, 0 (physical) … 1 (glass): raises the transmittance T' = T + (1 − T)·s (View → Map). */

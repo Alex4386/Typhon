@@ -14,6 +14,7 @@ import { KIND_LABEL } from '../store/entities';
 import { QUALITY, useStore } from '../store/store';
 import { worldExtent } from '../util/world';
 import { Atmosphere } from './Atmosphere';
+import { HORIZON, Sky } from './Sky';
 import { SurgeClouds } from './SurgeClouds';
 import { EruptionColumn } from './EruptionColumn';
 import { Hypocentres } from './Hypocentres';
@@ -34,8 +35,6 @@ import { rayGround } from './terrainMath';
 
 const FORCE_WEBGL = new URLSearchParams(window.location.search).get('renderer') === 'webgl';
 
-/** Horizon colour of the CSS sky behind the canvas; the fog fades distant terrain into it. */
-export const HORIZON = '#6e7680';
 
 type RendererFactory = (props: { canvas: HTMLCanvasElement | OffscreenCanvas }) => Promise<THREE.WebGLRenderer>;
 
@@ -48,7 +47,7 @@ function configure(r: { toneMapping: THREE.ToneMapping; toneMappingExposure: num
 /** WebGPURenderer (which itself falls back to a WebGL2 backend), or classic WebGL with ?renderer=webgl. */
 const createRenderer: RendererFactory = async (props) => {
   const setName = (renderer: string) => useStore.getState().set({ renderer });
-  // Transparent canvas: the sky is a CSS gradient behind it (cheap, identical on both backends).
+  // Transparent canvas: the sky dome (Sky.tsx) covers it above ground; underground the view's dark CSS backdrop shows.
   if (FORCE_WEBGL) {
     setName('WebGL2 (classic)');
     const r = new THREE.WebGLRenderer({ canvas: props.canvas as HTMLCanvasElement, antialias: true, alpha: true, logarithmicDepthBuffer: true });
@@ -304,8 +303,10 @@ export function Viewer({ world }: { world: WorldInfo }) {
       camera={{ position, fov: 38, near: 5, far: span * 20 }}
       style={{ cursor: tool !== 'orbit' ? 'crosshair' : camMode === 'fly' || camMode === 'walk' ? 'crosshair' : 'default', touchAction: 'none' }}
     >
-      <fog attach="fog" args={[HORIZON, span * 0.9, span * 3.2]} />
-      <hemisphereLight args={['#c9d6e8', '#4a3a2c', 0.75]} />
+      {/* aerial perspective: distant ground hazes into the horizon colour of the sky */}
+      <fog attach="fog" args={[HORIZON, span * 0.6, span * 3]} />
+      <Sky />
+      <hemisphereLight args={['#bcd0e6', '#5b4a3a', 0.8]} />
       <ambientLight intensity={0.12} />
       <Sun position={sun} target={[cx, 0, -cy]} span={span} shadows={q.shadows} />
       <group

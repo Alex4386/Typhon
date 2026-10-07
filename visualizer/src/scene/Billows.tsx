@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { billowLight } from './billowMath';
 import { waterUniforms } from './water';
@@ -23,10 +23,19 @@ export interface Billow {
   r: number;
   g: number;
   b: number;
-  /** 0..1, multiplies the shading (fading in or out). */
+  /** Multiplies the shading (≈1; a cloud's lit share). */
   fade: number;
+  /** 0..1, how opaque the billow is (forming, thinning, dissipating). Default 1. */
+  alpha?: number;
   seed: number;
 }
+
+/**
+ * Opacity steps: a billow's alpha picks the mesh of the nearest step. Instanced meshes carry no
+ * per-instance alpha without a custom shader, and folding the alpha into the colour turned thinning
+ * ash into black blots; a few opacity steps keep both backends on stock materials.
+ */
+const ALPHA_STEPS = 4;
 
 /**
  * Pre-shaded billow texture: overlapping cauliflower lobes, lit from the top of the image (the sun is
@@ -71,7 +80,7 @@ export function billowTexture(): THREE.Texture {
 }
 
 /**
- * Draws billows from `source()` every frame: one instanced draw call, at most `max` billboards, no
+ * Draws billows from `source()` every frame: one instanced draw call per opacity step, at most `max` billboards, no
  * custom shader (WebGPU and WebGL2 alike). Instance colours carry each billow's base colour times its
  * sun shading; billboards face the camera and roll only slightly, so the texture's top-lit lobes stay
  * consistent with the sun above.
@@ -79,26 +88,27 @@ export function billowTexture(): THREE.Texture {
 export function BillowLayer({ source, max, opacity = 0.82, renderOrder = 8 }: { source: () => Billow[]; max: number; opacity?: number; renderOrder?: number }) {
   // built by hand so the instance-colour attribute exists before the material is first compiled
   // (created lazily by setColorAt, a program compiled without it ignores the colours)
-  const instanced = useMemo(() => {
+  const layers = useMemo(() => {
     const geo = new THREE.PlaneGeometry(1, 1);
-    const mat = new THREE.MeshBasicMaterial({ map: billowTexture(), transparent: true, opacity, depthWrite: false });
-    const im = new THREE.InstancedMesh(geo, mat, max);
-    im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3).fill(1), 3);
-    im.count = 0;
-    im.frustumCulled = false;
-    im.renderOrder = renderOrder;
-    return im;
+    const map = billowTexture();
+    return Array.from({ length: ALPHA_STEPS }, (_, k) => {
+      const mat = new THREE.MeshBasicMaterial({ map, transparent: true, opacity: (opacity * (k + 1)) / ALPHA_STEPS, depthWrite: false });
+      const im = new THREE.InstancedMesh(geo, mat, max);
+      im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3).fill(1), 3);
+      im.count = 0;
+      im.frustumCulled = false;
+      im.renderOrder = renderOrder;
+      return im;
+    });
   }, [max, opacity, renderOrder]);
   useEffect(
     () => () => {
-      instanced.geometry.dispose();
-      (instanced.material as THREE.MeshBasicMaterial).map?.dispose();
-      (instanced.material as THREE.Material).dispose();
+      layers[0].geometry.dispose();
+      (layers[0].material as THREE.MeshBasicMaterial).map?.dispose();
+      for (const im of layers) (im.material as THREE.Material).dispose();
     },
-    [instanced],
+    [layers],
   );
-  const mesh = useRef<THREE.InstancedMesh>(instanced);
-  mesh.current = instanced;
   const m = useMemo(() => new THREE.Matrix4(), []);
   const p = useMemo(() => new THREE.Vector3(), []);
   const s = useMemo(() => new THREE.Vector3(), []);
@@ -106,30 +116,43 @@ export function BillowLayer({ source, max, opacity = 0.82, renderOrder = 8 }: { 
   const roll = useMemo(() => new THREE.Quaternion(), []);
   const zAxis = useMemo(() => new THREE.Vector3(0, 0, 1), []);
   const c = useMemo(() => new THREE.Color(), []);
+  const counts = useMemo(() => new Int32Array(ALPHA_STEPS), []);
 
   useFrame(({ camera, clock }) => {
-    const im = mesh.current;
-    if (!im) return;
     const t = clock.elapsedTime;
     const sun = waterUniforms.uSunDir.value as THREE.Vector3;
+    counts.fill(0);
     let n = 0;
     for (const b of source()) {
       if (n >= max) break;
+      const step = Math.min(ALPHA_STEPS, Math.round((b.alpha ?? 1) * ALPHA_STEPS)) - 1;
+      if (step < 0) continue;
+      const im = layers[step];
       p.set(b.x, b.y, b.z);
       s.set(b.size, b.size * b.flat, 1);
       roll.setFromAxisAngle(zAxis, Math.sin(b.seed * 12.9898) * 0.25 + Math.sin(t * 0.05 + b.seed) * 0.05);
       q.copy(camera.quaternion).multiply(roll);
       m.compose(p, q, s);
-      im.setMatrixAt(n, m);
+      im.setMatrixAt(counts[step], m);
       const light = billowLight(b.x - b.cx, b.y - b.cy, b.z - b.cz, sun.x, sun.y, sun.z) * b.fade;
       c.setRGB(b.r * light, b.g * light, b.b * light);
-      im.setColorAt(n, c);
+      im.setColorAt(counts[step], c);
+      counts[step]++;
       n++;
     }
-    im.count = n;
-    im.instanceMatrix.needsUpdate = true;
-    if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    for (let k = 0; k < ALPHA_STEPS; k++) {
+      const im = layers[k];
+      im.count = counts[k];
+      im.instanceMatrix.needsUpdate = true;
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    }
   });
 
-  return <primitive object={instanced} />;
+  return (
+    <>
+      {layers.map((im, k) => (
+        <primitive key={k} object={im} />
+      ))}
+    </>
+  );
 }
