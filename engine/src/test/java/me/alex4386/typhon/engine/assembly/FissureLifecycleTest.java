@@ -20,6 +20,7 @@ import me.alex4386.typhon.engine.magma.MagmaEvents;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionEnded;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.save.SaveStore;
@@ -45,7 +46,7 @@ class FissureLifecycleTest {
     }
 
     static MagmaChamberConfig flank() {
-        return MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
+        return MagmaChamberConfig.builder("test", Point3.ofBlock(new BlockPos(0, 60, 0), VolcanoScaling.DEFAULT.metersPerBlock()))
                 .initialOverpressureMPa(14.0) // above dike nucleation, below summit failure
                 .supplyVariability(0)
                 .build();

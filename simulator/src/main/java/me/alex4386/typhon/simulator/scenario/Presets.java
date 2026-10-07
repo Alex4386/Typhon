@@ -10,6 +10,7 @@ import me.alex4386.typhon.engine.subsurface.SubsurfaceConfig;
 import me.alex4386.typhon.engine.magma.ConduitConfig;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.volcano.VolcanoScaling;
 import me.alex4386.typhon.engine.world.BlockId;
@@ -75,15 +76,15 @@ public final class Presets {
 
     // ── helpers ──
 
-    /** Crater vent whose floor is the ground at (x, z). */
-    static VentSite crater(String id, ColumnGrid terrain, int x, int z, int radius) {
-        return VentSite.crater(id, new BlockPos(x, terrain.ground(x, z), z), radius);
+    /** Crater vent whose floor is the ground at column (x, z) of an {@code l}-metre grid. */
+    static VentSite crater(String id, ColumnGrid terrain, int x, int z, int radius, double l) {
+        return VentSite.crater(id, Point3.surfaceOf(new BlockPos(x, terrain.ground(x, z), z), l), radius);
     }
 
-    /** Chamber centre a few dozen blocks below the vent, inside the overworld. */
-    static BlockPos chamberBelow(VentSite vent, int depthBlocks) {
-        BlockPos p = vent.position();
-        return new BlockPos(p.x(), Math.max(-56, p.y() - depthBlocks), p.z());
+    /** Chamber centre (m) a few dozen blocks below the vent, inside the overworld. */
+    static Point3 chamberBelow(VentSite vent, int depthBlocks, double l) {
+        BlockPos p = vent.block(l);
+        return Point3.ofBlock(new BlockPos(p.x(), Math.max(-56, p.y() - depthBlocks), p.z()), l);
     }
 
     /** Wind variability used by every preset (real speeds are scaled by Froude similarity in the engine). */
@@ -108,8 +109,8 @@ public final class Presets {
                 seed -> TerrainGenerators.shield(256, seed, 44, 300, 10, 6),
                 (seed, terrain) -> {
                     Scenario.Builder b = new Scenario.Builder("kilauea", seed, terrain);
-                    VentSite vent = crater("halemaumau", terrain, 0, 0, 6);
-                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("kilauea", chamberBelow(vent, 40))
+                    VentSite vent = crater("halemaumau", terrain, 0, 0, 6, scaling.metersPerBlock());
+                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("kilauea", chamberBelow(vent, 40, scaling.metersPerBlock()))
                             .volume(1e9)
                             .lithostaticDepth(1500)
                             .conduitRadius(1.5) // feeder ~3 m across (Wilson & Head 1981); peak effusion within 1-100 m3/s
@@ -149,8 +150,8 @@ public final class Presets {
                 seed -> TerrainGenerators.cone(192, seed, new Cone(70, 170, 7, 5, 1.25, BlockId.minecraft("blackstone"))),
                 (seed, terrain) -> {
                     Scenario.Builder b = new Scenario.Builder("stromboli", seed, terrain);
-                    VentSite vent = crater("summit", terrain, 0, 0, 5);
-                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("stromboli", chamberBelow(vent, 48))
+                    VentSite vent = crater("summit", terrain, 0, 0, 5, scaling.metersPerBlock());
+                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("stromboli", chamberBelow(vent, 48, scaling.metersPerBlock()))
                             .volume(5e7)
                             .lithostaticDepth(3000)
                             .conduitRadius(0.8)
@@ -194,8 +195,8 @@ public final class Presets {
                 seed -> TerrainGenerators.cone(256, seed, new Cone(100, 230, 8, 4, 1.6, BlockId.minecraft("andesite"))),
                 (seed, terrain) -> {
                     Scenario.Builder b = new Scenario.Builder("st-helens", seed, terrain);
-                    VentSite vent = crater("summit", terrain, 0, 0, 6);
-                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("st-helens", chamberBelow(vent, 56))
+                    VentSite vent = crater("summit", terrain, 0, 0, 6, scaling.metersPerBlock());
+                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("st-helens", chamberBelow(vent, 56, scaling.metersPerBlock()))
                             .volume(5e9)
                             .lithostaticDepth(7500)
                             .conduitRadius(15)
@@ -235,8 +236,8 @@ public final class Presets {
                 seed -> TerrainGenerators.cone(320, seed, new Cone(90, 300, 10, 4, 1.5, BlockId.minecraft("andesite"))),
                 (seed, terrain) -> {
                     Scenario.Builder b = new Scenario.Builder("pinatubo", seed, terrain);
-                    VentSite vent = crater("summit", terrain, 0, 0, 8);
-                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("pinatubo", chamberBelow(vent, 60))
+                    VentSite vent = crater("summit", terrain, 0, 0, 8, scaling.metersPerBlock());
+                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("pinatubo", chamberBelow(vent, 60, scaling.metersPerBlock()))
                             .volume(4e10)
                             .lithostaticDepth(7000)
                             .conduitRadius(60)
@@ -276,8 +277,8 @@ public final class Presets {
                 seed -> TerrainGenerators.island(192, seed, seaLevel, seaLevel - 32, seaLevel - 4, 140, 6),
                 (seed, terrain) -> {
                     Scenario.Builder b = new Scenario.Builder("surtsey", seed, terrain);
-                    VentSite vent = crater("surtur", terrain, 0, 0, 4);
-                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("surtsey", chamberBelow(vent, 48))
+                    VentSite vent = crater("surtur", terrain, 0, 0, 4, scaling.metersPerBlock());
+                    MagmaChamberConfig chamber = MagmaChamberConfig.builder("surtsey", chamberBelow(vent, 48, scaling.metersPerBlock()))
                             .volume(5e8)
                             .lithostaticDepth(3000)
                             .conduitRadius(2.0)
@@ -321,12 +322,12 @@ public final class Presets {
                     // Heat sources are hydrothermal basins, not eruptive vents; the geothermal grid is centred on
                     // the caldera above the chamber. West Thumb lies in the lake, like its real counterpart.
                     List<VentSite> basins = List.of(
-                            crater("upper-geyser-basin", terrain, 40, 20, 8),
-                            crater("norris", terrain, 30, -80, 6),
-                            crater("mud-volcano", terrain, 70, 90, 6),
-                            crater("west-thumb", terrain, -100, 10, 6));
+                            crater("upper-geyser-basin", terrain, 40, 20, 8, scaling.metersPerBlock()),
+                            crater("norris", terrain, 30, -80, 6, scaling.metersPerBlock()),
+                            crater("mud-volcano", terrain, 70, 90, 6, scaling.metersPerBlock()),
+                            crater("west-thumb", terrain, -100, 10, 6, scaling.metersPerBlock()));
                     MagmaChamberConfig chamber = MagmaChamberConfig.builder("yellowstone",
-                                    new BlockPos(0, -40, 0))
+                                    Point3.ofBlock(new BlockPos(0, -40, 0), scaling.metersPerBlock()))
                             .volume(1e10)
                             .lithostaticDepth(6000)
                             .tensileStrengthMPa(20)

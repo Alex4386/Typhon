@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.output.Outbox;
 import me.alex4386.typhon.engine.save.StateReader;
@@ -133,9 +134,9 @@ public final class MagmaTransfer implements Subsystem {
         if (!Double.isNaN(c.lengthM())) return c.lengthM();
         MagmaChamber a = chambers.get(c.from());
         MagmaChamber b = chambers.get(c.to());
-        BlockPos pa = a.config().center();
-        BlockPos pb = b.config().center();
-        double h = Math.hypot(pa.x() - pb.x(), pa.z() - pb.z()) * metersPerBlock;
+        Point3 pa = a.config().center();
+        Point3 pb = b.config().center();
+        double h = pa.horizontalDistance(pb); // centres are metres
         double v = a.config().lithostaticDepth() - b.config().lithostaticDepth();
         return Math.max(1, Math.hypot(h, v));
     }

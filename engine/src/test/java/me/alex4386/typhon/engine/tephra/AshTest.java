@@ -22,7 +22,7 @@ import me.alex4386.typhon.engine.world.BlockId;
 import org.junit.jupiter.api.Test;
 
 class AshTest {
-    private static final VentSite VENT = VentSite.crater("summit", new BlockPos(0, 100, 0), 4);
+    private static final VentSite VENT = VentSite.crater("summit", Point3.surfaceOf(new BlockPos(0, 100, 0), 1), 4);
 
     @Test
     void plumeHeightFollowsMastinAndIsMonotone() {

@@ -18,6 +18,7 @@ import me.alex4386.typhon.engine.magma.plumbing.ConnectionConfig;
 import me.alex4386.typhon.engine.magma.plumbing.PlumbingConfig;
 import me.alex4386.typhon.engine.massflow.MassFlowConfig;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.tephra.TephraConfig;
 import me.alex4386.typhon.engine.volcano.VentKind;
@@ -38,11 +39,11 @@ import me.alex4386.typhon.engine.world.SurfaceDetailConfig;
  * name: Kīlauea
  * active: true
  * vents:
- *   - {id: halemaumau, kind: crater, x: 0, y: 70, z: 0, radius: 6}
- *   - {id: east-rift, kind: fissure, x: 40, y: 52, z: 12, angleDeg: 30, length: 24}
+ *   - {id: halemaumau, kind: crater, x: 2, y: -2, elevation: 1136, radius: 6}
+ *   - {id: east-rift, kind: fissure, x: 640, y: -192, elevation: 848, angleDeg: 30, length: 24}
  * ballisticFraction: 0.05
  * magma:
- *   chamber: {center: {x: 0, y: -40, z: 0}, volume: 1.0e10, supplyRate: 3, initialSilicaWt: 50}
+ *   chamber: {center: {x: 2, y: -2, elevation: -632}, volume: 1.0e10, supplyRate: 3, initialSilicaWt: 50}
  *   conduit: {initialOpenness: 1}
  * dikes: {enabled: true, blocked: false}
  * geothermal: {enabled: true, maxGeysers: 6}
@@ -53,11 +54,16 @@ import me.alex4386.typhon.engine.world.SurfaceDetailConfig;
  * detail: {radiusM: 300, metersPerCell: 1}   # crater-resolving fine surface; {enabled: false} turns it off
  * }</pre>
  *
+ * Positions are metres on the map ({@code x} east, {@code y} north, {@code elevation} up): a vent's is its
+ * surface point, a chamber's its centre. Radii and lengths stay in columns. Files from before metre
+ * positions give {@code {x, y, z}} block coordinates (engine axes: {@code y} up, {@code z} south); they
+ * load through a migration (with a warning) and are written back in metres.
+ *
  * Inactive volcanoes are built with no magma supply (dormant); their state is kept.
  *
  * @param dikes {@code null} when disabled
  * @param geothermal {@code null} when disabled
- * @param geothermalCenter {@code null} = above the chamber
+ * @param geothermalCenter centre of the hot-spring field on the ground (m), {@code null} = above the chamber
  * @param pdc {@code null} when mass flows are disabled
  * @param lahar {@code null} when mass flows are disabled
  * @param edificeMaterial material of this volcano's edifice for imported columns, {@code null} = world
@@ -72,7 +78,7 @@ import me.alex4386.typhon.engine.world.SurfaceDetailConfig;
  *     {@code magma.connections}); {@link PlumbingConfig#NONE} for one chamber
  */
 public record VolcanoDefinition(String id, String name, boolean active, List<VentSite> vents,
-        MagmaChamberConfig chamber, DikeConfig dikes, GeothermalConfig geothermal, BlockPos geothermalCenter,
+        MagmaChamberConfig chamber, DikeConfig dikes, GeothermalConfig geothermal, Point3 geothermalCenter,
         MassFlowConfig pdc, MassFlowConfig lahar, boolean deformation, TephraConfig tephra, double ballisticFraction, String edificeMaterial, double edificeRadius,
         double edificeBaseZ, List<GeodeticStation> stations, SurfaceDetailConfig detail, PlumbingConfig plumbing) {
 
@@ -96,7 +102,7 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
 
     /** Definition with a single-chamber plumbing. */
     public VolcanoDefinition(String id, String name, boolean active, List<VentSite> vents,
-            MagmaChamberConfig chamber, DikeConfig dikes, GeothermalConfig geothermal, BlockPos geothermalCenter,
+            MagmaChamberConfig chamber, DikeConfig dikes, GeothermalConfig geothermal, Point3 geothermalCenter,
             MassFlowConfig pdc, MassFlowConfig lahar, boolean deformation, TephraConfig tephra, double ballisticFraction, String edificeMaterial, double edificeRadius,
             double edificeBaseZ, List<GeodeticStation> stations, SurfaceDetailConfig detail) {
         this(id, name, active, vents, chamber, dikes, geothermal, geothermalCenter, pdc, lahar, deformation, tephra,
@@ -106,7 +112,7 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
 
     /** Definition with the default fine surface. */
     public VolcanoDefinition(String id, String name, boolean active, List<VentSite> vents,
-            MagmaChamberConfig chamber, DikeConfig dikes, GeothermalConfig geothermal, BlockPos geothermalCenter,
+            MagmaChamberConfig chamber, DikeConfig dikes, GeothermalConfig geothermal, Point3 geothermalCenter,
             MassFlowConfig pdc, MassFlowConfig lahar, boolean deformation, TephraConfig tephra, double ballisticFraction, String edificeMaterial, double edificeRadius,
             double edificeBaseZ, List<GeodeticStation> stations) {
         this(id, name, active, vents, chamber, dikes, geothermal, geothermalCenter, pdc, lahar, deformation, tephra,
@@ -116,7 +122,7 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
 
     /** Definition without deformation stations. */
     public VolcanoDefinition(String id, String name, boolean active, List<VentSite> vents,
-            MagmaChamberConfig chamber, DikeConfig dikes, GeothermalConfig geothermal, BlockPos geothermalCenter,
+            MagmaChamberConfig chamber, DikeConfig dikes, GeothermalConfig geothermal, Point3 geothermalCenter,
             MassFlowConfig pdc, MassFlowConfig lahar, boolean deformation, TephraConfig tephra, double ballisticFraction, String edificeMaterial, double edificeRadius,
             double edificeBaseZ) {
         this(id, name, active, vents, chamber, dikes, geothermal, geothermalCenter, pdc, lahar, deformation, tephra,
@@ -126,18 +132,21 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
 
     /** Definition with an unbounded edifice at the world's basement top (no edifice radius/base). */
     public VolcanoDefinition(String id, String name, boolean active, List<VentSite> vents,
-            MagmaChamberConfig chamber, DikeConfig dikes, GeothermalConfig geothermal, BlockPos geothermalCenter,
+            MagmaChamberConfig chamber, DikeConfig dikes, GeothermalConfig geothermal, Point3 geothermalCenter,
             MassFlowConfig pdc, MassFlowConfig lahar, boolean deformation, TephraConfig tephra, double ballisticFraction, String edificeMaterial) {
         this(id, name, active, vents, chamber, dikes, geothermal, geothermalCenter, pdc, lahar, deformation, tephra,
                 ballisticFraction, edificeMaterial, Double.POSITIVE_INFINITY,
                 Double.NaN);
     }
 
-    /** This volcano's edifice zone for importing columns, or {@code null} if it uses the world's rock. */
-    public Edifice edifice() {
+    /**
+     * This volcano's edifice zone for importing columns of an {@code l}-metre grid, or {@code null} if it uses
+     * the world's rock.
+     */
+    public Edifice edifice(double l) {
         if (edificeMaterial == null) return null;
-        BlockPos c = primaryVent().position();
-        return new Edifice(id, c.x() + 0.5, c.z() + 0.5, edificeRadius, edificeBaseZ, edificeMaterial);
+        Point3 c = primaryVent().position();
+        return new Edifice(id, c.x() / l, c.z() / l, edificeRadius, edificeBaseZ, edificeMaterial);
     }
 
     public VentSite primaryVent() {
@@ -146,15 +155,19 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
 
     // ── Parsing ──
 
-    /** Parses a volcano file; {@code id} comes from the file name ({@code volcanoes/<id>.yaml}). */
-    public static VolcanoDefinition parse(String id, ConfigNode root) {
+    /**
+     * Parses a volcano file of a world with {@code metersPerBlock} columns; {@code id} comes from the file name
+     * ({@code volcanoes/<id>.yaml}). The scale places the default chamber and migrates block coordinates.
+     */
+    public static VolcanoDefinition parse(String id, ConfigNode root, double metersPerBlock) {
+        double l = metersPerBlock;
         String declared = root.string("id", id);
         if (!declared.equals(id)) throw root.error("id", "'" + declared + "' does not match the file name '" + id + "'");
         String name = root.string("name", id);
         boolean active = root.bool("active", true);
 
         List<VentSite> vents = new ArrayList<>();
-        for (ConfigNode v : root.children("vents")) vents.add(parseVent(v));
+        for (ConfigNode v : root.children("vents")) vents.add(parseVent(v, l));
         if (vents.isEmpty()) throw root.error("vents", "at least one vent is required");
         for (int i = 0; i < vents.size(); i++) {
             for (int j = 0; j < i; j++) {
@@ -169,9 +182,9 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
 
         ConfigNode magma = root.child("magma");
         ConfigNode chamberNode = magma.child("chamber");
-        BlockPos center = chamberNode.has("center")
-                ? parsePos(chamberNode.child("center"))
-                : VolcanoSystem.defaultChamberCenter(vents.get(0).position());
+        Point3 center = chamberNode.has("center")
+                ? parseCenter(chamberNode.child("center"), l)
+                : VolcanoSystem.defaultChamberCenter(vents.get(0), l);
         chamberNode.markUsed("center");
         ConduitConfig conduit = ConfigBinder.bindRecord(magma.child("conduit"), ConduitConfig.DEFAULT, Set.of(), Set.of());
         MagmaChamberConfig.Builder builder = MagmaChamberConfig.builder(id, center).conduit(conduit);
@@ -182,7 +195,7 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
         } catch (IllegalArgumentException e) {
             throw chamberNode.error(e.getMessage());
         }
-        PlumbingConfig plumbing = parsePlumbing(magma, chamber);
+        PlumbingConfig plumbing = parsePlumbing(magma, chamber, l);
         magma.finish();
 
         DikeConfig dikes = null;
@@ -200,11 +213,11 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
         }
 
         GeothermalConfig geothermal = null;
-        BlockPos geothermalCenter = null;
+        Point3 geothermalCenter = null;
         ConfigNode geoNode = root.child("geothermal");
         if (geoNode.bool("enabled", true)) {
             geothermal = new GeothermalConfig();
-            if (geoNode.has("center")) geothermalCenter = parsePos(geoNode.child("center"));
+            if (geoNode.has("center")) geothermalCenter = parseSurfacePoint(geoNode.child("center"), l);
             ConfigBinder.bindFields(geoNode, geothermal, Set.of("enabled", "center"), Set.of());
             try {
                 geothermal.validate();
@@ -289,11 +302,11 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
      * unset ones taken from the main chamber, with no deep supply unless set) and pathways
      * ({@code magma.connections}).
      */
-    static PlumbingConfig parsePlumbing(ConfigNode magma, MagmaChamberConfig main) {
+    static PlumbingConfig parsePlumbing(ConfigNode magma, MagmaChamberConfig main, double l) {
         List<MagmaChamberConfig> chambers = new ArrayList<>();
         for (ConfigNode n : magma.children("chambers")) {
             String chamberId = n.requireString("id");
-            BlockPos center = n.has("center") ? parsePos(n.child("center")) : main.center();
+            Point3 center = n.has("center") ? parseCenter(n.child("center"), l) : main.center();
             n.markUsed("center");
             MagmaChamberConfig.Builder b = main.toBuilder().chamberId(chamberId).center(center).supplyRate(0);
             ConfigBinder.bindBuilder(n, b, Set.of("id", "center"), CHAMBER_DERIVED);
@@ -331,10 +344,10 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
         }
     }
 
-    static VentSite parseVent(ConfigNode v) {
+    static VentSite parseVent(ConfigNode v, double l) {
         String ventId = v.requireString("id");
         String kind = v.string("kind", "crater");
-        BlockPos position = new BlockPos(v.integer("x", 0), v.integer("y", 0), v.integer("z", 0));
+        Point3 position = surfacePoint(v, l);
         VentSite vent;
         try {
             vent = switch (kind) {
@@ -351,10 +364,75 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
         return vent;
     }
 
-    static BlockPos parsePos(ConfigNode p) {
-        BlockPos pos = new BlockPos(p.integer("x", 0), p.integer("y", 0), p.integer("z", 0));
+    /**
+     * A point on the ground ({@code {x, y, elevation}} map metres), or, in files from before metre positions,
+     * the ground block {@code {x, y, z}} (engine axes) under it: migrated to the block's surface point.
+     */
+    static Point3 surfacePoint(ConfigNode p, double l) {
+        if (p.has("elevation")) return mapPoint(p);
+        BlockPos block = new BlockPos(p.integer("x", 0), p.integer("y", 0), p.integer("z", 0));
+        p.warn("x", "is a block coordinate {x, y, z}: migrated to metres {x, y, elevation} (rewritten on the next save)");
+        return Point3.surfaceOf(block, requireScale(p, l));
+    }
+
+    /** {@link #surfacePoint} of a whole node (e.g. {@code geothermal.center}). */
+    static Point3 parseSurfacePoint(ConfigNode p, double l) {
+        Point3 point = surfacePoint(p, l);
         p.finish();
-        return pos;
+        return point;
+    }
+
+    /**
+     * A centre ({@code {x, y, elevation}} map metres), or, in files from before metre positions, the block
+     * {@code {x, y, z}} (engine axes) holding it: migrated to the block's centre.
+     */
+    static Point3 parseCenter(ConfigNode p, double l) {
+        Point3 point;
+        if (p.has("elevation")) {
+            point = mapPoint(p);
+        } else {
+            BlockPos block = new BlockPos(p.integer("x", 0), p.integer("y", 0), p.integer("z", 0));
+            p.warn("x", "is a block coordinate {x, y, z}: migrated to metres {x, y, elevation} (rewritten on the next save)");
+            point = Point3.ofBlock(block, requireScale(p, l));
+        }
+        p.finish();
+        return point;
+    }
+
+    /** Map metres ({@code x} east, {@code y} north, {@code elevation} up) to the engine's axes ({@code z} south). */
+    private static Point3 mapPoint(ConfigNode p) {
+        return new Point3(p.number("x", 0), p.requireNumber("elevation"), -p.number("y", 0));
+    }
+
+    private static double requireScale(ConfigNode p, double l) {
+        if (!(l > 0)) throw p.error("x", "block coordinates need the world's column size to migrate");
+        return l;
+    }
+
+    /** Whether a definition tree still gives a position as block coordinates (written before metre positions). */
+    @SuppressWarnings("unchecked")
+    public static boolean hasBlockPositions(Object tree) {
+        if (!(tree instanceof Map<?, ?> root)) return false;
+        if (root.get("vents") instanceof List<?> vents) {
+            for (Object v : vents) if (v instanceof Map<?, ?> m && !m.containsKey("elevation")) return true;
+        }
+        if (root.get("magma") instanceof Map<?, ?> magma) {
+            if (magma.get("chamber") instanceof Map<?, ?> c && c.get("center") instanceof Map<?, ?> p && !p.containsKey("elevation")) {
+                return true;
+            }
+            if (magma.get("chambers") instanceof List<?> list) {
+                for (Object o : list) {
+                    if (o instanceof Map<?, ?> c && c.get("center") instanceof Map<?, ?> p && !p.containsKey("elevation")) return true;
+                }
+            }
+        }
+        return root.get("geothermal") instanceof Map<?, ?> g && g.get("center") instanceof Map<?, ?> p
+                && !p.containsKey("elevation");
+    }
+
+    /** A point as map metres ({@code {x, y, elevation}}; the inverse of {@link #mapPoint}). */
+    static Map<String, Object> mapTree(Point3 p) {
+        return WorldDefinition.map("x", p.x(), "y", p.z() == 0 ? 0.0 : -p.z(), "elevation", p.y());
     }
 
     // ── Building ──
@@ -429,7 +507,7 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
                 system.dikes() != null ? system.dikes().config().copy() : null,
                 system.geothermal() != null
                         ? copyFields((GeothermalConfig) system.geothermal().config(), new GeothermalConfig()) : null,
-                system.geothermal() != null ? system.geothermal().center() : null,
+                system.geothermal() != null ? Point3.surfaceOf(system.geothermal().center(), system.scaling().metersPerBlock()) : null,
                 system.pyroclasticFlows() != null ? system.pyroclasticFlows().config().copy() : null,
                 system.lahars() != null ? system.lahars().config().copy() : null,
                 system.deformation() != null,
@@ -466,9 +544,7 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", v.id());
             m.put("kind", v.kind() == VentKind.CRATER ? "crater" : "fissure");
-            m.put("x", v.position().x());
-            m.put("y", v.position().y());
-            m.put("z", v.position().z());
+            m.putAll(mapTree(v.position()));
             m.put("radius", v.craterRadius());
             if (v.emergent()) m.put("emergent", true);
             if (v.kind() == VentKind.FISSURE) {
@@ -481,8 +557,7 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
         root.put("ballisticFraction", ballisticFraction);
 
         Map<String, Object> chamberTree = new LinkedHashMap<>();
-        BlockPos c = chamber.center();
-        chamberTree.put("center", WorldDefinition.map("x", c.x(), "y", c.y(), "z", c.z()));
+        chamberTree.put("center", mapTree(chamber.center()));
         chamberTree.putAll(ConfigBinder.exportRecord(chamber, CHAMBER_SKIP));
         Map<String, Object> magma = new LinkedHashMap<>();
         magma.put("chamber", chamberTree);
@@ -492,8 +567,7 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
             for (MagmaChamberConfig x : plumbing.chambers()) {
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("id", x.chamberId());
-                BlockPos xc = x.center();
-                m.put("center", WorldDefinition.map("x", xc.x(), "y", xc.y(), "z", xc.z()));
+                m.put("center", mapTree(x.center()));
                 m.putAll(ConfigBinder.exportRecord(x, CHAMBER_SKIP));
                 list.add(m);
             }
@@ -530,8 +604,7 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
         geoTree.put("enabled", geothermal != null);
         if (geothermal != null) {
             if (geothermalCenter != null) {
-                geoTree.put("center", WorldDefinition.map("x", geothermalCenter.x(), "y", geothermalCenter.y(),
-                        "z", geothermalCenter.z()));
+                geoTree.put("center", mapTree(geothermalCenter));
             }
             geoTree.putAll(ConfigBinder.exportFields(geothermal, Set.of()));
         }

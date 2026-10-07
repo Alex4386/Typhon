@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.FlowCell;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
@@ -62,11 +63,11 @@ public final class PyroclasticFlows extends MassFlowField {
      */
     public String columnCollapse(String sourceId, BlockPos vent, int radius, double massEruptionRateKgS,
             double collapseFraction, double temperatureC) {
-        List<BlockPos> cells = new ArrayList<>();
+        List<ColumnIndex> cells = new ArrayList<>();
         int r = Math.max(0, radius);
         for (int dz = -r; dz <= r; dz++) {
             for (int ddx = -r; ddx <= r; ddx++) {
-                if (ddx * ddx + dz * dz <= r * r) cells.add(vent.offset(ddx, 0, dz));
+                if (ddx * ddx + dz * dz <= r * r) cells.add(new ColumnIndex(vent.x() + ddx, vent.z() + dz));
             }
         }
         String fullId = "collapse:" + sourceId;
@@ -76,7 +77,7 @@ public final class PyroclasticFlows extends MassFlowField {
     }
 
     /** Collapse of a lava dome or crater wall: {@code volumeM3} of hot block-and-ash flow released at rest. */
-    public boolean domeCollapse(BlockPos center, int radius, double volumeM3, double temperatureC) {
+    public boolean domeCollapse(ColumnIndex center, int radius, double volumeM3, double temperatureC) {
         return release(center, radius, volumeM3, temperatureC, 0, Trigger.DOME_COLLAPSE);
     }
 

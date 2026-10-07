@@ -7,7 +7,7 @@ import java.util.Map;
 
 /**
  * A magma chamber placed by the user into a world: the definition of a new volcano with nothing built
- * yet. The chamber sits {@code depthM} below the ground at a column; its vent is {@link
+ * yet. The chamber sits {@code depthM} below the ground at a map point; its vent is {@link
  * me.alex4386.typhon.engine.volcano.VentSite#emergent emergent}, where the conduit from the chamber will
  * meet the ground, with no crater carved and no edifice. Cones, craters, islands and fissures come from
  * what the eruptions do. Fields left out take the defaults below (the server reports them in its schema).
@@ -18,11 +18,11 @@ public final class ChamberPlacement {
     /**
      * A placement request; {@code null} optional fields take the {@link Field#defaultValue defaults}.
      *
-     * @param x column of the chamber (and vent)
-     * @param z column of the chamber (and vent)
+     * @param x map x of the chamber (and vent), metres east
+     * @param y map y of the chamber (and vent), metres north
      * @param depthM depth of the chamber centre below the ground (m)
      */
-    public record Request(String name, int x, int z, double depthM, Double volumeM3, Double temperatureC, Double silicaWt,
+    public record Request(String name, double x, double y, double depthM, Double volumeM3, Double temperatureC, Double silicaWt,
             Double waterWt, Double co2Wt, Double crystalFraction, Double supplyRateM3PerS, Double tensileStrengthMPa,
             Double initialOverpressureMPa) {
         public Request {
@@ -92,8 +92,6 @@ public final class ChamberPlacement {
      */
     public static VolcanoDefinition definition(String id, Request r, double groundZ, double metersPerColumn) {
         double l = metersPerColumn;
-        int ventY = block(groundZ, l);
-        int chamberY = block(groundZ - r.depthM(), l);
         double temperature = value(r.temperatureC(), "temperatureC");
         double silica = value(r.silicaWt(), "silicaWt");
         double water = value(r.waterWt(), "waterWt");
@@ -103,9 +101,10 @@ public final class ChamberPlacement {
         Map<String, Object> vent = new LinkedHashMap<>();
         vent.put("id", "vent");
         vent.put("kind", "crater");
+        // metres as placed: the vent on the ground, the chamber depthM below it (no rounding to blocks)
         vent.put("x", r.x());
-        vent.put("y", ventY);
-        vent.put("z", r.z());
+        vent.put("y", r.y());
+        vent.put("elevation", groundZ);
         // an opening a conduit's width across (~20 m); the crater widens from what the eruption excavates
         vent.put("radius", Math.max(1, (int) Math.round(20 / l)));
         vent.put("emergent", true);
@@ -113,7 +112,7 @@ public final class ChamberPlacement {
         vents.add(vent);
 
         Map<String, Object> chamber = new LinkedHashMap<>();
-        chamber.put("center", WorldDefinition.map("x", r.x(), "y", chamberY, "z", r.z()));
+        chamber.put("center", WorldDefinition.map("x", r.x(), "y", r.y(), "elevation", groundZ - r.depthM()));
         chamber.put("volume", value(r.volumeM3(), "volumeM3"));
         chamber.put("lithostaticDepth", r.depthM());
         chamber.put("tensileStrengthMPa", value(r.tensileStrengthMPa(), "tensileStrengthMPa"));
@@ -133,19 +132,19 @@ public final class ChamberPlacement {
         root.put("name", r.name() != null && !r.name().isBlank() ? r.name() : id);
         root.put("vents", vents);
         root.put("magma", WorldDefinition.map("chamber", chamber));
-        return VolcanoDefinition.parse(id, ConfigNode.root("volcanoes/" + id + ".yaml", root));
+        return VolcanoDefinition.parse(id, ConfigNode.root("volcanoes/" + id + ".yaml", root), l);
     }
 
     /**
      * A further chamber of an existing volcano's plumbing for {@code r}: the {@code magma.chambers} element
-     * (YAML tree) at column ({@code r.x}, {@code r.z}), {@code r.depthM} below ground at {@code groundZ}.
+     * (YAML tree) at map point ({@code r.x}, {@code r.y}), {@code r.depthM} below ground at {@code groundZ}.
      * Fields left unset are not written, so they follow the volcano's main chamber; it gets no deep supply
      * unless {@code r} sets one. The server's one mapping from placement fields to definitions.
      */
     public static Map<String, Object> chamberElement(String chamberId, Request r, double groundZ, double metersPerColumn) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", chamberId);
-        m.put("center", WorldDefinition.map("x", r.x(), "y", block(groundZ - r.depthM(), metersPerColumn), "z", r.z()));
+        m.put("center", WorldDefinition.map("x", r.x(), "y", r.y(), "elevation", groundZ - r.depthM()));
         m.put("lithostaticDepth", r.depthM());
         if (r.volumeM3() != null) m.put("volume", r.volumeM3());
         if (r.tensileStrengthMPa() != null) m.put("tensileStrengthMPa", r.tensileStrengthMPa());
@@ -183,11 +182,6 @@ public final class ChamberPlacement {
         return m;
     }
 
-    /** Index of the block whose top is at or just above {@code z} (m): a chamber centre's block. */
-    public static int blockBelow(double z, double metersPerColumn) {
-        return block(z, metersPerColumn);
-    }
-
     /**
      * The definition key of a placement field ({@code volumeM3} → {@code volume}); other names are
      * definition keys already ({@code rechargeTemperatureC}). Depth and position are handled by callers.
@@ -198,10 +192,5 @@ public final class ChamberPlacement {
             case "supplyRateM3PerS" -> "supplyRate";
             default -> field;
         };
-    }
-
-    /** Index of the block whose top is at or just above {@code z} (m). */
-    static int block(double z, double l) {
-        return (int) Math.ceil(z / l - 1e-6) - 1;
     }
 }

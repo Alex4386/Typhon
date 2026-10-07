@@ -13,6 +13,7 @@ import me.alex4386.typhon.engine.config.Yaml;
 import me.alex4386.typhon.engine.expansion.ExpansionEvents.AreaExpanded;
 import me.alex4386.typhon.engine.lava.LavaSource;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
@@ -54,7 +55,7 @@ class WorldExpansionTest {
                   chamber: {center: {x: -20, y: -20, z: 0}, volume: 1.0e9, initialOverpressureMPa: 1, supplyRate: 0,
                             supplyVariability: 0}
                 geothermal: {radius: 16}
-                """)));
+                """), 4));
     }
 
     /** The core: 64 × 64 columns (x, z in [−32, 32)) from the same generator. */
@@ -75,7 +76,7 @@ class WorldExpansionTest {
     static World create(String expansion, InMemorySaveStore state, InMemorySaveStore history) {
         World w = World.create(world(expansion), quiet(), core(), state, history);
         w.setTerrainGenerator(PLANE);
-        w.lava().addSource(LavaSource.at("test/vent", new BlockPos(24, 58, 0), 1, 1150, 50, 0.1));
+        w.lava().addSource(LavaSource.at("test/vent", new ColumnIndex(24, 0), 1, 1150, 50, 0.1));
         return w;
     }
 
@@ -185,7 +186,7 @@ class WorldExpansionTest {
     @Test
     void withoutAGeneratorTheAreaStaysPut() {
         World w = World.create(world(GROW), quiet(), core());
-        w.lava().addSource(LavaSource.at("test/vent", new BlockPos(24, 58, 0), 1, 1150, 50, 0.1));
+        w.lava().addSource(LavaSource.at("test/vent", new ColumnIndex(24, 0), 1, 1150, 50, 0.1));
         assertNotNull(w.expansion());
         w.engine().runFor(LAVA * 120);
         assertEquals(0, w.expansion().addedTiles());

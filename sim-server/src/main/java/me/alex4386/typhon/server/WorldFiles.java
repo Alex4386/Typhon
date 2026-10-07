@@ -63,7 +63,7 @@ final class WorldFiles {
             try {
                 WorldDirectory wd = new WorldDirectory(dir);
                 WorldDefinition def = wd.readWorld();
-                int volcanoes = wd.readVolcanoes().size();
+                int volcanoes = wd.readVolcanoes(def.spec().metersPerColumn()).size();
                 out.add(new Listing(name, dir, def.name(), volcanoes, wd.hasState(), null));
             } catch (RuntimeException e) {
                 out.add(new Listing(name, dir, name, 0, false, String.valueOf(e.getMessage())));
@@ -117,7 +117,8 @@ final class WorldFiles {
 
     /** Volcano definitions of a world (for the tuning schema). */
     static List<VolcanoDefinition> volcanoes(Path dir) {
-        return new WorldDirectory(dir).readVolcanoes();
+        WorldDirectory wd = new WorldDirectory(dir);
+        return wd.readVolcanoes(wd.readWorld().spec().metersPerColumn());
     }
 
     /** Deletes a world directory recursively. */

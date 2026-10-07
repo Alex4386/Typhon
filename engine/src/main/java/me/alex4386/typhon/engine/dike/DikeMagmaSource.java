@@ -3,6 +3,7 @@ package me.alex4386.typhon.engine.dike;
 import java.util.Objects;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 
 /**
  * What a dike needs from its magma chamber: driving pressure, magma properties and the ability to
@@ -12,7 +13,8 @@ public interface DikeMagmaSource {
     String volcanoId();
 
     /** Chamber centre in world coordinates (dikes start here). */
-    BlockPos chamberCenter();
+    /** Centre of the chamber (m). */
+    Point3 chamberCenter();
 
     double overpressureMPa();
 
@@ -57,7 +59,7 @@ public interface DikeMagmaSource {
         Objects.requireNonNull(chamber, "chamber");
         return new DikeMagmaSource() {
             @Override public String volcanoId() { return chamber.config().volcanoId(); }
-            @Override public BlockPos chamberCenter() { return chamber.chamberCenter(); }
+            @Override public Point3 chamberCenter() { return chamber.chamberCenter(); }
             @Override public double overpressureMPa() { return chamber.overpressureMPa(); }
             @Override public double tensileStrengthMPa() { return chamber.config().tensileStrengthMPa(); }
             @Override public double chamberDepthM() { return chamber.config().lithostaticDepth(); }

@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.alert.AlertEvents.AlertLevelChanged;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.seismic.SeismicConfig;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
@@ -127,7 +128,7 @@ class AlertLevelEstimatorTest {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.overpressureRate = 0.3; // fast pressurisation, but overpressure itself still low
         SeismicityModel seismic = new SeismicityModel(
-                SeismicConfig.builder("v", new BlockPos(0, 100, 0)).swarmTriggerProbability(0).build(), magma, 1);
+                SeismicConfig.builder("v", Point3.surfaceOf(new BlockPos(0, 100, 0), 1)).swarmTriggerProbability(0).build(), magma, 1);
         AlertLevelEstimator estimator = new AlertLevelEstimator(AlertConfig.defaults("v").withStepPeriodSeconds(1), magma, seismic);
         Engine engine = Engine.builder(1).add(seismic).add(estimator).build();
 

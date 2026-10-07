@@ -15,6 +15,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainChunk;
@@ -75,7 +76,7 @@ class LavaCrustTubeTest {
         LavaFlow lava = new LavaFlow(world.terrain,
                 LavaConfig.defaults().toBuilder().coolingScale(20).crustEnabled(crust).build());
         Engine engine = world.engine(lava, 2);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 0.5, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 0.5, BASALT_T, BASALT_SI, 0.1));
         double farthest = 0;
         for (int i = 0; i < 4000; i++) {
             world.run(engine, 1);
@@ -105,7 +106,7 @@ class LavaCrustTubeTest {
                 .crustDisruptionVelocity(disruptionVelocity).build();
         LavaFlow lava = new LavaFlow(world.terrain, config);
         Engine engine = world.engine(lava, 3);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 4, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 4, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 300);
         double crust = 0;
         double melt = 0;
@@ -137,7 +138,7 @@ class LavaCrustTubeTest {
         LavaTestWorld world = new LavaTestWorld(-1, -1, 2, 0, (x, z) -> trough(x, z, false)).coarse(20);
         LavaFlow lava = new LavaFlow(world.terrain, config);
         Engine engine = world.engine(lava, seed);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 1.0, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 1.0, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 300);
         lava.removeSource("vent");
         world.run(engine, 2000);
@@ -242,7 +243,7 @@ class LavaCrustTubeTest {
         world.coarse(10);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults());
         Engine engine = world.engine(lava, 4);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 300);
 
         SubsystemState saved = new SubsystemState();
@@ -277,7 +278,7 @@ class LavaCrustTubeTest {
         world.coarse(10);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(50));
         Engine engine = world.engine(lava, 5);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 3, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 3, BASALT_T, BASALT_SI, 0.1));
         int shoreBefore = shoreline(world.terrain);
         world.run(engine, 4000);
         int shoreAfter = shoreline(world.terrain);
@@ -326,7 +327,7 @@ class LavaCrustTubeTest {
         LavaConfig config = LavaConfig.defaults().toBuilder().coolingScale(1).littoralExplosionFluxM3s(0.5).build();
         LavaFlow lava = new LavaFlow(world.terrain, config);
         Engine engine = world.engine(lava, 6);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), rate, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), rate, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 400);
         List<LavaEvents.LavaOceanEntry> entries = world.events(LavaEvents.LavaOceanEntry.class);
         if (explosive) return entries.stream().filter(LavaEvents.LavaOceanEntry::littoralExplosion).count();

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.VentSite;
@@ -16,7 +17,7 @@ import org.junit.jupiter.api.Test;
  */
 class ProximalBudgetTest {
     private static final int GROUND = 99;
-    private static final VentSite VENT = VentSite.crater("summit", new BlockPos(0, GROUND + 1, 0), 2);
+    private static final VentSite VENT = VentSite.crater("summit", Point3.surfaceOf(new BlockPos(0, GROUND + 1, 0), 1), 2);
 
     private record Setup(Engine engine, TephraSubsystem tephra, WorldModel world) {}
 

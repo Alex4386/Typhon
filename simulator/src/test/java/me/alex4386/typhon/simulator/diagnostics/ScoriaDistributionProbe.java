@@ -27,7 +27,7 @@ class ScoriaDistributionProbe {
         double hours = Double.parseDouble(System.getenv().getOrDefault("PROBE_HOURS", "1"));
         Scenario s = Presets.get(preset).build(1);
         TephraSubsystem tephra = s.volcano().tephra();
-        BlockPos vent = s.volcano().vents().get(0).position();
+        BlockPos vent = s.volcano().vents().get(0).block(s.world().spec().metersPerColumn());
         List<BlockPos> landings = new ArrayList<>();
         boolean first = true;
         for (double t = 0; t < hours * 3600; t += 60) {

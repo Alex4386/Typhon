@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.sim.Engine;
 import org.junit.jupiter.api.Test;
 
@@ -11,7 +12,7 @@ import org.junit.jupiter.api.Test;
 class ChamberWallHeatTest {
     @Test
     void wallPowerMatchesTheEnergyTheChamberLoses() {
-        MagmaChamberConfig config = MagmaChamberConfig.builder("v", new BlockPos(0, -40, 0))
+        MagmaChamberConfig config = MagmaChamberConfig.builder("v", Point3.ofBlock(new BlockPos(0, -40, 0), 1))
                 .volume(1e9)
                 .supplyRate(0)
                 .supplyVariability(0)

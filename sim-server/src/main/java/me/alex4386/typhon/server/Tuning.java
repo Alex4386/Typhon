@@ -469,7 +469,7 @@ final class Tuning {
             WorldDirectory wd = new WorldDirectory(dir);
             Map<String, Map<String, Object>> vs = new TreeMap<>();
             Map<String, String> names = new TreeMap<>();
-            for (VolcanoDefinition v : wd.readVolcanoes()) {
+            for (VolcanoDefinition v : wd.readVolcanoes(wd.readWorld().spec().metersPerColumn())) {
                 vs.put(v.id(), v.toTree());
                 names.put(v.id(), v.name());
             }

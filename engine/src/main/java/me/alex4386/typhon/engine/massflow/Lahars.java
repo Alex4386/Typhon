@@ -12,6 +12,7 @@ import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.FlowCell;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.Outbox;
@@ -132,12 +133,12 @@ public final class Lahars extends MassFlowField {
     }
 
     /** Snow/ice melted by an eruption or hot deposits: dilute water picking up sediment as it runs. */
-    public boolean meltwater(BlockPos center, int radius, double volumeM3) {
+    public boolean meltwater(ColumnIndex center, int radius, double volumeM3) {
         return release(center, radius, volumeM3, config.ambientC, 0.05, Trigger.MELTWATER);
     }
 
     /** Sudden release of a crater lake's water. */
-    public boolean lakeBreakout(BlockPos center, int radius, double volumeM3) {
+    public boolean lakeBreakout(ColumnIndex center, int radius, double volumeM3) {
         return release(center, radius, volumeM3, config.ambientC, 0.02, Trigger.LAKE_BREAKOUT);
     }
 

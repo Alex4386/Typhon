@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.tephra.TephraEvents.BombLanded;
@@ -19,7 +20,7 @@ import org.junit.jupiter.api.Test;
  * while fine ash is carried downwind.
  */
 class ProximalSymmetryTest {
-    private static final VentSite VENT = VentSite.crater("summit", new BlockPos(3, 100, -5), 2);
+    private static final VentSite VENT = VentSite.crater("summit", Point3.surfaceOf(new BlockPos(3, 100, -5), 1), 2);
     private static final double CX = VENT.position().x() + 0.5;
     private static final double CZ = VENT.position().z() + 0.5;
 
@@ -54,7 +55,7 @@ class ProximalSymmetryTest {
         AshGrid grid = t.grid();
         for (int dz = -radius; dz <= radius; dz++) {
             for (int dx = -radius; dx <= radius; dx++) {
-                double h = t.depositThickness(VENT.position().x() + dx, VENT.position().z() + dz);
+                double h = t.depositThickness(VENT.block(1).x() + dx, VENT.block(1).z() + dz);
                 if (h <= 0) continue;
                 double x = dx, z = dz; // column centre relative to the vent column's centre
                 double r = Math.hypot(x, z);
@@ -130,11 +131,11 @@ class ProximalSymmetryTest {
 
     @Test
     void ventColumnSitsInTheMiddleOfAnAshCell() {
-        AshGrid grid = AshGrid.centeredOn(VENT.position(), 8, 16);
-        int cell = grid.cellAt(VENT.position().x(), VENT.position().z());
+        AshGrid grid = AshGrid.centeredOn(VENT.block(1), 8, 16);
+        int cell = grid.cellAt(VENT.block(1).x(), VENT.block(1).z());
         // The vent's cell spans columns x−4 … x+3 (centre within half a block of the vent centre), with
         // its neighbours on either side; before, the vent sat on the corner of four cells.
-        int x = VENT.position().x(), z = VENT.position().z();
+        int x = VENT.block(1).x(), z = VENT.block(1).z();
         assertEquals(cell, grid.cellAt(x - 4, z));
         assertEquals(cell, grid.cellAt(x + 3, z));
         assertEquals(cell - 1, grid.cellAt(x - 5, z));

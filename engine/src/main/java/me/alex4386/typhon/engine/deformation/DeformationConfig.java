@@ -46,7 +46,7 @@ public final class DeformationConfig {
     /** Mogi source matching a chamber, scaled to the model world. */
     public static DeformationConfig forChamber(MagmaChamberConfig chamber, VolcanoScaling scaling) {
         DeformationConfig c = new DeformationConfig(chamber.volcanoId(), chamber.volume(), chamber.lithostaticDepth(),
-                chamber.center().x(), chamber.center().z());
+                chamber.center().columnX(scaling.metersPerBlock()), chamber.center().columnZ(scaling.metersPerBlock()));
         c.metersPerBlock = scaling.metersPerBlock();
         return c;
     }

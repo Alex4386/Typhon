@@ -13,6 +13,7 @@ import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.seismic.SeismicEvent;
@@ -38,7 +39,7 @@ class VolcanoSystemTest {
     private static final BlockId LAVA = BlockId.minecraft("lava");
     private static final int CHUNK_RADIUS = 8;
     private static final int SUMMIT_Y = 120;
-    static final VentSite CRATER = VentSite.crater("summit", new BlockPos(0, SUMMIT_Y - 3, 0), 4);
+    static final VentSite CRATER = VentSite.crater("summit", Point3.surfaceOf(new BlockPos(0, SUMMIT_Y - 3, 0), VolcanoScaling.DEFAULT.metersPerBlock()), 4);
 
     /** Cone rising from y=64 to a summit crater, sampled the way a host would send it. */
     static TerrainSnapshot cone() {
@@ -50,7 +51,7 @@ class VolcanoSystemTest {
                     for (int z = cz * 16; z < cz * 16 + 16; z++) {
                         double d = Math.sqrt(x * x + z * z);
                         int y = (int) Math.max(64, SUMMIT_Y - 0.45 * d);
-                        if (d <= CRATER.craterRadius()) y = CRATER.position().y();
+                        if (d <= CRATER.craterRadius()) y = CRATER.block(VolcanoScaling.DEFAULT.metersPerBlock()).y();
                         chunk.set(x, z, TerrainColumn.dry(y, STONE));
                     }
                 }
@@ -104,7 +105,7 @@ class VolcanoSystemTest {
 
     /** Basaltic 10 km³ chamber just below failure: recharge breaks it after ≈ 11 minutes. */
     static MagmaChamberConfig basalt() {
-        return MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
+        return MagmaChamberConfig.builder("test", Point3.ofBlock(new BlockPos(0, 60, 0), VolcanoScaling.DEFAULT.metersPerBlock()))
                 .initialOverpressureMPa(14.9999)
                 .supplyVariability(0)
                 .build();
@@ -115,7 +116,7 @@ class VolcanoSystemTest {
      * failure pressurises far more slowly than a basaltic one.)
      */
     static MagmaChamberConfig rhyolite() {
-        return MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
+        return MagmaChamberConfig.builder("test", Point3.ofBlock(new BlockPos(0, 60, 0), VolcanoScaling.DEFAULT.metersPerBlock()))
                 .initialOverpressureMPa(15.5)
                 .initialSilicaWt(72)
                 .initialWaterWt(6)
@@ -222,7 +223,7 @@ class VolcanoSystemTest {
 
     @Test
     void dikeOpensAFlankEruption() {
-        MagmaChamberConfig chamber = MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
+        MagmaChamberConfig chamber = MagmaChamberConfig.builder("test", Point3.ofBlock(new BlockPos(0, 60, 0), VolcanoScaling.DEFAULT.metersPerBlock()))
                 .initialOverpressureMPa(14.0) // above dike nucleation, below summit failure
                 .supplyVariability(0)
                 .build();

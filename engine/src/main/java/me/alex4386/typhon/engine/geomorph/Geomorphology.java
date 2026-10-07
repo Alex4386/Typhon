@@ -1145,14 +1145,14 @@ public final class Geomorphology implements Subsystem {
     /** The elevation of a vent's conduit mouth (m). */
     public double ventFloorZ(VentSite vent) {
         Double f = ventFloors.get(vent.id());
-        return f != null ? f : world.spec().blockTop(vent.position().y());
+        return f != null ? f : world.spec().blockTop(vent.block(world.spec().metersPerColumn()).y());
     }
 
     /** Between eruptions the vent's fill becomes its new floor: the next eruption starts from there. */
     private void settleVentFloors() {
         for (VentSite vent : vents) {
-            int x = vent.position().x();
-            int z = vent.position().z();
+            int x = vent.block(world.spec().metersPerColumn()).x();
+            int z = vent.block(world.spec().metersPerColumn()).z();
             if (!world.isKnown(x, z)) continue;
             double surface = world.surfaceZ(x, z);
             if (surface > ventFloorZ(vent) + MIN_MOVE) ventFloors.put(vent.id(), surface);
@@ -1164,7 +1164,7 @@ public final class Geomorphology implements Subsystem {
         double l = world.spec().metersPerColumn();
         for (VentSite vent : vents) {
             double floor = ventFloorZ(vent);
-            for (long[] c : conduitColumns(vent)) {
+            for (long[] c : conduitColumns(vent, world.spec().metersPerColumn())) {
                 int x = (int) c[0];
                 int z = (int) c[1];
                 if (!world.isKnown(x, z)) continue;
@@ -1193,10 +1193,10 @@ public final class Geomorphology implements Subsystem {
     }
 
     /** Columns of a vent's conduit mouth: a disc of its crater radius, or the fissure line. */
-    private static List<long[]> conduitColumns(VentSite vent) {
+    private static List<long[]> conduitColumns(VentSite vent, double l) {
         List<long[]> out = new ArrayList<>();
-        int cx = vent.position().x();
-        int cz = vent.position().z();
+        int cx = vent.block(l).x();
+        int cz = vent.block(l).z();
         if (vent.kind() == VentKind.FISSURE) {
             int half = Math.max(0, vent.fissureLength() / 2);
             double ax = Math.cos(vent.fissureAngleRad());
@@ -1272,7 +1272,7 @@ public final class Geomorphology implements Subsystem {
         double radius = diameter / 2;
         double l = world.spec().metersPerColumn();
         int r = (int) Math.ceil(radius / l);
-        BlockPos c = roof.center();
+        BlockPos c = roof.center().block(l);
         List<long[]> cols = new ArrayList<>();
         for (int dz = -r; dz <= r; dz++) {
             for (int dx = -r; dx <= r; dx++) {
@@ -1464,7 +1464,7 @@ public final class Geomorphology implements Subsystem {
     @Override
     public Snapshot snapshot() {
         Map<String, CraterShape> shapes = new TreeMap<>();
-        for (VentSite v : vents) shapes.put(v.id(), crater(v.position(), 300 * world.spec().metersPerColumn()));
+        for (VentSite v : vents) shapes.put(v.id(), crater(v.block(world.spec().metersPerColumn()), 300 * world.spec().metersPerColumn()));
         return new Snapshot(stats.failures, stats.failedM3, stats.avalanches, stats.craters, stats.excavatedM3,
                 stats.recycledM3, stats.maxCraterRadiusM, calderaSubsidenceM, active.size(), alteration.size(),
                 Map.copyOf(shapes));

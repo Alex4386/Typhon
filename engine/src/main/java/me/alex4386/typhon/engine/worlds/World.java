@@ -148,7 +148,9 @@ public final class World {
     static World open(WorldDirectory dir, SaveStore state, SaveStore history, TerrainProvider terrain,
             ChangePolicy policy, int threads) {
         if (threads < 0) throw new IllegalArgumentException("threads must be >= 0");
-        World world = new World(dir, state, history, dir.readWorld(), dir.readVolcanoes());
+        WorldDefinition worldDefinition = dir.readWorld();
+        World world = new World(dir, state, history, worldDefinition,
+                dir.readVolcanoes(worldDefinition.spec().metersPerColumn()));
         world.threads = threads;
         if (state.read(SaveFormat.META) == null) {
             world.build(null, Map.of(), Set.of());
@@ -170,6 +172,17 @@ public final class World {
         return world;
     }
 
+    /** A saved volcano definition in the current (metre) form; trees already in that form are kept as they are. */
+    private JsonObject migratedTree(String id, JsonObject tree) {
+        if (!VolcanoDefinition.hasBlockPositions(toJava(tree))) return tree;
+        try {
+            return json(VolcanoDefinition.parse(id, ConfigNode.root(WORLD_STATE + "#definitions." + id, toJava(tree)),
+                    definition.spec().metersPerColumn()).toTree());
+        } catch (RuntimeException e) {
+            return tree;
+        }
+    }
+
     private void resume(ChangePolicy policy) {
         JsonObject saved = readWorldState();
         JsonObject savedWorld = null;
@@ -178,7 +191,8 @@ public final class World {
             JsonObject runtime = saved.getAsJsonObject("runtime");
             for (Map.Entry<String, JsonElement> e : runtime.getAsJsonObject("added").entrySet()) {
                 added.put(e.getKey(), VolcanoDefinition.parse(e.getKey(),
-                        ConfigNode.root(WORLD_STATE + "#added." + e.getKey(), toJava(e.getValue()))));
+                        ConfigNode.root(WORLD_STATE + "#added." + e.getKey(), toJava(e.getValue())),
+                        definition.spec().metersPerColumn()));
             }
             for (JsonElement e : runtime.getAsJsonArray("removed")) removed.add(e.getAsString());
             for (Map.Entry<String, JsonElement> e : runtime.getAsJsonObject("active").entrySet()) {
@@ -187,7 +201,8 @@ public final class World {
             JsonObject defs = saved.getAsJsonObject("definitions");
             savedWorld = defs.getAsJsonObject("world");
             for (Map.Entry<String, JsonElement> e : defs.getAsJsonObject("volcanoes").entrySet()) {
-                savedVolcanoes.put(e.getKey(), e.getValue().getAsJsonObject());
+                // definitions saved with block positions compare as the metre form they migrate to
+                savedVolcanoes.put(e.getKey(), migratedTree(e.getKey(), e.getValue().getAsJsonObject()));
             }
             long seed = savedWorld.get("seed").getAsLong();
             double step = savedWorld.get("baseStepMs").getAsDouble();
@@ -273,7 +288,7 @@ public final class World {
         terrain = new TerrainModel(new WorldModel(definition.spec()));
         List<Edifice> edifices = new ArrayList<>();
         for (VolcanoDefinition v : volcanoDefinitions()) {
-            Edifice e = v.edifice();
+            Edifice e = v.edifice(definition.spec().metersPerColumn());
             if (e != null) edifices.add(e);
         }
         terrain.world().setEdifices(edifices);
@@ -465,6 +480,7 @@ public final class World {
         }
         engine.save(stateStore, router::route);
         stateStore.write(WORLD_STATE, SaveFormat.jsonBytes(worldState()));
+        if (directory != null) directory.rewriteBlockPositionFiles(volcanoDefinitions());
         deleteStaleSubsystems();
         changes = ConfigChanges.NONE;
     }

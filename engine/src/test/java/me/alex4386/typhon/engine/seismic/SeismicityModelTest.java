@@ -21,7 +21,7 @@ class SeismicityModelTest {
     private static final BlockPos VENT = new BlockPos(0, 100, 0);
 
     private static SeismicConfig.Builder config() {
-        return SeismicConfig.builder("v", VENT);
+        return SeismicConfig.builder("v", Point3.surfaceOf(VENT, 1));
     }
 
     private static List<SeismicEvent> run(Engine engine, int seconds) {

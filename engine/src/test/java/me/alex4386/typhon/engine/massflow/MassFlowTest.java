@@ -14,6 +14,8 @@ import me.alex4386.typhon.engine.massflow.MassFlowEvents.PdcSteam;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.TerrainNeeded;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.world.BlockId;
@@ -25,7 +27,7 @@ import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 class MassFlowTest {
     private static final IntBinaryOperator RAMP = MassFlowTestWorld.rampToPlain(0.4, 60, 64);
-    private static final BlockPos TOP = new BlockPos(8, 0, 32);
+    private static final ColumnIndex TOP = new ColumnIndex(8, 32);
 
     private static MassFlowTestWorld rampWorld() {
         return new MassFlowTestWorld(0, 0, 15, 3, RAMP);
@@ -61,7 +63,7 @@ class MassFlowTest {
             }
             Engine e = w.engine(field, 3);
             field.release(TOP, 3, 2000, 600, kind == MassFlowKind.LAHAR ? 0.3 : 0, Trigger.MANUAL);
-            field.addSource(FlowSource.at("feed", new BlockPos(4, 0, 32), 20, 600, kind == MassFlowKind.LAHAR ? 0.2 : 0),
+            field.addSource(FlowSource.at("feed", new ColumnIndex(4, 32), 20, 600, kind == MassFlowKind.LAHAR ? 0.2 : 0),
                     Trigger.MANUAL);
             for (int t = 0; t < 600; t += 10) {
                 w.run(e, 10);
@@ -98,7 +100,7 @@ class MassFlowTest {
     private static double[] depositCentroid(IntBinaryOperator ground) {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 11, 3, ground);
         PyroclasticFlows f = pdc(w);
-        f.release(new BlockPos(10, 0, 32), 4, 3000, 600, 0, Trigger.MANUAL);
+        f.release(new ColumnIndex(10, 32), 4, 3000, 600, 0, Trigger.MANUAL);
         runout(w, f);
         double sum = 0, sx = 0, sz = 0;
         for (int x = 0; x < 192; x++) {
@@ -135,7 +137,7 @@ class MassFlowTest {
     void pdcComesToRestOnFlatGroundAndDeposits() {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 7, 7, (x, z) -> 64);
         PyroclasticFlows f = pdc(w);
-        BlockPos center = new BlockPos(64, 0, 64);
+        ColumnIndex center = new ColumnIndex(64, 64);
         f.release(center, 6, 500, 600, 0, Trigger.MANUAL); // ~4.4 m deep pile
         runout(w, f);
         assertTrue(w.depositVolume(f, 1) > 0);
@@ -173,7 +175,7 @@ class MassFlowTest {
             return 64;
         });
         PyroclasticFlows f = pdc(w);
-        f.release(new BlockPos(6, 0, 32), 3, 1500, 600, 0, Trigger.MANUAL);
+        f.release(new ColumnIndex(6, 32), 3, 1500, 600, 0, Trigger.MANUAL);
         runout(w, f);
         double beyond = 0;
         for (int x = 66; x < 192; x++) {
@@ -188,7 +190,7 @@ class MassFlowTest {
     void depositsRaiseTerrain() {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 3, 3, (x, z) -> 64);
         PyroclasticFlows f = pdc(w);
-        f.release(new BlockPos(32, 0, 32), 6, 2000, 400, 0, Trigger.MANUAL);
+        f.release(new ColumnIndex(32, 32), 6, 2000, 400, 0, Trigger.MANUAL);
         runout(w, f);
 
         int raised = 0;
@@ -218,7 +220,7 @@ class MassFlowTest {
     private static List<LayerView> deposited(double temperature) {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 3, 3, (x, z) -> 64);
         PyroclasticFlows f = pdc(w);
-        f.release(new BlockPos(32, 0, 32), 4, 1500, temperature, 0, Trigger.MANUAL);
+        f.release(new ColumnIndex(32, 32), 4, 1500, temperature, 0, Trigger.MANUAL);
         runout(w, f);
         return w.layers(64).stream().filter(l -> l.material() == MaterialTable.TUFF.id()).toList();
     }
@@ -289,7 +291,7 @@ class MassFlowTest {
     void laharsLeaveMudOrGravel() {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 3, 3, (x, z) -> 64);
         Lahars l = new Lahars("lahar", w.terrain);
-        l.release(new BlockPos(32, 0, 32), 1, 3000, 15, 0.55, Trigger.MANUAL);
+        l.release(new ColumnIndex(32, 32), 1, 3000, 15, 0.55, Trigger.MANUAL);
         runout(w, l);
         List<BlockId> surfaces = w.surfaces(64);
         assertTrue(surfaces.contains(MassFlowPalette.MUD.id()) || surfaces.contains(MassFlowPalette.GRAVEL.id()));
@@ -333,7 +335,7 @@ class MassFlowTest {
         PyroclasticFlows a = new PyroclasticFlows("pdc:a", w.terrain);
         Lahars b = new Lahars("lahar:b", w.terrain);
         Engine e = Engine.builder(1).add(w.terrain).add(a).add(b).build();
-        e.submit(new MassFlowCommands.ReleaseFlow("lahar:b", TOP, 2, 500, 15, 0.2, Trigger.LAKE_BREAKOUT));
+        e.submit(new MassFlowCommands.ReleaseFlow("lahar:b", Point3.columnCentre(TOP, 0, 1), 2, 500, 15, 0.2, Trigger.LAKE_BREAKOUT));
         e.submit(new MassFlowCommands.SetRainfall("lahar:b", 10));
         w.run(e, 4);
         assertEquals(0, a.massBudget().released());
@@ -347,7 +349,7 @@ class MassFlowTest {
         MassFlowTestWorld w = new MassFlowTestWorld(0, 0, 1, 1, (x, z) -> 100 - x); // drops toward x = 32
         PyroclasticFlows f = pdc(w);
         Engine e = w.engine(f, 1);
-        f.release(new BlockPos(10, 0, 16), 2, 800, 600, 0, Trigger.MANUAL);
+        f.release(new ColumnIndex(10, 16), 2, 800, 600, 0, Trigger.MANUAL);
         w.runUntilStill(e, f, 4000);
 
         List<TerrainNeeded> needed = w.events(TerrainNeeded.class);
@@ -383,14 +385,14 @@ class MassFlowTest {
         PyroclasticFlows refFlow = pdc(ref);
         Engine refEngine = ref.engine(refFlow, 7);
         refFlow.release(TOP, 3, 2500, 650, 0, Trigger.MANUAL);
-        refFlow.addSource(FlowSource.at("feed", new BlockPos(5, 0, 30), 15, 600, 0), Trigger.COLUMN_COLLAPSE);
+        refFlow.addSource(FlowSource.at("feed", new ColumnIndex(5, 30), 15, 600, 0), Trigger.COLUMN_COLLAPSE);
         ref.run(refEngine, before + after);
 
         MassFlowTestWorld first = rampWorld();
         PyroclasticFlows firstFlow = pdc(first);
         Engine firstEngine = first.engine(firstFlow, 7);
         firstFlow.release(TOP, 3, 2500, 650, 0, Trigger.MANUAL);
-        firstFlow.addSource(FlowSource.at("feed", new BlockPos(5, 0, 30), 15, 600, 0), Trigger.COLUMN_COLLAPSE);
+        firstFlow.addSource(FlowSource.at("feed", new ColumnIndex(5, 30), 15, 600, 0), Trigger.COLUMN_COLLAPSE);
         first.run(firstEngine, before);
         assertTrue(firstFlow.activeCellCount() > 0, "save mid-flow");
         InMemorySaveStore saved = Saves.save(firstEngine);

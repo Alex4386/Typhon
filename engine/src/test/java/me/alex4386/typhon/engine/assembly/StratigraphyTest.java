@@ -14,6 +14,7 @@ import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaCommands;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.tephra.ExplosivePhase;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
@@ -70,7 +71,7 @@ class StratigraphyTest {
     }
 
     private static VolcanoSystem system(String id, VentSite vent, TerrainModel terrain, LavaFlow lava) {
-        MagmaChamberConfig chamber = MagmaChamberConfig.builder(id, new BlockPos(vent.position().x(), 40, vent.position().z()))
+        MagmaChamberConfig chamber = MagmaChamberConfig.builder(id, Point3.ofBlock(new BlockPos(vent.block(VolcanoScaling.DEFAULT.metersPerBlock()).x(), 40, vent.block(VolcanoScaling.DEFAULT.metersPerBlock()).z()), VolcanoScaling.DEFAULT.metersPerBlock()))
                 .initialOverpressureMPa(14.9999)
                 .initialWaterWt(0.3).rechargeWaterWt(0.3) // gas-poor: lava rather than fountain tephra
                 .supplyVariability(0)
@@ -166,8 +167,8 @@ class StratigraphyTest {
     void depositsAreAttributedToTheirOwnVolcano() {
         TerrainModel terrain = new TerrainModel();
         LavaFlow lava = new LavaFlow(terrain, FAST_COOLING);
-        VentSite eastVent = VentSite.crater("summit", new BlockPos(40, 101, 0), 3);
-        VentSite westVent = VentSite.crater("summit", new BlockPos(-40, 101, 0), 3);
+        VentSite eastVent = VentSite.crater("summit", Point3.surfaceOf(new BlockPos(40, 101, 0), VolcanoScaling.DEFAULT.metersPerBlock()), 3);
+        VentSite westVent = VentSite.crater("summit", Point3.surfaceOf(new BlockPos(-40, 101, 0), VolcanoScaling.DEFAULT.metersPerBlock()), 3);
         VolcanoSystem east = system("east", eastVent, terrain, lava);
         VolcanoSystem west = system("west", westVent, terrain, lava);
         Engine.Builder builder = Engine.builder(5).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(terrain);

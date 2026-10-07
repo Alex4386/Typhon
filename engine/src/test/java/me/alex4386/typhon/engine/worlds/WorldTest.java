@@ -53,7 +53,7 @@ class WorldTest {
     }
 
     static VolcanoDefinition volcano(String id, int x, double overpressure, double supply) {
-        return VolcanoDefinition.parse(id, Yaml.parse(id + ".yaml", volcanoYaml(x, overpressure, supply)));
+        return VolcanoDefinition.parse(id, Yaml.parse(id + ".yaml", volcanoYaml(x, overpressure, supply)), 4);
     }
 
     static List<VolcanoDefinition> twins() {
@@ -161,7 +161,7 @@ class WorldTest {
         // West's chamber geometry changes; east is untouched.
         List<VolcanoDefinition> changed = new ArrayList<>(List.of(volcano("east", 30, 14.95, 0.3)));
         changed.add(VolcanoDefinition.parse("west", Yaml.parse("west.yaml",
-                volcanoYaml(-30, 5, 0.3).replace("volume: 1.0e9", "volume: 5.0e9"))));
+                volcanoYaml(-30, 5, 0.3).replace("volume: 1.0e9", "volume: 5.0e9")), 4));
 
         ConfigException rejected = assertThrows(ConfigException.class,
                 () -> World.reopen(world(), changed, state, history, World.ChangePolicy.REJECT));

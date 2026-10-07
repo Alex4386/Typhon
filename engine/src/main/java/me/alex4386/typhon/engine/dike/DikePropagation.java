@@ -265,7 +265,7 @@ public final class DikePropagation implements Subsystem {
 
     private Dike start(StepContext context) {
         SimRandom random = context.random();
-        BlockPos center = magma.chamberCenter();
+        BlockPos center = magma.chamberCenter().block(config.metersPerBlock);
         double angle = random.nextDouble() * 2 * Math.PI;
         double radius = Math.sqrt(random.nextDouble()) * config.startOffsetBlocks;
         double x = center.x() + 0.5 + radius * StrictMath.cos(angle);
@@ -430,7 +430,8 @@ public final class DikePropagation implements Subsystem {
         double angle = strikeOf(dike, context.random());
         int length = (int) clamp(Math.round(dike.strikeLength / config.metersPerBlock),
                 config.minFissureLength, config.maxFissureLength);
-        dike.fissure = VentSite.fissure(volcanoId + "-dike-" + dike.id, new BlockPos(x, y, z), angle, length);
+        dike.fissure = VentSite.fissure(volcanoId + "-dike-" + dike.id, Point3.surfaceOf(new BlockPos(x, y, z), config.metersPerBlock), angle,
+                length);
         dike.status = DikeStatus.ERUPTED;
         dike.tipY = y;
         context.outbox().emit(new DikeEvents.FissureOpened(context.time(), volcanoId, dike.id, dike.fissure, dike.volume));
@@ -442,7 +443,7 @@ public final class DikePropagation implements Subsystem {
      */
     private double strikeOf(Dike dike, SimRandom random) {
         if (dike.fissure != null) return dike.fissure.fissureAngleRad();
-        BlockPos center = magma.chamberCenter();
+        BlockPos center = magma.chamberCenter().block(config.metersPerBlock);
         double dx = dike.x - (center.x() + 0.5);
         double dz = dike.z - (center.z() + 0.5);
         if (Math.hypot(dx, dz) >= 2) return StrictMath.atan2(dz, dx);
@@ -574,6 +575,6 @@ public final class DikePropagation implements Subsystem {
             for (JsonElement e : in.getAsJsonArray("pendingArrests")) pendingArrests.add(e.getAsInt());
         }
         dikes.clear();
-        for (JsonElement e : in.getAsJsonArray("dikes")) dikes.add(Dike.load(e.getAsJsonObject()));
+        for (JsonElement e : in.getAsJsonArray("dikes")) dikes.add(Dike.load(e.getAsJsonObject(), config.metersPerBlock));
     }
 }

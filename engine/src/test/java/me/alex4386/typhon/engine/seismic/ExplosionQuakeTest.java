@@ -17,7 +17,7 @@ import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 class ExplosionQuakeTest {
     static SeismicityModel model() {
-        return new SeismicityModel(SeismicConfig.builder("v", new BlockPos(0, 100, 0)).build(), StubMagmaState.basalt(), 1);
+        return new SeismicityModel(SeismicConfig.builder("v", Point3.surfaceOf(new BlockPos(0, 100, 0), 1)).build(), StubMagmaState.basalt(), 1);
     }
 
     static List<SeismicEvent> explosions(Engine engine, int ticks) {

@@ -77,7 +77,8 @@ class RealPresetsTest {
         scenario.engine().step(); // applies the terrain snapshot
         WorldModel world = scenario.terrain().world();
         VentSite vent = scenario.volcano().vents().get(0);
-        ColumnProfile summit = world.column(vent.position().x() + 3, vent.position().z());
+        BlockPos ventBlock = vent.block(world.spec().metersPerColumn());
+        ColumnProfile summit = world.column(ventBlock.x() + 3, ventBlock.z());
         List<LayerView> layers = summit.layers();
         assertEquals(MaterialTable.GRANITE.id(), layers.get(0).material(), "basement cake at the bottom");
         assertEquals(-2000, layers.get(0).top(), 1e-3);
@@ -98,10 +99,10 @@ class RealPresetsTest {
             Scenario sc = p.build(2, g, Scenario.Options.DEFAULT);
             double L = p.realSetting().metersPerColumn();
             for (VentSite v : sc.volcano().vents()) {
-                assertEquals(g.ground(v.position().x(), v.position().z()), v.position().y(), p.name() + " vent " + v.id());
+                assertEquals(g.ground(v.block(L).x(), v.block(L).z()), v.block(L).y(), p.name() + " vent " + v.id());
             }
-            double chamberTop = (sc.volcano().chamber().chamberCenter().y() + 1) * L;
-            double ventZ = (sc.volcano().vents().get(0).position().y() + 1) * L;
+            double chamberTop = sc.volcano().chamber().chamberCenter().y() + 0.5 * L; // centre (m) + half a block
+            double ventZ = sc.volcano().vents().get(0).position().y(); // the vent's surface (m)
             assertTrue(ventZ - chamberTop >= 1000, p.name() + ": chamber ≥ 1 km below the vent");
         }
     }

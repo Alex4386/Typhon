@@ -63,7 +63,7 @@ public final class SectionRenderer {
 
     /** Writes the section and column logs into {@code dir}, adding file name → caption to {@code maps}. */
     public void writeAll(Path dir, Map<String, String> maps) throws IOException {
-        BlockPos vent = scenario.volcano().vents().get(0).position();
+        BlockPos vent = scenario.volcano().vents().get(0).block(world.spec().metersPerColumn());
         var grid = scenario.initialTerrain();
         int minX = grid.minX();
         int maxX = grid.minX() + grid.size() - 1;

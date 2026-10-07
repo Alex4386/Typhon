@@ -14,6 +14,7 @@ import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.ConduitConfig;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.seismic.SeismicEvent;
@@ -53,7 +54,7 @@ class SurfaceDynamicsTest {
 
     /** Surtsey-like alkali basalt erupting at once. */
     static MagmaChamberConfig submarineBasalt(String id, BlockPos vent) {
-        return MagmaChamberConfig.builder(id, new BlockPos(vent.x(), Math.max(-56, vent.y() - 48), vent.z()))
+        return MagmaChamberConfig.builder(id, Point3.ofBlock(new BlockPos(vent.x(), Math.max(-56, vent.y() - 48), vent.z()), VolcanoScaling.DEFAULT.metersPerBlock()))
                 .volume(5e8).lithostaticDepth(3000).conduitRadius(2)
                 .tensileStrengthMPa(12).eruptionEndOverpressureMPa(1)
                 .supplyRate(2).supplyVariability(0)
@@ -95,8 +96,8 @@ class SurfaceDynamicsTest {
 
     @Test
     void strombolianBurstsComeWithExplosionQuakesAndBombs() {
-        VentSite vent = VentSite.crater("summit", new BlockPos(0, 117, 0), 4);
-        MagmaChamberConfig chamber = MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
+        VentSite vent = VentSite.crater("summit", Point3.surfaceOf(new BlockPos(0, 117, 0), VolcanoScaling.DEFAULT.metersPerBlock()), 4);
+        MagmaChamberConfig chamber = MagmaChamberConfig.builder("test", Point3.ofBlock(new BlockPos(0, 60, 0), VolcanoScaling.DEFAULT.metersPerBlock()))
                 .volume(5e7).lithostaticDepth(3000).conduitRadius(0.8)
                 .tensileStrengthMPa(8).eruptionEndOverpressureMPa(0.5)
                 .supplyRate(0.002).supplyVariability(0)
@@ -141,8 +142,8 @@ class SurfaceDynamicsTest {
 
     @Test
     void shallowSubmarineVentIsSurtseyanUntilItsTuffRingSealsItOff() {
-        VentSite vent = VentSite.crater("surtur", new BlockPos(0, 56, 0), 3);
-        World w = world("sea", seaFloor(56), vent, submarineBasalt("sea", vent.position()));
+        VentSite vent = VentSite.crater("surtur", Point3.surfaceOf(new BlockPos(0, 56, 0), VolcanoScaling.DEFAULT.metersPerBlock()), 3);
+        World w = world("sea", seaFloor(56), vent, submarineBasalt("sea", vent.block(VolcanoScaling.DEFAULT.metersPerBlock())));
         // the tuff ring needs minutes to rise above the sea
         List<EngineFrame> frames = new ArrayList<>();
         List<Double> emitted = new ArrayList<>(); // lava volume emitted by the end of each frame
@@ -185,8 +186,8 @@ class SurfaceDynamicsTest {
 
     @Test
     void deepSubmarineVentErupsQuietlyAsPillowLava() {
-        VentSite vent = VentSite.crater("deep", new BlockPos(0, 20, 0), 3);
-        World w = world("deep", seaFloor(20), vent, submarineBasalt("deep", vent.position()));
+        VentSite vent = VentSite.crater("deep", Point3.surfaceOf(new BlockPos(0, 20, 0), VolcanoScaling.DEFAULT.metersPerBlock()), 3);
+        World w = world("deep", seaFloor(20), vent, submarineBasalt("deep", vent.block(VolcanoScaling.DEFAULT.metersPerBlock())));
         List<EngineFrame> frames = w.engine().runFor(40 * 60);
 
         assertTrue(events(frames, PhreatomagmaticChanged.class).isEmpty(),

@@ -6,6 +6,7 @@ import java.util.function.IntBinaryOperator;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -50,7 +51,7 @@ final class DikeTestWorld {
 
     /** Hot, dry basaltic chamber (no exsolved gas, so its compressibility is constant). */
     static MagmaChamberConfig.Builder basalt(double overpressure) {
-        return MagmaChamberConfig.builder("v", new BlockPos(0, 0, 0))
+        return MagmaChamberConfig.builder("v", Point3.ofBlock(new BlockPos(0, 0, 0), 1))
                 .volume(1e11)
                 .initialOverpressureMPa(overpressure)
                 .initialTemperatureC(1180)

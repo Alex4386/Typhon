@@ -55,6 +55,22 @@ public record Point3(double x, double y, double z) {
         return new BlockPos((int) Math.floor(x / l), (int) Math.floor(y / l), (int) Math.floor(z / l));
     }
 
+    /**
+     * The point on top of ground block {@code ground} of an {@code l}-metre grid: its column centre at the
+     * block's top (the ground surface). Inverse of {@link #surfaceBlock}.
+     */
+    public static Point3 surfaceOf(BlockPos ground, double l) {
+        return new Point3((ground.x() + 0.5) * l, (ground.y() + 1) * l, (ground.z() + 0.5) * l);
+    }
+
+    /**
+     * For a point on the ground surface: the ground block under it, whose top is at (or just above) this
+     * elevation ({@code ceil(y/l) − 1}, as {@code WorldSpec#groundBlock}).
+     */
+    public BlockPos surfaceBlock(double l) {
+        return new BlockPos(columnX(l), (int) Math.ceil(y / l - 1e-6) - 1, columnZ(l));
+    }
+
     /** The column of an {@code l}-metre grid this point lies in. */
     public ColumnIndex column(double l) {
         return new ColumnIndex((int) Math.floor(x / l), (int) Math.floor(z / l));

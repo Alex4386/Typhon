@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -47,7 +48,7 @@ class GeothermalTest {
             this.temperature = temperature;
         }
 
-        @Override public BlockPos chamberCenter() { return chamber; }
+        @Override public Point3 chamberCenter() { return Point3.ofBlock(chamber, 1); }
         @Override public double overpressureMPa() { return overpressure; }
         @Override public double overpressureRateMPaPerSecond() { return 0; }
         @Override public double temperatureC() { return temperature; }
@@ -198,7 +199,7 @@ class GeothermalTest {
         GeothermalConfig config = smallConfig();
         config.radius = 64;
         TerrainModel terrain = flatTerrain(72, ANDESITE);
-        Geothermal geothermal = live(config, terrain, new StubMagma(1100), List.of(VentSite.crater("main", CENTER, 3)),
+        Geothermal geothermal = live(config, terrain, new StubMagma(1100), List.of(VentSite.crater("main", Point3.surfaceOf(CENTER, 1), 3)),
                 liveSubsurface());
         geothermal.equilibrate(30 * DAY);
 
@@ -221,7 +222,7 @@ class GeothermalTest {
         StubMagma magma = new StubMagma(1100);
         TerrainModel terrain = flatTerrain(40, ANDESITE);
         Geothermal geothermal = new Geothermal("test", smallConfig(), CENTER, magma, terrain,
-                BlockPalette.unrestricted(), List.of(VentSite.crater("main", CENTER, 3)),
+                BlockPalette.unrestricted(), List.of(VentSite.crater("main", Point3.surfaceOf(CENTER, 1), 3)),
                 new StubField(terrain, 10, 15, 0.5));
         List<me.alex4386.typhon.engine.subsurface.HeatSources.Chamber> chambers = geothermal.chambers();
         assertEquals(1, chambers.size());
@@ -273,7 +274,7 @@ class GeothermalTest {
         config.ventPipeDepthM = 20;
         config.maxFumaroles = 1000;
         TerrainModel terrain = flatTerrain(40, ANDESITE);
-        Geothermal geothermal = live(config, terrain, new StubMagma(chamberC), List.of(VentSite.crater("main", CENTER, 3)),
+        Geothermal geothermal = live(config, terrain, new StubMagma(chamberC), List.of(VentSite.crater("main", Point3.surfaceOf(CENTER, 1), 3)),
                 liveSubsurface());
         geothermal.equilibrate(30 * DAY);
         List<EngineFrame> frames = run(geothermal, 42, 100);
@@ -586,7 +587,7 @@ class GeothermalTest {
         GeothermalConfig config = smallConfig();
         GeothermalTest.stepTime(config, 900);
         Geothermal geothermal = live(config, terrain, new StubMagma(1150),
-                List.of(VentSite.crater("main", CENTER, 3), VentSite.fissure("rift", new BlockPos(12, 64, 0), 0.5, 20)),
+                List.of(VentSite.crater("main", Point3.surfaceOf(CENTER, 1), 3), VentSite.fissure("rift", Point3.surfaceOf(new BlockPos(12, 64, 0), 1), 0.5, 20)),
                 liveSubsurface());
         geothermal.equilibrate(30 * DAY);
         return geothermal;
@@ -616,7 +617,7 @@ class GeothermalTest {
         GeothermalConfig config = smallConfig();
         GeothermalTest.stepTime(config, 900);
         Geothermal second = live(config, world, new StubMagma(1150),
-                List.of(VentSite.crater("main", CENTER, 3), VentSite.fissure("rift", new BlockPos(12, 64, 0), 0.5, 20)),
+                List.of(VentSite.crater("main", Point3.surfaceOf(CENTER, 1), 3), VentSite.fissure("rift", Point3.surfaceOf(new BlockPos(12, 64, 0), 1), 0.5, 20)),
                 liveSubsurface());
         Engine after = engine(second, 5).restore(saved).build();
         // to the same absolute end as the reference (the first half may end past its mark)

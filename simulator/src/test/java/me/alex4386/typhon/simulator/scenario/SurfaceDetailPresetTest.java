@@ -23,7 +23,7 @@ class SurfaceDetailPresetTest {
         WorldModel world = s.terrain().world();
         double cell = d.cellMeters();
         assertTrue(cell >= 1 && cell <= 5, "crater-resolving cells: " + cell + " m");
-        BlockPos vent = s.volcano().vents().get(0).position();
+        BlockPos vent = s.volcano().vents().get(0).block(s.world().spec().metersPerColumn());
         int r = d.refinement();
         // Every detailed column averages to its column surface: no volume, no seams.
         for (int z = vent.z() - 6; z <= vent.z() + 6; z++) {
@@ -53,7 +53,7 @@ class SurfaceDetailPresetTest {
         Scenario s = Presets.get("stromboli").build(1);
         for (int i = 0; i < 40; i++) s.engine().step();
         SurfaceDetail d = s.volcano().surfaceDetail();
-        BlockPos vent = s.volcano().vents().get(0).position();
+        BlockPos vent = s.volcano().vents().get(0).block(s.world().spec().metersPerColumn());
         WorldModel world = s.terrain().world();
         world.deposit(vent.x(), vent.z(), 3.0, me.alex4386.typhon.engine.world.MaterialTable.BASALT, 0);
         for (int i = 0; i < 40; i++) s.engine().step();

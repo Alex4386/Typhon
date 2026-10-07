@@ -18,6 +18,7 @@ import me.alex4386.typhon.engine.magma.MagmaEvents.Cause;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionEnded;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -30,7 +31,7 @@ class MagmaChamberTest {
 
     /** A small, weakly supplied chamber (0.05 km³) so mechanics tests cycle quickly. */
     private static MagmaChamberConfig.Builder steady() {
-        return MagmaChamberConfig.builder("v", CENTER).volume(5e7).supplyRate(0.01).supplyVariability(0)
+        return MagmaChamberConfig.builder("v", Point3.ofBlock(CENTER, 1)).volume(5e7).supplyRate(0.01).supplyVariability(0)
                 .stepPeriodSeconds(1); // these tests count 50-ms ticks
     }
 
@@ -307,8 +308,8 @@ class MagmaChamberTest {
 
     @Test
     void routesCommandsToTheRightChamber() {
-        MagmaChamber a = new MagmaChamber(MagmaChamberConfig.builder("a", CENTER).supplyVariability(0).build());
-        MagmaChamber b = new MagmaChamber(MagmaChamberConfig.builder("b", new BlockPos(500, -40, 0)).supplyVariability(0).build());
+        MagmaChamber a = new MagmaChamber(MagmaChamberConfig.builder("a", Point3.ofBlock(CENTER, 1)).supplyVariability(0).build());
+        MagmaChamber b = new MagmaChamber(MagmaChamberConfig.builder("b", Point3.ofBlock(new BlockPos(500, -40, 0), 1)).supplyVariability(0).build());
         Engine engine = Engine.builder(0).add(a).add(b).build();
 
         engine.submit(new StartEruption("b"));
@@ -320,14 +321,14 @@ class MagmaChamberTest {
         run(engine, 40, EngineEvent.class);
         assertFalse(a.erupting());
 
-        MagmaChamber duplicate = new MagmaChamber(MagmaChamberConfig.builder("a", CENTER).build());
+        MagmaChamber duplicate = new MagmaChamber(MagmaChamberConfig.builder("a", Point3.ofBlock(CENTER, 1)).build());
         assertThrows(IllegalArgumentException.class,
-                () -> Engine.builder(0).add(new MagmaChamber(MagmaChamberConfig.builder("a", CENTER).build())).add(duplicate).build());
+                () -> Engine.builder(0).add(new MagmaChamber(MagmaChamberConfig.builder("a", Point3.ofBlock(CENTER, 1)).build())).add(duplicate).build());
     }
 
     @Test
     void sameSeedSameHistoryAndSaveRestoreIsBitForBit() {
-        MagmaChamberConfig config = MagmaChamberConfig.builder("v", CENTER).initialOverpressureMPa(13).build();
+        MagmaChamberConfig config = MagmaChamberConfig.builder("v", Point3.ofBlock(CENTER, 1)).initialOverpressureMPa(13).build();
 
         Engine reference = Engine.builder(9).add(new MagmaChamber(config)).build();
         List<EngineFrame> expected = new ArrayList<>();

@@ -3,7 +3,7 @@ package me.alex4386.typhon.engine.lava;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.world.UnitTable;
@@ -12,7 +12,7 @@ import me.alex4386.typhon.engine.world.UnitTable;
  * An effusive lava source: lava welling up at a set of surface columns.
  *
  * @param id unique source id (re-adding an id replaces the source)
- * @param cells columns the effusion is spread over evenly; only x/z are used
+ * @param cells grid columns the effusion is spread over evenly
  * @param rateM3PerS dense-rock-equivalent effusion rate
  * @param temperatureC eruption temperature
  * @param silicaWt SiO₂ content
@@ -20,7 +20,7 @@ import me.alex4386.typhon.engine.world.UnitTable;
  * @param unit stratigraphic unit (volcano, eruption) the lava's rock is attributed to; {@link
  *     UnitTable#UNATTRIBUTED} when unknown
  */
-public record LavaSource(String id, List<BlockPos> cells, double rateM3PerS, double temperatureC, double silicaWt,
+public record LavaSource(String id, List<ColumnIndex> cells, double rateM3PerS, double temperatureC, double silicaWt,
         double waterWt, int unit) {
     public LavaSource {
         Objects.requireNonNull(id, "id");
@@ -29,26 +29,29 @@ public record LavaSource(String id, List<BlockPos> cells, double rateM3PerS, dou
         if (rateM3PerS < 0) throw new IllegalArgumentException("rate must be >= 0");
     }
 
-    public LavaSource(String id, List<BlockPos> cells, double rateM3PerS, double temperatureC, double silicaWt,
+    public LavaSource(String id, List<ColumnIndex> cells, double rateM3PerS, double temperatureC, double silicaWt,
             double waterWt) {
         this(id, cells, rateM3PerS, temperatureC, silicaWt, waterWt, UnitTable.UNATTRIBUTED);
     }
 
-    public static LavaSource at(String id, BlockPos position, double rateM3PerS, double temperatureC, double silicaWt,
+    public static LavaSource at(String id, ColumnIndex position, double rateM3PerS, double temperatureC, double silicaWt,
             double waterWt) {
         return new LavaSource(id, List.of(position), rateM3PerS, temperatureC, silicaWt, waterWt);
     }
 
-    /** Source covering a vent: the inner half of a crater floor, or every column along a fissure. */
-    public static LavaSource atVent(VentSite vent, double rateM3PerS, double temperatureC, double silicaWt,
+    /**
+     * Source covering a vent on an {@code l}-metre grid: the inner half of a crater floor, or every column
+     * along a fissure.
+     */
+    public static LavaSource atVent(VentSite vent, double l, double rateM3PerS, double temperatureC, double silicaWt,
             double waterWt) {
-        List<BlockPos> cells = new ArrayList<>();
-        BlockPos c = vent.position();
+        List<ColumnIndex> cells = new ArrayList<>();
+        ColumnIndex c = vent.position().column(l);
         if (vent.kind() == VentKind.CRATER) {
             int r = Math.max(0, vent.craterRadius() / 2);
             for (int dz = -r; dz <= r; dz++) {
                 for (int dx = -r; dx <= r; dx++) {
-                    if (dx * dx + dz * dz <= r * r) cells.add(c.offset(dx, 0, dz));
+                    if (dx * dx + dz * dz <= r * r) cells.add(c.offset(dx, dz));
                 }
             }
         } else {
@@ -56,7 +59,7 @@ public record LavaSource(String id, List<BlockPos> cells, double rateM3PerS, dou
             double cos = StrictMath.cos(vent.fissureAngleRad());
             double sin = StrictMath.sin(vent.fissureAngleRad());
             for (int t = -half; t <= half; t++) {
-                BlockPos p = c.offset((int) Math.round(t * cos), 0, (int) Math.round(t * sin));
+                ColumnIndex p = c.offset((int) Math.round(t * cos), (int) Math.round(t * sin));
                 if (!cells.contains(p)) cells.add(p);
             }
         }

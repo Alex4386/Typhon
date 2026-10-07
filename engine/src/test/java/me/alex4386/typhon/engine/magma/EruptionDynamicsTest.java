@@ -11,6 +11,7 @@ import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionEnded;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
 import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -27,7 +28,7 @@ class EruptionDynamicsTest {
 
     /** St. Helens-like wet dacite under a sealed conduit, at failure. */
     static MagmaChamberConfig dacite() {
-        return MagmaChamberConfig.builder("v", CENTER)
+        return MagmaChamberConfig.builder("v", Point3.ofBlock(CENTER, 1))
                 .volume(5e8).lithostaticDepth(7500).conduitRadius(15)
                 .initialSilicaWt(64).rechargeSilicaWt(62)
                 .initialWaterWt(4.6).rechargeWaterWt(4.6)
@@ -39,7 +40,7 @@ class EruptionDynamicsTest {
 
     /** Stromboli-like: an open conduit over CO₂-rich basalt below its re-opening pressure, slow supply. */
     static MagmaChamberConfig openVentBasalt() {
-        return MagmaChamberConfig.builder("v", CENTER)
+        return MagmaChamberConfig.builder("v", Point3.ofBlock(CENTER, 1))
                 .volume(5e7).lithostaticDepth(3000).conduitRadius(0.8)
                 .tensileStrengthMPa(8).eruptionEndOverpressureMPa(0.5)
                 .supplyRate(0.002).supplyVariability(0)
@@ -54,7 +55,7 @@ class EruptionDynamicsTest {
 
     /** Degassed, crystal-rich dacite under an open conduit, just past re-opening. */
     static MagmaChamberConfig degassedDacite() {
-        return MagmaChamberConfig.builder("v", CENTER)
+        return MagmaChamberConfig.builder("v", Point3.ofBlock(CENTER, 1))
                 .volume(5e8).lithostaticDepth(3000).conduitRadius(10)
                 .initialSilicaWt(62).rechargeSilicaWt(62)
                 .initialWaterWt(0.6).rechargeWaterWt(0.6)

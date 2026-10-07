@@ -32,8 +32,8 @@ import me.alex4386.typhon.engine.save.InMemorySaveStore;
 
 /** Liquid- vs vapour-dominated ground, patchy alteration, aggregated events and prewarming. */
 class GeothermalHydrologyTest {
-    private static final VentSite WET_VENT = VentSite.crater("wet", new BlockPos(-12, SURFACE_Y, 0), 2);
-    private static final VentSite DRY_VENT = VentSite.crater("dry", new BlockPos(16, SURFACE_Y, 0), 2);
+    private static final VentSite WET_VENT = VentSite.crater("wet", Point3.surfaceOf(new BlockPos(-12, SURFACE_Y, 0), 1), 2);
+    private static final VentSite DRY_VENT = VentSite.crater("dry", Point3.surfaceOf(new BlockPos(16, SURFACE_Y, 0), 1), 2);
 
     /** Flat ground: well watered west of x = −4, poorly watered east of x = 4. */
     static TerrainModel basin() {
@@ -99,7 +99,7 @@ class GeothermalHydrologyTest {
             }
         }
         Geothermal geothermal = GeothermalTest.live(config, terrain, new StubMagma(1150),
-                List.of(VentSite.crater("main", CENTER, 3)), sc);
+                List.of(VentSite.crater("main", Point3.surfaceOf(CENTER, 1), 3)), sc);
         geothermal.equilibrate(60 * 86400);
         return geothermal;
     }

@@ -9,6 +9,7 @@ import me.alex4386.typhon.engine.geothermal.GeothermalGrid;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainModel;
 import me.alex4386.typhon.engine.volcano.VentSite;
@@ -17,13 +18,13 @@ import org.junit.jupiter.api.Test;
 
 /** Wind, geothermal centring and prewarming hooks on {@link VolcanoSystem}. */
 class VolcanoSystemHooksTest {
-    private static final VentSite FLANK = VentSite.crater("flank", new BlockPos(60, 90, -20), 3);
-    private static final VentSite SUMMIT = VentSite.crater("summit", new BlockPos(0, 120, 0), 4);
+    private static final VentSite FLANK = VentSite.crater("flank", Point3.surfaceOf(new BlockPos(60, 90, -20), VolcanoScaling.DEFAULT.metersPerBlock()), 3);
+    private static final VentSite SUMMIT = VentSite.crater("summit", Point3.surfaceOf(new BlockPos(0, 120, 0), VolcanoScaling.DEFAULT.metersPerBlock()), 4);
 
     private static VolcanoSystem.Builder builder() {
         TerrainModel terrain = new TerrainModel();
         return VolcanoSystem.builder("v", List.of(FLANK, SUMMIT), terrain, new LavaFlow(terrain))
-                .chamber(MagmaChamberConfig.builder("v", new BlockPos(0, 40, 0)).build())
+                .chamber(MagmaChamberConfig.builder("v", Point3.ofBlock(new BlockPos(0, 40, 0), VolcanoScaling.DEFAULT.metersPerBlock())).build())
                 .scaling(new VolcanoScaling(4, 100));
     }
 
@@ -49,7 +50,7 @@ class VolcanoSystemHooksTest {
         assertEquals(-extent / 2, grid.minX(), "centred above the chamber (x = 0), not on the flank vent");
         assertEquals(-extent / 2, grid.minZ());
 
-        VolcanoSystem custom = builder().geothermalCenter(new BlockPos(100, 64, 100)).build();
+        VolcanoSystem custom = builder().geothermalCenter(Point3.surfaceOf(new BlockPos(100, 64, 100), VolcanoScaling.DEFAULT.metersPerBlock())).build();
         assertEquals(100 - extent / 2, custom.geothermal().grid().minX());
     }
 

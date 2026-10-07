@@ -10,6 +10,7 @@ import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.save.SaveStore;
@@ -58,7 +59,7 @@ class AdaptiveClockTest {
 
     /** A chamber far below failure: recharges quietly for years. */
     static MagmaChamberConfig quiet() {
-        return MagmaChamberConfig.builder("test", new BlockPos(0, 60, 0))
+        return MagmaChamberConfig.builder("test", Point3.ofBlock(new BlockPos(0, 60, 0), VolcanoScaling.DEFAULT.metersPerBlock()))
                 .initialOverpressureMPa(2)
                 .supplyVariability(0)
                 .build();

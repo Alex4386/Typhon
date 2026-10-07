@@ -2,6 +2,7 @@ package me.alex4386.typhon.engine.magma;
 
 import java.util.Objects;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 
 /**
  * Parameters of a {@link MagmaChamber}, in physical units and physical time. Defaults give a small
@@ -49,7 +50,7 @@ import me.alex4386.typhon.engine.math.BlockPos;
  */
 public record MagmaChamberConfig(
         String volcanoId,
-        BlockPos center,
+        Point3 center,
         double volume,
         double compressibilityPerMPa,
         double lithostaticDepth,
@@ -130,7 +131,7 @@ public record MagmaChamberConfig(
         return MAIN.equals(chamberId);
     }
 
-    public static Builder builder(String volcanoId, BlockPos center) {
+    public static Builder builder(String volcanoId, Point3 center) {
         return new Builder(volcanoId, center);
     }
 
@@ -175,7 +176,7 @@ public record MagmaChamberConfig(
 
     public static final class Builder {
         private final String volcanoId;
-        private BlockPos center;
+        private Point3 center;
         private double volume = 1e10; // 10 km³; real chambers are ~1–100 km³
         private double compressibilityPerMPa = 2e-4;
         private double lithostaticDepth = 4000;
@@ -207,7 +208,7 @@ public record MagmaChamberConfig(
         private boolean freezeVolume = false;
         private String chamberId = MAIN;
 
-        private Builder(String volcanoId, BlockPos center) {
+        private Builder(String volcanoId, Point3 center) {
             this.volcanoId = volcanoId;
             this.center = center;
         }
@@ -242,7 +243,7 @@ public record MagmaChamberConfig(
         public Builder wallYieldFraction(double v) { wallYieldFraction = v; return this; }
         public Builder freezeVolume(boolean v) { freezeVolume = v; return this; }
         public Builder chamberId(String v) { chamberId = v; return this; }
-        public Builder center(BlockPos v) { center = Objects.requireNonNull(v); return this; }
+        public Builder center(Point3 v) { center = Objects.requireNonNull(v); return this; }
 
         public MagmaChamberConfig build() {
             return new MagmaChamberConfig(volcanoId, center, volume, compressibilityPerMPa, lithostaticDepth,

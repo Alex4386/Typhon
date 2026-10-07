@@ -15,6 +15,7 @@ import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.sim.StepContext;
@@ -31,7 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class SaveFormatTest {
-    private static final VentSite VENT = VentSite.crater("summit", new BlockPos(0, 97, 0), 3);
+    private static final VentSite VENT = VentSite.crater("summit", Point3.surfaceOf(new BlockPos(0, 97, 0), VolcanoScaling.DEFAULT.metersPerBlock()), 3);
 
     record World(Engine engine, TerrainModel terrain, LavaFlow lava, VolcanoSystem volcano) {}
 
@@ -40,7 +41,7 @@ class SaveFormatTest {
         TerrainModel terrain = new TerrainModel();
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder("v", List.of(VENT), terrain, lava)
-                .chamber(MagmaChamberConfig.builder("v", new BlockPos(0, 40, 0))
+                .chamber(MagmaChamberConfig.builder("v", Point3.ofBlock(new BlockPos(0, 40, 0), VolcanoScaling.DEFAULT.metersPerBlock()))
                         .initialOverpressureMPa(14.9999).supplyVariability(0).build())
                 .scaling(VolcanoScaling.DEFAULT)
                 .dikesEnabled(false)
@@ -62,7 +63,7 @@ class SaveFormatTest {
                     for (int z = cz * 16; z < cz * 16 + 16; z++) {
                         double d = Math.sqrt(x * x + z * z);
                         int y = (int) Math.max(64, 100 - 0.5 * d);
-                        if (d <= VENT.craterRadius()) y = VENT.position().y();
+                        if (d <= VENT.craterRadius()) y = VENT.block(VolcanoScaling.DEFAULT.metersPerBlock()).y();
                         chunk.set(x, z, TerrainColumn.dry(y, BlockId.minecraft("stone")));
                     }
                 }

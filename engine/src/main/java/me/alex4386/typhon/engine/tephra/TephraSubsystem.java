@@ -278,7 +278,7 @@ public final class TephraSubsystem implements Subsystem {
             switch (command) {
                 case StartExplosivePhase start -> {
                     phase = start.phase();
-                    ensureGrid(phase.vent().position());
+                    ensureGrid(phase.vent().block(metersPerBlock()));
                     context.outbox().emit(new ExplosivePhaseChanged(context.time(), id, true,
                             phase.massEruptionRate()));
                 }
@@ -380,7 +380,7 @@ public final class TephraSubsystem implements Subsystem {
 
     /** Lapilli of a discrete explosion: see {@link ProximalFallout}. */
     private void depositProximal(StepContext context, ProximalFallout f) {
-        ensureGrid(f.vent().position());
+        ensureGrid(f.vent().block(metersPerBlock()));
         SimRandom random = context.random();
         double exitSpeed = Math.max(config.minExitSpeed, Math.min(config.maxExitSpeed, f.exitSpeed()));
         double v = config.ballisticSpeedScale; // Froude: speeds ×1/√L, so ranges come out in blocks
@@ -457,8 +457,9 @@ public final class TephraSubsystem implements Subsystem {
         grid.addAppliedDeposit(cell, parcelMass, config.depositBulkDensity);
     }
 
-    private static Vec3d sampleVentPoint(VentSite vent, SimRandom random) {
-        BlockPos p = vent.position();
+    /** A launch point on the vent floor in the ballistic frame (block units). */
+    private Vec3d sampleVentPoint(VentSite vent, SimRandom random) {
+        BlockPos p = vent.block(metersPerBlock());
         double cx = p.x() + 0.5, cz = p.z() + 0.5, y = p.y() + 1;
         if (vent.kind() == VentKind.FISSURE) {
             double along = (random.nextDouble() - 0.5) * vent.fissureLength();
@@ -652,7 +653,7 @@ public final class TephraSubsystem implements Subsystem {
     private void ashStep(StepContext context) {
         double dt = config.ashStepSeconds;
         if (phase != null) {
-            BlockPos vent = phase.vent().position();
+            BlockPos vent = phase.vent().block(metersPerBlock());
             ensureGrid(vent);
             grid.parallel = context.parallel();
             // The column rises from the block above the vent, so cap its height at the world top from there.
@@ -811,7 +812,7 @@ public final class TephraSubsystem implements Subsystem {
     @Override
     public void loadState(StateReader reader) {
         JsonObject in = reader.json();
-        phase = in.has("phase") ? loadPhase(in.getAsJsonObject("phase")) : null;
+        phase = in.has("phase") ? loadPhase(in.getAsJsonObject("phase"), metersPerBlock()) : null;
         wind.load(in.getAsJsonObject("wind"));
         nextBombId = in.get("nextBombId").getAsLong();
         bombs.clear();
@@ -849,9 +850,9 @@ public final class TephraSubsystem implements Subsystem {
         VentSite v = p.vent();
         JsonObject vent = new JsonObject();
         vent.addProperty("id", v.id());
-        vent.addProperty("x", v.position().x());
-        vent.addProperty("y", v.position().y());
-        vent.addProperty("z", v.position().z());
+        vent.addProperty("xM", v.position().x());
+        vent.addProperty("yM", v.position().y());
+        vent.addProperty("zM", v.position().z());
         vent.addProperty("kind", v.kind().name());
         vent.addProperty("craterRadius", v.craterRadius());
         vent.addProperty("fissureAngle", v.fissureAngleRad());
@@ -869,11 +870,13 @@ public final class TephraSubsystem implements Subsystem {
         return out;
     }
 
-    private static ExplosivePhase loadPhase(JsonObject in) {
+    /** A saved phase; older saves give the vent as its ground block on the {@code l}-metre grid. */
+    private static ExplosivePhase loadPhase(JsonObject in, double l) {
         JsonObject v = in.getAsJsonObject("vent");
         VentSite vent = new VentSite(
                 v.get("id").getAsString(),
-                new BlockPos(v.get("x").getAsInt(), v.get("y").getAsInt(), v.get("z").getAsInt()),
+                v.has("xM") ? new Point3(v.get("xM").getAsDouble(), v.get("yM").getAsDouble(), v.get("zM").getAsDouble())
+                        : Point3.surfaceOf(new BlockPos(v.get("x").getAsInt(), v.get("y").getAsInt(), v.get("z").getAsInt()), l),
                 VentKind.valueOf(v.get("kind").getAsString()),
                 v.get("craterRadius").getAsInt(),
                 v.get("fissureAngle").getAsDouble(),

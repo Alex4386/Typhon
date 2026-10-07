@@ -7,6 +7,7 @@ import me.alex4386.typhon.engine.lava.LavaConfig;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.lava.LavaSource;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.terrain.TerrainChunk;
 import me.alex4386.typhon.engine.terrain.TerrainColumn;
@@ -66,7 +67,7 @@ class SurfaceCouplingTest {
             }
             engine.runFor(5);
         }
-        if (withLava) lava.addSource(LavaSource.at("vent", new BlockPos(24, 11, 24), 8, 1150, 50, 0.2));
+        if (withLava) lava.addSource(LavaSource.at("vent", new ColumnIndex(24, 24), 8, 1150, 50, 0.2));
         engine.runFor(seconds);
         return new Run(s, lava);
     }

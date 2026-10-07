@@ -11,6 +11,7 @@ import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.seismic.SeismicConfig;
 import me.alex4386.typhon.engine.seismic.SeismicEvent;
@@ -29,8 +30,8 @@ class VolcanoLifecycleTest {
 
     private static Volcano build(long seed) {
         // 1 km³: the small end of real chambers, so a full unrest → eruption cycle fits in a test.
-        MagmaChamber chamber = new MagmaChamber(MagmaChamberConfig.builder("v", CHAMBER).volume(1e9).build());
-        SeismicityModel seismic = new SeismicityModel(SeismicConfig.builder("v", VENT).build(), chamber, 1);
+        MagmaChamber chamber = new MagmaChamber(MagmaChamberConfig.builder("v", Point3.ofBlock(CHAMBER, 1)).volume(1e9).build());
+        SeismicityModel seismic = new SeismicityModel(SeismicConfig.builder("v", Point3.surfaceOf(VENT, 1)).build(), chamber, 1);
         AlertLevelEstimator alert = new AlertLevelEstimator(AlertConfig.defaults("v"), chamber, seismic);
         Engine engine = Engine.builder(seed).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(chamber).add(seismic).add(alert).build();
         return new Volcano(engine, chamber, seismic, alert);

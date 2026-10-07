@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import me.alex4386.typhon.engine.magma.MagmaCommands.InjectRecharge;
 import me.alex4386.typhon.engine.magma.MagmaCommands.SetSupplyRate;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.testing.Saves;
@@ -19,7 +20,7 @@ class ChamberRuptureTest {
     private static final BlockPos CENTER = new BlockPos(0, -40, 0);
 
     private static MagmaChamberConfig.Builder stromboli() {
-        return MagmaChamberConfig.builder("v", CENTER).volume(5e7).compressibilityPerMPa(2e-4)
+        return MagmaChamberConfig.builder("v", Point3.ofBlock(CENTER, 1)).volume(5e7).compressibilityPerMPa(2e-4)
                 .lithostaticDepth(3000).conduitRadius(0.8).tensileStrengthMPa(8).eruptionEndOverpressureMPa(0.5)
                 .supplyRate(0.3).supplyVariability(0);
     }

@@ -78,7 +78,8 @@ class EmptyWorldTest {
 
         // the definition round-trips through YAML (the server writes volcanoes/<id>.yaml)
         VolcanoDefinition again = VolcanoDefinition.parse("first",
-                me.alex4386.typhon.engine.config.ConfigNode.root("first.yaml", v.toTree()));
+                me.alex4386.typhon.engine.config.ConfigNode.root("first.yaml", v.toTree()),
+                s.world().spec().metersPerColumn());
         assertTrue(again.vents().get(0).emergent());
 
         s.saveWorld();

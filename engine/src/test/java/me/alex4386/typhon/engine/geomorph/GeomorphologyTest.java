@@ -243,7 +243,7 @@ class GeomorphologyTest {
         for (boolean open : new boolean[] {false, true}) {
             GeoWorld w = GeoWorld.flat(5, BASE_Y);
             Geomorphology g = geo(w, GroundState.DRY);
-            g.setVents(List.of(VentSite.crater("main", new BlockPos(40, BASE_Y, 40), 2)), () -> open);
+            g.setVents(List.of(VentSite.crater("main", Point3.surfaceOf(new BlockPos(40, BASE_Y, 40), 1), 2)), () -> open);
             Engine engine = w.engine(1, 1, g);
             for (int burst = 0; burst < 60; burst++) {
                 for (int x = 0; x < w.size; x++) {
@@ -274,7 +274,7 @@ class GeomorphologyTest {
         GeoWorld w = GeoWorld.flat(5, BASE_Y);
         Geomorphology g = geo(w, GroundState.DRY);
         boolean[] open = {false};
-        VentSite vent = VentSite.crater("main", new BlockPos(40, BASE_Y, 40), 2);
+        VentSite vent = VentSite.crater("main", Point3.surfaceOf(new BlockPos(40, BASE_Y, 40), 1), 2);
         g.setVents(List.of(vent), () -> open[0]);
         Engine engine = w.engine(1, 1, g);
         assertEquals(BASE_Z, g.ventFloorZ(vent), 1e-9, "the conduit mouth starts at the vent's ground");

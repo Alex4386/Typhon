@@ -9,6 +9,8 @@ import java.util.List;
 import me.alex4386.typhon.engine.lava.LavaEvents.ChunkCoord;
 import me.alex4386.typhon.engine.lava.LavaTestWorld.FixedRheology;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -36,7 +38,7 @@ class LavaFlowTest {
         world.coarse(5);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(200));
         Engine engine = world.engine(lava, 1);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 3, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 3, BASALT_T, BASALT_SI, 0.1));
 
         for (int i = 0; i < 400; i++) {
             if (i == 200) lava.removeSource("vent");
@@ -61,7 +63,7 @@ class LavaFlowTest {
         world.coarse(10);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 2);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 200);
         lava.removeSource("vent");
         world.run(engine, 2000);
@@ -129,7 +131,7 @@ class LavaFlowTest {
         world.coarse(10);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(50));
         Engine engine = world.engine(lava, 5);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, temperature, silica, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, temperature, silica, 0.1));
         double farthest = 0;
         for (int i = 0; i < 1500; i++) {
             if (i == 100) lava.removeSource("vent");
@@ -221,7 +223,7 @@ class LavaFlowTest {
         world.coarse(5);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(200));
         Engine engine = world.engine(lava, seed);
-        lava.addSource(LavaSource.atVent(VentSite.crater("summit", new BlockPos(0, 0, 0), 4), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.atVent(VentSite.crater("summit", Point3.surfaceOf(new BlockPos(0, 0, 0), 1), 4), 1, 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, ticks);
         return world.frames;
     }
@@ -229,7 +231,7 @@ class LavaFlowTest {
     @Test
     void savedStateResumesBitForBit() {
         LavaConfig config = LavaConfig.defaults().withCoolingScale(200);
-        LavaSource source = LavaSource.atVent(VentSite.fissure("rift", new BlockPos(0, 0, 0), 0.3, 9), 2, BASALT_T, BASALT_SI, 0.1);
+        LavaSource source = LavaSource.atVent(VentSite.fissure("rift", Point3.surfaceOf(new BlockPos(0, 0, 0), 1), 0.3, 9), 1, 2, BASALT_T, BASALT_SI, 0.1);
 
         LavaTestWorld reference = ramp(3).coarse(5);
         LavaFlow refLava = new LavaFlow(reference.terrain, config);
@@ -266,7 +268,7 @@ class LavaFlowTest {
         world.coarse(5);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 10);
-        lava.addSource(LavaSource.at("edge", new BlockPos(15, 0, 8), 1, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("edge", new ColumnIndex(15, 8), 1, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 100);
 
         assertEquals(0, lava.thickness(16, 8));
@@ -285,7 +287,7 @@ class LavaFlowTest {
         world.coarse(10);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 11);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 400);
         List<LavaEvents.LavaOceanEntry> entries = world.events(LavaEvents.LavaOceanEntry.class);
         assertFalse(entries.isEmpty());
@@ -298,7 +300,7 @@ class LavaFlowTest {
         world.coarse(5);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 12);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 400);
         List<LavaEvents.LavaFlowFront> fronts = world.events(LavaEvents.LavaFlowFront.class);
         assertTrue(fronts.size() >= 19);
@@ -312,7 +314,7 @@ class LavaFlowTest {
         LavaTestWorld world = ramp(3);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 13);
-        engine.submit(new LavaCommands.StartEffusion(LavaSource.at("vent", new BlockPos(0, 0, 0), 1, BASALT_T, BASALT_SI, 0.1)));
+        engine.submit(new LavaCommands.StartEffusion(LavaSource.at("vent", new ColumnIndex(0, 0), 1, BASALT_T, BASALT_SI, 0.1)));
         world.run(engine, 20);
         assertEquals(1.0, lava.emittedVolume(), 1e-9);
         engine.submit(new LavaCommands.SetEffusionRate("vent", 2));
@@ -330,7 +332,7 @@ class LavaFlowTest {
         world.coarse(5);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(300));
         Engine engine = world.engine(lava, 14);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 100);
         lava.removeSource("vent");
         for (int t = 0; t < 100_000 && lava.activeCellCount() > 0; t++) world.run(engine, 1);

@@ -13,8 +13,8 @@ final class Stations {
 
     /** A station {@code eastM}, {@code northM} metres from a vent, on {@code metersPerColumn} columns. */
     static GeodeticStation at(String name, VentSite vent, double eastM, double northM, double metersPerColumn) {
-        return new GeodeticStation(name, vent.position().x() + (int) Math.round(eastM / metersPerColumn),
-                vent.position().z() - (int) Math.round(northM / metersPerColumn));
+        return new GeodeticStation(name, vent.block(metersPerColumn).x() + (int) Math.round(eastM / metersPerColumn),
+                vent.block(metersPerColumn).z() - (int) Math.round(northM / metersPerColumn));
     }
 
     /**

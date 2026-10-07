@@ -3,6 +3,7 @@ package me.alex4386.typhon.engine.volcano;
 import me.alex4386.typhon.engine.magma.conduit.ConduitInput;
 import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 
 /**
  * Read-only view of a volcano's magma system, shared by the subsystems that react to it (seismicity,
@@ -13,7 +14,8 @@ import me.alex4386.typhon.engine.math.BlockPos;
  */
 public interface MagmaState {
     /** Centre of the magma chamber. */
-    BlockPos chamberCenter();
+    /** Centre of the chamber (m). */
+    Point3 chamberCenter();
 
     /** Pressure in excess of lithostatic; eruptions/dikes start when it exceeds rock strength. */
     double overpressureMPa();

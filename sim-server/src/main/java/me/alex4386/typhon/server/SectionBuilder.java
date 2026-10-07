@@ -10,6 +10,7 @@ import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.geothermal.Geothermal;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.subsurface.Subsurface;
 import me.alex4386.typhon.engine.volcano.VentSite;
 import me.alex4386.typhon.engine.world.LayerView;
@@ -269,13 +270,13 @@ final class SectionBuilder {
             boolean erupting = v.chamber().erupting();
             List<VentSite> active = erupting ? v.coupler().activeVents() : List.of();
             for (VentSite vent : v.coupler().allVents()) {
-                BlockPos p = vent.position();
-                double[] vp = project(req.polyline(), cum, map.x(p.x()), map.y(p.z()));
+                Point3 p = vent.position();
+                double[] vp = project(req.polyline(), cum, p.x(), -p.z());
                 if (vp[1] > Math.max(500, 4 * map.cell)) continue;
                 JsonObject o = new JsonObject();
                 o.addProperty("kind", "conduit");
                 o.add("u", Json.num(vp[0]));
-                o.add("zTop", Json.num((p.y() + 1) * map.cell));
+                o.add("zTop", Json.num(p.y()));
                 o.add("zBottom", Json.num(c[2] + r * 0.55));
                 o.add("width", Json.num(Math.max(2 * map.cell, 2 * v.chamber().config().conduitRadius())));
                 o.addProperty("active", active.contains(vent));

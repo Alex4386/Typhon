@@ -222,6 +222,7 @@ final class ConfigApi {
             p.names.put(v.id(), v.name());
         }
         Tuning.Definitions now = new Tuning.Definitions(world.definition().toTree(), trees(running), p.names);
+        double l = world.definition().spec().metersPerColumn(); // migrates block positions in patches
         Map<String, Object> defaults = dir != null ? Tuning.baselineValues(dir, now) : Map.of();
 
         // world
@@ -261,7 +262,7 @@ final class ConfigApi {
         List<VolcanoDefinition> next = new ArrayList<>();
         for (Map.Entry<String, Map<String, Object>> e : adding.entrySet()) {
             try {
-                VolcanoDefinition v = VolcanoDefinition.parse(e.getKey(), ConfigNode.root("volcanoes/" + e.getKey() + ".yaml", e.getValue()));
+                VolcanoDefinition v = VolcanoDefinition.parse(e.getKey(), ConfigNode.root("volcanoes/" + e.getKey() + ".yaml", e.getValue()), l);
                 next.add(v);
                 p.names.put(v.id(), v.name());
                 p.volcanoTrees.put(v.id(), e.getValue());
@@ -281,7 +282,7 @@ final class ConfigApi {
             }
             p.volcanoTrees.put(id, tree);
             try {
-                VolcanoDefinition v = VolcanoDefinition.parse(id, ConfigNode.root("volcanoes/" + id + ".yaml", tree));
+                VolcanoDefinition v = VolcanoDefinition.parse(id, ConfigNode.root("volcanoes/" + id + ".yaml", tree), l);
                 next.add(v);
             } catch (RuntimeException ex) {
                 errors.add(new FieldError("volcano." + id, ex.getMessage()));

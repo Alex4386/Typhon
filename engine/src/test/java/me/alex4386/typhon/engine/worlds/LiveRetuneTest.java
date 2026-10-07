@@ -115,7 +115,7 @@ class LiveRetuneTest {
                 VolcanoDefinition changedVolcano;
                 try {
                     changedVolcano = VolcanoDefinition.parse(v.id(),
-                            ConfigNode.root(v.id() + ".yaml", with(tree, leaf.getKey(), perturb(leaf.getValue()))));
+                            ConfigNode.root(v.id() + ".yaml", with(tree, leaf.getKey(), perturb(leaf.getValue()))), 4);
                 } catch (RuntimeException e) {
                     invalid++;
                     continue;
@@ -161,7 +161,7 @@ class LiveRetuneTest {
             Map<String, Object> tree = v.toTree();
             tree = with(tree, "magma.chamber.supplyRate", 2.0);
             tree = with(tree, "magma.chamber.tensileStrengthMPa", 8.0);
-            out.add(VolcanoDefinition.parse(v.id(), ConfigNode.root(v.id() + ".yaml", tree)));
+            out.add(VolcanoDefinition.parse(v.id(), ConfigNode.root(v.id() + ".yaml", tree), 4));
         }
         return out;
     }

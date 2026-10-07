@@ -275,17 +275,17 @@ final class EventTranslator {
         o.addProperty("id", v.id());
         o.addProperty("kind", v.kind() == VentKind.FISSURE ? "fissure" : "crater");
         if (v.emergent()) o.addProperty("emergent", true); // not formed yet: shown once magma reaches the surface
-        BlockPos p = v.position();
-        o.add("at", Json.xy(map.x(p.x()), map.y(p.z())));
-        o.add("z", Json.num((p.y() + 1) * map.cell));
+        Point3 p = v.position(); // metres: the vent's surface point
+        o.add("at", Json.xy(p.x(), -p.z()));
+        o.add("z", Json.num(p.y()));
         o.add("radius", Json.num(Math.max(1, v.craterRadius()) * map.cell));
         if (v.kind() == VentKind.FISSURE) {
-            double half = v.fissureLength() / 2.0;
+            double half = v.fissureLength() / 2.0 * map.cell; // length in columns
             double dx = Math.cos(v.fissureAngleRad()) * half;
             double dz = Math.sin(v.fissureAngleRad()) * half;
             JsonArray line = new JsonArray();
-            line.add(Json.xy(map.x(p.x() - dx), map.y(p.z() - dz)));
-            line.add(Json.xy(map.x(p.x() + dx), map.y(p.z() + dz)));
+            line.add(Json.xy(p.x() - dx, -(p.z() - dz)));
+            line.add(Json.xy(p.x() + dx, -(p.z() + dz)));
             o.add("line", line);
         }
         return o;
@@ -347,7 +347,7 @@ final class EventTranslator {
         double bestD = Double.POSITIVE_INFINITY;
         for (VolcanoSystem v : volcanoes) {
             for (VentSite vent : v.vents()) {
-                double d = Point3.ofBlock(vent.position(), map.cell).horizontalDistance(pos);
+                double d = vent.position().horizontalDistance(pos);
                 if (d < bestD) {
                     bestD = d;
                     best = v.volcanoId();

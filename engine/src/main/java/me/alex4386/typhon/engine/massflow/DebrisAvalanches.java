@@ -4,6 +4,7 @@ import java.util.List;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.FlowCell;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
 import me.alex4386.typhon.engine.output.Outbox;
@@ -39,7 +40,7 @@ public final class DebrisAvalanches extends MassFlowField {
     }
 
     /** Releases {@code volumeM3} of failed debris at rest within {@code radius} blocks of {@code center}. */
-    public boolean collapse(BlockPos center, int radius, double volumeM3) {
+    public boolean collapse(ColumnIndex center, int radius, double volumeM3) {
         return release(center, radius, volumeM3, config.ambientC, 0, Trigger.SLOPE_FAILURE);
     }
 

@@ -14,6 +14,7 @@ import me.alex4386.typhon.engine.deformation.GeodeticStation;
 import me.alex4386.typhon.engine.deformation.StationReading;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
 import me.alex4386.typhon.engine.tephra.ExplosivePhase;
 import me.alex4386.typhon.engine.tephra.TephraSubsystem;
@@ -136,9 +137,9 @@ final class Probe {
     }
 
     static double groundAboveChamber(me.alex4386.typhon.engine.magma.MagmaChamber chamber, VolcanoSystem v, GridMapping map, WorldModel world) {
-        BlockPos c = chamber.chamberCenter();
-        double s = world.surfaceZ(c.x(), c.z());
-        return Double.isFinite(s) ? s : (v.vents().get(0).position().y() + 1) * map.cell;
+        Point3 c = chamber.chamberCenter();
+        double s = world.surfaceZ(c.columnX(map.cell), c.columnZ(map.cell));
+        return Double.isFinite(s) ? s : v.vents().get(0).position().y();
     }
 
     /**
@@ -153,8 +154,8 @@ final class Probe {
 
     /** Centre of any chamber of the plumbing, at its physical depth below the ground above it. */
     static double[] chamberCenter(me.alex4386.typhon.engine.magma.MagmaChamber chamber, VolcanoSystem v, GridMapping map, WorldModel world) {
-        BlockPos b = chamber.chamberCenter();
-        double[] c = {map.x(b.x()), map.y(b.z()), (b.y() + 0.5) * map.cell};
+        Point3 b = chamber.chamberCenter();
+        double[] c = {b.x(), -b.z(), b.y()};
         double depth = chamber.physicalDepthM();
         if (Double.isFinite(depth) && depth > 0) c[2] = groundAboveChamber(chamber, v, map, world) - depth;
         return c;

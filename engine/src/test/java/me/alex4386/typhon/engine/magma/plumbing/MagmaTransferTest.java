@@ -10,6 +10,7 @@ import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaCommands.StartEruption;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.testing.Saves;
@@ -21,7 +22,7 @@ class MagmaTransferTest {
 
     /** A basaltic system: a shallow main chamber at 1.5 km over a deep one at 4 km, no own supply. */
     private static MagmaChamberConfig.Builder main() {
-        return MagmaChamberConfig.builder("v", new BlockPos(0, 0, 0)).volume(1e9).lithostaticDepth(1500).tensileStrengthMPa(10)
+        return MagmaChamberConfig.builder("v", Point3.ofBlock(new BlockPos(0, 0, 0), 1)).volume(1e9).lithostaticDepth(1500).tensileStrengthMPa(10)
                 .eruptionEndOverpressureMPa(1).supplyRate(0).supplyVariability(0).initialSilicaWt(50).initialWaterWt(0.4)
                 .initialTemperatureC(1180);
     }

@@ -19,6 +19,7 @@ import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.ChunkCoord;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.FlowCell;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.EngineEvent;
@@ -152,7 +153,7 @@ public abstract class MassFlowField implements Subsystem {
     @Override
     public void registerCommands(CommandBus bus) {
         bus.register(MassFlowCommands.ReleaseFlow.class, c -> {
-            if (c.target().equals(id)) release(c.center(), c.radius(), c.volumeM3(), c.temperatureC(), c.sedimentFraction(), c.trigger());
+            if (c.target().equals(id)) release(c.center().column(dx), c.radius(), c.volumeM3(), c.temperatureC(), c.sedimentFraction(), c.trigger());
         });
         bus.register(MassFlowCommands.StartFlowSource.class, c -> {
             if (c.target().equals(id)) addSource(c.source(), c.trigger());
@@ -195,9 +196,9 @@ public abstract class MassFlowField implements Subsystem {
 
     /**
      * Releases {@code volumeM3} of flow at rest, spread evenly over the known columns within
-     * {@code radius} blocks of {@code center}. Returns false (and requests terrain) if none is known.
+     * {@code radius} columns of {@code center}. Returns false (and requests terrain) if none is known.
      */
-    public boolean release(BlockPos center, int radius, double volumeM3, double temperatureC, double sedimentFraction,
+    public boolean release(ColumnIndex center, int radius, double volumeM3, double temperatureC, double sedimentFraction,
             Trigger trigger) {
         if (!(volumeM3 > 0)) return false;
         List<int[]> cells = new ArrayList<>();
@@ -218,8 +219,9 @@ public abstract class MassFlowField implements Subsystem {
         double per = volumeM3 / cells.size();
         for (int[] cell : cells) inject(cell[0], cell[1], per, temperatureC, sedimentFraction);
         released += volumeM3;
-        addOrigin(center);
-        pendingStarts.add(new PendingStart(trigger, center, volumeM3, 0, temperatureC));
+        BlockPos at = ground(center);
+        addOrigin(at);
+        pendingStarts.add(new PendingStart(trigger, at, volumeM3, 0, temperatureC));
         return true;
     }
 
@@ -253,9 +255,9 @@ public abstract class MassFlowField implements Subsystem {
     public void addSource(FlowSource source, Trigger trigger) {
         boolean fresh = !sources.containsKey(source.id());
         sources.put(source.id(), source);
-        for (BlockPos cell : source.cells()) addOrigin(cell);
+        for (ColumnIndex cell : source.cells()) addOrigin(ground(cell));
         if (fresh) {
-            pendingStarts.add(new PendingStart(trigger, source.cells().get(0), 0, source.rateM3PerS(), source.temperatureC()));
+            pendingStarts.add(new PendingStart(trigger, ground(source.cells().get(0)), 0, source.rateM3PerS(), source.temperatureC()));
         }
     }
 
@@ -388,7 +390,7 @@ public abstract class MassFlowField implements Subsystem {
         for (FlowSource source : sources.values()) {
             if (source.rateM3PerS() <= 0) continue;
             double per = source.rateM3PerS() * dt / source.cells().size();
-            for (BlockPos cell : source.cells()) {
+            for (ColumnIndex cell : source.cells()) {
                 if (knownColumn(cell.x(), cell.z())) {
                     inject(cell.x(), cell.z(), per, source.temperatureC(), source.sedimentFraction());
                     released += per;
@@ -866,6 +868,11 @@ public abstract class MassFlowField implements Subsystem {
                 reported));
     }
 
+    /** The ground block of a column as the terrain shows it (y 0 where unknown). */
+    private BlockPos ground(ColumnIndex c) {
+        return new BlockPos(c.x(), terrain.groundY(c.x(), c.z(), 0), c.z());
+    }
+
     private void addOrigin(BlockPos p) {
         BlockPos origin = new BlockPos(p.x(), 0, p.z());
         if (!origins.contains(origin)) origins.add(origin);
@@ -982,7 +989,7 @@ public abstract class MassFlowField implements Subsystem {
         for (FlowSource s : sources.values()) {
             JsonObject o = new JsonObject();
             o.addProperty("id", s.id());
-            o.add("cells", positions(s.cells()));
+            o.add("cells", columns(s.cells()));
             o.addProperty("rate", s.rateM3PerS());
             o.addProperty("temperature", s.temperatureC());
             o.addProperty("sediment", s.sedimentFraction());
@@ -1043,7 +1050,7 @@ public abstract class MassFlowField implements Subsystem {
 
         for (JsonElement e : in.getAsJsonArray("sources")) {
             JsonObject o = e.getAsJsonObject();
-            FlowSource s = new FlowSource(o.get("id").getAsString(), readPositions(o.getAsJsonArray("cells")),
+            FlowSource s = new FlowSource(o.get("id").getAsString(), readColumns(o.getAsJsonArray("cells")),
                     o.get("rate").getAsDouble(), o.get("temperature").getAsDouble(), o.get("sediment").getAsDouble());
             sources.put(s.id(), s);
         }
@@ -1101,6 +1108,28 @@ public abstract class MassFlowField implements Subsystem {
         for (JsonElement e : array) {
             JsonArray a = e.getAsJsonArray();
             list.add(new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt()));
+        }
+        return list;
+    }
+
+    /** Grid columns as {@code [x, 0, z]} triples (the layout block positions used, so older saves read back). */
+    private static JsonArray columns(List<ColumnIndex> list) {
+        JsonArray array = new JsonArray();
+        for (ColumnIndex c : list) {
+            JsonArray a = new JsonArray();
+            a.add(c.x());
+            a.add(0);
+            a.add(c.z());
+            array.add(a);
+        }
+        return array;
+    }
+
+    private static List<ColumnIndex> readColumns(JsonArray array) {
+        List<ColumnIndex> list = new ArrayList<>();
+        for (JsonElement e : array) {
+            JsonArray a = e.getAsJsonArray();
+            list.add(new ColumnIndex(a.get(0).getAsInt(), a.get(2).getAsInt()));
         }
         return list;
     }

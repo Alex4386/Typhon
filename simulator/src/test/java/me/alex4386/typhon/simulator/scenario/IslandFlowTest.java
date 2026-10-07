@@ -209,7 +209,8 @@ class IslandFlowTest {
     private static VolcanoDefinition withSupply(VolcanoDefinition v, double supply) {
         Map<String, Object> tree = copy(v.toTree());
         ((Map<String, Object>) ((Map<String, Object>) tree.get("magma")).get("chamber")).put("supplyRate", supply);
-        return VolcanoDefinition.parse(v.id(), ConfigNode.root("volcanoes/" + v.id() + ".yaml", tree));
+        return VolcanoDefinition.parse(v.id(), ConfigNode.root("volcanoes/" + v.id() + ".yaml", tree),
+                v.vents().get(0).position().y() == v.vents().get(0).position().y() ? L : L);
     }
 
     @SuppressWarnings("unchecked")

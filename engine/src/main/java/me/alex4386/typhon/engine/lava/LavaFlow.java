@@ -16,6 +16,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.lava.LavaEvents.ChunkCoord;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.output.Outbox;
@@ -287,7 +288,7 @@ public final class LavaFlow implements Subsystem {
 
     public void addSource(LavaSource source) {
         sources.put(source.id(), source);
-        for (BlockPos cell : source.cells()) {
+        for (ColumnIndex cell : source.cells()) {
             BlockPos origin = new BlockPos(cell.x(), 0, cell.z());
             if (!origins.contains(origin)) origins.add(origin);
         }
@@ -531,7 +532,7 @@ public final class LavaFlow implements Subsystem {
         for (LavaSource source : sources.values()) {
             if (source.rateM3PerS() <= 0) continue;
             double perCell = source.rateM3PerS() * dt / source.cells().size();
-            for (BlockPos cell : source.cells()) {
+            for (ColumnIndex cell : source.cells()) {
                 if (!addLava(cell.x(), cell.z(), perCell, source.temperatureC(), source.silicaWt(), source.waterWt(),
                         source.unit())) {
                     neededTerrain.add(LavaChunk.key(cell.x() >> 4, cell.z() >> 4));
@@ -1591,7 +1592,7 @@ public final class LavaFlow implements Subsystem {
         for (LavaSource s : sources.values()) {
             JsonObject o = new JsonObject();
             o.addProperty("id", s.id());
-            o.add("cells", positions(s.cells()));
+            o.add("cells", columns(s.cells()));
             o.addProperty("rate", s.rateM3PerS());
             o.addProperty("temperature", s.temperatureC());
             o.addProperty("silica", s.silicaWt());
@@ -1676,7 +1677,7 @@ public final class LavaFlow implements Subsystem {
 
         for (JsonElement e : in.getAsJsonArray("sources")) {
             JsonObject o = e.getAsJsonObject();
-            LavaSource s = new LavaSource(o.get("id").getAsString(), readPositions(o.getAsJsonArray("cells")),
+            LavaSource s = new LavaSource(o.get("id").getAsString(), readColumns(o.getAsJsonArray("cells")),
                     o.get("rate").getAsDouble(), o.get("temperature").getAsDouble(), o.get("silica").getAsDouble(),
                     o.get("water").getAsDouble(), o.get("unit").getAsInt());
             sources.put(s.id(), s);
@@ -1727,6 +1728,28 @@ public final class LavaFlow implements Subsystem {
         for (JsonElement e : array) {
             JsonArray a = e.getAsJsonArray();
             list.add(new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt()));
+        }
+        return list;
+    }
+
+    /** Grid columns as {@code [x, 0, z]} triples (the layout block positions used, so older saves read back). */
+    private static JsonArray columns(List<ColumnIndex> list) {
+        JsonArray array = new JsonArray();
+        for (ColumnIndex c : list) {
+            JsonArray a = new JsonArray();
+            a.add(c.x());
+            a.add(0);
+            a.add(c.z());
+            array.add(a);
+        }
+        return array;
+    }
+
+    private static List<ColumnIndex> readColumns(JsonArray array) {
+        List<ColumnIndex> list = new ArrayList<>();
+        for (JsonElement e : array) {
+            JsonArray a = e.getAsJsonArray();
+            list.add(new ColumnIndex(a.get(0).getAsInt(), a.get(2).getAsInt()));
         }
         return list;
     }

@@ -57,6 +57,11 @@ public final class ConfigNode {
         return path.isEmpty() ? key : path + "." + key;
     }
 
+    /** Logs a warning about {@code key} of this node (e.g. an old form that was migrated). */
+    public void warn(String key, String message) {
+        LOG.warning(file + ": " + pathOf(key) + " " + message);
+    }
+
     public ConfigException error(String key, String message) {
         return new ConfigException(file + ": " + pathOf(key) + ": " + message);
     }
@@ -176,6 +181,11 @@ public final class ConfigNode {
             list.add(new ConfigNode(file, p, stringKeys(file, p, map)));
         }
         return list;
+    }
+
+    /** Values of a mapping as plain Java objects, without marking them read (to inspect a document's form). */
+    public Map<String, Object> peek() {
+        return new LinkedHashMap<>(values);
     }
 
     /** Values of a mapping as plain Java objects (for free-form sections), marking them all read. */

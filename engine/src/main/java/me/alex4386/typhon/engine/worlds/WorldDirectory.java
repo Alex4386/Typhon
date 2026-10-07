@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 import me.alex4386.typhon.engine.config.ConfigException;
+import me.alex4386.typhon.engine.config.ConfigNode;
 import me.alex4386.typhon.engine.config.VolcanoDefinition;
 import me.alex4386.typhon.engine.config.WorldDefinition;
 import me.alex4386.typhon.engine.config.Yaml;
@@ -36,6 +37,8 @@ public final class WorldDirectory {
     public static final String HISTORY = "history";
 
     private final Path root;
+    /** Volcano files read with block positions (migrated on reading; rewritten in metres on the next save). */
+    private final java.util.Set<String> blockPositionFiles = new java.util.TreeSet<>();
 
     public WorldDirectory(Path root) {
         this.root = root;
@@ -76,7 +79,8 @@ public final class WorldDirectory {
     }
 
     /** Every {@code volcanoes/*.yaml}, sorted by id. */
-    public List<VolcanoDefinition> readVolcanoes() {
+    /** The volcano files, for a world of {@code metersPerBlock} columns (which migrates block positions). */
+    public List<VolcanoDefinition> readVolcanoes(double metersPerBlock) {
         List<VolcanoDefinition> list = new ArrayList<>();
         if (!Files.isDirectory(volcanoesDir())) return list;
         List<Path> files;
@@ -88,9 +92,26 @@ public final class WorldDirectory {
         for (Path file : files) {
             String name = file.getFileName().toString();
             String id = name.substring(0, name.length() - ".yaml".length());
-            list.add(VolcanoDefinition.parse(id, Yaml.read(file, VOLCANOES + "/" + name)));
+            ConfigNode node = Yaml.read(file, VOLCANOES + "/" + name);
+            if (VolcanoDefinition.hasBlockPositions(node.peek())) blockPositionFiles.add(id);
+            list.add(VolcanoDefinition.parse(id, node, metersPerBlock));
         }
         return list;
+    }
+
+    /**
+     * Rewrites the volcano files read with block positions in the metre form, from their definitions (the
+     * migration of {@link #readVolcanoes}); returns the ids rewritten.
+     */
+    public List<String> rewriteBlockPositionFiles(List<VolcanoDefinition> definitions) {
+        List<String> rewritten = new ArrayList<>();
+        for (VolcanoDefinition v : definitions) {
+            if (!blockPositionFiles.remove(v.id())) continue;
+            Yaml.write(volcanoFile(v.id()), "# positions in metres: {x east, y north, elevation} (migrated from block coordinates)",
+                    v.toTree());
+            rewritten.add(v.id());
+        }
+        return rewritten;
     }
 
     /** Writes definitions as YAML (a template for a new world). */

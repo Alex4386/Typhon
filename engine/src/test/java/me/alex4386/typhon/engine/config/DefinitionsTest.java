@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.save.SaveFormat;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.world.BlockId;
@@ -61,7 +62,7 @@ class DefinitionsTest {
     }
 
     static VolcanoDefinition volcano(String id, String text) {
-        return VolcanoDefinition.parse(id, Yaml.parse("volcanoes/" + id + ".yaml", text));
+        return VolcanoDefinition.parse(id, Yaml.parse("volcanoes/" + id + ".yaml", text), 4);
     }
 
     @Test
@@ -91,14 +92,15 @@ class DefinitionsTest {
         assertEquals(2, v.vents().size());
         assertEquals(VentKind.FISSURE, v.vents().get(1).kind());
         assertEquals(Math.toRadians(30), v.vents().get(1).fissureAngleRad(), 1e-12);
-        assertEquals(new BlockPos(-30, -20, 0), v.chamber().center());
+        // the fixture gives block coordinates (4-m blocks): migrated to the block's centre in metres
+        assertEquals(new Point3(-118, -78, 2), v.chamber().center());
         assertEquals(1.0e9, v.chamber().volume());
         assertEquals(0.5, v.chamber().supplyRate());
         assertEquals(1.0, v.chamber().conduit().initialOpenness());
         assertTrue(v.dikes().blocked);
         assertEquals(3, v.geothermal().maxGeysers);
         assertTrue(v.geothermal().alterableSurfaces.contains(BlockId.minecraft("stone")));
-        assertEquals(new BlockPos(-30, 70, 0), v.geothermalCenter());
+        assertEquals(new Point3(-118, 284, 2), v.geothermalCenter()); // on top of ground block (-30, 70, 0)
         assertEquals(0.2, v.pdc().frictionCoefficient);
         assertFalse(v.deformation());
         assertEquals(0.4, v.tephra().bombMedianDiameter);
@@ -126,7 +128,7 @@ class DefinitionsTest {
         assertEquals(json(w.toTree()), json(w2.toTree()));
 
         VolcanoDefinition v = volcano("west", VOLCANO);
-        VolcanoDefinition v2 = VolcanoDefinition.parse("west", Yaml.parse("west.yaml", Yaml.dump(v.toTree())));
+        VolcanoDefinition v2 = VolcanoDefinition.parse("west", Yaml.parse("west.yaml", Yaml.dump(v.toTree())), 4);
         assertEquals(json(v.toTree()), json(v2.toTree()));
     }
 

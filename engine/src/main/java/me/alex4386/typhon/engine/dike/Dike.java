@@ -119,9 +119,9 @@ public final class Dike {
         if (fissure != null) {
             JsonObject f = new JsonObject();
             f.addProperty("id", fissure.id());
-            f.addProperty("x", fissure.position().x());
-            f.addProperty("y", fissure.position().y());
-            f.addProperty("z", fissure.position().z());
+            f.addProperty("xM", fissure.position().x());
+            f.addProperty("yM", fissure.position().y());
+            f.addProperty("zM", fissure.position().z());
             f.addProperty("angle", fissure.fissureAngleRad());
             f.addProperty("length", fissure.fissureLength());
             o.add("fissure", f);
@@ -129,7 +129,8 @@ public final class Dike {
         return o;
     }
 
-    static Dike load(JsonObject o) {
+    /** A saved dike on an {@code l}-metre grid (older saves give the fissure as a ground block). */
+    static Dike load(JsonObject o, double l) {
         Dike d = new Dike(
                 o.get("id").getAsInt(),
                 o.get("startTime").getAsDouble(),
@@ -156,7 +157,8 @@ public final class Dike {
             JsonObject f = o.getAsJsonObject("fissure");
             d.fissure = new VentSite(
                     f.get("id").getAsString(),
-                    new BlockPos(f.get("x").getAsInt(), f.get("y").getAsInt(), f.get("z").getAsInt()),
+                    f.has("xM") ? new Point3(f.get("xM").getAsDouble(), f.get("yM").getAsDouble(), f.get("zM").getAsDouble())
+                            : Point3.surfaceOf(new BlockPos(f.get("x").getAsInt(), f.get("y").getAsInt(), f.get("z").getAsInt()), l),
                     VentKind.FISSURE,
                     1,
                     f.get("angle").getAsDouble(),

@@ -20,6 +20,7 @@ import me.alex4386.typhon.engine.magma.conduit.ConduitModel;
 import me.alex4386.typhon.engine.magma.conduit.ConduitModel.Branch;
 import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.save.StateReader;
 import me.alex4386.typhon.engine.save.StateWriter;
@@ -1161,7 +1162,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     }
 
     @Override
-    public BlockPos chamberCenter() {
+    public Point3 chamberCenter() {
         return config.center();
     }
 

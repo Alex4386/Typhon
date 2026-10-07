@@ -9,6 +9,7 @@ import me.alex4386.typhon.engine.geothermal.GeothermalConfig;
 import me.alex4386.typhon.engine.magma.ConduitConfig;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.tephra.TephraConfig;
 import me.alex4386.typhon.engine.subsurface.SubsurfaceConfig;
 import me.alex4386.typhon.engine.volcano.VentSite;
@@ -124,14 +125,14 @@ final class RealPresets {
     static VentSite vent(String id, ColumnGrid terrain, double metersPerColumn, double xm, double zm, double radiusM) {
         int x = (int) Math.floor(xm / metersPerColumn);
         int z = (int) Math.floor(zm / metersPerColumn);
-        return VentSite.crater(id, new BlockPos(x, terrain.ground(x, z), z),
+        return VentSite.crater(id, Point3.surfaceOf(new BlockPos(x, terrain.ground(x, z), z), metersPerColumn),
                 Math.max(1, (int) Math.round(radiusM / metersPerColumn)));
     }
 
-    /** Chamber centre under a vent at an elevation (m a.s.l.; negative below sea level). */
-    static BlockPos chamberAt(VentSite vent, double elevation, double metersPerColumn) {
-        return new BlockPos(vent.position().x(), Math.max(BlockPos.MIN_Y + 1, y(elevation, metersPerColumn)),
-                vent.position().z());
+    /** Chamber centre (m) under a vent at an elevation (m a.s.l.; negative below sea level), as placed. */
+    static Point3 chamberAt(VentSite vent, double elevation, double metersPerColumn) {
+        double floor = (BlockPos.MIN_Y + 1) * metersPerColumn;
+        return new Point3(vent.position().x(), Math.max(floor, elevation), vent.position().z());
     }
 
     static RealTerrain.Paint rock(String rock, double vegetationBelow) {
@@ -557,7 +558,7 @@ final class RealPresets {
                             vent("mud-volcano", terrain, L, 2000, 3000, 180),
                             vent("west-thumb", terrain, L, lakeX - 1500, 600, 180));
                     MagmaChamberConfig chamber = MagmaChamberConfig.builder("yellowstone-real",
-                                    new BlockPos(0, y(-3600, L), 0))
+                                    Point3.ofBlock(new BlockPos(0, y(-3600, L), 0), L))
                             .volume(1e10).lithostaticDepth(6000).tensileStrengthMPa(20).supplyRate(0.001)
                             .supplyVariability(0).initialSilicaWt(75).rechargeSilicaWt(75).initialWaterWt(4)
                             .rechargeWaterWt(4).initialTemperatureC(820).rechargeTemperatureC(850)

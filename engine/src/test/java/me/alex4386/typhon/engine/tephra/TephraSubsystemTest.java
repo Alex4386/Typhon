@@ -30,7 +30,7 @@ import me.alex4386.typhon.engine.save.SaveStore;
 
 class TephraSubsystemTest {
     private static final int TERRAIN_RADIUS = 20;
-    private static final VentSite VENT = VentSite.crater("summit", new BlockPos(0, 80, 0), 3);
+    private static final VentSite VENT = VentSite.crater("summit", Point3.surfaceOf(new BlockPos(0, 80, 0), 1), 3);
 
     private static TephraConfig config() {
         TephraConfig config = new TephraConfig();
@@ -133,7 +133,7 @@ class TephraSubsystemTest {
     @Test
     void phaseCanBeDerivedFromMagmaState() {
         MagmaState dacite = new MagmaState() {
-            @Override public BlockPos chamberCenter() { return new BlockPos(0, -500, 0); }
+            @Override public Point3 chamberCenter() { return Point3.ofBlock(new BlockPos(0, -500, 0), 1); }
             @Override public double overpressureMPa() { return 8; }
             @Override public double overpressureRateMPaPerSecond() { return 0; }
             @Override public double temperatureC() { return 850; }

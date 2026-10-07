@@ -96,8 +96,9 @@ public record Sample(long step, double timeSeconds, Map<String, Double> values, 
             v.put("water_springs_m3", subsurface.springDischarge());
             v.put("water_to_sea_m3", water.seaOutflow() + water.seaGroundwater());
             v.put("water_imbalance_m3", water.imbalance());
-            int x = volcano.vents().get(0).position().x();
-            int z = volcano.vents().get(0).position().z();
+            double l = scenario.world().spec().metersPerColumn();
+            int x = volcano.vents().get(0).block(l).x();
+            int z = volcano.vents().get(0).block(l).z();
             v.put("vent_water_table_depth_m", subsurface.waterTableDepthM(x, z));
             v.put("vent_ground_temperature_10m_c", subsurface.temperatureC(x, z, 10));
         }

@@ -2,6 +2,7 @@ package me.alex4386.typhon.engine.seismic;
 
 import java.util.Objects;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 
 /**
  * Parameters of a {@link SeismicityModel}. Rates are events per second.
@@ -42,7 +43,7 @@ import me.alex4386.typhon.engine.math.BlockPos;
  */
 public record SeismicConfig(
         String volcanoId,
-        BlockPos conduitTop,
+        Point3 conduitTop,
         double failureOverpressureMPa,
         double backgroundVtRate,
         double vtPerMPa,
@@ -92,13 +93,13 @@ public record SeismicConfig(
         if (!(samplePeriodSeconds >= 0)) throw new IllegalArgumentException("samplePeriodSeconds must be >= 0");
     }
 
-    public static Builder builder(String volcanoId, BlockPos conduitTop) {
+    public static Builder builder(String volcanoId, Point3 conduitTop) {
         return new Builder(volcanoId, conduitTop);
     }
 
     public static final class Builder {
         private final String volcanoId;
-        private final BlockPos conduitTop;
+        private final Point3 conduitTop;
         private double failureOverpressureMPa = 15;
         private double backgroundVtRate = 1e-5;
         private double vtPerMPa = 50;
@@ -128,7 +129,7 @@ public record SeismicConfig(
         private double stepPeriodSeconds = 0.5;
         private double samplePeriodSeconds = 5.0;
 
-        private Builder(String volcanoId, BlockPos conduitTop) {
+        private Builder(String volcanoId, Point3 conduitTop) {
             this.volcanoId = volcanoId;
             this.conduitTop = conduitTop;
         }

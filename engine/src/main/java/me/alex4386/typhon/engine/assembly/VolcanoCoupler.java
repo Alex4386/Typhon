@@ -336,7 +336,7 @@ public final class VolcanoCoupler implements Subsystem {
         if (p.wetFalloutMassFlux() > 0) buildTuffRing(context, main, p.wetFalloutMassFlux() * scale * stepSeconds);
         if (p.steamMassFlux() > 0 && context.time() >= nextSteamEventTime) {
             context.outbox().emit(new SurfaceEvents.PhreatomagmaticSteam(
-                    context.time(), volcanoId, Point3.ofBlock(main.position(), scaling.metersPerBlock()), p.steamMassFlux() * scale, waterDepthM));
+                    context.time(), volcanoId, main.position(), p.steamMassFlux() * scale, waterDepthM));
             nextSteamEventTime = context.time() + STEAM_EVENT_SECONDS;
         }
 
@@ -569,14 +569,14 @@ public final class VolcanoCoupler implements Subsystem {
             wanted.add(sourceId);
             if (activeLavaSources.add(sourceId)) {
                 int unit = units.unit(DepositType.LAVA, chamber.eruptionStartTime(), chamber.temperatureC());
-                lava.addSource(LavaSource.atVent(vent, perVent, chamber.temperatureC(), chamber.silicaWt(), chamber.ventWaterWt())
+                lava.addSource(LavaSource.atVent(vent, scaling.metersPerBlock(), perVent, chamber.temperatureC(), chamber.silicaWt(), chamber.ventWaterWt())
                         .withId(sourceId).withUnit(unit));
             } else {
                 lava.setRate(sourceId, perVent);
             }
             if (geothermal != null) {
-                int x = vent.position().x();
-                int z = vent.position().z();
+                int x = vent.block(scaling.metersPerBlock()).x();
+                int z = vent.block(scaling.metersPerBlock()).z();
                 geothermal.addLavaHeat(x, z, chamber.temperatureC(), Math.max(1.0, lava.thickness(x, z)));
             }
         }
@@ -663,7 +663,7 @@ public final class VolcanoCoupler implements Subsystem {
             collapseSource = null;
         }
         if (massRate > 0 && explosiveCollapse > 0.01) {
-            collapseSource = pdc.columnCollapse(volcanoId, vent.position(), Math.max(1, vent.craterRadius()), massRate,
+            collapseSource = pdc.columnCollapse(volcanoId, vent.block(scaling.metersPerBlock()), Math.max(1, vent.craterRadius()), massRate,
                     1.0, temperatureC);
         }
     }
@@ -711,10 +711,10 @@ public final class VolcanoCoupler implements Subsystem {
                     GrainSizeDistribution.of(f[0] + 1e-6, f[1] + 1e-6, f[2] + 1e-6, f[3] + 1e-6));
         }
         double energy = 0.5 * burst.ejectaMassKg() * speed * speed;
-        if (seismicity != null) seismicity.queueExplosion(Point3.ofBlock(vent.position().offset(0, -2, 0), scaling.metersPerBlock()), energy);
-        if (explosionListener != null) explosionListener.accept(vent.position(), energy);
+        if (seismicity != null) seismicity.queueExplosion(vent.position().offset(0, -2.5 * scaling.metersPerBlock(), 0), energy);
+        if (explosionListener != null) explosionListener.accept(vent.block(scaling.metersPerBlock()), energy);
         context.outbox().emit(new SurfaceEvents.ExplosiveBurst(context.time(), volcanoId,
-                slug ? BurstKind.STROMBOLIAN : BurstKind.VULCANIAN, Point3.ofBlock(vent.position(), scaling.metersPerBlock()), burst.ejectaMassKg(),
+                slug ? BurstKind.STROMBOLIAN : BurstKind.VULCANIAN, vent.position(), burst.ejectaMassKg(),
                 burst.gasMassKg(), speed, energy));
     }
 
@@ -725,10 +725,10 @@ public final class VolcanoCoupler implements Subsystem {
                 VentPartition.BALLISTIC_SIZE);
         tephra.launchSalvo(vent, mass, speed, 40, 15, chamber.silicaWt(), MAX_BOMBS_PER_SALVO);
         double energy = 0.5 * mass * speed * speed;
-        if (seismicity != null) seismicity.queueExplosion(Point3.ofBlock(vent.position(), scaling.metersPerBlock()), energy);
-        if (explosionListener != null) explosionListener.accept(vent.position(), energy);
+        if (seismicity != null) seismicity.queueExplosion(vent.position(), energy);
+        if (explosionListener != null) explosionListener.accept(vent.block(scaling.metersPerBlock()), energy);
         context.outbox().emit(new SurfaceEvents.ExplosiveBurst(context.time(), volcanoId, BurstKind.SURTSEYAN_JET,
-                Point3.ofBlock(vent.position(), scaling.metersPerBlock()), mass, 0, speed, energy));
+                vent.position(), mass, 0, speed, energy));
     }
 
     private java.util.function.BiConsumer<BlockPos, Double> explosionListener;
@@ -760,7 +760,7 @@ public final class VolcanoCoupler implements Subsystem {
      * vent from the groundwater model.
      */
     private VentPartition.Water surveyWater(VentSite vent) {
-        BlockPos c = vent.position();
+        BlockPos c = vent.block(scaling.metersPerBlock());
         double table = ground != null && ground.known(c.x(), c.z())
                 ? ground.waterTableDepthM(c.x(), c.z()) : Double.POSITIVE_INFINITY;
         WorldModel world = terrain == null ? null : terrain.world();
@@ -839,7 +839,7 @@ public final class VolcanoCoupler implements Subsystem {
         double boil = magmaKg * VentPartition.MAGMA_HEAT_CAPACITY * Math.max(0, temperatureC - 100)
                 / (VentPartition.WATER_HEAT_CAPACITY * 80 + VentPartition.WATER_LATENT_HEAT);
         double area = world.spec().metersPerColumn() * world.spec().metersPerColumn();
-        BlockPos c = vent.position();
+        BlockPos c = vent.block(scaling.metersPerBlock());
         int crater = Math.max(1, vent.craterRadius());
         double lake = 0;
         for (int dz = -crater; dz <= crater; dz++) {
@@ -951,7 +951,7 @@ public final class VolcanoCoupler implements Subsystem {
         int crater = Math.max(1, vent.craterRadius());
         int outer = crater + TUFF_RING_WIDTH;
         double peak = crater + 2;
-        BlockPos c = vent.position();
+        BlockPos c = vent.block(scaling.metersPerBlock());
         List<long[]> cells = new ArrayList<>();
         List<Double> weights = new ArrayList<>();
         double total = 0;
@@ -997,8 +997,8 @@ public final class VolcanoCoupler implements Subsystem {
     private void setPhreatomagmatic(StepContext context, boolean active, VentSite vent) {
         if (active == phreatomagmatic) return;
         phreatomagmatic = active;
-        BlockPos at = vent != null ? vent.position() : baseVents.get(0).position();
-        context.outbox().emit(new SurfaceEvents.PhreatomagmaticChanged(context.time(), volcanoId, active, Point3.ofBlock(at, scaling.metersPerBlock()), waterDepthM));
+        Point3 at = vent != null ? vent.position() : baseVents.get(0).position();
+        context.outbox().emit(new SurfaceEvents.PhreatomagmaticChanged(context.time(), volcanoId, active, at, waterDepthM));
     }
 
     /** Attributes lava sources and tuff-ring deposits to this volcano's eruptions. */

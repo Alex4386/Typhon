@@ -303,8 +303,8 @@ public final class Geothermal implements Subsystem, HeatSources {
     public List<Chamber> chambers() {
         double t = magma.temperatureC();
         if (!(t > 0)) return List.of();
-        BlockPos c = magma.chamberCenter();
         double l = terrain.world().spec().metersPerColumn();
+        BlockPos c = magma.chamberCenter().block(l);
         double surface = terrain.world().isKnown(c.x(), c.z())
                 ? terrain.world().surfaceZ(c.x(), c.z()) : terrain.world().spec().blockTop(referenceY);
         // Real chamber depth when the magma model knows it (the world's vertical scale is often
@@ -326,7 +326,7 @@ public final class Geothermal implements Subsystem, HeatSources {
         double l = terrain.world().spec().metersPerColumn();
         List<Vent> list = new ArrayList<>();
         for (VentSite vent : vents) {
-            BlockPos p = vent.position();
+            BlockPos p = vent.block(l);
             double sigma = (Math.max(config.cellSize, vent.craterRadius()) + config.ventHaloBlocks) * l;
             double extent = vent.kind() == VentKind.FISSURE ? vent.fissureLength() * l / 2 : 0;
             // Gas and fluid rising from the magma cannot heat the rock above the magma's temperature.

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.massflow.MassFlowEvents.Trigger;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.volcano.GroundCoupling;
@@ -28,7 +29,7 @@ class MassFlowGroundHeatTest {
         HeatMeter meter = new HeatMeter();
         pdc.setGround(meter);
         Engine e = w.engine(pdc, 1);
-        pdc.release(new BlockPos(8, 0, 32), 3, 2000, temperatureC, 0, Trigger.MANUAL);
+        pdc.release(new ColumnIndex(8, 32), 3, 2000, temperatureC, 0, Trigger.MANUAL);
         w.runUntilStill(e, pdc, 6000);
         return meter.heat;
     }

@@ -44,7 +44,7 @@ class PlumbingDefinitionTest {
     }
 
     private static VolcanoDefinition parse(Map<String, Object> tree) {
-        return VolcanoDefinition.parse("v", ConfigNode.root("volcanoes/v.yaml", tree));
+        return VolcanoDefinition.parse("v", ConfigNode.root("volcanoes/v.yaml", tree), L);
     }
 
     @Test

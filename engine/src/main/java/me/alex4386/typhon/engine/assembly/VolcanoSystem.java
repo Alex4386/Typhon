@@ -27,6 +27,7 @@ import me.alex4386.typhon.engine.massflow.DebrisAvalanches;
 import me.alex4386.typhon.engine.massflow.Lahars;
 import me.alex4386.typhon.engine.massflow.MassFlowConfig;
 import me.alex4386.typhon.engine.massflow.PyroclasticFlows;
+import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.math.BlockPos;
 import me.alex4386.typhon.engine.seismic.SeismicConfig;
 import me.alex4386.typhon.engine.seismic.SeismicityModel;
@@ -92,7 +93,7 @@ public final class VolcanoSystem {
         b.lava.setMetersPerBlock(scaling.metersPerBlock());
         b.terrain.setMetersPerBlock(scaling.metersPerBlock());
 
-        BlockPos primary = vents.get(0).position();
+        BlockPos primary = vents.get(0).block(scaling.metersPerBlock());
         Derived d = derive(b);
         MagmaChamberConfig chamberConfig = d.chamber();
         this.chamber = new MagmaChamber(chamberConfig);
@@ -134,7 +135,7 @@ public final class VolcanoSystem {
         }
 
         if (b.geothermal) {
-            this.geothermal = new Geothermal(volcanoId, d.geothermal(), d.geothermalCenter(), chamber, b.terrain, b.palette,
+            this.geothermal = new Geothermal(volcanoId, d.geothermal(), d.geothermalCenter().surfaceBlock(scaling.metersPerBlock()), chamber, b.terrain, b.palette,
                     vents, subsurface);
             subsurface.setHeatSources(volcanoId, geothermal);
         } else {
@@ -229,17 +230,17 @@ public final class VolcanoSystem {
      */
     record Derived(MagmaChamberConfig chamber, List<MagmaChamberConfig> extraChambers,
             List<me.alex4386.typhon.engine.magma.plumbing.ConnectionConfig> connections, SeismicConfig seismic, AlertConfig alert, DikeConfig dike,
-            TephraConfig tephra, GeothermalConfig geothermal, BlockPos geothermalCenter, MassFlowConfig pdc,
+            TephraConfig tephra, GeothermalConfig geothermal, Point3 geothermalCenter, MassFlowConfig pdc,
             MassFlowConfig lahar, MassFlowConfig avalanche, DeformationConfig deformation, GeomorphConfig geomorph,
             me.alex4386.typhon.engine.world.SurfaceDetailConfig detail) {}
 
     static Derived derive(Builder b) {
         VolcanoScaling scaling = b.scaling;
         String volcanoId = b.volcanoId;
-        BlockPos primary = b.vents.get(0).position();
+        Point3 primary = b.vents.get(0).position();
         MagmaChamberConfig chamberConfig = (b.chamberConfig != null
                         ? b.chamberConfig.toBuilder()
-                        : MagmaChamberConfig.builder(volcanoId, defaultChamberCenter(primary)))
+                        : MagmaChamberConfig.builder(volcanoId, defaultChamberCenter(b.vents.get(0), scaling.metersPerBlock())))
                 .build();
         if (!chamberConfig.volcanoId().equals(volcanoId)) {
             throw new IllegalArgumentException("Chamber config is for volcano " + chamberConfig.volcanoId());
@@ -271,14 +272,14 @@ public final class VolcanoSystem {
         }
 
         GeothermalConfig geothermal = null;
-        BlockPos geothermalCenter = null;
+        Point3 geothermalCenter = null;
         if (b.geothermal) {
             geothermal = b.geothermalConfig != null ? b.geothermalConfig : new GeothermalConfig();
             if (b.geothermalPrewarmSeconds >= 0) geothermal.prewarmSeconds = b.geothermalPrewarmSeconds;
-            BlockPos chamberCenter = chamberConfig.center();
+            Point3 chamberCenter = chamberConfig.center();
             geothermalCenter = b.geothermalCenter != null
                     ? b.geothermalCenter
-                    : new BlockPos(chamberCenter.x(), primary.y(), chamberCenter.z());
+                    : new Point3(chamberCenter.x(), primary.y(), chamberCenter.z());
         }
 
         MassFlowConfig pdc = null;
@@ -315,8 +316,9 @@ public final class VolcanoSystem {
     }
 
     /** Chamber a few dozen blocks under the primary vent, kept inside the overworld. */
-    public static BlockPos defaultChamberCenter(BlockPos vent) {
-        return new BlockPos(vent.x(), Math.max(-56, vent.y() - 48), vent.z());
+    public static Point3 defaultChamberCenter(VentSite vent, double l) {
+        BlockPos v = vent.block(l);
+        return Point3.ofBlock(new BlockPos(v.x(), Math.max(-56, v.y() - 48), v.z()), l);
     }
 
     public static Builder builder(String volcanoId, List<VentSite> vents, TerrainModel terrain, LavaFlow lava) {
@@ -436,7 +438,7 @@ public final class VolcanoSystem {
         private double windSpeed;
         private double windBearing;
         private double windVariability;
-        private BlockPos geothermalCenter;
+        private Point3 geothermalCenter;
         private double geothermalPrewarmSeconds = -1;
         private Subsurface subsurface;
         private SubsurfaceConfig subsurfaceConfig;
@@ -482,7 +484,7 @@ public final class VolcanoSystem {
          * Centre of the geothermal grid. Defaults to the volcano centre: above the magma chamber, at the
          * primary vent's height.
          */
-        public Builder geothermalCenter(BlockPos center) { this.geothermalCenter = Objects.requireNonNull(center); return this; }
+        public Builder geothermalCenter(Point3 center) { this.geothermalCenter = Objects.requireNonNull(center); return this; }
 
         /**
          * Physical seconds of subsurface spin-up run once on the first step with terrain (overrides

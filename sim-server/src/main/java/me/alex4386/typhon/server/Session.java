@@ -332,8 +332,8 @@ final class Session implements AutoCloseable {
         for (VolcanoSystem v : scenario.volcanoes()) {
             double physical = v.chamber().physicalDepthM();
             var c = v.chamber().chamberCenter();
-            double g = world.surfaceZ(c.x(), c.z());
-            double blockDepth = g - (c.y() + 0.5) * map.cell - 2 * map.cell;
+            double g = world.surfaceZ(c.columnX(map.cell), c.columnZ(map.cell));
+            double blockDepth = g - c.y() - 2 * map.cell;
             if (Double.isFinite(physical) && Double.isFinite(g) && blockDepth > 0) {
                 scale = Math.max(1, (physical - 2 * map.cell) / blockDepth);
                 break;
@@ -1331,7 +1331,7 @@ final class Session implements AutoCloseable {
         java.util.function.Function<String, Double> f = k -> fields != null && fields.has(k) && !fields.get(k).isJsonNull()
                 ? fields.get(k).getAsDouble() : null;
         Double depth = f.apply("depthM");
-        var request = new me.alex4386.typhon.engine.config.ChamberPlacement.Request(name, cx, cz,
+        var request = new me.alex4386.typhon.engine.config.ChamberPlacement.Request(name, x, y,
                 depth != null ? depth : me.alex4386.typhon.engine.config.ChamberPlacement.defaultOf("depthM"),
                 f.apply("volumeM3"), f.apply("temperatureC"), f.apply("silicaWt"), f.apply("waterWt"), f.apply("co2Wt"),
                 f.apply("crystalFraction"), f.apply("supplyRateM3PerS"), f.apply("tensileStrengthMPa"),
@@ -1389,12 +1389,10 @@ final class Session implements AutoCloseable {
         switch (op.op()) {
             case "addChamber" -> {
                 if (op.at() == null) throw new IllegalArgumentException("addChamber needs at: [x, y]");
-                int cx = map.columnAtX(op.at()[0]);
-                int cz = map.columnAtY(op.at()[1]);
-                double ground = groundAt(cx, cz);
+                double ground = groundAt(map.columnAtX(op.at()[0]), map.columnAtY(op.at()[1]));
                 if (chamberId == null) chamberId = freeId(ids(chambers), "chamber-");
                 if (chamberId.equals(main) || ids(chambers).contains(chamberId)) throw new IllegalArgumentException("Chamber " + chamberId + " exists");
-                chambers.add(me.alex4386.typhon.engine.config.ChamberPlacement.chamberElement(chamberId, placementRequest(cx, cz, fields), ground, l));
+                chambers.add(me.alex4386.typhon.engine.config.ChamberPlacement.chamberElement(chamberId, placementRequest(op.at()[0], op.at()[1], fields), ground, l));
             }
             case "editChamber" -> {
                 if (chamberId == null) throw new IllegalArgumentException("editChamber needs chamberId");
@@ -1406,20 +1404,21 @@ final class Session implements AutoCloseable {
                     if (target == null) throw new IllegalArgumentException("No chamber " + chamberId);
                 }
                 Map<String, Object> center = new java.util.LinkedHashMap<>((Map<String, Object>) target.get("center"));
-                int cx = ((Number) center.get("x")).intValue();
-                int cz = ((Number) center.get("z")).intValue();
+                // centres are map metres {x, y, elevation}
+                double cx = ((Number) center.get("x")).doubleValue();
+                double cy = ((Number) center.get("y")).doubleValue();
                 if (op.at() != null) {
-                    cx = map.columnAtX(op.at()[0]);
-                    cz = map.columnAtY(op.at()[1]);
+                    cx = op.at()[0];
+                    cy = op.at()[1];
                 }
                 double depth = fields.has("depthM") ? fields.get("depthM").getAsDouble() : ((Number) target.get("lithostaticDepth")).doubleValue();
                 Map<String, Object> changed = new java.util.LinkedHashMap<>();
                 if (op.at() != null || fields.has("depthM")) {
-                    double ground = groundAt(cx, cz);
+                    double ground = groundAt(map.columnAtX(cx), map.columnAtY(cy));
                     Map<String, Object> c = new java.util.LinkedHashMap<>();
                     c.put("x", cx);
-                    c.put("y", me.alex4386.typhon.engine.config.ChamberPlacement.blockBelow(ground - depth, l));
-                    c.put("z", cz);
+                    c.put("y", cy);
+                    c.put("elevation", ground - depth);
                     changed.put("center", c);
                     changed.put("lithostaticDepth", depth);
                 }
@@ -1487,10 +1486,10 @@ final class Session implements AutoCloseable {
         return ground;
     }
 
-    private static me.alex4386.typhon.engine.config.ChamberPlacement.Request placementRequest(int cx, int cz, JsonObject fields) {
+    private static me.alex4386.typhon.engine.config.ChamberPlacement.Request placementRequest(double x, double y, JsonObject fields) {
         java.util.function.Function<String, Double> f = k -> fields.has(k) && !fields.get(k).isJsonNull() ? fields.get(k).getAsDouble() : null;
         Double depth = f.apply("depthM");
-        return new me.alex4386.typhon.engine.config.ChamberPlacement.Request(null, cx, cz,
+        return new me.alex4386.typhon.engine.config.ChamberPlacement.Request(null, x, y,
                 depth != null ? depth : me.alex4386.typhon.engine.config.ChamberPlacement.defaultOf("depthM"),
                 f.apply("volumeM3"), f.apply("temperatureC"), f.apply("silicaWt"), f.apply("waterWt"), f.apply("co2Wt"),
                 f.apply("crystalFraction"), f.apply("supplyRateM3PerS"), f.apply("tensileStrengthMPa"), f.apply("initialOverpressureMPa"));
@@ -1706,7 +1705,7 @@ final class Session implements AutoCloseable {
             // keyframe never touches the world's own history logs.
             WorldDirectory dir = new WorldDirectory(source.worldDir());
             WorldDefinition definition = dir.readWorld();
-            World world = World.reopen(definition, dir.readVolcanoes(), best.store(), new InMemorySaveStore(),
+            World world = World.reopen(definition, dir.readVolcanoes(definition.spec().metersPerColumn()), best.store(), new InMemorySaveStore(),
                     World.ChangePolicy.ACCEPT);
             restored = Scenario.fromWorld(definition.name(), world, WorldScenarios.terrain(definition, source.worldDir()),
                     true);

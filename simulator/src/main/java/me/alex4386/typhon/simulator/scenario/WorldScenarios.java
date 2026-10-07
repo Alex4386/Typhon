@@ -254,7 +254,7 @@ public final class WorldScenarios {
                             initialOverpressureMPa: 14.0, initialSilicaWt: 50, rechargeSilicaWt: 50,
                             initialWaterWt: 0.5, rechargeWaterWt: 0.5}
                 geothermal: {radius: 64}
-                """));
+                """), 4);
         VolcanoDefinition west = VolcanoDefinition.parse("west", Yaml.parse("west.yaml", """
                 name: West cone (andesitic, quiet)
                 vents: [{id: summit, kind: crater, x: -80, y: 121, z: 0, radius: 5}]
@@ -264,7 +264,7 @@ public final class WorldScenarios {
                             initialTemperatureC: 1000}
                 geothermal: {radius: 64, maxGeysers: 4}
                 edifice: {material: andesite, radius: 140}
-                """));
+                """), 4);
         new WorldDirectory(out).writeDefinitions(world, List.of(east, west), HEADER + "# Example world 'twin'.\n");
     }
 

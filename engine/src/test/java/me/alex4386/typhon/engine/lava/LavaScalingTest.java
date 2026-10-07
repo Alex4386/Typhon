@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.ColumnIndex;
 import me.alex4386.typhon.engine.sim.Engine;
 import org.junit.jupiter.api.Test;
 
@@ -48,7 +49,7 @@ class LavaScalingTest {
         LavaConfig config = LavaConfig.defaults().withMetersPerBlock(metersPerBlock).withCoolingScale(10);
         LavaFlow lava = new LavaFlow(world.terrain, config);
         Engine engine = world.engine(lava, 7);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 4, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 4, BASALT_T, BASALT_SI, 0.1));
         double farthest = 0;
         for (int i = 0; i < 1200; i++) {
             if (i == 200) lava.removeSource("vent");
@@ -66,7 +67,7 @@ class LavaScalingTest {
         world.coarse(5);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(0));
         Engine engine = world.engine(lava, 9);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 3, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 3, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 600);
 
         double[] axis = new double[4];
@@ -112,7 +113,7 @@ class LavaScalingTest {
         world.coarse(10);
         LavaFlow lava = new LavaFlow(world.terrain, LavaConfig.defaults().withCoolingScale(5));
         Engine engine = world.engine(lava, 13);
-        lava.addSource(LavaSource.at("vent", new BlockPos(0, 0, 0), 2, BASALT_T, BASALT_SI, 0.1));
+        lava.addSource(LavaSource.at("vent", new ColumnIndex(0, 0), 2, BASALT_T, BASALT_SI, 0.1));
         world.run(engine, 400);
 
         double period = lava.config().eventPeriodSeconds();

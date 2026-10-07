@@ -156,7 +156,8 @@ public final class SeismicityModel implements Subsystem {
             double t = within(now, dt, i, explosionCount, random);
             double m = GutenbergRichter.sample(
                     random, config.explosionBValue(), config.explosionMinMagnitude(), config.explosionMaxMagnitude());
-            Point3 hypocenter = Point3.ofBlock(config.conduitTop().offset(0, -random.nextInt(0, 10), 0), metersPerBlock);
+            // centre of a block 0–9 blocks below the vent's ground block
+            Point3 hypocenter = config.conduitTop().offset(0, -(random.nextInt(0, 10) + 0.5) * metersPerBlock, 0);
             transientAmplitude += emit(context, t, SeismicEventType.EXPLOSION, m, hypocenter, transientSeconds(1.0, m), false);
         }
         for (QueuedExplosion q : explosions) {
@@ -292,15 +293,15 @@ public final class SeismicityModel implements Subsystem {
      * {@code spreadScale}.
      */
     private Point3 hypocenter(SimRandom random, double tMin, double tMax, double spreadScale) {
-        BlockPos bottom = magma.chamberCenter();
-        BlockPos top = config.conduitTop();
+        Point3 bottom = magma.chamberCenter();
+        Point3 top = config.conduitTop();
         double u = random.nextDouble();
         double t = tMin + (tMax - tMin) * u * u;
-        double spread = config.hypocenterSpread() * spreadScale * (1 - 0.5 * t);
+        double spread = config.hypocenterSpread() * spreadScale * (1 - 0.5 * t) * metersPerBlock; // spread is in blocks
         double x = bottom.x() + t * (top.x() - bottom.x()) + random.nextGaussian() * spread;
         double y = bottom.y() + t * (top.y() - bottom.y()) + random.nextGaussian() * spread * 0.5;
         double z = bottom.z() + t * (top.z() - bottom.z()) + random.nextGaussian() * spread;
-        return Point3.ofBlocks(x, y, z, metersPerBlock); // continuous: no rounding to blocks
+        return new Point3(x, y, z); // continuous: no rounding to blocks
     }
 
     private static double clamp01(double v) {

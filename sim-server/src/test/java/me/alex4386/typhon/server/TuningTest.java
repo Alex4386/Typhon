@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.math.BlockPos;
+import me.alex4386.typhon.engine.math.Point3;
 import org.junit.jupiter.api.Test;
 
 class TuningTest {
@@ -28,7 +29,7 @@ class TuningTest {
 
     @Test
     void largeInjectionsAreFlagged() {
-        MagmaChamber chamber = new MagmaChamber(MagmaChamberConfig.builder("v", new BlockPos(0, -40, 0)).volume(5e7).build());
+        MagmaChamber chamber = new MagmaChamber(MagmaChamberConfig.builder("v", Point3.ofBlock(new BlockPos(0, -40, 0), 1)).volume(5e7).build());
         assertNull(Tuning.injectionWarning(1e6, chamber));
         String note = Tuning.injectionWarning(1e9, chamber);
         assertNotNull(note);
