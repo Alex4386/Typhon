@@ -1,4 +1,5 @@
 import { OrbitControls } from '@react-three/drei';
+import { virtualPad } from './virtualPad';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useRef, type ComponentRef } from 'react';
 import * as THREE from 'three';
@@ -630,6 +631,9 @@ export function CameraRig({ world }: { world: WorldInfo }) {
       dh += deadzone(pad.axes[2] ?? 0) * 2.2 * dt;
       dp -= deadzone(pad.axes[3] ?? 0) * 1.6 * dt;
     }
+    // on-screen look stick (touch screens)
+    dh += virtualPad.lookX * 2.2 * dt;
+    dp += virtualPad.lookY * 1.6 * dt;
     s.heading = wrapAngle(s.heading + dh);
     s.pitch = clampPitch(s.pitch + dp);
   }
@@ -652,6 +656,9 @@ export function CameraRig({ world }: { world: WorldInfo }) {
       right += deadzone(pad.axes[0] ?? 0);
       up += (pad.buttons[7]?.value ?? 0) - (pad.buttons[6]?.value ?? 0);
     }
+    fwd += virtualPad.moveY;
+    right += virtualPad.moveX;
+    up += virtualPad.up;
     const d = directionOf(s.heading, s.pitch, tmp.current.dir);
     // forward follows the view (including pitch); strafe is horizontal; up is world up
     const sx = Math.cos(s.heading);
@@ -676,6 +683,8 @@ export function CameraRig({ world }: { world: WorldInfo }) {
       fwd -= deadzone(pad.axes[1] ?? 0);
       right += deadzone(pad.axes[0] ?? 0);
     }
+    fwd += virtualPad.moveY;
+    right += virtualPad.moveX;
     const len = Math.hypot(fwd, right);
     const speed = walkSpeed(run, slow);
     const eye = EYE_HEIGHT * si.vExag;

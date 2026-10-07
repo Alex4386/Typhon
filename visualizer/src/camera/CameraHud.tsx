@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bookmark, CircleHelp, Crosshair, Grid2x2, MoveUp, Plus, Settings, SplitSquareVertical, Trash2, X } from 'lucide-react';
+import { Bookmark, CircleHelp, Crosshair, Grid2x2, MoveUp, Plus, Settings, SplitSquareVertical, Trash2, Video, X } from 'lucide-react';
+import { NARROW_VIEWPORT, useMediaQuery } from '../util/useMediaQuery';
 import { SimpleSelect, SliderRow, SwitchRow } from '@/components/fields';
 import { Tip } from '@/components/tip';
 import { Button } from '@/components/ui/button';
@@ -68,6 +69,7 @@ export function CameraBar({ world }: { world: WorldInfo }) {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
   const full = useStore((s) => s.showCameraTools);
+  const narrow = useMediaQuery(NARROW_VIEWPORT);
   const modes = full ? CAMERA_MODES : CAMERA_MODES.filter((m) => m === 'orbit' || m === 'fly' || m === 'walk' || m === mode);
 
   const builtins = builtinBookmarks(sceneInfo(world));
@@ -83,6 +85,36 @@ export function CameraBar({ world }: { world: WorldInfo }) {
     set({ bookmarks: list });
     saveBookmarks(world.name, list);
   };
+
+  if (narrow) {
+    // phones: the mode in one menu, plus framing; everything else lives in View settings
+    return (
+      <div className={cn(OVERLAY, 'flex shrink-0 items-center gap-1 p-1')} role="toolbar" aria-label="Camera">
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button size="sm" variant="ghost" aria-label={`Camera mode: ${MODE_LABEL[mode].label}`} />}>
+            <Video /> <span className="text-xs">{MODE_LABEL[mode].label}</span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="end" className="w-auto min-w-48">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Camera</DropdownMenuLabel>
+              {CAMERA_MODES.map((m) => (
+                <DropdownMenuItem key={m} onClick={() => req({ kind: 'mode', mode: m })} className={cn(mode === m && 'bg-accent/50')}>
+                  {MODE_LABEL[m].label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => req({ kind: 'frame', what: 'overview' })}>
+              <Grid2x2 /> Whole world
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button size="icon-sm" variant="ghost" aria-label={hasSelection ? 'Frame the selection' : 'Frame the volcano'} onClick={() => req(hasSelection ? { kind: 'frameSelection' } : { kind: 'frame', what: 'volcano' })}>
+          <Crosshair />
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className={cn(OVERLAY, 'flex max-w-full shrink-0 flex-col gap-1 p-1.5')}>

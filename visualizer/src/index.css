@@ -6,6 +6,15 @@
 @custom-variant dark (&:is(.dark *));
 /* Short viewports (laptops with a docked browser bar, landscape tablets): the HUD condenses. */
 @custom-variant short (@media (max-height: 640px));
+/* Phone layout (see NARROW_VIEWPORT): narrow screens and short touch screens (phones in landscape). */
+@custom-variant phone {
+  @media (max-width: 639.98px) {
+    @slot;
+  }
+  @media (pointer: coarse) and (max-height: 500px) {
+    @slot;
+  }
+}
 
 @theme inline {
     --font-heading: var(--font-sans);
@@ -130,4 +139,33 @@
   html {
     @apply font-sans;
     }
+  /* An app, not a page: no rubber-band scroll, pull-to-refresh or page pinch-zoom (the 3D view has its
+     own gestures; sheets and panels scroll inside themselves). */
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    position: fixed;
+    inset: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Touch screens: every control is at least 44 px (Apple HIG / WCAG 2.5.5 target size). */
+  @media (pointer: coarse) {
+    [data-slot='button'],
+    [data-slot='tabs-trigger'],
+    [role='menuitem'],
+    [role='menuitemcheckbox'],
+    [role='menuitemradio'],
+    [role='option'] {
+      min-height: 44px;
+    }
+    [data-slot='button']:has(> svg:only-child),
+    [data-slot='button'][data-size^='icon'] {
+      min-width: 44px;
+    }
+  }
 }

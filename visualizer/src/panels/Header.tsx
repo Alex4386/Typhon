@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, ChevronDown, Gauge, Globe, Hammer, History, List, Pause, Play, Plus, ScrollText, Settings2, SkipForward, SlidersHorizontal, SquareSplitVertical, type LucideIcon } from 'lucide-react';
+import { Activity, ChevronDown, CircleHelp, Gauge, Globe, Hammer, History, List, Menu, Pause, Play, Plus, ScrollText, Search, Settings2, SkipForward, SlidersHorizontal, SquareSplitVertical, type LucideIcon } from 'lucide-react';
 import { CheckboxRow, SwitchRow } from '@/components/fields';
 import { Tip } from '@/components/tip';
 import { Badge } from '@/components/ui/badge';
@@ -87,7 +87,7 @@ export function Clock() {
   return (
     <Tip content={title}>
       <div className="flex flex-col items-end leading-none whitespace-nowrap" data-testid="clock">
-        <span className="font-mono text-sm tabular-nums">
+        <span className="font-mono text-sm tabular-nums phone:text-xs">
           {formatSimTime(now, fine)}
           {clock?.replay && (
             <Badge variant="destructive" className="ml-2 align-middle">
@@ -185,17 +185,17 @@ export function Playback() {
           disabled={replay}
           aria-label={playing ? 'Pause' : 'Play'}
           onClick={() => send(playing ? { type: 'transport', mode: 'PAUSED' } : { type: 'transport', mode: 'REALTIME', speed })}
-          className="w-20"
+          className="w-20 phone:w-auto"
         >
           {playing ? <Pause /> : <Play />}
-          {playing ? 'Pause' : 'Play'}
+          <span className="phone:hidden">{playing ? 'Pause' : 'Play'}</span>
         </Button>
       </Tip>
       <SpeedMenu />
       <DropdownMenu>
         <Tip content="Step forward by a fixed time, or rewind to watch again">
-          <DropdownMenuTrigger render={<Button size="sm" variant="outline" disabled={replay} />}>
-            <SkipForward /> Step <ChevronDown data-icon="inline-end" />
+          <DropdownMenuTrigger render={<Button size="sm" variant="outline" disabled={replay} aria-label="Step" />}>
+            <SkipForward /> <span className="phone:hidden">Step</span> <ChevronDown data-icon="inline-end" className="phone:hidden" />
           </DropdownMenuTrigger>
         </Tip>
         <DropdownMenuContent className="w-auto min-w-52">
@@ -225,6 +225,54 @@ export function Playback() {
         </Tip>
       )}
     </div>
+  );
+}
+
+/**
+ * Phones: one menu for everything the header has no room for (panels, worlds, search, help); the
+ * header keeps play/pause, the speed and the clock.
+ */
+export function MobileMenu() {
+  const sessions = useStore((s) => s.sessions);
+  const sessionId = useStore((s) => s.sessionId);
+  const drawer = useStore((s) => s.drawer);
+  const set = useStore((s) => s.set);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label="Menu" />}>
+        <Menu />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-h-[75dvh] w-64 overflow-y-auto">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Panels</DropdownMenuLabel>
+          {DRAWER_TABS.map((d) => (
+            <DropdownMenuItem key={d.tab} onClick={() => set({ drawer: drawer === d.tab ? null : d.tab })} className={cn(drawer === d.tab && 'bg-accent/50')}>
+              <d.icon /> {d.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+        {sessions.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Worlds</DropdownMenuLabel>
+              {sessions.map((x) => (
+                <DropdownMenuItem key={x.id} onClick={() => attachSession(x.id)} className={cn(x.id === sessionId && 'bg-accent/50')}>
+                  <Globe /> <span className="flex-1 truncate">{sessionLabel(x)}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+          </>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => set({ paletteOpen: true })}>
+          <Search /> Find…
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => set({ guideOpen: true })}>
+          <CircleHelp /> Quick guide
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

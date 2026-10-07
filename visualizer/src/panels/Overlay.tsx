@@ -14,7 +14,7 @@ import type { ParamSpec, ParamValue, SimCommand, VolcanoState, WorldInfo } from 
 import { useStore, type Tool } from '../store/store';
 import { ALERT_COLORS } from '../util/color';
 import { worldExtent } from '../util/world';
-import { SHORT_VIEWPORT, useMediaQuery } from '../util/useMediaQuery';
+import { NARROW_VIEWPORT, SHORT_VIEWPORT, useMediaQuery } from '../util/useMediaQuery';
 import { ALERT_LABEL, REGIME_LABEL, STYLE_LABEL } from './events';
 import { FALLBACK_INJECT_FIELDS, MAGMA_PRESETS, fieldError, formatVolume, injectWarnings, mixPreview } from './inject';
 import { injectFieldsFor } from './actions';
@@ -47,9 +47,12 @@ export function StatusCard({ world }: { world: WorldInfo }) {
   const { id, name, vs } = useVolcano(world);
   const setStore = useStore((s) => s.set);
   const set = useStore((s) => s.set);
+  // short viewports and phones start with the one-line summary (a pill); a tap expands it
   const short = useMediaQuery(SHORT_VIEWPORT);
-  const [collapsed, setCollapsed] = useState(short);
-  useEffect(() => setCollapsed(short), [short]); // short viewports start with the one-line summary
+  const narrow = useMediaQuery(NARROW_VIEWPORT);
+  const compact = short || narrow;
+  const [collapsed, setCollapsed] = useState(compact);
+  useEffect(() => setCollapsed(compact), [compact]);
   if (!id) {
     // an empty world: nothing here until the user places a magma chamber
     return (
@@ -75,8 +78,8 @@ export function StatusCard({ world }: { world: WorldInfo }) {
   const erupting = (vs?.chamber.eruptionRate ?? 0) > 0 || level === 'ERUPTING';
   const pressure = vs && vs.chamber.tensileStrengthMPa > 0 ? vs.chamber.overpressureMPa / vs.chamber.tensileStrengthMPa : null;
   return (
-    <section className={`${OVERLAY} flex max-h-full min-h-0 w-72 max-w-full flex-col p-3 text-sm`} aria-label="Volcano status">
-      <div className="flex shrink-0 items-center gap-2">
+    <section className={`${OVERLAY} flex max-h-full min-h-0 w-72 max-w-full flex-col p-3 text-sm phone:w-auto phone:p-2`} aria-label="Volcano status">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         {world.volcanoes.length > 1 ? (
           <SimpleSelect label="Volcano" value={id} onChange={(v) => set({ selectedVolcano: v })} options={world.volcanoes.map((v) => [v.id, v.name] as const)} />
         ) : (
@@ -315,27 +318,27 @@ export function ActionBar({ world }: { world: WorldInfo }) {
         {!id ? null : erupting ? (
           <Tip content="End the eruption now" side="top">
             <Button variant="destructive" size="sm" disabled={replay} onClick={() => command({ kind: 'stopEruption', volcanoId: id })}>
-              <Square /> <span className="short:hidden">Stop eruption</span>
+              <Square /> <span className="short:hidden phone:hidden">Stop eruption</span>
             </Button>
           </Tip>
         ) : (
           <Tip content="Open a vent and start an eruption now, whatever the pressure" side="top">
             <Button size="sm" disabled={replay} onClick={() => command({ kind: 'startEruption', volcanoId: id })}>
-              <Triangle /> <span className="short:hidden">Start eruption</span>
+              <Triangle /> <span className="short:hidden phone:hidden">Start eruption</span>
             </Button>
           </Tip>
         )}
         {id && (
           <Tip content="Add a batch of magma with chosen temperature and composition" side="top">
             <Button variant="secondary" size="sm" disabled={replay} onClick={() => set({ injectFor: id })}>
-              <Plus /> <span className="short:hidden">Add magma…</span>
+              <Plus /> <span className="short:hidden phone:hidden">Add magma…</span>
             </Button>
           </Tip>
         )}
         <DropdownMenu>
           <Tip content="More actions and map tools" side="top">
             <DropdownMenuTrigger render={<Button variant="secondary" size="sm" />}>
-              <Wrench /> <span className="short:hidden">Tools</span> <ChevronUp data-icon="inline-end" />
+              <Wrench /> <span className="short:hidden phone:hidden">Tools</span> <ChevronUp data-icon="inline-end" />
             </DropdownMenuTrigger>
           </Tip>
           <DropdownMenuContent side="top" className="w-auto min-w-60">

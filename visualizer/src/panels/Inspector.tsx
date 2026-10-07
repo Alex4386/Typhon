@@ -41,7 +41,7 @@ function inspectAt(sel: Selection | null, e: EntityView | undefined): [number, n
  * Properties of what is selected in the 3D view or the Entities panel, live: the entity's own
  * values plus everything the server knows about the ground column there (layers, heat, water).
  */
-export function Inspector({ world }: { world: WorldInfo }) {
+export function Inspector({ world, sheet = false }: { world: WorldInfo; sheet?: boolean }) {
   const selection = useStore((s) => s.selection);
   const entity = useStore((s) => (s.selection?.type === 'entity' ? s.entities[s.selection.id] : undefined));
   const inspection = useStore((s) => s.inspection);
@@ -96,7 +96,7 @@ export function Inspector({ world }: { world: WorldInfo }) {
   const settings = toggles.length > 0 || (entity?.kind === 'chamber' && !!entity.volcanoId);
 
   return (
-    <aside className={cn(OVERLAY, 'flex max-h-full min-h-0 w-80 max-w-full flex-col text-sm')} aria-label="Inspector">
+    <aside className={sheet ? 'flex min-h-0 flex-1 flex-col text-sm' : cn(OVERLAY, 'flex max-h-full min-h-0 w-80 max-w-full flex-col text-sm')} aria-label="Inspector">
       <div className="flex items-start gap-2 p-3 pb-2">
         <span className="mt-1 size-3 shrink-0 rounded-full ring-1 ring-black/40" style={{ background: color }} aria-hidden />
         <div className="min-w-0 flex-1">
