@@ -287,7 +287,7 @@ final class Session implements AutoCloseable {
         this.runner = r;
         r.start();
         rateWallNanos = System.nanoTime();
-        rateSimTime = scenario.engine().time();
+        rateSimTime = r.playbackMicros() / 1e6;
         rate = 0;
         droppedSeen = 0;
         summary = summarize(scenario);
@@ -479,9 +479,14 @@ final class Session implements AutoCloseable {
         return summary;
     }
 
+    /**
+     * Measures the achieved rate on the playback clock (the one the clock message carries), not the engine's step
+     * time: a long quiet step at a modest speed advances the engine in one jump every few seconds while the
+     * playback keeps up exactly, so the step time would read as bursts and stalls ("cannot keep up") instead.
+     */
     void updateRate() {
         long now = System.nanoTime();
-        double t = live.engine().time();
+        double t = runner.playbackMicros() / 1e6;
         double wall = (now - rateWallNanos) / 1e9;
         if (wall < 0.5) return;
         double measured = Math.max(0, t - rateSimTime) / wall;
