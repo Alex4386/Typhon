@@ -654,7 +654,7 @@ public abstract class MassFlowField implements Subsystem {
 
     // ── Shared helpers for kinds ──
 
-    /** Bed elevation (m): the world-model surface + uplift, plus deposit not yet written into it. */
+    /** Bed elevation (m): the world-model surface (uplift included), plus deposit not yet written into it. */
     protected final double bed(MassFlowChunk c, int i) {
         return c.bed[i] + c.worldPending[i];
     }
@@ -667,7 +667,7 @@ public abstract class MassFlowField implements Subsystem {
     /** The ground surface at the centre of a column (m). */
     protected final Point3 groundPoint(int x, int z) {
         double s = terrain.world().surfaceZ(x, z);
-        double y = Double.isFinite(s) ? s + terrain.world().uplift(x, z) : 0;
+        double y = Double.isFinite(s) ? s : 0;
         return Point3.columnCentre(x, z, y, dx);
     }
 
@@ -770,7 +770,7 @@ public abstract class MassFlowField implements Subsystem {
     protected final void rereadBed(MassFlowChunk c, int i) {
         WorldModel world = terrain.world();
         double s = world.surfaceZ(c.worldX(i), c.worldZ(i));
-        c.bed[i] = Double.isFinite(s) ? s + world.uplift(c.worldX(i), c.worldZ(i)) : Double.NaN;
+        c.bed[i] = Double.isFinite(s) ? s : Double.NaN;
     }
 
     /** Deposit laid down but not yet written to the world model (m), e.g. for exact accounting. */
@@ -903,7 +903,7 @@ public abstract class MassFlowField implements Subsystem {
         if (c.freshStamp != stamp) refresh(c);
     }
 
-    /** Reads the chunk's bed (world-model surface + uplift) and standing water level. */
+    /** Reads the chunk's bed (world-model surface, uplift included) and standing water level. */
     private void refresh(MassFlowChunk c) {
         c.freshStamp = stamp;
         WorldModel world = terrain.world();
@@ -913,7 +913,7 @@ public abstract class MassFlowField implements Subsystem {
             int x = bx | (i & 15);
             int z = bz | (i >> 4);
             double s = world.surfaceZ(x, z);
-            c.bed[i] = Double.isFinite(s) ? s + world.uplift(x, z) : Double.NaN;
+            c.bed[i] = Double.isFinite(s) ? s : Double.NaN;
             c.waterLevel[i] = world.waterZ(x, z);
         }
     }

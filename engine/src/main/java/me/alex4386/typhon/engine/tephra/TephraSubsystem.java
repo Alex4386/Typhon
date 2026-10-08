@@ -509,7 +509,7 @@ public final class TephraSubsystem implements Subsystem {
         int cx = (int) Math.floor(x / l);
         int cz = (int) Math.floor(z / l);
         double s = world.surfaceZ(cx, cz);
-        return Double.isFinite(s) ? s + world.uplift(cx, cz) : bomb.fallbackGroundZ;
+        return Double.isFinite(s) ? s : bomb.fallbackGroundZ;
     }
 
     /** Integrates one engine step of {@code stepSeconds}; returns the landing point if the bomb reached the ground. */

@@ -80,9 +80,9 @@ class RealPresetsTest {
         ColumnProfile summit = world.column(vent.position().columnX(l) + 3, vent.position().columnZ(l));
         List<LayerView> layers = summit.layers();
         assertEquals(MaterialTable.GRANITE.id(), layers.get(0).material(), "basement cake at the bottom");
-        assertEquals(-2000, layers.get(0).top(), 1e-3);
+        assertEquals(-2000 + summit.uplift(), layers.get(0).top(), 1e-3, "elevations include the deformation");
         assertEquals(MaterialTable.ANDESITE.id(), layers.get(1).material(), "country rock up to the edifice base");
-        assertEquals(1100, layers.get(1).top(), 1e-3);
+        assertEquals(1100 + summit.uplift(), layers.get(1).top(), 1e-3);
         assertEquals(MaterialTable.DACITE.id(), layers.get(2).material(), "dacite edifice");
         assertEquals("st-helens", world.unit(layers.get(2).unit()).volcanoId());
         assertEquals(DepositType.EDIFICE, world.unit(layers.get(2).unit()).type());

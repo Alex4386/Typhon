@@ -128,13 +128,13 @@ public final class BlockProjection {
     public ProjectedColumn project(int x, int z) {
         if (!world.isKnown(x, z)) return null;
         double l = blockSize();
-        double surface = world.surfaceZ(x, z) + world.uplift(x, z);
+        double surface = world.surfaceZ(x, z);
         QuantizationPolicy.Level level = policy.quantize(surface, l);
         BlockId surfaceBlock = hint.surface(x, z, level.groundY());
         if (surfaceBlock == null) {
             // the material at the top of the ground block (a partial top above it is shown by PartialBlocks)
             double groundTop = Math.min(surface, (level.groundY() + 1) * l);
-            surfaceBlock = materialBlock(x, z, groundTop - world.uplift(x, z) - 1e-3 * l);
+            surfaceBlock = materialBlock(x, z, groundTop - 1e-3 * l);
         }
 
         int lavaTop = NONE;
@@ -162,7 +162,7 @@ public final class BlockProjection {
         return new ProjectedColumn(level.groundY(), level.partialEighths(), surfaceBlock, lavaTop, lavaLevel, crust, waterTop);
     }
 
-    /** The block of the material at {@code elevation} (world-model metres, without uplift) in column (x, z). */
+    /** The block of the material at {@code elevation} (world-model metres, uplift included) in column (x, z). */
     private BlockId materialBlock(int x, int z, double elevation) {
         Material m = world.materialAt(x, z, elevation);
         BlockId id = m != null ? palette.block(m) : null;
@@ -197,7 +197,6 @@ public final class BlockProjection {
         ProjectedColumn before = previous != null ? previous
                 : new ProjectedColumn(hostGroundY, 0, hostSurface, NONE, 0, false, NONE);
         double l = blockSize();
-        double uplift = world.uplift(x, z);
         int bg = before.groundY();
         int ng = now.groundY();
         int top = Math.max(before.top(), now.top());
@@ -208,7 +207,7 @@ public final class BlockProjection {
             BlockState next;
             if (y < ng) {
                 if (y <= bg) continue; // buried ground stays as the host shows it
-                next = BlockState.of(materialBlock(x, z, (y + 0.5) * l - uplift));
+                next = BlockState.of(materialBlock(x, z, (y + 0.5) * l));
             } else if (y == ng) {
                 boolean moved = bg != ng;
                 // the host's own surface block is kept until the projection's own surface changes

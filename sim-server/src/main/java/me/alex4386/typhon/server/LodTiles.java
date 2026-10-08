@@ -351,7 +351,7 @@ final class LodTiles {
         return tiles;
     }
 
-    /** Fine-level elevations, column by column: one surface, uplift and detail read per column. */
+    /** Fine-level elevations, column by column: one surface and detail read per column. */
     private float[][] fine(Scenario s, Level l) {
         WorldModel world = s.terrain().world();
         int t = map.tileSize;
@@ -366,7 +366,6 @@ final class LodTiles {
         for (int z = colZ0; z <= colZ1; z++) {
             for (int x = colX0; x <= colX1; x++) {
                 double surface = world.surfaceZ(x, z);
-                double uplift = Double.isNaN(surface) ? 0 : world.uplift(x, z);
                 boolean detailed = false;
                 for (SurfaceDetail d : l.details) {
                     if (d.containsColumn(x, z)) {
@@ -375,13 +374,13 @@ final class LodTiles {
                         break;
                     }
                 }
-                double base = Double.isNaN(surface) ? context.elevation(x + 0.5, z + 0.5) : surface + uplift;
+                double base = Double.isNaN(surface) ? context.elevation(x + 0.5, z + 0.5) : surface;
                 for (int b = 0; b < r; b++) {
                     for (int a = 0; a < r; a++) {
                         int i = x * r + a - map.anchorX * r - l.minI;
                         int j = (map.anchorMaxZ + 1) * r - (z * r + b) - 1 - l.minJ;
                         if (i < 0 || i >= w || j < 0 || j >= l.height()) continue;
-                        double e = detailed && !Float.isNaN(cells[b * r + a]) ? cells[b * r + a] + uplift : base;
+                        double e = detailed && !Float.isNaN(cells[b * r + a]) ? cells[b * r + a] : base;
                         all[j * w + i] = (float) e;
                     }
                 }

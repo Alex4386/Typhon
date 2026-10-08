@@ -26,8 +26,9 @@ import java.util.function.DoubleBinaryOperator;
  * the truth and the detail stays consistent with them.
  *
  * <p>Coordinates: detail cell {@code (fx, fz)} lies in column {@code (floorDiv(fx, r), floorDiv(fz, r))}
- * and covers metres {@code [fx·L/r, (fx+1)·L/r)}. Elevations exclude ground deformation (add
- * {@link WorldModel#uplift} of the column, as for the columns themselves).
+ * and covers metres {@code [fx·L/r, (fx+1)·L/r)}. Elevations include ground deformation, like the column
+ * surfaces the base runs through: the base tilts with the deformed ground, and the residuals take only the
+ * changes of the layers (deposits and erosion), never the column moving as a whole.
  */
 public final class SurfaceDetail {
     /** Below this a column change is not redistributed (m). */
@@ -124,7 +125,7 @@ public final class SurfaceDetail {
     // ── Reading ──
 
     /**
-     * Elevation (m, without uplift) of detail cell ({@code fx}, {@code fz}): the base surface through the
+     * Elevation (m) of detail cell ({@code fx}, {@code fz}): the base surface through the
      * current column surfaces plus the cell's residual. {@code NaN} outside the region or over unknown
      * columns. Does not modify state (safe from readers between steps).
      */
@@ -140,7 +141,7 @@ public final class SurfaceDetail {
     }
 
     /**
-     * Elevations (m, without uplift) of the {@code r × r} cells of column ({@code x}, {@code z}) into
+     * Elevations (m) of the {@code r × r} cells of column ({@code x}, {@code z}) into
      * {@code out}, row-major from its north-west cell ({@code out[j·r + i]} is cell
      * {@code (x·r + i, z·r + j)}); NaN outside the region or over an unknown column. Like
      * {@link #elevation} for every cell, with one column lookup.
@@ -272,7 +273,7 @@ public final class SurfaceDetail {
         int c = columnIndex(x, z);
         int version = world.version(x, z);
         if (!Double.isNaN(seen[c]) && version == seenVersion[c]) return false;
-        double surface = world.surfaceZ(x, z);
+        double surface = layerSurface(x, z);
         if (Double.isNaN(surface)) return false;
         seenVersion[c] = version;
         if (Double.isNaN(seen[c])) {
@@ -426,8 +427,16 @@ public final class SurfaceDetail {
             }
         }
         int c = columnIndex(x, z);
-        seen[c] = world.surfaceZ(x, z);
+        seen[c] = layerSurface(x, z);
         seenVersion[c] = world.version(x, z);
+    }
+
+    /**
+     * The column's surface without its deformation: what deposits and erosion change. Deformation moves the
+     * whole column (and the base with it), so it is not a change for the residual to take.
+     */
+    private double layerSurface(int x, int z) {
+        return world.surfaceZ(x, z) - world.uplift(x, z);
     }
 
     // ── Persistence ──

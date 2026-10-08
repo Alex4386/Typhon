@@ -165,6 +165,7 @@ public final class Geomorphology implements Subsystem {
     static final class AlterationTile {
         final double[] body = new double[ColumnStacks.TILE_AREA];
         final double[] cover = new double[ColumnStacks.TILE_AREA];
+        /** Top of the altered body, in the column's own frame (elevation minus uplift: deformation moves it). */
         final double[] top = new double[ColumnStacks.TILE_AREA];
         AlterationTile() {
             java.util.Arrays.fill(top, Double.NaN);
@@ -292,7 +293,7 @@ public final class Geomorphology implements Subsystem {
         int i = ColumnStacks.localIndex(x, z);
         t.body[i] = RockStrength.clamp01(intensity);
         t.cover[i] = 0;
-        t.top[i] = world.isKnown(x, z) ? world.surfaceZ(x, z) : Double.NaN;
+        t.top[i] = world.isKnown(x, z) ? world.surfaceZ(x, z) - world.uplift(x, z) : Double.NaN;
         active.add(key(x, z));
     }
 
@@ -393,7 +394,7 @@ public final class Geomorphology implements Subsystem {
     private void alter(int x, int z, double dt) {
         AlterationTile t = alteration.get(tileKey(x, z));
         int i = ColumnStacks.localIndex(x, z);
-        double s = world.surfaceZ(x, z);
+        double s = world.surfaceZ(x, z) - world.uplift(x, z); // the column's own frame, like t.top
         double top = t == null || Double.isNaN(t.top[i]) ? s : t.top[i];
         double body = t == null ? 0 : t.body[i];
         double cover = t == null ? 0 : t.cover[i];
@@ -451,7 +452,7 @@ public final class Geomorphology implements Subsystem {
         AlterationTile t = alteration.get(tileKey(x, z));
         if (t == null) return 0;
         int i = ColumnStacks.localIndex(x, z);
-        if (Double.isNaN(t.top[i]) || elevation <= t.top[i]) return t.body[i];
+        if (Double.isNaN(t.top[i]) || elevation - world.uplift(x, z) <= t.top[i]) return t.body[i];
         return t.cover[i];
     }
 
@@ -489,24 +490,24 @@ public final class Geomorphology implements Subsystem {
     }
 
     /** A tile's columns steep enough to shake loose, and what they were worked out from. */
-    private record SteepColumns(long layerVersions, int tileCount, double minSlope, long[] columns) {}
+    private record SteepColumns(long versions, int tileCount, double minSlope, long[] columns) {}
 
     /** Not saved: a pure function of the world, rebuilt on demand. */
     private final Map<Long, SteepColumns> steepColumns = new HashMap<>();
 
     /**
      * Columns of a tile at least {@link GeomorphConfig#minSlope} steep (row by row), worked out again only when
-     * a layer under the tile or its rim changed (or tiles came and went): quakes shake the same slopes many
-     * times over.
+     * a column under the tile or its rim changed, its layers or its uplift (deformation tilts slopes), or tiles
+     * came and went: quakes shake the same slopes many times over.
      */
     private long[] steepColumns(long tileKey, int tx, int tz) {
         int x0 = tx * ColumnStacks.TILE;
         int z0 = tz * ColumnStacks.TILE;
         ColumnStacks stacks = world.stacks();
-        long versions = stacks.layerVersionSum(x0 - 1, z0 - 1, ColumnStacks.TILE + 2, ColumnStacks.TILE + 2);
+        long versions = stacks.versionSum(x0 - 1, z0 - 1, ColumnStacks.TILE + 2, ColumnStacks.TILE + 2);
         int tiles = stacks.tileCount();
         SteepColumns cached = steepColumns.get(tileKey);
-        if (cached != null && cached.layerVersions() == versions && cached.tileCount() == tiles
+        if (cached != null && cached.versions() == versions && cached.tileCount() == tiles
                 && cached.minSlope() == config.minSlope) {
             return cached.columns();
         }
@@ -1339,7 +1340,7 @@ public final class Geomorphology implements Subsystem {
 
     /** The ground surface at the centre of a column (m). */
     private Point3 groundPoint(int x, int z) {
-        double s = world.isKnown(x, z) ? world.surfaceZ(x, z) + world.uplift(x, z) : 0;
+        double s = world.isKnown(x, z) ? world.surfaceZ(x, z) : 0;
         return Point3.columnCentre(x, z, s, world.spec().metersPerColumn());
     }
 

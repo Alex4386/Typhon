@@ -19,6 +19,12 @@ import java.util.TreeMap;
  *
  * <p>Coordinates are integer column indices; elevations are real metres. Columns with no layers are
  * "unknown" (no data yet).
+ *
+ * <p>Ground deformation moves a column as a whole: every elevation this class reports or accepts (surface,
+ * layer tops and bottoms, the ranges of {@link #replaceRange}) includes the column's {@link #uplift}, so slopes,
+ * water depths and heads seen by every process follow the deformed ground. Layers are stored in the column's
+ * own undeformed frame (stored top + uplift = elevation), so deformation going up and back down leaves them
+ * exactly as they were.
  */
 public final class ColumnStacks {
     public static final int TILE = 32;
@@ -74,8 +80,6 @@ public final class ColumnStacks {
         final float[] uplift = new float[TILE_AREA];
         final float[] water = new float[TILE_AREA];
         final int[] version = new int[TILE_AREA];
-        /** How many of the {@link #version} changes were uplift alone (which moves no layer). */
-        final int[] upliftEdits = new int[TILE_AREA];
 
         Tile(int tx, int tz) {
             this.tx = tx;
@@ -320,12 +324,12 @@ public final class ColumnStacks {
         return t == null ? 0 : t.count(local(x, z));
     }
 
-    /** Ground surface elevation (top of the last layer), {@code NaN} if unknown. */
+    /** Ground surface elevation (top of the last layer, uplift included), {@code NaN} if unknown. */
     public double surface(int x, int z) {
         Tile t = tile(x, z);
         if (t == null) return Double.NaN;
         int c = local(x, z);
-        return t.count(c) == 0 ? Double.NaN : t.top[t.start[c + 1] - 1];
+        return t.count(c) == 0 ? Double.NaN : t.top[t.start[c + 1] - 1] + (double) t.uplift[c];
     }
 
     /** Layer {@code i} (0 = bottom) of a column. */
@@ -334,7 +338,8 @@ public final class ColumnStacks {
         int c = local(x, z);
         if (t == null || i < 0 || i >= t.count(c)) throw new IndexOutOfBoundsException("layer " + i);
         int g = t.start[c] + i;
-        return new LayerView(bottom(t, c, g), t.top[g], t.material[g], t.unit[g], dequantize(t.porosity[g]),
+        double u = t.uplift[c];
+        return new LayerView(bottom(t, c, g) + u, t.top[g] + u, t.material[g], t.unit[g], dequantize(t.porosity[g]),
                 dequantize(t.voidFrac[g]), dequantize(t.welding[g]), t.flags[g]);
     }
 
@@ -355,6 +360,7 @@ public final class ColumnStacks {
         int c = local(x, z);
         int s = t.start[c];
         int e = t.start[c + 1];
+        elevation -= t.uplift[c];
         if (e == s || elevation >= t.top[e - 1]) return -1;
         int lo = s;
         int hi = e - 1;
@@ -387,27 +393,9 @@ public final class ColumnStacks {
     }
 
     /**
-     * Sum of the change counters of a rectangle of columns, leaving out uplift: changes whenever the layers of
-     * any column under it are edited (the counters only grow).
-     */
-    public long layerVersionSum(int x0, int z0, int width, int depth) {
-        long sum = 0;
-        for (int z = z0; z < z0 + depth; z++) {
-            for (int x = x0; x < x0 + width; x++) {
-                Tile t = tile(x, z);
-                if (t != null) {
-                    int c = local(x, z);
-                    sum += t.version[c] - t.upliftEdits[c];
-                }
-            }
-        }
-        return sum;
-    }
-
-    /**
-     * Fingerprint of a rectangle of columns: changes whenever the layers of any column under it are edited or
-     * its standing water changes (which {@link #version} does not count); uplift alone does not change it. A
-     * 64-bit mix per column, so per-column caches can skip columns that did not change inside a tile that did.
+     * Fingerprint of a rectangle of columns: changes whenever any column under it is edited (uplift included) or
+     * its standing water changes (which {@link #version} does not count). A 64-bit mix per column, so per-column
+     * caches can skip columns that did not change inside a tile that did.
      */
     public long footprint(int x0, int z0, int width, int depth) {
         long sum = 0;
@@ -416,7 +404,7 @@ public final class ColumnStacks {
                 Tile t = tile(x, z);
                 if (t == null) continue;
                 int c = local(x, z);
-                long h = ((long) (t.version[c] - t.upliftEdits[c]) << 32) ^ (Float.floatToRawIntBits(t.water[c]) & 0xffffffffL);
+                long h = ((long) t.version[c] << 32) ^ (Float.floatToRawIntBits(t.water[c]) & 0xffffffffL);
                 h ^= pack(x, z) * 0x9e3779b97f4a7c15L;
                 h = (h ^ (h >>> 30)) * 0xbf58476d1ce4e5b9L;
                 h = (h ^ (h >>> 27)) * 0x94d049bb133111ebL;
@@ -450,6 +438,7 @@ public final class ColumnStacks {
         return thickness;
     }
 
+    /** How far deformation has moved the column up (m); already part of every elevation of the column. */
     public double uplift(int x, int z) {
         Tile t = tile(x, z);
         return t == null ? 0 : t.uplift[local(x, z)];
@@ -460,7 +449,6 @@ public final class ColumnStacks {
         int c = local(x, z);
         t.uplift[c] = (float) meters;
         t.version[c]++;
-        t.upliftEdits[c]++;
         editCount++;
     }
 
@@ -480,23 +468,27 @@ public final class ColumnStacks {
     /** One layer for {@link #setLayers}: it reaches from the previous top (or datum) to {@code top}. */
     public record LayerSpec(double top, short material, int unit, double porosity, double welding, int flags) {}
 
-    /** Replaces a whole column (import). Tops must increase and lie above the datum. */
+    /**
+     * Replaces a whole column (import). Tops are elevations (the column's uplift included, like every elevation
+     * this class reports), must increase and lie above the datum.
+     */
     public void setLayers(int x, int z, List<LayerSpec> layers) {
         Tile t = tileOrCreate(x, z);
         int c = local(x, z);
+        double u = t.uplift[c];
         int existing = t.count(c);
         if (existing > 0) t.remove(c, t.start[c], existing);
         double previous = datumZ;
         List<LayerSpec> kept = new ArrayList<>();
         for (LayerSpec layer : layers) {
-            if (layer.top() - previous < EPS) continue;
+            if (layer.top() - u - previous < EPS) continue;
             kept.add(layer);
-            previous = layer.top();
+            previous = layer.top() - u;
         }
         t.insert(c, t.start[c], kept.size());
         int g = t.start[c];
         for (LayerSpec layer : kept) {
-            t.set(g++, layer.top(), layer.material(), layer.unit(), quantize(layer.porosity()), (byte) 0,
+            t.set(g++, layer.top() - u, layer.material(), layer.unit(), quantize(layer.porosity()), (byte) 0,
                     quantize(layer.welding()), (byte) layer.flags());
         }
         enforceCap(t, c);
@@ -529,18 +521,18 @@ public final class ColumnStacks {
                             t.flags[g]);
                 }
             } else {
+                double u = t.uplift[c];
                 double previous = datumZ;
                 for (LayerSpec layer : r) {
-                    if (layer.top() - previous < EPS) continue;
-                    fresh.set(pos++, layer.top(), layer.material(), layer.unit(), quantize(layer.porosity()), (byte) 0,
-                            quantize(layer.welding()), (byte) layer.flags());
-                    previous = layer.top();
+                    if (layer.top() - u - previous < EPS) continue;
+                    fresh.set(pos++, layer.top() - u, layer.material(), layer.unit(), quantize(layer.porosity()),
+                            (byte) 0, quantize(layer.welding()), (byte) layer.flags());
+                    previous = layer.top() - u;
                 }
             }
             fresh.uplift[c] = t.uplift[c];
             fresh.water[c] = t.water[c];
             fresh.version[c] = t.version[c] + (r != null ? 1 : 0);
-            fresh.upliftEdits[c] = t.upliftEdits[c];
         }
         fresh.start[TILE_AREA] = pos;
         for (int c : replacements.keySet()) enforceCap(fresh, c);
@@ -674,6 +666,8 @@ public final class ColumnStacks {
         int c = local(x, z);
         if (t.count(c) == 0) return ErodeResult.NONE;
         double surface = t.top[t.start[c + 1] - 1];
+        zLo -= t.uplift[c]; // elevations to the column's own (undeformed) frame
+        zHi -= t.uplift[c];
         zLo = Math.max(zLo, datumZ);
         zHi = Math.min(zHi, surface);
         if (zHi - zLo < EPS) return ErodeResult.NONE;

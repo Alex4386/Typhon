@@ -173,12 +173,15 @@ class DeformationModelTest {
         assertEquals(target, world.uplift(0, 0), 1e-5 * target, "the world model carries the modelled uplift");
         assertEquals(w.model().upliftAt(4.5 * COLUMN_M, 0.5 * COLUMN_M), world.uplift(4, 0), 1e-5 * target,
                 "a continuous field sampled at column centres");
-        assertEquals(64, world.surfaceZ(0, 0), 1e-9, "uplift is a field, not material added to the stratigraphy");
+        assertEquals(64 + world.uplift(0, 0), world.surfaceZ(0, 0), 1e-9, "the ground moves up with the column");
+        assertEquals(world.spec().datumZ() + world.uplift(0, 0), world.layer(0, 0, 0).bottom(), 1e-9,
+                "every layer moves with it, down to the bottom: no material is added to the stratigraphy");
         assertFalse(events(first, GroundDeformed.class).isEmpty());
 
         magma.overpressure = 0;
         run(w.engine(), 20 * 20);
         assertEquals(0, world.uplift(0, 0), 0.01, "deflation returns the ground");
+        assertEquals(64 + world.uplift(0, 0), world.surfaceZ(0, 0), 1e-9);
     }
 
     @Test

@@ -224,7 +224,7 @@ final class SurfaceWater {
             int z = t.tz * TILE + (i >> 5);
             boolean known = world.isKnown(x, z);
             t.known[i] = known;
-            t.bed[i] = known ? world.surfaceZ(x, z) + world.uplift(x, z) : Double.NaN;
+            t.bed[i] = known ? world.surfaceZ(x, z) : Double.NaN;
             t.level[i] = known ? fixedLevel(x, z, t.bed[i]) : Double.NaN;
             t.fixedMask[i] = !Double.isNaN(t.level[i]);
 
@@ -262,7 +262,7 @@ final class SurfaceWater {
             return t.depth[i];
         }
         if (!world.isKnown(x, z)) return 0;
-        double bed = world.surfaceZ(x, z) + world.uplift(x, z);
+        double bed = world.surfaceZ(x, z);
         double level = fixedLevel(x, z, bed);
         return Double.isNaN(level) ? 0 : Math.max(0, level - bed);
     }
@@ -272,7 +272,7 @@ final class SurfaceWater {
         Tile t = tile(x, z);
         if (t != null) return t.fixed(local(x, z));
         if (!world.isKnown(x, z)) return false;
-        return !Double.isNaN(fixedLevel(x, z, world.surfaceZ(x, z) + world.uplift(x, z)));
+        return !Double.isNaN(fixedLevel(x, z, world.surfaceZ(x, z)));
     }
 
     /** Total stored surface water (m³), excluding open water. */
@@ -386,7 +386,7 @@ final class SurfaceWater {
     private double waterAbove(int x, int z) {
         if (!world.isKnown(x, z)) return 0;
         double w = world.waterZ(x, z);
-        double bed = world.surfaceZ(x, z) + world.uplift(x, z);
+        double bed = world.surfaceZ(x, z);
         return Double.isNaN(w) ? 0 : Math.max(0, w - bed);
     }
 

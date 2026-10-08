@@ -27,7 +27,7 @@ final class MassFlowChunk {
     double[] nextSediment = new double[AREA];
     final double[] outVolume = new double[4 * AREA];  // direction-major volume leaving each cell (m³)
     final double[] outSpeed = new double[4 * AREA];   // pipe speed in that direction after forcing (m/s)
-    /** World-model ground surface + uplift (m), NaN where unknown; refreshed every step. */
+    /** World-model ground surface (m, uplift included), NaN where unknown; refreshed every step. */
     final double[] bed = new double[AREA];
     /** Standing water surface elevation (m), NaN where dry. */
     final double[] waterLevel = new double[AREA];

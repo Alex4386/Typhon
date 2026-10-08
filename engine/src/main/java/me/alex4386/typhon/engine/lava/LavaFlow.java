@@ -42,7 +42,7 @@ import me.alex4386.typhon.engine.save.StateWriter;
  *
  * <p>The automaton runs in physical units: a column is {@code L × L} m ({@link #metersPerColumn()}) and its
  * molten core is {@code h} m thick, so an erupted volume reaches real runout distances. Every column holds a molten core with temperature, SiO₂ and H₂O on top of the world-model ground
- * surface ({@link WorldModel#surfaceZ} + uplift, real metres — so it flows over ash, ignimbrite and
+ * surface ({@link WorldModel#surfaceZ}, uplift included, real metres — so it flows over ash, ignimbrite and
  * earlier lava of any thickness), and optionally a rigid crust above the core. Each cell also carries
  * the stratigraphic unit (volcano, eruption) of its melt, taken from its {@link LavaSource} and
  * following the dominant inflow. Each step:
@@ -1363,7 +1363,7 @@ public final class LavaFlow implements Subsystem {
         int z = (int) key;
         WorldModel world = world();
         double s = world.surfaceZ(x, z);
-        double y = Double.isFinite(s) ? s + world.uplift(x, z) + thickness(x, z) : 0;
+        double y = Double.isFinite(s) ? s + thickness(x, z) : 0;
         return Point3.columnCentre(x, z, y, metersPerColumn());
     }
 
@@ -1416,7 +1416,7 @@ public final class LavaFlow implements Subsystem {
     }
 
     /**
-     * Re-reads the chunk's bed (world-model surface + uplift) and standing water level if any column
+     * Re-reads the chunk's bed (world-model surface, uplift included) and standing water level if any column
      * under it was edited.
      */
     private void refresh(LavaChunk c) {
@@ -1434,7 +1434,7 @@ public final class LavaFlow implements Subsystem {
             int x = x0 | (i & 15);
             int z = z0 | (i >> 4);
             double surface = world.surfaceZ(x, z);
-            c.bed[i] = surface == surface ? surface + world.uplift(x, z) : Double.NaN;
+            c.bed[i] = surface == surface ? surface : Double.NaN;
             c.waterLevel[i] = world.waterZ(x, z);
         }
     }
@@ -1449,7 +1449,7 @@ public final class LavaFlow implements Subsystem {
         int x = c.worldX(i);
         int z = c.worldZ(i);
         double surface = world.surfaceZ(x, z);
-        if (surface == surface) c.bed[i] = surface + world.uplift(x, z);
+        if (surface == surface) c.bed[i] = surface;
         if (c.bedVersion != Long.MIN_VALUE) c.bedVersion += world.version(x, z) - versionBefore;
     }
 

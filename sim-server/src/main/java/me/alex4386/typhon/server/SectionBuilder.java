@@ -95,9 +95,8 @@ final class SectionBuilder {
             int cx = map.columnAtX(p[0]);
             int cz = map.columnAtY(p[1]);
             double ground = relative ? world.surfaceZ(cx, cz) : raster.surfaceZ()[i];
-            double uplift = world.uplift(cx, cz);
             // z offset: absolute elevation = row z + offset (0 for an absolute datum)
-            double offset = relative && Double.isFinite(ground) ? ground + uplift : 0;
+            double offset = relative && Double.isFinite(ground) ? ground : 0;
             if (relative) sampleColumn(world, cx, cz, offset, req, i, relMaterial, relUnit, relVoid);
             double lavaH = lava.thickness(cx, cz);
             double lavaT = lavaH > 0 ? lava.temperatureC(cx, cz) : 0;
@@ -110,12 +109,12 @@ final class SectionBuilder {
             double waterZ = world.waterZ(cx, cz);
             double flowing = sub != null ? sub.surfaceWaterDepthM(cx, cz) : 0;
             if (Double.isFinite(ground) && Double.isFinite(flowing) && flowing > 0.01) {
-                double top = ground + uplift + flowing;
+                double top = ground + flowing;
                 waterZ = Double.isFinite(waterZ) ? Math.max(waterZ, top) : top;
             }
             double tableZ = modelled ? sub.waterTableZ(cx, cz) : Double.NaN;
             double vadose = modelled ? sub.vadoseM(cx, cz) : 0;
-            surface[i] = Double.isFinite(ground) ? (float) (ground + uplift + lavaH - offset) : Float.NaN;
+            surface[i] = Double.isFinite(ground) ? (float) (ground + lavaH - offset) : Float.NaN;
             waterTable[i] = (float) (tableZ - offset);
             for (int k = 0; k < nz; k++) {
                 double z = req.zMin() + (k + 0.5) * dzRow + offset;
@@ -134,7 +133,7 @@ final class SectionBuilder {
                     u = bottom.unit();
                 }
                 if (m.materialClass() == MaterialClass.AIR) {
-                    if (Double.isFinite(ground) && z <= ground + uplift + lavaH && lavaH > 0 && z > ground + uplift) {
+                    if (Double.isFinite(ground) && z <= ground + lavaH && lavaH > 0 && z > ground) {
                         f |= FLAG_MAGMA;
                         t = lavaT;
                     } else if (Double.isFinite(waterZ) && Double.isFinite(ground) && z <= waterZ && z > ground) {

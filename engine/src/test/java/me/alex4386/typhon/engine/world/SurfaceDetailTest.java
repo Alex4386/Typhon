@@ -104,6 +104,21 @@ class SurfaceDetailTest {
     }
 
     @Test
+    void uniformDeformationMovesTheDetailAsAWhole() {
+        WorldModel world = world();
+        SurfaceDetail d = new SurfaceDetail(world, 0, 0, 9, R, SurfaceDetailTest::bowl);
+        d.reconcileAll();
+        double[] before = new double[81 * R * R];
+        for (int k = 0; k < before.length; k++) before[k] = d.elevation(k % (9 * R), k / (9 * R));
+        for (int z = 0; z < 9; z++) for (int x = 0; x < 9; x++) world.setUplift(x, z, 1.5);
+        d.reconcileAll();
+        for (int k = 0; k < before.length; k++) {
+            assertEquals(before[k] + 1.5, d.elevation(k % (9 * R), k / (9 * R)), 1e-4,
+                    "the crater keeps its shape: deformation is not a deposit filling its hollows");
+        }
+    }
+
+    @Test
     void reconcilingIsPathIndependent() {
         WorldModel a = world();
         WorldModel b = world();

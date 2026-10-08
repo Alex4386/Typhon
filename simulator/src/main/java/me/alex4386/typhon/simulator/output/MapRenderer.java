@@ -27,7 +27,7 @@ public final class MapRenderer {
     private final ColumnGrid grid;
     private final int step;
     private final int width;
-    private final double[][] top;      // final ground surface (m): world-model surface + uplift
+    private final double[][] top;      // final ground surface (m): world-model surface (uplift included)
     private final double metersPerColumn;
     private final double[][] initial;  // initial ground surface (m)
 
@@ -45,7 +45,7 @@ public final class MapRenderer {
                 int x = x(i);
                 int z = z(j);
                 initial[j][i] = grid.surfaceZ(x, z);
-                top[j][i] = world.isKnown(x, z) ? world.surfaceZ(x, z) + world.uplift(x, z) : initial[j][i];
+                top[j][i] = world.isKnown(x, z) ? world.surfaceZ(x, z) : initial[j][i];
             }
         }
     }

@@ -84,6 +84,22 @@ class ReposeRelaxationTest {
         assertEquals(0, w.reposeRelaxation().pending());
     }
 
+    @Test
+    void groundTiltedByDeformationSlumpsBackToRepose() {
+        WorldModel w = flat(0);
+        w.deposit(0, 0, 150, MaterialTable.SCORIA, 1, LayerFlags.LOOSE, 0.5, 0);
+        assertTrue(worstExcess(w) <= 1e-4);
+        double before = volume(w, 0);
+        // inflation centred east of the cone: its west flank steepens by a fifth of the column spacing per column
+        for (int x = -R; x <= R; x++) {
+            for (int z = -R; z <= R; z++) w.setUplift(x, z, 0.2 * L * Math.max(0, x + 10));
+        }
+        assertTrue(worstExcess(w) <= 1e-4, "tilted slopes back at repose: " + worstExcess(w));
+        double moved = 0;
+        for (int x = -R; x <= R; x++) for (int z = -R; z <= R; z++) moved += w.uplift(x, z) * L * L;
+        assertEquals(before, volume(w, 0) - moved, 1e-3 * before, "deformation adds no material");
+    }
+
     private static WorldModel sea(double floor) {
         WorldModel w = flat(floor);
         for (int x = -R; x <= R; x++) for (int z = -R; z <= R; z++) w.setWaterZ(x, z, 0);

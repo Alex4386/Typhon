@@ -9,10 +9,13 @@ public interface WorldQuery {
 
     boolean isKnown(int x, int z);
 
-    /** Ground surface elevation, {@code NaN} if unknown. Excludes {@link #uplift}. */
+    /**
+     * Ground surface elevation, {@code NaN} if unknown. Includes {@link #uplift}: every elevation of the world
+     * model is of the deformed ground.
+     */
     double surfaceZ(int x, int z);
 
-    /** Accumulated ground deformation (m) on top of the layers. */
+    /** Accumulated ground deformation (m): already part of {@link #surfaceZ} and every other elevation. */
     double uplift(int x, int z);
 
     /** Standing-water surface elevation, {@code NaN} if dry. */

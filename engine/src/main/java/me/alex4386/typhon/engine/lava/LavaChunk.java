@@ -43,7 +43,7 @@ final class LavaChunk {
      */
     final double[] boilHeat = new double[AREA];
     final double[] groundHeat = new double[AREA];
-    /** World-model ground surface + uplift (m), NaN where unknown: the bed the lava flows on. */
+    /** World-model ground surface (m, uplift included), NaN where unknown: the bed the lava flows on. */
     final double[] bed = new double[AREA];
     long bedVersion = Long.MIN_VALUE; // world version sum the bed cache was read at
     long seenEdits = Long.MIN_VALUE; // world edit counter at the last bed check (transient)

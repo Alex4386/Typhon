@@ -242,7 +242,7 @@ public final class Lahars extends MassFlowField {
             int nz = z + DZ[d];
             double s = world.surfaceZ(nx, nz);
             if (!Double.isFinite(s)) continue;
-            double substrate = s + world.uplift(nx, nz)
+            double substrate = s
                     - (erodibleColumns.contains(columnKey(nx, nz)) ? erodibleThickness(nx, nz) : 0);
             best = Math.max(best, (g - substrate) / dx);
         }

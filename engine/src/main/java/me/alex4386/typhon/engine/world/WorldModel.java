@@ -218,9 +218,13 @@ public final class WorldModel implements WorldQuery, WorldEdit {
         return stacks.uplift(x, z);
     }
 
+    /**
+     * Moves a column to {@code meters} of total deformation: the whole column (every layer) rises or sinks with
+     * it, so the slopes to its neighbours tilt and loose deposits on them are re-examined.
+     */
     public void setUplift(int x, int z, double meters) {
-        // no relaxation: the repose limit compares layer tops, which uplift does not move
         stacks.setUplift(x, z, meters);
+        relaxAround(x, z);
     }
 
     @Override
@@ -427,7 +431,7 @@ public final class WorldModel implements WorldQuery, WorldEdit {
     public ErodeResult carve(int x, int z, double zLo, double zHi, int unit) {
         double surface = stacks.surface(x, z);
         if (Double.isNaN(surface)) return ErodeResult.NONE;
-        zLo = Math.max(zLo, spec.datumZ() + ColumnStacks.MIN_BOTTOM);
+        zLo = Math.max(zLo, spec.datumZ() + stacks.uplift(x, z) + ColumnStacks.MIN_BOTTOM);
         if (zLo >= surface) return ErodeResult.NONE;
         if (zHi >= surface - ColumnStacks.EPS) return erode(x, z, surface - zLo, false);
         return stacks.replaceRange(x, z, zLo, zHi, MaterialTable.VOID.id(), unit, 0, 1, 0);

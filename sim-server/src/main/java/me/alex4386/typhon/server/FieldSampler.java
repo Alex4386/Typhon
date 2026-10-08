@@ -87,7 +87,7 @@ final class FieldSampler {
         switch (field) {
             case SURFACE_ELEVATION -> {
                 double s = world.surfaceZ(x, z);
-                return Double.isFinite(s) ? s + world.uplift(x, z) : world.spec().datumZ();
+                return Double.isFinite(s) ? s : world.spec().datumZ();
             }
             case LAVA_DEPTH -> {
                 return noLava ? 0 : lava.thickness(x, z);
@@ -98,7 +98,7 @@ final class FieldSampler {
             case WATER_DEPTH -> {
                 double w = world.waterZ(x, z);
                 double s = world.surfaceZ(x, z);
-                double standing = Double.isFinite(w) && Double.isFinite(s) ? Math.max(0, w - (s + world.uplift(x, z))) : 0;
+                double standing = Double.isFinite(w) && Double.isFinite(s) ? Math.max(0, w - s) : 0;
                 // Flowing/poured water and lakes from the surface-water model.
                 double flowing = sub != null ? sub.surfaceWaterDepthM(x, z) : 0;
                 return Math.max(standing, Double.isFinite(flowing) ? flowing : 0);

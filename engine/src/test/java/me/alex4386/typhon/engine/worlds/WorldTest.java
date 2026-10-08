@@ -84,7 +84,7 @@ class WorldTest {
         assertEquals(10, world.worldModel().spec().metersPerColumn());
         run(world, 5);
         assertTrue(world.worldModel().isKnown(30, 0));
-        assertEquals(SUMMIT_Z, world.worldModel().surfaceZ(30, 0), 1e-3);
+        assertEquals(SUMMIT_Z + world.worldModel().uplift(30, 0), world.worldModel().surfaceZ(30, 0), 1e-3);
         assertNotNull(world.volcano("east").chamber());
         assertNotEquals(world.volcano("east").chamber().chamberCenter(), world.volcano("west").chamber().chamberCenter());
     }
