@@ -1207,6 +1207,11 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return bulkWater / (1 - crystalFraction());
     }
 
+    /** Total H₂O of the melt (dissolved and exsolved, wt%). */
+    public double meltWaterWt() {
+        return Math.max(0, meltTotalWater());
+    }
+
     /** Total CO₂ of the melt (dissolved and exsolved, wt%). */
     public double meltCo2Wt() {
         return Math.max(0, bulkCo2) / (1 - crystalFraction());

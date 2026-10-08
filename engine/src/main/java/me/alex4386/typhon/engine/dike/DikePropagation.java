@@ -14,6 +14,7 @@ import me.alex4386.typhon.engine.deformation.DikeGeometry;
 import me.alex4386.typhon.engine.dike.DikeEvents.StallReason;
 import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.magma.MagmaCommands;
+import me.alex4386.typhon.engine.magma.conduit.ConduitModel;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.StepContext;
 import me.alex4386.typhon.engine.sim.Subsystem;
@@ -41,10 +42,13 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * gravitational stress field is greatest at its top) and is a vertical crack of height {@code H} (roof to
  * tip) and breadth {@code b = min(H, D)}: a crack driven from a source grows about as broad as it is high
  * (penny-shaped), and is fed over at most the chamber's diameter {@code D} (Rubin 1995; Rivalta et al.
- * 2015). Its driving pressure is chamber overpressure plus buoyancy, {@code ΔP = P + (ρ_rock − ρ_magma) g H}
- * (basalt is denser than the crust and must be pushed; silicic magma is buoyant). Its opening is the
+ * 2015). Its driving pressure is chamber overpressure plus buoyancy, {@code ΔP = P + ∫(ρ_rock − ρ_magma) g dz}
+ * over the magma column from the roof to the tip. Bubble-free basalt is denser than the crust and must be
+ * pushed; but the melt's CO₂ and H₂O beyond their solubility at the local (lithostatic plus water) pressure
+ * are gas, so the magma lightens as it rises and is buoyant in the shallow crust (closed-system equilibrium
+ * exsolution: bubbles cannot leave a dike rising at ~0.1 m/s). Its opening is the
  * elastic estimate for a pressurised crack whose shorter dimension is {@code b},
- * {@code w = 2(1−ν) ΔP b / μ} (Pollard 1987), and the tip advances at the laminar slot velocity
+ * {@code w = 2(1−ν) ΔP̄ b / μ} under the net pressure averaged over its height, {@code ΔP̄} (Pollard 1987), and the tip advances at the laminar slot velocity
  * {@code v = w² (ΔP / H) / (12 η)} (Lister &amp; Kerr 1991) — basaltic dikes rise at ~0.1–5 m/s, viscous
  * silicic dikes far slower. The intruded volume {@code w · b · H} is drawn from the chamber, lowering its
  * overpressure.
@@ -301,16 +305,19 @@ public final class DikePropagation implements Subsystem {
         while (remaining > 0 && dike.depth > 0) {
             double height = Math.max(0, dike.chamberDepth - dike.depth);
             double characteristic = Math.max(height, config.minCharacteristicHeight);
-            double buoyancy = (config.rockDensity - magmaDensity(magma.silicaWt())) * GRAVITY * height / 1e6;
-            double drive = magma.overpressureMPa() + buoyancy;
+            double[] buoyancy = buoyancy(dike.x, dike.z, dike.depth, dike.chamberDepth);
+            double drive = magma.overpressureMPa() + buoyancy[0];
+            // the walls open under the net pressure averaged over the crack, not its value at the tip
+            double wallDrive = magma.overpressureMPa() + buoyancy[1];
             double breadth = Math.min(characteristic, sourceDiameterM());
             // the tip breaks rock only while its stress intensity exceeds the rock's toughness
-            if (!(drive > 0) || drive * Math.sqrt(Math.PI * breadth / 2) < config.fractureToughnessMPaSqrtM) {
+            if (!(drive > 0) || !(wallDrive > 0)
+                    || drive * Math.sqrt(Math.PI * breadth / 2) < config.fractureToughnessMPaSqrtM) {
                 stall = StallReason.INSUFFICIENT_PRESSURE;
                 break;
             }
 
-            double opening = 2 * (1 - config.poissonRatio) * drive * 1e6 * breadth / config.shearModulusPa;
+            double opening = 2 * (1 - config.poissonRatio) * wallDrive * 1e6 * breadth / config.shearModulusPa;
             double viscosity = StrictMath.pow(10, magma.viscosityLog10());
             double speed = Math.min(config.maxSpeed, opening * opening * (drive * 1e6 / characteristic) / (12 * viscosity));
             dike.speed = speed;
@@ -529,10 +536,90 @@ public final class DikePropagation implements Subsystem {
 
     // ── Geometry helpers ──
 
+    /** Gauss–Legendre nodes and weights on [−1, 1] for {@link #buoyancyMPa}. */
+    private static final double[] GL_NODES = {
+        -0.9602898564975363, -0.7966664774136267, -0.5255324099163290, -0.1834346424956498,
+        0.1834346424956498, 0.5255324099163290, 0.7966664774136267, 0.9602898564975363};
+    private static final double[] GL_WEIGHTS = {
+        0.1012285362903763, 0.2223810344533745, 0.3137066877114911, 0.3626837833783620,
+        0.3626837833783620, 0.3137066877114911, 0.2223810344533745, 0.1012285362903763};
+    /** Atmospheric pressure (MPa). */
+    static final double ATMOSPHERE_MPA = 0.101325;
+    /** Density of the water over submerged ground (kg/m³). */
+    static final double WATER_DENSITY = 1000;
+    /** Universal gas constant (J/(mol·K)). */
+    static final double GAS_CONSTANT = 8.314;
+    static final double WATER_MOLAR_MASS = 0.018;
+    static final double CO2_MOLAR_MASS = 0.044;
+
     /**
-     * Bulk melt density from silica (kg/m³): ~2750 for basalt to ~2480 for rhyolite. A linear fit of the order
-     * of anhydrous melt densities from partial molar volumes (Lange &amp; Carmichael 1987); it ignores water,
-     * temperature and bubbles, which lower it.
+     * Buoyancy (MPa) of the magma column from {@code bottomDepth} up to {@code topDepth} (m below the ground
+     * at {@code (x, z)}): {@code ∫(ρ_rock − ρ_magma(P)) g dz}. The pressure is the rock load plus the air or
+     * water above the ground, so {@code g dz = dP / ρ_rock} and the integral is
+     * {@code ∫(1 − ρ_magma(P)/ρ_rock) dP}; it is taken over {@code ln P}, where the gas fraction varies
+     * smoothly even near the surface.
+     */
+    double buoyancyMPa(double x, double z, double topDepth, double bottomDepth) {
+        return buoyancy(x, z, topDepth, bottomDepth)[0];
+    }
+
+    /**
+     * {@code {at the top, mean over the column}} (MPa): the buoyancy at the top as {@link #buoyancyMPa}, and its
+     * mean over the column's height, {@code (1/H) ∫₀^H B(s) ds = ∫ (1 − s/H) b(s) ds} — the part of the net
+     * pressure on the crack's walls that opens it.
+     */
+    double[] buoyancy(double x, double z, double topDepth, double bottomDepth) {
+        if (!(bottomDepth > topDepth)) return new double[] {0, 0};
+        double ambient = ambientMPa(x, z);
+        double load = config.rockDensity * GRAVITY / 1e6;
+        double lnTop = StrictMath.log(ambient + load * Math.max(0, topDepth));
+        double lnBottom = StrictMath.log(ambient + load * bottomDepth);
+        double half = 0.5 * (lnBottom - lnTop);
+        double mid = 0.5 * (lnBottom + lnTop);
+        double melt = magmaDensity(magma.silicaWt());
+        double pTop = StrictMath.exp(lnTop);
+        double range = StrictMath.exp(lnBottom) - pTop;
+        double top = 0;
+        double mean = 0;
+        for (int i = 0; i < GL_NODES.length; i++) {
+            double p = StrictMath.exp(mid + half * GL_NODES[i]);
+            double f = GL_WEIGHTS[i] * (1 - magmaDensityAt(melt, p) / config.rockDensity) * p;
+            top += f;
+            // height above the bottom s ↔ pressure: 1 − s/H = (P − P_top) / (P_bottom − P_top)
+            mean += f * (p - pTop) / range;
+        }
+        return new double[] {top * half, mean * half};
+    }
+
+    /**
+     * Density (kg/m³) of magma of melt density {@code melt} at {@code pressureMPa}: the H₂O beyond
+     * {@code 0.411 √P} wt% and the CO₂ beyond {@code 5·10⁻⁴ P} wt% (the chamber's and conduit's solubility
+     * laws) are an ideal gas at the magma's temperature.
+     */
+    double magmaDensityAt(double melt, double pressureMPa) {
+        double water = Math.max(0, magma.meltWaterWt() - ConduitModel.SOLUBILITY * Math.sqrt(pressureMPa));
+        double co2 = Math.max(0, magma.meltCo2Wt() - ConduitModel.CO2_SOLUBILITY * pressureMPa);
+        double moles = (water / WATER_MOLAR_MASS + co2 / CO2_MOLAR_MASS) / 100; // per kg of magma
+        if (!(moles > 0)) return melt;
+        double gasVolume = moles * GAS_CONSTANT * (magma.temperatureC() + 273.15) / (pressureMPa * 1e6);
+        return melt / (1 + melt * gasVolume);
+    }
+
+    /** Pressure (MPa) on the ground at {@code (x, z)} (m): the atmosphere, plus the water over it. */
+    private double ambientMPa(double x, double z) {
+        if (terrain == null) return ATMOSPHERE_MPA;
+        WorldModel world = terrain.world();
+        double l = world.spec().metersPerColumn();
+        int cx = (int) Math.floor(x / l);
+        int cz = (int) Math.floor(z / l);
+        double depth = world.waterZ(cx, cz) - world.surfaceZ(cx, cz);
+        return ATMOSPHERE_MPA + (depth > 0 ? WATER_DENSITY * GRAVITY * depth / 1e6 : 0);
+    }
+
+    /**
+     * Bubble-free melt density from silica (kg/m³): ~2750 for basalt to ~2480 for rhyolite. A linear fit of the
+     * order of anhydrous melt densities from partial molar volumes (Lange &amp; Carmichael 1987); exsolved gas is
+     * added by {@link #magmaDensityAt}.
      */
     static double magmaDensity(double silicaWt) {
         return clamp(2750 - 10 * (silicaWt - 48), 2300, 2800);

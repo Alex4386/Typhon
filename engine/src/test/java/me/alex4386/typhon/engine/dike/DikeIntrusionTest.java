@@ -19,8 +19,8 @@ import org.junit.jupiter.api.Test;
 class DikeIntrusionTest {
     @Test
     void stalledDikeLeavesIntrusionAtDepth() {
-        // 2 MPa: rises part-way from the chamber roof and freezes (1 MPa freezes before it leaves the roof)
-        DikeTestWorld.World w = world(4, basalt(2).build(), fastConfig(), flat(), null);
+        // 1.5 MPa: rises part-way from the chamber roof and freezes (1 MPa freezes before it leaves the roof)
+        DikeTestWorld.World w = world(4, basalt(1.5).build(), fastConfig(), flat(), null);
         WorldModel world = w.terrain().world();
         int unit = Provenance.unitFor(world, "v", 0, DepositType.INTRUSION, 0, Double.NaN, 50);
         w.dikes().setUnits((type, time, temperature) -> type == DepositType.INTRUSION ? unit : 0);

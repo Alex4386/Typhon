@@ -27,6 +27,19 @@ public interface DikeMagmaSource {
 
     double silicaWt();
 
+    /**
+     * Total H₂O of the melt (wt%, dissolved and exsolved). Whatever exceeds solubility at the pressure along
+     * the dike is gas and lightens the magma there. 0 by default (volatile-free, bubble-free magma).
+     */
+    default double meltWaterWt() {
+        return 0;
+    }
+
+    /** Total CO₂ of the melt (wt%, dissolved and exsolved); 0 by default. */
+    default double meltCo2Wt() {
+        return 0;
+    }
+
     /** True while the chamber erupts through its summit conduit (no new dikes then). */
     boolean erupting();
 
@@ -75,6 +88,8 @@ public interface DikeMagmaSource {
             @Override public double chamberDepthM() { return chamber.config().lithostaticDepth(); }
             @Override public double viscosityLog10() { return chamber.viscosityLog10(); }
             @Override public double silicaWt() { return chamber.silicaWt(); }
+            @Override public double meltWaterWt() { return chamber.meltWaterWt(); }
+            @Override public double meltCo2Wt() { return chamber.meltCo2Wt(); }
             @Override public boolean erupting() { return chamber.erupting(); }
             @Override public double withdraw(double volume) { return chamber.withdraw(volume); }
             @Override public double temperatureC() { return chamber.temperatureC(); }

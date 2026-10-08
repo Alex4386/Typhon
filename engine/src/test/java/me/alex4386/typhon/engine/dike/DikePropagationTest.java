@@ -95,9 +95,9 @@ class DikePropagationTest {
 
     @Test
     void denseBasaltStallsWithoutEnoughPressure() {
-        // dense basalt pushed by 2 MPa: as it rises its negative buoyancy eats the drive, the crack thins and
+        // dense basalt pushed by 1.5 MPa: as it rises its negative buoyancy eats the drive, the crack thins and
         // the magma freezes in it (or the tip can no longer break rock) before the surface
-        DikeTestWorld.World w = world(4, basalt(2).build(), fastConfig(), flat(), null);
+        DikeTestWorld.World w = world(4, basalt(1.5).build(), fastConfig(), flat(), null);
         w.engine().submit(new DikeCommands.ForceDike("v"));
         List<EngineFrame> frames = run(w.engine(), LONG);
 
@@ -109,6 +109,32 @@ class DikePropagationTest {
         Dike dike = w.dikes().dikes().get(0);
         assertEquals(DikeStatus.STALLED, dike.status());
         assertTrue(dike.depthM() > 0 && dike.depthM() < dike.heightM() + dike.depthM() - 1, "stalls part-way: " + dike.depthM());
+    }
+
+    @Test
+    void exsolvingGasBuoysTheShallowDike() {
+        // the same 1.5 MPa push that stalls nearly gas-free basalt: with 0.2 wt% CO₂, gas beyond its solubility
+        // lightens the magma below the crust's density in the shallow kilometres, and the dike erupts
+        DikeTestWorld.World w = world(4, basalt(1.5).initialCo2Wt(0.2).build(), fastConfig(), flat(), null);
+        w.engine().submit(new DikeCommands.ForceDike("v"));
+        List<EngineFrame> frames = run(w.engine(), LONG);
+
+        assertTrue(events(frames, DikeStalled.class).isEmpty(), "no stall");
+        assertEquals(1, events(frames, FissureOpened.class).size());
+    }
+
+    @Test
+    void magmaLightensAsItsGasExpands() {
+        DikeTestWorld.World w = world(4, basalt(2).initialCo2Wt(0.2).build(), fastConfig(), flat(), null);
+        double melt = DikePropagation.magmaDensity(w.chamber().silicaWt());
+        double deep = w.dikes().magmaDensityAt(melt, 100);
+        double shallow = w.dikes().magmaDensityAt(melt, 10);
+        assertTrue(deep < melt && shallow < deep, deep + " " + shallow);
+        assertTrue(shallow < 2600, "buoyant near the surface: " + shallow);
+        // bubble-free magma adds no buoyancy of its own beyond the melt's
+        DikeTestWorld.World dry = world(4, basalt(2).initialWaterWt(0).initialCo2Wt(0).build(), fastConfig(), flat(), null);
+        double dryMelt = DikePropagation.magmaDensity(dry.chamber().silicaWt());
+        assertEquals((2600 - dryMelt) * 9.81 * 1000 / 1e6, dry.dikes().buoyancyMPa(0, 0, 1000, 2000), 1e-6);
     }
 
     @Test
