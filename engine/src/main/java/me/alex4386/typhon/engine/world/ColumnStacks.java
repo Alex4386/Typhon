@@ -438,6 +438,19 @@ public final class ColumnStacks {
         return thickness;
     }
 
+    /**
+     * Whether the top layer of a column is loose solid material (not a cavity): the only columns that can slump
+     * ({@link ReposeRelaxation}). {@code false} for unknown columns.
+     */
+    public boolean looseTopLayer(int x, int z) {
+        Tile t = tile(x, z);
+        if (t == null) return false;
+        int c = local(x, z);
+        if (t.count(c) == 0) return false;
+        int g = t.start[c + 1] - 1;
+        return (t.flags[g] & LayerFlags.LOOSE) != 0 && MaterialTable.get(t.material[g]).solid();
+    }
+
     /** How far deformation has moved the column up (m); already part of every elevation of the column. */
     public double uplift(int x, int z) {
         Tile t = tile(x, z);

@@ -26,6 +26,8 @@ import java.util.Map;
  */
 public final class MaterialTable {
     private static final List<Material> BY_ID = new ArrayList<>();
+    /** {@code 10^logK} by material id, worked out once ({@link #hydraulicConductivity}). */
+    private static double[] hydraulicK = new double[0];
     private static final Map<String, Material> BY_NAME = new LinkedHashMap<>();
     private static final double NA = Double.NaN;
 
@@ -76,7 +78,14 @@ public final class MaterialTable {
                 erodibility, loose);
         BY_ID.add(m);
         BY_NAME.put(name, m);
+        hydraulicK = java.util.Arrays.copyOf(hydraulicK, BY_ID.size());
+        hydraulicK[m.id()] = StrictMath.pow(10, logK);
         return m;
+    }
+
+    /** Hydraulic conductivity K (m/s) of {@code m}: {@code 10^}{@link Material#log10HydraulicConductivity}, NaN if not porous. */
+    public static double hydraulicConductivity(Material m) {
+        return hydraulicK[m.id()];
     }
 
     /**

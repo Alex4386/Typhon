@@ -323,7 +323,7 @@ final class SubsurfaceGrid {
             ch.porosity[i] = (float) (cavity ? 0 : Math.max(0, Math.min(1, porosity)));
             double logK = m.log10HydraulicConductivity();
             ch.hydraulicK[i] = (float) (cavity || Double.isNaN(logK) || m.materialClass() == MaterialClass.WATER
-                    ? 0 : StrictMath.pow(10, logK));
+                    ? 0 : MaterialTable.hydraulicConductivity(m));
             ch.solidus[i] = (float) m.solidusC();
             ch.liquidus[i] = (float) m.liquidusC();
         }

@@ -304,9 +304,16 @@ public final class ReposeRelaxation {
         return sum;
     }
 
+    /**
+     * Queues a column and its neighbours, leaving out those without a loose top: {@link #relax} moves nothing
+     * there, and whatever makes a top loose later (a deposit, an excavation, a move) queues it again then.
+     */
     private void enqueueAround(int x, int z) {
-        queue.add(pack(x, z));
-        for (int d = 0; d < 8; d++) queue.add(pack(x + DX[d], z + DZ[d]));
+        ColumnStacks stacks = world.stacks();
+        if (stacks.looseTopLayer(x, z)) queue.add(pack(x, z));
+        for (int d = 0; d < 8; d++) {
+            if (stacks.looseTopLayer(x + DX[d], z + DZ[d])) queue.add(pack(x + DX[d], z + DZ[d]));
+        }
     }
 
     private static long pack(int x, int z) {

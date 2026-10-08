@@ -296,8 +296,7 @@ public final class DeformationModel implements Subsystem {
         UpliftField field = upliftField();
         appliedRadiusM = Math.min(config.terrainRadiusM, Math.max(appliedRadiusM, upliftRadiusM(field)));
         int radius = (int) Math.ceil(appliedRadiusM / l);
-        int raised = 0;
-        int lowered = 0;
+        int[] moved = new int[2]; // columns raised, lowered
         // the caches cover the known world's bounding box; the pass writes the part inside the disk
         long[] tiles = world.stacks().tileKeys();
         if (tiles.length == 0) return;
@@ -397,17 +396,19 @@ public final class DeformationModel implements Subsystem {
                     out[c] = chamber + q * DIKE_QUANTUM_M;
                 }
             });
-            for (int z = z0; z <= z1; z++) {
-                for (int x = x0; x <= x1; x++) {
-                    double value = out[(z - bz0) * width + (x - bx0)];
-                    if (Double.isNaN(value)) continue; // outside the disk, or unknown
-                    double before = world.uplift(x, z);
-                    if (Math.abs(value - before) < UPLIFT_REPORT_M) continue;
-                    world.setUplift(x, z, value);
-                    if (value > before) raised++;
-                    else lowered++;
+            // the tilted slopes are re-examined once, after the whole pass (every column at most once)
+            world.withRelaxationDeferred(() -> {
+                for (int z = z0; z <= z1; z++) {
+                    for (int x = x0; x <= x1; x++) {
+                        double value = out[(z - bz0) * width + (x - bx0)];
+                        if (Double.isNaN(value)) continue; // outside the disk, or unknown
+                        double before = world.uplift(x, z);
+                        if (Math.abs(value - before) < UPLIFT_REPORT_M) continue;
+                        world.setUplift(x, z, value);
+                        moved[value > before ? 0 : 1]++;
+                    }
                 }
-            }
+            });
         }
         // columns outside the disk keep the old cached set's sums: forget them when the set changes
         if (!entering.isEmpty() || !leaving.isEmpty()) {
@@ -421,8 +422,8 @@ public final class DeformationModel implements Subsystem {
             for (DikeGeometry g : leaving) cache.cached.remove(g);
             for (int i : entering) cache.cached.add(current.get(i));
         }
-        if (raised + lowered > 0) {
-            context.outbox().emit(new DeformationEvents.GroundDeformed(context.time(), config.volcanoId, raised, lowered));
+        if (moved[0] + moved[1] > 0) {
+            context.outbox().emit(new DeformationEvents.GroundDeformed(context.time(), config.volcanoId, moved[0], moved[1]));
         }
     }
 

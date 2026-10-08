@@ -6,8 +6,15 @@ package me.alex4386.typhon.engine.math;
  * not exposed, so it can never leak into results.
  */
 public final class LongHashSet {
-    private long[] slots = new long[64];
-    private boolean[] used = new boolean[64];
+    private static final int INITIAL = 64;
+    /**
+     * An empty set larger than this goes back to {@link #INITIAL}: a set that once held a burst (a whole world
+     * imported, a big relaxation) is otherwise left as a huge, nearly empty table whose every probe misses the
+     * cache, for each of the many small uses after it.
+     */
+    private static final int SHRINK_ABOVE = 1 << 12;
+    private long[] slots = new long[INITIAL];
+    private boolean[] used = new boolean[INITIAL];
     private int size;
 
     public int size() {
@@ -71,13 +78,22 @@ public final class LongHashSet {
             }
         }
         used[gap] = false;
-        size--;
+        if (--size == 0 && slots.length > SHRINK_ABOVE) reset();
         return true;
     }
 
     public void clear() {
-        java.util.Arrays.fill(used, false);
+        if (slots.length > SHRINK_ABOVE) {
+            reset();
+        } else {
+            java.util.Arrays.fill(used, false);
+        }
         size = 0;
+    }
+
+    private void reset() {
+        slots = new long[INITIAL];
+        used = new boolean[INITIAL];
     }
 
     private void rehash(int capacity) {
