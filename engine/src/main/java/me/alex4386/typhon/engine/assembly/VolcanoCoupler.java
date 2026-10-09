@@ -474,6 +474,11 @@ public final class VolcanoCoupler implements Subsystem {
             if (feeder.frozen()) continue;
             feeder.advance(stepDt, ventFlux.getOrDefault(e.getKey(), 0.0), chamber.temperatureC(), chamber.silicaWt());
         }
+        for (Map.Entry<String, LocalVent> e : localVents.entrySet()) {
+            VentThroat throat = e.getValue().throat();
+            if (throat.frozen()) continue;
+            throat.advance(stepDt, ventFlux.getOrDefault(e.getKey(), 0.0), chamber.temperatureC(), chamber.silicaWt());
+        }
         if (chamber.erupting()) {
             for (String id : new ArrayList<>(feeders.keySet())) {
                 if (eruptionVents.contains(id) && open(id)) localise(context, id, feeders.get(id));
@@ -485,11 +490,16 @@ public final class VolcanoCoupler implements Subsystem {
 
     /**
      * A vent the flow of a fissure localised into: one feeder segment still carrying magma after the
-     * segments beside it froze (Bruce &amp; Huppert 1989; Wylie et al. 1999). It keeps that segment's
-     * hydraulic conductance, measured against its fissure's when it opened, as the chamber's conduit
-     * model describes the freshly opened dike ({@link #outletCapacity()}).
+     * segments beside it froze (Bruce &amp; Huppert 1989; Wylie et al. 1999). Its throat starts with that
+     * segment's hydraulic conductance and then widens or freezes by its own heat balance ({@link VentThroat}),
+     * measured against its fissure's conductance when it opened, as the chamber's conduit model describes the
+     * freshly opened dike ({@link #outletCapacity()}).
      */
-    private record LocalVent(VentSite site, String fissureId, double conductance, double referenceConductance) {}
+    private record LocalVent(VentSite site, String fissureId, VentThroat throat, double referenceConductance) {
+        double conductance() {
+            return throat.conductance();
+        }
+    }
 
     /**
      * Turns every open segment of an erupting fissure whose neighbours froze into a vent: the flow has
@@ -519,7 +529,8 @@ public final class VolcanoCoupler implements Subsystem {
             double y = surfaceAt(x, z, fissure.position().y());
             VentSite site = VentSite.crater(fissureId + "-vent-" + i, new Point3(x, y, z), radius);
             feeder.width[i] = 0; // the flow goes on through the vent, no longer through the fissure
-            localVents.put(site.id(), new LocalVent(site, fissureId, conductance, feeder.initialConductance));
+            localVents.put(site.id(), new LocalVent(site, fissureId, VentThroat.ofConductance(conductance, feeder),
+                    feeder.initialConductance));
             eruptionVents.add(site.id());
             ventFlux.put(site.id(), sum > 0 ? fissureFlux * w * w * w / sum : 0); // its share until the next step
             context.outbox().emit(new VentEvents.VentFormed(context.time(), volcanoId, site, fissureId));
@@ -635,6 +646,8 @@ public final class VolcanoCoupler implements Subsystem {
         if (sealed.contains(ventId)) return VentStatus.SEALED;
         FissureFeeder feeder = feeders.get(ventId);
         if (feeder != null && feeder.frozen()) return VentStatus.FROZEN;
+        LocalVent local = localVents.get(ventId);
+        if (local != null && local.throat().frozen()) return VentStatus.FROZEN;
         if (!outlet) return VentStatus.IDLE;
         return feeder != null && feeder.waning() ? VentStatus.WANING : VentStatus.ACTIVE;
     }
@@ -642,6 +655,8 @@ public final class VolcanoCoupler implements Subsystem {
     /** True if magma can leave through {@code ventId}: not sealed and, for a fissure, not frozen. */
     private boolean open(String ventId) {
         if (sealed.contains(ventId)) return false;
+        LocalVent local = localVents.get(ventId);
+        if (local != null) return !local.throat().frozen();
         FissureFeeder feeder = feeders.get(ventId);
         return feeder == null || !feeder.frozen();
     }
@@ -1307,7 +1322,7 @@ public final class VolcanoCoupler implements Subsystem {
             o.add("position", v.site().position().toJson());
             o.addProperty("radiusM", v.site().craterRadiusM());
             o.addProperty("fissureId", v.fissureId());
-            o.addProperty("conductance", v.conductance());
+            o.add("throat", v.throat().save());
             o.addProperty("referenceConductance", v.referenceConductance());
             local.add(o);
         }
@@ -1363,8 +1378,17 @@ public final class VolcanoCoupler implements Subsystem {
             JsonObject o = e.getAsJsonObject();
             VentSite site = VentSite.crater(o.get("id").getAsString(), Point3.fromJson(o.get("position")),
                     o.get("radiusM").getAsDouble());
-            localVents.put(site.id(), new LocalVent(site, o.get("fissureId").getAsString(),
-                    o.get("conductance").getAsDouble(), o.get("referenceConductance").getAsDouble()));
+            String fissureId = o.get("fissureId").getAsString();
+            VentThroat throat;
+            if (o.has("throat")) {
+                throat = VentThroat.load(o.getAsJsonObject("throat"));
+            } else { // saves from before throats cooled: the conductance it kept, on its fissure's wall rock
+                FissureFeeder feeder = feeders.get(fissureId);
+                double radius = Math.pow(8 * o.get("conductance").getAsDouble() / Math.PI, 0.25);
+                throat = feeder != null ? new VentThroat(radius, feeder.heightM, feeder.wallRockC, feeder.age)
+                        : new VentThroat(radius, chamber.config().lithostaticDepth(), chamber.config().wallTemperatureC(), 0);
+            }
+            localVents.put(site.id(), new LocalVent(site, fissureId, throat, o.get("referenceConductance").getAsDouble()));
         }
         for (JsonElement e : in.getAsJsonArray("sealedVents")) sealed.add(e.getAsString());
         for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("ventStates").entrySet()) {

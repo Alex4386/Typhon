@@ -1,5 +1,6 @@
 package me.alex4386.typhon.engine.assembly;
 
+import me.alex4386.typhon.engine.magma.MeltDensity;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import me.alex4386.typhon.engine.random.SimRandom;
@@ -35,8 +36,7 @@ import me.alex4386.typhon.engine.random.SimRandom;
  * Solidification of basaltic magma during flow in a dike. Am. J. Sci. 282, 856–885.
  */
 final class FissureFeeder {
-    /** Magma density (kg/m³), specific heat (J/kg/K) and latent heat of crystallisation (J/kg). */
-    static final double RHO = 2700;
+    /** Specific heat (J/kg/K) and latent heat of crystallisation (J/kg) of the magma. */
     static final double HEAT_CAPACITY = 1200;
     static final double LATENT_HEAT = 4.0e5;
     /** Wall rock conductivity (W/m/K) and diffusivity (m²/s). */
@@ -136,6 +136,8 @@ final class FissureFeeder {
     void advance(double dt, double flux, double magmaC, double silicaWt) {
         this.flux = flux;
         double solidus = solidusC(silicaWt);
+        // the melt degassed on its way up the fissure: its anhydrous density
+        double rho = MeltDensity.anhydrousKgPerM3(silicaWt);
         double superheat = Math.max(0, magmaC - solidus);
         double wallGap = Math.max(1, solidus - wallRockC);
         double before = widestWidth();
@@ -153,11 +155,11 @@ final class FissureFeeder {
                 if (w <= FREEZE_WIDTH_M) continue;
                 double share = sum > 0 ? w * w * w / sum : 0;
                 double perLength = flux * share / segmentLengthM;
-                double gain = RHO * HEAT_CAPACITY * perLength * superheat / (2 * heightM);
+                double gain = rho * HEAT_CAPACITY * perLength * superheat / (2 * heightM);
                 double net = gain - loss;
                 rate[i] = net >= 0
-                        ? 2 * net / (RHO * (LATENT_HEAT + HEAT_CAPACITY * wallGap))
-                        : 2 * net / (RHO * LATENT_HEAT);
+                        ? 2 * net / (rho * (LATENT_HEAT + HEAT_CAPACITY * wallGap))
+                        : 2 * net / (rho * LATENT_HEAT);
                 if (rate[i] != 0) step = Math.min(step, MAX_STEP_CHANGE * w / Math.abs(rate[i]));
             }
             step = Math.max(step, Math.min(remaining, 1e-3));

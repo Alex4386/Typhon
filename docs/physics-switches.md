@@ -23,13 +23,17 @@ long as they do not change outcomes.
 - `conduitOpenness() < 0.5` picked the fast or slow conduit branch: a failure fragments the magma (fast branch)
   when its sudden decompression exceeds the foam's strength over its porosity (Spieler et al. 2004).
 - One plume per volcano, put on the strongest vent: every vent now feeds its own column and plume.
+- Localised vents kept their throat's conductance forever: a vent's throat now widens or freezes by the
+  same heat balance as the fissure (`VentThroat`). `FissureFeeder.RHO = 2700` follows the melt's density.
 - Molten lava held every step to 120 s whatever its cooling rate; the step now follows the fastest-cooling
   column. Bomb trajectories are sub-stepped by ground resolution (half a column) instead of a fixed 12.5 ms.
 
 ## High: decide whether or when eruptions, dikes or flows happen
 
-- `FissureFeeder.RHO = 2700`: a second magma density; it should use `MeltDensity`.
-- `DikeConfig.maxSpeed` (5 m/s) feeds the freeze-stall test, so a capped dike can be called frozen.
+- `DikeConfig.maxSpeed` (5 m/s) caps the dike's slot-flow speed, and so its freeze test. It hides openings
+  that come out several times too wide (7–19 m against observed ~1–3 m): the crust's shear modulus is 3 GPa
+  and the breadth reaches the chamber's diameter. Turbulent wall friction alone still gives ~80 m/s; the
+  opening and the elastic modulus need calibrating against dike widths before the cap can go.
 - `DikeConfig.maxConcurrentDikes = 1`: only one dike rises at a time.
 - `DikeConfig.minCharacteristicHeight = 200` sets the toughness test and speed of a new dike.
 - `MagmaChamber.MAX_CRYSTAL_FRACTION = 0.58`: a chamber can never lock up as a mush.
@@ -38,14 +42,19 @@ long as they do not change outcomes.
   vent.
 - Plug explosions: `plugStrengthMPa`, `plugViscosityLog10` and the logistic `PLUG_TRANSITION_LOG10`.
 - `FissureFeeder` `FREEZE_WIDTH_M`, `MAX_WIDENING`, minimum width, and the random `WIDTH_SPREAD` seed.
-- `VolcanoCoupler.LocalVent` conductance never cools, so localised vents never freeze.
 - A quiet conduit only loses heat by conduction: magma convecting in it (Kazahaya et al. 1994) and gas
   streaming through it keep open-vent volcanoes (Stromboli, lava lakes) molten; without them every
   conduit caps over within weeks.
 - `GeomorphConfig.debrisFlowSaturation` / `hotCollapseTemperatureC` classify failed masses.
 - `VentPartition` aquifer constants (`AQUIFER_PERMEABILITY`, `AQUIFER_INTERACTION_DEPTH_M`, unit
   gradient) ignore the groundwater model.
-- `VentPartition` submergence 150 m cutoff and its `(1 − s)²` shape.
+
+## Empirical constraints kept for now
+
+- `VentPartition.SUPPRESSION_DEPTH_M` (150 m): explosive water–magma interaction is observed only in the top
+  ~100–200 m of water (Kokelaar 1986). A first-principles steam-expansion bound (work ∝ ln(p_c/p)) leaves
+  half the explosivity at 140 m, more than observed, so the observed depth stays until the MFCI physics is
+  modelled.
 
 ## Medium: change magnitudes
 
