@@ -80,7 +80,10 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * mass-flow subsystems so changes apply in the same step.
  */
 public final class VolcanoCoupler implements Subsystem {
-    /** Relative change in column parameters that restarts the explosive phase with new parameters. */
+    /**
+     * Relative change in column parameters that is reported as a new explosive phase (an event); smaller
+     * changes retune the running phase silently, so the column always carries the eruption's current rate.
+     */
     static final double PHASE_UPDATE_THRESHOLD = 0.25;
     /** Column mass flux (kg/s, physical) below which no column is sustained (a few puffs at most). */
     static final double MIN_COLUMN_MASS_FLUX = 1;
@@ -230,6 +233,10 @@ public final class VolcanoCoupler implements Subsystem {
     public void setGround(HydrothermalField ground) {
         this.ground = ground;
         chamber.setCrust(crustAbove(chamber.chamberCenter())); // its water table saturates the crust
+        if (ground != null) {
+            double surface = ground.geothermC(0);
+            chamber.setGeotherm(surface, (ground.geothermC(1000) - surface));
+        }
     }
 
     @Override
@@ -864,19 +871,25 @@ public final class VolcanoCoupler implements Subsystem {
                 || Math.abs(columnMassRate - c.rate) > PHASE_UPDATE_THRESHOLD * c.rate
                 || Math.abs(p.collapseFraction() - c.collapse) > 0.1
                 || Math.abs(p.columnGasFraction() - c.gas) > PHASE_UPDATE_THRESHOLD * c.gas;
-        if (!restart) return;
-        c.rate = columnMassRate;
-        c.collapse = p.collapseFraction();
-        c.gas = p.columnGasFraction();
-        if (vent.id().equals(burstVentId)) burstPhaseUntil = -1; // the sustained column takes over its ash puff
+        if (restart) {
+            c.rate = columnMassRate;
+            c.collapse = p.collapseFraction();
+            c.gas = p.columnGasFraction();
+            if (vent.id().equals(burstVentId)) burstPhaseUntil = -1; // the sustained column takes over its ash puff
+        }
 
         // The phase's gas thrust is set by the jet: an equivalent overpressure that expands the
         // column's gas to its exit velocity.
         double overpressure = equivalentOverpressureMPa(p.columnVelocity(), p.columnGasFraction(), p.columnTemperatureC());
         ExplosivePhase phase = new ExplosivePhase(vent, columnMassRate, Math.min(1, p.columnGasFraction()), overpressure,
                 p.columnTemperatureC(), chamber.silicaWt(), 0, p.grainSize());
-        tephra.startPhase(phase.withMassEruptionRate(columnMassRate * (1 - p.collapseFraction())));
-        updateCollapse(vent, c, columnMassRate * p.collapseFraction(), p.columnTemperatureC());
+        ExplosivePhase lofted = phase.withMassEruptionRate(columnMassRate * (1 - p.collapseFraction()));
+        if (restart) {
+            tephra.startPhase(lofted);
+            updateCollapse(vent, c, columnMassRate * p.collapseFraction(), p.columnTemperatureC());
+        } else {
+            tephra.retunePhase(lofted);
+        }
     }
 
     /** Overpressure (MPa) whose isothermal expansion drives gas fraction {@code n} to speed {@code u}. */
@@ -1442,7 +1455,7 @@ public final class VolcanoCoupler implements Subsystem {
                 FissureFeeder feeder = feeders.get(fissureId);
                 double radius = Math.pow(8 * o.get("conductance").getAsDouble() / Math.PI, 0.25);
                 throat = feeder != null ? new VentThroat(radius, feeder.heightM, feeder.wallRockC, feeder.age)
-                        : new VentThroat(radius, chamber.config().lithostaticDepth(), chamber.config().wallTemperatureC(), 0);
+                        : new VentThroat(radius, chamber.config().lithostaticDepth(), chamber.conduitWallTemperatureC(), 0);
             }
             localVents.put(site.id(), new LocalVent(site, fissureId, throat, o.get("referenceConductance").getAsDouble()));
         }

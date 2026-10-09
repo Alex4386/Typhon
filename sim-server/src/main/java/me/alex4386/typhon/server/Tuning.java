@@ -87,7 +87,7 @@ final class Tuning {
         META.put("volcano:magma.chamber.initialSilicaWt", m("Starting magma silica (SiO₂)", "wt%", 42.0, 78.0, false, null));
         META.put("volcano:magma.chamber.initialWaterWt", m("Starting magma water (H₂O)", "wt%", 0.0, 8.0, false, null));
         META.put("volcano:magma.chamber.initialOverpressureMPa", m("Starting overpressure", "MPa", 0.0, 100.0, false, null));
-        META.put("volcano:magma.chamber.wallTemperatureC", m("Wall-rock temperature", "°C", 0.0, 1000.0, false, null));
+        META.put("volcano:magma.chamber.wallTemperatureC", m("Far-field rock temperature", "°C", 0.0, 1000.0, false, "Rock the chamber cools into; empty = the region's geotherm at its depth."));
         META.put("volcano:magma.chamber.coolingTimescale", m("Cooling time", "s", null, null, true, "e-folding time of chamber cooling into the wall rock."));
         META.put("volcano:magma.chamber.degassingTimescale", m("Degassing time", "s", null, null, true, null));
         META.put("volcano:magma.chamber.compressibilityPerMPa", m("Chamber compressibility", "/MPa", 1e-5, 1e-2, true, "How much the chamber (magma and walls) yields per MPa: a stiffer chamber pressurises faster."));

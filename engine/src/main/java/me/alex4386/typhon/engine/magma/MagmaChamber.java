@@ -193,6 +193,9 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     /** {@link #conduitQuietSeconds} of a chamber without a conduit. */
     static final double NO_CONDUIT = -1;
     private CrustColumn crust = CrustColumn.uniform(ROCK_DENSITY);
+    /** The region's geotherm (°C, °C/km): the average continental one until the surface coupling reports it. */
+    private double geothermSurfaceC = 15;
+    private double geothermGradientCPerKm = 30;
     private double ventAmbientPa = ConduitInput.ATMOSPHERE_PA;
     private double waterTableDepthM = DEFAULT_WATER_TABLE_DEPTH_M;
     /** Drivers of the current steady conduit flow, and the flow itself (null when not erupting). */
@@ -377,8 +380,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         double inflow = supply * dt;
 
         mix(inflow, rechargeTemperature, rechargeSilica, rechargeWater, rechargeCo2, rechargeCrystals);
-        temperature = config.wallTemperatureC()
-                + (temperature - config.wallTemperatureC()) * Math.exp(-dt / coolingTimescaleSeconds());
+        double farField = farFieldTemperatureC();
+        temperature = farField + (temperature - farField) * Math.exp(-dt / coolingTimescaleSeconds());
         double phi = crystalFraction();
         double vented = 1 - Math.exp(-dt / degassingTimescaleSeconds());
         double ventedWater = exsolvedWaterWt() * (1 - phi) * vented;
@@ -722,7 +725,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      */
     public double conduitFreezeSeconds() {
         double a = config.conduitRadius();
-        double dT = Math.max(1, temperature - config.wallTemperatureC());
+        double dT = Math.max(1, temperature - conduitWallTemperatureC());
         return a * a / THERMAL_DIFFUSIVITY * (1 + LATENT_HEAT_CRYSTALLISATION / (MELT_HEAT_CAPACITY * dT));
     }
 
@@ -1062,14 +1065,53 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return Double.isNaN(c.wallRuptureRatio()) ? HOOP_RUPTURE_RATIO : c.wallRuptureRatio();
     }
 
+    /**
+     * Far-field temperature (°C) of the rock the chamber cools into: the configured wall temperature, or the
+     * region's geotherm at the chamber's depth ({@link #setGeotherm}). Its conductive cooling,
+     * {@code τ = ρ c r² / 3k}, is the steady loss of a sphere into that far field.
+     */
+    public double farFieldTemperatureC() {
+        double configured = config.wallTemperatureC();
+        return Double.isNaN(configured) ? geothermC(config.lithostaticDepth()) : configured;
+    }
+
+    /** Mean temperature (°C) of the wall rock along the conduit: the geotherm half-way up (or the configured wall). */
+    public double conduitWallTemperatureC() {
+        double configured = config.wallTemperatureC();
+        return Double.isNaN(configured) ? geothermC(config.lithostaticDepth() / 2) : configured;
+    }
+
+    /**
+     * Temperature (°C) of the shell of wall rock that creeps: one radius thick around the chamber, in its steady
+     * conductive halo ({@code T − T_far ∝ R/r}), whose volume mean is {@code T_far + (9/14)(T − T_far)} (the
+     * viscous shell of Jellinek &amp; DePaolo 2003 is of the order of the chamber's radius). A long-lived hot
+     * chamber softens its walls; a cold one does not.
+     */
+    public double wallShellTemperatureC() {
+        double far = farFieldTemperatureC();
+        return far + 9.0 / 14.0 * Math.max(0, temperature - far);
+    }
+
+    private double geothermC(double depthM) {
+        return geothermSurfaceC + geothermGradientCPerKm * Math.max(0, depthM) / 1000;
+    }
+
+    /** The region's geotherm, reported by the surface coupling from the subsurface model. */
+    public void setGeotherm(double surfaceC, double gradientCPerKm) {
+        if (Double.isFinite(surfaceC) && Double.isFinite(gradientCPerKm)) {
+            geothermSurfaceC = surfaceC;
+            geothermGradientCPerKm = gradientCPerKm;
+        }
+    }
+
     /** Wall-rock creep: Arrhenius viscosity η = η₀·exp(E/R·(1/T − 1/T₀)) (crustal rock near a chamber). */
     static final double WALL_VISCOSITY_REF_PAS = 1e19; // at 700 °C (Jellinek & DePaolo 2003)
     static final double WALL_VISCOSITY_REF_K = 973.15;
     static final double WALL_ACTIVATION_J_MOL = 3.0e5;
 
-    /** Viscosity of the wall rock (Pa·s) at the configured wall temperature, clamped to 10¹⁶–10²⁵. */
+    /** Viscosity of the wall rock (Pa·s) at its shell's temperature ({@link #wallShellTemperatureC}), clamped to 10¹⁶–10²⁵. */
     public double wallViscosityPaS() {
-        double t = config.wallTemperatureC() + 273.15;
+        double t = wallShellTemperatureC() + 273.15;
         double eta = WALL_VISCOSITY_REF_PAS * StrictMath.exp(WALL_ACTIVATION_J_MOL / GAS_CONSTANT
                 * (1 / Math.max(t, 200) - 1 / WALL_VISCOSITY_REF_K));
         return Math.min(1e25, Math.max(1e16, eta));
@@ -1445,13 +1487,17 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     /**
      * Smallest eruption rate (m³/s) that keeps the conduit open: magma crossing the conduit length {@code L}
-     * faster than heat diffuses across its radius {@code r} stays molten, {@code r²/κ > L/v}, so the flow
-     * needs {@code Q = πr²v > πκL}. Slower flow freezes against the walls and the eruption ends (thermal
-     * control of eruptions, Delaney &amp; Pollard 1982, Am. J. Sci. 282:856-885; Bruce &amp; Huppert 1989,
-     * Nature 342:665-667). An order-of-magnitude criterion: ~0.01 m³/s for a conduit a few km long.
+     * faster than the conduit would solidify across its radius {@code a} stays molten. That takes
+     * {@code t_s = (a²/κ)(1 + L_h/(c ΔT))} ({@link #conduitFreezeSeconds}, latent heat {@code L_h} released
+     * against the contrast {@code ΔT} to the wall rock), so the flow needs {@code Q = π a² L / t_s =
+     * π κ L / (1 + L_h/(c ΔT))}. Slower flow freezes against the walls and the eruption ends (thermal control
+     * of eruptions, Delaney &amp; Pollard 1982, Am. J. Sci. 282:856-885; Bruce &amp; Huppert 1989, Nature
+     * 342:665-667): ~0.01 m³/s for a conduit a few km long.
      */
     public double conduitFreezingRateM3PerS() {
-        return Math.PI * THERMAL_DIFFUSIVITY * config.lithostaticDepth();
+        double dT = Math.max(1, temperature - conduitWallTemperatureC());
+        return Math.PI * THERMAL_DIFFUSIVITY * config.lithostaticDepth()
+                / (1 + LATENT_HEAT_CRYSTALLISATION / (MELT_HEAT_CAPACITY * dT));
     }
 
     /** log10 of the bulk magma viscosity (Pa·s). */
@@ -1510,7 +1556,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      */
     @Override
     public double wallHeatPowerW() {
-        double excess = temperature - config.wallTemperatureC();
+        double excess = temperature - farFieldTemperatureC();
         if (!(excess > 0)) return 0;
         return meltDensityKgPerM3() * effectiveHeatCapacity() * volume * excess / coolingTimescaleSeconds();
     }
@@ -1677,6 +1723,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         out.addProperty("conduitQuietSeconds", conduitQuietSeconds);
         out.addProperty("ventAmbientPa", ventAmbientPa);
         out.add("crust", crust.save());
+        out.addProperty("geothermSurfaceC", geothermSurfaceC);
+        out.addProperty("geothermGradientCPerKm", geothermGradientCPerKm);
         out.addProperty("waterTableDepthM", waterTableDepthM);
         if (conduitInput != null && conduit != null) {
             out.add("conduitInput", ConduitJson.write(conduitInput));
@@ -1745,6 +1793,10 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         conduitQuietSeconds = in.get("conduitQuietSeconds").getAsDouble();
         ventAmbientPa = in.get("ventAmbientPa").getAsDouble();
         crust = in.has("crust") ? CrustColumn.load(in.getAsJsonObject("crust")) : CrustColumn.uniform(ROCK_DENSITY);
+        if (in.has("geothermSurfaceC")) {
+            geothermSurfaceC = in.get("geothermSurfaceC").getAsDouble();
+            geothermGradientCPerKm = in.get("geothermGradientCPerKm").getAsDouble();
+        }
         waterTableDepthM = in.get("waterTableDepthM").getAsDouble();
         if (in.has("conduitInput") && in.has("conduit")) {
             conduitInput = ConduitJson.readInput(in.getAsJsonObject("conduitInput"));

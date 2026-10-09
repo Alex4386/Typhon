@@ -53,6 +53,11 @@ long as they do not change outcomes.
   a convecting conduit overflows only when the chamber lifts the column's mean weight (Stromboli).
 - `FissureFeeder.WANING_CONDUCTANCE` (0.5): a fissure is waning when its flow is falling and even its widest
   segment narrows.
+- `MagmaChamberConfig.wallTemperatureC = 400` played three parts: the chamber now cools into the region's
+  geotherm at its depth, its conduit freezes against the geotherm half-way up, and its walls creep at the
+  mean temperature of a one-radius shell in its steady conductive halo (Jellinek &amp; DePaolo 2003).
+- `conduitFreezingRateM3PerS` (πκL) ignored the latent heat and the contrast to the wall rock: it is now
+  `πκL / (1 + L_h/(c ΔT))`, the flux that crosses the conduit within its own solidification time.
 - `VentPartition` aquifer constants (`AQUIFER_PERMEABILITY` 1e-11 m², `AQUIFER_INTERACTION_DEPTH_M` 300 m, unit
   gradient): groundwater enters the conduit between the water table and the fragmentation level, through the
   conductivity of the ground's layers under the vent, as a well screen (Hvorslev shape factor).
@@ -88,17 +93,14 @@ long as they do not change outcomes.
 ## Medium: change magnitudes
 
 - Three liquidus/solidus laws and three maximum crystallinities for the same magma.
-- `MagmaChamberConfig.wallTemperatureC = 400` instead of the geotherm and the heating history. It plays two
-  parts: the far field the chamber cools into (should be the geotherm at its depth) and the contact
-  temperature that makes its walls creep (should be the halo's, near the magma's for a long-lived chamber,
-  which would make most chamber walls viscoelastic, Jellinek &amp; DePaolo 2003).
 - Convecting conduits carry no heat out of the chamber in the model (only gas).
 - Below the world's stack the crust keeps its deepest layer's density (no compaction with depth).
 - Duplicated constants that disagree: magma, rock and clast densities, crustal shear modulus.
 - Wall viscosity clamp, slug ejecta and backlog caps, the coalescence heuristic.
 - Configured `exsolutionTimescale` and `crystallisationTimescale`.
 - `VentPartition` grain-size medians, column-collapse sigmoid, aggregation constants.
-- `VolcanoCoupler.PHASE_UPDATE_THRESHOLD = 0.25`, fixed slug and plug clast sizes.
+- Fixed slug and plug clast sizes. `VolcanoCoupler.PHASE_UPDATE_THRESHOLD` now only decides when a column change is
+  reported (the lofted rate is retuned every step), but the collapse (PDC) source still follows it in 25 % steps.
 - Seismic explosivity index, and VT and swarm rates standing in for physics.
 - Lava: `crustDisruptionVelocity`, `hyaloclastiteFraction`, fixed density, the tuned yield-strength shift.
 - Mass flows: stop depth and speed, cooling timescale, welding temperature, erosion and rain thresholds.
@@ -106,4 +108,3 @@ long as they do not change outcomes.
 - Geomorphology caps: slab depth, crater radius, minimum slope.
 - Geothermal activity ramps and formation probabilities per hour.
 - Subsurface: Nusselt cap, steam collapse timescale.
-- `conduitFreezingRateM3PerS` ignores the temperature contrast and latent heat.

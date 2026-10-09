@@ -80,13 +80,15 @@ class MagmaChamberTest {
 
     @Test
     void withoutAConduitOnlyADikeStartsAnEruptionWhichDrainsUntilItsConduitFreezes() {
-        MagmaChamberConfig config = steady().initialOverpressureMPa(14.5).conduitRadius(3).build();
+        // a supply below the conduit's freezing rate (one above it would feed a steady eruption instead)
+        MagmaChamberConfig config = steady().supplyRate(0.002).initialOverpressureMPa(15.2).conduitRadius(3).build();
         MagmaChamber chamber = new MagmaChamber(config);
         Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
 
         // no conduit: past its roof strength the chamber does not erupt by itself (only a dike gets magma up)
         assertTrue(runFor(engine, 30 * 86_400, EruptionStarted.class).isEmpty(), "no way up without a conduit or dike");
-        assertTrue(chamber.overpressureMPa() >= config.tensileStrengthMPa(), "pressurised past the roof strength");
+        assertTrue(chamber.overpressureMPa() >= config.tensileStrengthMPa(), "pressurised past the roof strength: "
+                + chamber.overpressureMPa() + " vs " + config.tensileStrengthMPa() + " T=" + chamber.temperatureC());
         assertEquals(0, chamber.conduitOpenness());
 
         // a dike reaching the surface starts the eruption at the pressure the chamber has

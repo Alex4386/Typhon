@@ -130,6 +130,15 @@ public final class TephraSubsystem implements Subsystem {
         pending.add(new StartExplosivePhase(id, phase));
     }
 
+    /**
+     * Retunes a vent's running phase to {@code phase} at once, without a phase event: the column's rate and
+     * make-up follow the eruption step by step. Starts it (with its event) if the vent has none.
+     */
+    public void retunePhase(ExplosivePhase phase) {
+        if (phases.containsKey(phase.vent().id())) phases.put(phase.vent().id(), phase);
+        else startPhase(phase);
+    }
+
     /** Stops every vent's phase. */
     public void stopPhase() {
         pending.add(new StopExplosivePhase(id));

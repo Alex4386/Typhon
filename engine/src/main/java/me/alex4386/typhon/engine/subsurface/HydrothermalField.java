@@ -9,6 +9,11 @@ public interface HydrothermalField {
     /** Whether the column lies inside the modelled area. */
     boolean known(int x, int z);
 
+    /** Undisturbed geotherm (°C) at {@code depthM} below the ground, at any depth (the region's background). */
+    default double geothermC(double depthM) {
+        return 15 + 0.030 * Math.max(0, depthM);
+    }
+
     /** Ground temperature (°C) at {@code depthM} below the surface. */
     double temperatureC(int x, int z, double depthM);
 

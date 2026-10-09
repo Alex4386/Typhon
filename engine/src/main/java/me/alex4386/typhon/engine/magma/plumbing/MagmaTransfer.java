@@ -172,7 +172,7 @@ public final class MagmaTransfer implements Subsystem {
         if (!Double.isNaN(c.freezeSeconds())) return c.freezeSeconds();
         MagmaChamber from = chambers.get(c.from());
         double half = c.kind() == ConnectionConfig.Kind.CONDUIT ? c.radiusM() : c.widthM() / 2;
-        double cooling = Math.max(1, from.temperatureC() - from.config().wallTemperatureC());
+        double cooling = Math.max(1, from.temperatureC() - from.farFieldTemperatureC());
         double stefan = 1 + MagmaChamber.LATENT_HEAT_CRYSTALLISATION / (MagmaChamber.MELT_HEAT_CAPACITY * cooling);
         return half * half / MagmaChamber.THERMAL_DIFFUSIVITY * stefan;
     }

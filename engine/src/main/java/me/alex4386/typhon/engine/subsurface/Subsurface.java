@@ -722,6 +722,11 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
     }
 
     @Override
+    public double geothermC(double depthM) {
+        return grid.backgroundTemperature(depthM);
+    }
+
+    @Override
     public double rockTemperatureC(double x, double z, double depthM) {
         if (!(depthM >= 0) || depthM > grid.totalDepth()) return Double.NaN; // below the modelled ground
         double l = world.spec().metersPerColumn();

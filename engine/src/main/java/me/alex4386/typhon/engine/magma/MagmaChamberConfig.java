@@ -30,7 +30,8 @@ import me.alex4386.typhon.engine.math.Point3;
  * @param initialCo2Wt bulk CO₂ at creation (wt%)
  * @param initialOverpressureMPa overpressure at creation; NaN for an open-vent volcano at rest, its molten
  *     conduit's convecting magma column standing at the vent ({@code MagmaChamber#convectingColumnHeadMPa})
- * @param wallTemperatureC temperature the chamber relaxes towards by conduction
+ * @param wallTemperatureC far-field temperature (°C) of the rock the chamber cools into; NaN (default) = the
+ *     region's geotherm at its depth, and the conduit's and wall shell's from the geotherm and the chamber's halo
  * @param coolingTimescale e-folding time of conductive cooling (physical s); NaN = computed from conduction
  *     out of a sphere of the chamber's volume (see {@code MagmaChamber#coolingTimescaleSeconds})
  * @param degassingTimescale e-folding time for venting exsolved volatiles (physical s); NaN = computed from the
@@ -194,7 +195,7 @@ public record MagmaChamberConfig(
         private double initialOverpressureMPa = 0;
         // host rock around a long-lived reservoir, heated above the regional geotherm: a few hundred °C
         // (order of magnitude; poorly constrained, depends on the reservoir's history)
-        private double wallTemperatureC = 400;
+        private double wallTemperatureC = Double.NaN; // the geotherm (MagmaChamber#farFieldTemperatureC)
         private double coolingTimescale = Double.NaN; // computed (MagmaChamber#coolingTimescaleSeconds)
         private double degassingTimescale = Double.NaN; // computed (MagmaChamber#degassingTimescaleSeconds)
         // olivine + clinopyroxene + plagioclase of a basaltic cumulate (~45–48 wt% SiO₂)
