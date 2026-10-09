@@ -1018,7 +1018,11 @@ public final class Geomorphology implements Subsystem {
                 return FailureStyle.BLOCK_AND_ASH_FLOW;
             }
         }
-        if (saturation >= config.debrisFlowSaturation && lahars != null && waterM > 0) {
+        // A failing mass contracts to the debris' porosity; if its pore water then fills those pores, the grains
+        // load the water, its pressure rises, and the mass liquefies into a debris flow (Iverson et al. 1997,
+        // Annu. Rev. Earth Planet. Sci. 25:85-138; 2000, Science 290:513-516).
+        double contractedPores = solidsM * config.debrisPorosity / (1 - config.debrisPorosity);
+        if (waterM >= contractedPores && lahars != null && waterM > 0) {
             double c = Math.min(lahars.config().maxSedimentFraction, solidsM / (solidsM + waterM));
             // flow volume carrying the solids at concentration c
             List<double[]> mix = scale(cells, 1 / c);

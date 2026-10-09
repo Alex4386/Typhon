@@ -190,6 +190,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private double conduitQuietSeconds;
     /** Convective exchange flux through the quiet conduit during the last step (m³/s; derived, not saved). */
     private double convectionRate;
+    /** Physical seconds the conduit has been convecting without a break (its walls' conductive age). */
+    private double convectingSeconds;
     /** {@link #conduitQuietSeconds} of a chamber without a conduit. */
     static final double NO_CONDUIT = -1;
     private CrustColumn crust = CrustColumn.uniform(ROCK_DENSITY);
@@ -443,9 +445,14 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             convectionRate = summitBlocked ? 0 : convectiveExchangeM3PerS();
             if (conduitQuietSeconds >= 0 && convectionRate >= conduitFreezingRateM3PerS()) {
                 // magma convecting through the conduit keeps it molten, and degasses passively at its top (the
-                // gas exsolves near the surface as small bubbles, not as slugs segregated at depth)
+                // gas exsolves near the surface as small bubbles, not as slugs segregated at depth); the heat it
+                // carries up leaves through the conduit's walls and its open surface
                 degasByConvection(convectionRate * dt);
+                convectingSeconds += dt;
+                double heat = convectiveHeatLossW() * dt;
+                temperature -= heat / (meltDensityKgPerM3() * effectiveHeatCapacity() * volume);
             } else if (conduitQuietSeconds >= 0) {
+                convectingSeconds = 0;
                 conduitQuietSeconds += dt;
                 if (conduitQuietSeconds >= conduitFreezeSeconds()) conduitQuietSeconds = NO_CONDUIT; // frozen solid
             }
@@ -689,6 +696,29 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         double[] column = convectingDensities();
         double mean = (column[0] + column[1]) / 2;
         return mean * GRAVITY * config.lithostaticDepth() / 1e6 - lithostaticPressureMPa();
+    }
+
+    /** Stefan–Boltzmann constant (W/m²/K⁴) and the emissivity of basaltic melt (~0.95; Harris 2013). */
+    static final double STEFAN_BOLTZMANN = 5.670e-8;
+    static final double MELT_EMISSIVITY = 0.95;
+
+    /**
+     * Heat (W) a convecting conduit takes from the chamber: conducted into the walls along its length as from a
+     * cylinder held at the magma's temperature since convection began ({@link CylinderConduction}), plus what
+     * its open magma surface radiates, {@code ε σ (T⁴ − T_a⁴) π r²}.
+     */
+    public double convectiveHeatLossW() {
+        double r = config.conduitRadius();
+        double length = config.lithostaticDepth();
+        double wall = conduitWallTemperatureC();
+        double tau = THERMAL_DIFFUSIVITY * Math.max(1, convectingSeconds) / (r * r);
+        double walls = CRUST_CONDUCTIVITY * Math.max(0, temperature - wall) / r * CylinderConduction.flux(tau)
+                * 2 * Math.PI * r * length;
+        double tK = temperature + 273.15;
+        double ambientK = geothermSurfaceC + 273.15;
+        double surface = MELT_EMISSIVITY * STEFAN_BOLTZMANN * (tK * tK * tK * tK - ambientK * ambientK * ambientK * ambientK)
+                * Math.PI * r * r;
+        return walls + surface;
     }
 
     /** Exchange flux of the last quiet step ({@link #convectiveExchangeM3PerS}), 0 while erupting. */
@@ -1724,6 +1754,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         out.addProperty("ventAmbientPa", ventAmbientPa);
         out.add("crust", crust.save());
         out.addProperty("geothermSurfaceC", geothermSurfaceC);
+        out.addProperty("convectingSeconds", convectingSeconds);
         out.addProperty("geothermGradientCPerKm", geothermGradientCPerKm);
         out.addProperty("waterTableDepthM", waterTableDepthM);
         if (conduitInput != null && conduit != null) {
@@ -1793,6 +1824,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         conduitQuietSeconds = in.get("conduitQuietSeconds").getAsDouble();
         ventAmbientPa = in.get("ventAmbientPa").getAsDouble();
         crust = in.has("crust") ? CrustColumn.load(in.getAsJsonObject("crust")) : CrustColumn.uniform(ROCK_DENSITY);
+        convectingSeconds = in.has("convectingSeconds") ? in.get("convectingSeconds").getAsDouble() : 0;
         if (in.has("geothermSurfaceC")) {
             geothermSurfaceC = in.get("geothermSurfaceC").getAsDouble();
             geothermGradientCPerKm = in.get("geothermGradientCPerKm").getAsDouble();

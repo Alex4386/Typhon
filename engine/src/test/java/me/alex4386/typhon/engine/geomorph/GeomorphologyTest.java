@@ -10,6 +10,7 @@ import me.alex4386.typhon.engine.geomorph.GeomorphEvents.FailureStyle;
 import me.alex4386.typhon.engine.geomorph.GeomorphEvents.SlopeFailure;
 import me.alex4386.typhon.engine.geomorph.GeomorphEvents.Trigger;
 import me.alex4386.typhon.engine.massflow.DebrisAvalanches;
+import me.alex4386.typhon.engine.massflow.Lahars;
 import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
 import me.alex4386.typhon.engine.sim.Engine;
@@ -207,6 +208,41 @@ class GeomorphologyTest {
         double after = w.solid(null, 0);
         double lost = flow.massBudget().lost() * (1 - MaterialTable.DEBRIS.porosity());
         assertEquals(before, after + lost, 1e-7 * before, "solids conserved (flow losses at the edge accounted)");
+    }
+
+    @Test
+    void aSaturatedFailureLiquefiesIntoADebrisFlowADryOneDoesNot() {
+        // loose scoria (porosity 0.5) over-steepened to 50°: saturated, its pore water more than fills the pores
+        // of the contracting debris (0.3) and it runs as a debris flow (lahar); dry, as a debris avalanche
+        for (boolean wet : new boolean[] {true, false}) {
+            GeoWorld w = GeoWorld.flat(5, BASE_Z);
+            scoriaCone(w, 40, 40, 20, 50);
+            GeomorphConfig c = config();
+            c.avalancheMinVolumeM3 = 100;
+            Geomorphology g = new Geomorphology("geomorph:test", "test", w.terrain, c);
+            g.setGround(wet ? SATURATED : GroundState.DRY);
+            DebrisAvalanches avalanche = new DebrisAvalanches("avalanche:test", w.terrain);
+            Lahars lahar = new Lahars("lahar:test", w.terrain);
+            g.setFlows(avalanche, lahar, null);
+            g.activateArea(0, 0, w.size - 1, w.size - 1);
+            w.run(w.engine(1, 1, g, avalanche, lahar), 5);
+            List<FailureStyle> styles = w.events(SlopeFailure.class).stream().map(SlopeFailure::style).distinct().toList();
+            FailureStyle expected = wet ? FailureStyle.DEBRIS_FLOW : FailureStyle.DEBRIS_AVALANCHE;
+            assertTrue(styles.contains(expected), (wet ? "wet: " : "dry: ") + styles);
+            if (!wet) assertFalse(styles.contains(FailureStyle.DEBRIS_FLOW), "dry debris has no water to liquefy");
+        }
+        // dense lava does not: its few pores cannot fill those of the dilating debris
+        GeoWorld rock = cliff();
+        GeomorphConfig c = config();
+        c.avalancheMinVolumeM3 = 500;
+        Geomorphology g = new Geomorphology("geomorph:test", "test", rock.terrain, c);
+        g.setGround(SATURATED);
+        DebrisAvalanches avalanche = new DebrisAvalanches("avalanche:test", rock.terrain);
+        Lahars lahar = new Lahars("lahar:test", rock.terrain);
+        g.setFlows(avalanche, lahar, null);
+        for (int x = 0; x < rock.size; x++) for (int z = 0; z < rock.size; z++) g.setAlteration(x, z, 1);
+        rock.run(rock.engine(3, 1, g, avalanche, lahar), 5);
+        assertFalse(rock.events(SlopeFailure.class).stream().anyMatch(f -> f.style() == FailureStyle.DEBRIS_FLOW));
     }
 
     @Test

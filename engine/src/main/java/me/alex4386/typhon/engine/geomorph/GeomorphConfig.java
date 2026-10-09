@@ -38,8 +38,6 @@ public final class GeomorphConfig {
     public double reportMinVolumeM3 = 100;
     /** Talus / ejecta / avalanche debris porosity (that of {@code MaterialTable.DEBRIS}). */
     public double debrisPorosity = 0.30;
-    /** Failed masses at least this saturated (pore volume fraction) run as lahars (debris flows). */
-    public double debrisFlowSaturation = 0.8;
     /** Failed masses at least this hot run as pyroclastic block-and-ash flows (°C). */
     public double hotCollapseTemperatureC = 400;
     /**
@@ -101,7 +99,6 @@ public final class GeomorphConfig {
         c.avalancheMinVolumeM3 = avalancheMinVolumeM3;
         c.reportMinVolumeM3 = reportMinVolumeM3;
         c.debrisPorosity = debrisPorosity;
-        c.debrisFlowSaturation = debrisFlowSaturation;
         c.hotCollapseTemperatureC = hotCollapseTemperatureC;
         c.submergedReposeFactor = submergedReposeFactor;
         c.waveBaseM = waveBaseM;

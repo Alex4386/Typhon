@@ -194,7 +194,13 @@ class EruptionDynamicsTest {
         double water = chamber.meltWaterWt();
         double co2 = chamber.meltCo2Wt();
         double freeze = chamber.conduitFreezeSeconds();
+        MagmaChamber closed = new MagmaChamber(config.toBuilder().conduit(ConduitConfig.DEFAULT).build());
+        Engine closedEngine = Engine.builder(0).adaptive(3600).add(closed).build();
         runFor(engine, chamber, 3 * freeze);
+        runFor(closedEngine, closed, 3 * freeze);
+        double loss = chamber.convectiveHeatLossW();
+        assertTrue(loss > 1e6 && loss < 1e9, "MW to hundreds of MW, as open vents radiate and conduct: " + loss);
+        assertTrue(chamber.temperatureC() < closed.temperatureC(), "the heat it carries up cools the chamber");
         assertFalse(chamber.erupting());
         assertEquals(1, chamber.conduitOpenness(), 1e-9, "convection keeps the conduit molten");
         assertTrue(chamber.meltWaterWt() < water && chamber.meltCo2Wt() < co2, "and degasses the chamber");

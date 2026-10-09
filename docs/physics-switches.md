@@ -42,7 +42,8 @@ long as they do not change outcomes.
   its expansion across the conduit, `ρ ε̇ r² / η`, exceeds 1 (Namiki &amp; Manga 2008).
 - Quiet conduits only froze: gas-bearing magma now convects through them (core–annular exchange flow,
   `Q = Ps Δρ g r⁴ / μ_d`, Stevenson &amp; Blake 1998) and keeps them molten while that flux outruns
-  conduction, degassing the chamber at the vent.
+  conduction, degassing the chamber at the vent and cooling it (wall conduction along the conduit plus the
+  radiation of its open magma surface, ~10 MW at Stromboli).
 - Crust density was a constant 2600 kg/m³ (`MagmaChamber.ROCK_DENSITY`, `DikeConfig.rockDensity`): the chamber
   now takes the world's rock column above it (`CrustColumn`: each layer's bulk density, voids removed, pores
   saturated below the water table) for its lithostatic load, the head a magma column must balance and the
@@ -58,6 +59,9 @@ long as they do not change outcomes.
   mean temperature of a one-radius shell in its steady conductive halo (Jellinek &amp; DePaolo 2003).
 - `conduitFreezingRateM3PerS` (πκL) ignored the latent heat and the contrast to the wall rock: it is now
   `πκL / (1 + L_h/(c ΔT))`, the flux that crosses the conduit within its own solidification time.
+- `GeomorphConfig.debrisFlowSaturation` (0.8): a failed mass liquefies into a debris flow when its pore
+  water fills the pores of the debris it contracts to (Iverson et al. 1997): saturated loose tephra does,
+  saturated dense lava (dilating) does not.
 - `VentPartition` aquifer constants (`AQUIFER_PERMEABILITY` 1e-11 m², `AQUIFER_INTERACTION_DEPTH_M` 300 m, unit
   gradient): groundwater enters the conduit between the water table and the fragmentation level, through the
   conductivity of the ground's layers under the vent, as a well screen (Hvorslev shape factor).
@@ -70,9 +74,12 @@ long as they do not change outcomes.
   liquidus (water lowers it by ~100–150 °C; Médard &amp; Grove 2008) and a non-linear melt-fraction curve
   (silicic melts survive to near the solidus) first.
 - `minCharacteristicHeight = 200` is the size of the crack a dike starts as; the quasi-static slot model is
-  singular at zero height. It should come from the roof's failure (the region in hoop tension).
+  singular at zero height. It should come from the roof's failure (the region in hoop tension); taking the
+  chamber's radius instead gave cracks broader than the roof is thick and 26 m/s dikes from a large chamber.
 - Plug explosions: `plugStrengthMPa`, `plugViscosityLog10` and the logistic `PLUG_TRANSITION_LOG10`.
-- `GeomorphConfig.debrisFlowSaturation` / `hotCollapseTemperatureC` classify failed masses.
+- `GeomorphConfig.hotCollapseTemperatureC` (400 °C) sends hot failed masses (dome collapses) down as
+  block-and-ash flows: what makes a hot collapse fluidise into a PDC (pressurised pore gas, heated entrained
+  air) is not modelled.
 
 ## Empirical constraints kept for now
 
@@ -93,7 +100,6 @@ long as they do not change outcomes.
 ## Medium: change magnitudes
 
 - Three liquidus/solidus laws and three maximum crystallinities for the same magma.
-- Convecting conduits carry no heat out of the chamber in the model (only gas).
 - Below the world's stack the crust keeps its deepest layer's density (no compaction with depth).
 - Duplicated constants that disagree: magma, rock and clast densities, crustal shear modulus.
 - Wall viscosity clamp, slug ejecta and backlog caps, the coalescence heuristic.
