@@ -68,6 +68,32 @@ class TephraSubsystemTest {
     }
 
     @Test
+    void everyVentFeedsItsOwnColumn() {
+        Rig rig = new Rig();
+        Engine engine = rig.engine(7, null);
+        VentSite east = VentSite.crater("east", new Point3(205, 80, 5), 20);
+        engine.submit(TephraTestSupport.flat(TERRAIN_RADIUS, 80));
+        engine.submit(new StartExplosivePhase("tephra:test", ExplosivePhase.strombolian(VENT, 4000)));
+        engine.submit(new StartExplosivePhase("tephra:test", ExplosivePhase.strombolian(east, 1000)));
+        List<EngineFrame> frames = new ArrayList<>();
+        for (int i = 0; i < 100; i++) frames.add(engine.step());
+
+        assertEquals(2, rig.tephra.activePhases().size());
+        assertEquals(VENT, rig.tephra.activePhase().vent(), "the strongest column");
+        List<TephraEvents.PlumeColumn> columns = events(frames, TephraEvents.PlumeColumn.class);
+        assertTrue(columns.stream().anyMatch(c -> c.base().equals(VENT.position())));
+        assertTrue(columns.stream().anyMatch(c -> c.base().equals(east.position())));
+        double tall = rig.tephra.plumeHeight(rig.tephra.activePhase());
+        assertEquals(tall, rig.tephra.plumeHeight(), 1e-9, "the tallest column");
+
+        // stopping one vent leaves the other erupting
+        engine.submit(new StopExplosivePhase("tephra:test", "summit"));
+        engine.step();
+        assertEquals(1, rig.tephra.activePhases().size());
+        assertEquals(east, rig.tephra.activePhase().vent());
+    }
+
+    @Test
     void phaseLaunchesBombsThatLandAndIsDeterministic() {
         Rig a = new Rig();
         // 25 s of eruption, then 35 s for the last bombs (tens of seconds aloft at real speeds) to land.

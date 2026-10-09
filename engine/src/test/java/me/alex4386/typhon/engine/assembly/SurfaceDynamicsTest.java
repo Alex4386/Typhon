@@ -51,7 +51,7 @@ class SurfaceDynamicsTest {
         return MagmaChamberConfig.builder(id, vent.offset(0, -3000, 0))
                 .conduit(TestConduits.molten(12))
                 .volume(5e8).lithostaticDepth(3000).conduitRadius(2)
-                .tensileStrengthMPa(12).eruptionEndOverpressureMPa(1)
+                .tensileStrengthMPa(12)
                 .supplyRate(2).supplyVariability(0)
                 .initialSilicaWt(46.5).rechargeSilicaWt(46.5)
                 .initialWaterWt(0.7).rechargeWaterWt(0.7)
@@ -93,14 +93,14 @@ class SurfaceDynamicsTest {
         VentSite vent = VolcanoSystemTest.CRATER;
         MagmaChamberConfig chamber = MagmaChamberConfig.builder("test", new Point3(0, -3000, 0))
                 .volume(5e7).lithostaticDepth(3000).conduitRadius(0.8)
-                .tensileStrengthMPa(8).eruptionEndOverpressureMPa(0.5)
+                .tensileStrengthMPa(8)
                 .supplyRate(0.002).supplyVariability(0)
                 .initialSilicaWt(50).rechargeSilicaWt(50)
                 .initialWaterWt(2.7).rechargeWaterWt(2.7)
                 .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
                 .initialTemperatureC(1140).rechargeTemperatureC(1150)
                 .initialOverpressureMPa(0)
-                .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
+                .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1))
                 .build();
         TerrainModel terrain = new TerrainModel();
         LavaFlow lava = new LavaFlow(terrain);

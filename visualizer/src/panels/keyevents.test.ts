@@ -41,7 +41,7 @@ describe('key events', () => {
     expect(describeRow(rows.find((r) => r.event.kind === 'seismic')!)).toContain('M3.6');
     expect(describeRow(rows[4])).toContain('reached the sea');
     expect(describeEvent(rows[6].event)).toContain('Strombolian');
-    expect(describeEvent(rows[0].event)).toContain('froze');
+    expect(describeEvent(rows[0].event)).toContain('freezing');
   });
 
   it('merges a re-attach backlog into the key-event list without duplicates', () => {

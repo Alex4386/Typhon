@@ -17,7 +17,6 @@ import me.alex4386.typhon.engine.math.Point3;
  *     solubility and conduit length
  * @param conduitRadius conduit radius (m) for the Poiseuille eruption-rate law
  * @param tensileStrengthMPa overpressure at which the roof fails and an eruption starts
- * @param eruptionEndOverpressureMPa overpressure below which an eruption stops
  * @param supplyRate deep magma supply (m³ per physical second)
  * @param supplyVariability log-normal σ of per-step supply fluctuations (0 = steady)
  * @param rechargeTemperatureC temperature of the supplied magma
@@ -58,7 +57,6 @@ public record MagmaChamberConfig(
         double lithostaticDepth,
         double conduitRadius,
         double tensileStrengthMPa,
-        double eruptionEndOverpressureMPa,
         double supplyRate,
         double supplyVariability,
         double rechargeTemperatureC,
@@ -92,9 +90,6 @@ public record MagmaChamberConfig(
         requirePositive("lithostaticDepth", lithostaticDepth);
         requirePositive("conduitRadius", conduitRadius);
         requirePositive("tensileStrengthMPa", tensileStrengthMPa);
-        if (eruptionEndOverpressureMPa >= tensileStrengthMPa) {
-            throw new IllegalArgumentException("eruptionEndOverpressureMPa must be below tensileStrengthMPa");
-        }
         if (supplyRate < 0) throw new IllegalArgumentException("supplyRate must be >= 0");
         if (supplyVariability < 0) throw new IllegalArgumentException("supplyVariability must be >= 0");
         requirePositiveOrNaN("coolingTimescale", coolingTimescale);
@@ -116,15 +111,6 @@ public record MagmaChamberConfig(
         }
     }
 
-    /**
-     * Overpressure that re-opens an open conduit, kept between the eruption end threshold and the
-     * tensile strength (at least 0.5 MPa above the end threshold: a numerical margin so a conduit that just
-     * stopped does not re-open in the same step).
-     */
-    public double reopenOverpressureMPa() {
-        double low = Math.min(tensileStrengthMPa, eruptionEndOverpressureMPa + 0.5);
-        return Math.max(low, Math.min(tensileStrengthMPa, conduit.reopenOverpressureMPa()));
-    }
 
     /** Id of a volcano's main (eruptive) chamber, the one its summit conduit and vents draw from. */
     public static final String MAIN = "main";
@@ -148,7 +134,6 @@ public record MagmaChamberConfig(
         b.lithostaticDepth = lithostaticDepth;
         b.conduitRadius = conduitRadius;
         b.tensileStrengthMPa = tensileStrengthMPa;
-        b.eruptionEndOverpressureMPa = eruptionEndOverpressureMPa;
         b.supplyRate = supplyRate;
         b.supplyVariability = supplyVariability;
         b.rechargeTemperatureC = rechargeTemperatureC;
@@ -194,7 +179,6 @@ public record MagmaChamberConfig(
         // overpressure at roof failure: of the order of the host rock's tensile strength, a few to ~20 MPa
         // (Gudmundsson 2012; Jellinek & DePaolo 2003)
         private double tensileStrengthMPa = 15;
-        private double eruptionEndOverpressureMPa = 2;
         private double supplyRate = 0.3; // between arc (~0.01–0.1) and hotspot (~1–5) supply
         private double supplyVariability = 0.3;
         private double rechargeTemperatureC = 1180;
@@ -233,7 +217,6 @@ public record MagmaChamberConfig(
         public Builder lithostaticDepth(double v) { lithostaticDepth = v; return this; }
         public Builder conduitRadius(double v) { conduitRadius = v; return this; }
         public Builder tensileStrengthMPa(double v) { tensileStrengthMPa = v; return this; }
-        public Builder eruptionEndOverpressureMPa(double v) { eruptionEndOverpressureMPa = v; return this; }
         public Builder supplyRate(double v) { supplyRate = v; return this; }
         public Builder supplyVariability(double v) { supplyVariability = v; return this; }
         public Builder rechargeTemperatureC(double v) { rechargeTemperatureC = v; return this; }
@@ -262,7 +245,7 @@ public record MagmaChamberConfig(
 
         public MagmaChamberConfig build() {
             return new MagmaChamberConfig(volcanoId, center, volume, compressibilityPerMPa, lithostaticDepth,
-                    conduitRadius, tensileStrengthMPa, eruptionEndOverpressureMPa, supplyRate, supplyVariability,
+                    conduitRadius, tensileStrengthMPa, supplyRate, supplyVariability,
                     rechargeTemperatureC, rechargeSilicaWt, rechargeWaterWt, rechargeCo2Wt, rechargeCrystalFraction,
                     initialTemperatureC, initialSilicaWt, initialWaterWt, initialCo2Wt, initialOverpressureMPa,
                     wallTemperatureC, coolingTimescale, degassingTimescale, crystalSilicaWt, conduit, maxEruptionRate,

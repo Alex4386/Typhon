@@ -15,8 +15,11 @@ public final class TephraConfig {
     /** Sea-level air density, kg/m³ (ISA); bomb drag follows the standard atmosphere's density with height. */
     public double airDensity = 1.225;
     public double gravity = 9.81;
-    /** Longest RK4 integration step for bomb trajectories, seconds (each engine step is sub-divided). */
-    public double maxIntegrationStepSeconds = 0.0125;
+    /**
+     * Longest RK4 integration step for bomb trajectories, seconds (each engine step is sub-divided); a bomb
+     * also never moves more than half a ground column per sub-step, so it cannot skip over terrain.
+     */
+    public double maxIntegrationStepSeconds = 0.1;
 
     /** Physical exit speed bounds, m/s. */
     public double minExitSpeed = 20;

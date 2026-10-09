@@ -37,7 +37,7 @@ export const STYLE_LABEL: Record<string, string> = {
 
 const STALL_LABEL: Record<string, string> = {
   INSUFFICIENT_PRESSURE: 'not enough pressure to go on',
-  FROZE: 'the magma froze',
+  FROZE: 'too slow to outrun freezing (still molten for now)',
 };
 
 const VENT_STATE_LABEL: Record<string, string> = {
@@ -95,6 +95,10 @@ export function describeEvent(e: SimEvent): string {
       return `Magma intrusion (dike ${e.dikeId}) started rising from the chamber`;
     case 'dikeStalled':
       return `Dike ${e.dikeId} stalled ${(e.depthM / 1000).toFixed(2)} km down — ${STALL_LABEL[e.reason] ?? e.reason.toLowerCase().replaceAll('_', ' ')}`;
+    case 'dikeResumed':
+      return `Dike ${e.dikeId} is rising again from ${(e.depthM / 1000).toFixed(2)} km down`;
+    case 'dikeSolidified':
+      return `Dike ${e.dikeId} solidified ${(e.depthM / 1000).toFixed(2)} km down — now an intrusion`;
     case 'dikeAdvanced':
       return `Magma intrusion (dike) rising, tip ${(e.path[e.path.length - 1][2] / 1000).toFixed(2)} km`;
     case 'fissureOpened':
@@ -154,7 +158,7 @@ export function toastTone(e: SimEvent): 'info' | 'warn' | 'alert' | null {
 export const NOTABLE_FEATURES = new Set(['GEYSER', 'HOT_SPRING', 'SULFUR_SPRING', 'SUBMARINE_VENT']);
 
 /** Changes in what the volcano is doing: always their own row among the key events. */
-const MILESTONE_KINDS = new Set(['eruptionStarted', 'eruptionEnded', 'alertChanged', 'regimeChanged', 'styleEstimated', 'dikeStarted', 'ventFormed', 'dikeStalled', 'fissureOpened', 'ventState', 'message']);
+const MILESTONE_KINDS = new Set(['eruptionStarted', 'eruptionEnded', 'alertChanged', 'regimeChanged', 'styleEstimated', 'dikeStarted', 'ventFormed', 'dikeStalled', 'dikeResumed', 'dikeSolidified', 'fissureOpened', 'ventState', 'message']);
 
 /** Key events that are aggregated rather than milestones (see {@link aggregateKey}). */
 const AGGREGATED_KINDS = new Set(['areaExpanded']);

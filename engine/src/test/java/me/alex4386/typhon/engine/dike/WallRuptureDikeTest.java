@@ -22,7 +22,7 @@ class WallRuptureDikeTest {
     private static final double INJECTED = 2e8;
 
     private static MagmaChamberConfig.Builder chamber() {
-        return basalt(0).volume(1e9).tensileStrengthMPa(10).eruptionEndOverpressureMPa(1);
+        return basalt(0).volume(1e9).tensileStrengthMPa(10);
     }
 
     /** Volume beyond the rupture limit for an injection of {@link #INJECTED} into an unpressurised chamber. */

@@ -23,7 +23,7 @@ class MagmaTransferTest {
     private static MagmaChamberConfig.Builder main() {
         return MagmaChamberConfig.builder("v", new Point3(0, -1500, 0)).volume(1e9).lithostaticDepth(1500).tensileStrengthMPa(10)
                 .conduit(TestConduits.molten(10))
-                .eruptionEndOverpressureMPa(1).supplyRate(0).supplyVariability(0).initialSilicaWt(50).initialWaterWt(0.4)
+                .supplyRate(0).supplyVariability(0).initialSilicaWt(50).initialWaterWt(0.4)
                 .initialTemperatureC(1180);
     }
 
@@ -59,7 +59,11 @@ class MagmaTransferTest {
         Sys s = build(main().build(), deep().initialOverpressureMPa(8).build(), conduit(1.5), 1, null);
         ConnectionConfig link = s.transfer().connections().get(0);
         double drive0 = s.transfer().drivingPressureMPa(link);
-        assertTrue(drive0 > 8, "the deep chamber's overpressure plus the denser crust push magma up: " + drive0);
+        // the deep chamber's overpressure, less the weight of a basaltic column (denser than the crust) 2.5 km tall
+        double head = (MagmaChamber.rockDensity() - s.deep().meltDensityKgPerM3()) * 9.81 * 2500 / 1e6;
+        assertTrue(head < 0, "basalt melt outweighs the crust: " + head);
+        assertEquals(8 - s.main().overpressureMPa() + head, drive0, 1e-9);
+        assertTrue(drive0 > 0, "the overpressure still pushes magma up: " + drive0);
         runUntil(s.engine(), 1.5e7); // half a year
         double drive = s.transfer().drivingPressureMPa(link);
         assertTrue(Math.abs(drive) < 0.02 * drive0, "flow stops at head equilibrium: " + drive);

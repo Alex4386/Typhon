@@ -69,6 +69,7 @@ final class LavaChunk {
     boolean oceanExplosive;
     double oceanHeat;
     int actionCount; // cooling actions deferred to the sequential pass (cell << 4 | kind flags)
+    double coolPace; // fastest cooling sub-iterations per second of its columns in the last cooling pass
     final int[] actions = new int[AREA];
 
     LavaChunk(int cx, int cz) {

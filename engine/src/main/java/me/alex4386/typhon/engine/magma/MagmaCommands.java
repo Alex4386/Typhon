@@ -103,8 +103,8 @@ public final class MagmaCommands {
     public record StartEruption(String volcanoId) implements MagmaCommand {}
 
     /**
-     * Manual override: end the current eruption. The conduit seals and overpressure is relieved to the
-     * end threshold so the chamber does not immediately re-erupt.
+     * Manual override: end the current eruption by plugging its conduit solid. The chamber keeps its
+     * pressure; it next fails through its walls (a dike).
      */
     public record StopEruption(String volcanoId) implements MagmaCommand {}
 

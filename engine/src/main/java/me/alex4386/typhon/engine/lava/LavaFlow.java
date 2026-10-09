@@ -203,6 +203,11 @@ public final class LavaFlow implements Subsystem {
     private GroundCoupling ground = GroundCoupling.NONE; // transient
     private int heatCell = 1; // columns per side of the blocks heat is summed over
     private double lastMaxDiffusivity;
+    /**
+     * Fastest cooling pace of the last step (1/s): the sub-iterations per second the most rapidly cooling or
+     * crusting column needed ({@link LavaConfig#coolingStepK}); 0 before any lava has cooled.
+     */
+    private double lastCoolPace;
     private int lastSubsteps = 1;
     private double eventSeconds;
     private long chunkGeneration = 1; // bumped whenever a lava chunk is created (neighbour-cache validity)
@@ -459,13 +464,15 @@ public final class LavaFlow implements Subsystem {
 
     /**
      * While lava moves, the flux sub-steps ({@link LavaConfig#maxSubsteps()} at most) must stay within
-     * the explicit stability limit of the most fluid lava seen last step; while any lava is molten,
-     * cooling and crust growth are resolved at {@link #MOLTEN_STEP_SECONDS} at most.
+     * the explicit stability limit of the most fluid lava seen last step. While any lava is molten, a step
+     * stays within the cooling sub-iterations of its fastest-cooling column (half the {@link
+     * #MAX_COOL_ITERATIONS} budget at last step's pace): a crusted pond cooling for months takes long steps,
+     * fresh lava radiating at 1000 °C short ones. Before any lava has cooled, {@link #MOLTEN_STEP_SECONDS}.
      */
     @Override
     public double maxStepSeconds() {
         if (activeCellCount() == 0 && sourcesIdle()) return Double.POSITIVE_INFINITY;
-        double limit = MOLTEN_STEP_SECONDS;
+        double limit = lastCoolPace > 0 ? 0.5 * MAX_COOL_ITERATIONS / lastCoolPace : MOLTEN_STEP_SECONDS;
         if (lastMaxDiffusivity > 0) {
             double stable = config.relaxation() * metersPerColumn() * metersPerColumn() / lastMaxDiffusivity;
             limit = Math.min(limit, config.maxSubsteps() * stable);
@@ -473,7 +480,7 @@ public final class LavaFlow implements Subsystem {
         return limit;
     }
 
-    /** Longest step while any lava is molten (s). */
+    /** Longest step while lava is molten but its cooling pace is not known yet (s). */
     static final double MOLTEN_STEP_SECONDS = 120;
 
     private boolean sourcesIdle() {
@@ -567,8 +574,12 @@ public final class LavaFlow implements Subsystem {
         // drained-tube actions (world edits, random draws, block changes) in order
         parallel.forEach(update, CHUNK_GRAIN, c -> {
             c.actionCount = 0;
+            c.coolPace = 0;
             if (c.isActive()) coolHeat(c, dt);
         });
+        double pace = 0;
+        for (LavaChunk c : update) pace = Math.max(pace, c.coolPace);
+        lastCoolPace = pace;
         SolidStats stats = solidAcc;
         List<LavaTube> formed = new ArrayList<>();
         for (LavaChunk c : update) {
@@ -1040,12 +1051,16 @@ public final class LavaFlow implements Subsystem {
                 maxRate = Math.max(maxRate, rate);
                 double step = remaining;
                 if (rate * cs * step > stepK) step = stepK / (rate * cs);
+                // sub-iterations per second this column needs at its present cooling and crusting rates
+                double pace = rate * cs / stepK;
                 double freezeHeat = 0;
                 if (growing) {
                     freezeHeat = rho * (config.latentHeatJKg() + config.specificHeatJKgK() * (t - solidus));
                     double maxGrow = Math.max(0.02, 0.2 * hc);
                     if (qTop * cs * step / freezeHeat > maxGrow) step = maxGrow * freezeHeat / (qTop * cs);
+                    pace = Math.max(pace, qTop * cs / (maxGrow * freezeHeat));
                 }
+                c.coolPace = Math.max(c.coolPace, pace);
                 if (iter >= MAX_COOL_ITERATIONS - 1) step = remaining; // bounded work per column
                 step = Math.min(step, remaining);
 
@@ -1548,6 +1563,7 @@ public final class LavaFlow implements Subsystem {
         out.addProperty("emitted", emittedVolume);
         out.addProperty("solidified", solidifiedVolume);
         out.addProperty("lastMaxDiffusivity", lastMaxDiffusivity);
+        out.addProperty("lastCoolPace", lastCoolPace);
         out.addProperty("eventSeconds", eventSeconds);
         JsonArray solidAccArray = new JsonArray();
         solidAccArray.add(solidAcc.cells);
@@ -1632,6 +1648,7 @@ public final class LavaFlow implements Subsystem {
         emittedVolume = in.get("emitted").getAsDouble();
         solidifiedVolume = in.get("solidified").getAsDouble();
         lastMaxDiffusivity = in.get("lastMaxDiffusivity").getAsDouble();
+        lastCoolPace = in.has("lastCoolPace") ? in.get("lastCoolPace").getAsDouble() : 0;
         eventSeconds = in.get("eventSeconds").getAsDouble();
         solidAcc.clear();
         oceanEntries.clear();

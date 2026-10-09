@@ -75,6 +75,17 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
         double edificeBaseZ, List<GeodeticStation> stations, SurfaceDetailConfig detail, PlumbingConfig plumbing) {
 
     static final Set<String> CHAMBER_DERIVED = Set.of();
+    /**
+     * Chamber keys of earlier definitions that no longer configure anything, accepted and ignored so old
+     * worlds still open: {@code eruptionEndOverpressureMPa} (eruptions now end when the conduit flow can no
+     * longer keep the conduit molten, not at a set pressure).
+     */
+    static final Set<String> CHAMBER_RETIRED = Set.of("eruptionEndOverpressureMPa");
+    /**
+     * Conduit keys of earlier definitions, accepted and ignored: {@code reopenOverpressureMPa} (a molten
+     * conduit now reopens when its solidified cap fails, {@code MagmaChamber#failureOverpressureMPa}).
+     */
+    static final Set<String> CONDUIT_RETIRED = Set.of("reopenOverpressureMPa");
     static final Set<String> CHAMBER_SKIP = Set.of("volcanoId", "center", "conduit", "chamberId");
     static final Set<String> DIKE_DERIVED = Set.of();
     static final Set<String> MASSFLOW_DERIVED = Set.of();
@@ -173,8 +184,11 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
                 ? parsePos(chamberNode.child("center"))
                 : VolcanoSystem.defaultChamberCenter(vents.get(0).position(), depth);
         chamberNode.markUsed("center");
-        ConduitConfig conduit = ConfigBinder.bindRecord(magma.child("conduit"), ConduitConfig.DEFAULT, Set.of(), Set.of());
+        ConfigNode conduitNode = magma.child("conduit");
+        CONDUIT_RETIRED.forEach(conduitNode::markUsed);
+        ConduitConfig conduit = ConfigBinder.bindRecord(conduitNode, ConduitConfig.DEFAULT, Set.of(), Set.of());
         MagmaChamberConfig.Builder builder = MagmaChamberConfig.builder(id, center).conduit(conduit);
+        CHAMBER_RETIRED.forEach(chamberNode::markUsed);
         ConfigBinder.bindBuilder(chamberNode, builder, Set.of("center"), CHAMBER_DERIVED);
         MagmaChamberConfig chamber;
         try {
@@ -296,6 +310,7 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
             Point3 center = n.has("center") ? parsePos(n.child("center")) : main.center();
             n.markUsed("center");
             MagmaChamberConfig.Builder b = main.toBuilder().chamberId(chamberId).center(center).supplyRate(0);
+            CHAMBER_RETIRED.forEach(n::markUsed);
             ConfigBinder.bindBuilder(n, b, Set.of("id", "center"), CHAMBER_DERIVED);
             try {
                 chambers.add(b.build());

@@ -135,6 +135,22 @@ final class EventTranslator {
                 o.addProperty("reason", e.reason().name());
                 yield o;
             }
+            case DikeEvents.DikeResumed e -> {
+                finishedDikes.remove(e.volcanoId() + "#" + e.dikeId());
+                JsonObject o = base("dikeResumed", e.time(), e.volcanoId());
+                o.addProperty("dikeId", e.dikeId());
+                o.add("tip", Json.xyz(map.point(e.tip())));
+                o.add("depthM", Json.num(e.depthM()));
+                yield o;
+            }
+            case DikeEvents.DikeSolidified e -> {
+                JsonObject o = base("dikeSolidified", e.time(), e.volcanoId());
+                o.addProperty("dikeId", e.dikeId());
+                o.add("tip", Json.xyz(map.point(e.tip())));
+                o.add("depthM", Json.num(e.depthM()));
+                o.add("volumeM3", Json.num(e.volumeM3()));
+                yield o;
+            }
             case DikeEvents.FissureOpened e -> {
                 finishedDikes.add(e.volcanoId() + "#" + e.dikeId());
                 JsonObject o = base("fissureOpened", e.time(), e.volcanoId());

@@ -17,13 +17,17 @@ import com.google.gson.JsonParser;
 import java.util.List;
 import me.alex4386.typhon.engine.deformation.DikeGeometry;
 import me.alex4386.typhon.engine.dike.DikeEvents.DikeAdvanced;
+import me.alex4386.typhon.engine.dike.DikeEvents.DikeResumed;
+import me.alex4386.typhon.engine.dike.DikeEvents.DikeSolidified;
 import me.alex4386.typhon.engine.dike.DikeEvents.DikeStalled;
+import me.alex4386.typhon.engine.magma.MagmaCommands;
 import me.alex4386.typhon.engine.dike.DikeEvents.DikeStarted;
 import me.alex4386.typhon.engine.dike.DikeEvents.FissureOpened;
 import me.alex4386.typhon.engine.dike.DikeEvents.StallReason;
 import me.alex4386.typhon.engine.output.EngineFrame;
 import me.alex4386.typhon.engine.volcano.VentKind;
 import me.alex4386.typhon.engine.volcano.VentSite;
+import me.alex4386.typhon.engine.magma.MeltDensity;
 import org.junit.jupiter.api.Test;
 import me.alex4386.typhon.engine.testing.Saves;
 import me.alex4386.typhon.engine.save.InMemorySaveStore;
@@ -112,6 +116,38 @@ class DikePropagationTest {
     }
 
     @Test
+    void aStalledDikeStaysMoltenUntilItsSheetSolidifies() {
+        DikeTestWorld.World w = world(4, basalt(1.5).build(), fastConfig(), flat(), null);
+        w.engine().submit(new DikeCommands.ForceDike("v"));
+        assertTrue(runUntil(w.engine(), DikeStalled.class, LONG) >= 0, "stalls");
+        Dike dike = w.dikes().dikes().get(0);
+        assertTrue(dike.molten(), "a stalled dike is still molten");
+
+        double solidify = w.dikes().solidificationSeconds(dike.openingM(), w.dikes().wallRockC(dike));
+        assertTrue(solidify > 60 && solidify < LONG, "hours for a sheet decimetres thick: " + solidify);
+        List<EngineFrame> frames = run(w.engine(), (int) Math.ceil(solidify) + 120);
+        assertEquals(1, events(frames, DikeSolidified.class).size());
+        assertFalse(dike.molten());
+        assertEquals(DikeStatus.STALLED, dike.status());
+        assertTrue(events(frames, DikeResumed.class).isEmpty(), "nothing drove it on");
+    }
+
+    @Test
+    void aMoltenStalledDikeIsDrivenOnByARecharge() {
+        DikeTestWorld.World w = world(4, basalt(1.5).build(), fastConfig(), flat(), null);
+        w.engine().submit(new DikeCommands.ForceDike("v"));
+        assertTrue(runUntil(w.engine(), DikeStalled.class, LONG) >= 0, "stalls");
+        Dike dike = w.dikes().dikes().get(0);
+        double stalledAt = dike.depthM();
+
+        // a recharge pulse while the sheet is still molten raises the chamber's pressure behind it
+        w.engine().submit(new MagmaCommands.InjectRecharge("v", 2e8, 1180, 50, 0.5, null, null));
+        List<EngineFrame> frames = run(w.engine(), 600);
+        assertEquals(1, events(frames, DikeResumed.class).size());
+        assertTrue(dike.depthM() < stalledAt, "rises on: " + dike.depthM() + " < " + stalledAt);
+    }
+
+    @Test
     void exsolvingGasBuoysTheShallowDike() {
         // the same 1.5 MPa push that stalls nearly gas-free basalt: with 0.2 wt% CO₂, gas beyond its solubility
         // lightens the magma below the crust's density in the shallow kilometres, and the dike erupts
@@ -126,14 +162,13 @@ class DikePropagationTest {
     @Test
     void magmaLightensAsItsGasExpands() {
         DikeTestWorld.World w = world(4, basalt(2).initialCo2Wt(0.2).build(), fastConfig(), flat(), null);
-        double melt = DikePropagation.magmaDensity(w.chamber().silicaWt());
-        double deep = w.dikes().magmaDensityAt(melt, 100);
-        double shallow = w.dikes().magmaDensityAt(melt, 10);
-        assertTrue(deep < melt && shallow < deep, deep + " " + shallow);
+        double deep = w.dikes().magmaDensityAt(100);
+        double shallow = w.dikes().magmaDensityAt(10);
+        assertTrue(shallow < deep, deep + " " + shallow);
         assertTrue(shallow < 2600, "buoyant near the surface: " + shallow);
         // bubble-free magma adds no buoyancy of its own beyond the melt's
         DikeTestWorld.World dry = world(4, basalt(2).initialWaterWt(0).initialCo2Wt(0).build(), fastConfig(), flat(), null);
-        double dryMelt = DikePropagation.magmaDensity(dry.chamber().silicaWt());
+        double dryMelt = MeltDensity.anhydrousKgPerM3(dry.chamber().silicaWt());
         assertEquals((2600 - dryMelt) * 9.81 * 1000 / 1e6, dry.dikes().buoyancyMPa(0, 0, 1000, 2000), 1e-6);
     }
 

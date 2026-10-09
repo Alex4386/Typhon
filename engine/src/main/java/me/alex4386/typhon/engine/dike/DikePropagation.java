@@ -14,6 +14,7 @@ import me.alex4386.typhon.engine.deformation.DikeGeometry;
 import me.alex4386.typhon.engine.dike.DikeEvents.StallReason;
 import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.magma.MagmaCommands;
+import me.alex4386.typhon.engine.magma.MeltDensity;
 import me.alex4386.typhon.engine.magma.conduit.ConduitModel;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.StepContext;
@@ -58,7 +59,9 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * half-width {@code w/2} solidifies against wall rock at temperature {@code T₀} in
  * {@code t_s = (w/2)² / (4 κ λ²)}, {@code λ} from the Stefan condition
  * {@code L √π / (c (T_m − T₀)) = e^{−λ²} / (λ (1 + erf λ))} (Turcotte &amp; Schubert 2002, §4.18); magma
- * that takes longer than that to rise through the dike ({@code H / v > t_s}) freezes in it.
+ * that takes longer than that to rise through the dike ({@code H / v > t_s}) freezes in it. A stalled dike
+ * stays molten for that time {@code t_s} and connected to the chamber: if the chamber's pressure (or a
+ * recharge) drives it on before then, it resumes; otherwise it solidifies into an intrusion.
  *
  * <p><b>Path.</b> Dikes rise vertically at depth. Within the edifice, gravitational stresses rotate
  * them down the topographic slope ({@code −∇h}, weighted by {@code exp(−depth / scale)}), so dikes
@@ -143,7 +146,7 @@ public final class DikePropagation implements Subsystem {
 
     @Override
     public double maxStepSeconds() {
-        if (activeCount() > 0 || forcedPending > 0) return RISING_STEP_SECONDS;
+        if (activeCount() > 0 || forcedPending > 0 || moltenCount() > 0) return RISING_STEP_SECONDS;
         // a dike nucleates only when the chamber walls fail; the chamber bounds its own step towards that
         return Double.POSITIVE_INFINITY;
     }
@@ -171,7 +174,7 @@ public final class DikePropagation implements Subsystem {
     /** Stops the propagating dike {@code dikeId} at the next step; false if there is no such dike. */
     public boolean arrest(int dikeId) {
         Dike dike = find(dikeId);
-        if (dike == null || !dike.propagating()) return false;
+        if (dike == null || !(dike.propagating() || dike.molten())) return false;
         pendingArrests.add(dikeId);
         return true;
     }
@@ -183,7 +186,7 @@ public final class DikePropagation implements Subsystem {
     public boolean remove(int dikeId) {
         Dike dike = find(dikeId);
         if (dike == null) return false;
-        if (dike.propagating()) pendingArrests.add(dikeId);
+        if (dike.propagating() || dike.molten()) pendingArrests.add(dikeId);
         dike.removed = true;
         return true;
     }
@@ -239,8 +242,10 @@ public final class DikePropagation implements Subsystem {
         }
         for (int id : pendingArrests) {
             Dike dike = find(id);
-            if (dike == null || !dike.propagating()) continue;
+            if (dike == null || !(dike.propagating() || dike.molten())) continue;
+            if (dike.propagating()) dike.stallTime = context.time();
             dike.status = DikeStatus.STALLED;
+            dike.frozen = true;
             emplaceIntrusion(dike, context.time());
             context.outbox().emit(new DikeEvents.DikeStalled(context.time(), volcanoId, dike.id, dike.tip(), dike.depth,
                     dike.volume, StallReason.ARRESTED));
@@ -249,19 +254,30 @@ public final class DikePropagation implements Subsystem {
 
         if (!blocked() && magma.ruptureExcessM3() > 0) {
             // Ruptured walls: the magma they could not hold leaves through a dike (a rising one, or a new one).
+            // a rising dike takes it, else a stalled one still molten (an open crack to the chamber)
             Dike carrier = null;
             for (Dike dike : dikes) {
                 if (dike.propagating()) {
                     carrier = dike;
                     break;
                 }
+                if (dike.molten()) carrier = dike;
             }
             if (carrier == null && activeCount() < config.maxConcurrentDikes) carrier = start(context);
             if (carrier != null) carrier.volume += magma.takeRuptureExcess();
         }
 
         for (Dike dike : dikes) {
-            if (dike.propagating()) advance(dike, stepDt, context);
+            if (dike.propagating()) {
+                advance(dike, stepDt, context, false);
+            } else if (dike.molten()) {
+                if (context.time() - dike.stallTime >= solidificationSeconds(dike.opening, wallRockC(dike))) {
+                    solidify(dike, context);
+                } else {
+                    dike.status = DikeStatus.PROPAGATING; // try to drive it on
+                    advance(dike, stepDt, context, true);
+                }
+            }
         }
         prune();
     }
@@ -295,7 +311,19 @@ public final class DikePropagation implements Subsystem {
         return dike;
     }
 
-    private void advance(Dike dike, double stepDt, StepContext context) {
+    /** The stalled sheet has solidified: it becomes an intrusion. */
+    private void solidify(Dike dike, StepContext context) {
+        dike.frozen = true;
+        emplaceIntrusion(dike, context.time());
+        context.outbox().emit(new DikeEvents.DikeSolidified(context.time(), volcanoId, dike.id, dike.tip(), dike.depth,
+                dike.volume));
+    }
+
+    /**
+     * Advances a rising dike through {@code stepDt}. {@code resuming}: the dike had stalled and is still
+     * molten; if it still cannot move it stays stalled, as it was.
+     */
+    private void advance(Dike dike, double stepDt, StepContext context, boolean resuming) {
         SimRandom random = context.random();
         double remaining = stepDt;
         double travelled = 0;
@@ -387,6 +415,9 @@ public final class DikePropagation implements Subsystem {
         }
 
         dike.tipElevation = surfaceZ(dike.x, dike.z, dike.surfaceStartZ) - dike.depth;
+        if (resuming && travelled > 0) {
+            context.outbox().emit(new DikeEvents.DikeResumed(context.time(), volcanoId, dike.id, dike.tip(), dike.depth));
+        }
         if (travelled > 0) {
             if (hypocenterListener != null && !hypocenters.isEmpty()) hypocenterListener.accept(hypocenters);
             context.outbox().emit(new DikeEvents.DikeAdvanced(context.time(), volcanoId, dike.id, dike.tip(), dike.depth,
@@ -398,7 +429,9 @@ public final class DikePropagation implements Subsystem {
             emplaceIntrusion(dike, context.time());
         } else if (stall != null) {
             dike.status = DikeStatus.STALLED;
-            emplaceIntrusion(dike, context.time());
+            if (resuming && travelled == 0) return; // still stalled since dike.stallTime
+            // still molten: it solidifies after t_s unless driven on first
+            dike.stallTime = context.time();
             context.outbox().emit(new DikeEvents.DikeStalled(context.time(), volcanoId, dike.id, dike.tip(), dike.depth,
                     dike.volume, stall));
         }
@@ -502,12 +535,21 @@ public final class DikePropagation implements Subsystem {
      * {@code t_s = (w/2)² / (4 κ λ²)} (Turcotte &amp; Schubert 2002, §4.18).
      */
     double freezeSpeed(double opening, double height, double wallC) {
+        if (!(opening > 0)) return 0;
+        return height / solidificationSeconds(opening, wallC);
+    }
+
+    /**
+     * Time (s) for a stagnant sheet of opening {@code w} to solidify against wall rock at {@code wallC}:
+     * {@code t_s = (w/2)² / (4 κ λ²)} (Turcotte &amp; Schubert 2002, §4.18); never for a wall as hot as the magma.
+     */
+    double solidificationSeconds(double opening, double wallC) {
+        if (!(opening > 0)) return 0;
         double contrast = magma.temperatureC() - wallC;
-        if (!(contrast > 0) || !(opening > 0)) return 0;
+        if (!(contrast > 0)) return Double.POSITIVE_INFINITY;
         double lambda = stefanLambda(config.magmaLatentHeat * Math.sqrt(Math.PI) / (config.specificHeat * contrast));
         double half = opening / 2;
-        double solidification = half * half / (4 * config.wallRockDiffusivity * lambda * lambda);
-        return height / solidification;
+        return half * half / (4 * config.wallRockDiffusivity * lambda * lambda);
     }
 
     /**
@@ -547,10 +589,6 @@ public final class DikePropagation implements Subsystem {
     static final double ATMOSPHERE_MPA = 0.101325;
     /** Density of the water over submerged ground (kg/m³). */
     static final double WATER_DENSITY = 1000;
-    /** Universal gas constant (J/(mol·K)). */
-    static final double GAS_CONSTANT = 8.314;
-    static final double WATER_MOLAR_MASS = 0.018;
-    static final double CO2_MOLAR_MASS = 0.044;
 
     /**
      * Buoyancy (MPa) of the magma column from {@code bottomDepth} up to {@code topDepth} (m below the ground
@@ -576,14 +614,13 @@ public final class DikePropagation implements Subsystem {
         double lnBottom = StrictMath.log(ambient + load * bottomDepth);
         double half = 0.5 * (lnBottom - lnTop);
         double mid = 0.5 * (lnBottom + lnTop);
-        double melt = magmaDensity(magma.silicaWt());
         double pTop = StrictMath.exp(lnTop);
         double range = StrictMath.exp(lnBottom) - pTop;
         double top = 0;
         double mean = 0;
         for (int i = 0; i < GL_NODES.length; i++) {
             double p = StrictMath.exp(mid + half * GL_NODES[i]);
-            double f = GL_WEIGHTS[i] * (1 - magmaDensityAt(melt, p) / config.rockDensity) * p;
+            double f = GL_WEIGHTS[i] * (1 - magmaDensityAt(p) / config.rockDensity) * p;
             top += f;
             // height above the bottom s ↔ pressure: 1 − s/H = (P − P_top) / (P_bottom − P_top)
             mean += f * (p - pTop) / range;
@@ -592,17 +629,17 @@ public final class DikePropagation implements Subsystem {
     }
 
     /**
-     * Density (kg/m³) of magma of melt density {@code melt} at {@code pressureMPa}: the H₂O beyond
-     * {@code 0.411 √P} wt% and the CO₂ beyond {@code 5·10⁻⁴ P} wt% (the chamber's and conduit's solubility
-     * laws) are an ideal gas at the magma's temperature.
+     * Density (kg/m³) of the magma at {@code pressureMPa}: H₂O up to {@code 0.411 √P} wt% and CO₂ up to
+     * {@code 5·10⁻⁴ P} wt% (the chamber's and conduit's solubility laws) stay dissolved in the melt
+     * ({@link MeltDensity}); the rest is an ideal gas at the magma's temperature.
      */
-    double magmaDensityAt(double melt, double pressureMPa) {
-        double water = Math.max(0, magma.meltWaterWt() - ConduitModel.SOLUBILITY * Math.sqrt(pressureMPa));
+    double magmaDensityAt(double pressureMPa) {
+        double total = magma.meltWaterWt();
+        double dissolved = Math.min(total, ConduitModel.SOLUBILITY * Math.sqrt(pressureMPa));
         double co2 = Math.max(0, magma.meltCo2Wt() - ConduitModel.CO2_SOLUBILITY * pressureMPa);
-        double moles = (water / WATER_MOLAR_MASS + co2 / CO2_MOLAR_MASS) / 100; // per kg of magma
-        if (!(moles > 0)) return melt;
-        double gasVolume = moles * GAS_CONSTANT * (magma.temperatureC() + 273.15) / (pressureMPa * 1e6);
-        return melt / (1 + melt * gasVolume);
+        double melt = MeltDensity.meltKgPerM3(magma.silicaWt(), dissolved);
+        return MeltDensity.bubbly(melt,
+                MeltDensity.gasVolumePerKg(total - dissolved, co2, pressureMPa * 1e6, magma.temperatureC()));
     }
 
     /** Pressure (MPa) on the ground at {@code (x, z)} (m): the atmosphere, plus the water over it. */
@@ -616,14 +653,6 @@ public final class DikePropagation implements Subsystem {
         return ATMOSPHERE_MPA + (depth > 0 ? WATER_DENSITY * GRAVITY * depth / 1e6 : 0);
     }
 
-    /**
-     * Bubble-free melt density from silica (kg/m³): ~2750 for basalt to ~2480 for rhyolite. A linear fit of the
-     * order of anhydrous melt densities from partial molar volumes (Lange &amp; Carmichael 1987); exsolved gas is
-     * added by {@link #magmaDensityAt}.
-     */
-    static double magmaDensity(double silicaWt) {
-        return clamp(2750 - 10 * (silicaWt - 48), 2300, 2800);
-    }
 
     /** Numerical: below this horizontal offset (m) from the chamber axis the radial direction is undefined. */
     static final double DIRECTION_EPS_M = 1;
@@ -661,7 +690,7 @@ public final class DikePropagation implements Subsystem {
             for (int i = 0; i < dikes.size() && excess > 0; ) {
                 Dike d = dikes.get(i);
                 boolean vent = d.fissure != null && !d.removed;
-                if (!d.propagating() && (pass == 1 || !vent)) {
+                if (!d.propagating() && !d.molten() && (pass == 1 || !vent)) {
                     dikes.remove(i);
                     excess--;
                 } else {
@@ -700,6 +729,13 @@ public final class DikePropagation implements Subsystem {
     public int activeCount() {
         int n = 0;
         for (Dike d : dikes) if (d.propagating()) n++;
+        return n;
+    }
+
+    /** Stalled dikes still molten (they may yet resume). */
+    public int moltenCount() {
+        int n = 0;
+        for (Dike d : dikes) if (d.molten()) n++;
         return n;
     }
 

@@ -30,7 +30,7 @@ class ChamberWallHeatTest {
         double cEff = MagmaChamber.MELT_HEAT_CAPACITY
                 + (t0 > MagmaChamber.SOLIDUS_C && t0 < liquidus
                         ? MagmaChamber.LATENT_HEAT_CRYSTALLISATION / (liquidus - MagmaChamber.SOLIDUS_C) : 0);
-        double lost = MagmaChamber.MAGMA_DENSITY * cEff * config.volume() * (t0 - t1);
+        double lost = chamber.meltDensityKgPerM3() * cEff * config.volume() * (t0 - t1);
         assertTrue(power > 1e7, "a 1 km³ chamber loses tens of MW or more: " + power);
         assertEquals(lost, power * physicalSeconds, 1e-3 * lost);
     }

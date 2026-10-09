@@ -79,7 +79,7 @@ class MagmaChamberTest {
     }
 
     @Test
-    void withoutAConduitOnlyADikeStartsAnEruptionWhichDrainsToTheEndThreshold() {
+    void withoutAConduitOnlyADikeStartsAnEruptionWhichDrainsUntilItsConduitFreezes() {
         MagmaChamberConfig config = steady().initialOverpressureMPa(14.5).conduitRadius(3).build();
         MagmaChamber chamber = new MagmaChamber(config);
         Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
@@ -91,7 +91,15 @@ class MagmaChamberTest {
 
         // a dike reaching the surface starts the eruption at the pressure the chamber has
         chamber.requestFlankEruption();
-        List<EngineEvent> events = runFor(engine, 30 * 86_400, EngineEvent.class);
+        List<EngineEvent> events = new ArrayList<>();
+        double endOverpressure = Double.NaN;
+        for (double end = engine.time() + 30 * 86_400; engine.time() < end; ) {
+            List<EngineEvent> step = engine.step().events();
+            events.addAll(step);
+            if (Double.isNaN(endOverpressure) && step.stream().anyMatch(EruptionEnded.class::isInstance)) {
+                endOverpressure = chamber.overpressureMPa();
+            }
+        }
         EruptionStarted started = events.stream().filter(EruptionStarted.class::isInstance)
                 .map(EruptionStarted.class::cast).findFirst().orElse(null);
         EruptionEnded ended = events.stream().filter(EruptionEnded.class::isInstance)
@@ -100,13 +108,13 @@ class MagmaChamberTest {
         assertNotNull(started);
         assertEquals(Cause.DIKE, started.cause());
         assertTrue(started.overpressureMPa() >= config.tensileStrengthMPa());
-        assertNotNull(ended, "eruption should end once overpressure is relieved");
+        assertNotNull(ended, "eruption should end once the waning flow lets its conduit freeze");
         assertEquals(Cause.AUTOMATIC, ended.cause());
         assertTrue(ended.time() > started.time());
 
         // Mass balance: erupted volume ≈ elastic storage released (supply is negligible while erupting).
         double released = config.volume() * new MagmaChamber(config).bubbleFreeCompressibility()
-                * (started.overpressureMPa() - config.eruptionEndOverpressureMPa());
+                * (started.overpressureMPa() - endOverpressure);
         assertEquals(released, ended.eruptedVolume(), released * 0.05);
     }
 
@@ -169,7 +177,8 @@ class MagmaChamberTest {
         assertEquals(Cause.FORCED, ends.get(0).cause());
         assertFalse(chamber.erupting());
         assertEquals(0, chamber.eruptionRate());
-        assertTrue(chamber.overpressureMPa() <= config.eruptionEndOverpressureMPa() + 0.01);
+        assertEquals(0, chamber.conduitOpenness(), "stopped by hand: the conduit is plugged");
+        assertTrue(chamber.overpressureMPa() > 0, "and the chamber keeps its pressure");
 
         // Not re-erupting right away.
         assertTrue(run(engine, 20 * 60, EruptionStarted.class).isEmpty());

@@ -147,13 +147,22 @@ public final class VolcanoCoupler implements Subsystem {
     /** Physical magma flux (m³/s DRE) leaving through each outlet at the last step. */
     private final TreeMap<String, Double> ventFlux = new TreeMap<>();
     private boolean flankPending;
-    /** Column in progress: simulated mass rate (kg/s), collapse share, gas fraction. */
-    private double explosiveRate;
-    private double explosiveCollapse;
-    private double explosiveGas;
-    private String collapseSource;
+    /** A vent's sustained column: simulated mass rate (kg/s), collapse share, gas fraction, its collapse flow. */
+    private static final class Column {
+        double rate;
+        double collapse;
+        double gas;
+        String collapseSource;
+    }
+
+    /** Columns in progress, by vent id: every vent with enough fragmented magma feeds its own. */
+    private final TreeMap<String, Column> columns = new TreeMap<>();
     /** Simulation time (s) at which the current ash puff ends; negative = none. */
     private double burstPhaseUntil = -1;
+    /** Vent of the current ash puff. */
+    private String burstVentId;
+    /** Collapse flow of a save from before one column per vent, whose vent is unknown: ended at the next step. */
+    private String staleCollapseSource;
     private boolean phreatomagmatic;
     private double waterDepthM;
     private double openWaterFraction;
@@ -321,10 +330,8 @@ public final class VolcanoCoupler implements Subsystem {
         double mainDepth = waterDepthM;
         double mainOpen = openWaterFraction;
         double[] lavaRates = new double[vents.size()];
-        double column = 0;
-        double columnBest = -1;
-        VentSite columnVent = main;
-        VentPartition.Result columnPartition = null;
+        double[] columnRates = new double[vents.size()];
+        VentPartition.Result[] partitions = new VentPartition.Result[vents.size()];
         double wetMass = 0;
         double magmaMass = 0;
         boolean steam = false;
@@ -343,12 +350,8 @@ public final class VolcanoCoupler implements Subsystem {
             double scale = p.magmaMassFlux() > 0 ? magmaMassRate * weights[i] / p.magmaMassFlux() : 0;
             lavaRates[i] = p.lavaMassFlux() * scale / ExplosivePhase.DRE_DENSITY;
             double col = p.columnMassFlux() * scale;
-            column += col;
-            if (col > columnBest) {
-                columnBest = col;
-                columnVent = vent;
-                columnPartition = p;
-            }
+            columnRates[i] = col;
+            partitions[i] = p;
             double ballistic = p.ballisticMassFlux() * scale * stepSeconds;
             if (ballistic > 0) {
                 // Cooled fall-back of the fountain: its whole mass lands as loose scoria lapilli around the vent
@@ -375,9 +378,17 @@ public final class VolcanoCoupler implements Subsystem {
         if (Arrays.stream(lavaRates).anyMatch(r -> r > MIN_LAVA_RATE)) updateLava(vents, lavaRates);
         else stopLava();
 
-        boolean sustained = column >= MIN_COLUMN_MASS_FLUX;
-        if (sustained) updateExplosive(columnVent, columnPartition, column);
-        else stopExplosive();
+        if (staleCollapseSource != null && pdc != null) pdc.removeSource(staleCollapseSource);
+        staleCollapseSource = null;
+        // each vent's column rises on its own
+        TreeSet<String> rising = new TreeSet<>();
+        for (int i = 0; i < vents.size(); i++) {
+            if (columnRates[i] < MIN_COLUMN_MASS_FLUX) continue;
+            rising.add(vents.get(i).id());
+            updateExplosive(vents.get(i), partitions[i], columnRates[i]);
+        }
+        for (String id : new ArrayList<>(columns.keySet())) if (!rising.contains(id)) stopExplosive(id);
+        boolean sustained = rising.contains(main.id());
 
         double wetShare = magmaMass > 0 ? wetMass / magmaMass : 0;
         setPhreatomagmatic(context, phreatomagmatic ? wetShare >= PHREATOMAGMATIC_STOP_SHARE
@@ -790,15 +801,16 @@ public final class VolcanoCoupler implements Subsystem {
     // ── Sustained columns ──
 
     private void updateExplosive(VentSite vent, VentPartition.Result p, double columnMassRate) {
-        boolean restart = explosiveRate <= 0
-                || Math.abs(columnMassRate - explosiveRate) > PHASE_UPDATE_THRESHOLD * explosiveRate
-                || Math.abs(p.collapseFraction() - explosiveCollapse) > 0.1
-                || Math.abs(p.columnGasFraction() - explosiveGas) > PHASE_UPDATE_THRESHOLD * explosiveGas;
+        Column c = columns.computeIfAbsent(vent.id(), k -> new Column());
+        boolean restart = c.rate <= 0
+                || Math.abs(columnMassRate - c.rate) > PHASE_UPDATE_THRESHOLD * c.rate
+                || Math.abs(p.collapseFraction() - c.collapse) > 0.1
+                || Math.abs(p.columnGasFraction() - c.gas) > PHASE_UPDATE_THRESHOLD * c.gas;
         if (!restart) return;
-        explosiveRate = columnMassRate;
-        explosiveCollapse = p.collapseFraction();
-        explosiveGas = p.columnGasFraction();
-        burstPhaseUntil = -1; // the sustained column takes over any ash puff
+        c.rate = columnMassRate;
+        c.collapse = p.collapseFraction();
+        c.gas = p.columnGasFraction();
+        if (vent.id().equals(burstVentId)) burstPhaseUntil = -1; // the sustained column takes over its ash puff
 
         // The phase's gas thrust is set by the jet: an equivalent overpressure that expands the
         // column's gas to its exit velocity.
@@ -806,7 +818,7 @@ public final class VolcanoCoupler implements Subsystem {
         ExplosivePhase phase = new ExplosivePhase(vent, columnMassRate, Math.min(1, p.columnGasFraction()), overpressure,
                 p.columnTemperatureC(), chamber.silicaWt(), 0, p.grainSize());
         tephra.startPhase(phase.withMassEruptionRate(columnMassRate * (1 - p.collapseFraction())));
-        updateCollapse(vent, columnMassRate * p.collapseFraction(), p.columnTemperatureC());
+        updateCollapse(vent, c, columnMassRate * p.collapseFraction(), p.columnTemperatureC());
     }
 
     /** Overpressure (MPa) whose isothermal expansion drives gas fraction {@code n} to speed {@code u}. */
@@ -850,25 +862,28 @@ public final class VolcanoCoupler implements Subsystem {
         return critical;
     }
 
-    private void updateCollapse(VentSite vent, double massRate, double temperatureC) {
+    private void updateCollapse(VentSite vent, Column c, double massRate, double temperatureC) {
         if (pdc == null) return;
-        if (collapseSource != null) {
-            pdc.removeSource(collapseSource);
-            collapseSource = null;
+        if (c.collapseSource != null) {
+            pdc.removeSource(c.collapseSource);
+            c.collapseSource = null;
         }
-        if (massRate > 0 && explosiveCollapse > 0.01) {
-            collapseSource = pdc.columnCollapse(volcanoId, vent.position(), Math.max(metersPerColumn(), vent.craterRadiusM()), massRate,
-                    1.0, temperatureC);
+        if (massRate > 0 && c.collapse > 0.01) {
+            c.collapseSource = pdc.columnCollapse(volcanoId, vent.position(), Math.max(metersPerColumn(), vent.craterRadiusM()),
+                    massRate, 1.0, temperatureC);
         }
     }
 
+    /** Ends vent {@code ventId}'s column. */
+    private void stopExplosive(String ventId) {
+        Column c = columns.remove(ventId);
+        if (c == null) return;
+        tephra.stopPhase(ventId);
+        if (c.collapseSource != null && pdc != null) pdc.removeSource(c.collapseSource);
+    }
+
     private void stopExplosive() {
-        if (explosiveRate > 0) tephra.stopPhase();
-        explosiveRate = 0;
-        explosiveCollapse = 0;
-        explosiveGas = 0;
-        if (collapseSource != null && pdc != null) pdc.removeSource(collapseSource);
-        collapseSource = null;
+        for (String id : new ArrayList<>(columns.keySet())) stopExplosive(id);
     }
 
     // ── Discrete explosions ──
@@ -938,12 +953,14 @@ public final class VolcanoCoupler implements Subsystem {
         tephra.startPhase(new ExplosivePhase(vent, ashMassKg / durationSeconds, Math.min(1, gasFraction), overpressureMPa,
                 temperatureC, silicaWt, 0, grain));
         burstPhaseUntil = Math.max(burstPhaseUntil, now + durationSeconds);
+        burstVentId = vent.id();
     }
 
     private void endBurstPhaseIfDue(double now, boolean sustained) {
         if (burstPhaseUntil < 0 || now < burstPhaseUntil) return;
-        if (!sustained) tephra.stopPhase();
+        if (!sustained && burstVentId != null && !columns.containsKey(burstVentId)) tephra.stopPhase(burstVentId);
         burstPhaseUntil = -1;
+        burstVentId = null;
     }
 
     // ── Magma–water interaction ──
@@ -1229,7 +1246,7 @@ public final class VolcanoCoupler implements Subsystem {
 
     /** True while a sustained column (magmatic and/or phreatomagmatic) is erupting. */
     public boolean explosive() {
-        return explosiveRate > 0;
+        return !columns.isEmpty();
     }
 
     /** True while water fragments a large share of the erupting magma. */
@@ -1238,7 +1255,8 @@ public final class VolcanoCoupler implements Subsystem {
     }
 
     public boolean columnCollapsing() {
-        return collapseSource != null;
+        for (Column c : columns.values()) if (c.collapseSource != null) return true;
+        return false;
     }
 
     /** Slug bursts fired so far. */
@@ -1304,11 +1322,18 @@ public final class VolcanoCoupler implements Subsystem {
         for (Map.Entry<String, Double> e : ventFlux.entrySet()) flux.addProperty(e.getKey(), e.getValue());
         out.add("ventFlux", flux);
         out.addProperty("flankPending", flankPending);
-        out.addProperty("explosiveRate", explosiveRate);
-        out.addProperty("explosiveCollapse", explosiveCollapse);
-        out.addProperty("explosiveGas", explosiveGas);
-        if (collapseSource != null) out.addProperty("collapseSource", collapseSource);
+        JsonObject columnStates = new JsonObject();
+        for (Map.Entry<String, Column> e : columns.entrySet()) {
+            JsonObject c = new JsonObject();
+            c.addProperty("rate", e.getValue().rate);
+            c.addProperty("collapse", e.getValue().collapse);
+            c.addProperty("gas", e.getValue().gas);
+            if (e.getValue().collapseSource != null) c.addProperty("collapseSource", e.getValue().collapseSource);
+            columnStates.add(e.getKey(), c);
+        }
+        out.add("columns", columnStates);
         out.addProperty("burstPhaseUntil", burstPhaseUntil);
+        if (burstVentId != null) out.addProperty("burstVentId", burstVentId);
         out.addProperty("phreatomagmatic", phreatomagmatic);
         out.addProperty("waterDepthM", waterDepthM);
         out.addProperty("openWaterFraction", openWaterFraction);
@@ -1349,11 +1374,22 @@ public final class VolcanoCoupler implements Subsystem {
             ventFlux.put(e.getKey(), e.getValue().getAsDouble());
         }
         flankPending = in.get("flankPending").getAsBoolean();
-        explosiveRate = in.get("explosiveRate").getAsDouble();
-        explosiveCollapse = in.get("explosiveCollapse").getAsDouble();
-        explosiveGas = in.get("explosiveGas").getAsDouble();
-        collapseSource = in.has("collapseSource") ? in.get("collapseSource").getAsString() : null;
+        columns.clear();
+        if (in.has("columns")) {
+            for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("columns").entrySet()) {
+                JsonObject o = e.getValue().getAsJsonObject();
+                Column c = new Column();
+                c.rate = o.get("rate").getAsDouble();
+                c.collapse = o.get("collapse").getAsDouble();
+                c.gas = o.get("gas").getAsDouble();
+                c.collapseSource = o.has("collapseSource") ? o.get("collapseSource").getAsString() : null;
+                columns.put(e.getKey(), c);
+            }
+        }
+        // saves from before one column per vent: the column restarts at the next step (its vent unknown)
+        staleCollapseSource = in.has("collapseSource") ? in.get("collapseSource").getAsString() : null;
         burstPhaseUntil = in.get("burstPhaseUntil").getAsDouble();
+        burstVentId = in.has("burstVentId") ? in.get("burstVentId").getAsString() : null;
         phreatomagmatic = in.get("phreatomagmatic").getAsBoolean();
         waterDepthM = in.get("waterDepthM").getAsDouble();
         openWaterFraction = in.get("openWaterFraction").getAsDouble();

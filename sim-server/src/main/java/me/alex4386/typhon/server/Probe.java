@@ -326,7 +326,7 @@ final class Probe {
             budget.add("refusedM3", Json.num(ch.refusedVolumeM3()));
             budget.addProperty("frozen", ch.config().freezeVolume());
             budget.add("eruptedM3", Json.num(ch.eruptedVolume()));
-            budget.add("eruptionEndOverpressureMPa", Json.num(ch.config().eruptionEndOverpressureMPa()));
+            budget.add("freezingRateM3PerS", Json.num(ch.conduitFreezingRateM3PerS()));
             chamber.add("budget", budget);
             String regime = v.coupler().phreatomagmatic() ? "SURTSEYAN" : EventTranslator.regime(ch.eruptiveRegime());
             chamber.addProperty("regime", regime);
@@ -368,12 +368,26 @@ final class Probe {
 
             TephraSubsystem tephra = v.tephra();
             ExplosivePhase phase = tephra.activePhase();
-            if (phase != null && tephra.plumeHeight() > 0) {
+            if (phase != null && tephra.plumeHeight(phase) > 0) {
                 JsonObject plume = new JsonObject();
-                plume.add("topZ", Json.num(phase.vent().position().y() + tephra.plumeHeight()));
+                plume.add("topZ", Json.num(phase.vent().position().y() + tephra.plumeHeight(phase)));
                 plume.add("massRateKgS", Json.num(phase.massEruptionRate()));
                 o.add("plume", plume);
             }
+            JsonArray plumes = new JsonArray();
+            for (ExplosivePhase p : tephra.activePhases()) {
+                double height = tephra.plumeHeight(p);
+                if (!(height > 0)) continue;
+                JsonObject plume = new JsonObject();
+                plume.addProperty("ventId", p.vent().id());
+                plume.add("base", Json.xyz(map.point(p.vent().position())));
+                plume.add("topZ", Json.num(p.vent().position().y() + height));
+                plume.add("massRateKgS", Json.num(p.massEruptionRate()));
+                plume.add("radiusM", Json.num(tephra.plumeRadiusM(p)));
+                plume.add("ventRadiusM", Json.num(p.vent().craterRadiusM()));
+                plumes.add(plume);
+            }
+            if (!plumes.isEmpty()) o.add("plumes", plumes);
             out.add(v.volcanoId(), o);
 
             List<String> ids = new ArrayList<>();

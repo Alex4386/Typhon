@@ -14,6 +14,7 @@ import me.alex4386.typhon.engine.lava.LavaConfig;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaCommands;
+import me.alex4386.typhon.engine.volcano.VentCommands;
 import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.sim.Engine;
 import me.alex4386.typhon.engine.tephra.ExplosivePhase;
@@ -72,7 +73,7 @@ class StratigraphyTest {
     private static VolcanoSystem system(String id, VentSite vent, TerrainModel terrain, LavaFlow lava) {
         MagmaChamberConfig chamber = MagmaChamberConfig.builder(id, vent.position().offset(0, -3000, 0))
                 .conduit(TestConduits.molten())
-                .initialOverpressureMPa(14.9999)
+                .initialOverpressureMPa(15.05)
                 .initialWaterWt(0.3).rechargeWaterWt(0.3) // gas-poor: lava rather than fountain tephra
                 .supplyVariability(0)
                 .build();
@@ -97,12 +98,14 @@ class StratigraphyTest {
 
         runPastOnset(e, 30 * DAY, ERUPTION); // eruption 1 pours lava
         assertEquals(1, volcano.chamber().eruptionCount());
-        e.submit(new MagmaCommands.StopEruption("test"));
+        // plugging the crater ends it, the conduit below still molten (stopping by hand would plug it solid)
+        e.submit(new VentCommands.SealVent("test", CRATER.id()));
         run(e, FREEZE); // the thinner parts of the flow freeze (the crater pond stays molten)
         volcano.tephra().startPhase(ExplosivePhase.strombolian(CRATER, 5e5)); // bombs and ash on the cooled flow
-        run(e, 2 * 3600);
+        run(e, 1800);
         volcano.tephra().stopPhase();
         run(e, 3600);
+        e.submit(new VentCommands.UnsealVent("test", CRATER.id()));
         e.submit(new MagmaCommands.StartEruption("test"));
         run(e, ERUPTION); // eruption 2 pours lava over it
         assertEquals(2, volcano.chamber().eruptionCount());

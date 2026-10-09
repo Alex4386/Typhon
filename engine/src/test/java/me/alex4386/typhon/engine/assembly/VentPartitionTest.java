@@ -118,11 +118,11 @@ class VentPartitionTest {
     void magmaRisingIntoAWaterSaturatedVentFillMixesWithItsPoreWater() {
         // Kokelaar (1983): a vent full of wet tephra slurry gives R ≈ φ ρ_w / ρ_m, near the efficiency peak
         VentPartition.Water slurry = new VentPartition.Water(5, 1, 0, 1, 0.45, Double.NaN);
-        double r = VentPartition.slurryRatio(slurry, 2, 3e4);
-        assertEquals(0.45 * 1000 / 2500, r, 1e-12);
+        double r = VentPartition.slurryRatio(slurry, 2, 3e4, 2650);
+        assertEquals(0.45 * 1000 / 2650, r, 1e-12);
         // a crater cut off from the sea: only what seeps back in can mix
         VentPartition.Water sealed = new VentPartition.Water(5, 0, 1000, 1, 0.45, 300);
-        assertEquals(300 / 3e4, VentPartition.slurryRatio(sealed, 2, 3e4), 1e-12);
+        assertEquals(300 / 3e4, VentPartition.slurryRatio(sealed, 2, 3e4, 2650), 1e-12);
         assertTrue(VentPartition.interactionEfficiency(r) > 0.6, "near the optimum: " + VentPartition.interactionEfficiency(r));
         assertTrue(VentPartition.interactionEfficiency(300 / 3e4) < 0.15, "starved of water: mostly dry");
         assertTrue(VentPartition.interactionEfficiency(20) < 1e-20, "flooded: water quenches without exploding");

@@ -3,6 +3,7 @@ package me.alex4386.typhon.engine.magma.conduit;
 import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.magma.ConduitConfig;
+import me.alex4386.typhon.engine.magma.MeltDensity;
 import me.alex4386.typhon.engine.magma.MeltViscosity;
 import me.alex4386.typhon.engine.magma.conduit.ConduitSolution.Fragmentation;
 
@@ -31,11 +32,6 @@ public final class ConduitModel {
     static final double R_CO2 = 188.9;
     /** CO₂ solubility in silicate melt, wt% per MPa (Henry's law, ~0.5 ppm/bar; Dixon 1997). */
     public static final double CO2_SOLUBILITY = 5e-4;
-    /**
-     * Density of vesicle-free magma (kg/m³): one value between basalt (~2700) and rhyolite (~2300), the
-     * mid-range of melt densities (simplification: no composition dependence).
-     */
-    public static final double MAGMA_DENSITY = 2500;
     static final double WATER_DENSITY = 1000;
     /** H₂O solubility coefficient, wt% per √MPa (Wilson &amp; Head 1981). */
     public static final double SOLUBILITY = 0.411;
@@ -199,6 +195,8 @@ public final class ConduitModel {
         final double gasCo2;
         final double ambient;
         final double chamberViscosity;
+        /** Density of the melt entering the conduit (its composition and dissolved water). */
+        final double inletMelt;
         final double[] z;
 
         // per-trial constants
@@ -212,6 +210,8 @@ public final class ConduitModel {
         double u;
         double gasConstant;
         double dissolved;
+        /** Melt density at the current dissolved water (kg/m³). */
+        double meltDensity;
         double meltViscosity;
         double pureMeltViscosity;
         double denominator;
@@ -232,6 +232,7 @@ public final class ConduitModel {
             this.ambient = in.ventAmbientPressurePa();
             this.gasCo2 = co2Exsolved(in.chamberPressurePa());
             this.chamberViscosity = Math.pow(10, MeltViscosity.log10(in.silicaWt(), c0, in.temperatureC(), phiChamber));
+            this.inletMelt = MeltDensity.meltKgPerM3(in.silicaWt(), c0);
             int steps = c.gridSteps();
             this.z = new double[steps + 1];
             for (int i = 0; i <= steps; i++) {
@@ -260,10 +261,10 @@ public final class ConduitModel {
          * viscous melt.
          */
         double segregation(double g) {
-            double ascent = g / MAGMA_DENSITY;
+            double ascent = g / inletMelt;
             double d = 2 * r;
             double inertial = 0.345 * Math.sqrt(GRAVITY * d);
-            double viscous = 0.01 * MAGMA_DENSITY * GRAVITY * d * d / chamberViscosity;
+            double viscous = 0.01 * inletMelt * GRAVITY * d * d / chamberViscosity;
             double taylor = Math.min(inertial, viscous);
             double coalescence = 1 / (1 + chamberViscosity / c.coalescenceViscosity());
             return coalescence * taylor / (taylor + ascent);
@@ -274,10 +275,12 @@ public final class ConduitModel {
             n = Math.max(0, s.carried());
             gasConstant = n > 0 ? (s.nw * R_WATER + s.nc * R_CO2) / n : R_WATER;
             double gasVolume = n * gasConstant * tK / p;
-            v = gasVolume + (1 - n) / MAGMA_DENSITY;
+            // the melt densifies as its water exsolves
+            dissolved = dissolvedWater(s);
+            meltDensity = MeltDensity.meltKgPerM3(in.silicaWt(), dissolved);
+            v = gasVolume + (1 - n) / meltDensity;
             alpha = gasVolume / v;
             u = gFlux * v;
-            dissolved = dissolvedWater(s);
             double phiTotal = Math.min(c.maxCrystalFraction(), phiChamber + s.phi);
             pureMeltViscosity = Math.pow(10, MeltViscosity.meltLog10(in.silicaWt(), dissolved, in.temperatureC()));
             meltViscosity = Math.pow(10, MeltViscosity.log10(in.silicaWt(), dissolved, in.temperatureC(), phiTotal));
@@ -308,7 +311,7 @@ public final class ConduitModel {
                 friction = c.turbulentFrictionFactor() * u * u / (4 * r * v);
             }
             double dvdp = -n * gasConstant * tK / (p * p);
-            double dvdn = gasConstant * tK / p - 1 / MAGMA_DENSITY;
+            double dvdn = gasConstant * tK / p - 1 / meltDensity;
             denominator = 1 + gFlux * gFlux * dvdp;
             choke = denominator <= 1e-6;
             if (choke) return Double.NaN;
@@ -338,7 +341,7 @@ public final class ConduitModel {
          * the magma rises. Uses the scratch fields of the last {@link #dpdz} call for the speeds.
          */
         void relax(State from, State to, double h, double zz, double pEq, double dpdz, boolean fragmented) {
-            double meltAscent = gFlux * (1 - n) / (MAGMA_DENSITY * Math.max(1e-3, 1 - alpha));
+            double meltAscent = gFlux * (1 - n) / (meltDensity * Math.max(1e-3, 1 - alpha));
             double exsolve = 1 - Math.exp(-h / (c.exsolutionTimescale() * Math.max(meltAscent, 1e-12)));
             double dew = Math.max(0, (waterExsolved(pEq) - from.ew) * exsolve);
             double dec = Math.max(0, (co2Exsolved(pEq) - from.ec) * exsolve);
@@ -468,7 +471,7 @@ public final class ConduitModel {
                     // A choked flow keeps decompressing above the vent; if that carries its gas past the
                     // fragmentation porosity, the jet fragments at the vent (Hawaiian fountains).
                     double gasAtAmbient = n * gasConstant * tK / ambient;
-                    double alphaAtAmbient = gasAtAmbient / (gasAtAmbient + (1 - n) / MAGMA_DENSITY);
+                    double alphaAtAmbient = gasAtAmbient / (gasAtAmbient + (1 - n) / meltDensity);
                     if (alphaAtAmbient >= c.fragmentationPorosity()) {
                         mode = pureMeltViscosity < INERTIAL_VISCOSITY ? Fragmentation.INERTIAL : Fragmentation.FOAM;
                         fragmentationDepth = 0;
@@ -505,11 +508,12 @@ public final class ConduitModel {
             }
             double area = Math.PI * r * r;
             double massFlux = g * area;
-            double dre = massFlux * (1 - gasWater - gasCo2) / MAGMA_DENSITY;
+            // volume as the chamber holds it: melt at the chamber's dissolved water
+            double dre = massFlux * (1 - gasWater - gasCo2) / inletMelt;
             return new ConduitSolution(massFlux, dre, exit.u, exit.p, exit.choked, exit.n, exit.alpha,
                     exit.gasConstant, exit.fragmentation, exit.fragmentationDepth, exit.meltViscosityLog10,
                     exit.crystals, in.temperatureC(), exit.dissolved, exit.outgassed, segregated,
-                    g / MAGMA_DENSITY, exit.totalGas);
+                    g / inletMelt, exit.totalGas);
         }
     }
 }

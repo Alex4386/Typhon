@@ -41,14 +41,14 @@ class EruptionDynamicsTest {
     static MagmaChamberConfig openVentBasalt() {
         return MagmaChamberConfig.builder("v", CENTER)
                 .volume(5e7).lithostaticDepth(3000).conduitRadius(0.8)
-                .tensileStrengthMPa(8).eruptionEndOverpressureMPa(0.5)
+                .tensileStrengthMPa(8)
                 .supplyRate(0.002).supplyVariability(0)
                 .initialSilicaWt(50).rechargeSilicaWt(50)
                 .initialWaterWt(2.7).rechargeWaterWt(2.7)
                 .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
                 .initialTemperatureC(1140).rechargeTemperatureC(1150)
                 .initialOverpressureMPa(0)
-                .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
+                .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1))
                 // bursts every ~10 s: a chamber step well below that keeps their times resolved
                 .stepPeriodSeconds(2)
                 .build();
@@ -62,9 +62,9 @@ class EruptionDynamicsTest {
                 .initialWaterWt(0.6).rechargeWaterWt(0.6)
                 .initialCo2Wt(0).rechargeCo2Wt(0)
                 .initialTemperatureC(900).rechargeTemperatureC(900)
-                .initialOverpressureMPa(1.6).eruptionEndOverpressureMPa(-2)
+                .initialOverpressureMPa(1.6)
                 .supplyRate(0.5).supplyVariability(0)
-                .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
+                .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1))
                 .build();
     }
 
@@ -103,22 +103,26 @@ class EruptionDynamicsTest {
     }
 
     @Test
-    void sealedWetChamberFailsExplosivelyThenReopensAtLowPressure() {
+    void sealedWetChamberFailsExplosivelyThenWanesToItsSupply() {
         MagmaChamber chamber = new MagmaChamber(dacite());
         Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
         chamber.requestFlankEruption(); // the first eruption: a dike breaches the surface (there is no conduit yet)
-        Run run = runFor(engine, chamber, 200 * 86_400.0); // an eruption, months of recharge, the next one
+        Run run = runFor(engine, chamber, 200 * 86_400.0);
 
         ConduitSolution onset = run.flows().get(0);
         assertTrue(onset.fragmented(), "a sealed conduit failing at high pressure fragments: " + onset);
         assertTrue(onset.fragmentationDepthM() > 100, "deep in the conduit: " + onset.fragmentationDepthM());
         assertTrue(onset.dreRateM3PerS() > 300, "a Plinian-scale discharge: " + onset.dreRateM3PerS());
 
+        // No pressure threshold ends it: the discharge drains the chamber until outflow balances the supply,
+        // which (well above the conduit's freezing rate) keeps it open, as Mount St Helens' after 1980.
         List<EruptionStarted> starts = of(run.events(), EruptionStarted.class);
-        assertTrue(starts.size() >= 2, "the chamber recharges and erupts again: " + starts.size());
-        assertTrue(starts.get(1).overpressureMPa() < dacite().tensileStrengthMPa() / 2,
-                "an open conduit re-opens far below the tensile strength: " + starts.get(1).overpressureMPa());
-        assertTrue(chamber.waterWt() > 4, "the chamber stays water-rich, so its eruptions stay explosive");
+        assertEquals(1, starts.size());
+        assertTrue(chamber.erupting(), "an open system keeps erupting");
+        assertEquals(dacite().supplyRate(), chamber.eruptionRate(), 0.05 * dacite().supplyRate(), "outflow = supply");
+        assertTrue(chamber.overpressureMPa() < starts.get(0).overpressureMPa() - 10,
+                "drained far below its onset pressure: " + chamber.overpressureMPa());
+        assertTrue(chamber.waterWt() > 4, "the chamber stays water-rich");
     }
 
     @Test
@@ -183,21 +187,26 @@ class EruptionDynamicsTest {
         Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
         chamber.requestFlankEruption();
         boolean ended = false;
-        for (int i = 0; i < 200_000 && !ended; i++) {
+        // with no supply the discharge wanes until it can no longer keep its conduit molten
+        while (engine.time() < 10 * 365 * 86_400.0 && !ended) {
             ended = !of(engine.step().events(), EruptionEnded.class).isEmpty();
         }
-        assertTrue(ended);
+        assertTrue(ended, "the waning eruption ends");
+        assertTrue(chamber.eruptionRate() == 0);
         assertEquals(1, chamber.conduitOpenness(), 1e-9, "the conduit is full of melt right after the eruption");
-        assertEquals(config.reopenOverpressureMPa(), chamber.failureOverpressureMPa(), 1e-9);
+        assertEquals(0, chamber.failureOverpressureMPa(), 1e-9, "no solid cap yet");
 
         double freeze = chamber.conduitFreezeSeconds();
         assertTrue(freeze > 7 * 86_400 && freeze < 365 * 86_400, "weeks to months for a 1.5 m conduit: " + freeze);
-        runFor(engine, chamber, freeze / 4);
-        // solid rim grows as √t: a quarter of the freezing time leaves half the radius molten
-        assertEquals(0.5, chamber.conduitOpenness(), 0.05);
+        runFor(engine, chamber, freeze / 16);
+        // solid rim and cap grow as √t: a sixteenth of the freezing time freezes a quarter of the radius
+        assertEquals(0.75, chamber.conduitOpenness(), 0.05);
+        // the cap a quarter radius thick holds 2·C·δ/r = 4 T · 0.25 = T (Griffith cohesion C = 2 T)
+        assertEquals(config.tensileStrengthMPa(), chamber.failureOverpressureMPa(), 0.2 * config.tensileStrengthMPa());
         runFor(engine, chamber, freeze);
         assertEquals(0, chamber.conduitOpenness(), "frozen solid: no conduit");
-        assertEquals(config.tensileStrengthMPa(), chamber.failureOverpressureMPa(), 1e-9, "only rock is left to break");
+        assertEquals(chamber.ruptureOverpressureMPa(), chamber.nextFailureOverpressureMPa(), 1e-9,
+                "only the walls are left to break");
     }
 
     @Test

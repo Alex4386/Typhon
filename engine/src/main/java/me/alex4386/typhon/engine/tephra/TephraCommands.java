@@ -18,7 +18,12 @@ public final class TephraCommands {
         }
     }
 
-    public record StopExplosivePhase(String target) implements EngineCommand {
+    /** Stops the phase of vent {@code ventId}, or every phase when it is {@code null}. */
+    public record StopExplosivePhase(String target, String ventId) implements EngineCommand {
+        public StopExplosivePhase(String target) {
+            this(target, null);
+        }
+
         public StopExplosivePhase {
             Objects.requireNonNull(target, "target");
         }

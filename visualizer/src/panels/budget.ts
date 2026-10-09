@@ -10,8 +10,8 @@ export interface BudgetVerdict {
 
 /**
  * Reads a chamber's budget: an erupting chamber relaxes towards the pressure where outflow equals
- * supply. Below the eruption-end pressure that balance cannot be reached (the eruption drains and
- * stops); above the rupture limit the pressure is pinned there and the excess goes into dikes (or the
+ * supply. A supply too small to keep the conduit molten (below the freezing rate) cannot sustain it,
+ * and without a balance the outflow drains the chamber until the flow freezes; above the rupture limit the pressure is pinned there and the excess goes into dikes (or the
  * walls when dikes are off); in between the chamber settles into steady, pressurised effusion.
  */
 export function budgetVerdict(b: MagmaBudget, overpressureMPa: number, ruptureMPa: number | undefined, erupting: boolean): BudgetVerdict {
@@ -21,8 +21,8 @@ export function budgetVerdict(b: MagmaBudget, overpressureMPa: number, ruptureMP
       : { state: 'idle', text: 'No supply: the pressure holds.' };
   }
   const balance = b.balanceOverpressureMPa;
-  const end = b.eruptionEndOverpressureMPa ?? 0;
-  if (balance === undefined || balance === null || !Number.isFinite(balance) || balance <= end) {
+  const freezing = b.freezingRateM3PerS ?? 0;
+  if (balance === undefined || balance === null || !Number.isFinite(balance) || b.supplyM3PerS < freezing) {
     return { state: 'draining', text: 'Outflow exceeds supply: the eruption is draining the chamber and will stop.' };
   }
   if (ruptureMPa !== undefined && balance > ruptureMPa) {

@@ -72,7 +72,6 @@ import me.alex4386.typhon.engine.volcano.MagmaState;
  */
 public final class MagmaChamber implements Subsystem, MagmaState {
     static final double ROCK_DENSITY = 2600;
-    static final double MAGMA_DENSITY = ConduitModel.MAGMA_DENSITY;
     static final double GRAVITY = 9.81;
     static final double WATER_MOLAR_MASS = 0.018;
     static final double CO2_MOLAR_MASS = 0.044;
@@ -203,6 +202,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     // Forecast cache: a pure function of the rounded input, so it needs no saving.
     private ConduitInput forecastKey;
+    private Branch forecastBranch;
     private ConduitSolution forecast;
 
     public MagmaChamber(MagmaChamberConfig config) {
@@ -375,7 +375,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         bulkWater -= ventedWater;
         bulkCo2 -= ventedCo2;
         // Free gas leaving the chamber rises through an open conduit (through the crust otherwise).
-        double magmaMass = volume * MAGMA_DENSITY;
+        double magmaMass = volume * meltDensityKgPerM3();
         double conduitShare = erupting ? 1 : conduitOpenness();
         double gasWater = ventedWater / 100 * magmaMass * conduitShare;
         double gasCo2 = ventedCo2 / 100 * magmaMass * conduitShare;
@@ -420,9 +420,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
                 runConduitGas(context, flow, dt, gasWater, gasCo2);
                 setRegime(context, describe(flow));
-                if (overpressure <= config.eruptionEndOverpressureMPa()) {
-                    endEruption(context, Cause.AUTOMATIC);
-                } else if (dt > 0 && erupted / dt < conduitFreezingRateM3PerS()) {
+                if (dt > 0 && erupted / dt < conduitFreezingRateM3PerS()) {
                     endEruption(context, Cause.AUTOMATIC); // too little magma to keep the conduit from freezing
                 }
             }
@@ -436,7 +434,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             overpressure += inflow / stiffness;
             relieveRupture(supply);
             // only through a conduit that is still molten; otherwise the way up is a dike (DikePropagation)
-            if (eruptive && !summitBlocked && conduitOpenness() > 0 && overpressure >= failureOverpressureMPa()) {
+            if (eruptive && !summitBlocked && conduitOpenness() > 0 && overpressure >= failureOverpressureMPa()
+                    && sustainable(forecastFlow())) {
                 startEruption(context, Cause.AUTOMATIC);
             }
         }
@@ -496,15 +495,15 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private void applyOverrides(StepContext context) {
         if (pendingFlank) {
             pendingFlank = false;
-            if (!erupting && overpressure > config.eruptionEndOverpressureMPa()) {
-                startEruption(context, Cause.DIKE);
-            }
+            // the dike's fissure is a way up: magma erupts through it if the conduit flow can lift it there
+            if (!erupting) startEruption(context, Cause.DIKE);
         }
         if (pendingStop) {
             pendingStop = false;
             if (erupting) {
-                overpressure = Math.min(overpressure, config.eruptionEndOverpressureMPa());
                 endEruption(context, Cause.FORCED);
+                // stopped by hand: the conduit is plugged solid (the pressure stays; the walls fail next)
+                closeConduit();
             }
         }
         if (pendingStart) {
@@ -517,13 +516,22 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         }
     }
 
+    /**
+     * True if {@code flow} carries enough magma to keep its conduit from freezing ({@link
+     * #conduitFreezingRateM3PerS}): slower flow would freeze in it, so no eruption starts or lasts on it.
+     */
+    private boolean sustainable(ConduitSolution flow) {
+        return flow != null && flow.dreRateM3PerS() >= conduitFreezingRateM3PerS();
+    }
+
     private void startEruption(StepContext context, Cause cause) {
-        // A path that opens to a pressurised chamber with no molten conduit (a dike breaching the surface, a
-        // plug failing) decompresses the column suddenly: the fastest steady flow. Magma already rising through
-        // a molten conduit starts on the slowest.
-        boolean sealed = conduitOpenness() < 0.5;
+        // Opening the path releases the overpressure the column held beneath its cap or the dike's tip, at once.
+        // Released suddenly enough on vesicular magma, it fragments the magma and the flow starts on the fastest
+        // branch; else on the slowest.
+        double released = Math.max(0, overpressure);
         ConduitInput in = conduitInput(overpressure);
-        ConduitSolution flow = ConduitModel.solve(in, config.conduit(), sealed ? Branch.FASTEST : Branch.SLOWEST);
+        ConduitSolution flow = ConduitModel.solve(in, config.conduit(),
+                fragmentsOnRelease(released) ? Branch.FASTEST : Branch.SLOWEST);
         if (flow == null) return; // the chamber cannot lift magma to the surface
         conduitInput = in;
         conduit = flow;
@@ -557,12 +565,37 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     // ── Conduit ──
 
     /**
-     * Overpressure at which the next eruption starts: the tensile strength for a sealed conduit,
-     * down to the re-opening pressure for one left open by a recent eruption.
+     * Whether releasing {@code releasedMPa} at once (a cap or a dike tip giving way) fragments the magma
+     * beneath: a sudden decompression {@code ΔP} fragments vesicular magma of porosity {@code φ} once
+     * {@code ΔP ≥ σ/φ} (Spieler et al. 2004, EPSL 226:139-148), {@code σ} the foam's strength ({@link
+     * ConduitConfig#foamStrengthPa}). {@code φ} is the magma's equilibrium gas fraction under the cap, at the
+     * vent's ambient pressure plus the released pressure. Gas-poor magma never fragments this way.
+     */
+    boolean fragmentsOnRelease(double releasedMPa) {
+        if (!(releasedMPa > 0)) return false;
+        double p = ventAmbientPa + releasedMPa * 1e6;
+        double pMPa = p / 1e6;
+        double water = meltTotalWater();
+        double dissolved = Math.min(water, ConduitModel.SOLUBILITY * Math.sqrt(pMPa));
+        double co2 = Math.max(0, meltCo2Wt() - ConduitModel.CO2_SOLUBILITY * pMPa);
+        double melt = MeltDensity.meltKgPerM3(silicaWt(), dissolved);
+        double gas = MeltDensity.gasVolumePerKg(water - dissolved, co2, p, temperature) * (1 - crystalFraction());
+        double phi = melt * gas / (1 + melt * gas);
+        return phi > 0 && releasedMPa * 1e6 * phi >= config.conduit().foamStrengthPa();
+    }
+
+    /**
+     * Overpressure (MPa) at which a molten conduit's solidified cap fails and the next eruption starts there.
+     * The cap at the conduit's top is as thick as the rind frozen onto its walls, {@code δ = r (1 − openness)}
+     * (both grow by the same conduction, {@link #conduitOpenness}); pushing a plug of radius {@code r} and
+     * thickness {@code δ} out against the rock's cohesion {@code C} on its rim takes {@code ΔP = 2 C δ / r},
+     * with the Griffith cohesion {@code C = 2 T} (Jaeger, Cook &amp; Zimmerman 2007). A conduit frozen far
+     * enough holds more than the walls, which then fail first ({@link #ruptureOverpressureMPa}).
      */
     public double failureOverpressureMPa() {
-        double tensile = config.tensileStrengthMPa();
-        return tensile + (config.reopenOverpressureMPa() - tensile) * conduitOpenness();
+        double cohesion = 2 * config.tensileStrengthMPa();
+        double cap = 2 * cohesion * (1 - conduitOpenness());
+        return Math.min(cap, ruptureOverpressureMPa());
     }
 
     /**
@@ -611,7 +644,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      * than the crust rises even below lithostatic pressure.
      */
     public double zeroFlowOverpressureMPa() {
-        return -(ROCK_DENSITY - MAGMA_DENSITY) * GRAVITY * config.lithostaticDepth() / 1e6;
+        return -(ROCK_DENSITY - meltDensityKgPerM3()) * GRAVITY * config.lithostaticDepth() / 1e6;
     }
 
     /** Drivers of the conduit flow at a given chamber overpressure. */
@@ -684,15 +717,17 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     /**
      * The flow a failure of the conduit as it is now would start (at the failure overpressure, on the
-     * branch its openness implies); {@code null} if the chamber could not lift magma to the surface.
+     * branch the failure's release implies, {@link #fragmentsOnRelease}); {@code null} if the chamber could
+     * not lift magma to the surface.
      */
     @Override
     public ConduitSolution forecastFlow() {
         double op = Math.max(overpressure, failureOverpressureMPa());
         ConduitInput key = conduitInput(op).rounded();
-        Branch branch = conduitOpenness() < 0.5 ? Branch.FASTEST : Branch.SLOWEST;
-        if (!key.equals(forecastKey)) {
+        Branch branch = fragmentsOnRelease(op) ? Branch.FASTEST : Branch.SLOWEST;
+        if (!key.equals(forecastKey) || branch != forecastBranch) {
             forecastKey = key;
+            forecastBranch = branch;
             forecast = ConduitModel.solve(key, config.conduit(), branch);
         }
         return forecast;
@@ -762,7 +797,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             double strength = stiffness * c.plugStrengthMPa();
             if (plugPressureMPa() >= strength) {
                 double gas = plugGas;
-                double ejecta = MAGMA_DENSITY * (1 - c.plugPorosity()) * Math.PI * r * r * c.plugCapDepthM();
+                double ejecta = meltDensityKgPerM3() * (1 - c.plugPorosity()) * Math.PI * r * r * c.plugCapDepthM();
                 queueBurst(new ConduitBurst(context.time(), ConduitBurst.Kind.PLUG, gas, ejecta,
                         plugPressureMPa(), temperature, silicaWt(), burstDuration(c.plugCapDepthM(), strength * 1e6)));
                 plugGas = 0;
@@ -817,7 +852,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         double tK = temperature + 273.15;
         slugGas += gasKg;
         double length = c.slugLengthDiameters() * 2 * r;
-        double burstOverpressure = MAGMA_DENSITY * GRAVITY * length; // the melt head the slug lifts
+        double burstOverpressure = meltDensityKgPerM3() * GRAVITY * length; // the melt head the slug lifts
         double meanMass = (ventAmbientPa + burstOverpressure) / (gasConstant * tK) * Math.PI * r * r * length;
         if (nextSlugMass <= 0) nextSlugMass = sampleSlugMass(random, meanMass);
         for (int n = 0; slugGas >= nextSlugMass && n < 8; n++) { // at most 8 bursts reported per step (bookkeeping)
@@ -825,7 +860,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             slugGas -= gas;
             // the magma cap over the slug, about one conduit diameter thick (heuristic; caps of ~1 diameter are seen
             // in analogue slug experiments, James et al. 2008)
-            double ejecta = MAGMA_DENSITY * Math.PI * r * r * 2 * r;
+            double ejecta = meltDensityKgPerM3() * Math.PI * r * r * 2 * r;
             queueBurst(new ConduitBurst(context.time(), ConduitBurst.Kind.SLUG, gas, ejecta,
                     burstOverpressure / 1e6, temperature, silicaWt(), burstDuration(length, burstOverpressure)));
             nextSlugMass = sampleSlugMass(random, meanMass);
@@ -847,8 +882,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      * Time (physical s) for a burst to empty a gas pocket of {@code length} at {@code overpressurePa}: the pocket
      * length over the magma's pressure-driven speed {@code √(ΔP/ρ)}; at least 1 s (a reporting floor).
      */
-    private static double burstDuration(double length, double overpressurePa) {
-        return Math.max(1, length / Math.sqrt(Math.max(1, overpressurePa) / MAGMA_DENSITY));
+    private double burstDuration(double length, double overpressurePa) {
+        return Math.max(1, length / Math.sqrt(Math.max(1, overpressurePa) / meltDensityKgPerM3()));
     }
 
     /**
@@ -900,8 +935,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     /** Overpressure (MPa) at which the chamber walls rupture; never exceeded. */
     public double ruptureOverpressureMPa() {
-        // one basis for every threshold: the rock's tensile strength (the reopen pressure of an open conduit
-        // never exceeds it, MagmaChamberConfig#reopenOverpressureMPa)
+        // one basis for every threshold: the rock's tensile strength (a conduit's cap never holds more than
+        // the walls, failureOverpressureMPa)
         return wallRuptureRatio(config) * config.tensileStrengthMPa();
     }
 
@@ -1127,9 +1162,9 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return transferredOut;
     }
 
-    /** Magma density used for magmastatic heads (kg/m³). */
-    public static double magmaDensity() {
-        return MAGMA_DENSITY;
+    /** Density (kg/m³) of the chamber's melt: its composition and dissolved water ({@link MeltDensity}). */
+    public double meltDensityKgPerM3() {
+        return MeltDensity.meltKgPerM3(silicaWt(), waterWt());
     }
 
     /** Country-rock density for lithostatic pressure (kg/m³). */
@@ -1223,7 +1258,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         double moles = exsolvedWaterWt() / 100 * melt / WATER_MOLAR_MASS + exsolvedCo2Wt() / 100 * melt / CO2_MOLAR_MASS;
         if (moles <= 0) return 0;
         double gasVolume = moles * GAS_CONSTANT * (temperature + 273.15) / (absolutePressureMPa() * 1e6); // per kg
-        double ratio = gasVolume * MAGMA_DENSITY;
+        double ratio = gasVolume * meltDensityKgPerM3();
         return ratio / (1 + ratio);
     }
 
@@ -1273,7 +1308,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         double configured = config.coolingTimescale();
         if (!Double.isNaN(configured)) return configured;
         double r = chamberRadiusM();
-        return MAGMA_DENSITY * effectiveHeatCapacity() * r * r / (3 * CRUST_CONDUCTIVITY);
+        return meltDensityKgPerM3() * effectiveHeatCapacity() * r * r / (3 * CRUST_CONDUCTIVITY);
     }
 
     /**
@@ -1288,7 +1323,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         if (!Double.isNaN(configured)) return configured;
         double d = 2 * config.conduit().bubbleRadiusM();
         double eta = Math.pow(10, viscosityLog10());
-        double speed = MAGMA_DENSITY * GRAVITY * d * d / (18 * eta);
+        double speed = meltDensityKgPerM3() * GRAVITY * d * d / (18 * eta);
         return 2 * chamberRadiusM() / speed;
     }
 
@@ -1361,7 +1396,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     public double wallHeatPowerW() {
         double excess = temperature - config.wallTemperatureC();
         if (!(excess > 0)) return 0;
-        return MAGMA_DENSITY * effectiveHeatCapacity() * volume * excess / coolingTimescaleSeconds();
+        return meltDensityKgPerM3() * effectiveHeatCapacity() * volume * excess / coolingTimescaleSeconds();
     }
 
     @Override

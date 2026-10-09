@@ -327,13 +327,15 @@ final class EntityTracker {
             }
 
             TephraSubsystem tephra = v.tephra();
-            ExplosivePhase phase = tephra.activePhase();
-            if (phase != null && tephra.plumeHeight() > 0) {
+            for (ExplosivePhase phase : tephra.activePhases()) {
+                double height = tephra.plumeHeight(phase);
+                if (!(height > 0)) continue;
                 double[] base = map.point(phase.vent().position());
-                JsonObject o = entity("plume:" + vid, "plume", vid, "Eruption column", base);
+                JsonObject o = entity("plume:" + vid + ":" + phase.vent().id(), "plume", vid, "Eruption column", base);
                 JsonObject p = o.getAsJsonObject("props");
-                p.add("topZ", Json.num(phase.vent().position().y() + tephra.plumeHeight()));
-                p.add("heightM", Json.num(tephra.plumeHeight()));
+                p.addProperty("ventId", phase.vent().id());
+                p.add("topZ", Json.num(phase.vent().position().y() + height));
+                p.add("heightM", Json.num(height));
                 p.add("massRateKgS", Json.num(phase.massEruptionRate()));
                 out.put(o.get("id").getAsString(), o);
             }

@@ -86,7 +86,8 @@ class VolcanoSystemTest {
     static MagmaChamberConfig basalt() {
         return MagmaChamberConfig.builder("test", new Point3(0, -3000, 0))
                 .conduit(TestConduits.molten())
-                .initialOverpressureMPa(14.9999)
+                // just past what the conduit's cap holds (the tensile strength): it fails at once
+                .initialOverpressureMPa(15.05)
                 .supplyVariability(0)
                 .build();
     }

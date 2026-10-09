@@ -727,7 +727,10 @@ export interface VolcanoState {
   /** style: estimated from the eruption (or, with styleForecast, forecast for the next one); null until estimated. */
   alert: { level: AlertLevel; style: EruptionStyle | null; vei?: number; styleForecast?: boolean };
   deformation: { maxUpliftM: number; stations: StationReading[] };
+  /** The tallest eruption column. */
   plume?: { topZ: number; massRateKgS: number };
+  /** Every eruption column, one per vent that feeds one (base in world metres, top elevation, radius at the top). */
+  plumes?: { ventId: string; base: [number, number, number]; topZ: number; massRateKgS: number; radiusM: number; ventRadiusM: number }[];
   /** Ids of the vents erupting now (empty between eruptions; absent on older servers). */
   activeVents?: string[];
   /** Landscape change so far (absent on servers without geomorphology). */
@@ -773,6 +776,8 @@ export type SimEvent =
   | { kind: 'dikeStarted'; time: number; volcanoId: string; dikeId: number; origin: [number, number, number]; overpressureMPa: number }
   | { kind: 'dikeAdvanced'; time: number; volcanoId: string; dikeId: number; path: [number, number, number][] }
   | { kind: 'dikeStalled'; time: number; volcanoId: string; dikeId: number; tip: [number, number, number]; depthM: number; volumeM3: number; reason: string }
+  | { kind: 'dikeResumed'; time: number; volcanoId: string; dikeId: number; tip: [number, number, number]; depthM: number }
+  | { kind: 'dikeSolidified'; time: number; volcanoId: string; dikeId: number; tip: [number, number, number]; depthM: number; volumeM3: number }
   | { kind: 'fissureOpened'; time: number; volcanoId: string; vent: VentInfo }
   /** A fissure's flow localised: a segment still erupting after its neighbours froze is now a crater. */
   | { kind: 'ventFormed'; time: number; volcanoId: string; vent: VentInfo; fissureId: string }
@@ -848,5 +853,6 @@ export interface MagmaBudget {
   /** The chamber's size is frozen (no growth). */
   frozen?: boolean;
   eruptedM3: number;
-  eruptionEndOverpressureMPa?: number;
+  /** Smallest eruption rate that keeps the conduit molten (m³/s); a slower eruption freezes and ends. */
+  freezingRateM3PerS?: number;
 }

@@ -1,7 +1,7 @@
 package me.alex4386.typhon.engine.assembly;
 
 import me.alex4386.typhon.engine.magma.conduit.ConduitInput;
-import me.alex4386.typhon.engine.magma.conduit.ConduitModel;
+import me.alex4386.typhon.engine.magma.MeltDensity;
 import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.magma.conduit.ConduitSolution.Fragmentation;
 import me.alex4386.typhon.engine.tephra.GrainSizeDistribution;
@@ -187,7 +187,8 @@ public final class VentPartition {
         // filled with water-saturated tephra.
         double openRatio = waterMagmaRatio(water, conduitRadiusM, magma);
         double slurry = Math.max(0, Math.min(1, water.slurryFraction()));
-        double slurryRatio = slurry > 0 ? slurryRatio(water, conduitRadiusM, magma) : 0;
+        double melt = MeltDensity.meltKgPerM3(silicaWt, flow.exitDissolvedWaterWt());
+        double slurryRatio = slurry > 0 ? slurryRatio(water, conduitRadiusM, magma, melt) : 0;
         double ratio = slurry * slurryRatio + (1 - slurry) * openRatio;
         double submergence = Math.min(1, Math.max(0, water.surfaceDepthM()) / SUPPRESSION_DEPTH_M);
         double suppression = (1 - submergence) * (1 - submergence);
@@ -371,10 +372,10 @@ public final class VentPartition {
      * replaced: a crater cut off from open water is refilled only by seepage through the edifice and
      * groundwater flowing into the conduit.
      */
-    static double slurryRatio(Water water, double conduitRadiusM, double magmaMassFlux) {
+    static double slurryRatio(Water water, double conduitRadiusM, double magmaMassFlux, double meltDensity) {
         if (!(magmaMassFlux > 0)) return 0;
         double porosity = Math.max(0, Math.min(0.9, water.slurryPorosity()));
-        double mixing = porosity * WATER_DENSITY / ConduitModel.MAGMA_DENSITY;
+        double mixing = porosity * WATER_DENSITY / meltDensity;
         double seepage = water.seepageKgPerS();
         if (Double.isNaN(seepage)) return mixing;
         double resupply = (Math.max(0, seepage) + aquiferInflow(water, conduitRadiusM)) / magmaMassFlux;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { budgetVerdict } from './budget';
 import type { MagmaBudget } from '../protocol/messages';
 
-const base: MagmaBudget = { supplyM3PerS: 5, eruptionM3PerS: 5, intrudedM3: 0, wallGrowthM3: 0, eruptedM3: 1e6, eruptionEndOverpressureMPa: 0.5 };
+const base: MagmaBudget = { supplyM3PerS: 5, eruptionM3PerS: 5, intrudedM3: 0, wallGrowthM3: 0, eruptedM3: 1e6, freezingRateM3PerS: 0.01 };
 
 describe('magma budget verdict', () => {
   it('a quiet chamber with supply recharges', () => {
@@ -15,8 +15,10 @@ describe('magma budget verdict', () => {
     expect(budgetVerdict({ ...base, balanceOverpressureMPa: 15.3 }, 9, 16, true).state).toBe('settling');
   });
 
-  it('balance below the end pressure drains; beyond the rupture limit is pinned', () => {
-    expect(budgetVerdict({ ...base, balanceOverpressureMPa: -1.2 }, 1, 16, true).state).toBe('draining');
+  it('a supply below the freezing rate or no balance drains; beyond the rupture limit is pinned', () => {
+    expect(budgetVerdict({ ...base, supplyM3PerS: 0.001, balanceOverpressureMPa: -1.2 }, 1, 16, true).state).toBe('draining');
+    // a buoyant column keeps erupting below lithostatic pressure: a negative balance is still a balance
+    expect(budgetVerdict({ ...base, balanceOverpressureMPa: -1.2 }, -1.2, 16, true).state).toBe('steady');
     expect(budgetVerdict({ ...base }, 1, 16, true).state).toBe('draining');
     expect(budgetVerdict({ ...base, balanceOverpressureMPa: 34 }, 16, 16, true).state).toBe('pinned');
   });

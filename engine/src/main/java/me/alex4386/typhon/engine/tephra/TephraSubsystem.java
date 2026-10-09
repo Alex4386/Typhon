@@ -46,7 +46,7 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * set by the ballistic share of the mass eruption rate, with log-normal diameters, near-vertical
  * launch angles and the gas-thrust exit speed ({@link Ballistics#gasThrustExitSpeed}). They fly under
  * gravity and quadratic drag relative to the wind ({@link Ballistics#rk4}, sub-steps of at most
- * {@link TephraConfig#maxIntegrationStepSeconds}) until they cross the ground surface of the world model;
+ * {@link TephraConfig#maxIntegrationStepSeconds} and of half a ground column of travel) until they cross the ground surface of the world model;
  * where the ground is unknown it is taken to be at launch height. On impact a crater of radius
  * {@code k·E^(1/3)} is excavated and the bomb's own volume is laid on the ground as loose rock chosen by
  * silica content.
@@ -78,7 +78,8 @@ public final class TephraSubsystem implements Subsystem {
     /** Last announced ash fall per region: {fallRate, airborneLoad, time}. */
     private final TreeMap<Integer, double[]> ashReports = new TreeMap<>();
 
-    private ExplosivePhase phase;
+    /** Active explosive phases by vent id: each vent that feeds a column has its own. */
+    private final java.util.TreeMap<String, ExplosivePhase> phases = new java.util.TreeMap<>();
     private long nextBombId = 1;
     private AshGrid grid;
 
@@ -129,8 +130,14 @@ public final class TephraSubsystem implements Subsystem {
         pending.add(new StartExplosivePhase(id, phase));
     }
 
+    /** Stops every vent's phase. */
     public void stopPhase() {
         pending.add(new StopExplosivePhase(id));
+    }
+
+    /** Stops the phase of the vent {@code ventId} (the others go on). */
+    public void stopPhase(String ventId) {
+        pending.add(new StopExplosivePhase(id, ventId));
     }
 
     /** Attributes ash fall and bombs to the producing volcano's current eruption ({@link DepositType#FALL}). */
@@ -168,11 +175,25 @@ public final class TephraSubsystem implements Subsystem {
 
     @Override
     public Snapshot snapshot() {
-        return new Snapshot(phase != null, phase == null ? 0 : phase.massEruptionRate(), plumeHeight(), inFlightBombs());
+        return new Snapshot(!phases.isEmpty(), totalMassEruptionRate(), plumeHeight(), inFlightBombs());
     }
 
+    /** The strongest active phase (highest mass eruption rate), or {@code null}. */
     public ExplosivePhase activePhase() {
-        return phase;
+        ExplosivePhase best = null;
+        for (ExplosivePhase p : phases.values()) if (best == null || p.massEruptionRate() > best.massEruptionRate()) best = p;
+        return best;
+    }
+
+    /** Every active phase, by vent id. */
+    public java.util.Collection<ExplosivePhase> activePhases() {
+        return java.util.Collections.unmodifiableCollection(phases.values());
+    }
+
+    private double totalMassEruptionRate() {
+        double sum = 0;
+        for (ExplosivePhase p : phases.values()) sum += p.massEruptionRate();
+        return sum;
     }
 
     public int inFlightBombs() {
@@ -183,9 +204,22 @@ public final class TephraSubsystem implements Subsystem {
         return wind;
     }
 
-    /** Current plume height above the vent (m; 0 when no phase is active). */
+    /** Height (m) of the tallest column above its vent (0 when no phase is active). */
     public double plumeHeight() {
-        return phase == null || grid == null ? 0 : grid.plumeHeight;
+        double h = 0;
+        for (ExplosivePhase p : phases.values()) h = Math.max(h, plumeHeight(p));
+        return h;
+    }
+
+    /** Radius (m) over which {@code phase}'s column spreads its ash (as in its {@link PlumeColumn} events). */
+    public double plumeRadiusM(ExplosivePhase phase) {
+        if (grid == null) return 0;
+        return 2 * Math.max(grid.cellMeters() * 0.5, 0.25 * PlumeModel.heightForMassRate(phase.massEruptionRate()));
+    }
+
+    /** Height (m) of {@code phase}'s column above its vent (0 before its first ash step). */
+    public double plumeHeight(ExplosivePhase phase) {
+        return grid == null ? 0 : PlumeModel.heightForMassRate(phase.massEruptionRate());
     }
 
     /**
@@ -242,7 +276,8 @@ public final class TephraSubsystem implements Subsystem {
     @Override
     public double maxStepSeconds() {
         double limit = Double.POSITIVE_INFINITY;
-        if (phase != null || (grid != null && grid.airborneTotal() > 0)) limit = config.ashStepSeconds;
+        // a phase started or bombs launched through the direct API take effect at the next step: keep it short
+        if (!phases.isEmpty() || !pending.isEmpty() || (grid != null && grid.airborneTotal() > 0)) limit = config.ashStepSeconds;
         if (inFlightBombs() > 0) limit = Math.min(limit, BOMB_STEP_SECONDS);
         return limit;
     }
@@ -260,15 +295,18 @@ public final class TephraSubsystem implements Subsystem {
         for (EngineCommand command : pending) {
             switch (command) {
                 case StartExplosivePhase start -> {
-                    phase = start.phase();
+                    ExplosivePhase phase = start.phase();
+                    phases.put(phase.vent().id(), phase);
                     ensureGrid(phase.vent().position());
-                    context.outbox().emit(new ExplosivePhaseChanged(context.time(), id, true,
-                            phase.massEruptionRate()));
+                    context.outbox().emit(new ExplosivePhaseChanged(context.time(), id, true, totalMassEruptionRate()));
                 }
                 case StopExplosivePhase stop -> {
-                    if (phase != null) {
-                        phase = null;
-                        context.outbox().emit(new ExplosivePhaseChanged(context.time(), id, false, 0));
+                    boolean had = !phases.isEmpty();
+                    if (stop.ventId() == null) phases.clear();
+                    else phases.remove(stop.ventId());
+                    if (had) {
+                        context.outbox().emit(new ExplosivePhaseChanged(context.time(), id, !phases.isEmpty(),
+                                totalMassEruptionRate()));
                     }
                 }
                 case SetWind set -> wind.set(set.speed(), set.directionRad(), set.variability(), context.random());
@@ -293,7 +331,11 @@ public final class TephraSubsystem implements Subsystem {
     // ── Bombs ──
 
     private void launchFromPhase(StepContext context) {
-        if (phase == null || phase.massEruptionRate() <= 0 || phase.ballisticFraction() <= 0) return;
+        for (ExplosivePhase phase : phases.values()) launchFromPhase(context, phase);
+    }
+
+    private void launchFromPhase(StepContext context, ExplosivePhase phase) {
+        if (phase.massEruptionRate() <= 0 || phase.ballisticFraction() <= 0) return;
         SimRandom random = context.random();
 
         double sigma = config.bombDiameterSigma;
@@ -515,10 +557,16 @@ public final class TephraSubsystem implements Subsystem {
     /** Integrates one engine step of {@code stepSeconds}; returns the landing point if the bomb reached the ground. */
     private Landing advance(Bomb bomb, double time, double stepSeconds) {
         Vec3d w = wind.at(time);
-        int substeps = Math.max(1, (int) Math.ceil(stepSeconds / config.maxIntegrationStepSeconds - 1e-9));
-        double dt = stepSeconds / substeps;
         double[] s = bomb.s;
-        for (int sub = 0; sub < substeps; sub++) {
+        double half = 0.5 * metersPerColumn();
+        double elapsed = 0;
+        while (elapsed < stepSeconds) {
+            // resolve the ground column by column: at most half a column of travel per sub-step
+            double speed = Math.sqrt(s[3] * s[3] + s[4] * s[4] + s[5] * s[5]);
+            double limit = speed > 0 ? Math.min(config.maxIntegrationStepSeconds, half / speed) : config.maxIntegrationStepSeconds;
+            double remaining = stepSeconds - elapsed;
+            double dt = remaining <= limit * (1 + 1e-9) ? remaining : remaining / Math.ceil(remaining / limit - 1e-9);
+            elapsed = dt == remaining ? stepSeconds : elapsed + dt;
             double px = s[0], py = s[1], pz = s[2], pvx = s[3], pvy = s[4], pvz = s[5];
             double f0 = py - surfaceTop(px, pz, bomb);
             Ballistics.rk4(s, dt, bomb.dragFactor, config.gravity, w.x(), w.z());
@@ -671,13 +719,18 @@ public final class TephraSubsystem implements Subsystem {
 
     private void ashStep(StepContext context) {
         double dt = config.ashStepSeconds;
-        if (phase != null) {
+        // Each column injects its ash over its own vent. The ash grid is column-integrated, with one release
+        // height for all airborne ash: the columns' mass-weighted mean height.
+        double heightSum = 0;
+        double massSum = 0;
+        for (ExplosivePhase phase : phases.values()) {
             Point3 base = phase.vent().position();
             ensureGrid(base);
             grid.parallel = context.parallel();
             double height = PlumeModel.heightForMassRate(phase.massEruptionRate());
             double sigma = Math.max(grid.cellMeters() * 0.5, 0.25 * height);
-            grid.plumeHeight = height;
+            heightSum += height * phase.massEruptionRate();
+            massSum += phase.massEruptionRate();
             grid.inject(
                     phase.massEruptionRate() * (1 - phase.ballisticFraction()) * dt,
                     phase.grainSize().fractions(),
@@ -686,15 +739,16 @@ public final class TephraSubsystem implements Subsystem {
                     sigma);
             context.outbox().emit(new PlumeColumn(
                     context.time(), id, base, base.y() + height, 2 * sigma, phase.massEruptionRate()));
-            lightning(context, base, height, sigma, dt);
+            lightning(context, phase, base, height, sigma, dt);
         }
+        if (massSum > 0) grid.plumeHeight = heightSum / massSum;
         if (grid == null) return;
         grid.parallel = context.parallel();
 
         if (grid.airborneTotal() > 0) {
             grid.transport(dt, wind.at(context.time()), config.diffusivity);
             grid.settle(dt, config.settlingVelocities, grid.plumeHeight);
-            if (phase == null && grid.airborneTotal() < config.minAirborneMass) grid.discardAirborne();
+            if (phases.isEmpty() && grid.airborneTotal() < config.minAirborneMass) grid.discardAirborne();
         }
         grid.applyDeposits(terrain.world(), config.depositBulkDensity, config.depositUpdateThickness,
                 units.unit(DepositType.FALL, context.time(), Double.NaN), molten);
@@ -710,7 +764,7 @@ public final class TephraSubsystem implements Subsystem {
         this.molten = molten;
     }
 
-    private void lightning(StepContext context, Point3 base, double height, double sigma, double dt) {
+    private void lightning(StepContext context, ExplosivePhase phase, Point3 base, double height, double sigma, double dt) {
         // Flash rate scales with the column's mass eruption rate.
         double rate = phase.massEruptionRate();
         if (rate < config.lightningMinMassEruptionRate || height <= 0) return;
@@ -786,7 +840,9 @@ public final class TephraSubsystem implements Subsystem {
     @Override
     public void saveState(StateWriter writer) {
         JsonObject out = writer.json();
-        if (phase != null) out.add("phase", savePhase(phase));
+        JsonArray phaseStates = new JsonArray();
+        for (ExplosivePhase p : phases.values()) phaseStates.add(savePhase(p));
+        out.add("phases", phaseStates);
         JsonObject windState = new JsonObject();
         wind.save(windState);
         out.add("wind", windState);
@@ -815,7 +871,16 @@ public final class TephraSubsystem implements Subsystem {
     @Override
     public void loadState(StateReader reader) {
         JsonObject in = reader.json();
-        phase = in.has("phase") ? loadPhase(in.getAsJsonObject("phase")) : null;
+        phases.clear();
+        if (in.has("phases")) {
+            for (JsonElement e : in.getAsJsonArray("phases")) {
+                ExplosivePhase p = loadPhase(e.getAsJsonObject());
+                phases.put(p.vent().id(), p);
+            }
+        } else if (in.has("phase")) { // saves from before one phase per vent
+            ExplosivePhase p = loadPhase(in.getAsJsonObject("phase"));
+            phases.put(p.vent().id(), p);
+        }
         wind.load(in.getAsJsonObject("wind"));
         nextBombId = in.get("nextBombId").getAsLong();
         bombs.clear();

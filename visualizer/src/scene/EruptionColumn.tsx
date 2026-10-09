@@ -71,59 +71,66 @@ export function EruptionColumn({ world }: { world: WorldInfo }) {
     let seed = 0;
     for (const v of world.volcanoes) {
       const vs = st.state.volcanoes[v.id];
-      // the column rises over the vent that erupts (the first, if none is reported)
-      const vent = v.vents.find((x) => vs?.activeVents?.includes(x.id)) ?? v.vents[0];
-      if (!vs?.plume || !vent) continue;
-      const base = displayZ(world, vent.at[0], vent.at[1], vExag, dExag);
-      const H = Math.max(150, vs.plume.topZ - base / vExag); // physical column height (m)
-      const Hnb = H * NEUTRAL;
-      const r0 = Math.max(10, vent.radius ?? 20);
-      const rServer = radius.current.get(v.id);
-      const k = rServer && rServer > 0 ? rServer / (r0 + SPREAD * Hnb) : 1;
-      const b = (z: number) => (r0 + SPREAD * z) * Math.min(3, Math.max(0.33, k));
-      const s = steamShare(vs.chamber.regime, vs.alert.style);
-      const col: [number, number, number] = [ASH[0] + (STEAM[0] - ASH[0]) * s, ASH[1] + (STEAM[1] - ASH[1]) * s, ASH[2] + (STEAM[2] - ASH[2]) * s];
-      const axis = (z: number): [number, number] => [vent.at[0] + wx * z * lean, vent.at[1] + wy * z * lean];
-      // rising column: billows climb at a steady pace and wrap, so the column churns upward
-      for (let i = 0; i < COLUMN && billows.length < MAX_BILLOWS; i++, seed++) {
-        const phase = (i / COLUMN + t * 0.035 + hash(seed) * 0.02) % 1;
-        const z = phase * Hnb;
-        const r = b(z);
-        const [ax, ay] = axis(z);
-        const ang = hash(seed + 7) * Math.PI * 2 + t * 0.05;
-        const off = r * 0.5 * Math.sqrt(hash(seed + 13));
-        const x = ax + Math.cos(ang) * off;
-        const y = ay + Math.sin(ang) * off;
-        const zz = base + z * vExag;
-        billows.push({ x, y: zz, z: -y, size: r * 1.6, flat: 1, cx: ax, cy: zz, cz: -ay, r: col[0], g: col[1], b: col[2], fade: 0.9 + 0.1 * phase, seed });
-      }
-      // umbrella: spreading at neutral buoyancy up to the top, stretched downwind
-      const bTop = b(Hnb);
-      const Ru = 3.5 * bTop;
-      const [ux, uy] = axis(Hnb);
-      const uzMid = base + ((Hnb + H) / 2) * vExag;
-      for (let i = 0; i < UMBRELLA && billows.length < MAX_BILLOWS; i++, seed++) {
-        const u = Math.sqrt(hash(seed + 3));
-        const ang = hash(seed + 5) * Math.PI * 2;
-        const rr = u * Ru;
-        const down = u * Ru * 0.6;
-        const x = ux + Math.cos(ang) * rr + wx * down;
-        const y = uy + Math.sin(ang) * rr + wy * down;
-        const zz = base + (Hnb + (H - Hnb) * (0.35 + 0.65 * hash(seed + 9)) * (1 - 0.5 * u)) * vExag;
-        billows.push({ x, y: zz, z: -y, size: bTop * (1.1 + 0.6 * u), flat: 0.55, cx: ux, cy: uzMid - (H - Hnb) * 0.3 * vExag, cz: -uy, r: col[0], g: col[1], b: col[2], fade: 0.95, seed });
-      }
-      // ash drifting downwind from the umbrella, slowly settling (steam dissipates instead)
-      for (let i = 0; i < DRIFT && billows.length < MAX_BILLOWS && s < 0.5; i++, seed++) {
-        const f = (i / DRIFT + t * 0.004) % 1;
-        const d = Ru + f * Math.max(3000, 12 * Ru);
-        const lateral = (hash(seed + 21) - 0.5) * (Ru * 0.8 + d * 0.12);
-        const x = ux + wx * d - wy * lateral;
-        const y = uy + wy * d + wx * lateral;
-        const zz = base + Hnb * (1 - 0.25 * f) * vExag;
-        // overlapping, widening and thinning downwind: a continuous drifting cloud, not separate puffs;
-        // diluting downwind: paler and more transparent (never darker)
-        const lift = 0.12 * f;
-        billows.push({ x, y: zz, z: -y, size: Ru * (1 + f * 1.6), flat: 0.42, cx: x, cy: zz - bTop * vExag, cz: -y, r: col[0] + lift, g: col[1] + lift, b: col[2] + lift, fade: 1, alpha: 0.85 - 0.6 * f, seed });
+      if (!vs) continue;
+      // every vent feeding a column of its own (older servers report only the tallest, over its vent)
+      const vent = v.vents.find((x) => vs.activeVents?.includes(x.id)) ?? v.vents[0];
+      const columns: { at: [number, number]; topZ: number; ventRadius: number; radius?: number }[] = vs.plumes?.length
+        ? vs.plumes.map((p) => ({ at: [p.base[0], p.base[1]] as [number, number], topZ: p.topZ, ventRadius: p.ventRadiusM, radius: p.radiusM }))
+        : vs.plume && vent
+          ? [{ at: [vent.at[0], vent.at[1]], topZ: vs.plume.topZ, ventRadius: vent.radius ?? 20, radius: radius.current.get(v.id) }]
+          : [];
+      for (const c of columns) {
+        const base = displayZ(world, c.at[0], c.at[1], vExag, dExag);
+        const H = Math.max(150, c.topZ - base / vExag); // physical column height (m)
+        const Hnb = H * NEUTRAL;
+        const r0 = Math.max(10, c.ventRadius);
+        const rServer = c.radius;
+        const k = rServer && rServer > 0 ? rServer / (r0 + SPREAD * Hnb) : 1;
+        const b = (z: number) => (r0 + SPREAD * z) * Math.min(3, Math.max(0.33, k));
+        const s = steamShare(vs.chamber.regime, vs.alert.style);
+        const col: [number, number, number] = [ASH[0] + (STEAM[0] - ASH[0]) * s, ASH[1] + (STEAM[1] - ASH[1]) * s, ASH[2] + (STEAM[2] - ASH[2]) * s];
+        const axis = (z: number): [number, number] => [c.at[0] + wx * z * lean, c.at[1] + wy * z * lean];
+        // rising column: billows climb at a steady pace and wrap, so the column churns upward
+        for (let i = 0; i < COLUMN && billows.length < MAX_BILLOWS; i++, seed++) {
+          const phase = (i / COLUMN + t * 0.035 + hash(seed) * 0.02) % 1;
+          const z = phase * Hnb;
+          const r = b(z);
+          const [ax, ay] = axis(z);
+          const ang = hash(seed + 7) * Math.PI * 2 + t * 0.05;
+          const off = r * 0.5 * Math.sqrt(hash(seed + 13));
+          const x = ax + Math.cos(ang) * off;
+          const y = ay + Math.sin(ang) * off;
+          const zz = base + z * vExag;
+          billows.push({ x, y: zz, z: -y, size: r * 1.6, flat: 1, cx: ax, cy: zz, cz: -ay, r: col[0], g: col[1], b: col[2], fade: 0.9 + 0.1 * phase, seed });
+        }
+        // umbrella: spreading at neutral buoyancy up to the top, stretched downwind
+        const bTop = b(Hnb);
+        const Ru = 3.5 * bTop;
+        const [ux, uy] = axis(Hnb);
+        const uzMid = base + ((Hnb + H) / 2) * vExag;
+        for (let i = 0; i < UMBRELLA && billows.length < MAX_BILLOWS; i++, seed++) {
+          const u = Math.sqrt(hash(seed + 3));
+          const ang = hash(seed + 5) * Math.PI * 2;
+          const rr = u * Ru;
+          const down = u * Ru * 0.6;
+          const x = ux + Math.cos(ang) * rr + wx * down;
+          const y = uy + Math.sin(ang) * rr + wy * down;
+          const zz = base + (Hnb + (H - Hnb) * (0.35 + 0.65 * hash(seed + 9)) * (1 - 0.5 * u)) * vExag;
+          billows.push({ x, y: zz, z: -y, size: bTop * (1.1 + 0.6 * u), flat: 0.55, cx: ux, cy: uzMid - (H - Hnb) * 0.3 * vExag, cz: -uy, r: col[0], g: col[1], b: col[2], fade: 0.95, seed });
+        }
+        // ash drifting downwind from the umbrella, slowly settling (steam dissipates instead)
+        for (let i = 0; i < DRIFT && billows.length < MAX_BILLOWS && s < 0.5; i++, seed++) {
+          const f = (i / DRIFT + t * 0.004) % 1;
+          const d = Ru + f * Math.max(3000, 12 * Ru);
+          const lateral = (hash(seed + 21) - 0.5) * (Ru * 0.8 + d * 0.12);
+          const x = ux + wx * d - wy * lateral;
+          const y = uy + wy * d + wx * lateral;
+          const zz = base + Hnb * (1 - 0.25 * f) * vExag;
+          // overlapping, widening and thinning downwind: a continuous drifting cloud, not separate puffs;
+          // diluting downwind: paler and more transparent (never darker)
+          const lift = 0.12 * f;
+          billows.push({ x, y: zz, z: -y, size: Ru * (1 + f * 1.6), flat: 0.42, cx: x, cy: zz - bTop * vExag, cz: -y, r: col[0] + lift, g: col[1] + lift, b: col[2] + lift, fade: 1, alpha: 0.85 - 0.6 * f, seed });
+        }
       }
     }
   });

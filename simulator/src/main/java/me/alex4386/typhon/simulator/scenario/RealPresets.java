@@ -170,7 +170,7 @@ final class RealPresets {
                             // feeder ~3 m across, the scale of basaltic feeder dikes/conduits (Wilson & Head 1981);
                             // Poiseuille flow (Q ∝ r⁴) then peaks within the observed 1-100 m3/s (Neal et al. 2019)
                             .volume(1e9).lithostaticDepth(1500).conduitRadius(1.5).tensileStrengthMPa(10)
-                            .eruptionEndOverpressureMPa(1).supplyRate(3).supplyVariability(0.2)
+                            .supplyRate(3).supplyVariability(0.2)
                             .initialSilicaWt(50).rechargeSilicaWt(50).initialWaterWt(0.4).rechargeWaterWt(0.4)
                             .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
                             .initialTemperatureC(1165).rechargeTemperatureC(1180).initialOverpressureMPa(9.9999)
@@ -248,11 +248,11 @@ final class RealPresets {
                     VentSite vent = vent("crater-terrace", terrain, craterX, craterZ, 60);
                     MagmaChamberConfig chamber = MagmaChamberConfig.builder("stromboli", chamberAt(vent, -3000))
                             .volume(5e7).lithostaticDepth(3000).conduitRadius(1.5).tensileStrengthMPa(8)
-                            .eruptionEndOverpressureMPa(0.5).supplyRate(0.002).supplyVariability(0.4)
+                            .supplyRate(0.002).supplyVariability(0.4)
                             .initialSilicaWt(50).rechargeSilicaWt(50).initialWaterWt(2.7).rechargeWaterWt(2.7)
                             .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
                             .initialTemperatureC(1140).rechargeTemperatureC(1150).initialOverpressureMPa(0)
-                            .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(1.5))
+                            .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1))
                             .build();
                     return b.volcano(VolcanoSystem.builder("stromboli", List.of(vent), b.terrain(), b.lava())
                             .chamber(chamber)
@@ -315,7 +315,7 @@ final class RealPresets {
                     VentSite vent = vent("summit", terrain, 0, 0, 120);
                     MagmaChamberConfig chamber = MagmaChamberConfig.builder("st-helens", chamberAt(vent, -4800))
                             .volume(5e9).lithostaticDepth(7500).conduitRadius(30).tensileStrengthMPa(15)
-                            .eruptionEndOverpressureMPa(2).supplyRate(1.0).supplyVariability(0.2)
+                            .supplyRate(1.0).supplyVariability(0.2)
                             .initialSilicaWt(64).rechargeSilicaWt(62).initialWaterWt(4.6).rechargeWaterWt(4.6)
                             .initialTemperatureC(920).rechargeTemperatureC(950).initialOverpressureMPa(15.1)
                             // the scenario starts on 18 May: the magma that intruded the cryptodome from late
@@ -381,7 +381,7 @@ final class RealPresets {
                     VentSite vent = vent("summit", terrain, 0, 0, 240);
                     MagmaChamberConfig chamber = MagmaChamberConfig.builder("pinatubo", chamberAt(vent, -5300))
                             .volume(4e10).lithostaticDepth(7000).conduitRadius(90).tensileStrengthMPa(15)
-                            .eruptionEndOverpressureMPa(2).supplyRate(2).supplyVariability(0.1)
+                            .supplyRate(2).supplyVariability(0.1)
                             .initialSilicaWt(64.5).rechargeSilicaWt(64.5).initialWaterWt(6.2).rechargeWaterWt(6.2)
                             .initialTemperatureC(780).rechargeTemperatureC(800).initialOverpressureMPa(15.1)
                             // the scenario starts at the climax: the magma that reached the summit in April-June
@@ -455,7 +455,7 @@ final class RealPresets {
                     VentSite vent = vent("surtur", terrain, 0, 0, 40);
                     MagmaChamberConfig chamber = MagmaChamberConfig.builder("surtsey", chamberAt(vent, -3000))
                             .volume(5e8).lithostaticDepth(3000).conduitRadius(2.0).tensileStrengthMPa(12)
-                            .eruptionEndOverpressureMPa(1).supplyRate(2).supplyVariability(0.2)
+                            .supplyRate(2).supplyVariability(0.2)
                             .initialSilicaWt(46.5).rechargeSilicaWt(46.5).initialWaterWt(0.7).rechargeWaterWt(0.7)
                             .initialCo2Wt(0.2).rechargeCo2Wt(0.2)
                             .initialTemperatureC(1170).rechargeTemperatureC(1180).initialOverpressureMPa(11.99996)

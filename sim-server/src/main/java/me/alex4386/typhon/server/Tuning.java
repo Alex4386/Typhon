@@ -82,8 +82,6 @@ final class Tuning {
         META.put("volcano:magma.chamber.lithostaticDepth", m("Chamber depth", "m", 200.0, 20000.0, false, "Depth of the chamber below the surface."));
         META.put("volcano:magma.chamber.tensileStrengthMPa", m("Roof strength", "MPa", 0.5, 100.0, true,
                 "Overpressure needed to crack the rock above the chamber and start an eruption."));
-        META.put("volcano:magma.chamber.eruptionEndOverpressureMPa", m("Eruption stops below", "MPa", 0.0, 50.0, false,
-                "Overpressure at which an eruption runs out of push."));
         META.put("volcano:magma.chamber.maxEruptionRate", m("Maximum eruption rate", "m³/s", 1.0, 1e6, true, null));
         META.put("volcano:magma.chamber.initialTemperatureC", m("Starting magma temperature", "°C", 650.0, 1350.0, false, null));
         META.put("volcano:magma.chamber.initialSilicaWt", m("Starting magma silica (SiO₂)", "wt%", 42.0, 78.0, false, null));
@@ -101,7 +99,6 @@ final class Tuning {
         META.put("volcano:magma.chamber.stepPeriodSeconds", m("Chamber step", "s", 0.05, 60.0, true, "How often the chamber model runs (seconds)."));
         META.put("volcano:magma.chamber.samplePeriodSeconds", m("Chamber sample interval", "s", 0.0, 600.0, false, "How often chamber readings are reported."));
         META.put("volcano:magma.conduit.initialOpenness", m("Conduit open at start", "fraction", 0.0, 1.0, false, "0 = sealed, 1 = open summit conduit at the start."));
-        META.put("volcano:magma.conduit.reopenOverpressureMPa", m("Reopening pressure", "MPa", 0.0, 100.0, false, "Overpressure that reopens a partly open conduit."));
         META.put("volcano:magma.conduit.fragmentationPorosity", m("Fragmentation porosity", "fraction", 0.3, 0.95, false, "Gas fraction at which the rising magma shatters into ash (explosive above it)."));
         META.put("volcano:magma.conduit.brittleStressPa", m("Brittle stress", "Pa", 1e5, 1e10, true, "Shear stress at which viscous magma breaks (strain-rate fragmentation)."));
         META.put("volcano:magma.conduit.foamStrengthPa", m("Foam strength", "Pa", 1e3, 1e9, true, "Bubble-wall strength the gas overpressure must exceed to fragment."));

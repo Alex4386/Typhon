@@ -75,7 +75,6 @@ final class ObjectPanels {
             r("coolingTimescale", "walls", MORE, 11),
             r("degassingTimescale", "magma", MORE, 21),
             r("conduitRadius", "eruption", PRIMARY, 0),
-            r("eruptionEndOverpressureMPa", "eruption", MORE, 10),
             r("wallRuptureRatio", "overrides", MORE, 2),
             r("wallYieldFraction", "overrides", MORE, 3),
             r("freezeVolume", "overrides", PRIMARY, 4),
@@ -83,7 +82,7 @@ final class ObjectPanels {
             r("id|chamberId", "details", MORE, 90));
 
     private static final List<Rule> CONDUIT = List.of(
-            r("reopenOverpressureMPa|initialOpenness", "eruption", MORE, 20));
+            r("initialOpenness", "eruption", MORE, 20));
 
     private static final List<Rule> DIKES = List.of(
             r("blocked", "overrides", PRIMARY, 1),

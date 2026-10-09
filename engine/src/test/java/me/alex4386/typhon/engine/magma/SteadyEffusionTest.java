@@ -20,7 +20,7 @@ class SteadyEffusionTest {
 
     private static MagmaChamberConfig.Builder chamber(double supply) {
         return MagmaChamberConfig.builder("v", CENTER).volume(5e7).compressibilityPerMPa(2e-4).lithostaticDepth(3000)
-                .conduitRadius(0.8).tensileStrengthMPa(8).eruptionEndOverpressureMPa(0.5).supplyRate(supply)
+                .conduitRadius(0.8).tensileStrengthMPa(8).supplyRate(supply)
                 .conduit(TestConduits.molten(8)) // an open system
                 .supplyVariability(0).initialOverpressureMPa(7.9);
     }
@@ -40,24 +40,23 @@ class SteadyEffusionTest {
 
     @Test
     void outflowSettlesOnTheSupplyAtAConstantPressure() {
-        // This chamber balances between ~2 m³/s (below: the eruption drains and ends, as in
-        // episodic activity) and ~10 m³/s (above: the balance lies beyond the walls' limit).
-        // The approach takes several stiffness/conductance times (~10 h here).
+        // Through a 0.9 m conduit, dense basaltic melt balances a 5 m³/s supply well inside the walls'
+        // limit. The approach takes several stiffness/conductance times (~10 h here).
         double supply = 5;
-        MagmaChamber c = erupt(chamber(supply).build(), 72);
+        MagmaChamber c = erupt(chamber(supply).conduitRadius(0.9).build(), 72);
         assertTrue(c.erupting(), "a balanced open system keeps erupting");
         assertEquals(supply, c.eruptionRate(), 0.01 * supply, "outflow equals inflow");
         double balance = c.balanceOverpressureMPa();
-        assertTrue(balance > c.config().eruptionEndOverpressureMPa() && balance < c.ruptureOverpressureMPa(),
+        assertTrue(balance > 0 && balance < c.ruptureOverpressureMPa(),
                 "the balance lies in the open, pressurised range: " + balance);
         assertEquals(balance, c.overpressureMPa(), 0.01 * balance, "the chamber sits at its balance pressure");
         assertTrue(c.overpressureMPa() > 0, "still pressurised");
         assertEquals(0, c.wallGrowthM3(), 1e-6, "nothing beyond the walls' limit");
 
-        // a day later it is the same state
-        MagmaChamber later = erupt(chamber(supply).build(), 96);
-        assertEquals(c.overpressureMPa(), later.overpressureMPa(), 0.01 * c.overpressureMPa());
-        assertEquals(c.eruptionRate(), later.eruptionRate(), 0.01 * supply);
+        // a day later it is nearly the same state (the chamber's magma itself evolves slowly)
+        MagmaChamber later = erupt(chamber(supply).conduitRadius(0.9).build(), 96);
+        assertEquals(c.overpressureMPa(), later.overpressureMPa(), 0.1 * c.overpressureMPa());
+        assertEquals(supply, later.eruptionRate(), 0.05 * supply, "still close to the supply");
     }
 
     @Test

@@ -21,7 +21,7 @@ class ChamberRuptureTest {
 
     private static MagmaChamberConfig.Builder stromboli() {
         return MagmaChamberConfig.builder("v", CENTER).volume(5e7).compressibilityPerMPa(2e-4)
-                .lithostaticDepth(3000).conduitRadius(0.8).tensileStrengthMPa(8).eruptionEndOverpressureMPa(0.5)
+                .lithostaticDepth(3000).conduitRadius(0.8).tensileStrengthMPa(8)
                 .conduit(TestConduits.molten(8)) // an open-vent volcano
                 .supplyRate(0.3).supplyVariability(0);
     }

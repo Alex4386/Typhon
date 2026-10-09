@@ -38,7 +38,7 @@ class SaveFormatTest {
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder("v", List.of(VENT), terrain, lava)
                 .chamber(MagmaChamberConfig.builder("v", new Point3(0, -3000, 0))
-                        .conduit(TestConduits.molten()).initialOverpressureMPa(14.9999).supplyVariability(0).build())
+                        .conduit(TestConduits.molten()).initialOverpressureMPa(15.05).supplyVariability(0).build())
                 .dikesEnabled(false)
                 .build();
         Engine.Builder builder = Engine.builder(21).adaptive(Engine.DEFAULT_MAX_STEP_SECONDS).add(terrain);

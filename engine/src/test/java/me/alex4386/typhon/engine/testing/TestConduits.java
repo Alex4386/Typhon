@@ -13,11 +13,13 @@ public final class TestConduits {
     public static final double DEFAULT_TENSILE_MPA = 15;
 
     /**
-     * A conduit that is still molten, capped at the rock's tensile strength {@code tensileMPa}: the chamber
-     * erupts through its crater once its overpressure reaches that strength.
+     * A conduit still molten under a solidified cap that holds the rock's tensile strength {@code tensileMPa}
+     * (a chamber of that strength): a quarter of its radius frozen, so the cap ({@code 2·C·δ/r} with the
+     * Griffith cohesion {@code C = 2 T}) gives way, and the chamber erupts through its crater, once the
+     * overpressure reaches that strength.
      */
     public static ConduitConfig molten(double tensileMPa) {
-        return ConduitConfig.DEFAULT.withInitialOpenness(1).withReopenOverpressureMPa(tensileMPa);
+        return ConduitConfig.DEFAULT.withInitialOpenness(0.75);
     }
 
     /** {@link #molten(double)} for the default chamber's strength. */
@@ -26,11 +28,11 @@ public final class TestConduits {
     }
 
     /**
-     * A conduit mostly solidified since its last eruption (a quarter of its radius still molten), plugged by
-     * its solid rim: it fails at the rock's tensile strength {@code tensileMPa}, and the column decompresses
-     * suddenly (as a sealed silicic system does).
+     * The capped conduit of {@link #molten(double)} over gas-rich magma: the cap's failure at the tensile
+     * strength decompresses the vesicular magma suddenly enough to fragment it (as a sealed silicic system
+     * does); whether it does follows from the magma, not the conduit.
      */
     public static ConduitConfig plugged(double tensileMPa) {
-        return ConduitConfig.DEFAULT.withInitialOpenness(0.25).withReopenOverpressureMPa(tensileMPa);
+        return molten(tensileMPa);
     }
 }

@@ -44,6 +44,8 @@ function placeOf(e: SimEvent): [number, number] | null {
     case 'dikeStarted':
       return [e.origin[0], e.origin[1]];
     case 'dikeStalled':
+    case 'dikeResumed':
+    case 'dikeSolidified':
       return [e.tip[0], e.tip[1]];
     case 'bombLaunched':
       return [e.start[0], e.start[1]];
@@ -60,7 +62,8 @@ export function locateEvent(e: SimEvent): void {
     useCamera.getState().requestCamera({ kind: 'frameSelection' });
     return;
   }
-  if (e.kind === 'dikeAdvanced' || e.kind === 'dikeStarted' || e.kind === 'dikeStalled') {
+  if (e.kind === 'dikeAdvanced' || e.kind === 'dikeStarted' || e.kind === 'dikeStalled'
+      || e.kind === 'dikeResumed' || e.kind === 'dikeSolidified') {
     const id = `dike:${e.volcanoId}:${e.dikeId}`;
     if (s.entities[id]) return showEntity(id);
   }

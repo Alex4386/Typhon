@@ -204,7 +204,7 @@ class FissureLifecycleTest {
         List<EruptionEnded> ends = events(frames, EruptionEnded.class);
         assertEquals(1, ends.size());
         assertEquals(MagmaEvents.Cause.SEALED, ends.get(0).cause());
-        assertTrue(w.volcano().chamber().overpressureMPa() > w.volcano().chamber().config().eruptionEndOverpressureMPa(),
+        assertTrue(w.volcano().chamber().overpressureMPa() > 0,
                 "a plugged volcano stays pressurised");
         assertTrue(w.volcano().chamber().summitBlocked(), "its conduit is still molten, but blocked at the surface");
         frames.clear();
@@ -227,7 +227,7 @@ class FissureLifecycleTest {
         // Forcing the eruption: the sealed summit leaves only a dike as the way up; it opens a flank fissure
         // and the eruption goes there.
         w.engine().submit(new MagmaCommands.StartEruption("test"));
-        frames = run(w.engine(), 30 * MINUTE);
+        frames = VolcanoSystemTest.runPastOnset(w.engine(), 30 * MINUTE, 60);
         assertFalse(events(frames, DikeEvents.DikeStarted.class).isEmpty(), "the forced eruption starts a dike");
         List<FissureOpened> opened = events(frames, FissureOpened.class);
         assertFalse(opened.isEmpty());

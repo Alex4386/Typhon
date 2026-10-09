@@ -41,6 +41,10 @@ public final class Dike {
     VentSite fissure;
     /** Deleted by the user: its fissure is no longer a vent; the intrusion stays in the rock. */
     boolean removed;
+    /** Time (s) the dike last stalled; {@code NaN} if it never did. */
+    double stallTime = Double.NaN;
+    /** The stalled sheet has solidified (an intrusion; it cannot move again). */
+    boolean frozen;
 
     Dike(int id, double startTime, double x, double z, double surfaceStartZ, double chamberDepth) {
         this.id = id;
@@ -60,6 +64,10 @@ public final class Dike {
     public double startTime() { return startTime; }
     public DikeStatus status() { return status; }
     public boolean propagating() { return status == DikeStatus.PROPAGATING; }
+    /** Stalled but not yet solidified: still connected to the chamber, it can be driven on. */
+    public boolean molten() { return status == DikeStatus.STALLED && !frozen; }
+    /** Time (s) the dike last stalled, {@code NaN} if it never did. */
+    public double stallTime() { return stallTime; }
     /** Depth of the upper tip below the surface (m). */
     public double depthM() { return depth; }
     /** Height of the dike from the chamber to its tip (m). */
@@ -114,6 +122,8 @@ public final class Dike {
         o.addProperty("travelX", travelX);
         o.addProperty("travelZ", travelZ);
         if (removed) o.addProperty("removed", true);
+        if (!Double.isNaN(stallTime)) o.addProperty("stallTime", stallTime);
+        if (frozen) o.addProperty("frozen", true);
         if (fissure != null) {
             JsonObject f = new JsonObject();
             f.addProperty("id", fissure.id());
@@ -148,6 +158,10 @@ public final class Dike {
         d.travelX = o.get("travelX").getAsDouble();
         d.travelZ = o.get("travelZ").getAsDouble();
         d.removed = o.has("removed") && o.get("removed").getAsBoolean();
+        if (o.has("stallTime")) d.stallTime = o.get("stallTime").getAsDouble();
+        // saves from before molten stalls froze a dike as it stalled
+        d.frozen = o.has("frozen") ? o.get("frozen").getAsBoolean()
+                : d.status == DikeStatus.STALLED && !o.has("stallTime");
         if (o.has("fissure")) {
             JsonObject f = o.getAsJsonObject("fissure");
             d.fissure = new VentSite(f.get("id").getAsString(), Point3.fromJson(f.get("position")), VentKind.FISSURE,

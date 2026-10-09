@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.ArrayList;
 import java.util.List;
 import me.alex4386.typhon.engine.lava.LavaFlow;
+import me.alex4386.typhon.engine.magma.ConduitConfig;
+import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.magma.MagmaChamberConfig;
 import me.alex4386.typhon.engine.magma.MagmaEvents.EruptionStarted;
 import me.alex4386.typhon.engine.math.Point3;
@@ -38,7 +40,7 @@ class AdaptiveClockTest {
         LavaFlow lava = new LavaFlow(terrain);
         VolcanoSystem volcano = VolcanoSystem.builder("test", List.of(VolcanoSystemTest.CRATER), terrain, lava)
                 .chamber(chamber)
-                .dikesEnabled(false)
+                .dikesEnabled(true)
                 .geothermalEnabled(geothermal)
                 .build();
         Engine.Builder builder = Engine.builder(seed).adaptive(86_400).threads(threads).add(terrain);
@@ -49,9 +51,13 @@ class AdaptiveClockTest {
         return new Run(engine, volcano, terrain);
     }
 
-    /** The test basalt 0.1 MPa below failure: about two weeks of quiet recharge before it erupts. */
+    /**
+     * The test basalt with its conduit frozen solid, 0.1 MPa below the pressure that ruptures its walls: about
+     * two weeks of quiet recharge, then a dike breaks out and opens a flank eruption.
+     */
     static MagmaChamberConfig slowBasalt() {
-        return VolcanoSystemTest.basalt().toBuilder().initialOverpressureMPa(14.9).build();
+        MagmaChamberConfig solid = VolcanoSystemTest.basalt().toBuilder().conduit(ConduitConfig.DEFAULT).build();
+        return solid.toBuilder().initialOverpressureMPa(MagmaChamber.ruptureCap(solid) - 0.1).build();
     }
 
     /** A chamber far below failure: recharges quietly for years. */
@@ -62,8 +68,8 @@ class AdaptiveClockTest {
                 .build();
     }
 
-    /** The slow basalt fails at ≈ 1 166 700 s (13.5 days); this is a few minutes into its eruption. */
-    static final double PAST_ONSET = 1_167_000;
+    /** The slow basalt's dike opens its flank eruption at ≈ 1 167 300 s (13.5 days); this is minutes into it. */
+    static final double PAST_ONSET = 1_167_600;
 
     static List<EngineFrame> until(Engine engine, double time) {
         List<EngineFrame> frames = new ArrayList<>();
@@ -107,7 +113,7 @@ class AdaptiveClockTest {
                 break;
             }
         }
-        System.out.printf("CLOCK basalt at 14.9 MPa erupts after %.0f s%n", start);
+        System.out.printf("CLOCK basalt 0.1 MPa below wall rupture erupts after %.0f s%n", start);
         assertFalse(Double.isNaN(start), "the chamber should fail within two months");
 
         long t0 = System.nanoTime();
@@ -161,7 +167,7 @@ class AdaptiveClockTest {
     @Test
     void physicsDoesNotDependOnPlayback() throws Exception {
         // As fast as possible, versus a day a second slowed to ×600 at the eruption (the session policy).
-        double end = 1500; // the basalt fails after ≈ 19 minutes
+        double end = 1500; // the basalt fails at once
         List<EngineFrame> max = played(EngineRunner.Mode.UNBOUNDED, 1, 1e7, end);
         List<EngineFrame> slowed = played(EngineRunner.Mode.REALTIME, 86_400, 600, end);
         assertTrue(max.stream().anyMatch(f -> f.events().stream().anyMatch(e -> e instanceof EruptionStarted)));
