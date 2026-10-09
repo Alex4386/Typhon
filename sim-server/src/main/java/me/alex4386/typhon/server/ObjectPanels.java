@@ -86,7 +86,7 @@ final class ObjectPanels {
 
     private static final List<Rule> DIKES = List.of(
             r("blocked", "overrides", PRIMARY, 1),
-            r("shearModulusPa|poissonRatio|rockDensity|fractureToughnessMPaSqrtM|regionalSigma3AzimuthDeg", "dikes", MORE, 20),
+            r("shearModulusPa|poissonRatio|fractureToughnessMPaSqrtM|regionalSigma3AzimuthDeg", "dikes", MORE, 20),
             r("enabled", "dikes", MORE, 30));
 
     private static final List<Rule> VOLCANO_ROOT = List.of(

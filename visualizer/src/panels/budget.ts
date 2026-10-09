@@ -16,6 +16,13 @@ export interface BudgetVerdict {
  */
 export function budgetVerdict(b: MagmaBudget, overpressureMPa: number, ruptureMPa: number | undefined, erupting: boolean): BudgetVerdict {
   if (!erupting) {
+    const convection = b.convectionM3PerS ?? 0;
+    if (convection > 0 && convection >= (b.freezingRateM3PerS ?? 0)) {
+      return {
+        state: b.supplyM3PerS > 0 ? 'recharging' : 'idle',
+        text: `Open vent: ${convection.toPrecision(2)} m³/s of magma convects through the conduit, keeping it molten and degassing the chamber.`,
+      };
+    }
     return b.supplyM3PerS > 0
       ? { state: 'recharging', text: 'Recharging: pressure rises until the roof or walls give way.' }
       : { state: 'idle', text: 'No supply: the pressure holds.' };

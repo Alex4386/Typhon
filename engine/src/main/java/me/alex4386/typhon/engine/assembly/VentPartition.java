@@ -83,11 +83,6 @@ public final class VentPartition {
     static final double AIR_DENSITY = 1.0;
     static final double WATER_HEAT_CAPACITY = 4200;
     static final double MAGMA_HEAT_CAPACITY = 1200;
-    /** Aquifer permeability (m²) of fractured volcanic rock feeding groundwater into a conduit. */
-    static final double AQUIFER_PERMEABILITY = 1e-11;
-    static final double WATER_VISCOSITY = 1e-3;
-    /** Depth range (m) below the water table over which groundwater can reach the magma. */
-    static final double AQUIFER_INTERACTION_DEPTH_M = 300;
 
     /**
      * Water that can reach the magma at the vent.
@@ -99,14 +94,45 @@ public final class VentPartition {
      * @param slurryPorosity porosity of that fill
      * @param seepageKgPerS water that can seep into a crater cut off from open water, through the
      *     saturated edifice (kg/s); NaN when the crater is open to the sea or a lake (no limit)
+     * @param layerBottomDepthM depths (m below the vent) of the bottoms of the ground's layers under the vent,
+     *     from the top down; the deepest layer extends below its bottom
+     * @param layerConductivity their hydraulic conductivity (m/s)
      */
     public record Water(double surfaceDepthM, double openFraction, double waterTableDepthM, double slurryFraction,
-            double slurryPorosity, double seepageKgPerS) {
+            double slurryPorosity, double seepageKgPerS, double[] layerBottomDepthM, double[] layerConductivity) {
         public static final Water DRY = new Water(0, 0, Double.POSITIVE_INFINITY);
+        private static final double[] NONE = {};
+
+        /** Water at the vent over ground of unknown (impermeable) layers. */
+        public Water(double surfaceDepthM, double openFraction, double waterTableDepthM, double slurryFraction,
+                double slurryPorosity, double seepageKgPerS) {
+            this(surfaceDepthM, openFraction, waterTableDepthM, slurryFraction, slurryPorosity, seepageKgPerS, NONE, NONE);
+        }
 
         /** Open water and groundwater only (no vent fill). */
         public Water(double surfaceDepthM, double openFraction, double waterTableDepthM) {
             this(surfaceDepthM, openFraction, waterTableDepthM, 0, 0, Double.NaN);
+        }
+
+        /** This water, over ground of uniform hydraulic conductivity {@code k} (m/s). */
+        public Water withUniformGround(double k) {
+            return new Water(surfaceDepthM, openFraction, waterTableDepthM, slurryFraction, slurryPorosity,
+                    seepageKgPerS, new double[] {Double.POSITIVE_INFINITY}, new double[] {k});
+        }
+
+        /** Thickness-weighted mean hydraulic conductivity (m/s) of the ground between two depths below the vent. */
+        double meanConductivity(double top, double bottom) {
+            if (!(bottom > top) || layerConductivity.length == 0) return 0;
+            double sum = 0;
+            double above = 0;
+            for (int i = 0; i < layerConductivity.length; i++) {
+                double layerBottom = i == layerConductivity.length - 1 ? Double.POSITIVE_INFINITY : layerBottomDepthM[i];
+                double overlap = Math.min(bottom, layerBottom) - Math.max(top, above);
+                if (overlap > 0) sum += overlap * Math.max(0, layerConductivity[i]);
+                above = layerBottom;
+                if (above >= bottom) break;
+            }
+            return sum / (bottom - top);
         }
     }
 
@@ -185,10 +211,11 @@ public final class VentPartition {
 
         // Water–magma interaction: open water reaching the conduit, and (Surtseyan) magma rising into a vent
         // filled with water-saturated tephra.
-        double openRatio = waterMagmaRatio(water, conduitRadiusM, magma);
+        double intake = flow.fragmentationDepthM();
+        double openRatio = waterMagmaRatio(water, conduitRadiusM, magma, intake);
         double slurry = Math.max(0, Math.min(1, water.slurryFraction()));
         double melt = MeltDensity.meltKgPerM3(silicaWt, flow.exitDissolvedWaterWt());
-        double slurryRatio = slurry > 0 ? slurryRatio(water, conduitRadiusM, magma, melt) : 0;
+        double slurryRatio = slurry > 0 ? slurryRatio(water, conduitRadiusM, magma, melt, intake) : 0;
         double ratio = slurry * slurryRatio + (1 - slurry) * openRatio;
         double submergence = Math.min(1, Math.max(0, water.surfaceDepthM()) / SUPPRESSION_DEPTH_M);
         double suppression = (1 - submergence) * (1 - submergence);
@@ -372,22 +399,23 @@ public final class VentPartition {
      * replaced: a crater cut off from open water is refilled only by seepage through the edifice and
      * groundwater flowing into the conduit.
      */
-    static double slurryRatio(Water water, double conduitRadiusM, double magmaMassFlux, double meltDensity) {
+    static double slurryRatio(Water water, double conduitRadiusM, double magmaMassFlux, double meltDensity,
+            double intakeDepthM) {
         if (!(magmaMassFlux > 0)) return 0;
         double porosity = Math.max(0, Math.min(0.9, water.slurryPorosity()));
         double mixing = porosity * WATER_DENSITY / meltDensity;
         double seepage = water.seepageKgPerS();
         if (Double.isNaN(seepage)) return mixing;
-        double resupply = (Math.max(0, seepage) + aquiferInflow(water, conduitRadiusM)) / magmaMassFlux;
+        double resupply = (Math.max(0, seepage) + aquiferInflow(water, conduitRadiusM, intakeDepthM)) / magmaMassFlux;
         return Math.min(mixing, resupply);
     }
 
     /**
      * Water/magma mass ratio at the vent. Sea or lake water flows into an open crater under its
      * hydrostatic head through a band one conduit radius deep around the conduit; groundwater seeps in
-     * by Darcy flow from the aquifer the conduit crosses below the water table.
+     * from the ground the conduit crosses ({@link #aquiferInflow}).
      */
-    static double waterMagmaRatio(Water water, double conduitRadiusM, double magmaMassFlux) {
+    static double waterMagmaRatio(Water water, double conduitRadiusM, double magmaMassFlux, double intakeDepthM) {
         if (!(magmaMassFlux > 0)) return 0;
         double inflow = 0;
         double depth = Math.max(0, water.surfaceDepthM());
@@ -397,17 +425,30 @@ public final class VentPartition {
             double band = Math.min(depth, conduitRadiusM);
             inflow += WATER_DENSITY * speed * 2 * Math.PI * conduitRadiusM * band * open;
         }
-        inflow += aquiferInflow(water, conduitRadiusM);
+        inflow += aquiferInflow(water, conduitRadiusM, intakeDepthM);
         return inflow / magmaMassFlux;
     }
 
-    /** Groundwater seeping into the conduit by Darcy flow from the aquifer below the water table (kg/s). */
-    static double aquiferInflow(Water water, double conduitRadiusM) {
-        double table = water.waterTableDepthM();
-        if (!(table < AQUIFER_INTERACTION_DEPTH_M)) return 0;
-        double saturated = AQUIFER_INTERACTION_DEPTH_M - Math.max(0, table);
-        double darcy = AQUIFER_PERMEABILITY / WATER_VISCOSITY * WATER_DENSITY * GRAVITY; // m/s under a unit gradient
-        return WATER_DENSITY * darcy * 2 * Math.PI * conduitRadiusM * saturated;
+    /**
+     * Groundwater flowing into the conduit (kg/s). Only above the fragmentation level, {@code intakeDepthM}
+     * below the vent, is the conduit's gas–pyroclast mixture near the vent's pressure; below it the magma
+     * column's pressure exceeds the pore water's and keeps it out (no fragmentation: no intake). Between the
+     * water table and that level the pore water's head over the conduit grows with depth below the table,
+     * {@code Δh = z}; the conduit draws it in as a well screen of length {@code L} and radius {@code r} in
+     * ground of conductivity {@code K} (the layers' thickness-weighted mean), {@code Q = ρ_w F K Δh̄} with
+     * Hvorslev's shape factor {@code F = 2π L / ln(L/r + √(1 + (L/r)²))} (Hvorslev 1951, USACE WES Bull. 36)
+     * and the mean head {@code Δh̄ = L/2}.
+     */
+    static double aquiferInflow(Water water, double conduitRadiusM, double intakeDepthM) {
+        if (!(intakeDepthM > 0) || !(conduitRadiusM > 0)) return 0;
+        double table = Math.max(0, water.waterTableDepthM());
+        double length = intakeDepthM - table;
+        if (!(length > 0)) return 0;
+        double k = water.meanConductivity(table, intakeDepthM);
+        if (!(k > 0)) return 0;
+        double aspect = length / conduitRadiusM;
+        double shape = 2 * Math.PI * length / Math.log(aspect + Math.sqrt(1 + aspect * aspect));
+        return WATER_DENSITY * shape * k * length / 2;
     }
 
     /**

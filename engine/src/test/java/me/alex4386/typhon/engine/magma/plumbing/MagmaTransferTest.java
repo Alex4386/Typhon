@@ -60,7 +60,7 @@ class MagmaTransferTest {
         ConnectionConfig link = s.transfer().connections().get(0);
         double drive0 = s.transfer().drivingPressureMPa(link);
         // the deep chamber's overpressure, less the weight of a basaltic column (denser than the crust) 2.5 km tall
-        double head = (MagmaChamber.rockDensity() - s.deep().meltDensityKgPerM3()) * 9.81 * 2500 / 1e6;
+        double head = (s.deep().crust().meanDensity(1000) - s.deep().meltDensityKgPerM3()) * 9.81 * 2500 / 1e6;
         assertTrue(head < 0, "basalt melt outweighs the crust: " + head);
         assertEquals(8 - s.main().overpressureMPa() + head, drive0, 1e-9);
         assertTrue(drive0 > 0, "the overpressure still pushes magma up: " + drive0);
@@ -70,8 +70,9 @@ class MagmaTransferTest {
         assertTrue(s.main().overpressureMPa() > 0, "the shallow chamber is pressurised from below");
         assertEquals(s.deep().transferredOutM3(), s.main().transferredInM3(), 1e-6, "what leaves arrives");
         assertTrue(s.main().transferredInM3() > 0);
-        // no overshoot: the drive never reverses (one-way flow, exact relaxation)
-        assertTrue(drive >= -1e-6, "no overshoot past equilibrium: " + drive);
+        // no overshoot: the drive never reverses (one-way flow, exact relaxation) beyond what the shallow
+        // chamber's slow degassing through its convecting conduit shifts its melt density and pressure by
+        assertTrue(drive >= -1e-3 * drive0, "no overshoot past equilibrium: " + drive);
     }
 
     @Test

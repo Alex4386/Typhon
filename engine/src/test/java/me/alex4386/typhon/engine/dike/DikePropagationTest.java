@@ -20,6 +20,7 @@ import me.alex4386.typhon.engine.dike.DikeEvents.DikeAdvanced;
 import me.alex4386.typhon.engine.dike.DikeEvents.DikeResumed;
 import me.alex4386.typhon.engine.dike.DikeEvents.DikeSolidified;
 import me.alex4386.typhon.engine.dike.DikeEvents.DikeStalled;
+import me.alex4386.typhon.engine.magma.CrustColumn;
 import me.alex4386.typhon.engine.magma.MagmaCommands;
 import me.alex4386.typhon.engine.dike.DikeEvents.DikeStarted;
 import me.alex4386.typhon.engine.dike.DikeEvents.FissureOpened;
@@ -68,7 +69,8 @@ class DikePropagationTest {
         for (DikeAdvanced a : advances) {
             assertTrue(a.depthM() <= previous, "tip only rises");
             previous = a.depthM();
-            assertTrue(a.speedMPerS() >= 0.01 && a.speedMPerS() <= 5, "realistic dike speed: " + a.speedMPerS());
+            // a 14 MPa push from a 100 km³ chamber that hardly deflates: a fast, turbulent basaltic dike
+            assertTrue(a.speedMPerS() >= 0.01 && a.speedMPerS() <= 15, "realistic dike speed: " + a.speedMPerS());
             // a thin elastic crack: opening/breadth = 2(1−ν)ΔP/μ, of order 1e-3 for MPa pressures in a GPa crust
             assertTrue(a.openingM() > 0 && a.openingM() < 0.01 * Math.max(200, dike.strikeLengthM()),
                     "thin crack: opening " + a.openingM());
@@ -84,9 +86,8 @@ class DikePropagationTest {
 
     @Test
     void higherOverpressureRisesFaster() {
-        // below the speed safeguard (wide, strongly driven basaltic dikes reach it)
-        long slow = timeToSurface(3);
-        long fast = timeToSurface(4);
+        long slow = timeToSurface(6);
+        long fast = timeToSurface(8);
         assertTrue(slow > 0 && fast > 0, "both should surface: " + slow + ", " + fast);
         assertTrue(fast < slow, "fast " + fast + " vs slow " + slow);
     }
@@ -99,9 +100,9 @@ class DikePropagationTest {
 
     @Test
     void denseBasaltStallsWithoutEnoughPressure() {
-        // dense basalt pushed by 1.5 MPa: as it rises its negative buoyancy eats the drive, the crack thins and
-        // the magma freezes in it (or the tip can no longer break rock) before the surface
-        DikeTestWorld.World w = world(4, basalt(1.5).build(), fastConfig(), flat(), null);
+        // dense basalt pushed by 3.6 MPa: as it rises its negative buoyancy eats the drive, the crack stays thin
+        // and the magma freezes in it (or the tip can no longer break rock) before the surface
+        DikeTestWorld.World w = world(4, basalt(3.6).build(), fastConfig(), flat(), null);
         w.engine().submit(new DikeCommands.ForceDike("v"));
         List<EngineFrame> frames = run(w.engine(), LONG);
 
@@ -149,14 +150,30 @@ class DikePropagationTest {
 
     @Test
     void exsolvingGasBuoysTheShallowDike() {
-        // the same 1.5 MPa push that stalls nearly gas-free basalt: with 0.2 wt% CO₂, gas beyond its solubility
-        // lightens the magma below the crust's density in the shallow kilometres, and the dike erupts
-        DikeTestWorld.World w = world(4, basalt(1.5).initialCo2Wt(0.2).build(), fastConfig(), flat(), null);
+        // with 0.2 wt% CO₂, gas beyond its solubility lightens the magma in the shallow crust: the same 4 MPa push
+        // drives it up faster than nearly gas-free basalt
+        DikeTestWorld.World dry = world(4, basalt(4).build(), fastConfig(), flat(), null);
+        dry.engine().submit(new DikeCommands.ForceDike("v"));
+        long dryTime = runUntil(dry.engine(), FissureOpened.class, LONG);
+        DikeTestWorld.World w = world(4, basalt(4).initialCo2Wt(0.2).build(), fastConfig(), flat(), null);
+        w.engine().submit(new DikeCommands.ForceDike("v"));
+        long gasTime = runUntil(w.engine(), FissureOpened.class, LONG);
+        assertTrue(dryTime > 0 && gasTime > 0, dryTime + " " + gasTime);
+        assertTrue(gasTime < dryTime, "gas " + gasTime + " vs dry " + dryTime);
+    }
+
+    @Test
+    void aLightEdificeHoldsDenseMagmaBelowIt() {
+        // the 4 MPa basalt that erupts through uniform crust meets 600 m of porous scoria (1800 kg/m³) under the
+        // vent: the magma is far denser than that rock, the column's weight eats its drive, and it stalls at depth
+        // (the level of neutral buoyancy, Ryan 1987)
+        DikeTestWorld.World w = world(4, basalt(4).build(), fastConfig(), flat(), null);
+        w.chamber().setCrust(new CrustColumn(new double[] {600, Double.POSITIVE_INFINITY}, new double[] {1800, 2600}));
         w.engine().submit(new DikeCommands.ForceDike("v"));
         List<EngineFrame> frames = run(w.engine(), LONG);
-
-        assertTrue(events(frames, DikeStalled.class).isEmpty(), "no stall");
-        assertEquals(1, events(frames, FissureOpened.class).size());
+        assertTrue(events(frames, FissureOpened.class).isEmpty(), "held below the light edifice");
+        assertEquals(1, events(frames, DikeStalled.class).size());
+        assertTrue(w.dikes().dikes().get(0).depthM() > 0);
     }
 
     @Test
@@ -182,13 +199,16 @@ class DikePropagationTest {
     }
 
     @Test
-    void viscousRhyoliteFreezes() {
+    void viscousRhyoliteIsArrested() {
+        // dry crystal-bearing rhyolite (~10¹⁰ Pa·s or more) creeps far slower than its sheet solidifies: it is
+        // arrested within metres of the chamber
         DikeTestWorld.World w = world(5, basalt(14).initialSilicaWt(72).initialTemperatureC(780).build(), fastConfig(),
                 flat(), null);
         w.engine().submit(new DikeCommands.ForceDike("v"));
-        List<DikeStalled> stalls = events(run(w.engine(), LONG), DikeStalled.class);
-        assertEquals(1, stalls.size());
-        assertEquals(StallReason.FROZE, stalls.get(0).reason());
+        List<EngineFrame> frames = run(w.engine(), LONG);
+        assertTrue(events(frames, FissureOpened.class).isEmpty());
+        Dike dike = w.dikes().dikes().get(0);
+        assertTrue(dike.heightM() < 50, "rose only " + dike.heightM() + " m in 20 h");
     }
 
     @Test

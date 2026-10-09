@@ -166,12 +166,12 @@ class ConfigApiTest {
 
                 double supply = live.volcanoes().get(0).chamber().supplyRate();
                 Reply bad = http("PATCH", id, null, "{\"volcanoes\":{\"" + vid + "\":{\"magma.chamber.supplyRate\":" + (supply + 1)
-                        + ",\"magma.chamber.silicaNonsense\":3,\"dikes.maxSpeed\":true}}}");
+                        + ",\"magma.chamber.silicaNonsense\":3,\"dikes.poissonRatio\":true}}}");
                 assertEquals(422, bad.status(), bad.body().toString());
                 List<String> paths = new ArrayList<>();
                 for (JsonElement e : bad.body().getAsJsonArray("errors")) paths.add(e.getAsJsonObject().get("path").getAsString());
                 assertTrue(paths.contains("volcano." + vid + ".magma.chamber.silicaNonsense"), paths.toString());
-                assertTrue(paths.contains("volcano." + vid + ".dikes.maxSpeed"), paths.toString());
+                assertTrue(paths.contains("volcano." + vid + ".dikes.poissonRatio"), paths.toString());
                 assertEquals(supply, live.volcanoes().get(0).chamber().supplyRate(), 0, "nothing of a rejected request applies");
             } finally {
                 close(id);

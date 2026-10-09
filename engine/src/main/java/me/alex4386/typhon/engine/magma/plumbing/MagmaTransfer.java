@@ -181,8 +181,11 @@ public final class MagmaTransfer implements Subsystem {
     public double drivingPressureMPa(ConnectionConfig c) {
         MagmaChamber from = chambers.get(c.from());
         MagmaChamber to = chambers.get(c.to());
-        double head = (MagmaChamber.rockDensity() - from.meltDensityKgPerM3()) * GRAVITY
-                * (from.config().lithostaticDepth() - to.config().lithostaticDepth()) / 1e6;
+        // the crust's weight between the two depths, less the magma column's (the source's crust column)
+        double deep = from.config().lithostaticDepth();
+        double shallow = to.config().lithostaticDepth();
+        double head = from.crust().pressureMPa(deep) - from.crust().pressureMPa(shallow)
+                - from.meltDensityKgPerM3() * GRAVITY * (deep - shallow) / 1e6;
         return from.overpressureMPa() - to.overpressureMPa() + head;
     }
 

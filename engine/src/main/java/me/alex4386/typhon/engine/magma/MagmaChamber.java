@@ -40,7 +40,8 @@ import me.alex4386.typhon.engine.volcano.MagmaState;
  * <p><b>Eruption.</b> Magma reaches the surface through a conduit only where one exists: a vent's conduit
  * still molten from a recent eruption re-opens once the overpressure beats its plug. In repose the magma
  * left in it solidifies from the walls inward, the solid rim growing as √t (the Stefan solution), and the
- * conduit is solid rock after {@link #conduitFreezeSeconds()}. A chamber without a molten conduit (a new
+ * conduit is solid rock after {@link #conduitFreezeSeconds()} — unless gas-rich magma convecting through it
+ * carries heat up faster than the walls take it ({@link #convectiveExchangeM3PerS}), as at open-vent volcanoes. A chamber without a molten conduit (a new
  * volcano, or one whose conduit froze) erupts only through a dike that reaches the surface
  * ({@link #requestFlankEruption}). While erupting, magma leaves at the rate of the
  * steady conduit flow ({@link ConduitModel}: exsolution, outgassing, crystallisation, fragmentation,
@@ -48,7 +49,7 @@ import me.alex4386.typhon.engine.volcano.MagmaState;
  * open conduit or a dike starts on the slowest; during the eruption the flow stays on its branch until
  * that branch disappears (Melnik &amp; Sparks 1999). Between conduit solutions the outflow is
  * linearised about the magmastatic balance, {@code Q = k (P − P₀)}, and pressure integrated exactly.
- * The eruption ends when overpressure falls below the end threshold, or when the conduit can no longer
+ * The eruption ends when its flow can no longer keep the conduit molten, or the conduit can no longer
  * carry any flow.
  *
  * <p>Nothing here selects a style. Whether magma fountains, extrudes a dome or feeds a Plinian column
@@ -71,6 +72,7 @@ import me.alex4386.typhon.engine.volcano.MagmaState;
  * docs/eruption-dynamics.md}.
  */
 public final class MagmaChamber implements Subsystem, MagmaState {
+    /** Bulk density of the crust (kg/m³) where the world does not say ({@link #setCrust}). */
     static final double ROCK_DENSITY = 2600;
     static final double GRAVITY = 9.81;
     static final double WATER_MOLAR_MASS = 0.018;
@@ -163,6 +165,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     private double eruptionStartTime;
     private int eruptionCount;
     private double lastTime;
+    /** Whether the chamber has stepped since it was created (not saved: a loaded chamber has). */
+    private boolean stepped;
     private double eruptedVolume;
     private double eruptionRate;
     private double overpressureRate;
@@ -184,8 +188,11 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      * none (never formed, or frozen solid). The conduit's molten share follows from it ({@link #conduitOpenness}).
      */
     private double conduitQuietSeconds;
+    /** Convective exchange flux through the quiet conduit during the last step (m³/s; derived, not saved). */
+    private double convectionRate;
     /** {@link #conduitQuietSeconds} of a chamber without a conduit. */
     static final double NO_CONDUIT = -1;
+    private CrustColumn crust = CrustColumn.uniform(ROCK_DENSITY);
     private double ventAmbientPa = ConduitInput.ATMOSPHERE_PA;
     private double waterTableDepthM = DEFAULT_WATER_TABLE_DEPTH_M;
     /** Drivers of the current steady conduit flow, and the flow itself (null when not erupting). */
@@ -208,13 +215,16 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     public MagmaChamber(MagmaChamberConfig config) {
         this.config = config;
         this.volume = config.volume();
-        this.overpressure = Math.min(config.initialOverpressureMPa(), ruptureCap(config));
         this.temperature = config.initialTemperatureC();
         this.bulkSilica = config.initialSilicaWt();
         this.bulkWater = config.initialWaterWt();
         this.bulkCo2 = config.initialCo2Wt();
         resetSupplyFromConfig();
         this.conduitQuietSeconds = quietSecondsForOpenness(config.conduit().initialOpenness());
+        // NaN: an open-vent volcano at rest, its convecting magma column standing at the vent
+        double initial = config.initialOverpressureMPa();
+        if (Double.isNaN(initial)) initial = conduitQuietSeconds >= 0 ? restingColumnHeadMPa() : 0;
+        this.overpressure = Math.min(initial, ruptureCap(config));
     }
 
     @Override
@@ -233,7 +243,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         if (!n.chamberId().equals(config.chamberId()) || !n.center().equals(config.center()) || n.volume() != config.volume()
                 || n.initialTemperatureC() != config.initialTemperatureC() || n.initialSilicaWt() != config.initialSilicaWt()
                 || n.initialWaterWt() != config.initialWaterWt() || n.initialCo2Wt() != config.initialCo2Wt()
-                || n.initialOverpressureMPa() != config.initialOverpressureMPa()
+                || Double.compare(n.initialOverpressureMPa(), config.initialOverpressureMPa()) != 0
                 || n.conduit().initialOpenness() != config.conduit().initialOpenness()) {
             return false;
         }
@@ -355,6 +365,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     @Override
     public void step(StepContext context) {
         lastTime = context.time();
+        stepped = true;
         double dt = context.dtSeconds();
 
         applyOverrides(context);
@@ -426,16 +437,21 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             }
         } else {
             balanceOverpressure = Double.NaN;
-            percolateGas(context, dt, gasWater, gasCo2);
-            if (conduitQuietSeconds >= 0) {
+            convectionRate = summitBlocked ? 0 : convectiveExchangeM3PerS();
+            if (conduitQuietSeconds >= 0 && convectionRate >= conduitFreezingRateM3PerS()) {
+                // magma convecting through the conduit keeps it molten, and degasses passively at its top (the
+                // gas exsolves near the surface as small bubbles, not as slugs segregated at depth)
+                degasByConvection(convectionRate * dt);
+            } else if (conduitQuietSeconds >= 0) {
                 conduitQuietSeconds += dt;
                 if (conduitQuietSeconds >= conduitFreezeSeconds()) conduitQuietSeconds = NO_CONDUIT; // frozen solid
             }
+            percolateGas(context, dt, gasWater, gasCo2);
             overpressure += inflow / stiffness;
             relieveRupture(supply);
             // only through a conduit that is still molten; otherwise the way up is a dike (DikePropagation)
             if (eruptive && !summitBlocked && conduitOpenness() > 0 && overpressure >= failureOverpressureMPa()
-                    && sustainable(forecastFlow())) {
+                    && overpressure >= convectingColumnHeadMPa() && sustainable(forecastFlow())) {
                 startEruption(context, Cause.AUTOMATIC);
             }
         }
@@ -607,6 +623,92 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return conduitOpenness() > 0 && !summitBlocked ? failureOverpressureMPa() : ruptureOverpressureMPa();
     }
 
+    /**
+     * Poiseuille number of core–annular exchange flow in a conduit, {@code Ps = Q μ_d / (Δρ g r⁴)}: ~0.064
+     * at the flux the flow selects (Stevenson &amp; Blake 1998, Bull. Volcanol. 60:307-317; Beckett et al.
+     * 2011, Bull. Volcanol. 73:1201-1215).
+     */
+    static final double POISEUILLE_NUMBER = 0.064;
+
+    /**
+     * Exchange flux (m³/s each way) of magma convecting in a quiet conduit: gas-bearing magma from the chamber
+     * rises, degasses near the top, and the denser degassed magma sinks back down the walls, {@code Q = Ps Δρ g
+     * r⁴ / μ_d} (Kazahaya, Shinohara &amp; Saito 1994, Bull. Volcanol. 56:207-216; Stevenson &amp; Blake
+     * 1998). {@code Δρ} is between the degassed magma (water dissolved to the vent's pressure) and the
+     * bubbly magma at mid-conduit (equilibrium exsolution), {@code μ_d} the degassed magma's viscosity.
+     * Flux enough to outrun conduction ({@link #conduitFreezingRateM3PerS}) keeps open-vent volcanoes
+     * (Stromboli, lava lakes) molten for as long as the chamber has gas to give. 0 without a conduit.
+     */
+    public double convectiveExchangeM3PerS() {
+        if (conduitQuietSeconds < 0) return 0;
+        double[] column = convectingDensities();
+        double contrast = column[0] - column[1];
+        if (!(contrast > 0)) return 0;
+        double eta = MeltViscosity.of(silicaWt(), degassedWaterWt(), temperature, crystalFraction());
+        double r = config.conduitRadius();
+        return POISEUILLE_NUMBER * contrast * GRAVITY * r * r * r * r / eta;
+    }
+
+    /** Water left dissolved in magma degassed to the vent's pressure (wt%). */
+    private double degassedWaterWt() {
+        return Math.min(meltTotalWater(), ConduitModel.SOLUBILITY * Math.sqrt(ventAmbientPa / 1e6));
+    }
+
+    /**
+     * {@code {degassed, bubbly}} densities (kg/m³) of a convecting conduit's two streams: magma degassed to the
+     * vent's pressure, and chamber magma at mid-conduit with its gas in equilibrium.
+     */
+    private double[] convectingDensities() {
+        double phi = crystalFraction();
+        double water = meltTotalWater();
+        double degassed = MeltDensity.meltKgPerM3(silicaWt(), degassedWaterWt());
+        double mid = ventAmbientPa + degassed * GRAVITY * config.lithostaticDepth() / 2;
+        double dissolved = Math.min(water, ConduitModel.SOLUBILITY * Math.sqrt(mid / 1e6));
+        double co2 = Math.max(0, meltCo2Wt() - ConduitModel.CO2_SOLUBILITY * mid / 1e6);
+        double gas = MeltDensity.gasVolumePerKg(water - dissolved, co2, mid, temperature) * (1 - phi);
+        return new double[] {degassed, MeltDensity.bubbly(MeltDensity.meltKgPerM3(silicaWt(), dissolved), gas)};
+    }
+
+    /**
+     * Overpressure (MPa) a quiet conduit's convecting column needs to overflow the vent: the column is rising
+     * bubbly and sinking degassed magma about half and half (core–annular flow), so it stands at the vent only
+     * when the chamber holds up its mean weight against the crust's, {@code ρ̄ g L − P_lith}. Open-vent
+     * volcanoes (Stromboli) keep their magma just below the crater rim this way; a column of fresh gas-rich
+     * magma alone would overflow. −∞ when the conduit does not convect.
+     */
+    public double convectingColumnHeadMPa() {
+        if (!(convectionRate >= conduitFreezingRateM3PerS()) || !(convectionRate > 0)) return Double.NEGATIVE_INFINITY;
+        return restingColumnHeadMPa();
+    }
+
+    /** {@link #convectingColumnHeadMPa} whether or not the conduit convects now. */
+    private double restingColumnHeadMPa() {
+        double[] column = convectingDensities();
+        double mean = (column[0] + column[1]) / 2;
+        return mean * GRAVITY * config.lithostaticDepth() / 1e6 - lithostaticPressureMPa();
+    }
+
+    /** Exchange flux of the last quiet step ({@link #convectiveExchangeM3PerS}), 0 while erupting. */
+    public double convectionRateM3PerS() {
+        return erupting ? 0 : convectionRate;
+    }
+
+    /**
+     * {@code exchanged} m³ of chamber magma rose up the conduit and came back degassed to the vent's pressure:
+     * the chamber loses that gas. Returns {@code {H₂O, CO₂}} (kg) released at the vent.
+     */
+    private double[] degasByConvection(double exchanged) {
+        double share = Math.min(1, exchanged / volume);
+        double melt = 1 - crystalFraction();
+        double ventMPa = ventAmbientPa / 1e6;
+        double water = share * melt * Math.max(0, meltTotalWater() - ConduitModel.SOLUBILITY * Math.sqrt(ventMPa));
+        double co2 = share * melt * Math.max(0, meltCo2Wt() - ConduitModel.CO2_SOLUBILITY * ventMPa);
+        double magmaMass = volume * meltDensityKgPerM3();
+        bulkWater -= water;
+        bulkCo2 -= co2;
+        return new double[] {water / 100 * magmaMass, co2 / 100 * magmaMass};
+    }
+
     /** Openness of the conduit: 1 right after an eruption, decaying towards 0 (sealed) in repose. */
     public double conduitOpenness() {
         if (conduitQuietSeconds < 0) return 0;
@@ -644,7 +746,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      * than the crust rises even below lithostatic pressure.
      */
     public double zeroFlowOverpressureMPa() {
-        return -(ROCK_DENSITY - meltDensityKgPerM3()) * GRAVITY * config.lithostaticDepth() / 1e6;
+        return meltDensityKgPerM3() * GRAVITY * config.lithostaticDepth() / 1e6 - lithostaticPressureMPa();
     }
 
     /** Drivers of the conduit flow at a given chamber overpressure. */
@@ -1167,9 +1269,23 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         return MeltDensity.meltKgPerM3(silicaWt(), waterWt());
     }
 
-    /** Country-rock density for lithostatic pressure (kg/m³). */
-    public static double rockDensity() {
-        return ROCK_DENSITY;
+    /** The crust above the chamber ({@link #setCrust}). */
+    public CrustColumn crust() {
+        return crust;
+    }
+
+    /**
+     * The crust above the chamber, reported by the surface coupling from the world's rock column (porous
+     * near the surface): it sets the lithostatic load and the weight a magma column must balance. Used from
+     * the next step.
+     */
+    public void setCrust(CrustColumn crust) {
+        if (crust == null) return;
+        this.crust = crust;
+        // a chamber created at rest takes its resting pressure against the world's crust, once known
+        if (!stepped && Double.isNaN(config.initialOverpressureMPa()) && conduitQuietSeconds >= 0) {
+            overpressure = Math.min(restingColumnHeadMPa(), ruptureCap(config));
+        }
     }
 
     public double withdraw(double volume) {
@@ -1195,9 +1311,9 @@ public final class MagmaChamber implements Subsystem, MagmaState {
 
     // ── Derived physics ──
 
-    /** Lithostatic pressure at the chamber's physical depth (MPa). */
+    /** Lithostatic pressure at the chamber's physical depth (MPa): the weight of its crust column. */
     public double lithostaticPressureMPa() {
-        return ROCK_DENSITY * GRAVITY * config.lithostaticDepth() / 1e6;
+        return crust.pressureMPa(config.lithostaticDepth());
     }
 
     /** Liquidus temperature for the bulk composition (°C). */
@@ -1560,6 +1676,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         out.addProperty("regime", regime.name());
         out.addProperty("conduitQuietSeconds", conduitQuietSeconds);
         out.addProperty("ventAmbientPa", ventAmbientPa);
+        out.add("crust", crust.save());
         out.addProperty("waterTableDepthM", waterTableDepthM);
         if (conduitInput != null && conduit != null) {
             out.add("conduitInput", ConduitJson.write(conduitInput));
@@ -1620,12 +1737,14 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         eruptionStartTime = in.get("eruptionStartTime").getAsDouble();
         eruptionCount = in.get("eruptionCount").getAsInt();
         lastTime = in.get("lastTime").getAsDouble();
+        stepped = true;
         eruptedVolume = in.get("eruptedVolume").getAsDouble();
         eruptionRate = in.get("eruptionRate").getAsDouble();
         overpressureRate = in.get("overpressureRate").getAsDouble();
         regime = EruptiveRegime.valueOf(in.get("regime").getAsString());
         conduitQuietSeconds = in.get("conduitQuietSeconds").getAsDouble();
         ventAmbientPa = in.get("ventAmbientPa").getAsDouble();
+        crust = in.has("crust") ? CrustColumn.load(in.getAsJsonObject("crust")) : CrustColumn.uniform(ROCK_DENSITY);
         waterTableDepthM = in.get("waterTableDepthM").getAsDouble();
         if (in.has("conduitInput") && in.has("conduit")) {
             conduitInput = ConduitJson.readInput(in.getAsJsonObject("conduitInput"));

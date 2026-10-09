@@ -118,11 +118,11 @@ class VentPartitionTest {
     void magmaRisingIntoAWaterSaturatedVentFillMixesWithItsPoreWater() {
         // Kokelaar (1983): a vent full of wet tephra slurry gives R ≈ φ ρ_w / ρ_m, near the efficiency peak
         VentPartition.Water slurry = new VentPartition.Water(5, 1, 0, 1, 0.45, Double.NaN);
-        double r = VentPartition.slurryRatio(slurry, 2, 3e4, 2650);
+        double r = VentPartition.slurryRatio(slurry, 2, 3e4, 2650, Double.NaN);
         assertEquals(0.45 * 1000 / 2650, r, 1e-12);
         // a crater cut off from the sea: only what seeps back in can mix
         VentPartition.Water sealed = new VentPartition.Water(5, 0, 1000, 1, 0.45, 300);
-        assertEquals(300 / 3e4, VentPartition.slurryRatio(sealed, 2, 3e4, 2650), 1e-12);
+        assertEquals(300 / 3e4, VentPartition.slurryRatio(sealed, 2, 3e4, 2650, Double.NaN), 1e-12);
         assertTrue(VentPartition.interactionEfficiency(r) > 0.6, "near the optimum: " + VentPartition.interactionEfficiency(r));
         assertTrue(VentPartition.interactionEfficiency(300 / 3e4) < 0.15, "starved of water: mostly dry");
         assertTrue(VentPartition.interactionEfficiency(20) < 1e-20, "flooded: water quenches without exploding");
@@ -147,9 +147,25 @@ class VentPartitionTest {
 
     @Test
     void groundwaterMattersOnlyForSmallMagmaFluxes() {
-        VentPartition.Water aquifer = new VentPartition.Water(0, 0, 10);
-        assertTrue(VentPartition.waterMagmaRatio(aquifer, 2, 1e3) > 0.05, "a trickle of magma meets a wet aquifer");
-        assertTrue(VentPartition.waterMagmaRatio(aquifer, 2, 1e7) < 1e-3, "a Plinian flux overwhelms it");
-        assertEquals(0, VentPartition.waterMagmaRatio(new VentPartition.Water(0, 0, 1000), 2, 1e3));
+        // fractured basalt (K ~ 10⁻⁵ m/s) saturated from 10 m down, the magma fragmenting 300 m below the vent
+        VentPartition.Water aquifer = new VentPartition.Water(0, 0, 10).withUniformGround(1e-5);
+        assertTrue(VentPartition.waterMagmaRatio(aquifer, 2, 1e3, 300) > 0.05, "a trickle of magma meets a wet aquifer");
+        assertTrue(VentPartition.waterMagmaRatio(aquifer, 2, 1e7, 300) < 1e-3, "a Plinian flux overwhelms it");
+        assertEquals(0, VentPartition.waterMagmaRatio(new VentPartition.Water(0, 0, 1000).withUniformGround(1e-5), 2, 1e3, 300),
+                "the water table lies below the fragmentation level");
+        assertEquals(0, VentPartition.waterMagmaRatio(aquifer, 2, 1e3, Double.NaN),
+                "an unfragmented magma column's pressure keeps the pore water out");
+        double tight = VentPartition.waterMagmaRatio(new VentPartition.Water(0, 0, 10).withUniformGround(1e-10), 2, 1e3, 300);
+        assertTrue(tight < 1e-4, "granite hardly lets water in: " + tight);
+    }
+
+    @Test
+    void groundwaterInflowFollowsTheLayersItCrosses() {
+        // 50 m of scoria (K 10⁻³) over basalt (10⁻⁵): the deep intake draws mostly through the basalt
+        VentPartition.Water layered = new VentPartition.Water(0, 0, 0, 0, 0, Double.NaN,
+                new double[] {50, Double.POSITIVE_INFINITY}, new double[] {1e-3, 1e-5});
+        assertEquals((50 * 1e-3 + 250 * 1e-5) / 300, layered.meanConductivity(0, 300), 1e-15);
+        assertTrue(VentPartition.aquiferInflow(layered, 2, 300)
+                > VentPartition.aquiferInflow(layered.withUniformGround(1e-5), 2, 300));
     }
 }

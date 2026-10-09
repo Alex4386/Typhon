@@ -28,7 +28,8 @@ import me.alex4386.typhon.engine.math.Point3;
  * @param initialSilicaWt bulk SiO₂ at creation (wt%)
  * @param initialWaterWt bulk H₂O at creation (wt%)
  * @param initialCo2Wt bulk CO₂ at creation (wt%)
- * @param initialOverpressureMPa overpressure at creation
+ * @param initialOverpressureMPa overpressure at creation; NaN for an open-vent volcano at rest, its molten
+ *     conduit's convecting magma column standing at the vent ({@code MagmaChamber#convectingColumnHeadMPa})
  * @param wallTemperatureC temperature the chamber relaxes towards by conduction
  * @param coolingTimescale e-folding time of conductive cooling (physical s); NaN = computed from conduction
  *     out of a sphere of the chamber's volume (see {@code MagmaChamber#coolingTimescaleSeconds})

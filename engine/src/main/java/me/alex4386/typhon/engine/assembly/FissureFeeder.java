@@ -42,19 +42,21 @@ final class FissureFeeder {
     /** Wall rock conductivity (W/m/K) and diffusivity (m²/s). */
     static final double ROCK_CONDUCTIVITY = 2.5;
     static final double ROCK_DIFFUSIVITY = 1.0e-6;
-    /** Below this width (m) a segment is solid. */
-    static final double FREEZE_WIDTH_M = 0.01;
-    /** Widening is bounded: thermal erosion of a dike rarely exceeds a few times its initial width. */
-    static final double MAX_WIDENING = 4;
-    /** Relative spread of initial segment widths (fissures open unevenly along strike). */
+    /**
+     * Numerical: a segment this narrow (m) is counted solid. Its walls close the last millimetre within
+     * minutes, so the value does not change when a segment freezes.
+     */
+    static final double FREEZE_WIDTH_M = 1e-3;
+    /**
+     * Log-normal spread of the segments' opening about the elastic profile: the crust's stiffness and the
+     * stress on the dike vary along strike, so real dikes open unevenly (their opening varies by tens of per
+     * cent between outcrops; Delaney &amp; Pollard 1981, USGS PP 1202). An initial condition, not a switch.
+     */
     static final double WIDTH_SPREAD = 0.2;
     /** Largest relative width change per integration sub-step. */
     static final double MAX_STEP_CHANGE = 0.05;
-    /** A feeder narrowed below this share of its initial conductance, and still narrowing, is waning. */
-    static final double WANING_CONDUCTANCE = 0.5;
 
     final double[] width;
-    final double initialWidth;
     final double segmentLengthM;
     final double heightM;
     /** Mean temperature (°C) of the host rock along the dike's height, from the geotherm. */
@@ -67,10 +69,11 @@ final class FissureFeeder {
     double flux;
     /** Rate of change (m/s) of the widest open segment during the last update. */
     double widestRate;
+    /** Flux through this fissure during the update before the last (m³/s). */
+    double previousFlux;
 
-    private FissureFeeder(double[] width, double initialWidth, double segmentLengthM, double heightM, double wallRockC) {
+    private FissureFeeder(double[] width, double segmentLengthM, double heightM, double wallRockC) {
         this.width = width;
-        this.initialWidth = initialWidth;
         this.segmentLengthM = segmentLengthM;
         this.heightM = heightM;
         this.wallRockC = wallRockC;
@@ -78,21 +81,26 @@ final class FissureFeeder {
     }
 
     /**
-     * A freshly opened feeder.
+     * A freshly opened feeder. A dike opens as an elastic crack, widest at its centre and closing to its tips,
+     * {@code w(x) = w₀ √(1 − (2x/L)²)} (Pollard 1987), each segment around it by {@link #WIDTH_SPREAD}: the
+     * tips freeze first and the eruption draws in toward the centre, as fissure eruptions do (Holuhraun
+     * 2014, Krafla 1975–84).
      *
-     * @param openingM dike opening at the surface (m)
+     * @param openingM the dike's opening at the surface, at the fissure's centre (m)
      * @param lengthM fissure length (m)
      * @param heightM dike height from the chamber to the surface (m)
      * @param wallRockC mean host-rock temperature along the dike (°C)
      */
     static FissureFeeder open(double openingM, double lengthM, double heightM, double wallRockC, int segments,
             SimRandom random) {
-        double w0 = Math.max(4 * FREEZE_WIDTH_M, openingM);
         double[] width = new double[Math.max(1, segments)];
         for (int i = 0; i < width.length; i++) {
-            width[i] = w0 * Math.max(0.3, 1 + WIDTH_SPREAD * random.nextGaussian());
+            double x = width.length == 1 ? 0 : 2 * (i + 0.5) / width.length - 1;
+            double profile = Math.sqrt(1 - x * x);
+            double spread = Math.exp(WIDTH_SPREAD * random.nextGaussian() - WIDTH_SPREAD * WIDTH_SPREAD / 2);
+            width[i] = Math.max(0, openingM) * profile * spread;
         }
-        return new FissureFeeder(width, w0, Math.max(1, lengthM) / width.length, Math.max(100, heightM), wallRockC);
+        return new FissureFeeder(width, Math.max(1, lengthM) / width.length, Math.max(1, heightM), wallRockC);
     }
 
     /** Solidus (°C) of magma with {@code silicaWt}, as in the lava rheology. */
@@ -118,9 +126,13 @@ final class FissureFeeder {
         return openSegments() == 0;
     }
 
-    /** Still open, but narrowed well below its initial conductance and narrowing further. */
+    /**
+     * Still open, but its flow is falling and even its widest segment is narrowing: the eruption through it is
+     * dying down. (Narrow segments freezing while the widest holds is localisation; every segment narrowing
+     * at the start, as chilled margins grow, is not waning while the flow still rises.)
+     */
     boolean waning() {
-        return !frozen() && widestRate < 0 && conductance() < WANING_CONDUCTANCE * initialConductance;
+        return !frozen() && widestRate < 0 && flux < previousFlux;
     }
 
     double widestWidth() {
@@ -134,6 +146,7 @@ final class FissureFeeder {
      * {@code magmaC} °C.
      */
     void advance(double dt, double flux, double magmaC, double silicaWt) {
+        this.previousFlux = this.flux;
         this.flux = flux;
         double solidus = solidusC(silicaWt);
         // the melt degassed on its way up the fissure: its anhydrous density
@@ -166,7 +179,7 @@ final class FissureFeeder {
             for (int i = 0; i < width.length; i++) {
                 if (width[i] <= FREEZE_WIDTH_M) continue;
                 double w = width[i] + rate[i] * step;
-                width[i] = w <= FREEZE_WIDTH_M ? 0 : Math.min(w, MAX_WIDENING * initialWidth);
+                width[i] = w <= FREEZE_WIDTH_M ? 0 : w;
             }
             age += step;
             remaining -= step;
@@ -180,7 +193,6 @@ final class FissureFeeder {
         JsonArray w = new JsonArray();
         for (double v : width) w.add(v);
         o.add("width", w);
-        o.addProperty("initialWidth", initialWidth);
         o.addProperty("initialConductance", initialConductance);
         o.addProperty("segmentLengthM", segmentLengthM);
         o.addProperty("heightM", heightM);
@@ -188,6 +200,7 @@ final class FissureFeeder {
         o.addProperty("age", age);
         o.addProperty("flux", flux);
         o.addProperty("widestRate", widestRate);
+        o.addProperty("previousFlux", previousFlux);
         return o;
     }
 
@@ -195,12 +208,12 @@ final class FissureFeeder {
         JsonArray a = o.getAsJsonArray("width");
         double[] width = new double[a.size()];
         for (int i = 0; i < width.length; i++) width[i] = a.get(i).getAsDouble();
-        FissureFeeder f = new FissureFeeder(width, o.get("initialWidth").getAsDouble(),
-                o.get("segmentLengthM").getAsDouble(), o.get("heightM").getAsDouble(), o.get("wallRockC").getAsDouble());
+        FissureFeeder f = new FissureFeeder(width, o.get("segmentLengthM").getAsDouble(), o.get("heightM").getAsDouble(), o.get("wallRockC").getAsDouble());
         f.initialConductance = o.get("initialConductance").getAsDouble();
         f.age = o.get("age").getAsDouble();
         f.flux = o.get("flux").getAsDouble();
         f.widestRate = o.get("widestRate").getAsDouble();
+        f.previousFlux = o.has("previousFlux") ? o.get("previousFlux").getAsDouble() : f.flux;
         return f;
     }
 }

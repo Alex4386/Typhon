@@ -327,6 +327,7 @@ final class Probe {
             budget.addProperty("frozen", ch.config().freezeVolume());
             budget.add("eruptedM3", Json.num(ch.eruptedVolume()));
             budget.add("freezingRateM3PerS", Json.num(ch.conduitFreezingRateM3PerS()));
+            budget.add("convectionM3PerS", Json.num(ch.convectionRateM3PerS()));
             chamber.add("budget", budget);
             String regime = v.coupler().phreatomagmatic() ? "SURTSEYAN" : EventTranslator.regime(ch.eruptiveRegime());
             chamber.addProperty("regime", regime);

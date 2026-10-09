@@ -121,8 +121,14 @@ class FissureLifecycleTest {
         assertEquals(0, w.coupler().feederWidthM(fissure));
 
         // The stopped eruption left no molten conduit: forcing the next one sends a new dike up, and the
-        // eruption goes through its fissure, never the extinct one.
+        // eruption goes through its fissure, never the extinct one. A recharge first brings the chamber back to
+        // the pressure of the first dike (a weaker one drains its chamber and freezes before the surface).
         assertEquals(0, w.volcano().chamber().conduitOpenness());
+        var chamber = w.volcano().chamber();
+        double stiffness = chamber.volumeM3() * chamber.effectiveCompressibility();
+        w.engine().submit(new MagmaCommands.InjectRecharge("test", (14.0 - chamber.overpressureMPa()) * stiffness,
+                chamber.temperatureC(), chamber.silicaWt(), chamber.meltWaterWt(), null, null));
+        w.engine().step();
         frames.clear();
         w.engine().submit(new MagmaCommands.StartEruption("test"));
         String next = null;

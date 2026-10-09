@@ -73,6 +73,11 @@ public interface DikeMagmaSource {
         return Double.NaN;
     }
 
+    /** The crust above the chamber (bulk density with depth); a uniform 2600 kg/m³ by default. */
+    default me.alex4386.typhon.engine.magma.CrustColumn crust() {
+        return me.alex4386.typhon.engine.magma.CrustColumn.uniform(2600);
+    }
+
     /** Magma temperature (°C) at intrusion; basaltic by default. */
     default double temperatureC() {
         return 1150;
@@ -93,6 +98,7 @@ public interface DikeMagmaSource {
             @Override public boolean erupting() { return chamber.erupting(); }
             @Override public double withdraw(double volume) { return chamber.withdraw(volume); }
             @Override public double temperatureC() { return chamber.temperatureC(); }
+            @Override public me.alex4386.typhon.engine.magma.CrustColumn crust() { return chamber.crust(); }
             @Override public double chamberRadiusM() { return StrictMath.cbrt(3 * chamber.volumeM3() / (4 * Math.PI)); }
             @Override public double ruptureExcessM3() { return chamber.ruptureExcessM3(); }
             @Override public boolean conduitToSurface() {

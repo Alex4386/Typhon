@@ -171,6 +171,7 @@ class MagmaChamberTest {
         assertTrue(chamber.erupting());
         assertTrue(chamber.eruptionRate() > 0);
 
+        double atStop = chamber.overpressureMPa();
         engine.submit(new StopEruption("v"));
         List<EruptionEnded> ends = run(engine, 20, EruptionEnded.class);
         assertEquals(1, ends.size());
@@ -178,7 +179,7 @@ class MagmaChamberTest {
         assertFalse(chamber.erupting());
         assertEquals(0, chamber.eruptionRate());
         assertEquals(0, chamber.conduitOpenness(), "stopped by hand: the conduit is plugged");
-        assertTrue(chamber.overpressureMPa() > 0, "and the chamber keeps its pressure");
+        assertTrue(chamber.overpressureMPa() >= atStop, "and the chamber keeps its pressure (the supply still adds)");
 
         // Not re-erupting right away.
         assertTrue(run(engine, 20 * 60, EruptionStarted.class).isEmpty());

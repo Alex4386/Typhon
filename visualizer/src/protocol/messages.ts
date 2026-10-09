@@ -855,4 +855,6 @@ export interface MagmaBudget {
   eruptedM3: number;
   /** Smallest eruption rate that keeps the conduit molten (m³/s); a slower eruption freezes and ends. */
   freezingRateM3PerS?: number;
+  /** Magma convecting through the quiet conduit each way (m³/s); above the freezing rate it keeps the conduit molten. */
+  convectionM3PerS?: number;
 }

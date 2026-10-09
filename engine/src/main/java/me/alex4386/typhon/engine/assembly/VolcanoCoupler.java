@@ -20,6 +20,7 @@ import me.alex4386.typhon.engine.geothermal.Geothermal;
 import me.alex4386.typhon.engine.lava.LavaFlow;
 import me.alex4386.typhon.engine.lava.LavaSource;
 import me.alex4386.typhon.engine.magma.ConduitBurst;
+import me.alex4386.typhon.engine.magma.CrustColumn;
 import me.alex4386.typhon.engine.magma.MagmaChamber;
 import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.massflow.ColumnCollapse;
@@ -189,6 +190,7 @@ public final class VolcanoCoupler implements Subsystem {
         this.tephra = tephra;
         this.pdc = pdc;
         this.geothermal = geothermal;
+        chamber.setCrust(crustAbove(chamber.chamberCenter()));
     }
 
     /** Column width L (m) of the world. */
@@ -227,6 +229,7 @@ public final class VolcanoCoupler implements Subsystem {
 
     public void setGround(HydrothermalField ground) {
         this.ground = ground;
+        chamber.setCrust(crustAbove(chamber.chamberCenter())); // its water table saturates the crust
     }
 
     @Override
@@ -286,6 +289,7 @@ public final class VolcanoCoupler implements Subsystem {
         lastWater = water;
         chamber.setVentEnvironment(VentPartition.ambientPressurePa(water.surfaceDepthM()),
                 water.waterTableDepthM());
+        chamber.setCrust(crustAbove(chamber.chamberCenter()));
 
         double rate = chamber.eruptionRate();
         ConduitSolution flow = chamber.conduitFlow();
@@ -535,6 +539,45 @@ public final class VolcanoCoupler implements Subsystem {
             ventFlux.put(site.id(), sum > 0 ? fissureFlux * w * w * w / sum : 0); // its share until the next step
             context.outbox().emit(new VentEvents.VentFormed(context.time(), volcanoId, site, fissureId));
         }
+    }
+
+    /**
+     * The world's rock column above {@code point}, from the ground down: each layer's bulk density, less its
+     * voids, with its pores full of water below the water table. {@code null} where the world does not know the
+     * column (the chamber keeps its crust).
+     */
+    private CrustColumn crustAbove(Point3 point) {
+        if (terrain == null) return null;
+        WorldModel world = terrain.world();
+        double l = world.spec().metersPerColumn();
+        int cx = point.columnX(l);
+        int cz = point.columnZ(l);
+        if (!world.isKnown(cx, cz)) return null;
+        int layers = world.layerCount(cx, cz);
+        if (layers == 0) return null;
+        double table = ground != null && ground.known(cx, cz) ? ground.waterTableDepthM(cx, cz) : Double.POSITIVE_INFINITY;
+        double[] bottoms = new double[layers];
+        double[] density = new double[layers];
+        double depth = 0;
+        int n = 0;
+        for (int k = layers - 1; k >= 0; k--) {
+            LayerView layer = world.layer(cx, cz, k);
+            double thick = layer.thickness();
+            if (!(thick > 0)) continue;
+            var material = layer.materialInfo();
+            if (!material.solid()) continue; // voids and standing water: no rock weight here
+            double bulk = material.densityKgM3() * (1 - Math.max(0, Math.min(1, layer.voidFraction())));
+            // pores below the water table are full of water
+            double mid = depth + thick / 2;
+            if (mid > table) bulk += Math.max(0, Math.min(1, layer.porosity())) * VentPartition.WATER_DENSITY;
+            depth += thick;
+            bottoms[n] = depth;
+            density[n] = bulk;
+            n++;
+        }
+        if (n == 0) return null;
+        bottoms[n - 1] = Double.POSITIVE_INFINITY; // the deepest layer goes on down
+        return new CrustColumn(java.util.Arrays.copyOf(bottoms, n), java.util.Arrays.copyOf(density, n));
     }
 
     /** Ground elevation (m) at a point (m), {@code fallback} where the ground is not known. */
@@ -1052,7 +1095,20 @@ public final class VolcanoCoupler implements Subsystem {
         double porosity = fill > 0 ? pores / fill : 0;
         // Water drawn out of a crater cut off from open water comes back only by seepage through the edifice.
         double seepage = wet && openWaterFraction > 0 ? Double.NaN : seepageIntoCrater(world, cx, cz, crater, top - band);
-        return new VentPartition.Water(waterDepthM, openWaterFraction, table, slurry, porosity, seepage);
+        // the ground's layers under the vent, from the top down: the aquifer the conduit can draw water from
+        int layers = world.layerCount(cx, cz);
+        double[] bottoms = new double[layers];
+        double[] conductivity = new double[layers];
+        double below = 0;
+        for (int k = layers - 1, i = 0; k >= 0; k--, i++) {
+            LayerView layer = world.layer(cx, cz, k);
+            below += layer.thickness();
+            bottoms[i] = below;
+            double logK = layer.materialInfo().log10HydraulicConductivity();
+            conductivity[i] = Double.isFinite(logK) ? Math.pow(10, logK) : 0;
+        }
+        return new VentPartition.Water(waterDepthM, openWaterFraction, table, slurry, porosity, seepage, bottoms,
+                conductivity);
     }
 
     /**

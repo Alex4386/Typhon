@@ -125,7 +125,6 @@ final class Tuning {
         META.put("volcano:dikes.stepPeriodSeconds", m("Dike step", "s", 0.05, 60.0, true, null));
         META.put("volcano:dikes.shearModulusPa", m("Crust stiffness (shear modulus)", "Pa", 1e8, 1e11, true, "Stiffer crust opens dikes less for the same pressure."));
         META.put("volcano:dikes.poissonRatio", m("Poisson's ratio", null, 0.05, 0.49, false, null));
-        META.put("volcano:dikes.rockDensity", m("Crust density", "kg/m³", 1500.0, 3300.0, false, "Denser crust buoys magma up (dense basalt otherwise needs pushing)."));
         META.put("volcano:dikes.fractureToughnessMPaSqrtM", m("Crust fracture toughness", "MPa·√m", 0.5, 200.0, true, "A dike stalls when the stress intensity at its tip falls below this (in-situ values ~1–100)."));
         META.put("volcano:dikes.regionalSigma3AzimuthDeg", m("Regional least stress direction", "°", 0.0, 360.0, false, "Away from an edifice a dike strikes perpendicular to it; unset = no regional stress."));
         META.put("volcano:dikes.wallRockDiffusivity", m("Wall-rock thermal diffusivity", "m²/s", 1e-7, 1e-5, true, null));
@@ -134,7 +133,6 @@ final class Tuning {
         META.put("volcano:dikes.geothermalGradientCPerKm", m("Geothermal gradient", "°C/km", 0.0, 200.0, false, "Hotter crust freezes a dike more slowly."));
         META.put("volcano:dikes.surfaceTemperatureC", m("Surface temperature", "°C", -50.0, 60.0, false, null));
         META.put("volcano:dikes.minCharacteristicHeight", m("Smallest dike height used for driving pressure", "m", 10.0, 5000.0, true, null));
-        META.put("volcano:dikes.maxSpeed", m("Fastest dike", "m/s", 0.01, 50.0, true, "Upper limit of the dike tip speed (basaltic dikes rise at ~0.1–5 m/s)."));
         META.put("volcano:dikes.maxSubstepMeters", m("Dike sub-step", "m", 1.0, 1000.0, true, null));
         META.put("volcano:dikes.deflectionStrength", m("Steering by the edifice", null, 0.0, 20.0, false, "How strongly the volcano's slopes turn dikes towards the flanks."));
         META.put("volcano:dikes.edificeDepthScale", m("Edifice influence depth", "m", 10.0, 20000.0, true, null));

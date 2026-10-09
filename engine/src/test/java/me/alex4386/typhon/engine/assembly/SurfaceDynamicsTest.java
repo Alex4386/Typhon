@@ -99,7 +99,7 @@ class SurfaceDynamicsTest {
                 .initialWaterWt(2.7).rechargeWaterWt(2.7)
                 .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
                 .initialTemperatureC(1140).rechargeTemperatureC(1150)
-                .initialOverpressureMPa(0)
+                .initialOverpressureMPa(Double.NaN) // at rest: its convecting magma column at the vent
                 .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1))
                 .build();
         TerrainModel terrain = new TerrainModel();

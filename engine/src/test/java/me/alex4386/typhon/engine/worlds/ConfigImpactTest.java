@@ -25,7 +25,7 @@ class ConfigImpactTest {
     void volcanoTable() {
         for (String live : new String[] {"name", "active", "magma.chamber.supplyRate", "magma.chamber.rechargeCo2Wt", "magma.chamber.tensileStrengthMPa",
                 "magma.chamber.lithostaticDepth", "magma.chamber.wallRuptureRatio", "magma.chamber.coolingTimescale",
-                "magma.conduit.fragmentationPorosity", "magma.conduit.plugStrengthMPa", "dikes.maxSpeed", "dikes.shearModulusPa",
+                "magma.conduit.fragmentationPorosity", "magma.conduit.plugStrengthMPa", "dikes.shearModulusPa",
                 "massFlows.pdc.frictionCoefficient", "massFlows.lahar.erosionCoefficient", "tephra.diffusivity",
                 "tephra.initialWindSpeed", "geothermal.hotSpringMinC", "deformation.stations"}) {
             volcano(live, Kind.LIVE, Target.NONE);
@@ -61,7 +61,7 @@ class ConfigImpactTest {
 
     @Test
     void reopenCompatibilityFollowsTheSameRules() {
-        assertEquals(ConfigChanges.Kind.HOT, ConfigChanges.volcanoKind("dikes.maxSpeed"));
+        assertEquals(ConfigChanges.Kind.HOT, ConfigChanges.volcanoKind("dikes.shearModulusPa"));
         assertEquals(ConfigChanges.Kind.HOT, ConfigChanges.volcanoKind("edifice.material"));
         assertEquals(ConfigChanges.Kind.REINIT, ConfigChanges.volcanoKind("magma.chamber.initialSilicaWt"));
         assertEquals(ConfigChanges.Kind.REINIT, ConfigChanges.worldKind("grid.solverSpacing"));
@@ -72,7 +72,7 @@ class ConfigImpactTest {
         String m = ConfigImpact.volcano("magma.chamber.initialWaterWt").message("Kilauea");
         assertTrue(m.startsWith("Restarts Kilauea"), m);
         assertTrue(ConfigImpact.volcano("tephra.cellSizeM").message("Kilauea").contains("ash"));
-        assertEquals("Applies at once; the simulation carries on.", ConfigImpact.volcano("dikes.maxSpeed").message("Kilauea"));
+        assertEquals("Applies at once; the simulation carries on.", ConfigImpact.volcano("dikes.shearModulusPa").message("Kilauea"));
     }
 
     @Test

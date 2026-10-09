@@ -35,12 +35,6 @@ public final class ConduitModel {
     static final double WATER_DENSITY = 1000;
     /** H₂O solubility coefficient, wt% per √MPa (Wilson &amp; Head 1981). */
     public static final double SOLUBILITY = 0.411;
-    /**
-     * Melt viscosity (Pa·s) below which a fragmenting foam tears inertially into coarse clots (fluid basaltic
-     * fountains) rather than breaking brittlely (Namiki &amp; Manga 2008). The boundary is a convention within the
-     * gap between basaltic (≤ 10³) and andesitic (≥ 10⁵ Pa·s) melts, not a measured threshold.
-     */
-    static final double INERTIAL_VISCOSITY = 1e4;
 
     // Solver: the mass-flux search range (kg/m²/s), its scan density and bisection depth (numerical).
     static final double G_MIN = 1e-4;
@@ -214,6 +208,8 @@ public final class ConduitModel {
         double meltDensity;
         double meltViscosity;
         double pureMeltViscosity;
+        /** Bubble growth rate (1/s) of the rising parcel at the last fragmentation test. */
+        double lastExpansion;
         double denominator;
         boolean choke;
 
@@ -318,6 +314,17 @@ public final class ConduitModel {
             return -(GRAVITY / v + friction + gFlux * gFlux * dvdn * gasRate) / denominator;
         }
 
+        /**
+         * Whether a foam expanding at {@code expansion} (1/s) tears inertially into clots (fluid basaltic
+         * fountains) rather than building viscous stress until it breaks: the Reynolds number of its expansion
+         * across the conduit, {@code Re = ρ ε̇ r² / η}, exceeds 1, so the expanding mixture's inertia outweighs
+         * the melt's viscous resistance (Namiki &amp; Manga 2008, JVGR 169:48-60). Basaltic melts (~10² Pa·s)
+         * are inertial, andesitic and more viscous ones (≥ 10⁵) are not.
+         */
+        boolean inertial(double expansion) {
+            return meltDensity * Math.abs(expansion) * r * r / pureMeltViscosity >= 1;
+        }
+
         /** Permeable gas loss rate (1/s): vertical escape towards the vent plus lateral loss into the wall. */
         double outgassingRate(double zz, double p, double dpdz) {
             double threshold = c.percolationThreshold();
@@ -393,6 +400,7 @@ public final class ConduitModel {
             double dpdz = dpdz(p, s, 0, false);
             if (choke) return false;
             double uPrev = u;
+            lastExpansion = 0;
             int steps = z.length - 1;
             for (int i = 0; i < steps; i++) {
                 double zz = z[i];
@@ -428,13 +436,14 @@ public final class ConduitModel {
                     if (!choke && !fragmented && length - zz > r) {
                         double expansion = (u - uPrev) / dz; // bubble growth rate in the rising parcel
                         double loss = outgassingRate(zz, p, dpdz);
+                        lastExpansion = expansion;
                         boolean brittle = pureMeltViscosity * expansion >= c.brittleStressPa();
                         boolean foam = alpha >= c.fragmentationPorosity() && loss < expansion
-                                && (pureMeltViscosity < INERTIAL_VISCOSITY
+                                && (inertial(expansion)
                                         || 4.0 / 3.0 * pureMeltViscosity * expansion * alpha >= c.foamStrengthPa());
                         if (brittle || foam) {
                             fragmented = true;
-                            mode = pureMeltViscosity < INERTIAL_VISCOSITY ? Fragmentation.INERTIAL
+                            mode = inertial(expansion) ? Fragmentation.INERTIAL
                                     : (brittle ? Fragmentation.BRITTLE : Fragmentation.FOAM);
                             fragmentationDepth = length - zz;
                             fragmentationViscosity = Math.log10(meltViscosity);
@@ -473,7 +482,7 @@ public final class ConduitModel {
                     double gasAtAmbient = n * gasConstant * tK / ambient;
                     double alphaAtAmbient = gasAtAmbient / (gasAtAmbient + (1 - n) / meltDensity);
                     if (alphaAtAmbient >= c.fragmentationPorosity()) {
-                        mode = pureMeltViscosity < INERTIAL_VISCOSITY ? Fragmentation.INERTIAL : Fragmentation.FOAM;
+                        mode = inertial(lastExpansion) ? Fragmentation.INERTIAL : Fragmentation.FOAM;
                         fragmentationDepth = 0;
                         fragmentationViscosity = Math.log10(meltViscosity);
                         fragmentationCrystals = Math.min(c.maxCrystalFraction(), phiChamber + s.phi);

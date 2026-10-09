@@ -14,6 +14,7 @@ import me.alex4386.typhon.engine.deformation.DikeGeometry;
 import me.alex4386.typhon.engine.dike.DikeEvents.StallReason;
 import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.magma.MagmaCommands;
+import me.alex4386.typhon.engine.magma.CrustColumn;
 import me.alex4386.typhon.engine.magma.MeltDensity;
 import me.alex4386.typhon.engine.magma.conduit.ConduitModel;
 import me.alex4386.typhon.engine.random.SimRandom;
@@ -48,9 +49,10 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * pushed; but the melt's CO₂ and H₂O beyond their solubility at the local (lithostatic plus water) pressure
  * are gas, so the magma lightens as it rises and is buoyant in the shallow crust (closed-system equilibrium
  * exsolution: bubbles cannot leave a dike rising at ~0.1 m/s). Its opening is the
- * elastic estimate for a pressurised crack whose shorter dimension is {@code b},
- * {@code w = 2(1−ν) ΔP̄ b / μ} under the net pressure averaged over its height, {@code ΔP̄} (Pollard 1987), and the tip advances at the laminar slot velocity
- * {@code v = w² (ΔP / H) / (12 η)} (Lister &amp; Kerr 1991) — basaltic dikes rise at ~0.1–5 m/s, viscous
+ * elastic estimate for a pressurised crack whose shorter dimension is {@code b}, at its centre
+ * {@code w = 2(1−ν) ΔP̄ (b/2) / μ} under the net pressure averaged over its height, {@code ΔP̄} (Pollard 1987),
+ * and the tip advances at the slot velocity through its mean opening, laminar
+ * {@code v = w̄² (ΔP / H) / (12 η)} or turbulent past it (Lister &amp; Kerr 1991) — basaltic dikes rise at ~0.1–5 m/s, viscous
  * silicic dikes far slower. The intruded volume {@code w · b · H} is drawn from the chamber, lowering its
  * overpressure.
  *
@@ -345,9 +347,19 @@ public final class DikePropagation implements Subsystem {
                 break;
             }
 
-            double opening = 2 * (1 - config.poissonRatio) * wallDrive * 1e6 * breadth / config.shearModulusPa;
-            double viscosity = StrictMath.pow(10, magma.viscosityLog10());
-            double speed = Math.min(config.maxSpeed, opening * opening * (drive * 1e6 / characteristic) / (12 * viscosity));
+            // Flowing magma loses its pressure to viscous friction on the way up: from the static net pressure at
+            // the roof to just what breaks rock at the tip, K_c / √(π b / 2), linearly along the dike (Lister &amp;
+            // Kerr 1991). That loss drives the flow, and the walls open under the mean of what is left.
+            double tipFracture = config.fractureToughnessMPaSqrtM / Math.sqrt(Math.PI * breadth / 2);
+            double loss = drive - tipFracture;
+            double flowingWallDrive = wallDrive - loss / 2;
+            // (= (P + p_K)/2 plus the buoyancy profile's curvature; where that curvature pinches part of the
+            // crack shut, the open part's mean is the straight profile's)
+            if (!(flowingWallDrive > 0)) flowingWallDrive = (Math.max(0, magma.overpressureMPa()) + tipFracture) / 2;
+            // a plane-strain crack of half-length b/2 opens 2(1−ν) ΔP (b/2) / μ at its centre (Pollard 1987)
+            double opening = (1 - config.poissonRatio) * flowingWallDrive * 1e6 * breadth / config.shearModulusPa;
+            double speed = slotSpeed(opening, loss * 1e6 / characteristic, magmaDensityAt(ambientMPa(dike.x, dike.z)
+                    + magma.crust().pressureMPa(dike.depth)));
             dike.speed = speed;
             dike.opening = opening;
             if (speed < freezeSpeed(opening, characteristic, wallRockC(dike))) {
@@ -517,16 +529,57 @@ public final class DikePropagation implements Subsystem {
     /**
      * Mean temperature (°C) of the rock a dike has risen through, from its tip down to the chamber roof: the
      * ground model's where it reaches (warmed by earlier dikes and flows: later dikes freeze less, as at
-     * Krafla), the configured geotherm below it.
+     * Krafla), the geotherm and the chamber's halo below it ({@link #deepRockC}).
      */
     double wallRockC(Dike dike) {
         double sum = 0;
         for (int i = 0; i < WALL_SAMPLES; i++) {
             double depth = dike.depth + (i + 0.5) / WALL_SAMPLES * (dike.chamberDepth - dike.depth);
             double t = ground.rockTemperatureC(dike.x, dike.z, depth);
-            sum += Double.isFinite(t) ? t : config.surfaceTemperatureC + config.geothermalGradientCPerKm * depth / 1000;
+            sum += Double.isFinite(t) ? t : deepRockC(dike.x, dike.z, depth);
         }
         return sum / WALL_SAMPLES;
+    }
+
+    /**
+     * Rock temperature (°C) below the modelled ground: the geotherm plus the chamber's steady conductive halo,
+     * a sphere at the magma's temperature below the isothermal surface (image source,
+     * {@code ΔT = ΔT₀ (1/r − 1/r') / (1/a − 1/(2d))}), as the subsurface model's own bottom boundary
+     * ({@code SubsurfaceHeat#halo}): the roof a dike leaves from has been heated by the magma beneath it.
+     */
+    double deepRockC(double x, double z, double depth) {
+        double geotherm = config.surfaceTemperatureC + config.geothermalGradientCPerKm * depth / 1000;
+        double radius = magma.chamberRadiusM();
+        double centreDepth = magma.chamberDepthM();
+        if (!(radius > 0) || !(centreDepth > radius)) return geotherm;
+        double excess = magma.temperatureC()
+                - (config.surfaceTemperatureC + config.geothermalGradientCPerKm * centreDepth / 1000);
+        if (!(excess > 0)) return geotherm;
+        Point3 c = magma.chamberCenter();
+        double rho2 = (x - c.x()) * (x - c.x()) + (z - c.z()) * (z - c.z());
+        double r = Math.sqrt(rho2 + (centreDepth - depth) * (centreDepth - depth));
+        if (r <= radius) return Math.max(geotherm, magma.temperatureC());
+        double rImage = Math.sqrt(rho2 + (centreDepth + depth) * (centreDepth + depth));
+        double f = (1 / r - 1 / rImage) / (1 / radius - 1 / (2 * centreDepth));
+        return geotherm + excess * Math.max(0, Math.min(1, f));
+    }
+
+    /**
+     * Mean speed (m/s) of magma of density {@code rho} driven by {@code gradient} Pa/m up a crack of central
+     * opening {@code opening}: through its elliptical section's mean opening {@code w̄ = π w / 4}, by laminar
+     * slot flow {@code w̄² G / (12 η)} (Lister &amp; Kerr 1991), or, once that flow would be turbulent, by the
+     * Blasius wall friction {@code G = 0.316 Re^−¼ ρ v² / (2 D)} on the hydraulic diameter {@code D = 2 w̄}
+     * (Lister &amp; Kerr 1991 §6): whichever resists more.
+     */
+    double slotSpeed(double opening, double gradient, double rho) {
+        if (!(opening > 0) || !(gradient > 0)) return 0;
+        double viscosity = StrictMath.pow(10, magma.viscosityLog10());
+        double mean = Math.PI / 4 * opening;
+        double laminar = mean * mean * gradient / (12 * viscosity);
+        double diameter = 2 * mean;
+        double turbulent = StrictMath.pow(2 * gradient * StrictMath.pow(diameter, 1.25)
+                / (0.316 * StrictMath.pow(rho, 0.75) * StrictMath.pow(viscosity, 0.25)), 1 / 1.75);
+        return Math.min(laminar, turbulent);
     }
 
     /**
@@ -609,9 +662,9 @@ public final class DikePropagation implements Subsystem {
     double[] buoyancy(double x, double z, double topDepth, double bottomDepth) {
         if (!(bottomDepth > topDepth)) return new double[] {0, 0};
         double ambient = ambientMPa(x, z);
-        double load = config.rockDensity * GRAVITY / 1e6;
-        double lnTop = StrictMath.log(ambient + load * Math.max(0, topDepth));
-        double lnBottom = StrictMath.log(ambient + load * bottomDepth);
+        CrustColumn crust = magma.crust();
+        double lnTop = StrictMath.log(ambient + crust.pressureMPa(Math.max(0, topDepth)));
+        double lnBottom = StrictMath.log(ambient + crust.pressureMPa(bottomDepth));
         double half = 0.5 * (lnBottom - lnTop);
         double mid = 0.5 * (lnBottom + lnTop);
         double pTop = StrictMath.exp(lnTop);
@@ -620,7 +673,8 @@ public final class DikePropagation implements Subsystem {
         double mean = 0;
         for (int i = 0; i < GL_NODES.length; i++) {
             double p = StrictMath.exp(mid + half * GL_NODES[i]);
-            double f = GL_WEIGHTS[i] * (1 - magmaDensityAt(p) / config.rockDensity) * p;
+            double rock = crust.densityAt(crust.depthAtPressure(p - ambient));
+            double f = GL_WEIGHTS[i] * (1 - magmaDensityAt(p) / rock) * p;
             top += f;
             // height above the bottom s ↔ pressure: 1 − s/H = (P − P_top) / (P_bottom − P_top)
             mean += f * (p - pTop) / range;

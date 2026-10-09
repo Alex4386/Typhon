@@ -37,7 +37,10 @@ class EruptionDynamicsTest {
                 .build();
     }
 
-    /** Stromboli-like: an open conduit over CO₂-rich basalt below its re-opening pressure, slow supply. */
+    /**
+     * Stromboli-like: an open conduit over CO₂-rich basalt, slow supply, the chamber drained 2 MPa below the
+     * pressure at which its magma column would overflow (its last effusive episode).
+     */
     static MagmaChamberConfig openVentBasalt() {
         return MagmaChamberConfig.builder("v", CENTER)
                 .volume(5e7).lithostaticDepth(3000).conduitRadius(0.8)
@@ -47,7 +50,7 @@ class EruptionDynamicsTest {
                 .initialWaterWt(2.7).rechargeWaterWt(2.7)
                 .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
                 .initialTemperatureC(1140).rechargeTemperatureC(1150)
-                .initialOverpressureMPa(0)
+                .initialOverpressureMPa(-2)
                 .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1))
                 // bursts every ~10 s: a chamber step well below that keeps their times resolved
                 .stepPeriodSeconds(2)
@@ -156,7 +159,7 @@ class EruptionDynamicsTest {
         Engine engine = Engine.builder(0).add(chamber).build();
         Run run = run(engine, chamber, 20 * 3600 * 2);
 
-        assertFalse(chamber.erupting(), "no lava: the chamber is below its re-opening pressure");
+        assertFalse(chamber.erupting(), "no lava: the chamber cannot push its magma column over the rim");
         List<Double> times = run.bursts().stream().map(ConduitBurst::time).toList();
         assertTrue(times.size() >= 15, "chamber gas rising through the open conduit bursts as slugs: " + times.size());
         assertTrue(run.bursts().stream().allMatch(b -> b.kind() == ConduitBurst.Kind.SLUG));
@@ -177,6 +180,32 @@ class EruptionDynamicsTest {
         MagmaChamber viscous = new MagmaChamber(config.toBuilder().initialSilicaWt(66).initialTemperatureC(950).build());
         Engine viscousEngine = Engine.builder(0).add(viscous).build();
         assertTrue(run(viscousEngine, viscous, 20 * 3600).bursts().size() < times.size() / 4);
+    }
+
+    @Test
+    void convectionKeepsAnOpenVentMoltenWhileItsMagmaHasGas() {
+        // Stromboli-like: bubbly basalt rises up the quiet conduit, degasses and sinks back
+        MagmaChamberConfig config = openVentBasalt().toBuilder().supplyRate(0).stepPeriodSeconds(600).build();
+        MagmaChamber chamber = new MagmaChamber(config);
+        Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
+        double exchange = chamber.convectiveExchangeM3PerS();
+        assertTrue(exchange > chamber.conduitFreezingRateM3PerS(), "outruns conduction: " + exchange);
+        assertTrue(exchange < 10, "of the order of open-vent magma fluxes (~0.1 m³/s): " + exchange);
+        double water = chamber.meltWaterWt();
+        double co2 = chamber.meltCo2Wt();
+        double freeze = chamber.conduitFreezeSeconds();
+        runFor(engine, chamber, 3 * freeze);
+        assertFalse(chamber.erupting());
+        assertEquals(1, chamber.conduitOpenness(), 1e-9, "convection keeps the conduit molten");
+        assertTrue(chamber.meltWaterWt() < water && chamber.meltCo2Wt() < co2, "and degasses the chamber");
+
+        // degassed magma is as dense going up as coming down: nothing convects, and the conduit freezes
+        MagmaChamber dry = new MagmaChamber(config.toBuilder().initialWaterWt(0).rechargeWaterWt(0)
+                .initialCo2Wt(0).rechargeCo2Wt(0).build());
+        Engine dryEngine = Engine.builder(0).adaptive(3600).add(dry).build();
+        assertEquals(0, dry.convectiveExchangeM3PerS());
+        runFor(dryEngine, dry, 1.1 * dry.conduitFreezeSeconds());
+        assertEquals(0, dry.conduitOpenness());
     }
 
     @Test

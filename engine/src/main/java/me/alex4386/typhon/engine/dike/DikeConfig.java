@@ -29,8 +29,6 @@ public final class DikeConfig {
      */
     public double shearModulusPa = 3e9;
     public double poissonRatio = 0.25;
-    /** Density of the host rock (kg/m³). */
-    public double rockDensity = 2600;
     /**
      * Effective fracture toughness of the host rock (MPa·√m). Laboratory values are ~1–3 MPa·√m; dike
      * dimensions suggest larger in-situ values (up to ~100; Delaney &amp; Pollard 1981, Rubin 1995). The dike
@@ -49,12 +47,6 @@ public final class DikeConfig {
      */
     public double geothermalGradientCPerKm = 30;
     public double surfaceTemperatureC = 10;
-    /**
-     * Upper bound on tip speed (m/s): a safeguard on the laminar slot-flow estimate, which grows without
-     * bound for wide basaltic dikes; observed dike propagation is ~0.1–5 m/s (Rivalta et al. 2015,
-     * Tectonophysics 638).
-     */
-    public double maxSpeed = 5.0;
     /** Numerical: lower bound on the height used for the pressure gradient (m), avoids singular starts. */
     public double minCharacteristicHeight = 200;
     /** Numerical: longest advance integrated in one sub-step (m). */
@@ -110,7 +102,6 @@ public final class DikeConfig {
         c.blocked = blocked;
         c.shearModulusPa = shearModulusPa;
         c.poissonRatio = poissonRatio;
-        c.rockDensity = rockDensity;
         c.minCharacteristicHeight = minCharacteristicHeight;
         c.fractureToughnessMPaSqrtM = fractureToughnessMPaSqrtM;
         c.wallRockDiffusivity = wallRockDiffusivity;
@@ -119,7 +110,6 @@ public final class DikeConfig {
         c.geothermalGradientCPerKm = geothermalGradientCPerKm;
         c.surfaceTemperatureC = surfaceTemperatureC;
         c.regionalSigma3AzimuthDeg = regionalSigma3AzimuthDeg;
-        c.maxSpeed = maxSpeed;
         c.maxSubstepMeters = maxSubstepMeters;
         c.deflectionStrength = deflectionStrength;
         c.edificeDepthScale = edificeDepthScale;
@@ -138,14 +128,12 @@ public final class DikeConfig {
         if (!(poissonRatio > 0 && poissonRatio < 0.5)) {
             throw new IllegalArgumentException("poissonRatio must be in (0, 0.5)");
         }
-        requirePositive("rockDensity", rockDensity);
         requirePositive("fractureToughnessMPaSqrtM", fractureToughnessMPaSqrtM);
         requirePositive("wallRockDiffusivity", wallRockDiffusivity);
         requirePositive("magmaLatentHeat", magmaLatentHeat);
         requirePositive("specificHeat", specificHeat);
         if (!(geothermalGradientCPerKm >= 0)) throw new IllegalArgumentException("geothermalGradientCPerKm must be >= 0");
         requirePositive("minCharacteristicHeight", minCharacteristicHeight);
-        requirePositive("maxSpeed", maxSpeed);
         requirePositive("maxSubstepMeters", maxSubstepMeters);
         requirePositive("edificeDepthScale", edificeDepthScale);
         requirePositive("headingCorrelationLength", headingCorrelationLength);

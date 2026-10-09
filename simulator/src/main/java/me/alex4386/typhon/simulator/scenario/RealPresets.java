@@ -251,7 +251,8 @@ final class RealPresets {
                             .supplyRate(0.002).supplyVariability(0.4)
                             .initialSilicaWt(50).rechargeSilicaWt(50).initialWaterWt(2.7).rechargeWaterWt(2.7)
                             .initialCo2Wt(0.3).rechargeCo2Wt(0.3)
-                            .initialTemperatureC(1140).rechargeTemperatureC(1150).initialOverpressureMPa(0)
+                            .initialTemperatureC(1140).rechargeTemperatureC(1150)
+                            .initialOverpressureMPa(Double.NaN) // at rest: its magma column at the vent
                             .conduit(ConduitConfig.DEFAULT.withInitialOpenness(1))
                             .build();
                     return b.volcano(VolcanoSystem.builder("stromboli", List.of(vent), b.terrain(), b.lava())

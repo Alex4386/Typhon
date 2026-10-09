@@ -86,6 +86,12 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
      * conduit now reopens when its solidified cap fails, {@code MagmaChamber#failureOverpressureMPa}).
      */
     static final Set<String> CONDUIT_RETIRED = Set.of("reopenOverpressureMPa");
+    /**
+     * Dike keys of earlier definitions, accepted and ignored: {@code maxSpeed} (a dike's speed now follows
+     * laminar or turbulent slot flow through its elastic opening, with no cap) and {@code rockDensity} (the
+     * crust's density now comes from the world's rock column above the chamber).
+     */
+    static final Set<String> DIKE_RETIRED = Set.of("maxSpeed", "rockDensity");
     static final Set<String> CHAMBER_SKIP = Set.of("volcanoId", "center", "conduit", "chamberId");
     static final Set<String> DIKE_DERIVED = Set.of();
     static final Set<String> MASSFLOW_DERIVED = Set.of();
@@ -203,6 +209,7 @@ public record VolcanoDefinition(String id, String name, boolean active, List<Ven
         ConfigNode dikeNode = root.child("dikes");
         if (dikeNode.bool("enabled", true)) {
             dikes = DikeConfig.defaults();
+            DIKE_RETIRED.forEach(dikeNode::markUsed);
             ConfigBinder.bindFields(dikeNode, dikes, Set.of("enabled"), DIKE_DERIVED);
             try {
                 dikes.validate();
