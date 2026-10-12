@@ -31,4 +31,5 @@ export const PREF_KEYS = {
   showPerf: 'typhon.showPerf',
   autoQuality: 'typhon.autoQuality',
   showSimulatedArea: 'typhon.showSimulatedArea',
+  hideFrozen: 'typhon.hideFrozen',
 } as const;

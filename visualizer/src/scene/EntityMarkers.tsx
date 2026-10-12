@@ -3,7 +3,7 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { WorldInfo } from '../protocol/messages';
-import { entityColor, entityOpacity, isDeposit, KIND_LABEL, pulsePhase, type EntityView, type Selection } from '../store/entities';
+import { entityColor, entityOpacity, frozen, isDeposit, KIND_LABEL, pulsePhase, type EntityView, type Selection } from '../store/entities';
 import { hiddenByCategory } from '../store/entityTree';
 import { filterQuakes } from '../store/quakeFilter';
 import { simNow, useStore } from '../store/store';
@@ -291,21 +291,98 @@ function InstancedShape({ shape, items, selectedId, hoverId }: { shape: Shape; i
 }
 
 /** Vents, fissures and dikes: few, each with its own geometry. */
-function ShapedMarker({ p, vExag, selected, hovered }: { p: Placed; vExag: number; selected: boolean; hovered: boolean }) {
+/** Along-strike samples of a sheet or trace: about one per terrain cell. */
+function strikeSamples(length: number, cellSize: number): number {
+  return Math.min(64, Math.max(8, Math.ceil(length / Math.max(1, cellSize))));
+}
+
+/**
+ * Unit along-strike direction in protocol x/y for a strike in degrees clockwise from +x (engine
+ * convention; protocol y is engine −z).
+ */
+function strikeDir(e: EntityView): [number, number] | null {
+  if (typeof e.props.strikeDeg !== 'number') return null;
+  const s = (e.props.strikeDeg * Math.PI) / 180;
+  return [Math.cos(s), -Math.sin(s)];
+}
+
+/** A fissure's trace laid on the displayed ground along its whole length, as a thin tube. */
+function fissureTrace(e: EntityView, pos: THREE.Vector3, world: WorldInfo, vExag: number, dExag: number): THREE.BufferGeometry {
+  const len = Math.max(40, Number(e.props.lengthM ?? 0));
+  const [ux, uy] = strikeDir(e) ?? [1, 0];
+  const n = strikeSamples(len, world.cellSize);
+  const pts: THREE.Vector3[] = [];
+  for (let k = 0; k <= n; k++) {
+    const t = (k / n - 0.5) * len;
+    const x = e.at[0] + t * ux;
+    const y = e.at[1] + t * uy;
+    pts.push(new THREE.Vector3(x - pos.x, displayZ(world, x, y, vExag, dExag) + 2 - pos.y, -y - pos.z));
+  }
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), n * 2, 3, 6, false);
+}
+
+/**
+ * A dike as the blade it is: a vertical sheet along its strike, `strikeLengthM` wide, from its root
+ * (path[0]) up to its tip (path[1]). An erupted dike's top edge is its fissure, laid on the ground.
+ */
+function dikeSheet(e: EntityView, pos: THREE.Vector3, world: WorldInfo, vExag: number, dExag: number): THREE.BufferGeometry | null {
+  const dir = strikeDir(e);
+  const len = Number(e.props.strikeLengthM ?? 0);
+  if (!e.path || e.path.length < 2 || !dir || !(len > 0)) return null;
+  const [o, t] = [e.path[0], e.path[e.path.length - 1]];
+  const onGround = typeof e.props.fissure === 'string';
+  const n = strikeSamples(len, world.cellSize);
+  const verts = new Float32Array((n + 1) * 2 * 3);
+  for (let k = 0; k <= n; k++) {
+    const a = (k / n - 0.5) * len;
+    const bx = o[0] + a * dir[0];
+    const by = o[1] + a * dir[1];
+    const tx = t[0] + a * dir[0];
+    const ty = t[1] + a * dir[1];
+    const tz = onGround ? displayZ(world, tx, ty, vExag, dExag) : t[2] * vExag;
+    verts.set([bx - pos.x, o[2] * vExag - pos.y, -by - pos.z, tx - pos.x, tz - pos.y, -ty - pos.z], k * 6);
+  }
+  const index: number[] = [];
+  for (let k = 0; k < n; k++) {
+    const [b0, t0, b1, t1] = [2 * k, 2 * k + 1, 2 * k + 2, 2 * k + 3];
+    index.push(b0, b1, t0, t0, b1, t1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  g.setIndex(index);
+  g.computeBoundingSphere();
+  return g;
+}
+
+/** A dike without a strike (older servers): a tube from its root to its tip. */
+function dikeTube(e: EntityView, pos: THREE.Vector3, vExag: number): THREE.BufferGeometry | null {
+  if (!e.path || e.path.length < 2) return null;
+  const pts = e.path.map((q) => new THREE.Vector3(q[0] - pos.x, q[2] * vExag - pos.y, -q[1] - pos.z));
+  const curve = new THREE.CatmullRomCurve3(pts.length === 2 ? [pts[0], pts[0].clone().lerp(pts[1], 0.5), pts[1]] : pts);
+  const width = Math.max(10, Math.min(60, Number(e.props.openingM ?? 1) * 8));
+  return new THREE.TubeGeometry(curve, 16, width, 6, false);
+}
+
+function ShapedMarker({ p, world, vExag, dExag, ground, selected, hovered }: { p: Placed; world: WorldInfo; vExag: number; dExag: number; ground: number; selected: boolean; hovered: boolean }) {
   const { e, pos } = p;
   const body = useRef<THREE.Mesh>(null);
   const handlers = useMemo(() => pickHandlers(pickOf(e)), [e]);
   const color = p.color;
   const dike = useMemo(() => {
-    if (e.kind !== 'dike' || !e.path || e.path.length < 2) return null;
-    const pts = e.path.map((q) => new THREE.Vector3(q[0] - pos.x, q[2] * vExag - pos.y, -q[1] - pos.z));
-    const curve = new THREE.CatmullRomCurve3(pts.length === 2 ? [pts[0], pts[0].clone().lerp(pts[1], 0.5), pts[1]] : pts);
-    const width = Math.max(10, Math.min(60, Number(e.props.openingM ?? 1) * 8));
-    return new THREE.TubeGeometry(curve, 16, width, 6, false);
-  }, [e, pos, vExag]);
-  useLayoutEffect(() => () => dike?.dispose(), [dike]);
-  const fissureLen = Math.max(40, Number(e.props.lengthM ?? 0));
-  const strike = (Number(e.props.strikeDeg ?? 0) * Math.PI) / 180;
+    if (e.kind !== 'dike') return null;
+    const sheet = dikeSheet(e, pos, world, vExag, dExag);
+    if (sheet) return { geometry: sheet, sheet: true };
+    const tube = dikeTube(e, pos, vExag);
+    return tube && { geometry: tube, sheet: false };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `ground`: an erupted dike's top edge follows the ground
+  }, [e, pos, world, vExag, dExag, e.props.fissure ? ground : 0]);
+  useLayoutEffect(() => () => dike?.geometry.dispose(), [dike]);
+  const fissure = useMemo(
+    () => (e.kind === 'fissure' ? fissureTrace(e, pos, world, vExag, dExag) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `ground`: the trace follows the ground as it builds up
+    [e, pos, world, vExag, dExag, e.kind === 'fissure' ? ground : 0],
+  );
+  useLayoutEffect(() => () => fissure?.dispose(), [fissure]);
   const ventR = Math.max(30, Number(e.props.craterRadiusM ?? 0));
   const xray = XRAY.has(e.kind);
 
@@ -318,7 +395,7 @@ function ShapedMarker({ p, vExag, selected, hovered }: { p: Placed; vExag: numbe
       b.scale.setScalar(k * (hovered || selected ? 1.15 : 1));
     }
     const m = b.material as THREE.MeshBasicMaterial;
-    m.opacity = op * (xray ? 0.85 : e.kind === 'fissure' ? 0.6 : 1);
+    m.opacity = op * (dike?.sheet ? 0.35 : xray ? 0.85 : e.kind === 'fissure' ? 0.6 : 1);
     m.color.copy(color);
     if (hovered || selected) m.color.lerp(WHITE, 0.35);
   });
@@ -336,16 +413,15 @@ function ShapedMarker({ p, vExag, selected, hovered }: { p: Placed; vExag: numbe
           </mesh>
         </mesh>
       )}
-      {e.kind === 'fissure' && (
-        <mesh ref={body} rotation={[0, -strike, 0]} position={[0, 2, 0]} renderOrder={6} {...handlers}>
-          {/* a thin trace along the ground: the fire curtain (Atmosphere) shows an erupting fissure */}
-          <boxGeometry args={[fissureLen, 3, 6]} />
+      {fissure && (
+        /* a thin trace along the ground: the fire curtain (Atmosphere) shows an erupting fissure */
+        <mesh ref={body} geometry={fissure} renderOrder={6} {...handlers}>
           <meshBasicMaterial transparent opacity={0} />
         </mesh>
       )}
       {dike && (
-        <mesh ref={body} geometry={dike} renderOrder={12} {...handlers}>
-          <meshBasicMaterial transparent opacity={0} depthTest={false} depthWrite={false} />
+        <mesh ref={body} geometry={dike.geometry} renderOrder={12} {...handlers}>
+          <meshBasicMaterial transparent opacity={0} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
       )}
     </group>
@@ -443,6 +519,12 @@ function SelectionMarker({ world, vExag, dExag }: { world: WorldInfo; vExag: num
   );
 }
 
+function revisionSum(rev: Record<string, number>): number {
+  let sum = 0;
+  for (const k in rev) sum += rev[k];
+  return sum;
+}
+
 /** Placement cache: an entity record keeps its position until tiles or exaggerations change. */
 const placements = new WeakMap<EntityView, { p: Placed; key: string }>();
 
@@ -482,10 +564,13 @@ export function EntityMarkers({ world }: { world: WorldInfo }) {
   const showAtmosphere = useStore((s) => s.showAtmosphere);
   const hiddenCats = useStore((s) => s.hiddenCategories);
   const quakeFilter = useStore((s) => s.quakeFilter);
+  const hideFrozen = useStore((s) => s.hideFrozen);
   // quake markers follow the clock (last N as of now); re-evaluated with each clock message
   const clockTime = useStore((s) => s.clock?.time ?? 0);
   // ground under surface markers changes as tiles stream in
   const tiles = useStore((s) => Object.keys(s.tileRevision).length);
+  // fissure traces follow the ground as it builds up: any tile revision re-drapes them
+  const ground = useStore((s) => revisionSum(s.tileRevision));
   const selectedId = selection?.type === 'entity' ? selection.id : null;
 
   const placed = useMemo(() => {
@@ -504,12 +589,13 @@ export function EntityMarkers({ world }: { world: WorldInfo }) {
         if (e.kind === 'quake' && (!showHypo || !quakeShown.has(e.id))) continue;
         if (e.kind === 'plume' && !showAtmosphere) continue;
         if (hiddenByCategory(e, hiddenCats)) continue;
+        if (hideFrozen && frozen(e, entities)) continue;
       }
       out.push(placedOf(e, world, vExag, dExag, tiles));
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `tiles` re-places surface markers as ground arrives
-  }, [entities, selectedId, showFeatures, showHypo, showAtmosphere, hiddenCats, quakeFilter, clockTime, world, vExag, dExag, tiles]);
+  }, [entities, selectedId, showFeatures, showHypo, showAtmosphere, hiddenCats, quakeFilter, clockTime, hideFrozen, world, vExag, dExag, tiles]);
 
   const byShape = useMemo(() => {
     const m = new Map<string, Placed[]>(SHAPES.map((s) => [s.key, []]));
@@ -533,7 +619,7 @@ export function EntityMarkers({ world }: { world: WorldInfo }) {
         <InstancedShape key={s.key} shape={s} items={byShape.m.get(s.key)!} selectedId={selectedId} hoverId={hoverId} />
       ))}
       {byShape.shaped.map((p) => (
-        <ShapedMarker key={p.e.id} p={p} vExag={vExag} selected={p.e.id === selectedId} hovered={p.e.id === hoverId} />
+        <ShapedMarker key={p.e.id} p={p} world={world} vExag={vExag} dExag={dExag} ground={ground} selected={p.e.id === selectedId} hovered={p.e.id === hoverId} />
       ))}
       <PulseRings items={placed} />
       <SelectionHalo placed={selectedPlaced} />

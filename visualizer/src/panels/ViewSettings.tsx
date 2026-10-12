@@ -62,6 +62,11 @@ const LAYERS = [
     "Vents, fumaroles, hot springs and geysers",
   ],
   [
+    "hideFrozen",
+    "Hide frozen vents and dikes",
+    "Vents, fissures and dikes that have frozen solid are hidden; a selected one is still shown",
+  ],
+  [
     "showWaterTable",
     "Water table",
     "The groundwater surface as a translucent sheet",

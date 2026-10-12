@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import * as THREE from 'three';
 import type { WorldInfo, XY } from '../protocol/messages';
 import { useStore } from '../store/store';
+import { frozen } from '../store/entities';
 import { pickHandlers } from './EntityMarkers';
 import { displayZ } from './Terrain';
 
@@ -46,6 +47,8 @@ export function Markers({ world }: { world: WorldInfo }) {
   const selection = useStore((s) => s.selection);
   const hoverId = useStore((s) => s.hoverId);
   const rev = useStore((s) => Object.keys(s.tileRevision).length);
+  const entities = useStore((s) => s.entities);
+  const hideFrozen = useStore((s) => s.hideFrozen);
 
   const sectionPts = useMemo(
     () => (polyline.length > 0 ? drape(world, polyline.length === 1 ? [polyline[0], polyline[0]] : polyline, vExag, dExag, 6 * vExag, world.cellSize * 2) : []),
@@ -73,18 +76,26 @@ export function Markers({ world }: { world: WorldInfo }) {
                 <sphereGeometry args={[1, 32, 16]} />
                 <meshBasicMaterial color={new THREE.Color().setHSL(0.06 - hot * 0.05, 1, 0.45 + hot * 0.1 + (lit ? 0.15 : 0))} transparent opacity={lit ? 0.32 : 0.18} depthTest={false} depthWrite={false} />
               </mesh>
-              {v.vents.map((vent) => (
-                <Polyline
-                  key={vent.id}
-                  points={[
-                    [cx, (cz + v.chamber.radius / 1.8) * vExag, -cy],
-                    [vent.at[0], displayZ(world, vent.at[0], vent.at[1], vExag, dExag), -vent.at[1]],
-                  ]}
-                  color={st && st.chamber.eruptionRate > 0 ? '#ff6a2a' : '#7a4a3a'}
-                  depthTest={false}
-                  opacity={0.8}
-                />
-              ))}
+              {v.vents.map((vent) => {
+                const ventId = `vent:${v.id}:${vent.id}`;
+                const e = entities[ventId];
+                const selected = selection?.type === 'entity' && selection.id === ventId;
+                if (hideFrozen && !selected && e && frozen(e, entities)) return null;
+                // lit only for the vents magma is leaving through now, not every vent while any erupts
+                const erupting = e ? e.props.erupting === true : (st?.activeVents?.includes(vent.id) ?? false);
+                return (
+                  <Polyline
+                    key={vent.id}
+                    points={[
+                      [cx, (cz + v.chamber.radius / 1.8) * vExag, -cy],
+                      [vent.at[0], displayZ(world, vent.at[0], vent.at[1], vExag, dExag), -vent.at[1]],
+                    ]}
+                    color={erupting ? '#ff6a2a' : '#7a4a3a'}
+                    depthTest={false}
+                    opacity={0.8}
+                  />
+                );
+              })}
             </group>
           );
         })}

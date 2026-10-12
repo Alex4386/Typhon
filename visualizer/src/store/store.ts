@@ -211,6 +211,8 @@ interface Store {
   xray: boolean;
   /** Outline the simulated ground (the rest is generated landscape, simulated on demand; persisted). */
   showSimulatedArea: boolean;
+  /** Hide vents, fissures and dikes that have frozen solid, unless selected (persisted). */
+  hideFrozen: boolean;
   /** Set by the scene: the camera is below the displayed ground. */
   underground: boolean;
   waterVolume: number;
@@ -316,6 +318,7 @@ export const useStore = create<Store>((set, get) => ({
   showWaterTable: false,
   xray: true,
   showSimulatedArea: loadPref(PREF_KEYS.showSimulatedArea, true, isBool),
+  hideFrozen: loadPref(PREF_KEYS.hideFrozen, true, isBool),
   underground: false,
   waterVolume: 50000,
   digRadius: 40,
@@ -551,6 +554,7 @@ if (typeof window !== 'undefined') {
     if (s.waterSeeThrough !== prev.waterSeeThrough) savePref(PREF_KEYS.waterSeeThrough, s.waterSeeThrough);
     if (s.autoQuality !== prev.autoQuality) savePref(PREF_KEYS.autoQuality, s.autoQuality);
     if (s.showSimulatedArea !== prev.showSimulatedArea) savePref(PREF_KEYS.showSimulatedArea, s.showSimulatedArea);
+    if (s.hideFrozen !== prev.hideFrozen) savePref(PREF_KEYS.hideFrozen, s.hideFrozen);
   });
 }
 

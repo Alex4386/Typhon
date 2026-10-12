@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EntitiesMessage, Entity } from '../protocol/messages';
-import { FADE_OUT_MS, applyEntities, entityOpacity, listEntities, pruneEntities, pulsePhase } from './entities';
+import { FADE_OUT_MS, applyEntities, entityOpacity, frozen, listEntities, pruneEntities, pulsePhase } from './entities';
 
 function ent(id: string, kind = 'feature', extra: Partial<Entity> = {}): Entity {
   return { id, kind, label: id, at: [0, 0, 0], props: {}, createdAt: 1, updatedAt: 1, ...extra };
@@ -68,5 +68,27 @@ describe('entity store', () => {
     expect(listEntities(entities, ['feature']).map((e) => e.id)).toEqual(['f2', 'f1']);
     expect(listEntities(entities, ['feature'], { text: 'spring' }).map((e) => e.id)).toEqual(['f1']);
     expect(listEntities(entities, ['feature'], { volcanoId: 'a' }).map((e) => e.id)).toEqual(['f1']);
+  });
+});
+
+describe('frozen', () => {
+  const view = (id: string, kind: string, props: Entity['props']) => ({ ...ent(id, kind, { volcanoId: 'v', props }), seenAt: 0, fresh: false });
+  const fissure = view('vent:v:v-dike-3', 'fissure', { state: 'frozen' });
+  const live = view('vent:v:summit', 'vent', { state: 'erupting' });
+  const entities = { [fissure.id]: fissure, [live.id]: live };
+
+  it('is the vent state the server reports', () => {
+    expect(frozen(fissure, entities)).toBe(true);
+    expect(frozen(live, entities)).toBe(false);
+  });
+
+  it('takes a dike as frozen once its sheet solidifies or its fissure freezes', () => {
+    expect(frozen(view('dike:v:1', 'dike', { solidified: true }), entities)).toBe(true);
+    expect(frozen(view('dike:v:3', 'dike', { solidified: false, fissure: 'v-dike-3' }), entities)).toBe(true);
+    expect(frozen(view('dike:v:4', 'dike', { solidified: false }), entities)).toBe(false);
+  });
+
+  it('never hides other kinds', () => {
+    expect(frozen(view('feature:v:x', 'feature', { state: 'frozen' }), entities)).toBe(false);
   });
 });

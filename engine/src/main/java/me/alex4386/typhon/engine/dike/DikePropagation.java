@@ -508,6 +508,11 @@ public final class DikePropagation implements Subsystem {
      * perpendicular to the regional σ₃, else along the dike's travel; with none of these, undetermined
      * ({@code random} draws it; {@code null} gives 0).
      */
+    /** Strike of a dike's plane (radians clockwise from +x), as its deformation and hypocentres use it. */
+    public double strikeRad(Dike dike) {
+        return strikeOf(dike, null);
+    }
+
     private double strikeOf(Dike dike, SimRandom random) {
         if (dike.fissure != null) return dike.fissure.fissureAngleRad();
         Point3 center = magma.chamberCenter();

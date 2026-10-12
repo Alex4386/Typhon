@@ -162,3 +162,15 @@ export function entityColor(e: Pick<Entity, 'kind' | 'props'>, featureColors: Re
       return '#ffffff';
   }
 }
+
+/**
+ * Frozen solid: a vent or fissure the server reports frozen, a dike whose sheet has solidified or
+ * whose fissure has frozen.
+ */
+export function frozen(e: EntityView, entities: EntityMap): boolean {
+  if (e.kind === 'vent' || e.kind === 'fissure') return e.props.state === 'frozen';
+  if (e.kind !== 'dike') return false;
+  if (e.props.solidified === true) return true;
+  const f = typeof e.props.fissure === 'string' ? entities[`vent:${e.volcanoId}:${e.props.fissure}`] : undefined;
+  return f?.props.state === 'frozen';
+}

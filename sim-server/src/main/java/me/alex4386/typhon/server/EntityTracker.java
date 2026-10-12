@@ -15,6 +15,7 @@ import me.alex4386.typhon.engine.assembly.VolcanoSystem;
 import me.alex4386.typhon.engine.deformation.GeodeticStation;
 import me.alex4386.typhon.engine.dike.Dike;
 import me.alex4386.typhon.engine.dike.DikePropagation;
+import me.alex4386.typhon.engine.dike.DikeStatus;
 import me.alex4386.typhon.engine.geothermal.Geothermal;
 import me.alex4386.typhon.engine.geothermal.HydrothermalFeature;
 import me.alex4386.typhon.engine.geothermal.PlacedFeature;
@@ -303,6 +304,10 @@ final class EntityTracker {
                     p.add("strikeLengthM", Json.num(d.strikeLengthM()));
                     p.add("speedMPerS", Json.num(d.speedMPerS()));
                     p.add("volumeM3", Json.num(d.volumeM3()));
+                    // a stalled dike whose sheet has solidified is an intrusion now; an erupted one shares its fissure's state
+                    p.addProperty("solidified", d.status() == DikeStatus.STALLED && !d.molten());
+                    // the sheet's strike; an erupted dike's top edge is its fissure, along the same strike
+                    p.add("strikeDeg", Json.num(Math.round(Math.toDegrees(dikes.strikeRad(d)) * 10) / 10.0));
                     if (d.fissure() != null) p.addProperty("fissure", d.fissure().id());
                     out.put(o.get("id").getAsString(), o);
                 }
