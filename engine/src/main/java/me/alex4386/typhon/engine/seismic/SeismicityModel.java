@@ -152,7 +152,7 @@ public final class SeismicityModel implements Subsystem {
             double m = GutenbergRichter.sample(
                     random, config.explosionBValue(), config.explosionMinMagnitude(), config.explosionMaxMagnitude());
             // explosion quakes originate in the upper conduit, within ~100 m of the vent
-            Point3 hypocenter = config.conduitTop().offset(0, -100 * random.nextDouble(), 0);
+            Point3 hypocenter = conduitTop(random).offset(0, -100 * random.nextDouble(), 0);
             transientAmplitude += emit(context, t, SeismicEventType.EXPLOSION, m, hypocenter, transientSeconds(1.0, m), false);
         }
         for (QueuedExplosion q : explosions) {
@@ -283,13 +283,42 @@ public final class SeismicityModel implements Subsystem {
     }
 
     /**
+     * Vents magma is leaving through and their flux ({@code {x, y, z, m³/s}}, in a fixed order), reported by the
+     * surface coupling; empty when nothing erupts.
+     */
+    private java.util.function.Supplier<List<double[]>> outlets = List::of;
+
+    public void setOutlets(java.util.function.Supplier<List<double[]>> outlets) {
+        this.outlets = java.util.Objects.requireNonNull(outlets);
+    }
+
+    /**
+     * Top of the conduit an event's magma or gas moves in: while magma erupts, one of the vents it leaves
+     * through, picked by its share of the flow (the plumbing under a fissure's active vent is where the magma
+     * moves, not under the point the eruption began at); otherwise the volcano's conduit.
+     */
+    private Point3 conduitTop(SimRandom random) {
+        List<double[]> vents = outlets.get();
+        double total = 0;
+        for (double[] v : vents) total += Math.max(0, v[3]);
+        if (!(total > 0)) return config.conduitTop();
+        double pick = random.nextDouble() * total;
+        for (double[] v : vents) {
+            pick -= Math.max(0, v[3]);
+            if (pick <= 0) return new Point3(v[0], v[1], v[2]);
+        }
+        double[] last = vents.get(vents.size() - 1);
+        return new Point3(last[0], last[1], last[2]);
+    }
+
+    /**
      * Picks a hypocentre along the chamber → conduit-top axis at fraction {@code t ∈ [tMin, tMax]}
      * (0 = chamber, 1 = vent), skewed towards {@code tMin}, with lateral scatter scaled by
      * {@code spreadScale}.
      */
     private Point3 hypocenter(SimRandom random, double tMin, double tMax, double spreadScale) {
         Point3 bottom = magma.chamberCenter();
-        Point3 top = config.conduitTop();
+        Point3 top = conduitTop(random);
         double u = random.nextDouble();
         double t = tMin + (tMax - tMin) * u * u;
         double spread = config.hypocenterSpread() * spreadScale * (1 - 0.5 * t);

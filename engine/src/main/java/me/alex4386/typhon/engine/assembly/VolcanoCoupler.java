@@ -635,6 +635,20 @@ public final class VolcanoCoupler implements Subsystem {
         return VentSite.crater(volcanoId + "-surface", new Point3(c.x(), surfaceAt(c.x(), c.z(), 0), c.z()), 0);
     }
 
+    /** The vents magma is leaving through this step, {@code {x, y, z, m³/s}} each, in vent-id order. */
+    public List<double[]> activeOutletFluxes() {
+        List<double[]> out = new ArrayList<>();
+        if (!chamber.erupting()) return out;
+        for (Map.Entry<String, Double> e : ventFlux.entrySet()) {
+            if (!(e.getValue() > 0)) continue;
+            VentSite vent = find(e.getKey());
+            if (vent == null) continue;
+            Point3 p = vent.position();
+            out.add(new double[] {p.x(), p.y(), p.z(), e.getValue()});
+        }
+        return out;
+    }
+
     /** Tells the chamber how much of its conduit's conductance the open outlets can carry. */
     private void pushOutlets() {
         redirectIfStranded();

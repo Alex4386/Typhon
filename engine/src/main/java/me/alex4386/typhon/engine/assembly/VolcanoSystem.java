@@ -168,6 +168,7 @@ public final class VolcanoSystem {
         if (b.terrain != null) b.terrain.world().enableReposeRelaxation();
         this.coupler = new VolcanoCoupler(volcanoId, chamber, seismicity, vents, dikes, b.terrain, b.lava, tephra, pdc,
                 geothermal);
+        seismicity.setOutlets(coupler::activeOutletFluxes); // quakes under the vents magma leaves through
 
         if (subsurface != null) coupler.setGround(subsurface);
         if (geothermal != null) geothermal.setVents(coupler::allVents); // fissures and vents that formed too

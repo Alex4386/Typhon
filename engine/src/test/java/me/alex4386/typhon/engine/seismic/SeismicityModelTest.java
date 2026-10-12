@@ -171,6 +171,22 @@ class SeismicityModelTest {
     }
 
     @Test
+    void shallowQuakesFollowTheVentMagmaLeavesThrough() {
+        // the eruption has moved to a vent 1.5 km along the fissure from where the volcano's conduit tops out:
+        // its LP events and tremor rise beneath that vent
+        StubMagmaState magma = StubMagmaState.basalt();
+        magma.overpressureRate = 0.05;
+        magma.eruptionRate = 10;
+        SeismicityModel model = new SeismicityModel(config().build(), magma);
+        model.setOutlets(() -> List.of(new double[] {1500, 100, 0, 10}));
+        Engine engine = Engine.builder(8).add(model).build();
+        List<SeismicEvent> events = run(engine, 1800);
+        double lpX = events.stream().filter(e -> e.type() == SeismicEventType.LP)
+                .mapToDouble(e -> e.hypocenter().x()).average().orElseThrow();
+        assertTrue(lpX > 900, "beneath the active vent, not the configured one: " + lpX);
+    }
+
+    @Test
     void swarmsBoostRatesAndAreRichInSmallEvents() {
         StubMagmaState magma = StubMagmaState.basalt();
         magma.overpressureRate = 1e-4; // ~9 MPa a day: a fast pressurisation
