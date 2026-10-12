@@ -133,6 +133,8 @@ public final class Geomorphology implements Subsystem {
 
     // persistent state
     private final LongMinQueue active = new LongMinQueue();
+    /** The engine's worker pool, for this step's evaluations. */
+    private me.alex4386.typhon.engine.sim.Parallel parallel = me.alex4386.typhon.engine.sim.Parallel.sequential();
     private final List<double[]> pendingExplosions = new ArrayList<>(); // {x, y, z (m), energyJ}
     private final List<double[]> pendingQuakes = new ArrayList<>(); // {x, y, z (m), magnitude}
     private final TreeMap<Long, AlterationTile> alteration = new TreeMap<>();
@@ -329,6 +331,7 @@ public final class Geomorphology implements Subsystem {
     @Override
     public void step(StepContext context) {
         now = context.time();
+        parallel = context.parallel();
         double dtReal = context.dtSeconds();
         realClock += dtReal;
         Outbox outbox = context.outbox();
@@ -829,8 +832,9 @@ public final class Geomorphology implements Subsystem {
             budget -= batch.size();
             // Jacobi: evaluate everything on the same surface, then apply
             TreeMap<Long, Failure> moves = new TreeMap<>();
-            for (long k : batch) {
-                Evaluation e = evaluate(keyX(k), keyZ(k), khAt(keyX(k), keyZ(k)));
+            // the evaluations only read the surface, so they run in parallel; merged in batch order
+            List<Evaluation> evaluations = parallel.map(batch, k -> evaluate(keyX(k), keyZ(k), khAt(keyX(k), keyZ(k))));
+            for (Evaluation e : evaluations) {
                 if (e == null) continue;
                 for (Failure f : e.failures()) {
                     Failure prev = moves.get(f.key());

@@ -80,6 +80,8 @@ public final class ColumnStacks {
         final float[] uplift = new float[TILE_AREA];
         final float[] water = new float[TILE_AREA];
         final int[] version = new int[TILE_AREA];
+        /** Sum of {@link #version} (kept with every edit, so a tile's version is O(1); see {@link #recountVersions}). */
+        long versionSum;
 
         Tile(int tx, int tz) {
             this.tx = tx;
@@ -89,6 +91,13 @@ public final class ColumnStacks {
 
         int size() {
             return start[TILE_AREA];
+        }
+
+        /** Recomputes {@link #versionSum} after {@link #version} was written wholesale (a load). */
+        void recountVersions() {
+            long sum = 0;
+            for (int v : version) sum += v;
+            versionSum = sum;
         }
 
         int count(int c) {
@@ -295,9 +304,7 @@ public final class ColumnStacks {
     public long tileVersion(int tileX, int tileZ) {
         Tile t = tileAt(tileX, tileZ);
         if (t == null) return 0;
-        long sum = t.size();
-        for (int v : t.version) sum += v;
-        return sum;
+        return t.size() + t.versionSum;
     }
 
     static byte quantize(double fraction) {
@@ -462,6 +469,7 @@ public final class ColumnStacks {
         int c = local(x, z);
         t.uplift[c] = (float) meters;
         t.version[c]++;
+        t.versionSum++;
         editCount++;
     }
 
@@ -506,6 +514,7 @@ public final class ColumnStacks {
         }
         enforceCap(t, c);
         t.version[c]++;
+        t.versionSum++;
         editCount++;
     }
 
@@ -549,6 +558,7 @@ public final class ColumnStacks {
         }
         fresh.start[TILE_AREA] = pos;
         for (int c : replacements.keySet()) enforceCap(fresh, c);
+        fresh.recountVersions();
         tiles.put(key(tileX, tileZ), fresh);
         editCount++;
         reindex();
@@ -600,6 +610,7 @@ public final class ColumnStacks {
             enforceCap(t, c);
         }
         t.version[c]++;
+        t.versionSum++;
         editCount++;
         return true;
     }
@@ -649,6 +660,8 @@ public final class ColumnStacks {
         removed += collapseExposedVoids(t, c);
         if (removed > 0) {
             t.version[c]++;
+            t.versionSum++;
+        t.versionSum++;
             editCount++;
         }
         return new ErodeResult(removed, removedBy);
@@ -710,6 +723,7 @@ public final class ColumnStacks {
         mergeIdentical(t, c);
         enforceCap(t, c);
         t.version[c]++;
+        t.versionSum++;
         editCount++;
         return new ErodeResult(total, replaced);
     }

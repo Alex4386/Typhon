@@ -586,6 +586,7 @@ public final class WorldModel implements WorldQuery, WorldEdit {
             System.arraycopy(data.floats("uplift"), 0, t.uplift, 0, t.uplift.length);
             System.arraycopy(data.floats("water"), 0, t.water, 0, t.water.length);
             System.arraycopy(data.ints("version"), 0, t.version, 0, t.version.length);
+            t.recountVersions();
             stacks.putTile(t);
         }
     }

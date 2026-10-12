@@ -189,4 +189,34 @@ class TephraSubsystemTest {
         assertEquals(0, new WindField(0, 0, 0.5).at(100).length());
         assertEquals(10, new WindField(10, 0, 0).at(999).length(), 1e-12);
     }
+
+    /** The launch of one 0.3 m bomb at 150 m/s straight up from the ground (80 m) under water standing at {@code waterZ}. */
+    private static List<EngineFrame> launchUnderWater(double waterZ) {
+        Rig rig = new Rig();
+        Engine engine = rig.engine(3, null);
+        engine.submit(TephraTestSupport.flat(TERRAIN_RADIUS, 80));
+        engine.step();
+        var world = rig.terrain.world();
+        for (int x = -40; x <= 40; x++) for (int z = -40; z <= 40; z++) if (world.isKnown(x, z)) world.setWaterZ(x, z, waterZ);
+        rig.tephra.launchBomb(new Vec3d(5, 80, 5),
+                new Vec3d(0, 150, 0), 0.3, 50);
+        List<EngineFrame> frames = new ArrayList<>();
+        for (int t = 0; t < 120; t++) frames.add(engine.step());
+        return frames;
+    }
+
+    @Test
+    void waterStopsBombsFromASubmergedVent() {
+        // 100 m of water: drag ~800× the air's stops the bomb within metres; it never leaves the water
+        List<EngineFrame> deep = launchUnderWater(180);
+        assertTrue(events(deep, BombLaunched.class).isEmpty(), "no bomb leaves 100 m of water");
+        // 2 m of water: it breaks the surface, slowed, and flies on
+        List<BombLaunched> shallow = events(launchUnderWater(82), BombLaunched.class);
+        assertEquals(1, shallow.size());
+        BombLaunched b = shallow.get(0);
+        assertEquals(82, b.start().y(), 1e-6, "it flies from the water's surface");
+        double speed = Math.sqrt(b.velocity().x() * b.velocity().x() + b.velocity().y() * b.velocity().y()
+                + b.velocity().z() * b.velocity().z());
+        assertTrue(speed < 150 && speed > 10, "slowed by the water: " + speed);
+    }
 }

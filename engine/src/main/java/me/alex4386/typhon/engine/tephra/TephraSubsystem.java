@@ -45,8 +45,8 @@ import me.alex4386.typhon.engine.save.StateWriter;
  * <p><b>Bombs</b> are launched from the vent of the active {@link ExplosivePhase} at a Poisson rate
  * set by the ballistic share of the mass eruption rate, with log-normal diameters, near-vertical
  * launch angles and the gas-thrust exit speed ({@link Ballistics#gasThrustExitSpeed}). They fly under
- * gravity and quadratic drag relative to the wind ({@link Ballistics#rk4}, sub-steps of at most
- * {@link TephraConfig#maxIntegrationStepSeconds} and of half a ground column of travel) until they cross the ground surface of the world model;
+ * gravity and quadratic drag relative to the wind ({@link Ballistics#rk4}, sub-steps of a tenth of their drag
+ * timescale, the ground checked every half column along each) until they cross the ground surface of the world model;
  * where the ground is unknown it is taken to be at launch height. On impact a crater of radius
  * {@code k·E^(1/3)} is excavated and the bomb's own volume is laid on the ground as loose rock chosen by
  * silica content.
@@ -437,6 +437,7 @@ public final class TephraSubsystem implements Subsystem {
         Vec3d w = wind.at(context.time());
         double parcelMass = f.massKg() / PROXIMAL_PARCELS;
         double sigma = config.bombDiameterSigma;
+        TreeMap<Long, Double> batch = new TreeMap<>();
         for (int n = 0; n < PROXIMAL_PARCELS; n++) {
             double d = clamp(f.medianSizeM() * StrictMath.exp(sigma * random.nextGaussian()), f.minSizeM(), f.maxSizeM());
             double speed = exitSpeed * StrictMath.exp(0.15 * random.nextGaussian()) / Math.sqrt(1 + d);
@@ -457,7 +458,17 @@ public final class TephraSubsystem implements Subsystem {
             Vec3d at = sampleVentPoint(f.vent(), random);
             double x = at.x() + r * StrictMath.cos(azimuth) + w.x() * drift;
             double z = at.z() + r * StrictMath.sin(azimuth) + w.z() * drift;
-            depositParcel(context, x, z, parcelMass);
+            depositParcel(context, x, z, parcelMass, batch);
+        }
+        // one deposit per column, in a fixed order: the parcels' thicknesses summed
+        if (batch.isEmpty()) return;
+        WorldModel world = terrain.world();
+        int unit = units.unit(DepositType.FALL, context.time(), Double.NaN);
+        for (Map.Entry<Long, Double> e : batch.entrySet()) {
+            int x = (int) (e.getKey() >> 32);
+            int z = (int) (long) e.getKey();
+            world.deposit(x, z, e.getValue(), MaterialTable.ASH, unit, LayerFlags.LOOSE,
+                    1 - PROXIMAL_BULK_DENSITY / ExplosivePhase.DRE_DENSITY, 0);
         }
     }
 
@@ -473,7 +484,7 @@ public final class TephraSubsystem implements Subsystem {
      * column by column and relaxes to its angle of repose. The ash grid keeps the record (for maps and
      * world growth) without applying it again. Off the simulated ground the grid holds it for the backfill.
      */
-    private void depositParcel(StepContext context, double x, double z, double parcelMass) {
+    private void depositParcel(StepContext context, double x, double z, double parcelMass, TreeMap<Long, Double> batch) {
         WorldModel world = terrain.world();
         double l = world.spec().metersPerColumn();
         int cx = (int) Math.floor(x / l);
@@ -488,7 +499,6 @@ public final class TephraSubsystem implements Subsystem {
             return;
         }
         double realMass = parcelMass;
-        int unit = units.unit(DepositType.FALL, context.time(), Double.NaN);
         double weightSum = 10; // centre 2, eight neighbours 1
         for (int dz = -1; dz <= 1; dz++) {
             for (int dx = -1; dx <= 1; dx++) {
@@ -500,7 +510,7 @@ public final class TephraSubsystem implements Subsystem {
                     pz = cz;
                 }
                 double thickness = realMass * w / weightSum / (PROXIMAL_BULK_DENSITY * l * l);
-                world.deposit(px, pz, thickness, MaterialTable.ASH, unit, LayerFlags.LOOSE, 1 - PROXIMAL_BULK_DENSITY / ExplosivePhase.DRE_DENSITY, 0);
+                batch.merge(((long) px << 32) | (pz & 0xffffffffL), thickness, Double::sum);
             }
         }
         grid.addAppliedDeposit(cell, parcelMass, config.depositBulkDensity);
@@ -530,8 +540,20 @@ public final class TephraSubsystem implements Subsystem {
         // A launch point sampled inside the crater can sit below a wall column: start on its surface,
         // otherwise the bomb "lands" on its first step without flying.
         s[1] = Math.max(s[1], surfaceTop(s[0], s[2], bomb));
+        if (!throughWater(bomb)) {
+            // stopped by the water over a submerged vent: it settles back around its launch point
+            WorldModel world = terrain.world();
+            double l = metersPerColumn();
+            int cx = (int) Math.floor(s[0] / l);
+            int cz = (int) Math.floor(s[2] / l);
+            if (world.isKnown(cx, cz)) placeBomb(context, cx, cz, bomb);
+            return;
+        }
 
-        // Predict the flight on a copy so hosts can render it; identical unless terrain changes mid-flight.
+        // Integrate the whole flight once, at launch, at this step's length: the bomb then lands at that time
+        // and place (ground raised under it later in its flight is not seen; it lands on what is there).
+        Vec3d from = bomb.position(); // where it flies from: out of the crater, or where it broke the water's surface
+        Vec3d launchVelocity = bomb.velocity();
         Bomb probe = bomb.copy();
         double dt = context.dtSeconds();
         double flight = 0;
@@ -540,17 +562,56 @@ public final class TephraSubsystem implements Subsystem {
             landing = advance(probe, context.time() + flight, dt);
             flight += dt;
         }
+        bomb.landTime = landing == null ? Double.POSITIVE_INFINITY : context.time() + flight;
+        if (landing != null) {
+            bomb.landing = new double[] {landing.position().x(), landing.position().y(), landing.position().z(),
+                    landing.velocity().x(), landing.velocity().y(), landing.velocity().z()};
+        }
         context.outbox().emit(new BombLaunched(
                 context.time(),
                 id,
                 bomb.id,
-                start,
-                velocity,
+                from,
+                launchVelocity,
                 diameter,
                 k,
                 flight,
                 landing == null ? probe.position() : landing.position()));
         bombs.add(bomb);
+    }
+
+    static final double WATER_DENSITY = 1000;
+
+    /**
+     * Carries a bomb launched under water (a submerged vent) up to the water's surface: water's drag, the air's
+     * times {@code ρ_w/ρ_air}, slows it along its path as {@code d(v²)/ds = −2 k_w v² − 2 g' cos ζ}
+     * ({@code g'} gravity less buoyancy), so {@code v²(s) = (v₀² + g' cos ζ / k_w) e^(−2 k_w s) − g' cos ζ / k_w}.
+     * A 0.3 m bomb at 150 m/s rises only ~5 m through water. Returns false if it stops before the surface
+     * (the clast settles back); otherwise moves it to where it breaks the surface, at the speed it has left.
+     */
+    private boolean throughWater(Bomb bomb) {
+        double[] s = bomb.s;
+        WorldModel world = terrain.world();
+        double l = metersPerColumn();
+        int cx = (int) Math.floor(s[0] / l);
+        int cz = (int) Math.floor(s[2] / l);
+        if (!world.isKnown(cx, cz)) return true;
+        double top = world.waterZ(cx, cz);
+        if (!Double.isFinite(top) || !(top > s[1])) return true;
+        double speed = Math.sqrt(s[3] * s[3] + s[4] * s[4] + s[5] * s[5]);
+        if (!(speed > 0) || !(s[4] > 0)) return false;
+        double cos = s[4] / speed;
+        double kw = Ballistics.dragFactor(bomb.diameter, config.bombDensity, config.dragCoefficient, WATER_DENSITY);
+        double g = config.gravity * Math.max(0, 1 - WATER_DENSITY / config.bombDensity) * cos;
+        double path = (top - s[1]) / cos;
+        double v2 = (speed * speed + g / kw) * StrictMath.exp(-2 * kw * path) - g / kw;
+        if (!(v2 > 0)) return false;
+        double scale = Math.sqrt(v2) / speed;
+        for (int i = 0; i < 3; i++) {
+            s[i] += path * s[i + 3] / speed;
+            s[i + 3] *= scale;
+        }
+        return true;
     }
 
     /** Ground elevation (m) under a point, the bomb's fallback where the ground is not known. */
@@ -563,29 +624,51 @@ public final class TephraSubsystem implements Subsystem {
         return Double.isFinite(s) ? s : bomb.fallbackGroundZ;
     }
 
-    /** Integrates one engine step of {@code stepSeconds}; returns the landing point if the bomb reached the ground. */
+    /**
+     * Numerical: longest RK4 step (s) that resolves a bomb's drag, a tenth of its drag timescale
+     * {@code 1/(k ρ/ρ₀ v)} (gravity alone RK4 integrates exactly), and at most the configured cap.
+     */
+    private double accuracyStep(Bomb bomb, double[] s, double speed) {
+        double drag = bomb.dragFactor * Ballistics.airDensityRatio(s[1], config.gravity) * speed;
+        return drag > 0 ? Math.min(config.maxIntegrationStepSeconds, 0.1 / drag) : config.maxIntegrationStepSeconds;
+    }
+
+    /**
+     * Integrates one engine step of {@code stepSeconds}; returns the landing point if the bomb reached the ground.
+     * Each RK4 sub-step is as long as its drag allows ({@link #accuracyStep}); the ground is then checked along the
+     * sub-step's chord every half column of travel, so a bomb cannot skip over terrain (the arc sags below its
+     * chord by {@code g dt² / 8}, a fraction of a metre).
+     */
     private Landing advance(Bomb bomb, double time, double stepSeconds) {
         Vec3d w = wind.at(time);
         double[] s = bomb.s;
         double half = 0.5 * metersPerColumn();
         double elapsed = 0;
+        double f0 = s[1] - surfaceTop(s[0], s[2], bomb);
         while (elapsed < stepSeconds) {
-            // resolve the ground column by column: at most half a column of travel per sub-step
             double speed = Math.sqrt(s[3] * s[3] + s[4] * s[4] + s[5] * s[5]);
-            double limit = speed > 0 ? Math.min(config.maxIntegrationStepSeconds, half / speed) : config.maxIntegrationStepSeconds;
+            double limit = accuracyStep(bomb, s, speed);
             double remaining = stepSeconds - elapsed;
-            double dt = remaining <= limit * (1 + 1e-9) ? remaining : remaining / Math.ceil(remaining / limit - 1e-9);
+            double dt = remaining <= limit * (1 + 1e-9) ? remaining : limit;
             elapsed = dt == remaining ? stepSeconds : elapsed + dt;
             double px = s[0], py = s[1], pz = s[2], pvx = s[3], pvy = s[4], pvz = s[5];
-            double f0 = py - surfaceTop(px, pz, bomb);
             Ballistics.rk4(s, dt, bomb.dragFactor, config.gravity, w.x(), w.z());
-            double f1 = s[1] - surfaceTop(s[0], s[2], bomb);
-            if (f1 < 0) {
-                double t = f0 > 0 ? f0 / (f0 - f1) : 0;
-                return new Landing(
-                        new Vec3d(px + t * (s[0] - px), py + t * (s[1] - py), pz + t * (s[2] - pz)),
-                        new Vec3d(pvx + t * (s[3] - pvx), pvy + t * (s[4] - pvy), pvz + t * (s[5] - pvz)));
+            double dx = s[0] - px;
+            double dz = s[2] - pz;
+            int samples = Math.max(1, (int) Math.ceil(Math.sqrt(dx * dx + dz * dz) / half));
+            double before = f0;
+            for (int i = 1; i <= samples; i++) {
+                double u = (double) i / samples;
+                double f = py + u * (s[1] - py) - surfaceTop(px + u * dx, pz + u * dz, bomb);
+                if (f < 0) {
+                    double t = (i - 1 + (before > 0 ? before / (before - f) : 0)) / samples;
+                    return new Landing(
+                            new Vec3d(px + t * dx, py + t * (s[1] - py), pz + t * dz),
+                            new Vec3d(pvx + t * (s[3] - pvx), pvy + t * (s[4] - pvy), pvz + t * (s[5] - pvz)));
+                }
+                before = f;
             }
+            f0 = before;
         }
         return null;
     }
@@ -596,7 +679,16 @@ public final class TephraSubsystem implements Subsystem {
         Iterator<Bomb> it = bombs.iterator();
         while (it.hasNext()) {
             Bomb bomb = it.next();
-            Landing landing = advance(bomb, now, dt);
+            Landing landing;
+            if (Double.isNaN(bomb.landTime)) {
+                landing = advance(bomb, now, dt); // restored from an older save: integrate step by step
+            } else if (bomb.landing != null && bomb.landTime <= now + dt * (1 + 1e-9)) {
+                double[] l = bomb.landing;
+                landing = new Landing(new Vec3d(l[0], l[1], l[2]), new Vec3d(l[3], l[4], l[5]));
+                System.arraycopy(l, 0, bomb.s, 0, 6);
+            } else {
+                landing = null;
+            }
             if (landing != null) {
                 it.remove();
                 land(context, bomb, landing);

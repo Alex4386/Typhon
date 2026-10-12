@@ -192,4 +192,30 @@ class BallisticsTest {
         assertEquals(2 * r1, r8, 1e-9);
         assertEquals(0, Ballistics.craterRadius(0, 0.0107));
     }
+
+    @Test
+    void tabulatedAirDensityMatchesTheStandardAtmosphere() {
+        for (double z = -900; z < 60_000; z += 37.3) {
+            double exact = Ballistics.airDensityRatioExact(z, G);
+            assertEquals(exact, Ballistics.airDensityRatio(z, G), 1e-7 * exact, "at " + z + " m");
+        }
+    }
+
+    @Test
+    void stepsOfATenthOfTheDragTimescaleLandWhereFineStepsDo() {
+        // a 0.3 m bomb (k ≈ 1.2·10⁻³ /m at sea level) launched at 150 m/s, 60° up
+        double k = Ballistics.dragFactor(0.3, 2500, 1.0, 1.225);
+        double[] range = new double[2];
+        for (int run = 0; run < 2; run++) {
+            double[] s = {0, 0, 0, 150 * Math.cos(Math.PI / 3), 150 * Math.sin(Math.PI / 3), 0};
+            while (s[1] >= 0 || s[4] > 0) {
+                double v = Math.sqrt(s[3] * s[3] + s[4] * s[4]);
+                double dt = run == 0 ? 1e-3 : Math.min(1.0, 0.1 / (k * Ballistics.airDensityRatio(s[1], G) * v));
+                Ballistics.rk4(s, dt, k, G, 0, 0);
+            }
+            range[run] = s[0];
+        }
+        // the coarse run overshoots the ground by at most one step: compare within a few metres of ~1.4 km
+        assertEquals(range[0], range[1], 0.02 * range[0], "fine " + range[0] + " vs coarse " + range[1]);
+    }
 }

@@ -34,6 +34,13 @@ public final class Ballistics {
      * {@code (T/T₀)^(g/(R L) − 1)} in the troposphere, exponential (isothermal) above the tropopause.
      */
     public static double airDensityRatio(double z, double gravity) {
+        DensityTable t = table;
+        if (t.gravity != gravity) table = t = new DensityTable(gravity);
+        return t.at(z);
+    }
+
+    /** {@link #airDensityRatio} evaluated directly (what {@link DensityTable} tabulates). */
+    static double airDensityRatioExact(double z, double gravity) {
         double exponent = gravity / (R_AIR * ISA_LAPSE);
         double zt = Math.min(Math.max(z, -1000), ISA_TROPOPAUSE);
         double ratio = StrictMath.pow(1 - ISA_LAPSE * zt / ISA_T0, exponent - 1);
@@ -41,6 +48,36 @@ public final class Ballistics {
         double tTrop = ISA_T0 - ISA_LAPSE * ISA_TROPOPAUSE;
         return ratio * StrictMath.exp(-gravity * (z - ISA_TROPOPAUSE) / (R_AIR * tTrop));
     }
+
+    /**
+     * Numerical: {@link #airDensityRatioExact} tabulated every {@link #STEP_M} m from {@link #MIN_Z} to
+     * {@link #MAX_Z} and interpolated linearly (relative error ~10⁻⁸: the profile's scale height is ~8 km),
+     * exact outside. The integrator asks for it four times per step and bomb.
+     */
+    static final class DensityTable {
+        static final double MIN_Z = -1000;
+        static final double MAX_Z = 50_000;
+        static final double STEP_M = 5;
+        final double gravity;
+        final double[] ratio;
+
+        DensityTable(double gravity) {
+            this.gravity = gravity;
+            ratio = new double[(int) ((MAX_Z - MIN_Z) / STEP_M) + 1];
+            for (int i = 0; i < ratio.length; i++) ratio[i] = airDensityRatioExact(MIN_Z + i * STEP_M, gravity);
+        }
+
+        double at(double z) {
+            double u = (z - MIN_Z) / STEP_M;
+            if (!(u >= 0) || u >= ratio.length - 1) return airDensityRatioExact(z, gravity);
+            int i = (int) u;
+            double f = u - i;
+            return ratio[i] + f * (ratio[i + 1] - ratio[i]);
+        }
+    }
+
+    /** The table for the last gravity asked for (immutable; replaced whole, so safe to share). */
+    private static volatile DensityTable table = new DensityTable(9.81);
 
     /** Drag factor k (1/m) for a sphere in air of density {@code airDensity}. */
     public static double dragFactor(double diameter, double bombDensity, double dragCoefficient, double airDensity) {
