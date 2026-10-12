@@ -69,7 +69,14 @@ public final class ColumnStacks {
     static final class Tile {
         final int tx;
         final int tz;
+        /**
+         * Column {@code c}'s layers are {@code [start[c], end[c])}; {@code [end[c], start[c + 1])} is slack, so a
+         * layer added to a column moves only that column's layers, not the rest of the tile.
+         */
         final int[] start = new int[TILE_AREA + 1];
+        final int[] end = new int[TILE_AREA];
+        /** Layers in the tile (slack not counted). */
+        int layers;
         float[] top = new float[64];
         short[] material = new short[64];
         int[] unit = new int[64];
@@ -101,7 +108,42 @@ public final class ColumnStacks {
         }
 
         int count(int c) {
-            return start[c + 1] - start[c];
+            return end[c] - start[c];
+        }
+
+        /** Sets every column's end to the next one's start (a packed layout: no slack). */
+        void packedEnds() {
+            for (int c = 0; c < TILE_AREA; c++) end[c] = start[c + 1];
+            layers = start[TILE_AREA];
+        }
+
+        /** This tile with its columns packed (no slack), as saves store it; shares nothing with this one. */
+        Tile packed() {
+            Tile p = new Tile(tx, tz);
+            int total = 0;
+            for (int c = 0; c < TILE_AREA; c++) total += count(c);
+            p.ensure(Math.max(64, total));
+            int pos = 0;
+            for (int c = 0; c < TILE_AREA; c++) {
+                p.start[c] = pos;
+                int n = count(c);
+                System.arraycopy(top, start[c], p.top, pos, n);
+                System.arraycopy(material, start[c], p.material, pos, n);
+                System.arraycopy(unit, start[c], p.unit, pos, n);
+                System.arraycopy(porosity, start[c], p.porosity, pos, n);
+                System.arraycopy(voidFrac, start[c], p.voidFrac, pos, n);
+                System.arraycopy(welding, start[c], p.welding, pos, n);
+                System.arraycopy(flags, start[c], p.flags, pos, n);
+                pos += n;
+                p.end[c] = pos;
+            }
+            p.start[TILE_AREA] = pos;
+            p.layers = pos;
+            System.arraycopy(uplift, 0, p.uplift, 0, TILE_AREA);
+            System.arraycopy(water, 0, p.water, 0, TILE_AREA);
+            System.arraycopy(version, 0, p.version, 0, TILE_AREA);
+            p.versionSum = versionSum;
+            return p;
         }
 
         void ensure(int needed) {
@@ -116,33 +158,46 @@ public final class ColumnStacks {
             flags = Arrays.copyOf(flags, capacity);
         }
 
-        /** Opens {@code n} layer slots at global index {@code at} inside column {@code c}. */
+        /** Slack (free slots) a column is given when it outgrows its share of the tile. */
+        static final int SLACK = 4;
+
+        /** Opens {@code n} layer slots at global index {@code at} inside column {@code c} ({@code at ≤ end[c]}). */
         void insert(int c, int at, int n) {
-            int size = size();
-            ensure(size + n);
-            int tail = size - at;
-            System.arraycopy(top, at, top, at + n, tail);
-            System.arraycopy(material, at, material, at + n, tail);
-            System.arraycopy(unit, at, unit, at + n, tail);
-            System.arraycopy(porosity, at, porosity, at + n, tail);
-            System.arraycopy(voidFrac, at, voidFrac, at + n, tail);
-            System.arraycopy(welding, at, welding, at + n, tail);
-            System.arraycopy(flags, at, flags, at + n, tail);
-            for (int k = c + 1; k <= TILE_AREA; k++) start[k] += n;
+            if (end[c] + n > start[c + 1]) {
+                // out of slack: move the rest of the tile up, leaving this column room to grow again
+                int grow = n + SLACK;
+                int from = start[c + 1];
+                int size = size();
+                ensure(size + grow);
+                shift(from, from + grow, size - from);
+                for (int k = c + 1; k < TILE_AREA; k++) {
+                    start[k] += grow;
+                    end[k] += grow;
+                }
+                start[TILE_AREA] += grow;
+            }
+            shift(at, at + n, end[c] - at);
+            end[c] += n;
+            layers += n;
         }
 
-        /** Removes {@code n} layers at global index {@code at} of column {@code c}. */
+        /** Removes {@code n} layers at global index {@code at} of column {@code c}; the slots become its slack. */
         void remove(int c, int at, int n) {
-            int size = size();
-            int tail = size - at - n;
-            System.arraycopy(top, at + n, top, at, tail);
-            System.arraycopy(material, at + n, material, at, tail);
-            System.arraycopy(unit, at + n, unit, at, tail);
-            System.arraycopy(porosity, at + n, porosity, at, tail);
-            System.arraycopy(voidFrac, at + n, voidFrac, at, tail);
-            System.arraycopy(welding, at + n, welding, at, tail);
-            System.arraycopy(flags, at + n, flags, at, tail);
-            for (int k = c + 1; k <= TILE_AREA; k++) start[k] -= n;
+            shift(at + n, at, end[c] - at - n);
+            end[c] -= n;
+            layers -= n;
+        }
+
+        /** Moves {@code length} layer slots from {@code from} to {@code to} (overlapping ranges allowed). */
+        private void shift(int from, int to, int length) {
+            if (length <= 0 || from == to) return;
+            System.arraycopy(top, from, top, to, length);
+            System.arraycopy(material, from, material, to, length);
+            System.arraycopy(unit, from, unit, to, length);
+            System.arraycopy(porosity, from, porosity, to, length);
+            System.arraycopy(voidFrac, from, voidFrac, to, length);
+            System.arraycopy(welding, from, welding, to, length);
+            System.arraycopy(flags, from, flags, to, length);
         }
 
         void set(int g, double topZ, short mat, int u, byte por, byte vf, byte weld, byte fl) {
@@ -219,6 +274,7 @@ public final class ColumnStacks {
 
     /** Rebuilds {@link #index} after the tile set changed. */
     private void reindex() {
+        sortedKeys = null;
         if (tiles.isEmpty()) {
             index = new Tile[0];
             indexW = indexH = 0;
@@ -282,11 +338,47 @@ public final class ColumnStacks {
      * are the plain packed values, not the mixed map keys.
      */
     public long[] tileKeys() {
-        long[] keys = new long[tiles.size()];
-        int i = 0;
-        for (Tile t : tiles.values()) keys[i++] = pack(t.tx, t.tz);
-        Arrays.sort(keys);
-        return keys;
+        long[] keys = sortedKeys;
+        if (keys == null) {
+            keys = new long[tiles.size()];
+            int i = 0;
+            for (Tile t : tiles.values()) keys[i++] = pack(t.tx, t.tz);
+            Arrays.sort(keys);
+            sortedKeys = keys;
+        }
+        return keys.clone();
+    }
+
+    /** {@link #tileKeys()} as of the current tile set; dropped whenever the set changes ({@link #reindex}). */
+    private long[] sortedKeys;
+
+    /**
+     * Sum of the edit counters of a tile's columns and of the columns around it (its one-column rim in the eight
+     * neighbouring tiles): the same as {@link #versionSum} over the tile grown by one column on every side, in
+     * O(rim) instead of O(area).
+     */
+    public long rimVersionSum(int tx, int tz) {
+        long sum = tileEdits(tx, tz);
+        int last = TILE - 1;
+        Tile n = tileAt(tx, tz - 1);
+        Tile so = tileAt(tx, tz + 1);
+        Tile w = tileAt(tx - 1, tz);
+        Tile e = tileAt(tx + 1, tz);
+        for (int i = 0; i < TILE; i++) {
+            if (n != null) sum += n.version[last * TILE + i];
+            if (so != null) sum += so.version[i];
+            if (w != null) sum += w.version[i * TILE + last];
+            if (e != null) sum += e.version[i * TILE];
+        }
+        Tile nw = tileAt(tx - 1, tz - 1);
+        Tile ne = tileAt(tx + 1, tz - 1);
+        Tile sw = tileAt(tx - 1, tz + 1);
+        Tile se = tileAt(tx + 1, tz + 1);
+        if (nw != null) sum += nw.version[last * TILE + last];
+        if (ne != null) sum += ne.version[last * TILE];
+        if (sw != null) sum += sw.version[last];
+        if (se != null) sum += se.version[0];
+        return sum;
     }
 
     public static int keyTileX(long key) {
@@ -301,10 +393,19 @@ public final class ColumnStacks {
      * Sum of the edit counters of every column in a tile (0 if absent): changes whenever any column
      * of the tile is edited, so derived caches can be refreshed per tile.
      */
+    /**
+     * Edits made to a tile's columns (the sum of their edit counters, 0 if absent): grows with every edit, so a
+     * sum of these over tiles changes whenever any of their columns does. O(1).
+     */
+    public long tileEdits(int tileX, int tileZ) {
+        Tile t = tileAt(tileX, tileZ);
+        return t == null ? 0 : t.versionSum;
+    }
+
     public long tileVersion(int tileX, int tileZ) {
         Tile t = tileAt(tileX, tileZ);
         if (t == null) return 0;
-        return t.size() + t.versionSum;
+        return t.layers + t.versionSum;
     }
 
     static byte quantize(double fraction) {
@@ -336,7 +437,7 @@ public final class ColumnStacks {
         Tile t = tile(x, z);
         if (t == null) return Double.NaN;
         int c = local(x, z);
-        return t.count(c) == 0 ? Double.NaN : t.top[t.start[c + 1] - 1] + (double) t.uplift[c];
+        return t.count(c) == 0 ? Double.NaN : t.top[t.end[c] - 1] + (double) t.uplift[c];
     }
 
     /** Layer {@code i} (0 = bottom) of a column. */
@@ -366,7 +467,7 @@ public final class ColumnStacks {
         if (t == null) return -1;
         int c = local(x, z);
         int s = t.start[c];
-        int e = t.start[c + 1];
+        int e = t.end[c];
         elevation -= t.uplift[c];
         if (e == s || elevation >= t.top[e - 1]) return -1;
         int lo = s;
@@ -438,7 +539,7 @@ public final class ColumnStacks {
         int c = local(x, z);
         int s = t.start[c];
         double thickness = 0;
-        for (int g = t.start[c + 1] - 1; g > s; g--) {
+        for (int g = t.end[c] - 1; g > s; g--) {
             if ((t.flags[g] & LayerFlags.LOOSE) == 0 || t.material[g] == MaterialTable.VOID.id()) break;
             thickness += t.top[g] - t.top[g - 1];
         }
@@ -454,7 +555,7 @@ public final class ColumnStacks {
         if (t == null) return false;
         int c = local(x, z);
         if (t.count(c) == 0) return false;
-        int g = t.start[c + 1] - 1;
+        int g = t.end[c] - 1;
         return (t.flags[g] & LayerFlags.LOOSE) != 0 && MaterialTable.get(t.material[g]).solid();
     }
 
@@ -464,7 +565,7 @@ public final class ColumnStacks {
         if (t == null) return -1;
         int c = local(x, z);
         if (t.count(c) == 0) return -1;
-        return t.material[t.start[c + 1] - 1];
+        return t.material[t.end[c] - 1];
     }
 
     /**
@@ -476,7 +577,7 @@ public final class ColumnStacks {
         if (t == null) return 0;
         int c = local(x, z);
         double sum = 0;
-        for (int g = t.start[c + 1] - 1; g > t.start[c]; g--) {
+        for (int g = t.end[c] - 1; g > t.start[c]; g--) {
             if ((t.flags[g] & LayerFlags.LOOSE) == 0 || !MaterialTable.get(t.material[g]).solid()) break;
             sum += t.top[g] - t.top[g - 1];
         }
@@ -563,7 +664,7 @@ public final class ColumnStacks {
             fresh.start[c] = pos;
             List<LayerSpec> r = replacements.get(c);
             if (r == null) {
-                for (int g = t.start[c]; g < t.start[c + 1]; g++) {
+                for (int g = t.start[c]; g < t.end[c]; g++) {
                     fresh.set(pos++, t.top[g], t.material[g], t.unit[g], t.porosity[g], t.voidFrac[g], t.welding[g],
                             t.flags[g]);
                 }
@@ -577,11 +678,13 @@ public final class ColumnStacks {
                     previous = layer.top() - u;
                 }
             }
+            fresh.end[c] = pos;
             fresh.uplift[c] = t.uplift[c];
             fresh.water[c] = t.water[c];
             fresh.version[c] = t.version[c] + (r != null ? 1 : 0);
         }
         fresh.start[TILE_AREA] = pos;
+        fresh.layers = pos;
         for (int c : replacements.keySet()) enforceCap(fresh, c);
         fresh.recountVersions();
         tiles.put(key(tileX, tileZ), fresh);
@@ -612,7 +715,7 @@ public final class ColumnStacks {
         if (t == null) return false;
         int c = local(x, z);
         if (t.count(c) == 0) return false;
-        int g = t.start[c + 1] - 1;
+        int g = t.end[c] - 1;
         byte por = quantize(porosity);
         byte weld = quantize(welding);
         boolean thinLoose = thickness < THIN_LAYER_M && (flags & LayerFlags.LOOSE) != 0
@@ -656,7 +759,7 @@ public final class ColumnStacks {
         double remaining = thickness;
         while (remaining > 0) {
             int s = t.start[c];
-            int g = t.start[c + 1] - 1;
+            int g = t.end[c] - 1;
             short mat = t.material[g];
             boolean isVoid = mat == MaterialTable.VOID.id();
             if (looseOnly && !isVoid && (t.flags[g] & LayerFlags.LOOSE) == 0) break;
@@ -696,7 +799,7 @@ public final class ColumnStacks {
     private double collapseExposedVoids(Tile t, int c) {
         double removed = 0;
         while (t.count(c) > 1) {
-            int g = t.start[c + 1] - 1;
+            int g = t.end[c] - 1;
             if (t.material[g] != MaterialTable.VOID.id()) break;
             removed += t.top[g] - t.top[g - 1];
             t.remove(c, g, 1);
@@ -716,7 +819,7 @@ public final class ColumnStacks {
         if (t == null) return ErodeResult.NONE;
         int c = local(x, z);
         if (t.count(c) == 0) return ErodeResult.NONE;
-        double surface = t.top[t.start[c + 1] - 1];
+        double surface = t.top[t.end[c] - 1];
         zLo -= t.uplift[c]; // elevations to the column's own (undeformed) frame
         zHi -= t.uplift[c];
         zLo = Math.max(zLo, datumZ);
@@ -726,7 +829,7 @@ public final class ColumnStacks {
         split(t, c, zLo);
         split(t, c, zHi);
         int s = t.start[c];
-        int e = t.start[c + 1];
+        int e = t.end[c];
         int first = -1;
         int last = -1;
         Map<Short, Double> replaced = new TreeMap<>();
@@ -756,7 +859,7 @@ public final class ColumnStacks {
     /** Splits the layer straddling elevation {@code z} into two layers with the same identity. */
     private void split(Tile t, int c, double z) {
         int s = t.start[c];
-        int e = t.start[c + 1];
+        int e = t.end[c];
         for (int g = s; g < e; g++) {
             double b = bottom(t, c, g);
             if (b < z - EPS && t.top[g] > z + EPS) {
@@ -770,7 +873,7 @@ public final class ColumnStacks {
 
     private void mergeIdentical(Tile t, int c) {
         int g = t.start[c];
-        while (g < t.start[c + 1] - 1) {
+        while (g < t.end[c] - 1) {
             if (t.sameIdentity(g, g + 1)) {
                 t.remove(c, g, 1); // the upper layer keeps its top and covers both
             } else {
@@ -802,6 +905,8 @@ public final class ColumnStacks {
         w.set(n, newTop, material, unit, por, (byte) 0, weld, fl);
         w.start[0] = 0;
         Arrays.fill(w.start, 1, TILE_AREA + 1, n + 1);
+        w.end[0] = n + 1;
+        w.layers = n + 1;
         enforceCap(w, 0);
         int m = w.count(0);
         if (m > n) t.insert(c, s + n, m - n);
@@ -819,7 +924,7 @@ public final class ColumnStacks {
     private void enforceCap(Tile t, int c) {
         while (t.count(c) > MAX_LAYERS) {
             int s = t.start[c];
-            int e = t.start[c + 1];
+            int e = t.end[c];
             int best = -1;
             double bestThickness = Double.POSITIVE_INFINITY;
             for (int pass = 0; pass < 2 && best < 0; pass++) {

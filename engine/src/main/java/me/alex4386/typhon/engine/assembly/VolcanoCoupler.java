@@ -310,6 +310,7 @@ public final class VolcanoCoupler implements Subsystem {
         double rate = chamber.eruptionRate();
         ConduitSolution flow = chamber.conduitFlow();
         if (rate <= 0 || flow == null || vents.isEmpty()) {
+            layAllTuff();
             stopLava();
             stopExplosive();
             endBurstPhaseIfDue(context.time(), false);
@@ -1277,7 +1278,54 @@ public final class VolcanoCoupler implements Subsystem {
         if (terrain == null) return;
         WorldModel world = terrain.world();
         double l = world.spec().metersPerColumn();
-        double volume = massKg / TUFF_BULK_DENSITY;
+        boolean submarine = waterDepthM > 0;
+        int unit = units.unit(submarine ? DepositType.HYALOCLASTITE : DepositType.FALL, context.time(), Double.NaN);
+        TuffPile pile = tuffPiles.get(vent.id());
+        if (pile != null && (pile.submarine != submarine || pile.unit != unit)) {
+            layTuff(world, vent, pile); // what built up so far is a different deposit
+            pile = null;
+        }
+        if (pile == null) {
+            pile = new TuffPile(submarine, unit);
+            tuffPiles.put(vent.id(), pile);
+        }
+        pile.volume += massKg / TUFF_BULK_DENSITY;
+        // laid down once the pile's centre has built up by the ash grid's own deposit resolution
+        TuffRing ring = tuffRing(world, vent);
+        if (ring != null && pile.volume * ring.peak / (l * l) >= TUFF_LAY_THICKNESS_M) layTuff(world, vent, pile);
+    }
+
+    /** Numerical: tuff accumulated around a vent is laid down in steps of this thickness at its centre (m). */
+    static final double TUFF_LAY_THICKNESS_M = 0.001;
+
+    /** Wet fallout accumulated around a vent, not yet laid down (saved). */
+    private static final class TuffPile {
+        final boolean submarine;
+        final int unit;
+        double volume;
+
+        TuffPile(boolean submarine, int unit) {
+            this.submarine = submarine;
+            this.unit = unit;
+        }
+    }
+
+    private final TreeMap<String, TuffPile> tuffPiles = new TreeMap<>();
+
+    /**
+     * Where a vent's wet fallout lands: its columns and their shares of the volume (summing to 1); {@code peak}
+     * the largest share. Cached by the vent's geometry and the world's extent (derived; not saved).
+     */
+    private record TuffRing(Object key, int[] xs, int[] zs, double[] shares, double peak) {}
+
+    private final Map<String, TuffRing> tuffRings = new HashMap<>();
+
+    private TuffRing tuffRing(WorldModel world, VentSite vent) {
+        double l = world.spec().metersPerColumn();
+        Object key = java.util.List.of(vent.position(), vent.kind(), vent.craterRadiusM(), vent.fissureLengthM(),
+                vent.fissureAngleRad(), l, world.stacks().tileCount());
+        TuffRing ring = tuffRings.get(vent.id());
+        if (ring != null && ring.key().equals(key)) return ring;
         double crater = Math.max(l, vent.craterRadiusM());
         double scale = crater;
         double outer = crater + APRON_REACH * scale;
@@ -1288,7 +1336,7 @@ public final class VolcanoCoupler implements Subsystem {
         int cx = c.columnX(l);
         int cz = c.columnZ(l);
         int reach = (int) Math.ceil((outer + half) / l);
-        List<long[]> cells = new ArrayList<>();
+        List<int[]> cells = new ArrayList<>();
         List<Double> weights = new ArrayList<>();
         double total = 0;
         for (int dz = -reach; dz <= reach; dz++) {
@@ -1301,26 +1349,64 @@ public final class VolcanoCoupler implements Subsystem {
                 double r = Math.hypot(px - along * ux, pz - along * uz);
                 if (r > outer || !world.isKnown(x, z)) continue;
                 double w = Math.exp(-Math.max(0, r - crater) / scale);
-                cells.add(new long[] {x, z});
+                cells.add(new int[] {x, z});
                 weights.add(w);
                 total += w;
             }
         }
-        if (total <= 0) return;
-        boolean submarine = waterDepthM > 0;
-        int unit = units.unit(submarine ? DepositType.HYALOCLASTITE : DepositType.FALL, context.time(), Double.NaN);
-        var material = submarine ? MaterialTable.HYALOCLASTITE : MaterialTable.ASH;
-        double area = l * l;
-        double sum = total;
+        if (total <= 0) return null;
+        int n = cells.size();
+        int[] xs = new int[n];
+        int[] zs = new int[n];
+        double[] shares = new double[n];
+        double peak = 0;
+        for (int i = 0; i < n; i++) {
+            xs[i] = cells.get(i)[0];
+            zs[i] = cells.get(i)[1];
+            shares[i] = weights.get(i) / total;
+            peak = Math.max(peak, shares[i]);
+        }
+        ring = new TuffRing(key, xs, zs, shares, peak);
+        tuffRings.put(vent.id(), ring);
+        return ring;
+    }
+
+    /**
+     * Lays down a vent's accumulated wet fallout: magma quenched and granulated where it meets the water, and
+     * the coarse share of a collapsing wet column, piled up around the vent (Kokelaar 1983, 1986). Jet ejecta
+     * are not part of it: they fly ballistically ({@link #fireJets}). The pile covers the crater floor (it
+     * falls back into the vent and fills it as a slurry, Kokelaar 1983) and thins beyond the rim exponentially
+     * over the vent's own size (the crater radius, at least one column); repose relaxation then shapes it to
+     * its angle of repose. A fissure builds a ridge along its whole length (distances to its segment). Under
+     * water it is hyaloclastite; in air, loose wet ash (a tuff ring).
+     */
+    private void layTuff(WorldModel world, VentSite vent, TuffPile pile) {
+        TuffRing ring = tuffRing(world, vent);
+        double volume = pile.volume;
+        pile.volume = 0;
+        if (ring == null || !(volume > 0)) return;
+        double area = world.spec().metersPerColumn() * world.spec().metersPerColumn();
+        var material = pile.submarine ? MaterialTable.HYALOCLASTITE : MaterialTable.ASH;
         // one sweep of deposits, relaxed to repose once at its end (not after every column)
         world.withRelaxationDeferred(() -> {
-            for (int i = 0; i < cells.size(); i++) {
-                double thickness = volume * weights.get(i) / sum / area;
+            for (int i = 0; i < ring.xs().length; i++) {
+                double thickness = volume * ring.shares()[i] / area;
                 if (!(thickness > 0)) continue;
-                world.deposit((int) cells.get(i)[0], (int) cells.get(i)[1], thickness, material, unit,
-                        LayerFlags.LOOSE, WET_TEPHRA_POROSITY, 0);
+                world.deposit(ring.xs()[i], ring.zs()[i], thickness, material, pile.unit, LayerFlags.LOOSE,
+                        WET_TEPHRA_POROSITY, 0);
             }
         });
+    }
+
+    /** Lays down every vent's accumulated wet fallout (the eruption, or that vent's share of it, ended). */
+    private void layAllTuff() {
+        if (terrain == null || tuffPiles.isEmpty()) return;
+        WorldModel world = terrain.world();
+        for (Map.Entry<String, TuffPile> e : tuffPiles.entrySet()) {
+            VentSite vent = find(e.getKey());
+            if (vent != null) layTuff(world, vent, e.getValue());
+        }
+        tuffPiles.clear();
     }
 
     private void setPhreatomagmatic(StepContext context, boolean active, VentSite vent) {
@@ -1431,6 +1517,15 @@ public final class VolcanoCoupler implements Subsystem {
             columnStates.add(e.getKey(), c);
         }
         out.add("columns", columnStates);
+        JsonObject tuff = new JsonObject();
+        for (Map.Entry<String, TuffPile> e : tuffPiles.entrySet()) {
+            JsonObject t = new JsonObject();
+            t.addProperty("submarine", e.getValue().submarine);
+            t.addProperty("unit", e.getValue().unit);
+            t.addProperty("volume", e.getValue().volume);
+            tuff.add(e.getKey(), t);
+        }
+        out.add("tuffPiles", tuff);
         out.addProperty("burstPhaseUntil", burstPhaseUntil);
         if (burstVentId != null) out.addProperty("burstVentId", burstVentId);
         out.addProperty("phreatomagmatic", phreatomagmatic);
@@ -1492,6 +1587,15 @@ public final class VolcanoCoupler implements Subsystem {
                 c.gas = o.get("gas").getAsDouble();
                 c.collapseSource = o.has("collapseSource") ? o.get("collapseSource").getAsString() : null;
                 columns.put(e.getKey(), c);
+            }
+        }
+        tuffPiles.clear();
+        if (in.has("tuffPiles")) {
+            for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("tuffPiles").entrySet()) {
+                JsonObject o = e.getValue().getAsJsonObject();
+                TuffPile pile = new TuffPile(o.get("submarine").getAsBoolean(), o.get("unit").getAsInt());
+                pile.volume = o.get("volume").getAsDouble();
+                tuffPiles.put(e.getKey(), pile);
             }
         }
         // saves from before one column per vent: the column restarts at the next step (its vent unknown)

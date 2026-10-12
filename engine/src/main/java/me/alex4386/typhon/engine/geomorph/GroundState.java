@@ -10,6 +10,11 @@ public interface GroundState {
     /** Ground temperature (°C) {@code depthM} below the surface. */
     double temperatureC(int x, int z, double depthM);
 
+    /** {@link #temperatureC} of one column as a function of depth, its lookups done once (many depths asked). */
+    default java.util.function.DoubleUnaryOperator temperatureProfile(int x, int z) {
+        return depth -> temperatureC(x, z, depth);
+    }
+
     /** Depth of the water table below the surface (m); ≤ 0 when the ground is saturated to the top. */
     double waterTableDepthM(int x, int z);
 
@@ -56,6 +61,11 @@ public interface GroundState {
             @Override
             public double temperatureC(int x, int z, double depthM) {
                 return subsurface.temperatureC(x, z, depthM);
+            }
+
+            @Override
+            public java.util.function.DoubleUnaryOperator temperatureProfile(int x, int z) {
+                return subsurface.temperatureProfile(x, z);
             }
 
             @Override

@@ -437,7 +437,7 @@ public final class TephraSubsystem implements Subsystem {
         Vec3d w = wind.at(context.time());
         double parcelMass = f.massKg() / PROXIMAL_PARCELS;
         double sigma = config.bombDiameterSigma;
-        TreeMap<Long, Double> batch = new TreeMap<>();
+        java.util.HashMap<Long, Double> batch = new java.util.HashMap<>();
         WorldModel world = terrain.world();
         double l = metersPerColumn();
         for (int n = 0; n < PROXIMAL_PARCELS; n++) {
@@ -478,10 +478,12 @@ public final class TephraSubsystem implements Subsystem {
         // one deposit per column, in a fixed order: the parcels' thicknesses summed
         if (batch.isEmpty()) return;
         int unit = units.unit(DepositType.FALL, context.time(), Double.NaN);
-        for (Map.Entry<Long, Double> e : batch.entrySet()) {
-            int x = (int) (e.getKey() >> 32);
-            int z = (int) (long) e.getKey();
-            world.deposit(x, z, e.getValue(), MaterialTable.ASH, unit, LayerFlags.LOOSE,
+        long[] keys = new long[batch.size()];
+        int k = 0;
+        for (long key : batch.keySet()) keys[k++] = key;
+        java.util.Arrays.sort(keys); // a fixed order
+        for (long key : keys) {
+            world.deposit((int) (key >> 32), (int) key, batch.get(key), MaterialTable.ASH, unit, LayerFlags.LOOSE,
                     1 - PROXIMAL_BULK_DENSITY / ExplosivePhase.DRE_DENSITY, 0);
         }
     }
@@ -498,7 +500,7 @@ public final class TephraSubsystem implements Subsystem {
      * column by column and relaxes to its angle of repose. The ash grid keeps the record (for maps and
      * world growth) without applying it again. Off the simulated ground the grid holds it for the backfill.
      */
-    private void depositParcel(StepContext context, double x, double z, double parcelMass, TreeMap<Long, Double> batch) {
+    private void depositParcel(StepContext context, double x, double z, double parcelMass, Map<Long, Double> batch) {
         WorldModel world = terrain.world();
         double l = world.spec().metersPerColumn();
         int cx = (int) Math.floor(x / l);

@@ -151,6 +151,37 @@ public final class DeformationModel implements Subsystem {
         return new UpliftField(mogi, config.poissonRatio, geometries, resolved);
     }
 
+    /** The sources of the last terrain pass: the Mogi quadruples and the dikes' hash (saved). */
+    private double[] passMogi;
+    private int passDikes;
+
+    /**
+     * Whether the uplift can have changed by less than half the write resolution anywhere since the last pass:
+     * the same dikes, and the Mogi sources' volume changes moving their peak uplift ({@code (1 − ν) ΔV / (π d²)},
+     * the most they move any point) by less than {@link #UPLIFT_REPORT_M}/2 in all. Then the pass would write
+     * (almost) nothing and its relaxation of the tilted ground is not worth doing.
+     */
+    private boolean unchangedSinceLastPass(UpliftField field) {
+        double[] mogi = field.mogi();
+        int dikes = field.geometries().hashCode();
+        boolean same = passMogi != null && passMogi.length == mogi.length && dikes == passDikes;
+        if (same) {
+            double peak = 0;
+            for (int i = 0; i < mogi.length / 4; i++) {
+                double d = mogi[4 * i + 1];
+                if (passMogi[4 * i + 1] != d || passMogi[4 * i + 2] != mogi[4 * i + 2] || passMogi[4 * i + 3] != mogi[4 * i + 3]) {
+                    same = false;
+                    break;
+                }
+                peak += (1 - field.poissonRatio()) * Math.abs(mogi[4 * i] - passMogi[4 * i]) / (Math.PI * d * d);
+            }
+            if (same && peak < UPLIFT_REPORT_M / 2) return true;
+        }
+        passMogi = mogi.clone();
+        passDikes = dikes;
+        return false;
+    }
+
     /** Numerical: the dikes' uplift is summed in whole multiples of this (m), exactly, in any order. */
     static final double DIKE_QUANTUM_M = 1e-9;
 
@@ -294,6 +325,7 @@ public final class DeformationModel implements Subsystem {
         int cx = (int) Math.floor(config.centerX / l);
         int cz = (int) Math.floor(config.centerZ / l);
         UpliftField field = upliftField();
+        if (unchangedSinceLastPass(field)) return;
         appliedRadiusM = Math.min(config.terrainRadiusM, Math.max(appliedRadiusM, upliftRadiusM(field)));
         int radius = (int) Math.ceil(appliedRadiusM / l);
         int[] moved = new int[2]; // columns raised, lowered
@@ -464,6 +496,12 @@ public final class DeformationModel implements Subsystem {
     public void saveState(StateWriter writer) {
         writer.json().addProperty("lastTime", lastTime);
         writer.json().addProperty("appliedRadiusM", appliedRadiusM);
+        if (passMogi != null) {
+            com.google.gson.JsonArray m = new com.google.gson.JsonArray();
+            for (double v : passMogi) m.add(v);
+            writer.json().add("passMogi", m);
+            writer.json().addProperty("passDikes", passDikes);
+        }
         // the uplift itself lives in the world model (saved with it)
     }
 
@@ -471,5 +509,12 @@ public final class DeformationModel implements Subsystem {
     public void loadState(StateReader reader) {
         lastTime = reader.json().get("lastTime").getAsDouble();
         appliedRadiusM = reader.json().get("appliedRadiusM").getAsDouble();
+        passMogi = null;
+        if (reader.json().has("passMogi")) {
+            var m = reader.json().getAsJsonArray("passMogi");
+            passMogi = new double[m.size()];
+            for (int i = 0; i < passMogi.length; i++) passMogi[i] = m.get(i).getAsDouble();
+            passDikes = reader.json().get("passDikes").getAsInt();
+        }
     }
 }

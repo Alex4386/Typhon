@@ -450,6 +450,13 @@ public final class Geomorphology implements Subsystem {
         return Math.max(0.05, world.layer(x, z, n - 1).porosity());
     }
 
+    /** {@link #alterationAt} with the column's alteration tile, index and uplift already looked up. */
+    private static double alteration(AlterationTile t, int i, double uplift, double elevation) {
+        if (t == null) return 0;
+        if (Double.isNaN(t.top[i]) || elevation - uplift <= t.top[i]) return t.body[i];
+        return t.cover[i];
+    }
+
     /** Alteration of the material at {@code elevation} in a column. */
     double alterationAt(int x, int z, double elevation) {
         AlterationTile t = alteration.get(tileKey(x, z));
@@ -516,7 +523,7 @@ public final class Geomorphology implements Subsystem {
         int x0 = tx * ColumnStacks.TILE;
         int z0 = tz * ColumnStacks.TILE;
         ColumnStacks stacks = world.stacks();
-        long versions = stacks.versionSum(x0 - 1, z0 - 1, ColumnStacks.TILE + 2, ColumnStacks.TILE + 2);
+        long versions = stacks.rimVersionSum(tx, tz); // the tile and the columns around it
         int tiles = stacks.tileCount();
         SteepColumns cached = steepColumns.get(tileKey);
         if (cached != null && cached.versions() == versions && cached.tileCount() == tiles
@@ -577,15 +584,14 @@ public final class Geomorphology implements Subsystem {
 
     /** Steepest downhill gradient (tan β) to an 8-neighbour, 0 if none or unknown. */
     private double steepestTan(int x, int z) {
-        if (!world.isKnown(x, z)) return 0;
-        double s = world.surfaceZ(x, z);
+        double s = world.surfaceZ(x, z); // NaN where the column is not known: one lookup, not two
+        if (Double.isNaN(s)) return 0;
         double l = world.spec().metersPerColumn();
         double best = 0;
         for (int d = 0; d < 8; d++) {
-            int nx = x + DX[d];
-            int nz = z + DZ[d];
-            if (!world.isKnown(nx, nz)) continue;
-            double t = (s - world.surfaceZ(nx, nz)) / (l * (d < 4 ? 1 : SQRT2));
+            double n = world.surfaceZ(x + DX[d], z + DZ[d]);
+            if (Double.isNaN(n)) continue;
+            double t = (s - n) / (l * (d < 4 ? 1 : SQRT2));
             if (t > best) best = t;
         }
         return best;
@@ -593,6 +599,11 @@ public final class Geomorphology implements Subsystem {
 
     private Evaluation evaluate(int x, int z, double kh) {
         if (!world.isKnown(x, z)) return null;
+        // the column's ground temperature and alteration, looked up once for all its layers
+        java.util.function.DoubleUnaryOperator groundC = ground.temperatureProfile(x, z);
+        AlterationTile altTile = alteration.get(tileKey(x, z));
+        int altIndex = ColumnStacks.localIndex(x, z);
+        double altUplift = world.uplift(x, z);
         double l = world.spec().metersPerColumn();
         double s = world.surfaceZ(x, z);
         double[] drop = new double[8];
@@ -685,8 +696,8 @@ public final class Geomorphology implements Subsystem {
             double rho = m.densityKgM3() + RHO_W * layer.porosity() * sat;
             weight += rho * G * seg;
             double midDepth = 0.5 * (depthTop + zEnd);
-            double tMid = ground.temperatureC(x, z, midDepth);
-            RockStrength.Strength mid = RockStrength.of(layer, alterationAt(x, z, s - midDepth), tMid);
+            double tMid = groundC.applyAsDouble(midDepth);
+            RockStrength.Strength mid = RockStrength.of(layer, alteration(altTile, altIndex, altUplift, s - midDepth), tMid);
             cSum += mid.cohesionPa() * seg;
             tanSum += mid.tanPhi() * seg;
             satSum += sat * seg;
@@ -695,14 +706,14 @@ public final class Geomorphology implements Subsystem {
             if (zp > depthTop + 1e-9 && zp >= MIN_SLAB) {
                 double partialWeight = weight - rho * G * (zEnd - zp);
                 double gammaBar = partialWeight / zp;
-                double temperature = ground.temperatureC(x, z, zp);
-                double a = alterationAt(x, z, s - zp);
+                double temperature = groundC.applyAsDouble(zp);
+                double a = alteration(altTile, altIndex, altUplift, s - zp);
                 RockStrength.Strength st = RockStrength.of(layer, a, temperature);
                 LayerView planeLayer = layer;
                 if (zp == zBot && k > 0) {
                     LayerView below = world.layer(x, z, k - 1);
                     if (below.materialInfo().solid()) {
-                        RockStrength.Strength sb = RockStrength.of(below, alterationAt(x, z, s - zp - 1e-6), temperature);
+                        RockStrength.Strength sb = RockStrength.of(below, alteration(altTile, altIndex, altUplift, s - zp - 1e-6), temperature);
                         if (sb.cohesionPa() < st.cohesionPa() || sb.tanPhi() < st.tanPhi()) {
                             // the interface is as weak as the weaker side
                             st = new RockStrength.Strength(Math.min(st.cohesionPa(), sb.cohesionPa()),
@@ -758,7 +769,7 @@ public final class Geomorphology implements Subsystem {
                 if (cul[0] < best.factorOfSafety()) {
                     best = new Assessment(x, z, cul[0], relief, true, Math.toDegrees(faceBeta), relief,
                             Math.toDegrees(cul[1]), cBar, Math.toDegrees(Math.atan(tanBar)), ru, kh,
-                            alterationAt(x, z, s - 0.5 * relief), ground.temperatureC(x, z, 0.5 * relief), satBar,
+                            alteration(altTile, altIndex, altUplift, s - 0.5 * relief), groundC.applyAsDouble(0.5 * relief), satBar,
                             shallowA.material());
                     if (cul[0] < 1) failures.addAll(wedgeMoves(path, pathData, Math.tan(cul[1]), best, gammaEff));
                 }
@@ -851,7 +862,10 @@ public final class Geomorphology implements Subsystem {
                 }
             }
             if (moves.isEmpty()) continue;
-            for (List<Failure> cluster : clusters(moves)) apply(cluster, outbox);
+            // this pass's failures are laid down first and relaxed to repose once (the next pass evaluates afresh)
+            world.withRelaxationDeferred(() -> {
+                for (List<Failure> cluster : clusters(moves)) apply(cluster, outbox);
+            });
             }
     }
 

@@ -245,11 +245,10 @@ public final class ReposeRelaxation {
         double bestExcess = 0;
         double bestTolerance = 0;
         for (int d = 0; d < 8; d++) {
-            int nx = x + DX[d];
-            int nz = z + DZ[d];
-            if (!world.isKnown(nx, nz)) continue;
+            double neighbour = world.surfaceZ(x + DX[d], z + DZ[d]); // NaN where not known
+            if (Double.isNaN(neighbour)) continue;
             double distance = (d & 1) == 1 ? l * Math.sqrt(2) : l;
-            double excess = s - world.surfaceZ(nx, nz) - distance * tan;
+            double excess = s - neighbour - distance * tan;
             double tolerance = Math.max(2 * MIN_MOVE_M, distance * SLOPE_TOLERANCE_TAN);
             if (excess - tolerance > bestExcess - bestTolerance) {
                 bestExcess = excess;

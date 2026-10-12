@@ -503,7 +503,8 @@ public final class WorldModel implements WorldQuery, WorldEdit {
      */
     public void save(StateWriter out) {
         StateWriter.Field field = out.field("stacks", STACKS_SCHEMA);
-        for (ColumnStacks.Tile t : stacks.sortedTiles()) {
+        for (ColumnStacks.Tile live : stacks.sortedTiles()) {
+            ColumnStacks.Tile t = live.packed(); // saves store columns packed, without the slack edits leave
             int n = t.size();
             int[] material = new int[n];
             int[] unit = new int[n];
@@ -586,6 +587,7 @@ public final class WorldModel implements WorldQuery, WorldEdit {
             System.arraycopy(data.floats("uplift"), 0, t.uplift, 0, t.uplift.length);
             System.arraycopy(data.floats("water"), 0, t.water, 0, t.water.length);
             System.arraycopy(data.ints("version"), 0, t.version, 0, t.version.length);
+            t.packedEnds();
             t.recountVersions();
             stacks.putTile(t);
         }

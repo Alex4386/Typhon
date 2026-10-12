@@ -701,11 +701,23 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
         return ch != null && ch.exists[SolverChunk.column(grid.solverCoord(x), grid.solverCoord(z))];
     }
 
+    /** {@link #temperatureC} of one column as a function of depth, its chunk looked up once. */
+    public java.util.function.DoubleUnaryOperator temperatureProfile(int x, int z) {
+        SolverChunk ch = chunkAt(x, z);
+        int c = SolverChunk.column(grid.solverCoord(x), grid.solverCoord(z));
+        if (ch == null || !ch.exists[c]) return grid::backgroundTemperature;
+        return depth -> columnTemperatureC(ch, c, depth);
+    }
+
     @Override
     public double temperatureC(int x, int z, double depthM) {
         SolverChunk ch = chunkAt(x, z);
         int c = SolverChunk.column(grid.solverCoord(x), grid.solverCoord(z));
         if (ch == null || !ch.exists[c]) return grid.backgroundTemperature(depthM);
+        return columnTemperatureC(ch, c, depthM);
+    }
+
+    private double columnTemperatureC(SolverChunk ch, int c, double depthM) {
         int n = grid.levels();
         if (depthM <= grid.centerDepth(0)) {
             // Between the surface (exchange temperature) and the first cell centre.
