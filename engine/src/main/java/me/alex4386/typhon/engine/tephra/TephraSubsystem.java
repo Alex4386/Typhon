@@ -438,11 +438,27 @@ public final class TephraSubsystem implements Subsystem {
         double parcelMass = f.massKg() / PROXIMAL_PARCELS;
         double sigma = config.bombDiameterSigma;
         TreeMap<Long, Double> batch = new TreeMap<>();
+        WorldModel world = terrain.world();
+        double l = metersPerColumn();
         for (int n = 0; n < PROXIMAL_PARCELS; n++) {
             double d = clamp(f.medianSizeM() * StrictMath.exp(sigma * random.nextGaussian()), f.minSizeM(), f.maxSizeM());
             double speed = exitSpeed * StrictMath.exp(0.15 * random.nextGaussian()) / Math.sqrt(1 + d);
             double zenith = Math.toRadians(launchZenithDeg(f.zenithMeanDeg(), f.zenithSigmaDeg(), random));
             double azimuth = random.nextDouble(0, 2 * Math.PI);
+            // under water (a submerged vent) the clast rises only as far as water's drag lets it: it settles
+            // back around the vent, or breaks the surface slowed (as bombs do, see throughWater)
+            Vec3d from = sampleVentPoint(f.vent(), random);
+            int fx = (int) Math.floor(from.x() / l);
+            int fz = (int) Math.floor(from.z() / l);
+            double waterTop = world.isKnown(fx, fz) ? world.waterZ(fx, fz) : Double.NaN;
+            if (Double.isFinite(waterTop) && waterTop > from.y()) {
+                double left = speedAtWaterSurface(d, speed, StrictMath.cos(zenith), waterTop - from.y());
+                if (!(left > 0)) {
+                    depositParcel(context, from.x(), from.z(), parcelMass, batch);
+                    continue;
+                }
+                speed = left;
+            }
             // Quadratic drag (v_t = sqrt(g/k)): a vertical launch at speed v peaks at (v_t²/2g)·ln(1 + v²/v_t²),
             // so use the drag-free speed that reaches the same height.
             double vt = Math.sqrt(config.gravity / Ballistics.dragFactor(d, config.bombDensity, config.dragCoefficient,
@@ -455,14 +471,12 @@ public final class TephraSubsystem implements Subsystem {
             double tau = vt / config.gravity;
             double drift = flight - tau * (1 - StrictMath.exp(-flight / tau));
             double r = vh * flight;
-            Vec3d at = sampleVentPoint(f.vent(), random);
-            double x = at.x() + r * StrictMath.cos(azimuth) + w.x() * drift;
-            double z = at.z() + r * StrictMath.sin(azimuth) + w.z() * drift;
+            double x = from.x() + r * StrictMath.cos(azimuth) + w.x() * drift;
+            double z = from.z() + r * StrictMath.sin(azimuth) + w.z() * drift;
             depositParcel(context, x, z, parcelMass, batch);
         }
         // one deposit per column, in a fixed order: the parcels' thicknesses summed
         if (batch.isEmpty()) return;
-        WorldModel world = terrain.world();
         int unit = units.unit(DepositType.FALL, context.time(), Double.NaN);
         for (Map.Entry<Long, Double> e : batch.entrySet()) {
             int x = (int) (e.getKey() >> 32);
@@ -589,6 +603,18 @@ public final class TephraSubsystem implements Subsystem {
      * A 0.3 m bomb at 150 m/s rises only ~5 m through water. Returns false if it stops before the surface
      * (the clast settles back); otherwise moves it to where it breaks the surface, at the speed it has left.
      */
+    /**
+     * Speed (m/s) a clast of diameter {@code d} launched at {@code speed} with {@code cosZenith} has left on
+     * breaking the surface of {@code depth} m of water ({@link #throughWater}), or 0 if water stops it first.
+     */
+    private double speedAtWaterSurface(double d, double speed, double cosZenith, double depth) {
+        if (!(cosZenith > 0) || !(speed > 0)) return 0;
+        double kw = Ballistics.dragFactor(d, config.bombDensity, config.dragCoefficient, WATER_DENSITY);
+        double g = config.gravity * Math.max(0, 1 - WATER_DENSITY / config.bombDensity) * cosZenith;
+        double v2 = (speed * speed + g / kw) * StrictMath.exp(-2 * kw * depth / cosZenith) - g / kw;
+        return v2 > 0 ? Math.sqrt(v2) : 0;
+    }
+
     private boolean throughWater(Bomb bomb) {
         double[] s = bomb.s;
         WorldModel world = terrain.world();

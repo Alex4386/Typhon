@@ -470,6 +470,14 @@ public final class Geomorphology implements Subsystem {
         if (quakes.isEmpty()) return;
         double l = world.spec().metersPerColumn();
         double minKh = GroundMotion.pseudoStatic(config.minPgaG);
+        // how far each quake shakes the ground past the threshold: farther tiles cannot reach it from that quake,
+        // so they never change a tile's result (its largest coefficient, kept only at or above the threshold)
+        List<double[]> felt = new ArrayList<>();
+        for (double[] q : quakes) {
+            double reach = GroundMotion.radiusKm(q[3], config.minPgaG) * 1000;
+            if (GroundMotion.pga(q[3], 0) >= config.minPgaG) felt.add(new double[] {q[0], q[2], q[3], reach + 1});
+        }
+        if (felt.isEmpty()) return;
         long[] keys = world.stacks().tileKeys();
         java.util.Arrays.sort(keys);
         for (long key : keys) {
@@ -480,11 +488,12 @@ public final class Geomorphology implements Subsystem {
             double x1 = x0 + ColumnStacks.TILE - 1;
             double z1 = z0 + ColumnStacks.TILE - 1;
             double kh = 0;
-            for (double[] q : quakes) {
+            for (double[] q : felt) {
                 double dx = Math.max(0, Math.max(x0 - q[0] / l, q[0] / l - x1)) * l;
-                double dz = Math.max(0, Math.max(z0 - q[2] / l, q[2] / l - z1)) * l;
+                double dz = Math.max(0, Math.max(z0 - q[1] / l, q[1] / l - z1)) * l;
                 double d = Math.sqrt(dx * dx + dz * dz);
-                kh = Math.max(kh, GroundMotion.pseudoStatic(GroundMotion.pga(q[3], d / 1000)));
+                if (d > q[3]) continue;
+                kh = Math.max(kh, GroundMotion.pseudoStatic(GroundMotion.pga(q[2], d / 1000)));
             }
             if (kh < minKh) continue;
             shaking.put(key, kh);

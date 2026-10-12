@@ -287,6 +287,15 @@ public final class VolcanoCoupler implements Subsystem {
 
     @Override
     public void step(StepContext context) {
+        // this step's deposits are relaxed to repose once, at its end, not after every column
+        if (terrain == null) {
+            advance(context);
+        } else {
+            terrain.world().withRelaxationDeferred(() -> advance(context));
+        }
+    }
+
+    private void advance(StepContext context) {
         watchFissures(context);
         List<ConduitBurst> bursts = chamber.drainBursts();
 
@@ -1302,12 +1311,16 @@ public final class VolcanoCoupler implements Subsystem {
         int unit = units.unit(submarine ? DepositType.HYALOCLASTITE : DepositType.FALL, context.time(), Double.NaN);
         var material = submarine ? MaterialTable.HYALOCLASTITE : MaterialTable.ASH;
         double area = l * l;
-        for (int i = 0; i < cells.size(); i++) {
-            double thickness = volume * weights.get(i) / total / area;
-            if (!(thickness > 0)) continue;
-            world.deposit((int) cells.get(i)[0], (int) cells.get(i)[1], thickness, material, unit,
-                    LayerFlags.LOOSE, WET_TEPHRA_POROSITY, 0);
-        }
+        double sum = total;
+        // one sweep of deposits, relaxed to repose once at its end (not after every column)
+        world.withRelaxationDeferred(() -> {
+            for (int i = 0; i < cells.size(); i++) {
+                double thickness = volume * weights.get(i) / sum / area;
+                if (!(thickness > 0)) continue;
+                world.deposit((int) cells.get(i)[0], (int) cells.get(i)[1], thickness, material, unit,
+                        LayerFlags.LOOSE, WET_TEPHRA_POROSITY, 0);
+            }
+        });
     }
 
     private void setPhreatomagmatic(StepContext context, boolean active, VentSite vent) {

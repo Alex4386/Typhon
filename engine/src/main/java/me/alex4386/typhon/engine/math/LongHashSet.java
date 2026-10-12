@@ -78,7 +78,12 @@ public final class LongHashSet {
             }
         }
         used[gap] = false;
-        if (--size == 0 && slots.length > SHRINK_ABOVE) reset();
+        if (--size == 0 && slots.length > SHRINK_ABOVE) {
+            reset();
+        } else if (slots.length > SHRINK_ABOVE && size * 8 < slots.length) {
+            // a set draining after a burst: keep the table small enough to stay in cache while it empties
+            rehash(Math.max(INITIAL, Integer.highestOneBit(size * 4 - 1) << 1)); // a quarter full: O(1) amortised
+        }
         return true;
     }
 

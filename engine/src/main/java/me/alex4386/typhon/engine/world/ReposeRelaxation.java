@@ -206,9 +206,9 @@ public final class ReposeRelaxation {
 
     /** {@code tan φ} of the loose top of a column (reduced under water); infinite for an empty column. */
     double reposeTan(int x, int z) {
-        int n = world.layerCount(x, z);
-        if (n == 0) return Double.POSITIVE_INFINITY;
-        double tan = dryTan(world.layer(x, z, n - 1).material());
+        short top = world.stacks().topMaterial(x, z);
+        if (top < 0) return Double.POSITIVE_INFINITY;
+        double tan = dryTan(top);
         double water = world.waterZ(x, z);
         double depth = Double.isFinite(water) ? water - world.surfaceZ(x, z) : 0;
         if (depth > 0 && waveBaseM > 0 && depth < waveBaseM) {
@@ -295,13 +295,7 @@ public final class ReposeRelaxation {
 
     /** Thickness of the loose solid layers at the top of a column (m). */
     double looseTop(int x, int z) {
-        double sum = 0;
-        for (int k = world.layerCount(x, z) - 1; k > 0; k--) {
-            LayerView layer = world.layer(x, z, k);
-            if (!layer.loose() || !layer.materialInfo().solid()) break;
-            sum += layer.thickness();
-        }
-        return sum;
+        return world.stacks().looseSolidTopThickness(x, z);
     }
 
     /**

@@ -458,6 +458,31 @@ public final class ColumnStacks {
         return (t.flags[g] & LayerFlags.LOOSE) != 0 && MaterialTable.get(t.material[g]).solid();
     }
 
+    /** Material id of a column's top layer, or -1 for an absent or empty column (no allocation). */
+    public short topMaterial(int x, int z) {
+        Tile t = tile(x, z);
+        if (t == null) return -1;
+        int c = local(x, z);
+        if (t.count(c) == 0) return -1;
+        return t.material[t.start[c + 1] - 1];
+    }
+
+    /**
+     * Thickness (m) of the loose solid layers at the top of a column, above its bottom layer (which is never
+     * loose ground to move); no allocation.
+     */
+    public double looseSolidTopThickness(int x, int z) {
+        Tile t = tile(x, z);
+        if (t == null) return 0;
+        int c = local(x, z);
+        double sum = 0;
+        for (int g = t.start[c + 1] - 1; g > t.start[c]; g--) {
+            if ((t.flags[g] & LayerFlags.LOOSE) == 0 || !MaterialTable.get(t.material[g]).solid()) break;
+            sum += t.top[g] - t.top[g - 1];
+        }
+        return sum;
+    }
+
     /** How far deformation has moved the column up (m); already part of every elevation of the column. */
     public double uplift(int x, int z) {
         Tile t = tile(x, z);

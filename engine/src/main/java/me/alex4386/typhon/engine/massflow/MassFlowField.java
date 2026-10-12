@@ -376,6 +376,15 @@ public abstract class MassFlowField implements Subsystem {
 
     @Override
     public void step(StepContext context) {
+        // this step's deposits are relaxed to repose once, at its end, not after every column
+        if (terrain == null) {
+            advance(context);
+        } else {
+            terrain.world().withRelaxationDeferred(() -> advance(context));
+        }
+    }
+
+    private void advance(StepContext context) {
         parallel = context.parallel();
         double time = context.time();
         currentTime = time;
