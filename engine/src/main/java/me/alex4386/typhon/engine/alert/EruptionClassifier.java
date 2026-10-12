@@ -159,7 +159,7 @@ public final class EruptionClassifier implements Subsystem {
         }
         VentPartition.Result p = coupler.partition();
         double w = 1 - Math.exp(-stepDt / WINDOW_SECONDS);
-        double actual = chamber.eruptionRate() * DRE_DENSITY;
+        double actual = chamber.eruptionRate() * chamber.meltDensityKgPerM3(); // the melt volume's mass
         double scale = p != null && p.magmaMassFlux() > 0 ? actual / p.magmaMassFlux() : 0;
         double lava = p == null ? actual : p.lavaMassFlux() * scale;
         double column = p == null ? 0 : p.columnMassFlux() * scale;

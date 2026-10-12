@@ -333,7 +333,9 @@ public final class VolcanoCoupler implements Subsystem {
         // Each vent erupts into its own setting: a crater under a shallow sea is Surtseyan while a fissure on
         // the deep sea floor (water pressure suppresses the steam explosions) pours pillow lava. The chamber's
         // outflow is split by the vents' shares; each share is partitioned with that vent's water.
-        double magmaMassRate = chamber.eruptionRate() * ExplosivePhase.DRE_DENSITY;
+        // the chamber's outflow is a volume of its melt; the lava it feeds is a volume of lava at the lava's density
+        double magmaMassRate = chamber.eruptionRate() * chamber.meltDensityKgPerM3();
+        double lavaDensity = lava != null ? lava.config().densityKgM3() : chamber.meltDensityKgPerM3();
         double stepSeconds = context.dtSeconds();
         if (water.openFraction() <= 0 && water.surfaceDepthM() > 0) {
             boilCraterLake(main, magmaMassRate * stepSeconds, flow.exitTemperatureC());
@@ -359,7 +361,7 @@ public final class VolcanoCoupler implements Subsystem {
             // the chamber's actual outflow (linearised between conduit solutions) sets the totals; the
             // partition sets the shares
             double scale = p.magmaMassFlux() > 0 ? magmaMassRate * weights[i] / p.magmaMassFlux() : 0;
-            lavaRates[i] = p.lavaMassFlux() * scale / ExplosivePhase.DRE_DENSITY;
+            lavaRates[i] = p.lavaMassFlux() * scale / lavaDensity;
             double col = p.columnMassFlux() * scale;
             columnRates[i] = col;
             partitions[i] = p;
