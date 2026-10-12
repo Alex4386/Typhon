@@ -166,7 +166,11 @@ public final class Parallel {
             synchronized (turn) {
                 Region region = new Region(n, grain, body);
                 current = region; // volatile: publishes the region to the workers
-                for (Thread t : workers) LockSupport.unpark(t);
+                // wake only as many parked workers as there are chunks beyond the caller's own (a small region
+                // costs more to hand out to every worker than it saves; workers still spinning join anyway)
+                int chunks = (n + grain - 1) / grain;
+                int helpers = Math.min(workers.length, chunks - 1);
+                for (int w = 0; w < helpers; w++) LockSupport.unpark(workers[w]);
                 region.work();
                 // Wait for chunks other threads claimed (all of them once the claims ran past n).
                 while (region.done.get() < Math.min(n, region.next.get())) Thread.onSpinWait();
