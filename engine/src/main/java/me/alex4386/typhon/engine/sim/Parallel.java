@@ -75,6 +75,25 @@ public final class Parallel {
      * (use a larger grain for cheap bodies); fewer than {@code 2 · grain} items run inline.
      */
     public void forEach(int n, int grain, IntConsumer body) {
+        forEach(n, grain, body, body.getClass());
+    }
+
+    /**
+     * Work (ns) that justifies one more thread in a region: waking a parked worker and collecting its chunk
+     * costs a few to tens of microseconds, so a thread is only worth it with several times that to do.
+     */
+    static final long NANOS_PER_THREAD = Long.getLong("typhon.parallelNanosPerThread", 50_000);
+
+    /** Measured cost of one item of a region (ns), by the code that issues it (its body's class). */
+    private static final Map<Class<?>, double[]> COST = new ConcurrentHashMap<>();
+
+    /**
+     * Runs a region on as many threads as its work is worth: the cost per item of earlier regions from the same
+     * code ({@code site}), times {@code n}, over {@link #NANOS_PER_THREAD}, at most {@link #threads}. A region
+     * with too little work runs inline on the caller. The results do not depend on the thread count (the class
+     * rule), so this only changes how fast it runs.
+     */
+    private void forEach(int n, int grain, IntConsumer body, Class<?> site) {
         if (n <= 0) return;
         int g = Math.max(1, grain);
         boolean[] inRegion = IN_REGION.get();
@@ -82,12 +101,26 @@ public final class Parallel {
             for (int i = 0; i < n; i++) body.accept(i);
             return;
         }
-        pool.run(n, Math.max(g, n / (threads * 8)), body);
+        double[] cost = COST.computeIfAbsent(site, k -> new double[] {Double.NaN});
+        double perItem = cost[0];
+        int use = threads;
+        if (!Double.isNaN(perItem)) {
+            use = (int) Math.max(1, Math.min(threads, perItem * n / NANOS_PER_THREAD));
+        }
+        long start = System.nanoTime();
+        if (use <= 1) {
+            for (int i = 0; i < n; i++) body.accept(i);
+        } else {
+            pool.run(n, Math.max(g, n / (use * 4)), body, use - 1);
+        }
+        // the work it took (threads × wall time, overheads included), per item; smoothed over regions
+        double measured = (double) (System.nanoTime() - start) * use / n;
+        cost[0] = Double.isNaN(perItem) ? measured : 0.8 * perItem + 0.2 * measured;
     }
 
     /** {@link #forEach(int, int, IntConsumer)} over a list. */
     public <T> void forEach(List<T> items, int grain, Consumer<? super T> body) {
-        forEach(items.size(), grain, i -> body.accept(items.get(i)));
+        forEach(items.size(), grain, i -> body.accept(items.get(i)), body.getClass());
     }
 
     /** {@link #forEach(int, IntConsumer)} over a list. */
@@ -99,7 +132,7 @@ public final class Parallel {
     public <T, R> List<R> map(List<T> items, Function<? super T, ? extends R> f) {
         int n = items.size();
         Object[] out = new Object[n];
-        forEach(n, i -> out[i] = f.apply(items.get(i)));
+        forEach(n, 1, i -> out[i] = f.apply(items.get(i)), f.getClass());
         List<R> result = new ArrayList<>(n);
         for (Object o : out) {
             @SuppressWarnings("unchecked")
@@ -120,7 +153,7 @@ public final class Parallel {
     /** {@link #sum(int, IntToDoubleFunction)} with a minimum grain. */
     public double sum(int n, int grain, IntToDoubleFunction f) {
         double[] terms = new double[Math.max(0, n)];
-        forEach(n, grain, i -> terms[i] = f.applyAsDouble(i));
+        forEach(n, grain, i -> terms[i] = f.applyAsDouble(i), f.getClass());
         double s = 0;
         for (double t : terms) s += t;
         return s;
@@ -162,15 +195,15 @@ public final class Parallel {
             }
         }
 
-        void run(int n, int grain, IntConsumer body) {
+        void run(int n, int grain, IntConsumer body, int helpers) {
             synchronized (turn) {
-                Region region = new Region(n, grain, body);
+                Region region = new Region(n, grain, body, helpers);
                 current = region; // volatile: publishes the region to the workers
                 // wake only as many parked workers as there are chunks beyond the caller's own (a small region
                 // costs more to hand out to every worker than it saves; workers still spinning join anyway)
                 int chunks = (n + grain - 1) / grain;
-                int helpers = Math.min(workers.length, chunks - 1);
-                for (int w = 0; w < helpers; w++) LockSupport.unpark(workers[w]);
+                int wake = Math.min(Math.min(workers.length, helpers), chunks - 1);
+                for (int w = 0; w < wake; w++) LockSupport.unpark(workers[w]);
                 region.work();
                 // Wait for chunks other threads claimed (all of them once the claims ran past n).
                 while (region.done.get() < Math.min(n, region.next.get())) Thread.onSpinWait();
@@ -196,7 +229,7 @@ public final class Parallel {
                     }
                 }
                 seen = region;
-                region.work();
+                if (region.join()) region.work(); // as many workers as the region asked for
             }
         }
     }
@@ -208,11 +241,19 @@ public final class Parallel {
         final AtomicInteger next = new AtomicInteger();
         final AtomicInteger done = new AtomicInteger();
         final AtomicReference<Throwable> failure = new AtomicReference<>();
+        /** Workers (besides the caller) that may take part, and how many joined. */
+        final int helpers;
+        final AtomicInteger joined = new AtomicInteger();
 
-        Region(int n, int grain, IntConsumer body) {
+        Region(int n, int grain, IntConsumer body, int helpers) {
             this.n = n;
             this.grain = grain;
             this.body = body;
+            this.helpers = helpers;
+        }
+
+        boolean join() {
+            return joined.incrementAndGet() <= helpers;
         }
 
         void work() {
