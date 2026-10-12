@@ -96,10 +96,13 @@ public final class SubsurfaceConfig {
     public int reservoirColumns = 4096;
     /** Courant number of the local-inertial surface-water scheme (Bates et al. 2010: 0.7). */
     public double surfaceWaterCfl = 0.7;
-    /** Iterations of the red-black SOR groundwater solve per macro step. */
-    public int groundwaterIterations = 60;
     /**
-     * Shortest groundwater sub-step (physical s). A macro step whose SOR solve does not converge
+     * Numerical: most conjugate-gradient iterations of a groundwater solve (it stops once heads change by less
+     * than a micrometre). A long spin-up step needs a few hundred; one that does not converge is halved.
+     */
+    public int groundwaterIterations = 600;
+    /**
+     * Shortest groundwater sub-step (physical s). A macro step whose solve does not converge
      * within {@link #groundwaterIterations} is halved until it does, down to this: unconverged around
      * strong sinks (boiling) in permeable rock, the flux update overshoots heads below the floor and
      * above the ground (springs from nothing). Young basalt converges at ~2-day steps.
@@ -111,7 +114,7 @@ public final class SubsurfaceConfig {
      * a no-flow boundary (an island or a closed basin).
      */
     public boolean regionalBoundary = false;
-    /** SOR over-relaxation factor. */
+    /** No longer used (groundwater is solved by conjugate gradients); kept so older definitions still load. */
     public double sorOmega = 1.7;
     /** Latent heat of vaporisation of water (J/kg). */
     public double latentHeatVaporJkg = 2.26e6;

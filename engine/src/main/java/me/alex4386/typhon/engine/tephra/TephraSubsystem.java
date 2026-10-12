@@ -72,8 +72,13 @@ public final class TephraSubsystem implements Subsystem {
     private final TephraConfig config;
     private final WindField wind;
     private final List<EngineCommand> pending = new ArrayList<>();
-    /** Parcels a proximal-fallout command is split into (deterministic sampling of the landing field). */
+    /**
+     * Numerical: most parcels a proximal-fallout command is split into (deterministic sampling of the landing
+     * field), and fewest: a small explosion is split only into parcels that each lay at least the ash grid's
+     * deposit resolution over a column, since finer sampling only spreads deposits too thin to register.
+     */
     static final int PROXIMAL_PARCELS = 96;
+    static final int MIN_PROXIMAL_PARCELS = 8;
     private final List<Bomb> bombs = new ArrayList<>();
     /** Last announced ash fall per region: {fallRate, airborneLoad, time}. */
     private final TreeMap<Integer, double[]> ashReports = new TreeMap<>();
@@ -435,12 +440,15 @@ public final class TephraSubsystem implements Subsystem {
         SimRandom random = context.random();
         double exitSpeed = Math.max(config.minExitSpeed, Math.min(config.maxExitSpeed, f.exitSpeed()));
         Vec3d w = wind.at(context.time());
-        double parcelMass = f.massKg() / PROXIMAL_PARCELS;
+        double l2 = metersPerColumn() * metersPerColumn();
+        double resolutionMass = config.depositUpdateThickness * l2 * PROXIMAL_BULK_DENSITY;
+        int parcels = (int) Math.max(MIN_PROXIMAL_PARCELS, Math.min(PROXIMAL_PARCELS, Math.ceil(f.massKg() / resolutionMass)));
+        double parcelMass = f.massKg() / parcels;
         double sigma = config.bombDiameterSigma;
         java.util.HashMap<Long, Double> batch = new java.util.HashMap<>();
         WorldModel world = terrain.world();
         double l = metersPerColumn();
-        for (int n = 0; n < PROXIMAL_PARCELS; n++) {
+        for (int n = 0; n < parcels; n++) {
             double d = clamp(f.medianSizeM() * StrictMath.exp(sigma * random.nextGaussian()), f.minSizeM(), f.maxSizeM());
             double speed = exitSpeed * StrictMath.exp(0.15 * random.nextGaussian()) / Math.sqrt(1 + d);
             double zenith = Math.toRadians(launchZenithDeg(f.zenithMeanDeg(), f.zenithSigmaDeg(), random));

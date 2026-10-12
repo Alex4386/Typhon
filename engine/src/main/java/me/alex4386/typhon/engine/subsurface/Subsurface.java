@@ -970,6 +970,7 @@ public final class Subsurface implements Subsystem, HydrothermalField, me.alex43
         surface.rejected = b.get("rejected").getAsDouble();
         surface.seeded.clear();
         for (JsonElement e : json.getAsJsonArray("seededTiles")) surface.seeded.add(e.getAsLong());
+        surface.seededTileSet = -1; // look at the tiles again
         pendingHeat.clear();
         for (JsonElement e : json.getAsJsonArray("pendingHeat")) {
             JsonArray entry = e.getAsJsonArray();

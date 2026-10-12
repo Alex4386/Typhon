@@ -275,6 +275,7 @@ public final class ColumnStacks {
     /** Rebuilds {@link #index} after the tile set changed. */
     private void reindex() {
         sortedKeys = null;
+        tileSetVersion++;
         if (tiles.isEmpty()) {
             index = new Tile[0];
             indexW = indexH = 0;
@@ -351,6 +352,12 @@ public final class ColumnStacks {
 
     /** {@link #tileKeys()} as of the current tile set; dropped whenever the set changes ({@link #reindex}). */
     private long[] sortedKeys;
+    private long tileSetVersion;
+
+    /** Changes whenever a tile is added, replaced or removed (not when columns are edited; not persisted). */
+    public long tileSetVersion() {
+        return tileSetVersion;
+    }
 
     /**
      * Sum of the edit counters of a tile's columns and of the columns around it (its one-column rim in the eight

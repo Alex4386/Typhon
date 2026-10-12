@@ -314,7 +314,14 @@ final class SurfaceWater {
      * with water above the ground) that touch an unknown column — the edge of the modelled area —
      * become open water at their level; enclosed ones are seeded as lake water.
      */
+    /** The world's tile set when lakes were last seeded (derived; -1: look again). */
+    long seededTileSet = -1;
+
     void seedLakes() {
+        // lakes are seeded on tiles new to the world: nothing to do while its tile set stays the same
+        long tileSet = world.stacks().tileSetVersion();
+        if (tileSet == seededTileSet) return;
+        seededTileSet = tileSet;
         List<Long> fresh = new ArrayList<>();
         for (long key : world.stacks().tileKeys()) {
             if (seeded.add(key)) fresh.add(key);

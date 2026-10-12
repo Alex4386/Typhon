@@ -212,7 +212,13 @@ public final class Geothermal implements Subsystem, HeatSources {
         sampleField();
 
         double dtHours = dt / 3600.0;
-        formFeatures(context, dtHours);
+        // features form as a Poisson process at their rates; drawing it over a longer interval with the summed
+        // time has the same distribution, and a pass over every cell is not worth making every step
+        formingHours += dtHours;
+        if (formingHours * 3600 >= FORMING_INTERVAL_SECONDS) {
+            formFeatures(context, formingHours);
+            formingHours = 0;
+        }
         depositSulfur(context, dtHours);
         emitFumaroleActivity(context);
 
@@ -1014,10 +1020,16 @@ public final class Geothermal implements Subsystem, HeatSources {
 
     // ── Persistence ──
 
+    /** Numerical: features are drawn for every cell at most this often (s); see {@link #formFeatures}. */
+    static final double FORMING_INTERVAL_SECONDS = 30;
+    /** Time (h) since features were last drawn. */
+    private double formingHours;
+
     @Override
     public void saveState(StateWriter writer) {
         JsonObject out = writer.json();
         out.addProperty("hazardClock", hazardClock);
+        out.addProperty("formingHours", formingHours);
         JsonArray list = new JsonArray();
         for (PlacedFeature feature : features.values()) {
             JsonArray entry = new JsonArray();
@@ -1068,6 +1080,7 @@ public final class Geothermal implements Subsystem, HeatSources {
     public void loadState(StateReader reader) {
         JsonObject in = reader.json();
         hazardClock = in.get("hazardClock").getAsDouble();
+        formingHours = in.has("formingHours") ? in.get("formingHours").getAsDouble() : 0;
         features.clear();
         counts.clear();
         for (JsonElement element : in.getAsJsonArray("features")) {

@@ -16,7 +16,7 @@ import java.util.Map;
  * columns on the edge of the modelled area keep their head (the regional water table beyond it). Face transmissivity is the harmonic mean of the two
  * columns' effective conductivities times their mean saturated thickness (as in MODFLOW).
  *
- * <p>Each macro step is solved implicitly (Picard-linearised transmissivity) with red-black SOR
+ * <p>Each macro step is solved implicitly (Picard-linearised transmissivity) with preconditioned conjugate gradients
  * iterated to convergence or a fixed cap; the new heads are then obtained by a conservative update
  * from the face fluxes, so water is conserved exactly. Columns below sea level are fixed-head
  * boundaries; water above the ground surface leaves as springs into the surface-water field.
@@ -26,7 +26,6 @@ final class Groundwater {
     private final SubsurfaceGrid grid;
     private final SubsurfaceConfig config;
     final Parallel parallel;
-    private static final int SOR_BLOCK = 2048;
 
     // Budget of the last step (m³)
     double rechargeVolume;
@@ -90,7 +89,6 @@ final class Groundwater {
     private int[] south = new int[0];
     private int[] west = new int[0];
     private int[] north = new int[0];
-    private boolean[] red = new boolean[0];
 
     /** Flattens the existing columns (key order) and their neighbour links when the grid changed. */
     private void refreshTopology() {
@@ -116,7 +114,6 @@ final class Groundwater {
         south = new int[m];
         west = new int[m];
         north = new int[m];
-        red = new boolean[m];
         java.util.Arrays.fill(west, -1);
         java.util.Arrays.fill(north, -1);
         for (int i = 0; i < m; i++) {
@@ -126,11 +123,32 @@ final class Groundwater {
             Integer so = index.get(SubsurfaceGrid.key(gx, gz + 1));
             east[i] = e == null ? -1 : e;
             south[i] = so == null ? -1 : so;
-            red[i] = ((gx + gz) & 1) == 0;
         }
         for (int i = 0; i < m; i++) {
             if (east[i] >= 0) west[east[i]] = i;
             if (south[i] >= 0) north[south[i]] = i;
+        }
+    }
+
+    /** {@code out = A v} over the free columns (fixed columns read as zero: their heads are in b). */
+    private void applyOperator(double[] v, double[] out, boolean[] fixed, double[] diag, double[] tEast,
+            double[] tSouth, int[] west, int[] north) {
+        int m = v.length;
+        for (int i = 0; i < m; i++) {
+            if (fixed[i]) {
+                out[i] = 0;
+                continue;
+            }
+            double sum = diag[i] * v[i];
+            int e = east[i];
+            int w = west[i];
+            int so = south[i];
+            int no = north[i];
+            if (e >= 0 && !fixed[e]) sum -= tEast[i] * v[e];
+            if (w >= 0 && !fixed[w]) sum -= tEast[w] * v[w];
+            if (so >= 0 && !fixed[so]) sum -= tSouth[i] * v[so];
+            if (no >= 0 && !fixed[no]) sum -= tSouth[no] * v[no];
+            out[i] = sum;
         }
     }
 
@@ -140,7 +158,7 @@ final class Groundwater {
 
     /**
      * One implicit step of {@code dt}, taking {@code boiledShare} of the boiled volumes. With
-     * {@code requireConvergence}, an SOR solve that hits the iteration cap changes nothing and
+     * {@code requireConvergence}, a solve that hits the iteration cap changes nothing and
      * returns false (the caller retries with shorter steps): the conservative flux update of an
      * unconverged solve overshoots around strong sinks.
      */
@@ -157,7 +175,6 @@ final class Groundwater {
         if (m == 0) return true;
         int[] east = this.east;
         int[] south = this.south;
-        boolean[] red = this.red;
         double[] h0 = new double[m];
         double[] storageCoef = new double[m];
         double[] source = new double[m]; // m³/s
@@ -211,45 +228,65 @@ final class Groundwater {
         int[] west = this.west;
         int[] north = this.north;
 
+        // The implicit step is a symmetric positive-definite system, A h = b: A = storage + Σ face T on the
+        // diagonal, −T to each neighbour; fixed-head columns (sea, regional boundary) keep h0 and move to b.
+        // Jacobi-preconditioned conjugate gradients converge in far fewer sweeps than SOR on large steps (√κ vs
+        // κ); every sum is taken in column order, so the result does not depend on the thread count.
         double[] h = h0.clone();
-        double omega = config.sorOmega;
+        double[] b = new double[m];
+        for (int i = 0; i < m; i++) {
+            if (fixed[i]) continue;
+            double rhs = storageCoef[i] * h0[i] + source[i];
+            if (east[i] >= 0 && fixed[east[i]]) rhs += tEast[i] * h0[east[i]];
+            if (west[i] >= 0 && fixed[west[i]]) rhs += tEast[west[i]] * h0[west[i]];
+            if (south[i] >= 0 && fixed[south[i]]) rhs += tSouth[i] * h0[south[i]];
+            if (north[i] >= 0 && fixed[north[i]]) rhs += tSouth[north[i]] * h0[north[i]];
+            b[i] = rhs;
+        }
+        double[] r = new double[m];
+        double[] z = new double[m];
+        double[] p = new double[m];
+        double[] ap = new double[m];
+        applyOperator(h, ap, fixed, diag, tEast, tSouth, west, north);
+        double rz = 0;
+        for (int i = 0; i < m; i++) {
+            if (fixed[i]) continue;
+            r[i] = b[i] - ap[i];
+            z[i] = r[i] / diag[i];
+            p[i] = z[i];
+            rz += r[i] * z[i];
+        }
         int iterations = 0;
         boolean converged = false;
-        // Red-black SOR: within one colour every update reads only the other colour, so blocks of
-        // columns are updated in parallel with results independent of the thread count.
-        int blocks = (m + SOR_BLOCK - 1) / SOR_BLOCK;
-        List<Integer> blockList = new ArrayList<>(blocks);
-        for (int b = 0; b < blocks; b++) blockList.add(b);
-        double[] blockChange = new double[blocks];
         for (; iterations < config.groundwaterIterations; iterations++) {
-            java.util.Arrays.fill(blockChange, 0);
-            for (int colour = 0; colour < 2; colour++) {
-                boolean wantRed = colour == 0;
-                parallel.forEach(blockList, (bi, b) -> {
-                    int end = Math.min(m, (b + 1) * SOR_BLOCK);
-                    double change = blockChange[b];
-                    for (int i = b * SOR_BLOCK; i < end; i++) {
-                        if (fixed[i] || red[i] != wantRed) continue;
-                        double sum = storageCoef[i] * h0[i] + source[i];
-                        if (east[i] >= 0) sum += tEast[i] * h[east[i]];
-                        if (west[i] >= 0) sum += tEast[west[i]] * h[west[i]];
-                        if (south[i] >= 0) sum += tSouth[i] * h[south[i]];
-                        if (north[i] >= 0) sum += tSouth[north[i]] * h[north[i]];
-                        double gs = sum / diag[i];
-                        double next = h[i] + omega * (gs - h[i]);
-                        change = Math.max(change, Math.abs(next - h[i]));
-                        h[i] = next;
-                    }
-                    blockChange[b] = change;
-                });
+            if (rz == 0) { // already solved
+                converged = true;
+                break;
             }
+            applyOperator(p, ap, fixed, diag, tEast, tSouth, west, north);
+            double pap = 0;
+            for (int i = 0; i < m; i++) if (!fixed[i]) pap += p[i] * ap[i];
+            if (!(pap > 0)) break;
+            double alpha = rz / pap;
             double maxChange = 0;
-            for (double c : blockChange) maxChange = Math.max(maxChange, c);
+            double rzNext = 0;
+            for (int i = 0; i < m; i++) {
+                if (fixed[i]) continue;
+                double dh = alpha * p[i];
+                h[i] += dh;
+                maxChange = Math.max(maxChange, Math.abs(dh));
+                r[i] -= alpha * ap[i];
+                z[i] = r[i] / diag[i];
+                rzNext += r[i] * z[i];
+            }
             if (maxChange < 1e-6) { // micrometre head changes: converged
                 iterations++;
                 converged = true;
                 break;
             }
+            double beta = rzNext / rz;
+            rz = rzNext;
+            for (int i = 0; i < m; i++) if (!fixed[i]) p[i] = z[i] + beta * p[i];
         }
         lastIterations = iterations;
         if (requireConvergence && !converged) {

@@ -54,6 +54,9 @@ public final class WorldExpansion implements Subsystem {
     private final List<ExpansionActivity> sources = new ArrayList<>();
     private final List<ExpansionActivity.Listener> listeners = new ArrayList<>();
 
+    /** Active tiles whose whole margin was already simulated (derived; not saved: rebuilt on demand). */
+    private final me.alex4386.typhon.engine.math.LongHashSet settled = new me.alex4386.typhon.engine.math.LongHashSet();
+
     /** Tiles added by expansion (packed tile keys), in order of their keys. */
     private final TreeSet<Long> added = new TreeSet<>();
     /** Number of steps that materialised tiles. */
@@ -133,22 +136,37 @@ public final class WorldExpansion implements Subsystem {
     public void step(StepContext context) {
         if (!config.enabled() || generator == null || added.size() >= config.maxTiles()) return;
         int t = config.tileColumns();
-        TreeSet<Long> activeTiles = new TreeSet<>();
-        ExpansionActivity.Sink sink = (x, z) -> activeTiles.add(key(Math.floorDiv(x, t), Math.floorDiv(z, t)));
+        // active tiles, each once (sources report many columns per tile), then in key order
+        me.alex4386.typhon.engine.math.LongHashSet seen = new me.alex4386.typhon.engine.math.LongHashSet();
+        long[][] found = {new long[64]};
+        int[] count = {0};
+        ExpansionActivity.Sink sink = (x, z) -> {
+            long k = key(Math.floorDiv(x, t), Math.floorDiv(z, t));
+            if (settled.contains(k) || !seen.add(k)) return;
+            if (count[0] == found[0].length) found[0] = java.util.Arrays.copyOf(found[0], count[0] * 2);
+            found[0][count[0]++] = k;
+        };
         for (ExpansionActivity source : sources) source.report(sink);
-        if (activeTiles.isEmpty()) return;
+        if (count[0] == 0) return;
+        long[] activeTiles = java.util.Arrays.copyOf(found[0], count[0]);
+        java.util.Arrays.sort(activeTiles);
 
         int m = config.marginTiles();
         TreeSet<Long> wanted = new TreeSet<>();
         for (long a : activeTiles) {
             int ax = keyX(a);
             int az = keyZ(a);
+            boolean all = true;
             for (int dz = -m; dz <= m; dz++) {
                 for (int dx = -m; dx <= m; dx++) {
                     long k = key(ax + dx, az + dz);
-                    if (!wanted.contains(k) && withinCap(ax + dx, az + dz) && !complete(ax + dx, az + dz)) wanted.add(k);
+                    if (!withinCap(ax + dx, az + dz) || complete(ax + dx, az + dz)) continue;
+                    all = false;
+                    wanted.add(k);
                 }
             }
+            // its whole margin is simulated (or beyond the cap) and ground is never dropped: nothing to do for it again
+            if (all) settled.add(a);
         }
         if (wanted.isEmpty()) return;
 
@@ -269,6 +287,7 @@ public final class WorldExpansion implements Subsystem {
         JsonObject o = in.json();
         added.clear();
         complete.clear();
+        settled.clear();
         for (JsonElement e : o.getAsJsonArray("added")) {
             JsonArray c = e.getAsJsonArray();
             added.add(key(c.get(0).getAsInt(), c.get(1).getAsInt()));
