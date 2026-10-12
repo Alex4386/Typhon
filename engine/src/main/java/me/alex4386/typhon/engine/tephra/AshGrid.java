@@ -369,7 +369,7 @@ final class AshGrid {
      * step's fall lands first; the touched columns relax to their angle of repose together afterwards.
      */
     void applyDeposits(WorldModel world, double bulkDensity, double updateThicknessM, int unit,
-            java.util.function.BiPredicate<Integer, Integer> molten) {
+            TephraSubsystem.ColumnTest molten) {
         // what each cell has gained since it was last laid down: the shape the new layer follows across cells
         java.util.function.IntToDoubleFunction pending = c -> Math.max(0, thickness(c, bulkDensity) - applied[c]);
         int n = cellColumns;

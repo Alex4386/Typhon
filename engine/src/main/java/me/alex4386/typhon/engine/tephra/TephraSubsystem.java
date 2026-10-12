@@ -891,13 +891,19 @@ public final class TephraSubsystem implements Subsystem {
                 units.unit(DepositType.FALL, context.time(), Double.NaN), molten);
     }
 
-    private java.util.function.BiPredicate<Integer, Integer> molten = (x, z) -> false;
+    /** Whether a column is covered by molten lava (primitive: asked for every column ash lands on). */
+    @FunctionalInterface
+    public interface ColumnTest {
+        boolean test(int x, int z);
+    }
+
+    private ColumnTest molten = (x, z) -> false;
 
     /**
      * Tells the ash fall which columns are covered by molten lava (e.g. {@code (x, z) ->
      * lava.thickness(x, z) > 0}): ash landing there joins the flow instead of forming a layer under it.
      */
-    public void setMoltenSurface(java.util.function.BiPredicate<Integer, Integer> molten) {
+    public void setMoltenSurface(ColumnTest molten) {
         this.molten = molten;
     }
 
@@ -925,10 +931,13 @@ public final class TephraSubsystem implements Subsystem {
     private void emitAshFall(StepContext context) {
         int r = Math.max(1, config.ashEventRegionCells);
         int regions = (grid.cells + r - 1) / r;
-        for (int rj = 0; rj < regions; rj++) {
+        // each region's sums, in parallel (every region writes its own slots); the events then go out in order
+        double[] rates = new double[regions * regions];
+        double[] loads = new double[regions * regions];
+        int[] counts = new int[regions * regions];
+        context.parallel().forEach(regions, rj -> {
             for (int ri = 0; ri < regions; ri++) {
                 int region = rj * regions + ri;
-                double[] last = ashReports.get(region);
                 double rate = 0, load = 0;
                 int count = 0;
                 for (int j = rj * r; j < Math.min(grid.cells, (rj + 1) * r); j++) {
@@ -939,6 +948,17 @@ public final class TephraSubsystem implements Subsystem {
                         count++;
                     }
                 }
+                rates[region] = rate;
+                loads[region] = load;
+                counts[region] = count;
+            }
+        });
+        for (int rj = 0; rj < regions; rj++) {
+            for (int ri = 0; ri < regions; ri++) {
+                int region = rj * regions + ri;
+                double[] last = ashReports.get(region);
+                double rate = rates[region], load = loads[region];
+                int count = counts[region];
                 double area = count * grid.cellArea();
                 double fallRate = rate / area;
                 double airborneLoad = load / area;

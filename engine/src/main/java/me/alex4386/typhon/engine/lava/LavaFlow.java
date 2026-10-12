@@ -1138,14 +1138,27 @@ public final class LavaFlow implements Subsystem {
      * through the crust, {@code k (T − T_s) / H}, equals the surface loss (bisection; the loss rises with T_s).
      */
     private double crustSurfaceC(double meltC, double crustM, double k, double ambientC) {
+        // Newton on f(T_s) = loss(T_s) − k (T − T_s)/H (increasing in T_s), kept inside the bracket [ambient, melt]
+        // by bisection where a step would leave it; to a millikelvin
         double lo = ambientC;
         double hi = meltC;
-        for (int n = 0; n < 32; n++) {
-            double mid = 0.5 * (lo + hi);
-            if (surfaceLoss(mid, ambientC) > k * (meltC - mid) / crustM) hi = mid;
-            else lo = mid;
+        double conductance = k / crustM;
+        double ts = ambientC + (meltC - ambientC) * conductance / (conductance + 10); // a first guess
+        for (int n = 0; n < 40; n++) {
+            double f = surfaceLoss(ts, ambientC) - conductance * (meltC - ts);
+            if (f > 0) hi = ts;
+            else lo = ts;
+            double tsK = ts + KELVIN;
+            // the loss's slope: radiation 4εσT³ plus about 4/3 of the free-convection coefficient
+            double dT = Math.max(1e-9, ts - ambientC);
+            double hConv = 0.14 * AIR_K * Math.cbrt(G * dT / (0.5 * (tsK + ambientC + KELVIN) * AIR_NU * AIR_ALPHA));
+            double slope = 4 * config.emissivity() * SIGMA * tsK * tsK * tsK + 4.0 / 3.0 * hConv + conductance;
+            double next = ts - f / slope;
+            if (!(next > lo && next < hi)) next = 0.5 * (lo + hi);
+            if (Math.abs(next - ts) < 1e-3 || hi - lo < 1e-3) return next;
+            ts = next;
         }
-        return 0.5 * (lo + hi);
+        return ts;
     }
 
     /**
