@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.TreeMap;
 import me.alex4386.typhon.engine.command.CommandBus;
 import me.alex4386.typhon.engine.command.EngineCommand;
+import me.alex4386.typhon.engine.math.LongDoubleSumMap;
 import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.random.SimRandom;
 import me.alex4386.typhon.engine.sim.StepContext;
@@ -445,7 +446,7 @@ public final class TephraSubsystem implements Subsystem {
         int parcels = (int) Math.max(MIN_PROXIMAL_PARCELS, Math.min(PROXIMAL_PARCELS, Math.ceil(f.massKg() / resolutionMass)));
         double parcelMass = f.massKg() / parcels;
         double sigma = config.bombDiameterSigma;
-        java.util.HashMap<Long, Double> batch = new java.util.HashMap<>();
+        LongDoubleSumMap batch = new LongDoubleSumMap();
         WorldModel world = terrain.world();
         double l = metersPerColumn();
         for (int n = 0; n < parcels; n++) {
@@ -486,11 +487,7 @@ public final class TephraSubsystem implements Subsystem {
         // one deposit per column, in a fixed order: the parcels' thicknesses summed
         if (batch.isEmpty()) return;
         int unit = units.unit(DepositType.FALL, context.time(), Double.NaN);
-        long[] keys = new long[batch.size()];
-        int k = 0;
-        for (long key : batch.keySet()) keys[k++] = key;
-        java.util.Arrays.sort(keys); // a fixed order
-        for (long key : keys) {
+        for (long key : batch.sortedKeys()) { // a fixed order
             world.deposit((int) (key >> 32), (int) key, batch.get(key), MaterialTable.ASH, unit, LayerFlags.LOOSE,
                     1 - PROXIMAL_BULK_DENSITY / ExplosivePhase.DRE_DENSITY, 0);
         }
@@ -508,7 +505,8 @@ public final class TephraSubsystem implements Subsystem {
      * column by column and relaxes to its angle of repose. The ash grid keeps the record (for maps and
      * world growth) without applying it again. Off the simulated ground the grid holds it for the backfill.
      */
-    private void depositParcel(StepContext context, double x, double z, double parcelMass, Map<Long, Double> batch) {
+    private void depositParcel(StepContext context, double x, double z, double parcelMass,
+            LongDoubleSumMap batch) {
         WorldModel world = terrain.world();
         double l = world.spec().metersPerColumn();
         int cx = (int) Math.floor(x / l);
@@ -534,7 +532,7 @@ public final class TephraSubsystem implements Subsystem {
                     pz = cz;
                 }
                 double thickness = realMass * w / weightSum / (PROXIMAL_BULK_DENSITY * l * l);
-                batch.merge(((long) px << 32) | (pz & 0xffffffffL), thickness, Double::sum);
+                batch.add(((long) px << 32) | (pz & 0xffffffffL), thickness);
             }
         }
         grid.addAppliedDeposit(cell, parcelMass, config.depositBulkDensity);
@@ -882,7 +880,8 @@ public final class TephraSubsystem implements Subsystem {
         if (grid == null) return;
         grid.parallel = context.parallel();
 
-        if (grid.airborneTotal() > 0) {
+        double airborne = grid.airborneTotal();
+        if (airborne > 0) {
             grid.transport(dt, wind.at(context.time()), config.diffusivity);
             grid.settle(dt, config.settlingVelocities, grid.plumeHeight);
             if (phases.isEmpty() && grid.airborneTotal() < config.minAirborneMass) grid.discardAirborne();

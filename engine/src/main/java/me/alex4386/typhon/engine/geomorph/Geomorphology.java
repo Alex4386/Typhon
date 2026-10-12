@@ -614,10 +614,7 @@ public final class Geomorphology implements Subsystem {
             int nx = x + DX[d];
             int nz = z + DZ[d];
             dist[d] = l * (d < 4 ? 1 : SQRT2);
-            if (!world.isKnown(nx, nz)) {
-                drop[d] = Double.NaN;
-                continue;
-            }
+            // an unknown column's surface is NaN: no drop, and no comparison with it holds
             drop[d] = s - world.surfaceZ(nx, nz);
             double t = drop[d] / dist[d];
             if (t > bestTan) {
@@ -641,10 +638,8 @@ public final class Geomorphology implements Subsystem {
             int nd = -1;
             double nt = config.minSlope;
             for (int d = 0; d < 8; d++) {
-                int nx = cx + DX[d];
-                int nz = cz + DZ[d];
-                if (!world.isKnown(nx, nz)) continue;
-                double t = (cs - world.surfaceZ(nx, nz)) / dist[d];
+                // NaN (an unknown column) never beats nt
+                double t = (cs - world.surfaceZ(cx + DX[d], cz + DZ[d])) / dist[d];
                 if (t > nt) {
                     nt = t;
                     nd = d;

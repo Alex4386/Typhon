@@ -220,19 +220,19 @@ public final class ReposeRelaxation {
 
     /** {@code tan φ} in air by material id, filled on first use (the same value the formula gives every time). */
     private double[] dryTan = new double[0];
+    /** Which {@link #dryTan} entries are filled (a material without an angle of repose caches NaN). */
+    private boolean[] dryTanKnown = new boolean[0];
 
     private double dryTan(short material) {
         if (material >= dryTan.length) {
-            int from = dryTan.length;
             dryTan = java.util.Arrays.copyOf(dryTan, material + 1);
-            java.util.Arrays.fill(dryTan, from, dryTan.length, Double.NaN);
+            dryTanKnown = java.util.Arrays.copyOf(dryTanKnown, material + 1);
         }
-        double tan = dryTan[material];
-        if (Double.isNaN(tan)) {
-            tan = Math.tan(Math.toRadians(MaterialTable.reposeAngleDeg(MaterialTable.get(material))));
-            dryTan[material] = tan;
+        if (!dryTanKnown[material]) {
+            dryTan[material] = Math.tan(Math.toRadians(MaterialTable.reposeAngleDeg(MaterialTable.get(material))));
+            dryTanKnown[material] = true;
         }
-        return tan;
+        return dryTan[material];
     }
 
     private boolean relax(int x, int z) {

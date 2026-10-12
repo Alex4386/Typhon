@@ -1309,8 +1309,13 @@ public final class VolcanoCoupler implements Subsystem {
         if (ring != null && pile.volume * ring.peak / (l * l) >= TUFF_LAY_THICKNESS_M) layTuff(world, vent, pile);
     }
 
-    /** Numerical: tuff accumulated around a vent is laid down in steps of this thickness at its centre (m). */
-    static final double TUFF_LAY_THICKNESS_M = 0.001;
+    /**
+     * Numerical: tuff accumulated around a vent is laid down in steps of this thickness at its centre (m). A few
+     * centimetres are far below what changes the vent's water depth or seals it (metres), and every lay covers
+     * the whole apron (~10³ columns) and relaxes it to repose, so finer steps only cost time (at 1 mm a vigorous
+     * Surtseyan vent laid its apron every few steps).
+     */
+    static final double TUFF_LAY_THICKNESS_M = 0.05;
 
     /** Wet fallout accumulated around a vent, not yet laid down (saved). */
     private static final class TuffPile {

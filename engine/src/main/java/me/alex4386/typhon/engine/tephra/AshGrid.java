@@ -145,15 +145,14 @@ final class AshGrid {
     }
 
     double airborneTotal() {
-        double total = 0;
-        for (double[] layer : airborne) {
-            total += parallel.sum(cells, j -> {
-                double s = 0;
+        // one pass over the rows for all grain classes (one parallel region, not one per class)
+        return parallel.sum(cells, j -> {
+            double s = 0;
+            for (double[] layer : airborne) {
                 for (int cell = j * cells, end = cell + cells; cell < end; cell++) s += layer[cell];
-                return s;
-            });
-        }
-        return total;
+            }
+            return s;
+        });
     }
 
     double airborneAt(int cell) {
@@ -374,10 +373,14 @@ final class AshGrid {
         java.util.function.IntToDoubleFunction pending = c -> Math.max(0, thickness(c, bulkDensity) - applied[c]);
         int n = cellColumns;
         double[] w = new double[n * n];
+        // a cheap screen first (most cells gained nothing worth laying); the exact thickness decides
+        double perMass = 1 / (bulkDensity * cellArea());
+        double screen = updateThicknessM * (1 - 1e-9);
         world.withRelaxationDeferred(() -> {
             for (int j = 0; j < cells; j++) {
                 for (int i = 0; i < cells; i++) {
                     int cell = index(i, j);
+                    if (deposit[cell] * perMass - applied[cell] < screen) continue;
                     double t1 = thickness(cell, bulkDensity);
                     double dt = t1 - applied[cell];
                     if (dt < updateThicknessM) continue;
@@ -427,15 +430,25 @@ final class AshGrid {
     }
 
     /**
-     * Reports the cells whose deposit is at least {@code minThicknessM} thick: one sample column every
+     * Cells already reported by {@link #reportDeposits} (transient: a loaded grid reports them once more). A
+     * deposit never thins, and world expansion grows the ground around an area the step it first hears of it,
+     * so reporting a cell again every period only repeats what it already acted on.
+     */
+    private boolean[] reported;
+
+    /**
+     * Reports the cells whose deposit has newly reached {@code minThicknessM}: one sample column every
      * {@code stride} columns across each such cell.
      */
     void reportDeposits(double minThicknessM, double bulkDensity, int stride,
             me.alex4386.typhon.engine.expansion.ExpansionActivity.Sink sink) {
+        if (reported == null) reported = new boolean[cells * cells];
+        double minMass = minThicknessM * bulkDensity * cellArea(); // the threshold as a cell mass: no division per cell
         for (int j = 0; j < cells; j++) {
             for (int i = 0; i < cells; i++) {
                 int cell = index(i, j);
-                if (!(deposit[cell] > 0) || thickness(cell, bulkDensity) < minThicknessM) continue;
+                if (reported[cell] || !(deposit[cell] > 0) || deposit[cell] < minMass) continue;
+                reported[cell] = true;
                 int x0 = originX + i * cellColumns;
                 int z0 = originZ + j * cellColumns;
                 for (int z = z0; z < z0 + cellColumns; z += stride) {
