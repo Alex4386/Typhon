@@ -121,6 +121,30 @@ public final class ConduitModel {
         return new Flow(in, c).integrate(massFluxPerArea, null);
     }
 
+    /** Whether some flux would reach the vent if the conduit's root held whatever the chamber's pressure. */
+    public static boolean flowsIgnoringWalls(ConduitInput in, ConduitConfig c) {
+        Flow flow = new Flow(in, c);
+        flow.enforceWalls = false;
+        int points = (int) Math.ceil(Math.log10(G_MAX / G_MIN) * SCAN_PER_DECADE) + 1;
+        for (int i = 0; i < points; i++) {
+            if (flow.integrate(G_MIN * Math.pow(10, (double) i / SCAN_PER_DECADE), null)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Stability of the conduit walls along the coherent (unfragmented) magma for mass flux per area {@code g},
+     * the inlet's not enforced: {lowest margin of the magma pressure over the wall's failure pressure (Pa), its depth below
+     * the vent (m)}; {@code null} if the flux does not reach the vent (for tests and diagnostics).
+     */
+    public static double[] wallMargin(ConduitInput in, ConduitConfig c, double massFluxPerArea) {
+        Flow flow = new Flow(in, c);
+        flow.enforceWalls = false;
+        Exit exit = new Exit();
+        if (!flow.integrate(massFluxPerArea, exit)) return null;
+        return new double[] {exit.wallMargin, exit.wallMarginDepth};
+    }
+
     /** The flow at a given mass flux per area, which must be admissible (for tests and diagnostics). */
     public static ConduitSolution evaluate(ConduitInput in, ConduitConfig c, double massFluxPerArea) {
         return new Flow(in, c).solution(massFluxPerArea);
@@ -143,6 +167,9 @@ public final class ConduitModel {
         double dissolved;
         double outgassed;
         double totalGas;
+        /** Lowest margin of the coherent magma's pressure over the wall's failure pressure (Pa), and its depth. */
+        double wallMargin = Double.POSITIVE_INFINITY;
+        double wallMarginDepth = Double.NaN;
     }
 
     /** Crystal and volatile state of the rising magma, as mass fractions of the flow. */
@@ -192,6 +219,13 @@ public final class ConduitModel {
         /** Density of the melt entering the conduit (its composition and dissolved water). */
         final double inletMelt;
         final double[] z;
+        /** Whether the wall rock's stress is known (the input carries the lithostatic stress at the inlet). */
+        final boolean checkWalls;
+        /** Mohr–Coulomb terms of the wall rock: 1 − sin φ, and C cos φ (Pa). */
+        final double wallStressFactor;
+        final double wallCohesionTerm;
+        /** Whether a chamber pressure that collapses the conduit's root is inadmissible (off for diagnostics). */
+        boolean enforceWalls = true;
 
         // per-trial constants
         double gFlux;
@@ -229,12 +263,45 @@ public final class ConduitModel {
             this.gasCo2 = co2Exsolved(in.chamberPressurePa());
             this.chamberViscosity = Math.pow(10, MeltViscosity.log10(in.silicaWt(), c0, in.temperatureC(), phiChamber));
             this.inletMelt = MeltDensity.meltKgPerM3(in.silicaWt(), c0);
+            this.checkWalls = Double.isFinite(in.lithostaticPressurePa());
+            double friction = Math.toRadians(c.wallRockFrictionDeg());
+            this.wallStressFactor = 1 - Math.sin(friction);
+            this.wallCohesionTerm = c.wallRockCohesionPa() * Math.cos(friction);
             int steps = c.gridSteps();
             this.z = new double[steps + 1];
             for (int i = 0; i <= steps; i++) {
                 double s = 1 - (double) i / steps;
                 z[i] = length * (1 - s * s); // refined towards the vent, where gradients steepen
             }
+        }
+
+        /**
+         * Magma pressure (Pa) below which the conduit wall fails at {@code depth} metres below the vent. Around a
+         * cylindrical hole in rock under an isotropic stress σ (lithostatic: from the vent's ambient pressure to
+         * the inlet's), magma at pressure p leaves a radial stress p and a hoop stress 2σ − p at the wall; with
+         * p below σ the hoop stress is the largest, and the Mohr–Coulomb criterion
+         * σ₁ = σ₃ (1 + sin φ)/(1 − sin φ) + 2C cos φ/(1 − sin φ) fails it once
+         * p ≤ σ (1 − sin φ) − C cos φ (Aravena et al. 2017, JVGR 339:52-62). The wall rock is taken dry.
+         */
+        double wallFailurePressure(double depth) {
+            double sigma = ambient + (in.lithostaticPressurePa() - ambient) * Math.max(0, depth) / length;
+            return sigma * wallStressFactor - wallCohesionTerm;
+        }
+
+        /**
+         * Records the wall's margin at {@code depth} under coherent magma at pressure {@code p}. Only the inlet
+         * decides admissibility: walls failing there, at the chamber's own pressure, collapse into the conduit's
+         * root whatever the flow and plug it. Higher up a failing wall is eroded by the flow (wall-rock lithics
+         * in the deposit; the conduit's widening is not modelled), and fragmented flow is not examined at all.
+         */
+        boolean wallHolds(Exit exit, double depth, double p, boolean inlet) {
+            if (!checkWalls) return true;
+            double margin = p - wallFailurePressure(depth);
+            if (exit != null && margin < exit.wallMargin) {
+                exit.wallMargin = margin;
+                exit.wallMarginDepth = depth;
+            }
+            return margin >= 0 || !inlet || !enforceWalls;
         }
 
         /** Water exsolved at equilibrium at pressure {@code p}, as a mass fraction of the flow. */
@@ -399,6 +466,7 @@ public final class ConduitModel {
 
             double dpdz = dpdz(p, s, 0, false);
             if (choke) return false;
+            if (!wallHolds(exit, length, p, true)) return false;
             double uPrev = u;
             lastExpansion = 0;
             int steps = z.length - 1;
@@ -429,6 +497,7 @@ public final class ConduitModel {
                             State t = s;
                             s = next;
                             next = t;
+                            if (!fragmented) wallHolds(exit, length - zz, p, false);
                         }
                     }
                     // Within a conduit radius of the vent the foam is open to the atmosphere and vents

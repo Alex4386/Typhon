@@ -20,6 +20,13 @@ long as they do not change outcomes.
   when the pressure pushes out its solidified cap (`2·C·δ/r`, Griffith cohesion), and an eruption only
   starts or lasts while its flow keeps the conduit from freezing.
 - A stop by hand drained the chamber to the end threshold; it now plugs the conduit and keeps the pressure.
+- The erupting chamber's outflow was linearised towards the overpressure that just holds a bubble-free column
+  up, which a gas-charged column flows far below: the linearisation pinned the pressure and ended eruptions
+  at ~97 m³/s (Surtsey). Its secant slope also mixed in the moving lithostatic reference. The slope now comes
+  from absolute pressures or a probe of the conduit, a flow insensitive to pressure leaves at its own rate,
+  and a drained chamber's eruption ends when the rock around the conduit's root fails (Mohr–Coulomb, cause
+  `COLLAPSE`; the rubble plugs the conduit). Wall failure higher up (erosion, conduit widening) is only
+  diagnosed (`ConduitModel.wallMargin`), not yet modelled.
 - `conduitOpenness() < 0.5` picked the fast or slow conduit branch: a failure fragments the magma (fast branch)
   when its sudden decompression exceeds the foam's strength over its porosity (Spieler et al. 2004).
 - One plume per volcano, put on the strongest vent: every vent now feeds its own column and plume.

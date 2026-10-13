@@ -17,6 +17,8 @@ package me.alex4386.typhon.engine.magma.conduit;
  * @param waterTableDepthM depth of the water table below the vent (0 when the wall rock is
  *     saturated to the vent, as under the sea); pore pressure in the wall is ambient above it and
  *     hydrostatic below, which sets how much gas the conduit can lose laterally
+ * @param lithostaticPressurePa lithostatic stress at the conduit inlet (Pa): with the vent's ambient pressure it
+ *     sets the stress in the wall rock along the conduit ({@code NaN}: the walls are not examined)
  */
 public record ConduitInput(
         double chamberPressurePa,
@@ -29,14 +31,29 @@ public record ConduitInput(
         double radiusM,
         double lengthM,
         double ventAmbientPressurePa,
-        double waterTableDepthM) {
+        double waterTableDepthM,
+        double lithostaticPressurePa) {
 
     public static final double ATMOSPHERE_PA = 101_325;
+
+    /** Without the lithostatic stress: the conduit walls are not examined. */
+    public ConduitInput(double chamberPressurePa, double temperatureC, double silicaWt, double dissolvedWaterWt,
+            double co2Wt, double exsolvedGasMassFraction, double crystalFraction, double radiusM, double lengthM,
+            double ventAmbientPressurePa, double waterTableDepthM) {
+        this(chamberPressurePa, temperatureC, silicaWt, dissolvedWaterWt, co2Wt, exsolvedGasMassFraction,
+                crystalFraction, radiusM, lengthM, ventAmbientPressurePa, waterTableDepthM, Double.NaN);
+    }
 
     public ConduitInput {
         if (!(chamberPressurePa > 0)) throw new IllegalArgumentException("chamber pressure must be positive");
         if (!(radiusM > 0) || !(lengthM > 0)) throw new IllegalArgumentException("conduit geometry must be positive");
         if (!(ventAmbientPressurePa > 0)) throw new IllegalArgumentException("ambient pressure must be positive");
+    }
+
+    /** The same drivers at another chamber pressure. */
+    public ConduitInput withChamberPressurePa(double pressurePa) {
+        return new ConduitInput(pressurePa, temperatureC, silicaWt, dissolvedWaterWt, co2Wt, exsolvedGasMassFraction,
+                crystalFraction, radiusM, lengthM, ventAmbientPressurePa, waterTableDepthM, lithostaticPressurePa);
     }
 
     /** True when the two inputs differ by less than {@code tolerance} (relative) in every driver. */
@@ -50,7 +67,9 @@ public record ConduitInput(
                 && Math.abs(exsolvedGasMassFraction - o.exsolvedGasMassFraction) < tolerance * 1e-2
                 && Math.abs(crystalFraction - o.crystalFraction) < tolerance * 0.1
                 && radiusM == o.radiusM && lengthM == o.lengthM
-                && rel(ventAmbientPressurePa, o.ventAmbientPressurePa) < tolerance;
+                && rel(ventAmbientPressurePa, o.ventAmbientPressurePa) < tolerance
+                && (Double.isNaN(lithostaticPressurePa) ? Double.isNaN(o.lithostaticPressurePa)
+                        : rel(lithostaticPressurePa, o.lithostaticPressurePa) < tolerance * 0.1);
     }
 
     /**
@@ -61,7 +80,7 @@ public record ConduitInput(
         return new ConduitInput(round(chamberPressurePa, 2.5e5), round(temperatureC, 2), round(silicaWt, 0.25),
                 round(dissolvedWaterWt, 0.05), round(co2Wt, 0.02), round(exsolvedGasMassFraction, 1e-4),
                 round(crystalFraction, 0.01), radiusM, lengthM, Math.max(1, round(ventAmbientPressurePa, 1e3)),
-                round(waterTableDepthM, 10));
+                round(waterTableDepthM, 10), round(lithostaticPressurePa, 2.5e5));
     }
 
     private static double round(double v, double step) {

@@ -77,6 +77,33 @@ class ConduitModelTest {
     }
 
     @Test
+    void gasChargedMagmaRisesBelowLithostaticUntilTheConduitsRootCollapses() {
+        // a water-rich dacite foam keeps rising with the chamber below the lithostatic stress ...
+        double depth = 5000;
+        double lithostatic = CRUST * 9.81 * depth;
+        java.util.function.DoubleFunction<ConduitInput> at = op -> new ConduitInput(lithostatic + op * 1e6, 900, 65,
+                4.5, 0, 0, 0, 10, depth, ConduitInput.ATMOSPHERE_PA, 300, lithostatic);
+        ConduitSolution under = ConduitModel.solve(at.apply(-20), C, Branch.FASTEST);
+        assertNotNull(under, "a gas-charged column is lighter than the crust");
+        assertTrue(under.dreRateM3PerS() > 0);
+
+        // ... until the rock around the conduit's root fails (Mohr–Coulomb around a cylindrical hole):
+        // p ≤ σ (1 − sin φ) − C cos φ
+        double phi = Math.toRadians(C.wallRockFrictionDeg());
+        double failure = lithostatic * (1 - Math.sin(phi)) - C.wallRockCohesionPa() * Math.cos(phi);
+        double limitMPa = (failure - lithostatic) / 1e6;
+        ConduitInput collapsed = at.apply(limitMPa - 1);
+        assertTrue(ConduitModel.admissibleFluxes(collapsed, C).isEmpty(), "the walls collapse into the conduit");
+        assertTrue(ConduitModel.flowsIgnoringWalls(collapsed, C), "while magma could still rise through it");
+        assertFalse(ConduitModel.admissibleFluxes(at.apply(limitMPa + 1), C).isEmpty(), "just above, it stands");
+
+        // without the lithostatic stress the walls are not examined
+        ConduitInput unchecked = new ConduitInput(collapsed.chamberPressurePa(), 900, 65, 4.5, 0, 0, 0, 10, depth,
+                ConduitInput.ATMOSPHERE_PA, 300);
+        assertFalse(ConduitModel.admissibleFluxes(unchecked, C).isEmpty());
+    }
+
+    @Test
     void co2AddsGasThatExsolvesDeep() {
         ConduitSolution dry = ConduitModel.solve(input(5, 1500, 1.5, 1165, 50, 0.4, 0, 0), C, Branch.FASTEST);
         ConduitSolution co2 = ConduitModel.solve(input(5, 1500, 1.5, 1165, 50, 0.4, 0.3, 0), C, Branch.FASTEST);

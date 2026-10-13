@@ -106,7 +106,7 @@ class EruptionDynamicsTest {
     }
 
     @Test
-    void sealedWetChamberFailsExplosivelyThenWanesToItsSupply() {
+    void sealedWetChamberFailsExplosivelyUntilItsConduitCollapses() {
         MagmaChamber chamber = new MagmaChamber(dacite());
         Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
         chamber.requestFlankEruption(); // the first eruption: a dike breaches the surface (there is no conduit yet)
@@ -117,14 +117,21 @@ class EruptionDynamicsTest {
         assertTrue(onset.fragmentationDepthM() > 100, "deep in the conduit: " + onset.fragmentationDepthM());
         assertTrue(onset.dreRateM3PerS() > 300, "a Plinian-scale discharge: " + onset.dreRateM3PerS());
 
-        // No pressure threshold ends it: the discharge drains the chamber until outflow balances the supply,
-        // which (well above the conduit's freezing rate) keeps it open, as Mount St Helens' after 1980.
+        // No pressure threshold ends it: the choked foam's discharge hardly depends on the chamber's pressure, and
+        // the gas-charged column keeps rising far below the lithostatic stress, until the rock around the
+        // conduit's root can no longer stand that underpressure and collapses into it (Mohr–Coulomb).
         List<EruptionStarted> starts = of(run.events(), EruptionStarted.class);
         assertEquals(1, starts.size());
-        assertTrue(chamber.erupting(), "an open system keeps erupting");
-        assertEquals(dacite().supplyRate(), chamber.eruptionRate(), 0.05 * dacite().supplyRate(), "outflow = supply");
-        assertTrue(chamber.overpressureMPa() < starts.get(0).overpressureMPa() - 10,
-                "drained far below its onset pressure: " + chamber.overpressureMPa());
+        List<EruptionEnded> ends = of(run.events(), EruptionEnded.class);
+        assertEquals(1, ends.size());
+        assertEquals(MagmaEvents.Cause.COLLAPSE, ends.get(0).cause());
+        assertTrue(ends.get(0).eruptedVolume() > 1e7, "a Plinian volume: " + ends.get(0).eruptedVolume());
+        assertFalse(chamber.erupting());
+        assertEquals(0, chamber.conduitOpenness(), "the rubble plugs the conduit: the next eruption needs a dike");
+        double lithostatic = chamber.lithostaticPressureMPa();
+        double strength = lithostatic * Math.sin(Math.toRadians(35)) + 2 * Math.cos(Math.toRadians(35));
+        assertTrue(chamber.overpressureMPa() < -0.5 * strength,
+                "drained far below the lithostatic stress, towards the walls' strength: " + chamber.overpressureMPa());
         assertTrue(chamber.waterWt() > 4, "the chamber stays water-rich");
     }
 
@@ -216,8 +223,10 @@ class EruptionDynamicsTest {
 
     @Test
     void conduitSolidifiesAfterAnEruptionAndThenOnlyADikeCanReopen() {
-        // a basaltic feeder 1.5 m in radius solidifies in weeks (t = a²/κ·(1 + L/cΔT))
-        MagmaChamberConfig config = dacite().toBuilder().supplyRate(0).conduitRadius(1.5).build();
+        // a basaltic feeder 1.5 m in radius solidifies in weeks (t = a²/κ·(1 + L/cΔT)); its walls are strong enough
+        // not to collapse as the chamber drains, so the eruption wanes until the conduit can freeze
+        MagmaChamberConfig config = dacite().toBuilder().supplyRate(0).conduitRadius(1.5)
+                .conduit(ConduitConfig.DEFAULT.withWallRock(5e8, 35)).build();
         MagmaChamber chamber = new MagmaChamber(config);
         Engine engine = Engine.builder(0).adaptive(3600).add(chamber).build();
         chamber.requestFlankEruption();

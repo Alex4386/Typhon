@@ -19,7 +19,13 @@ public final class MagmaEvents {
          * Ended because every outlet closed (feeders froze or vents were sealed) while the chamber was
          * still pressurised: the pressure is kept and the conduit is left sealed.
          */
-        SEALED
+        SEALED,
+        /**
+         * Ended because the conduit's walls collapsed into it: the magma's pressure fell so far below the
+         * rock's lithostatic stress that the rock mass around the conduit failed, and the rubble plugged it (a
+         * new dike is needed).
+         */
+        COLLAPSE
     }
 
     public record EruptionStarted(double time, String volcanoId, double overpressureMPa, Cause cause)

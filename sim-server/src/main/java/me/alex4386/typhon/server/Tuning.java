@@ -121,6 +121,8 @@ final class Tuning {
         META.put("volcano:magma.conduit.exsolutionTimescale", m("Gas exsolution time", "s", 1e-3, 1e5, true, null));
         META.put("volcano:magma.conduit.wallSlipStressPa", m("Wall slip stress", "Pa", 1e3, 1e9, true, "Shear stress at which a crystal-rich plug slips along the walls."));
         META.put("volcano:magma.conduit.wallFrictionCoefficient", m("Wall friction", null, 0.0, 1.0, false, null));
+        META.put("volcano:magma.conduit.wallRockCohesionPa", m("Wall rock cohesion", "Pa", 0.0, 1e8, false, "Rock-mass cohesion around the conduit: magma pressure far below the lithostatic stress collapses the walls and plugs the conduit."));
+        META.put("volcano:magma.conduit.wallRockFrictionDeg", m("Wall rock friction angle", "°", 0.0, 60.0, false, "Internal friction of the rock mass around the conduit (~30–40°)."));
         META.put("volcano:magma.conduit.gridSteps", m("Conduit solver steps", null, 20.0, 2000.0, true, "Depth steps of the conduit flow solution (accuracy vs. speed)."));
         META.put("volcano:dikes.stepPeriodSeconds", m("Dike step", "s", 0.05, 60.0, true, null));
         META.put("volcano:dikes.shearModulusPa", m("Crust stiffness (shear modulus)", "Pa", 1e8, 1e11, true, "Stiffer crust opens dikes less for the same pressure."));

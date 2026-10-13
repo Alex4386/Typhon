@@ -46,6 +46,9 @@ package me.alex4386.typhon.engine.magma;
  *     the wall friction of stiff, crystal-rich magma
  * @param wallFrictionCoefficient friction coefficient of that shear zone on the magma pressure
  *     (gouge, ~0.1–0.6): the slip stress grows with depth
+ * @param wallRockCohesionPa cohesion of the rock mass around the conduit (Pa; fractured volcanic rock masses
+ *     ~0.5–5 MPa, far below intact rock, Schultz 1996, J. Struct. Geol. 18:1139-1149)
+ * @param wallRockFrictionDeg internal friction angle of that rock mass (°; ~30–40)
  * @param gridSteps integration steps along the conduit
  */
 public record ConduitConfig(
@@ -72,6 +75,8 @@ public record ConduitConfig(
         double exsolutionTimescale,
         double wallSlipStressPa,
         double wallFrictionCoefficient,
+        double wallRockCohesionPa,
+        double wallRockFrictionDeg,
         int gridSteps) {
 
     /** Literature-based defaults; see each parameter for its source range. */
@@ -84,6 +89,7 @@ public record ConduitConfig(
             1e3, 5,
             10, 5, 500, 0.2,
             1.0, 1e6, 0.1,
+            2e6, 35,
             160);
 
     public ConduitConfig {
@@ -112,6 +118,10 @@ public record ConduitConfig(
         requirePositive("exsolutionTimescale", exsolutionTimescale);
         requirePositive("wallSlipStressPa", wallSlipStressPa);
         if (!(wallFrictionCoefficient >= 0)) throw new IllegalArgumentException("wallFrictionCoefficient must be >= 0");
+        if (!(wallRockCohesionPa >= 0)) throw new IllegalArgumentException("wallRockCohesionPa must be >= 0");
+        if (!(wallRockFrictionDeg >= 0 && wallRockFrictionDeg < 90)) {
+            throw new IllegalArgumentException("wallRockFrictionDeg must be in [0, 90)");
+        }
         if (gridSteps < 20) throw new IllegalArgumentException("gridSteps must be >= 20");
     }
 
@@ -120,7 +130,8 @@ public record ConduitConfig(
                 turbulentFrictionFactor, referencePermeability, percolationThreshold, wallPermeability, gasViscosity,
                 microlitesPerWtWater, crystallisationTimescale, maxCrystalFraction, bubbleRadiusM, surfaceTension,
                 coalescenceViscosity, slugLengthDiameters, plugViscosityLog10, plugStrengthMPa, plugCapDepthM, plugPorosity,
-                exsolutionTimescale, wallSlipStressPa, wallFrictionCoefficient, gridSteps);
+                exsolutionTimescale, wallSlipStressPa, wallFrictionCoefficient, wallRockCohesionPa, wallRockFrictionDeg,
+                gridSteps);
     }
 
     public ConduitConfig withPermeability(double reference, double wall) {
@@ -128,7 +139,8 @@ public record ConduitConfig(
                 brittleStressPa, foamStrengthPa, turbulentFrictionFactor, reference, percolationThreshold, wall, gasViscosity,
                 microlitesPerWtWater, crystallisationTimescale, maxCrystalFraction, bubbleRadiusM, surfaceTension,
                 coalescenceViscosity, slugLengthDiameters, plugViscosityLog10, plugStrengthMPa, plugCapDepthM, plugPorosity,
-                exsolutionTimescale, wallSlipStressPa, wallFrictionCoefficient, gridSteps);
+                exsolutionTimescale, wallSlipStressPa, wallFrictionCoefficient, wallRockCohesionPa, wallRockFrictionDeg,
+                gridSteps);
     }
 
     public ConduitConfig withPlug(double viscosityLog10, double strengthMPa) {
@@ -136,7 +148,16 @@ public record ConduitConfig(
                 brittleStressPa, foamStrengthPa, turbulentFrictionFactor, referencePermeability, percolationThreshold, wallPermeability,
                 gasViscosity, microlitesPerWtWater, crystallisationTimescale, maxCrystalFraction, bubbleRadiusM,
                 surfaceTension, coalescenceViscosity, slugLengthDiameters, viscosityLog10, strengthMPa, plugCapDepthM,
-                plugPorosity, exsolutionTimescale, wallSlipStressPa, wallFrictionCoefficient, gridSteps);
+                plugPorosity, exsolutionTimescale, wallSlipStressPa, wallFrictionCoefficient, wallRockCohesionPa, wallRockFrictionDeg,
+                gridSteps);
+    }
+
+    public ConduitConfig withWallRock(double cohesionPa, double frictionDeg) {
+        return new ConduitConfig(initialOpenness, fragmentationPorosity,
+                brittleStressPa, foamStrengthPa, turbulentFrictionFactor, referencePermeability, percolationThreshold, wallPermeability,
+                gasViscosity, microlitesPerWtWater, crystallisationTimescale, maxCrystalFraction, bubbleRadiusM,
+                surfaceTension, coalescenceViscosity, slugLengthDiameters, plugViscosityLog10, plugStrengthMPa, plugCapDepthM,
+                plugPorosity, exsolutionTimescale, wallSlipStressPa, wallFrictionCoefficient, cohesionPa, frictionDeg, gridSteps);
     }
 
     private static void requirePositive(String name, double value) {

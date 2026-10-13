@@ -203,9 +203,16 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     /** Drivers of the current steady conduit flow, and the flow itself (null when not erupting). */
     private ConduitInput conduitInput;
     private ConduitSolution conduit;
-    /** The solution before the current one (for the secant outflow slope): overpressure and rate. */
-    private double previousSolvedOverpressure;
+    /**
+     * The solution before the current one (for the secant outflow slope): absolute chamber pressure (MPa; the
+     * flow depends on it, not on the excess over a lithostatic load that moves as the ground above changes)
+     * and rate.
+     */
+    private double previousSolvedPressureMPa;
     private double previousSolvedRate;
+    /** Outflow slope dQ/dP (m³/s per MPa) probed about {@link #probedFor} (derived; not saved). */
+    private ConduitSolution probedFor;
+    private double probedConductance;
     private double slugGas;
     private double nextSlugMass;
     private double plugGas;
@@ -403,7 +410,14 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         if (erupting) {
             ConduitSolution flow = updateConduit();
             if (flow == null) {
-                endEruption(context, Cause.AUTOMATIC); // the conduit can no longer carry magma
+                if (ConduitModel.flowsIgnoringWalls(conduitInput(overpressure), config.conduit())) {
+                    // magma could still rise, but the chamber's pressure has fallen below what the rock around
+                    // the conduit's root needs to stand: the walls collapse into it and plug it
+                    endEruption(context, Cause.COLLAPSE);
+                    closeConduit();
+                } else {
+                    endEruption(context, Cause.AUTOMATIC); // the conduit can no longer carry magma
+                }
             } else if (outletCapacity <= 0) {
                 // Every outlet froze or was sealed: the chamber stops venting but keeps its pressure.
                 endEruption(context, Cause.SEALED);
@@ -411,24 +425,22 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             } else {
                 // Outflow linearised about the last solutions: Q = k (P − P₀).
                 double solvedAt = solvedOverpressureMPa();
-                double conductance = flow.dreRateM3PerS() / Math.max(1e-6, solvedAt - zeroFlowOverpressureMPa());
-                double slope = (flow.dreRateM3PerS() - previousSolvedRate) / (solvedAt - previousSolvedOverpressure);
-                boolean sameBranch = previousSolvedRate > 0
-                        && Math.abs(Math.log(flow.dreRateM3PerS() / previousSolvedRate)) < Math.log(3);
-                if (sameBranch && Math.abs(solvedAt - previousSolvedOverpressure) > 1e-3 && slope > 0) {
-                    conductance = slope; // m³/s per MPa
-                }
-                double base = solvedAt - flow.dreRateM3PerS() / conductance;
-                conductance = Math.min(conductance, config.maxEruptionRate() / Math.max(1e-6, overpressure - base));
-                // Fissure feeders narrowing as they freeze throttle the outflow.
-                conductance *= outletCapacity;
-                balanceOverpressure = conductance > 0 ? base + supply / conductance : Double.NaN;
+                double conductance = outflowConductance(flow);
                 if (conductance > 0) {
-                    double equilibrium = base + supply / conductance;
+                    double base = solvedAt - flow.dreRateM3PerS() / conductance;
+                    conductance = Math.min(conductance, config.maxEruptionRate() / Math.max(1e-6, overpressure - base));
+                    // Fissure feeders narrowing as they freeze throttle the outflow.
+                    conductance *= outletCapacity;
+                    balanceOverpressure = base + supply / conductance;
+                    double equilibrium = balanceOverpressure;
                     double tau = stiffness / conductance;
                     overpressure = equilibrium + (overpressure - equilibrium) * Math.exp(-dt / tau);
                 } else {
-                    overpressure += inflow / stiffness;
+                    // a flow that does not rise with pressure (a choked foam, insensitive to the chamber; the
+                    // conduit is solved again as the pressure moves): it leaves at its own rate
+                    double outflow = Math.min(flow.dreRateM3PerS(), config.maxEruptionRate()) * outletCapacity;
+                    balanceOverpressure = Double.NaN;
+                    overpressure += (inflow - outflow * dt) / stiffness;
                 }
                 double stored = relieveRupture(supply);
                 erupted = Math.max(0, inflow - stored - stiffness * (overpressure - previous));
@@ -561,7 +573,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         if (flow == null) return; // the chamber cannot lift magma to the surface
         conduitInput = in;
         conduit = flow;
-        previousSolvedOverpressure = 0;
+        previousSolvedPressureMPa = 0;
         previousSolvedRate = 0;
         erupting = true;
         eruptionStartTime = context.time();
@@ -792,7 +804,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         double pressure = Math.max(0.1, lithostaticPressureMPa() + overpressureMPa) * 1e6;
         return new ConduitInput(pressure, temperature, silicaWt(), waterWt(), meltCo2Wt(),
                 exsolvedWaterWt() / 100 * (1 - phi), phi, config.conduitRadius(), config.lithostaticDepth(),
-                ambientPa, waterTableDepthM);
+                ambientPa, waterTableDepthM, lithostaticPressureMPa() * 1e6);
     }
 
     /** Conduit flows solved for other vents' ambient pressures, by pressure (0.1 bar buckets); transient. */
@@ -831,12 +843,53 @@ public final class MagmaChamber implements Subsystem, MagmaState {
                 ? ConduitModel.solve(in, config.conduit(), Branch.SLOWEST)
                 : ConduitModel.solveNear(in, config.conduit(), conduit.massFluxKgPerS());
         if (conduit != null) {
-            previousSolvedOverpressure = solvedOverpressureMPa();
+            previousSolvedPressureMPa = conduitInput.chamberPressurePa() / 1e6;
             previousSolvedRate = conduit.dreRateM3PerS();
         }
         conduitInput = in;
         conduit = next;
         return next;
+    }
+
+    /** Chamber pressure step (MPa) over which the outflow slope is probed when no secant is at hand. */
+    static final double OUTFLOW_PROBE_MPA = 0.1;
+
+    /**
+     * Slope dQ/dP (m³/s per MPa) of the steady outflow about its current solution: the secant through the
+     * previous solution on the same branch, by absolute chamber pressure; otherwise the conduit solved again
+     * {@link #OUTFLOW_PROBE_MPA} below (and above) it; {@code 0} where the flow does not rise with pressure. A
+     * bubble-free magma column is no intercept for this: a gas-charged one keeps flowing below the pressure that
+     * would just hold a bubble-free column up.
+     */
+    private double outflowConductance(ConduitSolution flow) {
+        double q = flow.dreRateM3PerS();
+        double dp = conduitInput.chamberPressurePa() / 1e6 - previousSolvedPressureMPa;
+        boolean sameBranch = previousSolvedRate > 0 && Math.abs(Math.log(q / previousSolvedRate)) < Math.log(3);
+        if (sameBranch && Math.abs(dp) > 1e-3) {
+            double slope = (q - previousSolvedRate) / dp;
+            if (slope > 0) return slope;
+        }
+        if (probedFor == flow) return probedConductance;
+        // below: a flow that stops within the step gives Q/step; flat or falling either way gives 0
+        double slope = probedSlope(flow, -OUTFLOW_PROBE_MPA);
+        if (!(slope > 0)) slope = probedSlope(flow, OUTFLOW_PROBE_MPA);
+        if (!(slope > 0)) slope = 0;
+        probedFor = flow;
+        probedConductance = slope;
+        return slope;
+    }
+
+    /**
+     * (Q(P + step) − Q(P)) / step along the branch of {@code flow}, a missing flow counting as none: the drivers
+     * it was solved for at another chamber pressure only (so it depends on the saved solution alone).
+     */
+    private double probedSlope(ConduitSolution flow, double stepMPa) {
+        double p = conduitInput.chamberPressurePa() + stepMPa * 1e6;
+        if (!(p > 0)) return Double.NaN;
+        ConduitSolution other = ConduitModel.solveNear(conduitInput.withChamberPressurePa(p), config.conduit(),
+                flow.massFluxKgPerS());
+        double q = other == null ? 0 : other.dreRateM3PerS();
+        return (q - flow.dreRateM3PerS()) / stepMPa;
     }
 
     /** Chamber overpressure (MPa) the current conduit solution was computed at. */
@@ -1760,7 +1813,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         if (conduitInput != null && conduit != null) {
             out.add("conduitInput", ConduitJson.write(conduitInput));
             out.add("conduit", ConduitJson.write(conduit));
-            out.addProperty("previousSolvedOverpressure", previousSolvedOverpressure);
+            out.addProperty("previousSolvedPressureMPa", previousSolvedPressureMPa);
             out.addProperty("previousSolvedRate", previousSolvedRate);
         }
         out.addProperty("slugGas", slugGas);
@@ -1833,7 +1886,9 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         if (in.has("conduitInput") && in.has("conduit")) {
             conduitInput = ConduitJson.readInput(in.getAsJsonObject("conduitInput"));
             conduit = ConduitJson.readSolution(in.getAsJsonObject("conduit"));
-            previousSolvedOverpressure = in.get("previousSolvedOverpressure").getAsDouble();
+            // older saves kept an overpressure: no secant until the next solution (the slope is probed)
+            previousSolvedPressureMPa = in.has("previousSolvedPressureMPa")
+                    ? in.get("previousSolvedPressureMPa").getAsDouble() : Double.NaN;
             previousSolvedRate = in.get("previousSolvedRate").getAsDouble();
         } else {
             conduitInput = null;
