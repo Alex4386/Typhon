@@ -1105,6 +1105,45 @@ public final class Geomorphology implements Subsystem {
 
     // ── Craters ──
 
+    /**
+     * Throws {@code solids} (solid column-metres by material, as {@link #strip} measures them) out of a crater of
+     * {@code radius} metres around column ({@code cx}, {@code cz}) as an ejecta blanket, t ∝ (r/R)^-3 out to
+     * {@link CraterScaling#EJECTA_OUTER_RADII} radii, conserving the solid volume.
+     */
+    private void depositEjecta(int cx, int cz, double radius, TreeMap<Short, Double> solids, double solid) {
+        if (!(solid > 0)) return;
+        double l = world.spec().metersPerColumn();
+        double outer = radius * CraterScaling.EJECTA_OUTER_RADII;
+        int ro = (int) Math.ceil(outer / l);
+        List<long[]> ring = new ArrayList<>();
+        List<Double> weights = new ArrayList<>();
+        double wSum = 0;
+        for (int dz = -ro; dz <= ro; dz++) {
+            for (int dx = -ro; dx <= ro; dx++) {
+                double d = Math.sqrt((double) dx * dx + (double) dz * dz) * l;
+                if (d < radius || d > outer) continue;
+                if (!world.isKnown(cx + dx, cz + dz)) continue;
+                double w = CraterScaling.ejectaWeight(d, radius);
+                ring.add(new long[] {cx + dx, cz + dz});
+                weights.add(w);
+                wSum += w;
+            }
+        }
+        if (!(wSum > 0)) return;
+        int unit = units.unit(DepositType.EJECTA, now, Double.NaN);
+        double n = storedPorosity(config.debrisPorosity);
+        for (int i = 0; i < ring.size(); i++) {
+            int x = (int) ring.get(i)[0];
+            int z = (int) ring.get(i)[1];
+            double share = weights.get(i) / wSum;
+            for (Map.Entry<Short, Double> me : solids.entrySet()) {
+                double thick = me.getValue() * share / (1 - n);
+                if (thick > 0) world.deposit(x, z, thick, MaterialTable.get(me.getKey()), unit, LayerFlags.LOOSE, n, 0);
+            }
+            markChanged(x, z);
+        }
+    }
+
     private void excavate(double[] e, Outbox outbox) {
         double energy = e[3];
         double radius = 0.5 * CraterScaling.diameter(energy) * config.craterDiameterScale;
@@ -1149,41 +1188,11 @@ public final class Geomorphology implements Subsystem {
             }
         }
         if (removed <= 0) return;
-        // ejecta blanket, t ∝ (r/R)^-3 out to EJECTA_OUTER_RADII radii, conserving the solid volume
-        double outer = radius * CraterScaling.EJECTA_OUTER_RADII;
-        int ro = (int) Math.ceil(outer / l);
-        List<long[]> ring = new ArrayList<>();
-        List<Double> weights = new ArrayList<>();
-        double wSum = 0;
-        for (int dz = -ro; dz <= ro; dz++) {
-            for (int dx = -ro; dx <= ro; dx++) {
-                double d = Math.sqrt((double) dx * dx + (double) dz * dz) * l;
-                if (d < radius || d > outer) continue;
-                if (!world.isKnown(cx + dx, cz + dz)) continue;
-                double w = CraterScaling.ejectaWeight(d, radius);
-                ring.add(new long[] {cx + dx, cz + dz});
-                weights.add(w);
-                wSum += w;
-            }
-        }
-        if (wSum > 0 && solid > 0) {
-            int unit = units.unit(DepositType.EJECTA, now, Double.NaN);
-            double n = storedPorosity(config.debrisPorosity);
-            for (int i = 0; i < ring.size(); i++) {
-                int x = (int) ring.get(i)[0];
-                int z = (int) ring.get(i)[1];
-                double share = weights.get(i) / wSum;
-                for (Map.Entry<Short, Double> me : solids.entrySet()) {
-                    double thick = me.getValue() * share / (1 - n);
-                    if (thick > 0) world.deposit(x, z, thick, MaterialTable.get(me.getKey()), unit, LayerFlags.LOOSE, n, 0);
-                }
-                markChanged(x, z);
-            }
-        }
+        depositEjecta(cx, cz, radius, solids, solid);
         stats.craters++;
         stats.excavatedM3 += removed * l * l;
         stats.maxCraterRadiusM = Math.max(stats.maxCraterRadiusM, radius);
-        activateDisc(cx, cz, ro + 1);
+        activateDisc(cx, cz, (int) Math.ceil(radius * CraterScaling.EJECTA_OUTER_RADII / l) + 1);
         moved.add(key(cx, cz));
         outbox.emit(new GeomorphEvents.CraterExcavated(now, volcanoId, Point3.columnCentre(cx, cz, rim - depth, l),
                 radius, depth, energy, removed * l * l));
@@ -1216,27 +1225,44 @@ public final class Geomorphology implements Subsystem {
         }
     }
 
-    /** Open conduits swallow whatever falls or slides into them, down to the conduit mouth. */
+    /**
+     * An erupting vent keeps its crater open: what falls or slides into it, down to the vent's floor (which rises
+     * with what fills it between eruptions), is thrown out again by the eruption (vent clasts recycled through the
+     * jets, as at Surtsey) and lands outside the crater as ejecta, so nothing is lost and the ring around the
+     * crater grows. A flooded crater is the coupler's (magma–water interaction, tuff ring).
+     */
     private void clearVents(List<VentSite> erupting) {
         double l = world.spec().metersPerColumn();
         for (VentSite vent : erupting) {
-            double floor = ventFloorZ(vent);
-            for (long[] c : conduitColumns(vent, l)) {
+            double ventFloor = ventFloorZ(vent);
+            TreeMap<Short, Double> solids = new TreeMap<>();
+            double solid = 0;
+            List<long[]> crater = conduitColumns(vent, l);
+            for (long[] c : crater) {
                 int x = (int) c[0];
                 int z = (int) c[1];
                 if (!world.isKnown(x, z)) continue;
                 // a flooded vent belongs to the magma–water interaction (jets, tuff ring) in the coupler
+                double surface = world.surfaceZ(x, z);
                 double water = world.waterZ(x, z);
-                if (Double.isFinite(water) && water > world.surfaceZ(x, z)) continue;
+                if (Double.isFinite(water) && water > surface) continue;
                 // only fallen, loose material: lava standing in the vent is the eruption itself
-                double excess = Math.min(world.surfaceZ(x, z) - floor, looseTop(x, z));
+                double excess = Math.min(surface - ventFloor, looseTop(x, z));
                 if (excess < MIN_MOVE) continue;
                 Strip st = strip(x, z, excess, 0);
+                for (Map.Entry<Short, Double> me : st.solids().entrySet()) solids.merge(me.getKey(), me.getValue(), Double::sum);
+                solid += st.solidM();
                 stats.recycledM3 += st.removedM() * l * l;
                 activateDisc(x, z, 2);
             }
+            if (solid > 0) {
+                // thrown clear of the crater it was cleared from: from just outside its columns
+                double radius = (Math.floor(vent.craterRadiusM() / l) + 1) * l;
+                depositEjecta(vent.position().columnX(l), vent.position().columnZ(l), radius, solids, solid);
+            }
         }
     }
+
 
     /** Thickness of the loose layers at the top of a column (m). */
     private double looseTop(int x, int z) {
