@@ -18,6 +18,7 @@ import me.alex4386.typhon.engine.magma.conduit.ConduitInput;
 import me.alex4386.typhon.engine.magma.conduit.ConduitJson;
 import me.alex4386.typhon.engine.magma.conduit.ConduitModel;
 import me.alex4386.typhon.engine.magma.conduit.ConduitModel.Branch;
+import me.alex4386.typhon.engine.magma.conduit.ConduitShape;
 import me.alex4386.typhon.engine.magma.conduit.ConduitSolution;
 import me.alex4386.typhon.engine.math.Point3;
 import me.alex4386.typhon.engine.random.SimRandom;
@@ -210,6 +211,13 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      */
     private double previousSolvedPressureMPa;
     private double previousSolvedRate;
+    /**
+     * The conduit as its flows eroded it ({@code null}: still the configured cylinder); back to the cylinder when
+     * the conduit freezes, collapses, is plugged or a dike opens a new way up.
+     */
+    private ConduitShape conduitShape;
+    /** Wall rock the conduit's flows have eroded and carried off as lithics (m³). */
+    private double erodedVolumeM3;
     /** Outflow slope dQ/dP (m³/s per MPa) probed about {@link #probedFor} (derived; not saved). */
     private ConduitSolution probedFor;
     private double probedConductance;
@@ -263,6 +271,9 @@ public final class MagmaChamber implements Subsystem, MagmaState {
                 || n.rechargeTemperatureC() != config.rechargeTemperatureC() || n.rechargeSilicaWt() != config.rechargeSilicaWt()
                 || n.rechargeWaterWt() != config.rechargeWaterWt() || n.rechargeCo2Wt() != config.rechargeCo2Wt()
                 || n.rechargeCrystalFraction() != config.rechargeCrystalFraction();
+        if (n.conduitRadius() != config.conduitRadius() || n.lithostaticDepth() != config.lithostaticDepth()) {
+            conduitShape = null; // a conduit of another size: its eroded shape no longer applies
+        }
         config = n;
         // the configured supply is the source of truth once it changes (as when a world reopens with it)
         if (supply) resetSupplyFromConfig();
@@ -435,6 +446,9 @@ public final class MagmaChamber implements Subsystem, MagmaState {
                     double equilibrium = balanceOverpressure;
                     double tau = stiffness / conductance;
                     overpressure = equilibrium + (overpressure - equilibrium) * Math.exp(-dt / tau);
+                    // the line holds near its solution only: once it strays from the solved flow, solve again
+                    double linear = conductance / outletCapacity * (overpressure - base);
+                    conduitStale = !(Math.abs(linear - flow.dreRateM3PerS()) <= LINEARISATION_SPAN * flow.dreRateM3PerS());
                 } else {
                     // a flow that does not rise with pressure (a choked foam, insensitive to the chamber; the
                     // conduit is solved again as the pressure moves): it leaves at its own rate
@@ -466,7 +480,10 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             } else if (conduitQuietSeconds >= 0) {
                 convectingSeconds = 0;
                 conduitQuietSeconds += dt;
-                if (conduitQuietSeconds >= conduitFreezeSeconds()) conduitQuietSeconds = NO_CONDUIT; // frozen solid
+                if (conduitQuietSeconds >= conduitFreezeSeconds()) { // frozen solid
+                    conduitQuietSeconds = NO_CONDUIT;
+                    conduitShape = null;
+                }
             }
             percolateGas(context, dt, gasWater, gasCo2);
             overpressure += inflow / stiffness;
@@ -567,12 +584,14 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         // Released suddenly enough on vesicular magma, it fragments the magma and the flow starts on the fastest
         // branch; else on the slowest.
         double released = Math.max(0, overpressure);
+        if (cause == Cause.DIKE) conduitShape = null; // a dike's fresh way up
         ConduitInput in = conduitInput(overpressure);
         ConduitSolution flow = ConduitModel.solve(in, config.conduit(),
                 fragmentsOnRelease(released) ? Branch.FASTEST : Branch.SLOWEST);
         if (flow == null) return; // the chamber cannot lift magma to the surface
         conduitInput = in;
         conduit = flow;
+        erode(in, flow);
         previousSolvedPressureMPa = 0;
         previousSolvedRate = 0;
         erupting = true;
@@ -777,6 +796,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
      */
     public void closeConduit() {
         conduitQuietSeconds = NO_CONDUIT;
+        conduitShape = null;
     }
 
     /** {@link #conduitQuietSeconds} of a conduit {@code openness} molten (inverse of {@link #conduitOpenness}). */
@@ -804,7 +824,30 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         double pressure = Math.max(0.1, lithostaticPressureMPa() + overpressureMPa) * 1e6;
         return new ConduitInput(pressure, temperature, silicaWt(), waterWt(), meltCo2Wt(),
                 exsolvedWaterWt() / 100 * (1 - phi), phi, config.conduitRadius(), config.lithostaticDepth(),
-                ambientPa, waterTableDepthM, lithostaticPressureMPa() * 1e6);
+                ambientPa, waterTableDepthM, lithostaticPressureMPa() * 1e6, conduitShape);
+    }
+
+    /**
+     * The flow just solved erodes the conduit where its walls fail ({@link ConduitModel#erodedShape}); the next
+     * step solves the flow through the widened conduit (and erodes it again while walls still fail).
+     */
+    private void erode(ConduitInput in, ConduitSolution flow) {
+        double area = Math.PI * in.radiusM() * in.radiusM();
+        ConduitShape eroded = ConduitModel.erodedShape(in, config.conduit(), flow.massFluxKgPerS() / area);
+        if (eroded == null) return;
+        ConduitShape before = conduitShape != null ? conduitShape : ConduitShape.uniform(in.radiusM());
+        erodedVolumeM3 += eroded.volume(in.lengthM()) - before.volume(in.lengthM());
+        conduitShape = eroded;
+    }
+
+    /** The conduit's shape as its flows eroded it ({@code null}: the configured cylinder). */
+    public ConduitShape conduitShape() {
+        return conduitShape;
+    }
+
+    /** Wall rock eroded from the conduit and carried off as lithics so far (m³). */
+    public double erodedVolumeM3() {
+        return erodedVolumeM3;
     }
 
     /** Conduit flows solved for other vents' ambient pressures, by pressure (0.1 bar buckets); transient. */
@@ -838,7 +881,8 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     /** Keeps the steady flow up to date with the chamber, staying on the current branch. */
     private ConduitSolution updateConduit() {
         ConduitInput in = conduitInput(overpressure);
-        if (conduit != null && in.closeTo(conduitInput, RESOLVE_TOLERANCE)) return conduit;
+        if (conduit != null && !conduitStale && in.closeTo(conduitInput, RESOLVE_TOLERANCE)) return conduit;
+        conduitStale = false;
         ConduitSolution next = conduit == null
                 ? ConduitModel.solve(in, config.conduit(), Branch.SLOWEST)
                 : ConduitModel.solveNear(in, config.conduit(), conduit.massFluxKgPerS());
@@ -848,8 +892,18 @@ public final class MagmaChamber implements Subsystem, MagmaState {
         }
         conduitInput = in;
         conduit = next;
+        if (next != null) erode(in, next);
         return next;
     }
+
+    /**
+     * Numerical: the outflow's linearisation is trusted while it stays within this share of the solved flow; past
+     * it the conduit is solved again, however little its drivers moved (a steep branch, near its end, would
+     * otherwise pin the pressure where the line, not the conduit, reaches the supply).
+     */
+    static final double LINEARISATION_SPAN = 0.1;
+    /** The linearised outflow strayed from the solved flow: solve the conduit again next step (derived; not saved). */
+    private boolean conduitStale;
 
     /** Chamber pressure step (MPa) over which the outflow slope is probed when no secant is at hand. */
     static final double OUTFLOW_PROBE_MPA = 0.1;
@@ -870,7 +924,7 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             if (slope > 0) return slope;
         }
         if (probedFor == flow) return probedConductance;
-        // below: a flow that stops within the step gives Q/step; flat or falling either way gives 0
+        // flat, falling or ending either way gives 0: the flow leaves at its own rate
         double slope = probedSlope(flow, -OUTFLOW_PROBE_MPA);
         if (!(slope > 0)) slope = probedSlope(flow, OUTFLOW_PROBE_MPA);
         if (!(slope > 0)) slope = 0;
@@ -880,16 +934,19 @@ public final class MagmaChamber implements Subsystem, MagmaState {
     }
 
     /**
-     * (Q(P + step) − Q(P)) / step along the branch of {@code flow}, a missing flow counting as none: the drivers
-     * it was solved for at another chamber pressure only (so it depends on the saved solution alone).
+     * (Q(P + step) − Q(P)) / step along the branch of {@code flow}: the drivers it was solved for at another chamber
+     * pressure only (so it depends on the saved solution alone). {@code NaN} where the branch does not reach (no
+     * flow, or only another branch): its end is no slope, and the flow runs on at its own rate until the chamber's
+     * pressure passes it and the conduit is solved again.
      */
     private double probedSlope(ConduitSolution flow, double stepMPa) {
         double p = conduitInput.chamberPressurePa() + stepMPa * 1e6;
         if (!(p > 0)) return Double.NaN;
         ConduitSolution other = ConduitModel.solveNear(conduitInput.withChamberPressurePa(p), config.conduit(),
                 flow.massFluxKgPerS());
-        double q = other == null ? 0 : other.dreRateM3PerS();
-        return (q - flow.dreRateM3PerS()) / stepMPa;
+        double q = flow.dreRateM3PerS();
+        if (other == null || !(Math.abs(Math.log(other.dreRateM3PerS() / q)) < Math.log(3))) return Double.NaN;
+        return (other.dreRateM3PerS() - q) / stepMPa;
     }
 
     /** Chamber overpressure (MPa) the current conduit solution was computed at. */
@@ -1816,6 +1873,12 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             out.addProperty("previousSolvedPressureMPa", previousSolvedPressureMPa);
             out.addProperty("previousSolvedRate", previousSolvedRate);
         }
+        if (conduitShape != null) {
+            com.google.gson.JsonArray radii = new com.google.gson.JsonArray();
+            for (double r : conduitShape.radii()) radii.add(r);
+            out.add("conduitShape", radii);
+        }
+        out.addProperty("erodedVolumeM3", erodedVolumeM3);
         out.addProperty("slugGas", slugGas);
         out.addProperty("slugFillSeconds", Double.isFinite(slugFillSeconds) ? slugFillSeconds : -1);
         out.addProperty("nextSlugMass", nextSlugMass);
@@ -1894,6 +1957,15 @@ public final class MagmaChamber implements Subsystem, MagmaState {
             conduitInput = null;
             conduit = null;
         }
+        if (in.has("conduitShape")) {
+            com.google.gson.JsonArray a = in.getAsJsonArray("conduitShape");
+            double[] radii = new double[a.size()];
+            for (int k = 0; k < radii.length; k++) radii[k] = a.get(k).getAsDouble();
+            conduitShape = new ConduitShape(radii);
+        } else {
+            conduitShape = null;
+        }
+        erodedVolumeM3 = in.has("erodedVolumeM3") ? in.get("erodedVolumeM3").getAsDouble() : 0;
         slugGas = in.get("slugGas").getAsDouble();
         double fill = in.get("slugFillSeconds").getAsDouble();
         slugFillSeconds = fill >= 0 ? fill : Double.POSITIVE_INFINITY;

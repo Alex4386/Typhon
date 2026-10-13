@@ -25,8 +25,10 @@ long as they do not change outcomes.
   at ~97 m³/s (Surtsey). Its secant slope also mixed in the moving lithostatic reference. The slope now comes
   from absolute pressures or a probe of the conduit, a flow insensitive to pressure leaves at its own rate,
   and a drained chamber's eruption ends when the rock around the conduit's root fails (Mohr–Coulomb, cause
-  `COLLAPSE`; the rubble plugs the conduit). Wall failure higher up (erosion, conduit widening) is only
-  diagnosed (`ConduitModel.wallMargin`), not yet modelled.
+  `COLLAPSE`; the rubble plugs the conduit). Higher up, walls failing around coherent magma erode the
+  conduit (`ConduitShape`, quasi-one-dimensional flow): it widens to the plastic zone of its original hole
+  under the lowest pressure the flow put there (Salençon 1969), the broken rock leaving as lithics.
+  Fragmented flow's walls are left to the ground's crater.
 - `conduitOpenness() < 0.5` picked the fast or slow conduit branch: a failure fragments the magma (fast branch)
   when its sudden decompression exceeds the foam's strength over its porosity (Spieler et al. 2004).
 - One plume per volcano, put on the strongest vent: every vent now feeds its own column and plume.
@@ -74,6 +76,11 @@ long as they do not change outcomes.
   conductivity of the ground's layers under the vent, as a well screen (Hvorslev shape factor).
 
 ## High: decide whether or when eruptions, dikes or flows happen
+
+- `VolcanoCoupler.surveyWater` calls a vent wet only when more than half its crater disc is under water: a
+  vent column below the sea in an emerged disc reads dry and switches the water–magma interaction off
+  (Surtseyan ↔ dry flipping). Water reaching the conduit should follow the water actually over or around the
+  vent's mouth.
 
 - `DikeConfig.maxConcurrentDikes = 1`: only one dike rises at a time.
 - `MagmaChamber.MAX_CRYSTAL_FRACTION = 0.58`: a chamber can never lock up as a mush. Removing it alone locks

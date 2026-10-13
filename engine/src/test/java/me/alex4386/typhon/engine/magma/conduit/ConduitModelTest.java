@@ -103,6 +103,60 @@ class ConduitModelTest {
         assertFalse(ConduitModel.admissibleFluxes(unchecked, C).isEmpty());
     }
 
+    /** A water-rich dacite feeding a Plinian foam through a 15 m conduit from 7.5 km, its walls examined. */
+    private static ConduitInput plinian(ConduitShape shape) {
+        double depth = 7500;
+        double lithostatic = CRUST * 9.81 * depth;
+        return new ConduitInput(lithostatic + 10e6, 920, 64, 4.6, 0, 0, 0, 15, depth, ConduitInput.ATMOSPHERE_PA, 300,
+                lithostatic, shape);
+    }
+
+    @Test
+    void aCylindricalShapeIsTheCylinder() {
+        ConduitSolution cylinder = ConduitModel.solve(plinian(null), C, Branch.FASTEST);
+        ConduitSolution shaped = ConduitModel.solve(plinian(ConduitShape.uniform(15)), C, Branch.FASTEST);
+        assertEquals(cylinder, shaped);
+    }
+
+    @Test
+    void wallsFailingAroundTheFoamErodeTheConduitToABoundedWidth() {
+        ConduitInput in = plinian(null);
+        double area = Math.PI * 15 * 15;
+        ConduitSolution flow = ConduitModel.solve(in, C, Branch.FASTEST);
+        double[] before = ConduitModel.wallMargin(in, C, flow.massFluxKgPerS() / area);
+        assertTrue(before[0] < 0, "the foam's pressure deep in the conduit is below the walls' strength: " + before[0]);
+
+        // the flow erodes the failing walls; the widened conduit carries more, and is eroded again while walls fail
+        ConduitShape shape = null;
+        for (int i = 0; i < 40; i++) {
+            ConduitInput through = plinian(shape);
+            ConduitSolution f = ConduitModel.solve(through, C, Branch.FASTEST);
+            assertNotNull(f);
+            ConduitShape eroded = ConduitModel.erodedShape(through, C, f.massFluxKgPerS() / area);
+            if (eroded == null) break;
+            shape = eroded;
+        }
+        assertNotNull(shape, "the walls eroded");
+        double widest = 0;
+        for (int k = 0; k < shape.nodes(); k++) {
+            assertTrue(shape.radius(k) >= 15);
+            widest = Math.max(widest, shape.radius(k));
+        }
+        assertEquals(15, shape.radius(0), 0, "the inlet does not erode");
+        assertTrue(widest > 15 && widest < 3 * 15, "widened, at most to the plastic zone of the original hole: " + widest);
+        assertTrue(ConduitModel.erodedShape(plinian(shape), C,
+                ConduitModel.solve(plinian(shape), C, Branch.FASTEST).massFluxKgPerS() / area) == null
+                || widest < 3 * 15, "erosion converges");
+    }
+
+    @Test
+    void shapedInputsRoundTripThroughJson() {
+        ConduitInput in = plinian(new ConduitShape(new double[] {15, 15, 22.5, 30, 15}));
+        assertEquals(in, ConduitJson.readInput(ConduitJson.write(in)));
+        ConduitInput cylinder = plinian(null);
+        assertEquals(cylinder, ConduitJson.readInput(ConduitJson.write(cylinder)));
+    }
+
     @Test
     void co2AddsGasThatExsolvesDeep() {
         ConduitSolution dry = ConduitModel.solve(input(5, 1500, 1.5, 1165, 50, 0.4, 0, 0), C, Branch.FASTEST);

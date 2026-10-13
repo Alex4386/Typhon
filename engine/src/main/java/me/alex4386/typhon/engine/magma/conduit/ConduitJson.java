@@ -24,6 +24,12 @@ public final class ConduitJson {
                     out.addProperty(c.getName(), b);
                 } else if (v instanceof Enum<?> e) {
                     out.addProperty(c.getName(), e.name());
+                } else if (v instanceof ConduitShape shape) {
+                    com.google.gson.JsonArray radii = new com.google.gson.JsonArray();
+                    for (double r : shape.radii()) radii.add(r);
+                    out.add(c.getName(), radii);
+                } else if (v == null && c.getType() == ConduitShape.class) {
+                    out.add(c.getName(), JsonNull.INSTANCE);
                 } else {
                     throw new IllegalArgumentException("unsupported component " + c.getName());
                 }
@@ -57,6 +63,15 @@ public final class ConduitJson {
                 args[i] = e != null && e.getAsBoolean();
             } else if (c.getType().isEnum()) {
                 args[i] = Enum.valueOf((Class<? extends Enum>) c.getType(), e.getAsString());
+            } else if (c.getType() == ConduitShape.class) {
+                if (e == null || e.isJsonNull()) {
+                    args[i] = null; // a cylinder (and every save from before conduits eroded)
+                } else {
+                    com.google.gson.JsonArray a = e.getAsJsonArray();
+                    double[] radii = new double[a.size()];
+                    for (int k = 0; k < radii.length; k++) radii[k] = a.get(k).getAsDouble();
+                    args[i] = new ConduitShape(radii);
+                }
             } else {
                 throw new IllegalArgumentException("unsupported component " + c.getName());
             }

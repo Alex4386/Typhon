@@ -13,7 +13,7 @@ import me.alex4386.typhon.engine.magma.conduit.ConduitSolution.Fragmentation;
  * derivation and references are in {@code docs/eruption-dynamics.md}; in short:
  *
  * <pre>
- *   dp/dz = −(ρ g + F) / (1 + G² ∂v/∂p)       v = n R_w T / p + (1 − n)/ρ_m,  u = G v
+ *   dp/dz = −(ρ g + F − G² v dlnA/dz) / (1 + G² ∂v/∂p)       v = n R_w T / p + (1 − n)/ρ_m,  u = G v
  *   F = 8 η u / r²  (coherent, Poiseuille)    F = f ρ u² / (4 r)  (fragmented, turbulent)
  * </pre>
  *
@@ -23,6 +23,11 @@ import me.alex4386.typhon.engine.magma.conduit.ConduitSolution.Fragmentation;
  * flux: a conduit can sustain both a slow outgassed (effusive) and a fast gas-rich (fragmented)
  * steady flow at the same chamber pressure (Melnik &amp; Sparks 1999; Degruyter et al. 2012), and the
  * chamber picks the branch from the conduit's history, not from a chosen style.
+ *
+ * <p>A conduit whose walls eroded is not a cylinder ({@link ConduitShape}): the mass flux per area {@code G} then
+ * follows the local cross-section A, and the term {@code G² v dlnA/dz} (quasi-one-dimensional flow) lets the
+ * pressure recover where the conduit widens. Mass fluxes per area are always given against the reference
+ * radius {@link ConduitInput#radiusM()}.
  *
  * <p>Pure and deterministic: the same inputs always give the same solution.
  */
@@ -145,6 +150,38 @@ public final class ConduitModel {
         return new double[] {exit.wallMargin, exit.wallMarginDepth};
     }
 
+    /**
+     * The conduit after the flow at mass flux per area {@code g} (against the reference radius) eroded its walls:
+     * wherever the coherent magma's pressure is below the wall rock's Mohr–Coulomb failure pressure, the rock
+     * around the original hole (the reference radius) yields out to its plastic radius under that pressure
+     * ({@link Flow#plasticRadiusRatio}), and the flow carries the broken rock off as lithics. The conduit there
+     * is as wide as the plastic zone of the lowest pressure any flow has put on it: it widens only when the
+     * pressure there falls lower than before, and no further than ~3 times its original radius even with no
+     * pressure left (removing the whole plastic zone is the upper bound of the erosion). The inlet does not
+     * erode (walls failing there collapse the conduit, see {@link #flowsIgnoringWalls}); fragmented flow is not
+     * examined (the vent's crater widens with the ground). {@code null} if no wall fails or the walls are not
+     * examined.
+     */
+    public static ConduitShape erodedShape(ConduitInput in, ConduitConfig c, double massFluxPerArea) {
+        Flow flow = new Flow(in, c);
+        if (!flow.checkWalls) return null;
+        ConduitShape shape = in.shape() != null ? in.shape() : ConduitShape.uniform(in.radiusM());
+        Exit exit = new Exit();
+        exit.trackNodes(shape.nodes());
+        if (!flow.integrate(massFluxPerArea, exit)) return null;
+        double[] radii = shape.radii();
+        boolean changed = false;
+        for (int k = 1; k < radii.length; k++) {
+            if (!(exit.nodeMargin[k] < 0)) continue;
+            double widened = in.radiusM() * flow.plasticRadiusRatio(exit.nodePressure[k], exit.nodeStress[k]);
+            if (Double.isFinite(widened) && widened > radii[k]) {
+                radii[k] = widened;
+                changed = true;
+            }
+        }
+        return changed ? new ConduitShape(radii) : null;
+    }
+
     /** The flow at a given mass flux per area, which must be admissible (for tests and diagnostics). */
     public static ConduitSolution evaluate(ConduitInput in, ConduitConfig c, double massFluxPerArea) {
         return new Flow(in, c).solution(massFluxPerArea);
@@ -170,6 +207,17 @@ public final class ConduitModel {
         /** Lowest margin of the coherent magma's pressure over the wall's failure pressure (Pa), and its depth. */
         double wallMargin = Double.POSITIVE_INFINITY;
         double wallMarginDepth = Double.NaN;
+        /** Per shape node (when tracked): lowest wall margin near it (Pa), the magma pressure and rock stress there. */
+        double[] nodeMargin;
+        double[] nodePressure;
+        double[] nodeStress;
+
+        void trackNodes(int nodes) {
+            nodeMargin = new double[nodes];
+            nodePressure = new double[nodes];
+            nodeStress = new double[nodes];
+            java.util.Arrays.fill(nodeMargin, Double.POSITIVE_INFINITY);
+        }
     }
 
     /** Crystal and volatile state of the rising magma, as mass fractions of the flow. */
@@ -205,7 +253,12 @@ public final class ConduitModel {
         final ConduitInput in;
         final ConduitConfig c;
         final double tK;
-        final double r;
+        /** Local radius (m) at the last {@link #setPosition}; the reference radius for a cylinder. */
+        double r;
+        /** Reference radius (m): mass flux per area is given against its cross-section. */
+        final double rRef;
+        /** The conduit's shape, {@code null} for a cylinder. */
+        final ConduitShape shape;
         final double length;
         final double c0;
         final double co2;
@@ -228,7 +281,12 @@ public final class ConduitModel {
         boolean enforceWalls = true;
 
         // per-trial constants
+        /** Mass flux per area against the reference cross-section (the trial's unknown). */
+        double gRef;
+        /** Mass flux per area through the local cross-section (= gRef in a cylinder). */
         double gFlux;
+        /** d ln A / dz (1/m) of the local cross-section (0 in a cylinder). */
+        double areaGradient;
         double segregated;
 
         // scratch outputs of fields() / dpdz()
@@ -251,7 +309,9 @@ public final class ConduitModel {
             this.in = in;
             this.c = c;
             this.tK = in.temperatureC() + 273.15;
-            this.r = in.radiusM();
+            this.rRef = in.radiusM();
+            this.r = rRef;
+            this.shape = in.shape();
             this.length = in.lengthM();
             this.c0 = Math.max(0, in.dissolvedWaterWt());
             this.co2 = Math.max(0, in.co2Wt());
@@ -284,8 +344,41 @@ public final class ConduitModel {
          * p ≤ σ (1 − sin φ) − C cos φ (Aravena et al. 2017, JVGR 339:52-62). The wall rock is taken dry.
          */
         double wallFailurePressure(double depth) {
-            double sigma = ambient + (in.lithostaticPressurePa() - ambient) * Math.max(0, depth) / length;
-            return sigma * wallStressFactor - wallCohesionTerm;
+            return wallStress(depth) * wallStressFactor - wallCohesionTerm;
+        }
+
+        /** Lithostatic stress (Pa) in the wall rock at {@code depth} below the vent. */
+        double wallStress(double depth) {
+            return ambient + (in.lithostaticPressurePa() - ambient) * Math.max(0, depth) / length;
+        }
+
+        /**
+         * Radius, relative to the hole's, out to which the wall rock fails around a circular hole at pressure
+         * {@code p} in rock under the isotropic stress {@code sigma} (elasto-plastic Mohr–Coulomb rock,
+         * Salençon 1969): {@code [2 (σ (K − 1) + σc) / ((K + 1)(p (K − 1) + σc))]^(1/(K − 1))} with
+         * {@code K = (1 + sin φ)/(1 − sin φ)} and {@code σc = 2 C cos φ/(1 − sin φ)}; 1 while the wall holds.
+         * Frictionless rock (Tresca) gives {@code exp((σ − p)/(2C) − 1/2)}.
+         */
+        double plasticRadiusRatio(double p, double sigma) {
+            double sinPhi = 1 - wallStressFactor;
+            double k = (1 + sinPhi) / (1 - sinPhi);
+            if (k - 1 < 1e-9) {
+                double cohesion = wallCohesionTerm; // cos φ = 1
+                return cohesion > 0 ? Math.max(1, Math.exp((sigma - p) / (2 * cohesion) - 0.5)) : Double.POSITIVE_INFINITY;
+            }
+            double sc = 2 * wallCohesionTerm / (1 - sinPhi);
+            double ratio = 2 * (sigma * (k - 1) + sc) / ((k + 1) * (p * (k - 1) + sc));
+            return ratio > 1 ? Math.pow(ratio, 1 / (k - 1)) : 1;
+        }
+
+        /** Moves the local cross-section to {@code zz} metres up from the inlet (no-op in a cylinder). */
+        void setPosition(double zz) {
+            if (shape == null) return;
+            double f = zz / length;
+            r = shape.radiusAt(f);
+            double ratio = rRef / r;
+            gFlux = gRef * ratio * ratio;
+            areaGradient = 2 * shape.slopeAt(f) / (length * r);
         }
 
         /**
@@ -300,6 +393,15 @@ public final class ConduitModel {
             if (exit != null && margin < exit.wallMargin) {
                 exit.wallMargin = margin;
                 exit.wallMarginDepth = depth;
+            }
+            if (exit != null && exit.nodeMargin != null) {
+                int node = (int) Math.max(0, Math.min(exit.nodeMargin.length - 1,
+                        Math.rint((1 - depth / length) * (exit.nodeMargin.length - 1))));
+                if (margin < exit.nodeMargin[node]) {
+                    exit.nodeMargin[node] = margin;
+                    exit.nodePressure[node] = p;
+                    exit.nodeStress[node] = wallStress(depth);
+                }
             }
             return margin >= 0 || !inlet || !enforceWalls;
         }
@@ -378,7 +480,8 @@ public final class ConduitModel {
             denominator = 1 + gFlux * gFlux * dvdp;
             choke = denominator <= 1e-6;
             if (choke) return Double.NaN;
-            return -(GRAVITY / v + friction + gFlux * gFlux * dvdn * gasRate) / denominator;
+            return -(GRAVITY / v + friction + gFlux * gFlux * dvdn * gasRate - gFlux * gFlux * v * areaGradient)
+                    / denominator;
         }
 
         /**
@@ -448,8 +551,11 @@ public final class ConduitModel {
          * admissible (reaches the vent at or above ambient pressure without choking below it).
          */
         boolean integrate(double g, Exit exit) {
+            gRef = g;
             gFlux = g;
-            segregated = segregation(g);
+            areaGradient = 0;
+            setPosition(0);
+            segregated = segregation(gFlux);
             State s = new State();
             State mid = new State();
             State next = new State();
@@ -482,6 +588,7 @@ public final class ConduitModel {
                     double pm = p + 0.5 * dz * dpdz;
                     if (pm <= 0) return false;
                     relax(s, mid, 0.5 * dz, zz, pm, dpdz, fragmented);
+                    setPosition(zMid);
                     double dpdzMid = dpdz(pm, mid, (mid.carried() - s.carried()) / (0.5 * dz), fragmented);
                     double rate = 0;
                     if (!choke) {
@@ -489,6 +596,7 @@ public final class ConduitModel {
                         if (pNext < ambient) return false;
                         relax(s, next, dz, zMid, pm, dpdzMid, fragmented);
                         rate = (next.carried() - s.carried()) / dz;
+                        setPosition(last ? z[i + 1] : zz + dz);
                         double dpdzNext = dpdz(pNext, next, rate, fragmented);
                         if (!choke) {
                             dpdz = dpdzNext;
@@ -584,7 +692,7 @@ public final class ConduitModel {
             if (!integrate(g, exit)) {
                 throw new IllegalStateException("mass flux " + g + " is not admissible");
             }
-            double area = Math.PI * r * r;
+            double area = Math.PI * rRef * rRef;
             double massFlux = g * area;
             // volume as the chamber holds it: melt at the chamber's dissolved water
             double dre = massFlux * (1 - gasWater - gasCo2) / inletMelt;
