@@ -326,6 +326,31 @@ class GeomorphologyTest {
     }
 
     @Test
+    void anExplosionOnTheCraterFloorWidensAndDeepensTheVent() {
+        GeoWorld w = GeoWorld.flat(20, BASE_Z);
+        Geomorphology g = geo(w, GroundState.DRY);
+        VentSite vent = VentSite.crater("main", new Point3(160.5, BASE_Z, 160.5), 20);
+        g.setVents(() -> List.of(g.onGround(vent)), List::of);
+        Engine engine = w.engine(1, 1, g);
+        assertEquals(vent, g.onGround(vent), "untouched, the vent is as it was made");
+
+        // a blast 15 m off the centre, on the crater's floor, digs a crater wider than the rest of the crater
+        g.queueExplosion(new Point3(175.5, BASE_Z, 160.5), 1e12);
+        w.run(engine, 1);
+        CraterExcavated e = w.events(CraterExcavated.class).get(0);
+        VentSite now = g.onGround(vent);
+        assertEquals(15 + e.radiusM(), now.craterRadiusM(), 1, "out to the blast crater's far edge: " + now);
+        assertTrue(now.position().y() < BASE_Z - 1, "the blast dug the vent's mouth deeper: " + now.position());
+        assertEquals(now.position().y(), g.ventFloorZ(vent), 1e-9);
+
+        // a blast off the crater's floor leaves it alone
+        double radius = now.craterRadiusM();
+        g.queueExplosion(new Point3(160.5 + radius + 40, BASE_Z, 160.5), 1e12);
+        w.run(engine, 1);
+        assertEquals(radius, g.onGround(vent).craterRadiusM(), 1e-9);
+    }
+
+    @Test
     void wetTephraSpikeRelaxesToItsAngleOfRepose() {
         GeoWorld w = GeoWorld.flat(5, BASE_Z);
         for (int x = 0; x < w.size; x++) {

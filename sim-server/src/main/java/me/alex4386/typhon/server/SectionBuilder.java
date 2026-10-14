@@ -277,7 +277,7 @@ final class SectionBuilder {
                 o.add("zTop", Json.num(p.y()));
                 o.add("zBottom", Json.num(c[2] + r * 0.55));
                 o.add("width", Json.num(Math.max(2 * map.cell, 2 * v.chamber().config().conduitRadius())));
-                o.addProperty("active", active.contains(vent));
+                o.addProperty("active", active.stream().anyMatch(a -> a.id().equals(vent.id())));
                 out.add(o);
             }
         }

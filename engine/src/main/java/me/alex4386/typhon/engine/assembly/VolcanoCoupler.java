@@ -770,7 +770,20 @@ public final class VolcanoCoupler implements Subsystem {
         List<VentSite> all = new ArrayList<>(baseVents);
         if (dikes != null) all.addAll(dikes.openedVents());
         for (LocalVent local : localVents.values()) all.add(local.site());
+        all.replaceAll(ventGround);
         return all;
+    }
+
+    /** Each vent as the ground has it now (its mouth's elevation, its crater's width); as created without one. */
+    private java.util.function.UnaryOperator<VentSite> ventGround = java.util.function.UnaryOperator.identity();
+
+    /**
+     * Where the vents are now: the landscape keeps each vent's mouth and crater (a cone's vent rises as it fills,
+     * explosions widen and deepen craters), and every vent this coupler hands out, to the tephra, lava, the
+     * ground and the clients, is that one.
+     */
+    public void setVentGround(java.util.function.UnaryOperator<VentSite> ground) {
+        this.ventGround = ground != null ? ground : java.util.function.UnaryOperator.identity();
     }
 
     /**

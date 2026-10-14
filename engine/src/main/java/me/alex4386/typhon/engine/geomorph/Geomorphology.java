@@ -147,6 +147,11 @@ public final class Geomorphology implements Subsystem {
      * cone's vent rises with it. An open conduit only swallows what falls in above it.
      */
     private final TreeMap<String, Double> ventFloors = new TreeMap<>();
+    /**
+     * Crater radius of each crater vent that explosions widened (m), by vent id: an explosion on the crater
+     * floor that digs past its rim widens the crater to the far edge of the explosion's own crater.
+     */
+    private final TreeMap<String, Double> ventRadii = new TreeMap<>();
     private double realClock;
     private double calderaSubsidenceM;
     private final Stats stats = new Stats();
@@ -1189,6 +1194,7 @@ public final class Geomorphology implements Subsystem {
         }
         if (removed <= 0) return;
         depositEjecta(cx, cz, radius, solids, solid);
+        widenVents(e[0], e[2], radius);
         stats.craters++;
         stats.excavatedM3 += removed * l * l;
         stats.maxCraterRadiusM = Math.max(stats.maxCraterRadiusM, radius);
@@ -1196,6 +1202,47 @@ public final class Geomorphology implements Subsystem {
         moved.add(key(cx, cz));
         outbox.emit(new GeomorphEvents.CraterExcavated(now, volcanoId, Point3.columnCentre(cx, cz, rim - depth, l),
                 radius, depth, energy, removed * l * l));
+    }
+
+    /**
+     * An explosion centred on a crater vent's floor at ({@code x}, {@code z}) dug a crater of {@code radius}: where
+     * it reaches past the vent's crater, the crater is that much wider, and where it dug the vent's own column
+     * deeper, the conduit's mouth is that much lower.
+     */
+    private void widenVents(double x, double z, double radius) {
+        double l = world.spec().metersPerColumn();
+        for (VentSite vent : vents.get()) {
+            if (vent.kind() != VentKind.CRATER) continue;
+            double d = Math.hypot(x - vent.position().x(), z - vent.position().z());
+            double crater = ventRadiusM(vent);
+            if (d > crater) continue; // not on this crater's floor
+            if (d + radius > crater) ventRadii.put(vent.id(), d + radius);
+            int vx = vent.position().columnX(l);
+            int vz = vent.position().columnZ(l);
+            if (d < radius && world.isKnown(vx, vz)) {
+                double floor = world.surfaceZ(vx, vz);
+                if (floor < ventFloorZ(vent) - MIN_MOVE) ventFloors.put(vent.id(), floor);
+            }
+        }
+    }
+
+    /** Crater radius of a crater vent now (m): as configured or opened, or as explosions widened it. */
+    public double ventRadiusM(VentSite vent) {
+        Double r = ventRadii.get(vent.id());
+        return r != null ? r : vent.craterRadiusM();
+    }
+
+    /**
+     * The vent as the ground has it now: its conduit's mouth at {@link #ventFloorZ} and, for a crater, the radius
+     * explosions widened it to. Everything that launches from or looks at a vent uses this one.
+     */
+    public VentSite onGround(VentSite vent) {
+        Double floor = ventFloors.get(vent.id());
+        Double radius = vent.kind() == VentKind.CRATER ? ventRadii.get(vent.id()) : null;
+        if (floor == null && radius == null) return vent;
+        Point3 p = vent.position();
+        return new VentSite(vent.id(), floor != null ? new Point3(p.x(), floor, p.z()) : p, vent.kind(),
+                radius != null ? radius : vent.craterRadiusM(), vent.fissureAngleRad(), vent.fissureLengthM());
     }
 
     private void activateDisc(int cx, int cz, int r) {
@@ -1216,7 +1263,7 @@ public final class Geomorphology implements Subsystem {
     private void settleVentFloors(List<VentSite> erupting) {
         double l = world.spec().metersPerColumn();
         for (VentSite vent : vents.get()) {
-            if (erupting.contains(vent)) continue;
+            if (erupting.stream().anyMatch(e -> e.id().equals(vent.id()))) continue;
             int x = vent.position().columnX(l);
             int z = vent.position().columnZ(l);
             if (!world.isKnown(x, z)) continue;
@@ -1446,6 +1493,9 @@ public final class Geomorphology implements Subsystem {
         JsonObject floors = new JsonObject();
         for (Map.Entry<String, Double> e : ventFloors.entrySet()) floors.addProperty(e.getKey(), e.getValue());
         o.add("ventFloors", floors);
+        JsonObject radii = new JsonObject();
+        for (Map.Entry<String, Double> e : ventRadii.entrySet()) radii.addProperty(e.getKey(), e.getValue());
+        o.add("ventRadii", radii);
         JsonObject s = new JsonObject();
         stats.save(s);
         o.add("stats", s);
@@ -1482,6 +1532,12 @@ public final class Geomorphology implements Subsystem {
         ventFloors.clear();
         for (Map.Entry<String, JsonElement> e : o.getAsJsonObject("ventFloors").entrySet()) {
             ventFloors.put(e.getKey(), e.getValue().getAsDouble());
+        }
+        ventRadii.clear();
+        if (o.has("ventRadii")) {
+            for (Map.Entry<String, JsonElement> e : o.getAsJsonObject("ventRadii").entrySet()) {
+                ventRadii.put(e.getKey(), e.getValue().getAsDouble());
+            }
         }
         stats.load(o.getAsJsonObject("stats"));
         tileClock.clear();

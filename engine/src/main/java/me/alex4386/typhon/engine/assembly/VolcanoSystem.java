@@ -198,6 +198,7 @@ public final class VolcanoSystem {
             geomorphology.setFlows(avalanches, lahars, pdc);
             geomorphology.setChamber(ChamberRoof.of(chamber));
             geomorphology.setVents(coupler::allVents, coupler::activeVents);
+            coupler.setVentGround(geomorphology::onGround);
             Geomorphology g = geomorphology;
             seismicity.setQuakeListener(e -> g.queueQuake(e.hypocenter(), e.magnitude()));
             coupler.setExplosionListener(g::queueExplosion);
