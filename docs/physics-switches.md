@@ -20,6 +20,10 @@ long as they do not change outcomes.
   when the pressure pushes out its solidified cap (`2·C·δ/r`, Griffith cohesion), and an eruption only
   starts or lasts while its flow keeps the conduit from freezing.
 - A stop by hand drained the chamber to the end threshold; it now plugs the conduit and keeps the pressure.
+- `VolcanoCoupler.surveyWater` called a vent wet only when more than half its crater disc was under water, and
+  the whole tuff apron took one material from that: the vent's water is now the mean depth over the crater
+  floor (dry columns count as none), and each column of the apron is hyaloclastite under water and wet ash in
+  air.
 - The erupting chamber's outflow was linearised towards the overpressure that just holds a bubble-free column
   up, which a gas-charged column flows far below: the linearisation pinned the pressure and ended eruptions
   at ~97 m³/s (Surtsey). Its secant slope also mixed in the moving lithostatic reference. The slope now comes
@@ -77,10 +81,6 @@ long as they do not change outcomes.
 
 ## High: decide whether or when eruptions, dikes or flows happen
 
-- `VolcanoCoupler.surveyWater` calls a vent wet only when more than half its crater disc is under water: a
-  vent column below the sea in an emerged disc reads dry and switches the water–magma interaction off
-  (Surtseyan ↔ dry flipping). Water reaching the conduit should follow the water actually over or around the
-  vent's mouth.
 
 - `DikeConfig.maxConcurrentDikes = 1`: only one dike rises at a time.
 - `MagmaChamber.MAX_CRYSTAL_FRACTION = 0.58`: a chamber can never lock up as a mush. Removing it alone locks

@@ -387,7 +387,7 @@ public final class VolcanoCoupler implements Subsystem {
             wetMass += p.waterFragmentedMassFlux() * scale;
             magmaMass += p.magmaMassFlux() * scale;
             if (p.jetMassFlux() > 0) fireJets(context, vent, p.jetMassFlux() * scale * stepSeconds, p.jetSpeed());
-            if (p.wetFalloutMassFlux() > 0) buildTuffRing(context, vent, p.wetFalloutMassFlux() * scale * stepSeconds, w.surfaceDepthM());
+            if (p.wetFalloutMassFlux() > 0) buildTuffRing(context, vent, p.wetFalloutMassFlux() * scale * stepSeconds);
             if (p.steamMassFlux() > 0 && context.time() >= nextSteamEventTime) {
                 context.outbox().emit(new SurfaceEvents.PhreatomagmaticSteam(
                         context.time(), volcanoId, vent.position(), p.steamMassFlux() * scale, w.surfaceDepthM()));
@@ -1076,9 +1076,11 @@ public final class VolcanoCoupler implements Subsystem {
     // ── Magma–water interaction ──
 
     /**
-     * Water around the vent: depth of water standing over the crater floor, the share of the ring just
-     * outside the crater that is submerged (open to the sea or lake), and the water table below the
-     * vent from the groundwater model.
+     * Water around the vent: the mean depth of water standing on the crater floor (a dry column counts as none, so
+     * the lagoon shrinks smoothly as the floor emerges: no share of the floor switches it on or off), the share of
+     * the ring just outside the crater that is submerged (open to the sea or lake), and the water table below the
+     * vent from the groundwater model. Surtseyan jets work the whole crater lagoon and its slurry, not only the
+     * water over the conduit's mouth.
      */
     private VentPartition.Water surveyWater(VentSite vent) {
         WorldModel world = terrain == null ? null : terrain.world();
@@ -1094,8 +1096,8 @@ public final class VolcanoCoupler implements Subsystem {
         }
         double l = lc;
         int crater = craterColumns(vent);
-        int ventColumns = 0;
-        int ventSubmerged = 0;
+        int floorColumns = 0;
+        int floorSubmerged = 0;
         double depthSum = 0;
         double levelSum = 0;
         int rimColumns = 0;
@@ -1111,20 +1113,20 @@ public final class VolcanoCoupler implements Subsystem {
                 double level = world.waterZ(x, z);
                 double depth = Double.isFinite(level) ? Math.max(0, level - world.surfaceZ(x, z)) : 0;
                 if (d2 <= crater * crater) {
-                    ventColumns++;
+                    floorColumns++;
                     if (depth > 0) {
-                        ventSubmerged++;
+                        floorSubmerged++;
                         depthSum += depth;
                         levelSum += level;
                     }
-                } else {
+                } else if (d2 > crater * crater) {
                     rimColumns++;
                     if (depth > 0) rimSubmerged++;
                 }
             }
         }
-        boolean wet = ventColumns > 0 && ventSubmerged * 2 >= ventColumns;
-        waterDepthM = wet ? depthSum / ventSubmerged : 0;
+        boolean wet = floorSubmerged > 0;
+        waterDepthM = floorColumns > 0 ? depthSum / floorColumns : 0;
         // Open water reaches the vent freely only if the crater's water connects to the open sea; a lagoon
         // closed off by the ring is refilled only by seepage.
         openWaterFraction = wet && rimColumns > 0 && connectedToOpenWater(world, cx, cz, crater + MAX_RING_COLUMNS)
@@ -1140,10 +1142,11 @@ public final class VolcanoCoupler implements Subsystem {
             fill += layer.thickness();
             pores += layer.thickness() * layer.porosity();
         }
-        double level = wet ? levelSum / ventSubmerged : Double.isFinite(table) ? top - table : Double.NaN;
-        double mouth = crater * l;
-        double band = Math.min(fill, mouth);
-        double slurry = band > 0 && Double.isFinite(level) ? Math.max(0, Math.min(band, level - (top - band))) / mouth : 0;
+        double level = wet ? levelSum / floorSubmerged : Double.isFinite(table) ? top - table : Double.NaN;
+        double craterRadius = crater * l;
+        double band = Math.min(fill, craterRadius);
+        double slurry = band > 0 && Double.isFinite(level)
+                ? Math.max(0, Math.min(band, level - (top - band))) / craterRadius : 0;
         double porosity = fill > 0 ? pores / fill : 0;
         // Water drawn out of a crater cut off from open water comes back only by seepage through the edifice.
         double seepage = wet && openWaterFraction > 0 ? Double.NaN : seepageIntoCrater(world, cx, cz, crater, top - band);
@@ -1298,22 +1301,21 @@ public final class VolcanoCoupler implements Subsystem {
      * falls back into the vent and fills it as a slurry, Kokelaar 1983) and thins beyond the rim exponentially
      * over the vent's own size (the crater radius, at least one column); repose relaxation
      * then shapes it to its angle of repose. A fissure builds a ridge along its whole length (distances to
-     * its segment). Under water ({@code waterDepthM > 0}) it is hyaloclastite; in air, loose wet ash (a tuff
-     * ring).
+     * its segment). Where it lands under water it is hyaloclastite; where in air, loose wet ash (a tuff ring).
      */
-    private void buildTuffRing(StepContext context, VentSite vent, double massKg, double waterDepthM) {
+    private void buildTuffRing(StepContext context, VentSite vent, double massKg) {
         if (terrain == null) return;
         WorldModel world = terrain.world();
         double l = world.spec().metersPerColumn();
-        boolean submarine = waterDepthM > 0;
-        int unit = units.unit(submarine ? DepositType.HYALOCLASTITE : DepositType.FALL, context.time(), Double.NaN);
+        int submarine = units.unit(DepositType.HYALOCLASTITE, context.time(), Double.NaN);
+        int subaerial = units.unit(DepositType.FALL, context.time(), Double.NaN);
         TuffPile pile = tuffPiles.get(vent.id());
-        if (pile != null && (pile.submarine != submarine || pile.unit != unit)) {
-            layTuff(world, vent, pile); // what built up so far is a different deposit
+        if (pile != null && (pile.submarineUnit != submarine || pile.subaerialUnit != subaerial)) {
+            layTuff(world, vent, pile); // what built up so far belongs to another eruption's deposits
             pile = null;
         }
         if (pile == null) {
-            pile = new TuffPile(submarine, unit);
+            pile = new TuffPile(submarine, subaerial);
             tuffPiles.put(vent.id(), pile);
         }
         pile.volume += massKg / TUFF_BULK_DENSITY;
@@ -1332,13 +1334,14 @@ public final class VolcanoCoupler implements Subsystem {
 
     /** Wet fallout accumulated around a vent, not yet laid down (saved). */
     private static final class TuffPile {
-        final boolean submarine;
-        final int unit;
+        /** Units of what lands under water (hyaloclastite) and in air (fall). */
+        final int submarineUnit;
+        final int subaerialUnit;
         double volume;
 
-        TuffPile(boolean submarine, int unit) {
-            this.submarine = submarine;
-            this.unit = unit;
+        TuffPile(int submarineUnit, int subaerialUnit) {
+            this.submarineUnit = submarineUnit;
+            this.subaerialUnit = subaerialUnit;
         }
     }
 
@@ -1409,8 +1412,8 @@ public final class VolcanoCoupler implements Subsystem {
      * are not part of it: they fly ballistically ({@link #fireJets}). The pile covers the crater floor (it
      * falls back into the vent and fills it as a slurry, Kokelaar 1983) and thins beyond the rim exponentially
      * over the vent's own size (the crater radius, at least one column); repose relaxation then shapes it to
-     * its angle of repose. A fissure builds a ridge along its whole length (distances to its segment). Under
-     * water it is hyaloclastite; in air, loose wet ash (a tuff ring).
+     * its angle of repose. A fissure builds a ridge along its whole length (distances to its segment). Each
+     * column takes what lands on it as it stands: under water, hyaloclastite; in air, loose wet ash (a tuff ring).
      */
     private void layTuff(WorldModel world, VentSite vent, TuffPile pile) {
         TuffRing ring = tuffRing(world, vent);
@@ -1418,14 +1421,17 @@ public final class VolcanoCoupler implements Subsystem {
         pile.volume = 0;
         if (ring == null || !(volume > 0)) return;
         double area = world.spec().metersPerColumn() * world.spec().metersPerColumn();
-        var material = pile.submarine ? MaterialTable.HYALOCLASTITE : MaterialTable.ASH;
         // one sweep of deposits, relaxed to repose once at its end (not after every column)
         world.withRelaxationDeferred(() -> {
             for (int i = 0; i < ring.xs().length; i++) {
                 double thickness = volume * ring.shares()[i] / area;
                 if (!(thickness > 0)) continue;
-                world.deposit(ring.xs()[i], ring.zs()[i], thickness, material, pile.unit, LayerFlags.LOOSE,
-                        WET_TEPHRA_POROSITY, 0);
+                int x = ring.xs()[i];
+                int z = ring.zs()[i];
+                double water = world.waterZ(x, z);
+                boolean under = Double.isFinite(water) && water > world.surfaceZ(x, z);
+                world.deposit(x, z, thickness, under ? MaterialTable.HYALOCLASTITE : MaterialTable.ASH,
+                        under ? pile.submarineUnit : pile.subaerialUnit, LayerFlags.LOOSE, WET_TEPHRA_POROSITY, 0);
             }
         });
     }
@@ -1552,8 +1558,8 @@ public final class VolcanoCoupler implements Subsystem {
         JsonObject tuff = new JsonObject();
         for (Map.Entry<String, TuffPile> e : tuffPiles.entrySet()) {
             JsonObject t = new JsonObject();
-            t.addProperty("submarine", e.getValue().submarine);
-            t.addProperty("unit", e.getValue().unit);
+            t.addProperty("submarineUnit", e.getValue().submarineUnit);
+            t.addProperty("unit", e.getValue().subaerialUnit);
             t.addProperty("volume", e.getValue().volume);
             tuff.add(e.getKey(), t);
         }
@@ -1625,7 +1631,9 @@ public final class VolcanoCoupler implements Subsystem {
         if (in.has("tuffPiles")) {
             for (Map.Entry<String, JsonElement> e : in.getAsJsonObject("tuffPiles").entrySet()) {
                 JsonObject o = e.getValue().getAsJsonObject();
-                TuffPile pile = new TuffPile(o.get("submarine").getAsBoolean(), o.get("unit").getAsInt());
+                int unit = o.get("unit").getAsInt();
+                // saves from before each column chose its own deposit kept one unit per pile
+                TuffPile pile = new TuffPile(o.has("submarineUnit") ? o.get("submarineUnit").getAsInt() : unit, unit);
                 pile.volume = o.get("volume").getAsDouble();
                 tuffPiles.put(e.getKey(), pile);
             }

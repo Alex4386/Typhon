@@ -1303,11 +1303,56 @@ public final class Geomorphology implements Subsystem {
                 activateDisc(x, z, 2);
             }
             if (solid > 0) {
-                // thrown clear of the crater it was cleared from: from just outside its columns
-                double radius = (Math.floor(vent.craterRadiusM() / l) + 1) * l;
-                depositEjecta(vent.position().columnX(l), vent.position().columnZ(l), radius, solids, solid);
+                Ejecta pending = recycling.computeIfAbsent(vent.id(), k -> new Ejecta());
+                for (Map.Entry<Short, Double> me : solids.entrySet()) pending.solids.merge(me.getKey(), me.getValue(), Double::sum);
+                pending.solid += solid;
+                // thrown clear of the crater in steps a few centimetres thick at the blanket's inner edge
+                double radius = ejectaRadius(vent);
+                double inner = pending.solid * l * l / (EJECTA_EDGE_SHARE * Math.PI * radius * radius);
+                if (inner >= RECYCLE_LAY_THICKNESS_M) throwRecycled(vent);
             }
         }
+        // vents that stopped erupting throw what they still hold
+        for (String id : new ArrayList<>(recycling.keySet())) {
+            if (erupting.stream().anyMatch(v -> v.id().equals(id))) continue;
+            VentSite vent = vents.get().stream().filter(v -> v.id().equals(id)).findFirst().orElse(null);
+            if (vent != null) throwRecycled(vent);
+            else recycling.remove(id);
+        }
+    }
+
+    /**
+     * Numerical: what a vent clears is thrown out once the blanket it makes is this thick at its inner edge (m): a
+     * centimetre changes nothing the vent or its flanks respond to, and each throw covers ~10³ columns. (Thicker
+     * throws leave flanks a little over repose where one relaxation pass reaches its bound.)
+     */
+    static final double RECYCLE_LAY_THICKNESS_M = 0.01;
+    /**
+     * The blanket's volume over its inner-edge thickness, in units of π R²: ∫ (r/R)^-3 2πr dr from R to
+     * {@link CraterScaling#EJECTA_OUTER_RADII} R.
+     */
+    static final double EJECTA_EDGE_SHARE = 2 * (1 - 1 / CraterScaling.EJECTA_OUTER_RADII);
+
+    /** Fill cleared from an erupting vent, not yet thrown out (solid column-metres by material; saved). */
+    private static final class Ejecta {
+        final TreeMap<Short, Double> solids = new TreeMap<>();
+        double solid;
+    }
+
+    private final TreeMap<String, Ejecta> recycling = new TreeMap<>();
+
+    /** Radius the vent's fill is thrown from: just outside its crater's columns. */
+    private double ejectaRadius(VentSite vent) {
+        double l = world.spec().metersPerColumn();
+        return (Math.floor(vent.craterRadiusM() / l) + 1) * l;
+    }
+
+    private void throwRecycled(VentSite vent) {
+        Ejecta e = recycling.remove(vent.id());
+        if (e == null || !(e.solid > 0)) return;
+        double l = world.spec().metersPerColumn();
+        world.withRelaxationDeferred(() -> depositEjecta(vent.position().columnX(l), vent.position().columnZ(l),
+                ejectaRadius(vent), e.solids, e.solid));
     }
 
 
@@ -1496,6 +1541,18 @@ public final class Geomorphology implements Subsystem {
         JsonObject radii = new JsonObject();
         for (Map.Entry<String, Double> e : ventRadii.entrySet()) radii.addProperty(e.getKey(), e.getValue());
         o.add("ventRadii", radii);
+        JsonObject recycled = new JsonObject();
+        for (Map.Entry<String, Ejecta> e : recycling.entrySet()) {
+            JsonObject r = new JsonObject();
+            JsonObject byMaterial = new JsonObject();
+            for (Map.Entry<Short, Double> me : e.getValue().solids.entrySet()) {
+                byMaterial.addProperty(Short.toString(me.getKey()), me.getValue());
+            }
+            r.add("solids", byMaterial);
+            r.addProperty("solid", e.getValue().solid);
+            recycled.add(e.getKey(), r);
+        }
+        o.add("recycling", recycled);
         JsonObject s = new JsonObject();
         stats.save(s);
         o.add("stats", s);
@@ -1532,6 +1589,18 @@ public final class Geomorphology implements Subsystem {
         ventFloors.clear();
         for (Map.Entry<String, JsonElement> e : o.getAsJsonObject("ventFloors").entrySet()) {
             ventFloors.put(e.getKey(), e.getValue().getAsDouble());
+        }
+        recycling.clear();
+        if (o.has("recycling")) {
+            for (Map.Entry<String, JsonElement> e : o.getAsJsonObject("recycling").entrySet()) {
+                Ejecta ej = new Ejecta();
+                JsonObject r = e.getValue().getAsJsonObject();
+                for (Map.Entry<String, JsonElement> me : r.getAsJsonObject("solids").entrySet()) {
+                    ej.solids.put(Short.parseShort(me.getKey()), me.getValue().getAsDouble());
+                }
+                ej.solid = r.get("solid").getAsDouble();
+                recycling.put(e.getKey(), ej);
+            }
         }
         ventRadii.clear();
         if (o.has("ventRadii")) {
