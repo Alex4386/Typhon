@@ -667,6 +667,18 @@ public final class Geomorphology implements Subsystem {
         double waterZ = world.waterZ(x, z);
         boolean submerged = pond > 0.01 || (!Double.isNaN(waterZ) && waterZ > s + 0.01);
         double wetFront = ground.vadoseM(x, z) / topPorosity(x, z);
+        // inclination of the water table towards the downslope neighbour: groundwater flows along it and pushes the
+        // slab with its seepage force; a flat table (an island's, pinned at the sea) only buoys what lies below it
+        double tableDip = 0;
+        if (!submerged && Double.isFinite(wtDepth)) {
+            int nx = x + DX[bestDir];
+            int nz = z + DZ[bestDir];
+            double wtNext = ground.waterTableDepthM(nx, nz);
+            double sNext = world.surfaceZ(nx, nz);
+            if (Double.isFinite(wtNext) && Double.isFinite(sNext)) {
+                tableDip = Math.atan(((s - wtDepth) - (sNext - wtNext)) / dist[bestDir]);
+            }
+        }
 
         double zMax = Math.min(config.maxSlabDepthM, Math.max(relief, drop[bestDir]));
         double reach = Math.max(zMax, relief);
@@ -680,6 +692,8 @@ public final class Geomorphology implements Subsystem {
         Assessment shallowA = null;
         LayerView critPlane = null;
         double critGamma = 0;
+        double critRu = 0;
+        double critKh = kh;
         for (int k = n - 1; k >= 0 && depthTop < reach; k--) {
             LayerView layer = world.layer(x, z, k);
             Material m = layer.materialInfo();
@@ -722,11 +736,46 @@ public final class Geomorphology implements Subsystem {
                         }
                     }
                 }
-                double hw = Math.max(0, zp - Math.max(0, wtDepth));
-                if (wetFront >= zp) hw = zp;
-                double gammaEff = submerged ? Math.max(0.2 * gammaBar, gammaBar - RHO_W * G) : gammaBar;
-                double ru = submerged ? 0 : Math.min(1, RHO_W * G * hw / (gammaBar * zp));
-                double fs = SlopeStability.infiniteSlope(st.cohesionPa(), st.tanPhi(), gammaEff, zp, beta, ru, kh);
+                double fs;
+                double gammaEff;
+                double ru; // the water's share of the normal stress (reported; and the stability where it seeps along the slope)
+                double ruCrit;
+                double khCrit;
+                if (submerged) {
+                    gammaEff = Math.max(0.2 * gammaBar, gammaBar - RHO_W * G);
+                    ru = 0;
+                    ruCrit = 0;
+                    khCrit = kh;
+                    fs = SlopeStability.infiniteSlope(st.cohesionPa(), st.tanPhi(), gammaEff, zp, beta, 0, kh);
+                } else if (wetFront >= zp) {
+                    // rain soaked the whole slab: perched water seeping parallel to the slope
+                    gammaEff = gammaBar;
+                    ru = Math.min(1, RHO_W * G * zp / (gammaBar * zp));
+                    ruCrit = ru;
+                    khCrit = kh;
+                    fs = SlopeStability.infiniteSlope(st.cohesionPa(), st.tanPhi(), gammaEff, zp, beta, ru, kh);
+                } else if (!(zp > Math.max(0, wtDepth))) {
+                    // dry down to the slip plane
+                    gammaEff = gammaBar;
+                    ru = 0;
+                    ruCrit = 0;
+                    khCrit = kh;
+                    fs = SlopeStability.infiniteSlope(st.cohesionPa(), st.tanPhi(), gammaEff, zp, beta, 0, kh);
+                } else {
+                    // groundwater: buoyant below the water table, pushed along the table's dip by its seepage
+                    double hw = zp - Math.max(0, wtDepth);
+                    double weightPa = gammaBar * zp;
+                    double effective = Math.max(0.2 * weightPa, weightPa - RHO_W * G * hw);
+                    double seepage = RHO_W * G * hw * Math.sin(tableDip);
+                    fs = SlopeStability.infiniteSlopeSeepage(st.cohesionPa(), st.tanPhi(), weightPa, effective, seepage,
+                            tableDip, beta, kh);
+                    gammaEff = effective / zp;
+                    double c2 = Math.cos(beta) * Math.cos(beta);
+                    double normal = effective * c2 - seepage * Math.sin(beta - tableDip) * Math.cos(beta);
+                    ru = Math.max(0, Math.min(1, 1 - normal / (weightPa * c2)));
+                    ruCrit = 0;
+                    khCrit = (kh * weightPa + seepage) / effective; // exact for a flat table
+                }
                 if (fs < minFs) {
                     minFs = fs;
                     shallowA = new Assessment(x, z, fs, zp, false, Math.toDegrees(beta), relief, Double.NaN,
@@ -734,6 +783,8 @@ public final class Geomorphology implements Subsystem {
                             satSum / zEnd, planeLayer.material());
                     critPlane = planeLayer;
                     critGamma = gammaEff;
+                    critRu = ruCrit;
+                    critKh = khCrit;
                 }
             }
             depthTop = zBot;
@@ -743,7 +794,7 @@ public final class Geomorphology implements Subsystem {
         Failure shallow = null;
         if (shallowA.factorOfSafety() < 1) {
             double crit = SlopeStability.criticalAngle(shallowA.cohesionPa(), Math.tan(Math.toRadians(shallowA.frictionDeg())),
-                    critGamma, shallowA.slipDepthM(), shallowA.ru(), kh);
+                    critGamma, shallowA.slipDepthM(), critRu, critKh);
             shallowA = new Assessment(x, z, shallowA.factorOfSafety(), shallowA.slipDepthM(), false, shallowA.slopeDeg(),
                     relief, Math.toDegrees(crit), shallowA.cohesionPa(), shallowA.frictionDeg(), shallowA.ru(), kh,
                     shallowA.alteration(), shallowA.temperatureC(), shallowA.saturation(), shallowA.material());
@@ -760,12 +811,26 @@ public final class Geomorphology implements Subsystem {
             double gammaBar = weight / depthUsed;
             double satBar = satSum / depthUsed;
             double faceBeta = Math.atan(faceTan);
-            double hw = Math.max(0, relief - Math.max(0, wtDepth));
-            if (wetFront >= relief) hw = relief;
-            double ru = submerged ? 0 : Math.min(1, 0.5 * RHO_W * G * hw / (gammaBar * relief));
-            double gammaEff = submerged ? Math.max(0.2 * gammaBar, gammaBar - RHO_W * G) : gammaBar;
-            if (faceTan * (1 + kh) > tanBar * (1 - ru)) {
-                double[] cul = SlopeStability.culmannMinimum(cBar, tanBar, gammaEff, relief, faceBeta, ru, kh);
+            double ru;
+            double gammaEff;
+            double khWedge = kh;
+            if (submerged) {
+                ru = 0;
+                gammaEff = Math.max(0.2 * gammaBar, gammaBar - RHO_W * G);
+            } else if (wetFront >= relief) {
+                ru = Math.min(1, 0.5 * RHO_W * G * relief / (gammaBar * relief)); // perched water seeping along the face
+                gammaEff = gammaBar;
+            } else {
+                // groundwater: the wedge's part below the water table (a similar triangle at its toe) is buoyed, and
+                // the table's dip pushes it (taken horizontal, as for the slab)
+                double hw = Math.max(0, relief - Math.max(0, wtDepth));
+                double below = (hw / relief) * (hw / relief);
+                ru = 0;
+                gammaEff = Math.max(0.2 * gammaBar, gammaBar - RHO_W * G * below);
+                khWedge = (kh * gammaBar + RHO_W * G * below * Math.sin(tableDip)) / gammaEff;
+            }
+            if (faceTan * (1 + khWedge) > tanBar * (1 - ru)) {
+                double[] cul = SlopeStability.culmannMinimum(cBar, tanBar, gammaEff, relief, faceBeta, ru, khWedge);
                 if (cul[0] < best.factorOfSafety()) {
                     best = new Assessment(x, z, cul[0], relief, true, Math.toDegrees(faceBeta), relief,
                             Math.toDegrees(cul[1]), cBar, Math.toDegrees(Math.atan(tanBar)), ru, kh,

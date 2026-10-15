@@ -10,6 +10,25 @@ import org.junit.jupiter.api.Test;
 
 /** Limit-equilibrium formulas against their closed forms, and the strength model's trends. */
 class SlopeStabilityTest {
+
+    @Test
+    void staticGroundwaterOnlyBuoysSeepageAlongTheSlopeIsTheClassicalRu() {
+        double tanPhi = Math.tan(Math.toRadians(34));
+        double beta = Math.toRadians(30);
+        double gamma = 19_000;
+        double z = 10;
+        double h = 8; // saturated metres above the slip plane
+        double w = gamma * z;
+        double buoyed = w - 9810 * h;
+        // a flat water table (an island's, pinned at the sea): no seepage, a cohesionless slope stands at φ
+        double still = SlopeStability.infiniteSlopeSeepage(0, tanPhi, w, buoyed, 0, 0, beta, 0);
+        assertEquals(tanPhi / Math.tan(beta), still, 1e-12);
+        // water seeping parallel to the slope: u = γw h cos²β, the r_u form
+        double seeping = SlopeStability.infiniteSlopeSeepage(0, tanPhi, w, buoyed, 9810 * h * Math.sin(beta), beta, beta, 0);
+        double ru = 9810 * h / w;
+        assertEquals(SlopeStability.infiniteSlope(0, tanPhi, gamma, z, beta, ru, 0), seeping, 1e-12);
+        assertTrue(seeping < 0.6 * still, "seepage, not standing water, weakens it: " + still + " vs " + seeping);
+    }
     private static final double GAMMA = 20_000;
 
     @Test

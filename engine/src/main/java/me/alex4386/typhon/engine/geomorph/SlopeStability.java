@@ -46,6 +46,30 @@ public final class SlopeStability {
         return (cohesionPa + Math.max(0, normal) * tanPhi) / driving;
     }
 
+    /**
+     * Infinite-slope factor of safety in effective stress with groundwater: the slab's weight {@code W} per unit
+     * plan area (water included: it shakes with the slab), its effective weight {@code W'} (buoyant below the water
+     * table) and the seepage force {@code S = γ_w h sin α} per unit plan area of the groundwater flowing along a water
+     * table inclined at {@code α}:
+     *
+     * <pre>
+     *   FS = [c + (W' cos²β − k_h W sinβ cosβ − S sin(β − α) cosβ) tanφ] / (W' sinβ cosβ + k_h W cos²β + S cos(β − α) cosβ)
+     * </pre>
+     *
+     * Static water (α = 0) only buoys the slab (a cohesionless slope stands at its friction angle); water seeping
+     * parallel to the slope (α = β) gives the classical {@code r_u} form with {@code u = γ_w h cos²β}.
+     */
+    public static double infiniteSlopeSeepage(double cohesionPa, double tanPhi, double weight, double effectiveWeight,
+            double seepage, double alpha, double beta, double kh) {
+        if (!(weight > 0) || !(beta > 0)) return Double.POSITIVE_INFINITY;
+        double s = Math.sin(beta);
+        double c = Math.cos(beta);
+        double driving = effectiveWeight * s * c + kh * weight * c * c + seepage * Math.cos(beta - alpha) * c;
+        if (!(driving > 0)) return Double.POSITIVE_INFINITY;
+        double normal = effectiveWeight * c * c - kh * weight * s * c - seepage * Math.sin(beta - alpha) * c;
+        return (cohesionPa + Math.max(0, normal) * tanPhi) / driving;
+    }
+
     /** Minimum Culmann factor of safety over planes θ ∈ (0, β); {@code +∞} for non-positive H or β. */
     public static double culmann(double cohesionPa, double tanPhi, double unitWeight, double height, double beta,
             double ru, double kh) {

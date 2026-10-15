@@ -20,6 +20,11 @@ long as they do not change outcomes.
   when the pressure pushes out its solidified cap (`2·C·δ/r`, Griffith cohesion), and an eruption only
   starts or lasts while its flow keeps the conduit from freezing.
 - A stop by hand drained the chamber to the end threshold; it now plugs the conduit and keeps the pressure.
+- Slope stability charged every unflooded slab with water seeping parallel to the slope (`r_u` on the full
+  saturated weight) wherever it reached below the water table: under a young island's flat table, pinned at
+  the sea, loose tephra failed at ~10° and the emerging cone was planed back to the waterline. The slab is now
+  in effective stress: buoyant below the water table, pushed by the seepage force of groundwater flowing along
+  the table's dip; perched rain water soaking the whole slab still seeps parallel to the slope.
 - `VolcanoCoupler.surveyWater` called a vent wet only when more than half its crater disc was under water, and
   the whole tuff apron took one material from that: the vent's water is now the mean depth over the crater
   floor (dry columns count as none), and each column of the apron is hyaloclastite under water and wet ash in
